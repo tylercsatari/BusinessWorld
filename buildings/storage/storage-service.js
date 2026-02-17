@@ -6,25 +6,42 @@ const StorageService = (() => {
     let boxes = [];
     let items = [];
 
-    // --- Box resolution (fuzzy matching like inventory.py _find_box_by_name) ---
+    // --- Box resolution (fuzzy matching with number word ↔ digit normalization) ---
     function findBoxByName(name) {
         if (!name) return null;
-        let n = name.trim().toLowerCase().replace(/[.!?,;:]+$/, '');
-        n = n.replace(/^box\s+/i, '');
-        // Map spoken letters
-        if (StorageCanonicalize.SPOKEN_LETTERS[n]) n = StorageCanonicalize.SPOKEN_LETTERS[n];
-        const upper = n.toUpperCase();
-        // Exact match
-        let match = boxes.find(b => b.name.toUpperCase() === upper);
+        const inputCanonical = StorageCanonicalize.canonicalizeBoxName(name);
+        if (!inputCanonical) return null;
+
+        // 1. Canonical match (handles "shoes one" == "SHOES 1" == "shoes 1")
+        let match = boxes.find(b =>
+            StorageCanonicalize.canonicalizeBoxName(b.name) === inputCanonical
+        );
         if (match) return match;
-        // StartsWith match
-        match = boxes.find(b => b.name.toUpperCase().startsWith(upper));
+
+        // 2. No-space match (handles "SHOES1" == "SHOES 1")
+        const inputNoSpace = inputCanonical.replace(/\s+/g, '');
+        match = boxes.find(b =>
+            StorageCanonicalize.canonicalizeBoxName(b.name).replace(/\s+/g, '') === inputNoSpace
+        );
         if (match) return match;
-        // Single letter match
-        if (upper.length === 1) {
-            match = boxes.find(b => b.name.toUpperCase() === upper);
+
+        // 3. Exact uppercase match (raw, no normalization)
+        const upper = name.trim().toUpperCase();
+        match = boxes.find(b => b.name.toUpperCase() === upper);
+        if (match) return match;
+
+        // 4. StartsWith match on canonical form
+        match = boxes.find(b =>
+            StorageCanonicalize.canonicalizeBoxName(b.name).startsWith(inputCanonical)
+        );
+        if (match) return match;
+
+        // 5. Single letter match
+        if (inputCanonical.length === 1) {
+            match = boxes.find(b => b.name.toUpperCase() === inputCanonical);
             if (match) return match;
         }
+
         return null;
     }
 

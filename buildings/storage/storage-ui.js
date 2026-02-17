@@ -28,6 +28,7 @@ const StorageUI = (() => {
                         <button onclick="StorageUI.onRemoveItem()">- Remove Item</button>
                         <button onclick="StorageUI.onSearch()">Search</button>
                         <button onclick="StorageUI.onAddBox()">+ Add Box</button>
+                        <button onclick="StorageUI.onRemoveBox()">- Remove Box</button>
                         <button class="sync-btn" onclick="StorageUI.onSync()">Sync</button>
                         <button class="sync-btn" onclick="StorageUI.onReindex()">Re-index</button>
                     </div>
@@ -419,6 +420,13 @@ const StorageUI = (() => {
             const name = prompt('New box name:');
             if (!name) return;
             handleIntent({ intent: 'ADD_BOX', boxName: name.toUpperCase() });
+        },
+
+        onRemoveBox() {
+            const name = prompt('Box name to remove:');
+            if (!name) return;
+            addChatMsg(`Removing box ${name.toUpperCase()}...`, 'user');
+            handleIntent({ intent: 'REMOVE_BOX', boxName: name.toUpperCase() });
         },
 
         async onChatSend() {

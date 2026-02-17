@@ -63,10 +63,10 @@ const StorageCanonicalize = (() => {
         if (!name) return '';
         let n = name.trim().toLowerCase().replace(/[.!?,;:]+$/, '');
         n = n.replace(/^box\s+/i, '');
-        // Map spoken letters
+        // Map spoken letters and number words → digits
         const tokens = n.split(/\s+/);
         const normalized = tokens.map(t => {
-            if (StorageCanonicalize.SPOKEN_LETTERS[t]) return StorageCanonicalize.SPOKEN_LETTERS[t];
+            if (SPOKEN_LETTERS[t]) return SPOKEN_LETTERS[t];
             if (NUMBER_WORDS_TO_DIGITS[t]) return NUMBER_WORDS_TO_DIGITS[t];
             return t;
         });
@@ -181,7 +181,8 @@ const StorageCanonicalize = (() => {
 
         /**
          * Fuzzy match a spoken box name against existing box names.
-         * Returns the matched box name or null.
+         * Uses canonical comparison (number words ↔ digits) so "shoes one" matches "SHOES 1".
+         * Returns the actual box name from existingBoxNames, or null.
          */
         resolveSpokenBoxName(spoken, existingBoxNames) {
             if (!spoken) return null;
@@ -191,21 +192,35 @@ const StorageCanonicalize = (() => {
             // Handle "X as in Romeo" → extract X
             const asInMatch = extracted.match(/^(\w)\s+as\s+in\s+/i);
             if (asInMatch) extracted = asInMatch[1];
-            // Strip "box " prefix
-            extracted = extracted.replace(/^box\s+/i, '');
-            // Map spoken letters
-            if (SPOKEN_LETTERS[extracted]) extracted = SPOKEN_LETTERS[extracted];
-            const upper = extracted.toUpperCase();
-            // Exact match
-            if (existingBoxNames.map(b => b.toUpperCase()).includes(upper)) return upper;
-            // Single letter match
-            if (upper.length === 1) {
-                const match = existingBoxNames.find(b => b.toUpperCase() === upper);
-                if (match) return match.toUpperCase();
+
+            // Get canonical form of the spoken name
+            const spokenCanonical = canonicalizeBoxName(extracted);
+
+            // Match against canonical forms of existing boxes
+            for (const boxName of existingBoxNames) {
+                const existingCanonical = canonicalizeBoxName(boxName);
+                if (spokenCanonical === existingCanonical) return boxName;
             }
-            // Substring/startsWith
-            const startMatch = existingBoxNames.find(b => b.toUpperCase().startsWith(upper));
-            if (startMatch) return startMatch.toUpperCase();
+
+            // Try without spaces (SHOES1 vs SHOES 1)
+            const spokenNoSpace = spokenCanonical.replace(/\s+/g, '');
+            for (const boxName of existingBoxNames) {
+                const existingNoSpace = canonicalizeBoxName(boxName).replace(/\s+/g, '');
+                if (spokenNoSpace === existingNoSpace) return boxName;
+            }
+
+            // Single letter/token match
+            if (spokenCanonical.length === 1) {
+                const match = existingBoxNames.find(b => b.toUpperCase() === spokenCanonical);
+                if (match) return match;
+            }
+
+            // StartsWith match
+            const startMatch = existingBoxNames.find(b =>
+                canonicalizeBoxName(b).startsWith(spokenCanonical)
+            );
+            if (startMatch) return startMatch;
+
             return null;
         }
     };

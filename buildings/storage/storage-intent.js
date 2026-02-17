@@ -28,7 +28,7 @@ const StorageIntent = (() => {
         // MOVE: "move X [from box Y] to box Z"
         {
             intent: 'MOVE',
-            regex: /(?:move|moving|put|place|relocate)\s+(.+?)\s+(?:from\s+(?:box\s+)?[\w-]+\s+)?(?:to|into|in)\s+(?:box\s+)?([\w-]+)/i,
+            regex: /(?:move|moving|put|place|relocate)\s+(.+?)\s+(?:from\s+(?:box\s+)?.+?\s+)?(?:to|into|in)\s+(?:box\s+)?(.+?)(?:\s*[.?!]*)$/i,
             extract: m => ({
                 itemName: StorageCanonicalize.normalizeItem(m[1]),
                 toBox: StorageCanonicalize.normalizeBox(m[2])
@@ -37,23 +37,23 @@ const StorageIntent = (() => {
         // CLEAR_BOX: "clear/remove everything from box A"
         {
             intent: 'CLEAR_BOX',
-            regex: /(?:remove|delete|clear)\s+(?:(?:all\s+)?(?:the\s+)?items?|everything|all)\s+(?:from|in|inside)\s+(?:box\s+)?([\w-]+)/i,
+            regex: /(?:remove|delete|clear)\s+(?:(?:all\s+)?(?:the\s+)?items?|everything|all)\s+(?:from|in|inside)\s+(?:box\s+)?(.+?)(?:\s*[.?!]*)$/i,
             extract: m => ({ boxName: StorageCanonicalize.normalizeBox(m[1]) })
         },
         {
             intent: 'CLEAR_BOX',
-            regex: /(?:clear|empty)\s+(?:out\s+)?(?:box\s+)?([\w-]+)/i,
+            regex: /(?:clear|empty)\s+(?:out\s+)?(?:box\s+)?(.+?)(?:\s*[.?!]*)$/i,
             extract: m => ({ boxName: StorageCanonicalize.normalizeBox(m[1]) })
         },
-        // ADD_BOX: "add box named X" / "create box X"
+        // ADD_BOX: "add box named X" / "create box X" / "create box shoes one"
         {
             intent: 'ADD_BOX',
-            regex: /(?:add|create|make)\s+(?:a\s+)?(?:new\s+)?box.*?(?:named|called)\s+([\w-]+)/i,
+            regex: /(?:add|create|make)\s+(?:a\s+)?(?:new\s+)?box.*?(?:named|called)\s+(.+?)(?:\s*[.?!]*)$/i,
             extract: m => ({ boxName: StorageCanonicalize.normalizeBox(m[1]) })
         },
         {
             intent: 'ADD_BOX',
-            regex: /(?:add|create|make)\s+(?:a\s+)?(?:new\s+)?box\s+([\w-]+)/i,
+            regex: /(?:add|create|make)\s+(?:a\s+)?(?:new\s+)?box\s+(.+?)(?:\s*[.?!]*)$/i,
             extract: m => ({ boxName: StorageCanonicalize.normalizeBox(m[1]) })
         },
         {
@@ -61,16 +61,16 @@ const StorageIntent = (() => {
             regex: /(?:add|create|make)\s+(?:a\s+)?(?:new\s+)?box\b/i,
             extract: () => ({ boxName: null })
         },
-        // REMOVE_BOX: "remove/delete box A"
+        // REMOVE_BOX: "remove/delete box A" or "remove box shoes one"
         {
             intent: 'REMOVE_BOX',
-            regex: /(?:remove|delete)\s+(?:the\s+)?box\s+([\w-]+)/i,
+            regex: /(?:remove|delete)\s+(?:the\s+)?box\s+(.+?)(?:\s*[.?!]*)$/i,
             extract: m => ({ boxName: StorageCanonicalize.normalizeBox(m[1]) })
         },
-        // ADD item with box: "add 3 batteries to box A"
+        // ADD item with box: "add 3 batteries to box A" or "add 2 pops to shoes one"
         {
             intent: 'ADD',
-            regex: /(?:add(?:ing|ed)?|put|place)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an|some)\s+)?(.+?)\s+(?:to|into|in)\s+(?:box\s+)?([\w-]+)/i,
+            regex: /(?:add(?:ing|ed)?|put|place)\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an|some)\s+)?(.+?)\s+(?:to|into|in)\s+(?:box\s+)?(.+?)(?:\s*[.?!]*)$/i,
             extract: m => ({
                 quantity: StorageCanonicalize.parseQty(m[1]),
                 itemName: StorageCanonicalize.normalizeItem(m[2]),
