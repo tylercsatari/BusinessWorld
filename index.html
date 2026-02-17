@@ -2084,15 +2084,68 @@ if (isTouchDevice && joystickZone) {
     joystickZone.addEventListener('touchend', resetJoystick);
     joystickZone.addEventListener('touchcancel', resetJoystick);
 
-    // Camera rotation + pinch zoom on canvas
+    // Camera rotation + pinch zoom + edit-mode drag on canvas
+    let touchDragObject = null; // object being dragged on touch
+    let touchDragOffset = new THREE.Vector3();
+    let tapStart = 0, tapX = 0, tapY = 0;
+    let touchMoved = false;
+
+    function touchHitTest(clientX, clientY) {
+        const r = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((clientX - r.left) / r.width) * 2 - 1;
+        mouse.y = -((clientY - r.top) / r.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        let m = [];
+        clickables.forEach(o => o.traverse(c => { if (c.isMesh) { c.userData.parentClickable = o; m.push(c); } }));
+        return raycaster.intersectObjects(m);
+    }
+
+    function touchGroundHit(clientX, clientY) {
+        const r = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((clientX - r.left) / r.width) * 2 - 1;
+        mouse.y = -((clientY - r.top) / r.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hp = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(dragPlane, hp)) return hp;
+        return null;
+    }
+
     renderer.domElement.addEventListener('touchstart', e => {
         if (e.touches.length === 1) {
             const t = e.touches[0];
+            tapStart = Date.now();
+            tapX = t.clientX;
+            tapY = t.clientY;
+            touchMoved = false;
+
+            // In edit mode, check if we touched a draggable object
+            if (editMode && !pathPlaceMode) {
+                const hits = touchHitTest(t.clientX, t.clientY);
+                if (hits.length > 0) {
+                    const hit = hits[0].object.userData.parentClickable;
+                    if (hit && hit.userData.isDraggable) {
+                        touchDragObject = hit;
+                        const gp = touchGroundHit(t.clientX, t.clientY);
+                        if (gp) touchDragOffset.copy(hit.position).sub(gp);
+                        touchCamId = null; // don't rotate while dragging
+                        return;
+                    }
+                }
+            }
+
+            // Path placement on tap in path mode
+            if (editMode && pathPlaceMode) {
+                touchCamId = null;
+                return;
+            }
+
+            // Otherwise: camera rotation
             touchCamId = t.identifier;
             touchCamLastX = t.clientX;
             touchCamLastY = t.clientY;
         } else if (e.touches.length === 2) {
-            touchCamId = null; // stop rotation during pinch
+            touchCamId = null;
+            touchDragObject = null;
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
             pinchDist = Math.sqrt(dx * dx + dy * dy);
@@ -2101,14 +2154,30 @@ if (isTouchDevice && joystickZone) {
 
     renderer.domElement.addEventListener('touchmove', e => {
         e.preventDefault();
-        if (e.touches.length === 1 && touchCamId !== null) {
+        touchMoved = true;
+
+        if (e.touches.length === 1) {
             const t = e.touches[0];
-            const dx = t.clientX - touchCamLastX;
-            const dy = t.clientY - touchCamLastY;
-            cameraAngle -= dx * 0.006;
-            cameraPitch = Math.max(0.15, Math.min(Math.PI / 2.2, cameraPitch + dy * 0.006));
-            touchCamLastX = t.clientX;
-            touchCamLastY = t.clientY;
+
+            // Dragging an object in edit mode
+            if (touchDragObject) {
+                const gp = touchGroundHit(t.clientX, t.clientY);
+                if (gp) {
+                    touchDragObject.position.x = snapToGrid(gp.x + touchDragOffset.x);
+                    touchDragObject.position.z = snapToGrid(gp.z + touchDragOffset.z);
+                }
+                return;
+            }
+
+            // Camera rotation
+            if (touchCamId !== null) {
+                const dx = t.clientX - touchCamLastX;
+                const dy = t.clientY - touchCamLastY;
+                cameraAngle -= dx * 0.006;
+                cameraPitch = Math.max(0.15, Math.min(Math.PI / 2.2, cameraPitch + dy * 0.006));
+                touchCamLastX = t.clientX;
+                touchCamLastY = t.clientY;
+            }
         } else if (e.touches.length === 2) {
             const dx = e.touches[0].clientX - e.touches[1].clientX;
             const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -2120,34 +2189,43 @@ if (isTouchDevice && joystickZone) {
     }, { passive: false });
 
     renderer.domElement.addEventListener('touchend', e => {
-        if (e.touches.length === 0) { touchCamId = null; }
-        // Tap to inspect (single short touch)
-    }, { passive: true });
-
-    // Tap to inspect buildings on mobile
-    let tapStart = 0, tapX = 0, tapY = 0;
-    renderer.domElement.addEventListener('touchstart', e => {
-        if (e.touches.length === 1) {
-            tapStart = Date.now();
-            tapX = e.touches[0].clientX;
-            tapY = e.touches[0].clientY;
+        // Release drag
+        if (touchDragObject) {
+            touchDragObject = null;
+            saveLayout();
         }
-    }, { passive: true });
-    renderer.domElement.addEventListener('touchend', e => {
-        if (Date.now() - tapStart < 250 && e.changedTouches.length === 1) {
+
+        if (e.touches.length === 0) { touchCamId = null; }
+
+        // Tap detection (short touch, didn't move much)
+        if (!touchMoved && Date.now() - tapStart < 300 && e.changedTouches.length === 1) {
             const t = e.changedTouches[0];
             const dx = t.clientX - tapX, dy = t.clientY - tapY;
             if (Math.abs(dx) < 15 && Math.abs(dy) < 15) {
-                // Simulate click for building inspection
-                const fakeEvent = { clientX: t.clientX, clientY: t.clientY, button: 0 };
-                const h = getHits(fakeEvent);
-                if (h.length > 0) {
-                    const hit = h[0].object.userData.parentClickable;
-                    if (hit && !editMode) openModal(hit.userData.name, hit.userData.type);
+                if (editMode && pathPlaceMode) {
+                    // Place/remove path tile
+                    const gp = touchGroundHit(t.clientX, t.clientY);
+                    if (gp) {
+                        const gx = Math.round(gp.x / GRID_SIZE), gz = Math.round(gp.z / GRID_SIZE);
+                        togglePathTile(gx, gz);
+                        saveLayout();
+                    }
+                } else if (!editMode) {
+                    // Inspect building
+                    const hits = touchHitTest(t.clientX, t.clientY);
+                    if (hits.length > 0) {
+                        const hit = hits[0].object.userData.parentClickable;
+                        if (hit) openModal(hit.userData.name, hit.userData.type);
+                    }
                 }
             }
         }
     }, { passive: true });
+
+    renderer.domElement.addEventListener('touchcancel', () => {
+        touchDragObject = null;
+        touchCamId = null;
+    });
 }
 
 // --- Animation ---
