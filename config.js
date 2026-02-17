@@ -18,4 +18,5 @@ const CONFIG = {
 fetch('/api/config').then(r => r.json()).then(cfg => {
     if (cfg.airtable) Object.assign(CONFIG.airtable, cfg.airtable);
     if (cfg.search) Object.assign(CONFIG.search, cfg.search);
+    if (cfg.notion) CONFIG.notion = cfg.notion;
 }).catch(() => {});

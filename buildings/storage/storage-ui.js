@@ -9,6 +9,7 @@ const StorageUI = (() => {
     let micState = 'idle'; // idle | recording | processing
     let recognition = null; // Web Speech API instance
     let ttsAudio = null; // current TTS audio element
+    let audioUnlocked = false; // whether mobile audio has been unlocked
     let history = []; // activity history log
     let historyVisible = false;
 
@@ -195,6 +196,19 @@ const StorageUI = (() => {
         return rec;
     }
 
+    // Unlock audio playback on mobile — must be called from a user gesture (tap/click)
+    function unlockAudio() {
+        if (audioUnlocked) return;
+        // Create a reusable Audio element and play a tiny silent clip to unlock playback
+        ttsAudio = new Audio();
+        // Tiny silent WAV (44 bytes header + 1 sample)
+        ttsAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGFpYQAAAAA=';
+        ttsAudio.play().then(() => {
+            ttsAudio.pause();
+            audioUnlocked = true;
+        }).catch(() => {});
+    }
+
     async function speakTTS(text) {
         // Try OpenAI TTS first for high-quality voice
         try {
@@ -206,16 +220,35 @@ const StorageUI = (() => {
             if (res.ok) {
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
-                if (ttsAudio) { ttsAudio.pause(); ttsAudio = null; }
-                ttsAudio = new Audio(url);
-                ttsAudio.play();
-                ttsAudio.onended = () => URL.revokeObjectURL(url);
+                if (ttsAudio) {
+                    // Reuse the pre-unlocked Audio element (critical for mobile)
+                    ttsAudio.pause();
+                    const oldSrc = ttsAudio.src;
+                    ttsAudio.src = url;
+                    ttsAudio.onended = () => URL.revokeObjectURL(url);
+                    ttsAudio.play().catch(e => {
+                        console.warn('Audio play failed:', e.message);
+                        // Fallback to browser TTS on play failure
+                        fallbackBrowserTTS(text);
+                    });
+                    if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+                } else {
+                    ttsAudio = new Audio(url);
+                    ttsAudio.onended = () => URL.revokeObjectURL(url);
+                    ttsAudio.play().catch(e => {
+                        console.warn('Audio play failed:', e.message);
+                        fallbackBrowserTTS(text);
+                    });
+                }
                 return;
             }
         } catch (e) {
             console.warn('OpenAI TTS failed, falling back to browser TTS:', e.message);
         }
-        // Fallback to browser TTS
+        fallbackBrowserTTS(text);
+    }
+
+    function fallbackBrowserTTS(text) {
         if ('speechSynthesis' in window) {
             const utter = new SpeechSynthesisUtterance(text);
             utter.rate = 1.0;
@@ -249,11 +282,12 @@ const StorageUI = (() => {
                         if (r.suggestions && r.suggestions.length > 0) showSuggestions(r.suggestions);
                         return;
                     }
+                    const fromBox = r.boxName ? ` from box ${r.boxName}` : '';
                     const msg = r.deleted
-                        ? `Removed all ${r.item.name}.`
-                        : `Removed ${parsed.quantity || 1}x ${r.item.name}. ${r.item.quantity} remaining.`;
+                        ? `Removed all ${r.item.name}${fromBox}.`
+                        : `Removed ${parsed.quantity || 1}x ${r.item.name}${fromBox}. ${r.item.quantity} remaining.`;
                     addChatMsg(msg, 'system');
-                    addHistory('REMOVE', r.deleted ? `All ${r.item.name}` : `${parsed.quantity || 1}x ${r.item.name} (${r.item.quantity} left)`);
+                    addHistory('REMOVE', r.deleted ? `All ${r.item.name}${fromBox}` : `${parsed.quantity || 1}x ${r.item.name}${fromBox} (${r.item.quantity} left)`);
                     await speakTTS(msg);
                     break;
                 }
@@ -407,6 +441,8 @@ const StorageUI = (() => {
                 addChatMsg('Voice input not supported in this browser.', 'error');
                 return;
             }
+            // Unlock audio on user gesture so TTS can play after async processing
+            unlockAudio();
             if (micState === 'recording') {
                 recognition.stop();
                 setMicState('idle');
@@ -485,6 +521,7 @@ const StorageUI = (() => {
             const text = input.value.trim();
             if (!text) return;
             input.value = '';
+            unlockAudio();
             addChatMsg(text, 'user');
             await processUserInput(text);
         }

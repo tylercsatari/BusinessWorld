@@ -73,6 +73,7 @@
         #loading-overlay .status { font-family: 'Nunito', sans-serif; font-size: 16px; color: rgba(255,255,255,0.8); margin-top: 14px; font-weight: 700; }
     </style>
     <link rel="stylesheet" href="buildings/storage/storage.css">
+    <link rel="stylesheet" href="buildings/library/library.css">
 </head>
 <body>
 <div id="hud">
@@ -124,6 +125,7 @@
     <div class="control-row"><span class="control-desc">Library - Grand hall of knowledge</span></div>
     <div class="control-row"><span class="control-desc">Finance - Wall Street tower</span></div>
     <div class="control-row"><span class="control-desc">The House - Home sweet home</span></div>
+    <div class="control-row"><span class="control-desc">Movie Theatre - Art-deco cinema</span></div>
 </div>
 
 <script src="config.js"></script>
@@ -134,6 +136,7 @@
 <script src="buildings/storage/storage-service.js"></script>
 <script src="buildings/storage/storage-intent.js"></script>
 <script src="buildings/storage/storage-ui.js"></script>
+<script src="buildings/library/library-ui.js"></script>
 
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -470,7 +473,7 @@ function makeClickable(group, name, type = 'building') {
     return group;
 }
 
-let workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house;
+let workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, movieTheatre;
 let jarvisNetwork; // separate group for network graph (replaceable with real data)
 let zeusMesh; // Zeus the cat
 
@@ -1796,10 +1799,119 @@ function createHouse() {
     return makeClickable(g, 'The House');
 }
 
+// --- MOVIE THEATRE: Art-deco cinema with marquee ---
+function createMovieTheatre() {
+    const g = new THREE.Group();
+    const artDecoGold = new THREE.MeshStandardMaterial({ color: 0xD4AF37, roughness: 0.3, metalness: 0.7 });
+    const darkBrick = new THREE.MeshStandardMaterial({ color: 0x4a2020, roughness: 0.8 });
+    const creamWall = new THREE.MeshStandardMaterial({ color: 0xf5e6d0, roughness: 0.5 });
+    const darkRoof = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+    const winGlow = new THREE.MeshStandardMaterial({ color: 0xffdd88, emissive: 0xffaa44, emissiveIntensity: 0.7, roughness: 0.3, transparent: true, opacity: 0.85 });
+
+    // Main building body (wide, boxy cinema)
+    const mainBody = new THREE.Mesh(new THREE.BoxGeometry(14, 6, 10), darkBrick);
+    mainBody.position.y = 3; mainBody.castShadow = true; mainBody.receiveShadow = true; g.add(mainBody);
+
+    // Sloped auditorium roof (angled back to front)
+    const roofGeo = new THREE.BoxGeometry(14.4, 0.3, 10.6);
+    const roof = new THREE.Mesh(roofGeo, darkRoof);
+    roof.position.set(0, 6.5, -0.5); roof.rotation.x = 0.1; roof.castShadow = true; g.add(roof);
+
+    // Front facade - taller marquee wall
+    const facade = new THREE.Mesh(new THREE.BoxGeometry(14.2, 9, 0.6), creamWall);
+    facade.position.set(0, 4.5, 5.3); facade.castShadow = true; g.add(facade);
+
+    // Art-deco vertical accent strips on facade
+    for (let i = -2; i <= 2; i++) {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.15, 9, 0.15), artDecoGold);
+        strip.position.set(i * 3.2, 4.5, 5.7); g.add(strip);
+    }
+
+    // Marquee sign board (protruding canopy with glow)
+    const marqueeMat = new THREE.MeshStandardMaterial({ color: 0xcc1111, roughness: 0.4, emissive: 0x440000, emissiveIntensity: 0.3 });
+    const marquee = new THREE.Mesh(new THREE.BoxGeometry(12, 2, 2.5), marqueeMat);
+    marquee.position.set(0, 7, 6.5); marquee.castShadow = true; g.add(marquee);
+
+    // Marquee underside glow
+    const marqueeGlow = new THREE.Mesh(new THREE.PlaneGeometry(11, 2), new THREE.MeshStandardMaterial({ color: 0xffeedd, emissive: 0xffcc88, emissiveIntensity: 1.2, transparent: true, opacity: 0.9 }));
+    marqueeGlow.position.set(0, 6, 6.5); marqueeGlow.rotation.x = Math.PI / 2; g.add(marqueeGlow);
+
+    // Marquee light bulbs along edges
+    const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffeeaa, emissiveIntensity: 1.5 });
+    for (let i = 0; i < 12; i++) {
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 6), bulbMat);
+        bulb.position.set(-5.5 + i * 1, 8.05, 6.5); g.add(bulb);
+        const bulbBot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 6), bulbMat);
+        bulbBot.position.set(-5.5 + i * 1, 5.95, 6.5); g.add(bulbBot);
+    }
+
+    // "CINEMA" text panel on marquee (simplified as glowing rectangle)
+    const textPanel = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.2), new THREE.MeshStandardMaterial({ color: 0xffeecc, emissive: 0xffdd66, emissiveIntensity: 0.8, transparent: true, opacity: 0.9 }));
+    textPanel.position.set(0, 7, 7.8); g.add(textPanel);
+
+    // Ticket booth (small box at entrance)
+    const boothMat = new THREE.MeshStandardMaterial({ color: 0x8B0000, roughness: 0.5 });
+    const booth = new THREE.Mesh(new THREE.BoxGeometry(2.5, 3, 2), boothMat);
+    booth.position.set(4.5, 1.5, 7.5); booth.castShadow = true; g.add(booth);
+    // Booth window
+    const boothWin = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1), winGlow);
+    boothWin.position.set(4.5, 2.2, 8.52); g.add(boothWin);
+    // Booth roof
+    const boothRoof = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 2.5), artDecoGold);
+    boothRoof.position.set(4.5, 3.1, 7.5); g.add(boothRoof);
+
+    // Front entrance doors (double door)
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x2a1510, roughness: 0.4, metalness: 0.2 });
+    for (let d = -1; d <= 1; d += 2) {
+        const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.5, 0.1), doorMat);
+        door.position.set(d * 1, 1.75, 5.65); g.add(door);
+        // Door handle
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 6), artDecoGold);
+        handle.position.set(d * 1 + d * 0.5, 1.8, 5.75); g.add(handle);
+    }
+
+    // Decorative columns flanking entrance (art-deco style)
+    for (let side = -1; side <= 1; side += 2) {
+        const col = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 0.6), creamWall);
+        col.position.set(side * 6.8, 4, 5.5); col.castShadow = true; g.add(col);
+        // Column cap
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.4, 0.9), artDecoGold);
+        cap.position.set(side * 6.8, 8.2, 5.5); g.add(cap);
+        // Column base
+        const colBase = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.4, 0.9), artDecoGold);
+        colBase.position.set(side * 6.8, 0.2, 5.5); g.add(colBase);
+    }
+
+    // Side windows with warm glow
+    for (let side = -1; side <= 1; side += 2) {
+        for (let i = 0; i < 3; i++) {
+            const win = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2), winGlow);
+            win.position.set(side * 7.02, 4, -2 + i * 3);
+            win.rotation.y = side * Math.PI / 2; g.add(win);
+        }
+    }
+
+    // Stepped art-deco crown at top of facade
+    for (let s = 0; s < 3; s++) {
+        const stepW = 6 - s * 2;
+        const stepH = 0.6;
+        const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(stepW, stepH, 0.4), artDecoGold);
+        stepMesh.position.set(0, 9.3 + s * 0.6, 5.5); g.add(stepMesh);
+    }
+
+    // Warm interior light
+    const theatreLight = new THREE.PointLight(0xffaa55, 1, 18);
+    theatreLight.position.set(0, 4, 2); g.add(theatreLight);
+    const marqueeLight = new THREE.PointLight(0xffcc66, 0.8, 12);
+    marqueeLight.position.set(0, 6.5, 8); g.add(marqueeLight);
+
+    return makeClickable(g, 'Movie Theatre');
+}
+
 // --- Save / Load Layout ---
-const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House'];
+const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre'];
 function getBuildingByName(n) {
-    return { 'Workshop': workshop, 'Storage': storage, 'Incubator': incubator, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house }[n];
+    return { 'Workshop': workshop, 'Storage': storage, 'Incubator': incubator, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre }[n];
 }
 function saveLayout() {
     const data = {
@@ -1852,6 +1964,7 @@ async function init() {
     library = createLibrary();
     finance = createFinance();
     house = createHouse();
+    movieTheatre = createMovieTheatre();
 
     // Load saved layout or use defaults
     const saved = await loadLayout();

@@ -187,18 +187,20 @@ const StorageService = (() => {
 
             if (!item) return { error: `Could not resolve item "${name}".`, suggestions };
 
+            const boxName = getBoxName(item);
+
             if (qty >= item.quantity || qty >= 9999) {
                 // Delete entirely
                 await StorageAirtable.deleteItem(item.id);
                 try { await StorageEmbeddings.deleteItem(item.id); } catch (e) {}
                 items = items.filter(i => i.id !== item.id);
-                return { item: { ...item, quantity: 0 }, deleted: true, suggestions };
+                return { item: { ...item, quantity: 0 }, deleted: true, boxName, suggestions };
             }
 
             const newQty = item.quantity - qty;
             await StorageAirtable.updateItemQty(item.id, newQty);
             item.quantity = newQty;
-            return { item, deleted: false, suggestions };
+            return { item, deleted: false, boxName, suggestions };
         },
 
         /**

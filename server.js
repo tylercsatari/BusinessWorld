@@ -100,7 +100,8 @@ const server = http.createServer(async (req, res) => {
                 boxesTable: 'Box', itemsTable: 'Items', itemsLinkField: 'Link To Box',
                 boxesNameField: 'Name', itemsNameField: 'Name', itemsQuantityField: 'Quantity'
             },
-            search: { semanticMatchThreshold: parseFloat(process.env.SEMANTIC_MATCH_THRESHOLD) || 0.75 }
+            search: { semanticMatchThreshold: parseFloat(process.env.SEMANTIC_MATCH_THRESHOLD) || 0.75 },
+            notion: { videosPageId: process.env.NOTION_VIDEOS_PAGE_ID || '' }
         }));
         return;
     }
@@ -201,6 +202,40 @@ const server = http.createServer(async (req, res) => {
             method: 'POST',
             headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    // =========================================
+    // API: Notion proxy  /api/notion/pages (create page)
+    // =========================================
+    if (pathname === '/api/notion/pages' && req.method === 'POST') {
+        const body = await readBody(req);
+        await proxyFetch(res, 'https://api.notion.com/v1/pages', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
+                'Notion-Version': '2022-06-28',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    // =========================================
+    // API: Notion proxy  /api/notion/blocks/:id/children (list children)
+    // =========================================
+    const notionBlocksMatch = pathname.match(/^\/api\/notion\/blocks\/([^/]+)\/children$/);
+    if (notionBlocksMatch && req.method === 'GET') {
+        const blockId = notionBlocksMatch[1];
+        const qs = url.search || '';
+        await proxyFetch(res, `https://api.notion.com/v1/blocks/${blockId}/children${qs}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
+                'Notion-Version': '2022-06-28'
+            }
         });
         return;
     }
