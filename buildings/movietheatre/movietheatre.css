@@ -1,0 +1,334 @@
+/* Movie Theatre — Two-page navigation: file browser <-> preview */
+.theatre-panel {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #1a1a2e;
+    border-radius: 16px;
+    color: #e0e0e0;
+}
+
+/* --- Pages (slide between browser and preview) --- */
+.theatre-page {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.theatre-panel.show-browser .theatre-browser-page {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.theatre-panel.show-preview .theatre-browser-page {
+    transform: translateX(-30%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.theatre-panel.show-browser .theatre-preview-page {
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.theatre-panel.show-preview .theatre-preview-page {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* --- Header / Breadcrumb --- */
+.theatre-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 10px;
+}
+
+.theatre-heading {
+    font-family: 'Fredoka One', cursive;
+    font-size: 24px;
+    color: #e8b86d;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.theatre-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 4px 0;
+}
+
+.theatre-breadcrumb::-webkit-scrollbar {
+    display: none;
+}
+
+.theatre-breadcrumb-item {
+    border: none;
+    background: none;
+    color: #e8b86d;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    transition: background 0.15s;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+.theatre-breadcrumb-item:hover {
+    background: rgba(232, 184, 109, 0.15);
+}
+
+.theatre-breadcrumb-item.current {
+    color: #fff;
+    cursor: default;
+}
+
+.theatre-breadcrumb-item.current:hover {
+    background: none;
+}
+
+.theatre-breadcrumb-sep {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 13px;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+/* --- File grid --- */
+.theatre-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    align-content: start;
+    -webkit-overflow-scrolling: touch;
+}
+
+.theatre-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 10px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.theatre-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+}
+
+.theatre-card:active {
+    transform: scale(0.97);
+}
+
+.theatre-card-thumb {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.theatre-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.theatre-card-icon {
+    font-size: 36px;
+    margin-bottom: 8px;
+    line-height: 1;
+}
+
+.theatre-card-thumb .theatre-card-icon {
+    margin-bottom: 0;
+}
+
+.theatre-card-name {
+    font-size: 13px;
+    color: #e0e0e0;
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.3;
+    max-height: 3.9em;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+/* --- Preview page --- */
+.theatre-preview-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 12px;
+}
+
+.theatre-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: none;
+    color: #e8b86d;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 6px 10px 6px 4px;
+    border-radius: 8px;
+    transition: background 0.15s;
+    font-family: inherit;
+}
+
+.theatre-back-btn:hover {
+    background: rgba(232, 184, 109, 0.12);
+}
+
+.theatre-preview-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.theatre-preview-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 20px;
+    background: #0d0d1a;
+}
+
+.theatre-preview-body img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+}
+
+.theatre-preview-body video {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 8px;
+    outline: none;
+}
+
+.theatre-preview-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    background: #e8b86d;
+    color: #1a1a2e;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+    text-decoration: none;
+    font-family: inherit;
+}
+
+.theatre-preview-download:hover {
+    background: #f0c97d;
+    transform: scale(1.04);
+}
+
+/* --- Empty / loading states --- */
+.theatre-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 15px;
+    gap: 8px;
+    padding: 32px;
+}
+
+.theatre-empty-icon {
+    font-size: 44px;
+    opacity: 0.5;
+}
+
+.theatre-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+}
+
+/* --- Mobile --- */
+@media (pointer: coarse) {
+    .theatre-card {
+        padding: 14px 8px 12px;
+    }
+
+    .theatre-preview-body {
+        padding: 12px;
+    }
+}
+
+@media (max-width: 768px) {
+    .theatre-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 10px;
+        padding: 12px;
+    }
+
+    .theatre-card-icon {
+        font-size: 30px;
+    }
+
+    .theatre-card-name {
+        font-size: 12px;
+    }
+
+    .theatre-heading {
+        font-size: 20px;
+    }
+}

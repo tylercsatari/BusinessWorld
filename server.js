@@ -101,7 +101,8 @@ const server = http.createServer(async (req, res) => {
                 boxesNameField: 'Name', itemsNameField: 'Name', itemsQuantityField: 'Quantity'
             },
             search: { semanticMatchThreshold: parseFloat(process.env.SEMANTIC_MATCH_THRESHOLD) || 0.75 },
-            notion: { videosPageId: process.env.NOTION_VIDEOS_PAGE_ID || '' }
+            notion: { videosPageId: process.env.NOTION_VIDEOS_PAGE_ID || '' },
+            dropbox: { rootPath: process.env.DROPBOX_ROOT_PATH || '' }
         }));
         return;
     }
@@ -268,6 +269,70 @@ const server = http.createServer(async (req, res) => {
         await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockPatch[1]}`, {
             method: 'DELETE', headers: NOTION_HEADERS
         });
+        return;
+    }
+
+    // =========================================
+    // API: Dropbox proxy — file browser
+    // =========================================
+    const DROPBOX_HEADERS = {
+        'Authorization': `Bearer ${process.env.DROPBOX_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+    };
+
+    if (pathname === '/api/dropbox/list_folder' && req.method === 'POST') {
+        const body = await readBody(req);
+        await proxyFetch(res, 'https://api.dropboxapi.com/2/files/list_folder', {
+            method: 'POST', headers: DROPBOX_HEADERS, body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    if (pathname === '/api/dropbox/list_folder/continue' && req.method === 'POST') {
+        const body = await readBody(req);
+        await proxyFetch(res, 'https://api.dropboxapi.com/2/files/list_folder/continue', {
+            method: 'POST', headers: DROPBOX_HEADERS, body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    if (pathname === '/api/dropbox/get_temporary_link' && req.method === 'POST') {
+        const body = await readBody(req);
+        await proxyFetch(res, 'https://api.dropboxapi.com/2/files/get_temporary_link', {
+            method: 'POST', headers: DROPBOX_HEADERS, body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    if (pathname === '/api/dropbox/get_thumbnail' && req.method === 'GET') {
+        const filePath = url.searchParams.get('path');
+        if (!filePath) { res.writeHead(400); res.end('Missing path'); return; }
+        try {
+            const response = await fetch('https://content.dropboxapi.com/2/files/get_thumbnail_v2', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${process.env.DROPBOX_ACCESS_TOKEN}`,
+                    'Dropbox-API-Arg': JSON.stringify({
+                        resource: { '.tag': 'path', path: filePath },
+                        format: 'jpeg',
+                        size: 'w256h256',
+                        mode: 'fitone_bestfit'
+                    }),
+                    'Content-Type': 'application/octet-stream'
+                }
+            });
+            if (!response.ok) {
+                res.writeHead(response.status, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'thumbnail failed' }));
+                return;
+            }
+            const buffer = await response.arrayBuffer();
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' });
+            res.end(Buffer.from(buffer));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
         return;
     }
 
