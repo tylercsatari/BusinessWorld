@@ -386,14 +386,97 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+    .storage-panel {
+        gap: 0;
+    }
+    .storage-header {
+        padding-bottom: 6px;
+    }
+    .storage-header h2 {
+        font-size: 16px;
+    }
+    .storage-stat {
+        font-size: 11px;
+        padding: 2px 8px;
+    }
     .storage-body {
         flex-direction: column;
+        gap: 8px;
+        padding-top: 6px;
+    }
+    .storage-toolbar {
+        gap: 4px;
+        margin-bottom: 6px;
+    }
+    .storage-toolbar button {
+        padding: 4px 8px;
+        font-size: 11px;
+        border-width: 1.5px;
+        border-radius: 7px;
+    }
+    .storage-toolbar button.sync-btn {
+        margin-left: 0;
+    }
+    .storage-boxes-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 8px;
+    }
+    .storage-box-card {
+        padding: 8px;
+        border-radius: 10px;
+    }
+    .storage-box-card h3 {
+        font-size: 13px;
+        margin: 0 0 4px 0;
+    }
+    .storage-box-card h3::before {
+        font-size: 14px;
+    }
+    .storage-box-items {
+        font-size: 12px;
     }
     .storage-chat {
         width: 100%;
-        height: 250px;
+        height: 200px;
     }
-    .storage-boxes-grid {
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    .storage-chat-header {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+    .storage-chat-log {
+        padding: 6px 10px;
+        gap: 6px;
+    }
+    .storage-chat-msg {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    .storage-chat-input-row {
+        padding: 6px;
+        gap: 6px;
+    }
+    .storage-chat-input-row input {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    .storage-chat-input-row button {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+    .storage-mic-btn {
+        width: 30px;
+        height: 30px;
+    }
+    .storage-history-entry {
+        padding: 6px 8px;
+        font-size: 12px;
+        gap: 6px;
+    }
+    .storage-history-action {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+    .storage-history-time {
+        font-size: 10px;
     }
 }

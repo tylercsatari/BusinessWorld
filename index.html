@@ -38,6 +38,7 @@
         #modal-close { position: absolute; top: 12px; right: 18px; font-size: 28px; cursor: pointer; color: #bbb; font-weight: 700; transition: color 0.2s; }
         #modal-close:hover { color: #555; }
         #modal.modal-expanded { min-width: auto; max-width: 95vw; width: 95vw; height: 90vh; display: flex; flex-direction: column; padding: 20px 24px; }
+        @media (max-width: 768px) { #modal.modal-expanded { width: 100vw; max-width: 100vw; height: 95vh; padding: 12px; border-radius: 10px; } }
         #modal.modal-expanded #modal-title { flex-shrink: 0; }
         #modal.modal-expanded #modal-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
         #menu-panel { position: fixed; top: 0; left: -360px; width: 340px; height: 100vh; background: linear-gradient(135deg, rgba(255,255,255,0.97), rgba(255,250,240,0.97)); border-right: 4px solid #5a3e1b; z-index: 300; transition: left 0.35s cubic-bezier(0.4,0,0.2,1); padding: 30px 24px; backdrop-filter: blur(12px); overflow-y: auto; }
@@ -2162,6 +2163,7 @@ function openModal(n, t) {
 
     if (BuildingRegistry.has(n)) {
         modal.classList.add('modal-expanded');
+        title.style.display = 'none';
         body.innerHTML = '';
         document.getElementById('modal-overlay').classList.add('visible');
         BuildingRegistry.get(n).open(body);
@@ -2172,10 +2174,12 @@ function openModal(n, t) {
 }
 window.closeModal = function () {
     const modal = document.getElementById('modal');
-    const title = document.getElementById('modal-title').textContent;
+    const titleEl = document.getElementById('modal-title');
+    const title = titleEl.textContent;
     if (BuildingRegistry.has(title)) {
         BuildingRegistry.get(title).close();
     }
+    titleEl.style.display = '';
     modal.classList.remove('modal-expanded');
     document.getElementById('modal-overlay').classList.remove('visible');
 };
