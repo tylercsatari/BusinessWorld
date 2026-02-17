@@ -342,6 +342,10 @@
         font-size: 22px;
     }
 
+    .library-list-header {
+        padding-right: 48px;
+    }
+
     .library-editor-textarea {
         font-size: 15px;
     }

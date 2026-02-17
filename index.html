@@ -35,10 +35,10 @@
         @keyframes modalIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         #modal-title { font-family: 'Fredoka One', cursive; font-size: 24px; color: #5a3e1b; margin-bottom: 12px; }
         #modal-body { font-size: 16px; color: #666; min-height: 80px; line-height: 1.5; }
-        #modal-close { position: absolute; top: 12px; right: 18px; font-size: 28px; cursor: pointer; color: #bbb; font-weight: 700; transition: color 0.2s; }
+        #modal-close { position: absolute; top: 12px; right: 18px; font-size: 28px; cursor: pointer; color: #bbb; font-weight: 700; transition: color 0.2s; z-index: 10; }
         #modal-close:hover { color: #555; }
         #modal.modal-expanded { min-width: auto; max-width: 95vw; width: 95vw; height: 90vh; display: flex; flex-direction: column; padding: 20px 24px; }
-        @media (max-width: 768px) { #modal.modal-expanded { width: 100vw; max-width: 100vw; height: 95vh; padding: 12px; border-radius: 10px; } }
+        @media (max-width: 768px) { #modal.modal-expanded { width: 100vw; max-width: 100vw; height: 95vh; padding: 12px; border-radius: 10px; } #modal.modal-expanded #modal-close { top: 2px; right: 8px; width: 36px; height: 36px; background: rgba(0,0,0,0.45); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; } }
         #modal.modal-expanded #modal-title { flex-shrink: 0; }
         #modal.modal-expanded #modal-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
         #menu-panel { position: fixed; top: 0; left: -360px; width: 340px; height: 100vh; background: linear-gradient(135deg, rgba(255,255,255,0.97), rgba(255,250,240,0.97)); border-right: 4px solid #5a3e1b; z-index: 300; transition: left 0.35s cubic-bezier(0.4,0,0.2,1); padding: 30px 24px; backdrop-filter: blur(12px); overflow-y: auto; }

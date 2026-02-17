@@ -314,6 +314,10 @@
 }
 
 @media (max-width: 768px) {
+    .theatre-header {
+        padding-right: 48px;
+    }
+
     .theatre-grid {
         grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
         gap: 10px;
