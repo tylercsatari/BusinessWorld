@@ -1,3 +1,4 @@
 node_modules/
 .env
 StorageAI/api_keys.json
+layout.json

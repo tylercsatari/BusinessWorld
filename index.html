@@ -190,8 +190,8 @@ const woodTex = makeWoodTex();
 const wallWood = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6, color: 0xffeedd, emissive: 0x1a1008, emissiveIntensity: 0.12 });
 const metalMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.3, metalness: 0.6 });
 const darkMetal = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.25, metalness: 0.65 });
-const goldMat = new THREE.MeshStandardMaterial({ color: 0xD4AF37, roughness: 0.2, metalness: 0.7, emissive: 0x443300, emissiveIntensity: 0.1 });
-const goldBright = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.12, metalness: 0.8, emissive: 0xCC9900, emissiveIntensity: 0.2 });
+const goldMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.2, metalness: 0.7, emissive: 0x998200, emissiveIntensity: 0.15 });
+const goldBright = new THREE.MeshStandardMaterial({ color: 0xFFE433, roughness: 0.12, metalness: 0.8, emissive: 0xDDAA00, emissiveIntensity: 0.25 });
 const glowMat = new THREE.MeshStandardMaterial({ color: 0xff6622, emissive: 0xff4400, emissiveIntensity: 1.0, roughness: 1 });
 const grassMat = new THREE.MeshStandardMaterial({ color: 0x5aaa40, roughness: 0.9 });
 const dirtMat = new THREE.MeshStandardMaterial({ color: 0x9a8a6a, roughness: 0.95 });
@@ -559,11 +559,11 @@ let moneyPitDomeRadius = 7;
 // Canvas texture: hundreds of tiny gold coins packed together
 function makeGoldCoinTex() {
     return canvasTex(512, 512, (ctx, w, h) => {
-        // Dark gold base
-        ctx.fillStyle = '#b8960f';
+        // Bright gold base
+        ctx.fillStyle = '#f0c800';
         ctx.fillRect(0, 0, w, h);
         // Draw hundreds of overlapping coins
-        const coinColors = ['#ffd700', '#ffcc00', '#e6b800', '#daa520', '#f0c420', '#ffdb4d', '#cca300', '#f5d030'];
+        const coinColors = ['#ffd700', '#ffe033', '#ffe84d', '#ffdf00', '#ffea00', '#ffdb4d', '#ffd000', '#fff44f'];
         for (let i = 0; i < 600; i++) {
             const cx = Math.random() * w, cy = Math.random() * h;
             const r = 6 + Math.random() * 10;
@@ -576,7 +576,7 @@ function makeGoldCoinTex() {
             ctx.strokeStyle = 'rgba(255,255,220,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
             // Inner circle
             ctx.beginPath(); ctx.arc(cx, cy, r * 0.6, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(180,140,20,0.4)'; ctx.lineWidth = 0.8; ctx.stroke();
+            ctx.strokeStyle = 'rgba(220,180,40,0.4)'; ctx.lineWidth = 0.8; ctx.stroke();
             // Specular highlight
             ctx.beginPath(); ctx.arc(cx - r * 0.2, cy - r * 0.25, r * 0.3, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(255,255,200,0.35)'; ctx.fill();
@@ -585,7 +585,7 @@ function makeGoldCoinTex() {
         for (let i = 0; i < 200; i++) {
             const cx = Math.random() * w, cy = Math.random() * h;
             ctx.beginPath(); ctx.arc(cx, cy, 2 + Math.random() * 3, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(80,60,0,0.3)'; ctx.fill();
+            ctx.fillStyle = 'rgba(160,130,20,0.25)'; ctx.fill();
         }
     });
 }
@@ -705,12 +705,12 @@ function createMoneyPit() {
     const coinTopTex = makeGoldCoinTex();
 
     const goldFillMat = new THREE.MeshStandardMaterial({
-        map: coinTex, color: 0xFFDD00, roughness: 0.3, metalness: 0.75,
-        emissive: 0x996600, emissiveIntensity: 0.15
+        map: coinTex, color: 0xFFE833, roughness: 0.3, metalness: 0.75,
+        emissive: 0xBB9900, emissiveIntensity: 0.2
     });
     const goldFillTopMat = new THREE.MeshStandardMaterial({
-        map: coinTopTex, color: 0xFFDD00, roughness: 0.25, metalness: 0.8,
-        emissive: 0xAA7700, emissiveIntensity: 0.12
+        map: coinTopTex, color: 0xFFE833, roughness: 0.25, metalness: 0.8,
+        emissive: 0xCCAA00, emissiveIntensity: 0.18
     });
     // Cylinder: fills from floor up. Max height = R (full hemisphere)
     const goldCyl = new THREE.Mesh(
@@ -1811,6 +1811,11 @@ const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pe
 function getBuildingByName(n) {
     return { 'Workshop': workshop, 'Storage': storage, 'Incubator': incubator, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house }[n];
 }
+// === HARDCODED DEFAULT LAYOUT ===
+// This is the canonical layout baked into the code. It can never be overwritten
+// by git, deploys, or server restarts. To permanently update, edit this object.
+const DEFAULT_LAYOUT = {"buildings":{"Workshop":{"x":18,"z":-15},"Storage":{"x":-18,"z":-21},"Incubator":{"x":21,"z":12},"Money Pit":{"x":0,"z":-24},"The Pen":{"x":-15,"z":30},"Employee Island":{"x":-27,"z":0},"Science Center":{"x":-39,"z":-36},"Jarvis":{"x":6,"z":-63},"The House":{"x":-60,"z":-21}},"paths":["0,0","0,-2","0,-3","0,-4","0,-5","-1,0","-2,1","-3,1","-4,2","-5,3","-6,4","-6,5","1,0","2,-1","3,-1","4,-2","5,-2","6,-3","1,1","2,2","3,3","4,4","5,5","-2,-1","-3,-2","-4,-2","-5,-3","-6,-3","2,0","4,-1","6,-2","1,2","2,3","3,4","4,5","6,5","7,5","-1,1","-3,2","-4,3","-5,4","-3,-1","-1,-1","-1,-2","-5,-2","-6,-5","-6,-4","-7,-3","-8,-3","-9,-1","-9,-3","-9,-2","-9,-4","-9,-5","-10,-5","-11,-5","-11,-6","-12,-5","-14,-5","-13,-5","-15,-5","-16,-5","-17,-5","-18,-5","-19,-5","-20,-5","-11,-7","-11,-8","-11,-9","-12,-9","-13,-9","-13,-10","-13,-11","-10,-9","-9,-9","-9,-10","-9,-12","-9,-11","-9,-13","-8,-13","-7,-13","-6,-13","-5,-13","-4,-13","-4,-14"],"trees":[{"x":-24,"z":-81,"s":1},{"x":-36,"z":15,"s":1},{"x":30,"z":-25,"s":1},{"x":63,"z":6,"s":1},{"x":9,"z":30,"s":1},{"x":33,"z":18,"s":1},{"x":-69,"z":-12,"s":1},{"x":48,"z":-21,"s":1},{"x":-69,"z":-30,"s":1},{"x":6,"z":-12,"s":1},{"x":-63,"z":18,"s":1},{"x":87,"z":36,"s":1},{"x":-18,"z":48,"s":1},{"x":78,"z":-75,"s":1},{"x":-69,"z":-21,"s":1},{"x":20,"z":40,"s":1},{"x":-54,"z":-21,"s":1},{"x":84,"z":-39,"s":1},{"x":-6,"z":48,"s":1},{"x":36,"z":-51,"s":1},{"x":-54,"z":-30,"s":1},{"x":72,"z":63,"s":1},{"x":-57,"z":39,"s":1},{"x":114,"z":-30,"s":1},{"x":30,"z":-105,"s":1}],"employees":[{"name":"Robin","x":-24,"z":3},{"name":"Jordan","x":-27,"z":3},{"name":"Tyler","x":-28,"z":22},{"name":"Neil","x":-32,"z":22},{"name":"Tennille","x":-63,"z":-15}],"penSize":{"w":33,"d":27}};
+
 function saveLayout() {
     const data = {
         buildings: {},
@@ -1823,33 +1828,12 @@ function saveLayout() {
         const b = getBuildingByName(n);
         if (b) data.buildings[n] = { x: b.position.x, z: b.position.z };
     });
-    // Save to server (source of truth — shared across all devices)
+    // Save to server for session persistence
     fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
         .catch(err => console.warn('Server save failed:', err));
 }
 async function loadLayout() {
-    // One-time migration: if localStorage has a layout, push it to the server
-    // and use it as the source of truth, then clear localStorage.
-    try {
-        const localRaw = localStorage.getItem('businessWorldLayout');
-        if (localRaw) {
-            const localData = JSON.parse(localRaw);
-            if (localData && localData.buildings) {
-                // Migrate to server
-                await fetch('/save-layout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(localData)
-                });
-                localStorage.removeItem('businessWorldLayout');
-                console.log('Layout migrated from localStorage to server.');
-                return localData;
-            }
-        }
-    } catch (e) {
-        console.warn('localStorage migration failed:', e);
-    }
-    // Load from server (source of truth — same layout on every device)
+    // Try server first (picks up runtime changes within a deploy session)
     try {
         const res = await fetch('/load-layout');
         if (res.ok) {
@@ -1859,7 +1843,8 @@ async function loadLayout() {
     } catch (e) {
         console.warn('Server load failed:', e);
     }
-    return null;
+    // Always fall back to the hardcoded default — this can never be lost
+    return DEFAULT_LAYOUT;
 }
 // Auto-save before page closes (ensures nothing is lost)
 window.addEventListener('beforeunload', () => { saveLayout(); });
