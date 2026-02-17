@@ -12,6 +12,7 @@ const StorageUI = (() => {
     let audioUnlocked = false; // whether mobile audio has been unlocked
     let voiceTranscript = ''; // accumulated final transcript from push-to-talk
     let interimText = ''; // current interim (unfinished) words
+    let voiceSessionId = 0; // incremented each session so stale callbacks are ignored
     let history = []; // activity history log
     let historyVisible = false;
 
@@ -202,8 +203,17 @@ const StorageUI = (() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) return null;
 
-        // Kill any old instance
-        if (recognition) { try { recognition.abort(); } catch (e) {} }
+        // Kill any old instance — null out handlers first to prevent stale onend firing
+        if (recognition) {
+            recognition.onresult = null;
+            recognition.onerror = null;
+            recognition.onend = null;
+            try { recognition.abort(); } catch (e) {}
+            recognition = null;
+        }
+
+        // New session — any callbacks from previous sessions will be ignored
+        const sessionId = ++voiceSessionId;
 
         const rec = new SpeechRecognition();
         rec.continuous = true;
@@ -211,6 +221,7 @@ const StorageUI = (() => {
         rec.lang = 'en-US';
 
         rec.onresult = (event) => {
+            if (sessionId !== voiceSessionId) return; // stale session
             let finalChunk = '';
             interimText = '';
             for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -228,21 +239,23 @@ const StorageUI = (() => {
         };
 
         rec.onerror = (event) => {
+            if (sessionId !== voiceSessionId) return; // stale session
             if (event.error !== 'aborted' && event.error !== 'no-speech') {
                 addChatMsg(`Voice error: ${event.error}`, 'error');
             }
         };
 
         rec.onend = () => {
+            if (sessionId !== voiceSessionId) return; // stale session
             // On mobile, recognition can auto-stop mid-sentence. Restart if still recording.
             if (micState === 'recording') {
                 try {
                     rec.start();
                 } catch (e) {
-                    // If restart fails, create a brand new instance
+                    // If restart fails, create a brand new instance after brief delay
                     setTimeout(() => {
-                        if (micState === 'recording') {
-                            recognition = startNewRecognition();
+                        if (micState === 'recording' && sessionId === voiceSessionId) {
+                            startNewRecognition();
                         }
                     }, 100);
                 }
