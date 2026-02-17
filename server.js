@@ -17,6 +17,66 @@ const PORT = process.env.PORT || 8002;
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
 
+// =========================================
+// Airtable-backed persistent layout storage
+// =========================================
+const LAYOUT_TABLE = 'Layout';
+const LAYOUT_FIELD = 'Data';
+let layoutRecordId = null; // cached record ID for the single layout row
+
+function airtableHeaders() {
+    return {
+        'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}`,
+        'Content-Type': 'application/json'
+    };
+}
+
+async function loadLayoutFromAirtable() {
+    if (!process.env.AIRTABLE_TOKEN || !process.env.AIRTABLE_BASE_ID) return null;
+    try {
+        const url = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent(LAYOUT_TABLE)}?maxRecords=1`;
+        const resp = await fetch(url, { headers: airtableHeaders() });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        if (data.records && data.records.length > 0) {
+            layoutRecordId = data.records[0].id;
+            const raw = data.records[0].fields[LAYOUT_FIELD];
+            if (raw) return JSON.parse(raw);
+        }
+    } catch (e) {
+        console.warn('Airtable layout load failed:', e.message);
+    }
+    return null;
+}
+
+async function saveLayoutToAirtable(layoutJson) {
+    if (!process.env.AIRTABLE_TOKEN || !process.env.AIRTABLE_BASE_ID) return;
+    try {
+        const fields = { [LAYOUT_FIELD]: layoutJson };
+        if (layoutRecordId) {
+            // Update existing record
+            await fetch(`https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent(LAYOUT_TABLE)}/${layoutRecordId}`, {
+                method: 'PATCH',
+                headers: airtableHeaders(),
+                body: JSON.stringify({ fields })
+            });
+        } else {
+            // Create new record
+            const resp = await fetch(`https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent(LAYOUT_TABLE)}`, {
+                method: 'POST',
+                headers: airtableHeaders(),
+                body: JSON.stringify({ records: [{ fields }] })
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.records && data.records[0]) layoutRecordId = data.records[0].id;
+            }
+        }
+    } catch (e) {
+        console.warn('Airtable layout save failed:', e.message);
+    }
+}
+
 const MIME_TYPES = {
     '.html': 'text/html',
     '.js': 'application/javascript',
@@ -191,15 +251,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
-    // Existing: Save layout
+    // Save layout — writes to local file + Airtable (permanent)
     // =========================================
     if (req.method === 'POST' && pathname === '/save-layout') {
         let body = '';
         req.on('data', chunk => body += chunk);
-        req.on('end', () => {
+        req.on('end', async () => {
             try {
-                JSON.parse(body);
+                JSON.parse(body); // validate
                 fs.writeFileSync(LAYOUT_FILE, body, 'utf8');
+                // Also save to Airtable so it survives deploys
+                saveLayoutToAirtable(body).catch(e => console.warn('Airtable save error:', e.message));
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end('{"ok":true}');
             } catch (e) {
@@ -211,17 +273,29 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
-    // Existing: Load layout
+    // Load layout — tries local file, then Airtable, then 404
     // =========================================
     if (req.method === 'GET' && pathname === '/load-layout') {
+        // Try local file first (fast, works within a deploy session)
         if (fs.existsSync(LAYOUT_FILE)) {
             const data = fs.readFileSync(LAYOUT_FILE, 'utf8');
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(data);
-        } else {
-            res.writeHead(404);
-            res.end('{}');
+            return;
         }
+        // Try Airtable (permanent storage, survives deploys)
+        const airtableLayout = await loadLayoutFromAirtable();
+        if (airtableLayout) {
+            const json = JSON.stringify(airtableLayout);
+            // Cache locally for fast subsequent reads
+            try { fs.writeFileSync(LAYOUT_FILE, json, 'utf8'); } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(json);
+            return;
+        }
+        // Nothing found — frontend will use DEFAULT_LAYOUT
+        res.writeHead(404);
+        res.end('{}');
         return;
     }
 
