@@ -1823,33 +1823,22 @@ function saveLayout() {
         const b = getBuildingByName(n);
         if (b) data.buildings[n] = { x: b.position.x, z: b.position.z };
     });
-    // Always save to localStorage (reliable, works offline)
-    try {
-        localStorage.setItem('businessWorldLayout', JSON.stringify(data));
-    } catch (e) {
-        console.warn('localStorage save failed:', e);
-    }
-    // Also try server save as backup (non-blocking, failure is fine)
+    // Save to server (source of truth — shared across all devices)
     fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-        .catch(() => {});
+        .catch(err => console.warn('Server save failed:', err));
 }
 async function loadLayout() {
-    // Try localStorage first (most reliable)
-    try {
-        const local = localStorage.getItem('businessWorldLayout');
-        if (local) {
-            const parsed = JSON.parse(local);
-            if (parsed && parsed.buildings) return parsed;
-        }
-    } catch (e) {
-        console.warn('localStorage load failed:', e);
-    }
-    // Fall back to server
+    // Load from server (source of truth — same layout on every device)
     try {
         const res = await fetch('/load-layout');
-        if (!res.ok) return null;
-        return await res.json();
-    } catch { return null; }
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.buildings) return data;
+        }
+    } catch (e) {
+        console.warn('Server load failed:', e);
+    }
+    return null;
 }
 // Auto-save before page closes (ensures nothing is lost)
 window.addEventListener('beforeunload', () => { saveLayout(); });
