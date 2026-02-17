@@ -196,6 +196,23 @@
     50% { transform: scale(1.1); box-shadow: 0 0 12px 4px rgba(231, 76, 60, 0.3); }
 }
 
+/* Voice preview */
+.storage-voice-preview {
+    padding: 8px 14px;
+    background: linear-gradient(135deg, #e74c3c15, #c0392b10);
+    border-top: 1px solid #e0d5c0;
+    font-size: 13px;
+    color: #5a3e1b;
+    font-weight: 600;
+    font-style: italic;
+    animation: voice-fade 1.5s ease-in-out infinite;
+}
+
+@keyframes voice-fade {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 /* Chat Panel */
 .storage-chat {
     width: 300px;

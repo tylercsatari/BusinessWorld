@@ -10,6 +10,8 @@ const StorageUI = (() => {
     let recognition = null; // Web Speech API instance
     let ttsAudio = null; // current TTS audio element
     let audioUnlocked = false; // whether mobile audio has been unlocked
+    let voiceTranscript = ''; // accumulated final transcript from push-to-talk
+    let interimText = ''; // current interim (unfinished) words
     let history = []; // activity history log
     let historyVisible = false;
 
@@ -98,6 +100,7 @@ const StorageUI = (() => {
                     <div class="storage-chat-log" id="storage-chat-log">
                         <div class="storage-chat-msg system">Welcome! Type or speak commands like "add 3 batteries to box A" or ask "where are the scissors?"</div>
                     </div>
+                    <div class="storage-voice-preview" id="storage-voice-preview" style="display:none;">Listening...</div>
                     <div class="storage-chat-input-row">
                         <input type="text" id="storage-chat-input" placeholder="Type a command or question..." onkeydown="if(event.key==='Enter')StorageUI.onChatSend()">
                         <button onclick="StorageUI.onChatSend()">Send</button>
@@ -170,30 +173,79 @@ const StorageUI = (() => {
         if (state === 'processing') btn.classList.add('processing');
     }
 
+    function updateVoicePreview() {
+        const preview = document.getElementById('storage-voice-preview');
+        if (!preview) return;
+        const full = (voiceTranscript + (interimText ? ' ' + interimText : '')).trim();
+        if (full) {
+            preview.textContent = full + (interimText ? '...' : '');
+            preview.style.display = 'block';
+        } else {
+            preview.textContent = 'Listening...';
+            preview.style.display = 'block';
+        }
+    }
+
+    function hideVoicePreview() {
+        const preview = document.getElementById('storage-voice-preview');
+        if (preview) preview.style.display = 'none';
+    }
+
     function initSpeechRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) return null;
         const rec = new SpeechRecognition();
-        rec.continuous = false;
-        rec.interimResults = false;
+        rec.continuous = true;
+        rec.interimResults = true;
         rec.lang = 'en-US';
-        rec.onresult = async (event) => {
-            const transcript = event.results[0][0].transcript;
-            setMicState('processing');
-            addChatMsg(transcript, 'user');
-            await processUserInput(transcript);
-            setMicState('idle');
+
+        rec.onresult = (event) => {
+            let finalChunk = '';
+            interimText = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                if (result.isFinal) {
+                    finalChunk += result[0].transcript;
+                } else {
+                    interimText += result[0].transcript;
+                }
+            }
+            if (finalChunk) {
+                voiceTranscript = (voiceTranscript + ' ' + finalChunk).trim();
+            }
+            updateVoicePreview();
         };
+
         rec.onerror = (event) => {
-            if (event.error !== 'aborted') {
+            if (event.error !== 'aborted' && event.error !== 'no-speech') {
                 addChatMsg(`Voice error: ${event.error}`, 'error');
             }
-            setMicState('idle');
+            // Don't reset state here — let onend handle it
         };
+
         rec.onend = () => {
-            if (micState === 'recording') setMicState('idle');
+            // On mobile, recognition can auto-stop. If still in recording mode, restart it.
+            if (micState === 'recording') {
+                try { rec.start(); } catch (e) {}
+            }
         };
+
         return rec;
+    }
+
+    async function finishVoiceInput() {
+        hideVoicePreview();
+        const text = (voiceTranscript + (interimText ? ' ' + interimText : '')).trim();
+        voiceTranscript = '';
+        interimText = '';
+        if (!text) {
+            setMicState('idle');
+            return;
+        }
+        setMicState('processing');
+        addChatMsg(text, 'user');
+        await processUserInput(text);
+        setMicState('idle');
     }
 
     // Unlock audio playback on mobile — must be called from a user gesture (tap/click)
@@ -431,6 +483,9 @@ const StorageUI = (() => {
             if (recognition) { try { recognition.abort(); } catch (e) {} }
             if (ttsAudio) { ttsAudio.pause(); ttsAudio = null; }
             if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            voiceTranscript = '';
+            interimText = '';
+            micState = 'idle';
             container = null;
             initialized = false;
             historyVisible = false;
@@ -444,10 +499,15 @@ const StorageUI = (() => {
             // Unlock audio on user gesture so TTS can play after async processing
             unlockAudio();
             if (micState === 'recording') {
+                // Stop recording and send accumulated transcript
+                micState = 'processing'; // prevent auto-restart in onend
                 recognition.stop();
-                setMicState('idle');
+                finishVoiceInput();
             } else if (micState === 'idle') {
+                voiceTranscript = '';
+                interimText = '';
                 setMicState('recording');
+                updateVoicePreview();
                 recognition.start();
             }
         },
