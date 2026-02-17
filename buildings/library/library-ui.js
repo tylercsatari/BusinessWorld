@@ -1,16 +1,18 @@
 /**
  * Library UI — Apple Notes-style script editor with Notion sync.
- * Auto-saves to Notion as you type. No save button.
+ * Two-page navigation: script list → full-screen editor with back button.
+ * Auto-saves to Notion as you type.
  */
 const LibraryUI = (() => {
     let container = null;
     let videosPageId = '';
-    let scripts = []; // { id, title, created, lastEdited, preview }
+    let scripts = [];
     let selectedId = null;
-    let selectedBlocks = []; // block objects from Notion
+    let selectedBlocks = [];
     let saveTimer = null;
     let titleSaveTimer = null;
     let dirty = false;
+    let currentPage = 'list'; // 'list' or 'editor'
 
     // --- Config ---
     async function loadConfig() {
@@ -130,7 +132,6 @@ const LibraryUI = (() => {
         return blocks;
     }
 
-    // --- Title helper: auto-append "Script" ---
     function ensureScriptSuffix(title) {
         const trimmed = title.trim();
         if (!trimmed) return '';
@@ -138,7 +139,6 @@ const LibraryUI = (() => {
         return trimmed + ' Script';
     }
 
-    // --- Relative date formatting (Apple Notes style) ---
     function formatDate(dateStr) {
         const d = new Date(dateStr);
         const now = new Date();
@@ -179,13 +179,11 @@ const LibraryUI = (() => {
         dirty = false;
 
         try {
-            // Delete all existing blocks then re-create
             for (const block of selectedBlocks) {
                 await deleteBlock(block.id);
             }
             const newBlocks = textToBlocks(textarea.value);
             await appendBlocks(selectedId, newBlocks);
-            // Refresh block references
             selectedBlocks = await fetchPageContent(selectedId);
             setSaveStatus('Saved');
         } catch (e) {
@@ -195,7 +193,6 @@ const LibraryUI = (() => {
         }
     }
 
-    // --- Auto-save title (debounced) ---
     function scheduleTitleSave() {
         if (titleSaveTimer) clearTimeout(titleSaveTimer);
         titleSaveTimer = setTimeout(() => saveTitleNow(), 1200);
@@ -211,10 +208,8 @@ const LibraryUI = (() => {
         setSaveStatus('Saving...');
         try {
             await updatePageTitle(selectedId, title);
-            // Update local list
             const script = scripts.find(s => s.id === selectedId);
             if (script) script.title = title;
-            renderList();
             setSaveStatus('Saved');
         } catch (e) {
             console.warn('Library: title save failed', e);
@@ -222,25 +217,45 @@ const LibraryUI = (() => {
         }
     }
 
+    // --- Page navigation ---
+    function showListPage() {
+        currentPage = 'list';
+        const panel = container.querySelector('.library-panel');
+        if (!panel) return;
+        panel.classList.remove('show-editor');
+        panel.classList.add('show-list');
+        // Re-render list to reflect any title changes
+        renderList();
+    }
+
+    function showEditorPage() {
+        currentPage = 'editor';
+        const panel = container.querySelector('.library-panel');
+        if (!panel) return;
+        panel.classList.remove('show-list');
+        panel.classList.add('show-editor');
+    }
+
     // --- Render ---
     function render(bodyEl) {
         container = bodyEl;
         container.innerHTML = `
-            <div class="library-panel">
-                <div class="library-sidebar">
-                    <div class="library-sidebar-header">
-                        <h2 class="library-sidebar-title">Scripts</h2>
+            <div class="library-panel show-list">
+                <div class="library-page library-list-page" id="library-list-page">
+                    <div class="library-list-header">
+                        <h2 class="library-list-heading">Scripts</h2>
                         <button class="library-new-btn" id="library-new-btn" title="New Script">+</button>
                     </div>
                     <div class="library-list" id="library-list">
                         <div class="library-empty">Loading...</div>
                     </div>
                 </div>
-                <div class="library-divider"></div>
-                <div class="library-editor" id="library-editor">
-                    <div class="library-editor-empty">
-                        <div class="library-editor-empty-icon">📝</div>
-                        <div>Select a script or create a new one</div>
+                <div class="library-page library-editor-page" id="library-editor-page">
+                    <div class="library-editor" id="library-editor">
+                        <div class="library-editor-empty">
+                            <div class="library-editor-empty-icon">📝</div>
+                            <div>Select a script or create a new one</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -262,15 +277,14 @@ const LibraryUI = (() => {
             const isSelected = s.id === selectedId;
             const date = formatDate(s.lastEdited || s.created);
             return `<div class="library-list-item${isSelected ? ' selected' : ''}" data-id="${s.id}">
-                <div class="library-list-title">${escHtml(s.title)}</div>
-                <div class="library-list-meta">
-                    <span class="library-list-date">${date}</span>
+                <div class="library-list-item-content">
+                    <div class="library-list-title">${escHtml(s.title)}</div>
+                    <div class="library-list-date">${date}</div>
                 </div>
                 <button class="library-delete-btn" data-id="${s.id}" title="Delete">&times;</button>
             </div>`;
         }).join('');
 
-        // Click handlers
         listEl.querySelectorAll('.library-list-item').forEach(el => {
             el.addEventListener('click', (e) => {
                 if (e.target.classList.contains('library-delete-btn')) return;
@@ -289,45 +303,44 @@ const LibraryUI = (() => {
         const editorEl = document.getElementById('library-editor');
         if (!editorEl) return;
 
-        // Strip "Script" suffix for the input so user sees just the base name
         const displayTitle = title.replace(/\s*Script$/i, '');
 
         editorEl.innerHTML = `
-            <div class="library-editor-header">
+            <div class="library-editor-toolbar">
+                <button class="library-back-btn" id="library-back-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    Scripts
+                </button>
+                <span class="library-save-status saved" id="library-save-status">Saved</span>
+            </div>
+            <div class="library-editor-body">
                 <div class="library-editor-title-row">
                     <input type="text" class="library-editor-title" id="library-editor-title"
                         value="${escAttr(displayTitle)}" placeholder="Title" />
                     <span class="library-editor-suffix">Script</span>
                 </div>
-                <span class="library-save-status saved" id="library-save-status">Saved</span>
+                <textarea class="library-editor-textarea" id="library-editor-textarea"
+                    placeholder="Start writing...">${escHtml(content)}</textarea>
             </div>
-            <textarea class="library-editor-textarea" id="library-editor-textarea"
-                placeholder="Start writing...">${escHtml(content)}</textarea>
         `;
 
-        // Auto-save on typing
+        document.getElementById('library-back-btn').addEventListener('click', handleBack);
         document.getElementById('library-editor-textarea').addEventListener('input', scheduleContentSave);
         document.getElementById('library-editor-title').addEventListener('input', scheduleTitleSave);
     }
 
-    function renderEditorEmpty() {
-        const editorEl = document.getElementById('library-editor');
-        if (!editorEl) return;
-        editorEl.innerHTML = `
-            <div class="library-editor-empty">
-                <div class="library-editor-empty-icon">📝</div>
-                <div>Select a script or create a new one</div>
-            </div>
-        `;
+    // --- Actions ---
+    async function handleBack() {
+        if (dirty && selectedId) await saveContent();
+        showListPage();
     }
 
-    // --- Actions ---
     async function selectScript(id) {
-        // Save any pending changes first
         if (dirty && selectedId) await saveContent();
 
         selectedId = id;
-        renderList(); // update selection highlight
+        renderList();
+        showEditorPage();
 
         const editorEl = document.getElementById('library-editor');
         if (editorEl) editorEl.innerHTML = '<div class="library-loading">Loading...</div>';
@@ -340,7 +353,6 @@ const LibraryUI = (() => {
 
     async function handleNew() {
         const title = ensureScriptSuffix('Untitled');
-        setSaveStatus('Creating...');
 
         try {
             const page = await createPage(title, '');
@@ -354,14 +366,13 @@ const LibraryUI = (() => {
             selectedId = page.id;
             selectedBlocks = [];
             renderList();
+            showEditorPage();
             renderEditor(title, '');
-            // Focus the title input
             const titleInput = document.getElementById('library-editor-title');
             if (titleInput) { titleInput.focus(); titleInput.select(); }
             setSaveStatus('Saved');
         } catch (e) {
             console.warn('Library: create failed', e);
-            setSaveStatus('Create failed');
         }
     }
 
@@ -374,12 +385,9 @@ const LibraryUI = (() => {
             await archivePage(id);
             scripts = scripts.filter(s => s.id !== id);
             if (selectedId === id) {
-                selectedId = scripts.length > 0 ? scripts[0].id : null;
-                if (selectedId) {
-                    await selectScript(selectedId);
-                } else {
-                    renderEditorEmpty();
-                }
+                selectedId = null;
+                selectedBlocks = [];
+                if (currentPage === 'editor') showListPage();
             }
             renderList();
         } catch (e) {
@@ -405,19 +413,15 @@ const LibraryUI = (() => {
             render(bodyEl);
             scripts = await fetchScripts();
             renderList();
-            // Auto-select first script
-            if (scripts.length > 0) {
-                selectScript(scripts[0].id);
-            }
         },
         close() {
-            // Flush pending saves
             if (saveTimer) { clearTimeout(saveTimer); saveContent(); }
             if (titleSaveTimer) { clearTimeout(titleSaveTimer); saveTitleNow(); }
             container = null;
             selectedId = null;
             selectedBlocks = [];
             dirty = false;
+            currentPage = 'list';
         }
     };
 })();
