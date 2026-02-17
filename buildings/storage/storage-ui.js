@@ -191,9 +191,20 @@ const StorageUI = (() => {
         if (preview) preview.style.display = 'none';
     }
 
-    function initSpeechRecognition() {
+    // Check if SpeechRecognition is available (set once, used to gate mic button)
+    function hasSpeechRecognition() {
+        return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    }
+
+    // Create a fresh SpeechRecognition instance each time — mobile browsers
+    // often can't reuse an instance after stop(), so we recreate every session.
+    function startNewRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) return null;
+
+        // Kill any old instance
+        if (recognition) { try { recognition.abort(); } catch (e) {} }
+
         const rec = new SpeechRecognition();
         rec.continuous = true;
         rec.interimResults = true;
@@ -220,16 +231,26 @@ const StorageUI = (() => {
             if (event.error !== 'aborted' && event.error !== 'no-speech') {
                 addChatMsg(`Voice error: ${event.error}`, 'error');
             }
-            // Don't reset state here — let onend handle it
         };
 
         rec.onend = () => {
-            // On mobile, recognition can auto-stop. If still in recording mode, restart it.
+            // On mobile, recognition can auto-stop mid-sentence. Restart if still recording.
             if (micState === 'recording') {
-                try { rec.start(); } catch (e) {}
+                try {
+                    rec.start();
+                } catch (e) {
+                    // If restart fails, create a brand new instance
+                    setTimeout(() => {
+                        if (micState === 'recording') {
+                            recognition = startNewRecognition();
+                        }
+                    }, 100);
+                }
             }
         };
 
+        recognition = rec;
+        rec.start();
         return rec;
     }
 
@@ -465,7 +486,6 @@ const StorageUI = (() => {
         async open(bodyEl) {
             container = bodyEl;
             container.innerHTML = render();
-            recognition = initSpeechRecognition();
             loadHistory();
 
             try {
@@ -492,7 +512,7 @@ const StorageUI = (() => {
         },
 
         onMicToggle() {
-            if (!recognition) {
+            if (!hasSpeechRecognition()) {
                 addChatMsg('Voice input not supported in this browser.', 'error');
                 return;
             }
@@ -501,14 +521,15 @@ const StorageUI = (() => {
             if (micState === 'recording') {
                 // Stop recording and send accumulated transcript
                 micState = 'processing'; // prevent auto-restart in onend
-                recognition.stop();
+                if (recognition) { try { recognition.stop(); } catch (e) {} }
                 finishVoiceInput();
             } else if (micState === 'idle') {
                 voiceTranscript = '';
                 interimText = '';
                 setMicState('recording');
                 updateVoicePreview();
-                recognition.start();
+                // Fresh instance every time — mobile can't reliably reuse after stop()
+                startNewRecognition();
             }
         },
 
