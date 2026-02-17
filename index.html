@@ -518,14 +518,12 @@ function createWorkshop() {
     const gear = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.1, 6, 16), darkMetal);
     gear.position.set(0, roofY * 0.5, -2.5); gear.userData.isGear = true; g.add(gear);
 
-    g.position.set(18, 0, -8);
     return makeClickable(g, 'Workshop');
 }
 
 // --- STORAGE: Storage Hut model ---
 function createStorage() {
     const g = prepareModel('storage', 7);
-    g.position.set(-12, 0, -12);
     return makeClickable(g, 'Storage');
 }
 
@@ -546,7 +544,6 @@ function createIncubator() {
     const warmLight = new THREE.PointLight(0xff9933, 0.8, 12, 2);
     warmLight.position.y = 2; g.add(warmLight);
 
-    g.position.set(14, 0, 16);
     return makeClickable(g, 'Incubator');
 }
 
@@ -827,7 +824,6 @@ function createMoneyPit() {
     const finial = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), goldBright);
     finial.position.set(0, R + 2.6, 0); g.add(finial);
 
-    g.position.set(0, 0, -16);
     return makeClickable(g, 'Money Pit');
 }
 
@@ -987,7 +983,6 @@ function createPen() {
     const g = new THREE.Group();
     buildPenFence(g);
     createPenHandles(g);
-    g.position.set(-18, 0, 14);
     return makeClickable(g, 'The Pen');
 }
 
@@ -1126,7 +1121,6 @@ function createEmployeeIsland() {
     const water = new THREE.Mesh(new THREE.RingGeometry(6.5, 10, 48), waterMat);
     water.rotation.x = -Math.PI / 2; water.position.y = -0.35; water.userData.isWater = true; g.add(water);
 
-    g.position.set(-25, 0, -14);
     return makeClickable(g, 'Employee Island');
 }
 
@@ -1212,7 +1206,6 @@ function createScienceCenter() {
     scLight.position.set(0, 3, 0); g.add(scLight);
 
     g.scale.set(0.5, 0.5, 0.5);
-    g.position.set(24, 0, 20);
     return makeClickable(g, 'Science Center');
 }
 
@@ -1456,7 +1449,6 @@ function createJarvis() {
         g.add(al);
     }
 
-    g.position.set(30, 0, -20);
     return makeClickable(g, 'Jarvis');
 }
 
@@ -1564,7 +1556,6 @@ function createLibrary() {
     const libLight2 = new THREE.PointLight(0xffcc77, 0.6, 12);
     libLight2.position.set(0, 10, 0); g.add(libLight2);
 
-    g.position.set(36, 0, 24);
     return makeClickable(g, 'Library');
 }
 
@@ -1687,7 +1678,6 @@ function createFinance() {
     const entrDoor = new THREE.Mesh(new THREE.BoxGeometry(2.5, 3, 0.08), doorGlass);
     entrDoor.position.set(0, 2, 3.05); g.add(entrDoor);
 
-    g.position.set(-42, 0, 24);
     return makeClickable(g, 'Finance');
 }
 
@@ -1802,7 +1792,6 @@ function createHouse() {
     const houseLight = new THREE.PointLight(0xffaa55, 0.9, 15);
     houseLight.position.set(0, 2.5, 0); g.add(houseLight);
 
-    g.position.set(-30, 0, 20);
     return makeClickable(g, 'The House');
 }
 
@@ -1839,9 +1828,7 @@ async function loadLayout() {
     }
     return null;
 }
-// Auto-save before page closes (ensures nothing is lost)
 window.addEventListener('beforeunload', () => { saveLayout(); });
-// Periodic auto-save every 30 seconds
 setInterval(saveLayout, 30000);
 
 // --- Async Init: Load models, create buildings, start game ---
@@ -1919,7 +1906,6 @@ async function init() {
             if (emp) { emp.position.x = se.x; emp.position.z = se.z; }
         });
     }
-    // Save immediately so any new buildings get persisted
     saveLayout();
     // Create ambient particles
     initAmbientParticles();

@@ -76,6 +76,21 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
+    // API: Debug env vars (shows which keys are set, not their values)
+    // =========================================
+    if (pathname === '/api/debug-env' && req.method === 'GET') {
+        const keys = ['AIRTABLE_TOKEN', 'AIRTABLE_BASE_ID', 'OPENAI_API_KEY', 'PINECONE_API_KEY', 'PINECONE_HOST'];
+        const status = {};
+        keys.forEach(k => {
+            const v = process.env[k];
+            status[k] = v ? `set (${v.length} chars, starts with "${v.slice(0, 4)}...")` : 'NOT SET';
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status, null, 2));
+        return;
+    }
+
+    // =========================================
     // API: Non-secret config for frontend
     // =========================================
     if (pathname === '/api/config' && req.method === 'GET') {
@@ -244,7 +259,12 @@ const server = http.createServer(async (req, res) => {
             res.end('Not found');
             return;
         }
-        res.writeHead(200, { 'Content-Type': contentType });
+        // Prevent browser caching of HTML/JS so code changes take effect immediately
+        const headers = { 'Content-Type': contentType };
+        if (ext === '.html' || ext === '.js') {
+            headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        }
+        res.writeHead(200, headers);
         res.end(data);
     });
 });
