@@ -37,6 +37,9 @@
         #modal-body { font-size: 16px; color: #666; min-height: 80px; line-height: 1.5; }
         #modal-close { position: absolute; top: 12px; right: 18px; font-size: 28px; cursor: pointer; color: #bbb; font-weight: 700; transition: color 0.2s; }
         #modal-close:hover { color: #555; }
+        #modal.modal-expanded { min-width: auto; max-width: 95vw; width: 95vw; height: 90vh; display: flex; flex-direction: column; padding: 20px 24px; }
+        #modal.modal-expanded #modal-title { flex-shrink: 0; }
+        #modal.modal-expanded #modal-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
         #menu-panel { position: fixed; top: 0; left: -360px; width: 340px; height: 100vh; background: linear-gradient(135deg, rgba(255,255,255,0.97), rgba(255,250,240,0.97)); border-right: 4px solid #5a3e1b; z-index: 300; transition: left 0.35s cubic-bezier(0.4,0,0.2,1); padding: 30px 24px; backdrop-filter: blur(12px); overflow-y: auto; }
         #menu-panel.open { left: 0; }
         #menu-panel h2 { font-family: 'Fredoka One', cursive; color: #5a3e1b; font-size: 28px; margin-bottom: 24px; }
@@ -68,6 +71,7 @@
         #loading-overlay .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #f1c40f, #e67e22); border-radius: 11px; transition: width 0.3s; }
         #loading-overlay .status { font-family: 'Nunito', sans-serif; font-size: 16px; color: rgba(255,255,255,0.8); margin-top: 14px; font-weight: 700; }
     </style>
+    <link rel="stylesheet" href="buildings/storage/storage.css">
 </head>
 <body>
 <div id="hud">
@@ -116,8 +120,19 @@
     <div class="control-row"><span class="control-desc">Employee Island - Manage workers</span></div>
     <div class="control-row"><span class="control-desc">Science Center - Research & development</span></div>
     <div class="control-row"><span class="control-desc">Jarvis - Central intelligence hub</span></div>
+    <div class="control-row"><span class="control-desc">Library - Grand hall of knowledge</span></div>
+    <div class="control-row"><span class="control-desc">Finance - Wall Street tower</span></div>
     <div class="control-row"><span class="control-desc">The House - Home sweet home</span></div>
 </div>
+
+<script src="config.js"></script>
+<script src="buildings/building-registry.js"></script>
+<script src="buildings/storage/storage-canonicalize.js"></script>
+<script src="buildings/storage/storage-airtable.js"></script>
+<script src="buildings/storage/storage-embeddings.js"></script>
+<script src="buildings/storage/storage-service.js"></script>
+<script src="buildings/storage/storage-intent.js"></script>
+<script src="buildings/storage/storage-ui.js"></script>
 
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -454,7 +469,7 @@ function makeClickable(group, name, type = 'building') {
     return group;
 }
 
-let workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, house;
+let workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house;
 let jarvisNetwork; // separate group for network graph (replaceable with real data)
 let zeusMesh; // Zeus the cat
 
@@ -1445,6 +1460,237 @@ function createJarvis() {
     return makeClickable(g, 'Jarvis');
 }
 
+// --- LIBRARY: Grand classical library with dome, columns, floating books ---
+let libraryBooks = []; // animated floating book particles
+function createLibrary() {
+    const g = new THREE.Group();
+    // Stone base with steps
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc8, roughness: 0.6, flatShading: true });
+    const marbleMat = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.35, metalness: 0.1 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(14, 1.2, 10), stoneMat);
+    base.position.y = 0.6; base.castShadow = true; base.receiveShadow = true; g.add(base);
+    // Wide entry steps (3 tiers)
+    for (let s = 0; s < 3; s++) {
+        const step = new THREE.Mesh(new THREE.BoxGeometry(8 - s * 0.5, 0.35, 1.2 - s * 0.1), stoneMat);
+        step.position.set(0, 0.18 + s * 0.35, 5.6 + s * 0.6); step.receiveShadow = true; g.add(step);
+    }
+    // Main building body
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xf0e8d8, roughness: 0.5 });
+    const mainWalls = new THREE.Mesh(new THREE.BoxGeometry(12, 7, 8), wallMat);
+    mainWalls.position.y = 4.7; mainWalls.castShadow = true; mainWalls.receiveShadow = true; g.add(mainWalls);
+    // Decorative cornice/frieze at top
+    const friezeMat = new THREE.MeshStandardMaterial({ color: 0xd4c8b0, roughness: 0.4 });
+    const frieze = new THREE.Mesh(new THREE.BoxGeometry(12.6, 0.6, 8.6), friezeMat);
+    frieze.position.y = 8.5; frieze.castShadow = true; g.add(frieze);
+    // Triangular pediment above columns (front)
+    const pedimentGeo = new THREE.BufferGeometry();
+    const pedVerts = new Float32Array([-6.3, 8.8, 4.31, 6.3, 8.8, 4.31, 0, 11, 4.31]);
+    pedimentGeo.setAttribute('position', new THREE.BufferAttribute(pedVerts, 3));
+    pedimentGeo.computeVertexNormals();
+    const pediment = new THREE.Mesh(pedimentGeo, friezeMat);
+    g.add(pediment);
+    // 4 tall Greek-revival columns across the front
+    for (let i = 0; i < 4; i++) {
+        const x = -4.5 + i * 3;
+        // Column shaft (fluted look via lower segment count)
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 7, 12), marbleMat);
+        col.position.set(x, 4.7, 4.8); col.castShadow = true; g.add(col);
+        // Capital (wider top)
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.4, 0.5, 12), marbleMat);
+        cap.position.set(x, 8.2, 4.8); g.add(cap);
+        // Base
+        const colBase = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.4, 12), marbleMat);
+        colBase.position.set(x, 1.3, 4.8); g.add(colBase);
+    }
+    // Warm glowing arched windows (front, between columns)
+    const winGlowMat = new THREE.MeshStandardMaterial({ color: 0xffdd88, emissive: 0xffaa44, emissiveIntensity: 0.8, roughness: 0.3, transparent: true, opacity: 0.85 });
+    for (let i = 0; i < 3; i++) {
+        const x = -3 + i * 3;
+        // Rectangular part
+        const winRect = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 3), winGlowMat);
+        winRect.position.set(x, 5, 4.02); g.add(winRect);
+        // Arch top (half circle)
+        const archGeo = new THREE.CircleGeometry(0.7, 12, 0, Math.PI);
+        const arch = new THREE.Mesh(archGeo, winGlowMat);
+        arch.position.set(x, 6.5, 4.02); g.add(arch);
+    }
+    // Side windows
+    for (let side = -1; side <= 1; side += 2) {
+        for (let i = 0; i < 3; i++) {
+            const z = -2 + i * 2.5;
+            const win = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.5), winGlowMat);
+            win.position.set(side * 6.02, 5.2, z); win.rotation.y = side * Math.PI / 2; g.add(win);
+        }
+    }
+    // Copper-patina octagonal dome on top
+    const domeMat = new THREE.MeshStandardMaterial({ color: 0x5a9a7a, roughness: 0.3, metalness: 0.6, emissive: 0x1a3a2a, emissiveIntensity: 0.1 });
+    const domeBase = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4, 1.2, 8), domeMat);
+    domeBase.position.y = 9.4; domeBase.castShadow = true; g.add(domeBase);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(3.2, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+    dome.position.y = 10; dome.castShadow = true; g.add(dome);
+    // Dome lantern/cupola on top
+    const cupola = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 1.5, 8), domeMat);
+    cupola.position.y = 12.8; g.add(cupola);
+    const cupolaTop = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+    cupolaTop.position.y = 13.5; g.add(cupolaTop);
+    // Open book sculpture at the entrance
+    const bookMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.5 });
+    const pageMat = new THREE.MeshStandardMaterial({ color: 0xfffff0, roughness: 0.6, emissive: 0xffeecc, emissiveIntensity: 0.15 });
+    const bookL = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.8), pageMat);
+    bookL.position.set(-0.65, 1.55, 6.5); bookL.rotation.z = 0.3; g.add(bookL);
+    const bookR = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.8), pageMat);
+    bookR.position.set(0.65, 1.55, 6.5); bookR.rotation.z = -0.3; g.add(bookR);
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.85), bookMat);
+    spine.position.set(0, 1.35, 6.5); g.add(spine);
+    // Pedestal for book
+    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 1.2, 8), stoneMat);
+    pedestal.position.set(0, 0.6 + 0.3, 6.5); g.add(pedestal);
+    // Floating glowing book particles
+    const bookParticleMat = new THREE.MeshStandardMaterial({ color: 0xffeedd, emissive: 0xffcc88, emissiveIntensity: 0.9, transparent: true, opacity: 0.7 });
+    libraryBooks = [];
+    for (let i = 0; i < 10; i++) {
+        const bp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.3), bookParticleMat.clone());
+        const angle = (i / 10) * Math.PI * 2;
+        const radius = 5 + Math.random() * 3;
+        const height = 6 + Math.random() * 8;
+        bp.userData = { isLibraryBook: true, orbitAngle: angle, orbitRadius: radius, orbitHeight: height, orbitSpeed: 0.15 + Math.random() * 0.2, bobOffset: Math.random() * Math.PI * 2 };
+        bp.position.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
+        g.add(bp);
+        libraryBooks.push(bp);
+    }
+    // Interior warm light
+    const libLight = new THREE.PointLight(0xffaa55, 1.2, 20);
+    libLight.position.set(0, 6, 0); g.add(libLight);
+    const libLight2 = new THREE.PointLight(0xffcc77, 0.6, 12);
+    libLight2.position.set(0, 10, 0); g.add(libLight2);
+
+    g.position.set(36, 0, 24);
+    return makeClickable(g, 'Library');
+}
+
+// --- FINANCE: Sleek modern Wall Street skyscraper ---
+let financeDollarSign = null; // animated rotating dollar sign
+let financeRotorGroup = null; // animated helipad rotor
+let financeTickerTime = 0;
+function createFinance() {
+    const g = new THREE.Group();
+    // Glass tower material
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x1a3a4a, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.7, envMapIntensity: 1.5 });
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0xc0c8d0, roughness: 0.15, metalness: 0.9, emissive: 0x111111, emissiveIntensity: 0.05 });
+    const greenGlow = new THREE.MeshStandardMaterial({ color: 0x00ff66, emissive: 0x00ff44, emissiveIntensity: 1.2, roughness: 1 });
+    // Concrete base/plaza
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.7 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(10, 0.5, 10), baseMat);
+    base.position.y = 0.25; base.receiveShadow = true; g.add(base);
+    // Main glass tower - tall and imposing
+    const towerH = 22;
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(7, towerH, 6), glassMat);
+    tower.position.y = towerH / 2 + 0.5; tower.castShadow = true; tower.receiveShadow = true; g.add(tower);
+    // Steel frame grid on exterior (horizontal + vertical bands)
+    for (let y = 0; y <= towerH; y += 2.5) {
+        // Horizontal bands (front & back)
+        for (let side = -1; side <= 1; side += 2) {
+            const hBand = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.12, 0.08), steelMat);
+            hBand.position.set(0, y + 0.5, side * 3.04); g.add(hBand);
+        }
+        // Horizontal bands (left & right)
+        for (let side = -1; side <= 1; side += 2) {
+            const hBand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 6.2), steelMat);
+            hBand.position.set(side * 3.54, y + 0.5, 0); g.add(hBand);
+        }
+    }
+    // Vertical steel bands
+    for (let x = -3; x <= 3; x += 1.5) {
+        for (let side = -1; side <= 1; side += 2) {
+            const vBand = new THREE.Mesh(new THREE.BoxGeometry(0.08, towerH + 0.5, 0.08), steelMat);
+            vBand.position.set(x, towerH / 2 + 0.5, side * 3.04); g.add(vBand);
+        }
+    }
+    for (let z = -2.5; z <= 2.5; z += 1.5) {
+        for (let side = -1; side <= 1; side += 2) {
+            const vBand = new THREE.Mesh(new THREE.BoxGeometry(0.08, towerH + 0.5, 0.08), steelMat);
+            vBand.position.set(side * 3.54, towerH / 2 + 0.5, z); g.add(vBand);
+        }
+    }
+    // Glowing green LED stock ticker strip wrapping around at 1/3 height
+    const tickerY = towerH * 0.35 + 0.5;
+    const tickerH = 0.5;
+    // Front
+    const tickerF = new THREE.Mesh(new THREE.BoxGeometry(7.3, tickerH, 0.1), greenGlow);
+    tickerF.position.set(0, tickerY, 3.06); tickerF.userData.isFinanceTicker = true; g.add(tickerF);
+    // Back
+    const tickerB = new THREE.Mesh(new THREE.BoxGeometry(7.3, tickerH, 0.1), greenGlow.clone());
+    tickerB.position.set(0, tickerY, -3.06); tickerB.userData.isFinanceTicker = true; g.add(tickerB);
+    // Left
+    const tickerL = new THREE.Mesh(new THREE.BoxGeometry(0.1, tickerH, 6.3), greenGlow.clone());
+    tickerL.position.set(-3.56, tickerY, 0); tickerL.userData.isFinanceTicker = true; g.add(tickerL);
+    // Right
+    const tickerR = new THREE.Mesh(new THREE.BoxGeometry(0.1, tickerH, 6.3), greenGlow.clone());
+    tickerR.position.set(3.56, tickerY, 0); tickerR.userData.isFinanceTicker = true; g.add(tickerR);
+    // Rooftop helipad
+    const helipadMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.5 });
+    const helipad = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 0.15, 24), helipadMat);
+    helipad.position.y = towerH + 0.58; g.add(helipad);
+    // H marking on helipad
+    const hMarkMat = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xaaaa00, emissiveIntensity: 0.3 });
+    const hLeft = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 1.4), hMarkMat);
+    hLeft.position.set(-0.5, towerH + 0.67, 0); g.add(hLeft);
+    const hRight = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 1.4), hMarkMat);
+    hRight.position.set(0.5, towerH + 0.67, 0); g.add(hRight);
+    const hMid = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.02, 0.2), hMarkMat);
+    hMid.position.set(0, towerH + 0.67, 0); g.add(hMid);
+    // Spinning rotor blades
+    financeRotorGroup = new THREE.Group();
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.7 });
+    for (let i = 0; i < 4; i++) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 2.2), bladeMat);
+        blade.rotation.y = (i / 4) * Math.PI; financeRotorGroup.add(blade);
+    }
+    const rotorHub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.3, 8), bladeMat);
+    financeRotorGroup.add(rotorHub);
+    financeRotorGroup.position.y = towerH + 0.9;
+    financeRotorGroup.userData.isFinanceRotor = true;
+    g.add(financeRotorGroup);
+    // Large rotating golden dollar sign on top
+    const dollarGroup = new THREE.Group();
+    const dollarGold = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.1, metalness: 0.9, emissive: 0xCC9900, emissiveIntensity: 0.3 });
+    // S-shape made from torus segments
+    const sTop = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.2, 8, 16, Math.PI), dollarGold);
+    sTop.position.y = 0.4; sTop.rotation.z = Math.PI / 2; dollarGroup.add(sTop);
+    const sBot = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.2, 8, 16, Math.PI), dollarGold);
+    sBot.position.y = -0.4; sBot.rotation.z = -Math.PI / 2; dollarGroup.add(sBot);
+    // Vertical bars through the S
+    const bar1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.2, 6), dollarGold);
+    bar1.position.x = 0.15; dollarGroup.add(bar1);
+    const bar2 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.2, 6), dollarGold);
+    bar2.position.x = -0.15; dollarGroup.add(bar2);
+    dollarGroup.position.y = towerH + 3.5;
+    dollarGroup.scale.setScalar(1.5);
+    dollarGroup.userData.isFinanceDollar = true;
+    financeDollarSign = dollarGroup;
+    g.add(dollarGroup);
+    // Green accent point lights at corners
+    const cornerPositions = [[-3.5, 3], [3.5, 3], [-3.5, -3], [3.5, -3]];
+    cornerPositions.forEach(([x, z]) => {
+        const light = new THREE.PointLight(0x00ff66, 0.5, 10);
+        light.position.set(x, 1, z); g.add(light);
+    });
+    // Top accent light
+    const topLight = new THREE.PointLight(0x00ff44, 0.8, 15);
+    topLight.position.set(0, towerH + 5, 0); g.add(topLight);
+    // Entrance canopy
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x2a4a5a, roughness: 0.2, metalness: 0.8 });
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(4, 0.15, 2), canopyMat);
+    canopy.position.set(0, 3.5, 4); canopy.castShadow = true; g.add(canopy);
+    // Glass entrance doors
+    const doorGlass = new THREE.MeshStandardMaterial({ color: 0x88ccdd, roughness: 0.05, metalness: 0.5, transparent: true, opacity: 0.5 });
+    const entrDoor = new THREE.Mesh(new THREE.BoxGeometry(2.5, 3, 0.08), doorGlass);
+    entrDoor.position.set(0, 2, 3.05); g.add(entrDoor);
+
+    g.position.set(-42, 0, 24);
+    return makeClickable(g, 'Finance');
+}
+
 // --- THE HOUSE: Home for Tennille and Zeus ---
 function createHouse() {
     const g = new THREE.Group();
@@ -1452,20 +1698,22 @@ function createHouse() {
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
     const walls = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 6), wallMat);
     walls.position.y = 2; walls.castShadow = true; walls.receiveShadow = true; g.add(walls);
-    // Pitched roof (black)
+    // Pitched roof (black) - panels sized and angled to meet cleanly
     const roofMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7 });
-    const roofL = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.2, 4.2), roofMat);
-    roofL.position.set(0, 4.8, -1); roofL.rotation.x = -0.55; roofL.castShadow = true; g.add(roofL);
-    const roofR = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.2, 4.2), roofMat);
-    roofR.position.set(0, 4.8, 1); roofR.rotation.x = 0.55; roofR.castShadow = true; g.add(roofR);
+    const roofAngle = Math.atan2(1.8, 3); // rise/run for the roof slope
+    const roofLen = Math.sqrt(3 * 3 + 1.8 * 1.8); // hypotenuse of slope
+    const roofL = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.2, roofLen + 0.3), roofMat);
+    roofL.position.set(0, 4 + 0.9, -1.5); roofL.rotation.x = -roofAngle; roofL.castShadow = true; g.add(roofL);
+    const roofR = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.2, roofLen + 0.3), roofMat);
+    roofR.position.set(0, 4 + 0.9, 1.5); roofR.rotation.x = roofAngle; roofR.castShadow = true; g.add(roofR);
     // Roof ridge
-    const ridge = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.15, 0.3), roofMat);
-    ridge.position.y = 5.55; g.add(ridge);
-    // Gable ends (triangular - approximated with a wedge shape)
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(7.9, 0.25, 0.4), roofMat);
+    ridge.position.y = 5.8; g.add(ridge);
+    // Gable ends (triangular - matches roof slope exactly)
     const gableMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
     const gableGeo = new THREE.BufferGeometry();
     const gableVerts = new Float32Array([
-        -3.5, 4, 0,  3.5, 4, 0,  0, 5.6, 0  // triangle
+        -3.5, 4, 0,  3.5, 4, 0,  0, 5.8, 0  // triangle peak matches ridge
     ]);
     gableGeo.setAttribute('position', new THREE.BufferAttribute(gableVerts, 3));
     gableGeo.computeVertexNormals();
@@ -1534,16 +1782,16 @@ function createHouse() {
     // Chimney
     const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x994422, roughness: 0.7 });
     const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.5, 0.8), chimneyMat);
-    chimney.position.set(2.5, 5.5, -1.5); chimney.castShadow = true; g.add(chimney);
+    chimney.position.set(2.5, 5.7, -1.5); chimney.castShadow = true; g.add(chimney);
     const chimneyTop = new THREE.Mesh(new THREE.BoxGeometry(1, 0.15, 1), chimneyMat);
-    chimneyTop.position.set(2.5, 6.8, -1.5); g.add(chimneyTop);
+    chimneyTop.position.set(2.5, 7.0, -1.5); g.add(chimneyTop);
     // Chimney smoke
     const houseSmoke = new THREE.Group(); houseSmoke.userData.isSmoke = true;
     for (let i = 0; i < 10; i++) {
         const pf = new THREE.Mesh(new THREE.SphereGeometry(0.12 + Math.random() * 0.15, 6, 6), new THREE.MeshStandardMaterial({ color: 0xcccccc, transparent: true, opacity: 0.25, roughness: 1 }));
         pf.userData = { smokeIndex: i, smokeOffset: Math.random() * Math.PI * 2 }; houseSmoke.add(pf);
     }
-    houseSmoke.position.set(2.5, 6.9, -1.5); g.add(houseSmoke);
+    houseSmoke.position.set(2.5, 7.1, -1.5); g.add(houseSmoke);
     // Cat tree visible through side window (decorative)
     const catTreeMat = new THREE.MeshStandardMaterial({ color: 0xc8a870, roughness: 0.8 });
     const catTreePole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.2, 6), catTreeMat);
@@ -1559,9 +1807,9 @@ function createHouse() {
 }
 
 // --- Save / Load Layout ---
-const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'The House'];
+const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House'];
 function getBuildingByName(n) {
-    return { 'Workshop': workshop, 'Storage': storage, 'Incubator': incubator, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'The House': house }[n];
+    return { 'Workshop': workshop, 'Storage': storage, 'Incubator': incubator, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house }[n];
 }
 function saveLayout() {
     const data = {
@@ -1575,16 +1823,38 @@ function saveLayout() {
         const b = getBuildingByName(n);
         if (b) data.buildings[n] = { x: b.position.x, z: b.position.z };
     });
+    // Always save to localStorage (reliable, works offline)
+    try {
+        localStorage.setItem('businessWorldLayout', JSON.stringify(data));
+    } catch (e) {
+        console.warn('localStorage save failed:', e);
+    }
+    // Also try server save as backup (non-blocking, failure is fine)
     fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-        .catch(err => console.warn('Save failed:', err));
+        .catch(() => {});
 }
 async function loadLayout() {
+    // Try localStorage first (most reliable)
+    try {
+        const local = localStorage.getItem('businessWorldLayout');
+        if (local) {
+            const parsed = JSON.parse(local);
+            if (parsed && parsed.buildings) return parsed;
+        }
+    } catch (e) {
+        console.warn('localStorage load failed:', e);
+    }
+    // Fall back to server
     try {
         const res = await fetch('/load-layout');
         if (!res.ok) return null;
         return await res.json();
     } catch { return null; }
 }
+// Auto-save before page closes (ensures nothing is lost)
+window.addEventListener('beforeunload', () => { saveLayout(); });
+// Periodic auto-save every 30 seconds
+setInterval(saveLayout, 30000);
 
 // --- Async Init: Load models, create buildings, start game ---
 async function init() {
@@ -1603,6 +1873,8 @@ async function init() {
     employeeIsland = createEmployeeIsland();
     scienceCenter = createScienceCenter();
     jarvis = createJarvis();
+    library = createLibrary();
+    finance = createFinance();
     house = createHouse();
 
     // Load saved layout or use defaults
@@ -1644,7 +1916,7 @@ async function init() {
 
     // Snap buildings to grid (for initial default positions)
     if (!saved) {
-        [workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, house].forEach(b => {
+        [workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house].forEach(b => {
             b.position.x = snapToGrid(b.position.x);
             b.position.z = snapToGrid(b.position.z);
         });
@@ -1659,6 +1931,8 @@ async function init() {
             if (emp) { emp.position.x = se.x; emp.position.z = se.z; }
         });
     }
+    // Save immediately so any new buildings get persisted
+    saveLayout();
     // Create ambient particles
     initAmbientParticles();
     // Set initial gold fill level
@@ -1669,7 +1943,7 @@ async function init() {
     // Start animation
     animate();
     // Expose for testing
-    window._bw = { playerMesh, camera, cameraTarget, scene, workshop, storage, incubator, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, house };
+    window._bw = { playerMesh, camera, cameraTarget, scene, workshop, storage, incubator, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house };
     console.log('Business World loaded!');
 }
 
@@ -1905,8 +2179,32 @@ window.togglePathMode = function () {
     document.getElementById('path-btn').textContent = pathPlaceMode ? 'Done Paths' : 'Place Paths';
     document.getElementById('edit-indicator').textContent = pathPlaceMode ? 'PATH MODE - Click grid to place/remove paths' : 'EDIT MODE - Drag to rearrange';
 };
-function openModal(n, t) { document.getElementById('modal-title').textContent = n; document.getElementById('modal-body').textContent = t === 'character' ? `This is ${n}. Assign them by dragging in edit mode!` : t === 'tree' ? 'A lovely tree. Move it around in edit mode!' : 'Nothing here yet... Check back soon!'; document.getElementById('modal-overlay').classList.add('visible'); }
-window.closeModal = function () { document.getElementById('modal-overlay').classList.remove('visible'); };
+function openModal(n, t) {
+    const modal = document.getElementById('modal');
+    const title = document.getElementById('modal-title');
+    const body = document.getElementById('modal-body');
+    title.textContent = n;
+    modal.classList.remove('modal-expanded');
+
+    if (BuildingRegistry.has(n)) {
+        modal.classList.add('modal-expanded');
+        body.innerHTML = '';
+        document.getElementById('modal-overlay').classList.add('visible');
+        BuildingRegistry.get(n).open(body);
+    } else {
+        body.textContent = t === 'character' ? `This is ${n}. Assign them by dragging in edit mode!` : t === 'tree' ? 'A lovely tree. Move it around in edit mode!' : 'Nothing here yet... Check back soon!';
+        document.getElementById('modal-overlay').classList.add('visible');
+    }
+}
+window.closeModal = function () {
+    const modal = document.getElementById('modal');
+    const title = document.getElementById('modal-title').textContent;
+    if (BuildingRegistry.has(title)) {
+        BuildingRegistry.get(title).close();
+    }
+    modal.classList.remove('modal-expanded');
+    document.getElementById('modal-overlay').classList.remove('visible');
+};
 function updateMoney() { level = Math.floor(money / LEVEL_THRESHOLD) + 1; const p = (money % LEVEL_THRESHOLD) / LEVEL_THRESHOLD; document.getElementById('level-text').textContent = `Lv. ${level}`; document.getElementById('money-bar-fill').style.width = `${p * 100}%`; document.getElementById('money-text').textContent = `$${money.toLocaleString()}`; updateMoneyPitFill(p); }
 updateMoney();
 
@@ -2310,6 +2608,23 @@ function animate() {
         zeusMesh.position.y = Math.sin(time * 3) * 0.02;
         zeusMesh.rotation.y = zeusMesh.userData.wanderAngle;
     }
+    // Library: Floating book particles orbit
+    libraryBooks.forEach(bp => {
+        const d = bp.userData;
+        d.orbitAngle += d.orbitSpeed * dt;
+        bp.position.x = Math.cos(d.orbitAngle) * d.orbitRadius;
+        bp.position.z = Math.sin(d.orbitAngle) * d.orbitRadius;
+        bp.position.y = d.orbitHeight + Math.sin(time * 1.5 + d.bobOffset) * 0.8;
+        bp.rotation.y = d.orbitAngle + Math.PI / 2;
+        bp.rotation.x = Math.sin(time + d.bobOffset) * 0.2;
+        bp.material.opacity = 0.5 + Math.sin(time * 2 + d.bobOffset) * 0.2;
+    });
+    // Finance: Rotating dollar sign, spinning rotor, ticker pulse
+    if (financeDollarSign) financeDollarSign.rotation.y += dt * 0.6;
+    if (financeRotorGroup) financeRotorGroup.rotation.y += dt * 8;
+    finance.children.forEach(ch => {
+        if (ch.userData.isFinanceTicker) { ch.material.emissiveIntensity = 0.8 + Math.sin(time * 3 + ch.position.x * 2) * 0.4; }
+    });
     // Grid pulse in edit mode
     if (gridHelper) gridHelper.children.forEach(ch => { if (ch.isMesh) ch.material.opacity = 0.08 + Math.sin(time * 2) * 0.04; });
     composer.render();

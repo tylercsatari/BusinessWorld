@@ -1,0 +1,7 @@
+PyQt5>=5.15.11
+openai>=1.40.0
+pinecone-client>=3,<4
+python-dotenv>=1.0.1
+requests>=2.32.3
+python-dateutil>=2.9.0.post0
+sqlite-utils>=3.36
