@@ -1,13 +1,7 @@
 const StorageAirtable = (() => {
-    const baseUrl = () => `https://api.airtable.com/v0/${CONFIG.airtable.baseId}`;
-    const headers = () => ({
-        'Authorization': `Bearer ${CONFIG.airtable.token}`,
-        'Content-Type': 'application/json'
-    });
-
-    async function request(method, table, path = '', body = null) {
-        const url = `${baseUrl()}/${encodeURIComponent(table)}${path}`;
-        const opts = { method, headers: headers() };
+    async function request(method, table, pathSuffix = '', body = null) {
+        const url = `/api/airtable/${encodeURIComponent(table)}${pathSuffix}`;
+        const opts = { method, headers: { 'Content-Type': 'application/json' } };
         if (body) opts.body = JSON.stringify(body);
         const res = await fetch(url, opts);
         if (!res.ok) {

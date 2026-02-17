@@ -4,19 +4,12 @@
  */
 const StorageIntent = (() => {
 
-    // --- GPT Helper ---
+    // --- GPT Helper (via server proxy) ---
     async function gptChat(messages, temperature = 0) {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        const res = await fetch('/api/openai/chat', {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${CONFIG.openai.apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: CONFIG.openai.chatModel,
-                messages,
-                temperature
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages, temperature })
         });
         const data = await res.json();
         if (data.choices && data.choices[0]) return data.choices[0].message.content.trim();

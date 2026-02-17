@@ -1,29 +1,22 @@
 /**
- * OpenAI Embeddings + Pinecone Vector Search.
+ * OpenAI Embeddings + Pinecone Vector Search (via server proxy).
  * Ported from StorageAI/src/vector/embedder.py, pinecone_index.py, search.py
  */
 const StorageEmbeddings = (() => {
+    const NAMESPACE = 'inventory';
 
-    // --- OpenAI Embeddings ---
+    // --- OpenAI Embeddings (via proxy) ---
     async function embedTexts(texts) {
-        const res = await fetch('https://api.openai.com/v1/embeddings', {
+        const res = await fetch('/api/openai/embeddings', {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${CONFIG.openai.apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: CONFIG.openai.embeddingModel,
-                input: texts,
-                dimensions: CONFIG.openai.embeddingDimensions
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input: texts })
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             throw new Error(`Embedding failed: ${res.status} - ${JSON.stringify(err)}`);
         }
         const data = await res.json();
-        // Sort by index to preserve order
         return data.data.sort((a, b) => a.index - b.index).map(d => d.embedding);
     }
 
@@ -32,20 +25,12 @@ const StorageEmbeddings = (() => {
         return vecs[0];
     }
 
-    // --- Pinecone REST API ---
-    const pineconeHeaders = () => ({
-        'Api-Key': CONFIG.pinecone.apiKey,
-        'Content-Type': 'application/json'
-    });
-
+    // --- Pinecone (via proxy) ---
     async function pineconeUpsert(vectors) {
-        const res = await fetch(`${CONFIG.pinecone.host}/vectors/upsert`, {
+        const res = await fetch('/api/pinecone/upsert', {
             method: 'POST',
-            headers: pineconeHeaders(),
-            body: JSON.stringify({
-                vectors,
-                namespace: CONFIG.pinecone.namespace
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vectors, namespace: NAMESPACE })
         });
         if (!res.ok) {
             const err = await res.text();
@@ -55,13 +40,10 @@ const StorageEmbeddings = (() => {
     }
 
     async function pineconeDelete(ids) {
-        const res = await fetch(`${CONFIG.pinecone.host}/vectors/delete`, {
+        const res = await fetch('/api/pinecone/delete', {
             method: 'POST',
-            headers: pineconeHeaders(),
-            body: JSON.stringify({
-                ids,
-                namespace: CONFIG.pinecone.namespace
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, namespace: NAMESPACE })
         });
         if (!res.ok) {
             const err = await res.text();
@@ -71,15 +53,10 @@ const StorageEmbeddings = (() => {
     }
 
     async function pineconeQuery(vector, topK = 5) {
-        const res = await fetch(`${CONFIG.pinecone.host}/query`, {
+        const res = await fetch('/api/pinecone/query', {
             method: 'POST',
-            headers: pineconeHeaders(),
-            body: JSON.stringify({
-                vector,
-                topK,
-                namespace: CONFIG.pinecone.namespace,
-                includeMetadata: true
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vector, topK, namespace: NAMESPACE, includeMetadata: true })
         });
         if (!res.ok) {
             const err = await res.text();
@@ -95,11 +72,6 @@ const StorageEmbeddings = (() => {
 
     // --- High-Level Semantic Search ---
     return {
-        /**
-         * Index an item in Pinecone.
-         * @param {Object} item - {id, name, canonicalName, boxId}
-         * @param {string} boxName - display name of box
-         */
         async indexItem(item, boxName) {
             const canonical = item.canonicalName || StorageCanonicalize.normalizeToSingular(item.name);
             const vector = await embedText(canonical);
@@ -115,23 +87,11 @@ const StorageEmbeddings = (() => {
             }]);
         },
 
-        /**
-         * Remove an item from Pinecone.
-         */
         async deleteItem(itemId) {
-            try {
-                await pineconeDelete([itemId]);
-            } catch (e) {
-                console.warn('Pinecone delete failed (non-fatal):', e.message);
-            }
+            try { await pineconeDelete([itemId]); }
+            catch (e) { console.warn('Pinecone delete failed (non-fatal):', e.message); }
         },
 
-        /**
-         * Semantic search for an item.
-         * Returns { bestMatch, bestScore, suggestions }
-         * bestMatch = {id, name, canonicalName, boxId, boxName, score} or null
-         * suggestions = [{id, name, score, boxName}, ...]
-         */
         async findBestMatch(queryText, topK = 4) {
             const canonical = StorageCanonicalize.normalizeToSingular(queryText);
             const vector = await embedText(canonical);
@@ -156,10 +116,8 @@ const StorageEmbeddings = (() => {
                     },
                     bestScore: best.score,
                     suggestions: matches.slice(1).map(m => ({
-                        id: m.id,
-                        name: m.metadata.name || '',
-                        score: m.score,
-                        boxName: m.metadata.box_name || ''
+                        id: m.id, name: m.metadata.name || '',
+                        score: m.score, boxName: m.metadata.box_name || ''
                     }))
                 };
             }
@@ -168,17 +126,12 @@ const StorageEmbeddings = (() => {
                 bestMatch: null,
                 bestScore: best.score,
                 suggestions: matches.map(m => ({
-                    id: m.id,
-                    name: m.metadata.name || '',
-                    score: m.score,
-                    boxName: m.metadata.box_name || ''
+                    id: m.id, name: m.metadata.name || '',
+                    score: m.score, boxName: m.metadata.box_name || ''
                 }))
             };
         },
 
-        /**
-         * Find all matches above threshold.
-         */
         async findAllAboveThreshold(queryText, k = 10) {
             const canonical = StorageCanonicalize.normalizeToSingular(queryText);
             const vector = await embedText(canonical);
@@ -196,21 +149,15 @@ const StorageEmbeddings = (() => {
                 }));
         },
 
-        /**
-         * Re-index all items from Airtable into Pinecone.
-         * Used for manual sync.
-         */
         async reindexAll(items, boxes) {
             const boxMap = {};
             for (const b of boxes) boxMap[b.id] = b.name;
-
             for (const item of items) {
                 const boxName = item.boxIds && item.boxIds[0] ? (boxMap[item.boxIds[0]] || '') : '';
                 await this.indexItem(item, boxName);
             }
         },
 
-        // Expose low-level for GPT service usage
         embedText,
         embedTexts
     };

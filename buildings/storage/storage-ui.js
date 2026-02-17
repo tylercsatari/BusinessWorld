@@ -147,17 +147,10 @@ const StorageUI = (() => {
     async function speakTTS(text) {
         // Try OpenAI TTS first for high-quality voice
         try {
-            const res = await fetch('https://api.openai.com/v1/audio/speech', {
+            const res = await fetch('/api/openai/tts', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${CONFIG.openai.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: CONFIG.openai.ttsModel,
-                    voice: CONFIG.openai.ttsVoice,
-                    input: text
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: text })
             });
             if (res.ok) {
                 const blob = await res.blob();
