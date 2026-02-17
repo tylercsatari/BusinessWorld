@@ -1828,6 +1828,27 @@ function saveLayout() {
         .catch(err => console.warn('Server save failed:', err));
 }
 async function loadLayout() {
+    // One-time migration: if localStorage has a layout, push it to the server
+    // and use it as the source of truth, then clear localStorage.
+    try {
+        const localRaw = localStorage.getItem('businessWorldLayout');
+        if (localRaw) {
+            const localData = JSON.parse(localRaw);
+            if (localData && localData.buildings) {
+                // Migrate to server
+                await fetch('/save-layout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(localData)
+                });
+                localStorage.removeItem('businessWorldLayout');
+                console.log('Layout migrated from localStorage to server.');
+                return localData;
+            }
+        }
+    } catch (e) {
+        console.warn('localStorage migration failed:', e);
+    }
     // Load from server (source of truth — same layout on every device)
     try {
         const res = await fetch('/load-layout');
