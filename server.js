@@ -207,35 +207,66 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
-    // API: Notion proxy  /api/notion/pages (create page)
+    // API: Notion proxy — full CRUD for pages and blocks
     // =========================================
+    const NOTION_HEADERS = {
+        'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+    };
+
+    // POST /api/notion/pages — create a page
     if (pathname === '/api/notion/pages' && req.method === 'POST') {
         const body = await readBody(req);
         await proxyFetch(res, 'https://api.notion.com/v1/pages', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
-                'Notion-Version': '2022-06-28',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body)
+            method: 'POST', headers: NOTION_HEADERS, body: JSON.stringify(body)
         });
         return;
     }
 
-    // =========================================
-    // API: Notion proxy  /api/notion/blocks/:id/children (list children)
-    // =========================================
-    const notionBlocksMatch = pathname.match(/^\/api\/notion\/blocks\/([^/]+)\/children$/);
-    if (notionBlocksMatch && req.method === 'GET') {
-        const blockId = notionBlocksMatch[1];
+    // PATCH /api/notion/pages/:id — update page (title, archive)
+    const notionPagePatch = pathname.match(/^\/api\/notion\/pages\/([^/]+)$/);
+    if (notionPagePatch && req.method === 'PATCH') {
+        const body = await readBody(req);
+        await proxyFetch(res, `https://api.notion.com/v1/pages/${notionPagePatch[1]}`, {
+            method: 'PATCH', headers: NOTION_HEADERS, body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    // GET /api/notion/blocks/:id/children — list block children
+    const notionBlockChildren = pathname.match(/^\/api\/notion\/blocks\/([^/]+)\/children$/);
+    if (notionBlockChildren && req.method === 'GET') {
         const qs = url.search || '';
-        await proxyFetch(res, `https://api.notion.com/v1/blocks/${blockId}/children${qs}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
-                'Notion-Version': '2022-06-28'
-            }
+        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockChildren[1]}/children${qs}`, {
+            method: 'GET', headers: NOTION_HEADERS
+        });
+        return;
+    }
+
+    // PATCH /api/notion/blocks/:id/children — append block children
+    if (notionBlockChildren && req.method === 'PATCH') {
+        const body = await readBody(req);
+        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockChildren[1]}/children`, {
+            method: 'PATCH', headers: NOTION_HEADERS, body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    // PATCH /api/notion/blocks/:id — update a block
+    const notionBlockPatch = pathname.match(/^\/api\/notion\/blocks\/([^/]+)$/);
+    if (notionBlockPatch && req.method === 'PATCH') {
+        const body = await readBody(req);
+        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockPatch[1]}`, {
+            method: 'PATCH', headers: NOTION_HEADERS, body: JSON.stringify(body)
+        });
+        return;
+    }
+
+    // DELETE /api/notion/blocks/:id — delete a block
+    if (notionBlockPatch && req.method === 'DELETE') {
+        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockPatch[1]}`, {
+            method: 'DELETE', headers: NOTION_HEADERS
         });
         return;
     }
