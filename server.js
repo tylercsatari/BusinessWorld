@@ -241,9 +241,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
-    // Save layout
+    // Save layout (local dev only — Render's ephemeral disk would cause drift)
     // =========================================
     if (req.method === 'POST' && pathname === '/save-layout') {
+        if (process.env.RENDER) {
+            // On Render, layout.json from git is the source of truth — don't overwrite
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end('{"ok":true,"readonly":true}');
+            return;
+        }
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
