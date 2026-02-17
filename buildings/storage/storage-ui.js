@@ -9,6 +9,53 @@ const StorageUI = (() => {
     let micState = 'idle'; // idle | recording | processing
     let recognition = null; // Web Speech API instance
     let ttsAudio = null; // current TTS audio element
+    let history = []; // activity history log
+    let historyVisible = false;
+
+    function loadHistory() {
+        try {
+            const raw = localStorage.getItem('storageHistory');
+            if (raw) history = JSON.parse(raw);
+        } catch (e) { history = []; }
+    }
+
+    function saveHistory() {
+        try {
+            // Keep last 200 entries
+            if (history.length > 200) history = history.slice(-200);
+            localStorage.setItem('storageHistory', JSON.stringify(history));
+        } catch (e) {}
+    }
+
+    function addHistory(action, details) {
+        history.push({
+            time: new Date().toISOString(),
+            action,
+            details
+        });
+        saveHistory();
+        if (historyVisible) renderHistory();
+    }
+
+    function renderHistory() {
+        const list = document.getElementById('storage-history-list');
+        if (!list) return;
+        if (history.length === 0) {
+            list.innerHTML = '<div style="padding:10px;color:#999;font-style:italic;">No activity yet.</div>';
+            return;
+        }
+        // Show newest first
+        list.innerHTML = history.slice().reverse().map(h => {
+            const d = new Date(h.time);
+            const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            return `<div class="storage-history-entry">
+                <span class="storage-history-action">${escHtml(h.action)}</span>
+                <span class="storage-history-details">${escHtml(h.details)}</span>
+                <span class="storage-history-time">${date} ${time}</span>
+            </div>`;
+        }).join('');
+    }
 
     // --- Rendering ---
     function render() {
@@ -30,10 +77,14 @@ const StorageUI = (() => {
                         <button onclick="StorageUI.onAddBox()">+ Add Box</button>
                         <button onclick="StorageUI.onRemoveBox()">- Remove Box</button>
                         <button class="sync-btn" onclick="StorageUI.onSync()">Sync</button>
-                        <button class="sync-btn" onclick="StorageUI.onReindex()">Re-index</button>
+                        <button class="sync-btn" onclick="StorageUI.onToggleHistory()">History</button>
                     </div>
                     <div class="storage-boxes-grid" id="storage-boxes-grid">
                         <div class="storage-loading"><div class="storage-spinner"></div></div>
+                    </div>
+                    <div class="storage-history" id="storage-history" style="display:none;">
+                        <h3>Activity History</h3>
+                        <div class="storage-history-list" id="storage-history-list"></div>
                     </div>
                 </div>
                 <div class="storage-chat">
@@ -187,6 +238,7 @@ const StorageUI = (() => {
                         ? `Merged with existing "${r.mergedWith}" in box ${r.boxName} (${(r.score * 100).toFixed(0)}% match). Now ${r.item.quantity}x total.`
                         : `Added ${parsed.quantity || 1}x ${r.item.name} to box ${r.boxName}.`;
                     addChatMsg(msg, 'system');
+                    addHistory('ADD', `${parsed.quantity || 1}x ${r.item.name} → Box ${r.boxName}`);
                     await speakTTS(msg);
                     break;
                 }
@@ -201,6 +253,7 @@ const StorageUI = (() => {
                         ? `Removed all ${r.item.name}.`
                         : `Removed ${parsed.quantity || 1}x ${r.item.name}. ${r.item.quantity} remaining.`;
                     addChatMsg(msg, 'system');
+                    addHistory('REMOVE', r.deleted ? `All ${r.item.name}` : `${parsed.quantity || 1}x ${r.item.name} (${r.item.quantity} left)`);
                     await speakTTS(msg);
                     break;
                 }
@@ -234,6 +287,7 @@ const StorageUI = (() => {
                     }
                     const msg = `Moved ${r.item.name} to box ${r.toBox}.`;
                     addChatMsg(msg, 'system');
+                    addHistory('MOVE', `${r.item.name} → Box ${r.toBox}`);
                     await speakTTS(msg);
                     break;
                 }
@@ -247,6 +301,7 @@ const StorageUI = (() => {
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     const msg = `Created box ${r.box.name}.`;
                     addChatMsg(msg, 'system');
+                    addHistory('ADD BOX', r.box.name);
                     await speakTTS(msg);
                     break;
                 }
@@ -255,6 +310,7 @@ const StorageUI = (() => {
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     const msg = `Removed box ${r.box.name}.`;
                     addChatMsg(msg, 'system');
+                    addHistory('REMOVE BOX', r.box.name);
                     await speakTTS(msg);
                     break;
                 }
@@ -263,6 +319,7 @@ const StorageUI = (() => {
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     const msg = `Cleared ${r.count} items from box ${r.box.name}.`;
                     addChatMsg(msg, 'system');
+                    addHistory('CLEAR BOX', `${r.count} items from ${r.box.name}`);
                     await speakTTS(msg);
                     break;
                 }
@@ -323,6 +380,7 @@ const StorageUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             recognition = initSpeechRecognition();
+            loadHistory();
 
             try {
                 await StorageService.sync();
@@ -341,6 +399,7 @@ const StorageUI = (() => {
             if ('speechSynthesis' in window) window.speechSynthesis.cancel();
             container = null;
             initialized = false;
+            historyVisible = false;
         },
 
         onMicToggle() {
@@ -370,16 +429,14 @@ const StorageUI = (() => {
             }
         },
 
-        async onReindex() {
-            addChatMsg('Re-indexing vector database...', 'system');
-            try {
-                await StorageService.sync();
-                await StorageService.reindexAll((msg) => addChatMsg(msg, 'system'));
-                renderBoxes();
-                updateStats();
-            } catch (e) {
-                addChatMsg(`Re-index error: ${e.message}`, 'error');
-            }
+        onToggleHistory() {
+            const grid = document.getElementById('storage-boxes-grid');
+            const hist = document.getElementById('storage-history');
+            if (!grid || !hist) return;
+            historyVisible = !historyVisible;
+            grid.style.display = historyVisible ? 'none' : '';
+            hist.style.display = historyVisible ? 'block' : 'none';
+            if (historyVisible) renderHistory();
         },
 
         onAddItem() {
