@@ -59,8 +59,34 @@
     flex: 1; overflow-y: auto; padding: 16px;
     display: flex; flex-direction: column; gap: 12px;
 }
-.workshop-empty, .workshop-loading {
+.workshop-empty {
     text-align: center; color: #999; font-style: italic; padding: 40px 20px;
+}
+
+/* Skeleton loading cards */
+.workshop-skeleton-card {
+    display: flex; align-items: center; gap: 16px;
+    background: white; border-radius: 14px; padding: 14px 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #ece8e0;
+}
+.workshop-skeleton-egg {
+    width: 50px; height: 62px; border-radius: 50%;
+    background: linear-gradient(110deg, #f0ece4 30%, #faf7f2 50%, #f0ece4 70%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+.workshop-skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.workshop-skeleton-line {
+    height: 14px; border-radius: 7px;
+    background: linear-gradient(110deg, #f0ece4 30%, #faf7f2 50%, #f0ece4 70%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+.workshop-skeleton-line.short { width: 60%; }
+.workshop-skeleton-line.shorter { width: 40%; }
+@keyframes skeletonShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
 .workshop-card {

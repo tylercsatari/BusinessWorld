@@ -6,11 +6,9 @@
  */
 const LibraryUI = (() => {
     let container = null;
-    let videosPageId = '';
-    let todoPageId = '';
-    let scripts = [];
+    let todoPageId = '';       // for to-do list
+    let calendarPageId = '';   // for calendar
     let selectedId = null;
-    let selectedBlocks = [];
     let selectedScriptMeta = null; // {project, linkedIdeaId, linkedVideoId}
     let saveTimer = null;
     let titleSaveTimer = null;
@@ -20,131 +18,30 @@ const LibraryUI = (() => {
     let selectedNote = null;
     let noteSaveTimer = null;
     let noteDirty = false;
-    let todoItems = [];  // [{id, text, done}] — Notion to_do blocks
+    let todoItems = [];  // [{id, text, rawText, done, category}] — Notion to_do blocks
+    let todoCategory = 'daily'; // current add category toggle
+    let calendarItems = []; // [{id, text, date, time, done}]
+    let calendarLoaded = false;
+    let calendarBusy = false;
+    let calendarViewMode = 'week'; // 'week' | 'month'
+    let calendarSelectedDate = null; // Date object
     let selectedVideo = null;
     let videoSaveTimer = null;
     let videoDirty = false;
 
-    // --- Idea content helpers (JSON in content field) ---
-    function parseIdeaContent(content) {
-        if (!content) return { hook: '', context: '' };
-        try {
-            const obj = JSON.parse(content);
-            return { hook: obj.hook || '', context: obj.context || '' };
-        } catch (e) {
-            // Legacy plain text — treat as context
-            return { hook: '', context: content };
-        }
-    }
-    function ideaContentToString(hook, context) {
-        return JSON.stringify({ hook, context });
-    }
+    const escHtml = NotionHelpers.escHtml;
+    const escAttr = NotionHelpers.escAttr;
 
-    // --- Config ---
+    // --- Config (only for todo/calendar page IDs) ---
     async function loadConfig() {
-        if (videosPageId) return;
+        if (todoPageId) return;
         try {
-            const res = await fetch('/api/config');
-            const cfg = await res.json();
+            const cfg = await NotionHelpers.getConfig();
             if (cfg.notion) {
-                if (cfg.notion.videosPageId) videosPageId = cfg.notion.videosPageId;
                 if (cfg.notion.todoPageId) todoPageId = cfg.notion.todoPageId;
+                if (cfg.notion.calendarPageId) calendarPageId = cfg.notion.calendarPageId;
             }
         } catch (e) { console.warn('Library: config load failed', e); }
-    }
-
-    // --- Notion API helpers ---
-    async function fetchScripts() {
-        if (!videosPageId) return [];
-        try {
-            const res = await fetch(`/api/notion/blocks/${videosPageId}/children`);
-            const data = await res.json();
-            if (!data.results) return [];
-            return data.results
-                .filter(b => b.type === 'child_page')
-                .map(b => ({ id: b.id, title: b.child_page.title, project: '', created: b.created_time, lastEdited: b.last_edited_time }));
-        } catch (e) { console.warn('Library: fetch scripts failed', e); return []; }
-    }
-
-    async function fetchPageContent(pageId) {
-        try {
-            const res = await fetch(`/api/notion/blocks/${pageId}/children`);
-            const data = await res.json();
-            return data.results || [];
-        } catch (e) { console.warn('Library: fetch content failed', e); return []; }
-    }
-
-    async function createPage(title, content) {
-        const children = textToBlocks(content);
-        const res = await fetch('/api/notion/pages', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ parent: { page_id: videosPageId }, properties: { title: { title: [{ text: { content: title } }] } }, children })
-        });
-        if (!res.ok) throw new Error('Failed to create page');
-        return await res.json();
-    }
-
-    async function updatePageTitle(pageId, title) {
-        await fetch(`/api/notion/pages/${pageId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ properties: { title: { title: [{ text: { content: title } }] } } }) });
-    }
-
-    async function archivePage(pageId) {
-        await fetch(`/api/notion/pages/${pageId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: true }) });
-    }
-
-    async function deleteBlock(blockId) { await fetch(`/api/notion/blocks/${blockId}`, { method: 'DELETE' }); }
-
-    async function appendBlocks(pageId, blocks) {
-        await fetch(`/api/notion/blocks/${pageId}/children`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ children: blocks }) });
-    }
-
-    function blocksToText(blocks) {
-        return blocks.filter(b => b.type === 'paragraph').map(b => {
-            const rt = b.paragraph && b.paragraph.rich_text;
-            if (!rt || rt.length === 0) return '';
-            return rt.map(t => t.plain_text || t.text?.content || '').join('');
-        }).join('\n');
-    }
-
-    function extractScriptMeta(blocks) {
-        for (const b of blocks) {
-            if (b.type === 'code') {
-                const text = (b.code.rich_text || []).map(t => t.plain_text).join('');
-                try { return JSON.parse(text); } catch (e) {}
-            }
-        }
-        return { project: '' };
-    }
-
-    async function saveScriptMeta(pageId, meta) {
-        // Find and delete existing code blocks, then append new one
-        const res = await fetch(`/api/notion/blocks/${pageId}/children`);
-        if (res.ok) {
-            const data = await res.json();
-            for (const block of (data.results || [])) {
-                if (block.type === 'code') {
-                    await fetch(`/api/notion/blocks/${block.id}`, { method: 'DELETE' });
-                }
-            }
-        }
-        await appendBlocks(pageId, [{
-            object: 'block', type: 'code',
-            code: { language: 'json', rich_text: [{ type: 'text', text: { content: JSON.stringify(meta) } }] }
-        }]);
-    }
-
-    function textToBlocks(text) {
-        const lines = text.split('\n');
-        const blocks = lines.map(line => ({ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: line } }] } }));
-        if (blocks.length === 0) blocks.push({ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: '' } }] } });
-        return blocks;
-    }
-
-    function ensureScriptSuffix(title) {
-        const t = title.trim();
-        if (!t) return '';
-        return /script$/i.test(t) ? t : t + ' Script';
     }
 
     function formatDate(dateStr) {
@@ -177,16 +74,7 @@ const LibraryUI = (() => {
         if (!textarea) return;
         setSaveStatus('Saving...'); dirty = false;
         try {
-            for (const block of selectedBlocks) await deleteBlock(block.id);
-            const blocks = textToBlocks(textarea.value);
-            // Append metadata code block if we have metadata
-            if (selectedScriptMeta) {
-                const projectEl = document.getElementById('library-script-project');
-                if (projectEl) selectedScriptMeta.project = projectEl.value;
-                blocks.push({ object: 'block', type: 'code', code: { language: 'json', rich_text: [{ type: 'text', text: { content: JSON.stringify(selectedScriptMeta) } }] } });
-            }
-            await appendBlocks(selectedId, blocks);
-            selectedBlocks = await fetchPageContent(selectedId);
+            await ScriptService.saveContent(selectedId, textarea.value, selectedScriptMeta);
             setSaveStatus('Saved');
         } catch (e) { console.warn('Library: save failed', e); setSaveStatus('Save failed'); dirty = true; }
     }
@@ -200,11 +88,11 @@ const LibraryUI = (() => {
         if (!selectedId) return;
         const input = document.getElementById('library-editor-title');
         if (!input) return;
-        const title = ensureScriptSuffix(input.value.trim());
+        const title = ScriptService.ensureScriptSuffix(input.value.trim());
         setSaveStatus('Saving...');
         try {
-            await updatePageTitle(selectedId, title);
-            const s = scripts.find(s => s.id === selectedId);
+            await NotionHelpers.updatePageTitle(selectedId, title);
+            const s = ScriptService.getAll().find(s => s.id === selectedId);
             if (s) s.title = title;
             setSaveStatus('Saved');
         } catch (e) { console.warn('Library: title save failed', e); setSaveStatus('Save failed'); }
@@ -219,6 +107,7 @@ const LibraryUI = (() => {
         panel.classList.add('show-list');
         if (activeTab === 'scripts') renderList();
         else if (activeTab === 'notes') renderNotesList();
+        else if (activeTab === 'calendar') renderCalendarList();
         else if (activeTab === 'projects') renderProjectsList();
     }
 
@@ -240,15 +129,17 @@ const LibraryUI = (() => {
                         <button class="library-tab active" data-tab="scripts">Scripts</button>
                         <button class="library-tab" data-tab="notes">Ideas</button>
                         <button class="library-tab" data-tab="todo">To-Do</button>
+                        <button class="library-tab" data-tab="calendar">Calendar</button>
                         <button class="library-tab" data-tab="projects">Projects</button>
                     </div>
                     <div class="library-list-header" id="library-list-header">
                         <h2 class="library-list-heading" id="library-list-heading">Scripts</h2>
                         <button class="library-new-btn" id="library-new-btn" title="New">+</button>
                     </div>
-                    <div class="library-list" id="library-list"><div class="library-empty">Loading...</div></div>
-                    <div class="library-notes-list" id="library-notes-list" style="display:none;"><div class="library-empty">Loading...</div></div>
+                    <div class="library-list" id="library-list">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
+                    <div class="library-notes-list" id="library-notes-list" style="display:none;">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
                     <div class="library-todo-container" id="library-todo-container" style="display:none;"></div>
+                    <div class="library-calendar-container" id="library-calendar-container" style="display:none;"></div>
                     <div class="library-projects-container" id="library-projects-container" style="display:none;"></div>
                 </div>
                 <div class="library-page library-editor-page" id="library-editor-page">
@@ -261,8 +152,9 @@ const LibraryUI = (() => {
         document.getElementById('library-new-btn').addEventListener('click', () => {
             if (activeTab === 'scripts') handleNew();
             else if (activeTab === 'notes') handleNewNote();
-            // todo uses inline input, no + button action needed — but we'll focus the input
+            // todo/calendar use inline input, no + button action needed — but we'll focus the input
             else if (activeTab === 'todo') focusTodoInput();
+            else if (activeTab === 'calendar') focusCalendarInput();
         });
         container.querySelectorAll('.library-tab').forEach(tab => {
             tab.addEventListener('click', () => switchTab(tab.dataset.tab));
@@ -276,11 +168,13 @@ const LibraryUI = (() => {
         const scriptList = document.getElementById('library-list');
         const notesList = document.getElementById('library-notes-list');
         const todoContainer = document.getElementById('library-todo-container');
+        const calendarContainer = document.getElementById('library-calendar-container');
         const projectsContainer = document.getElementById('library-projects-container');
 
         if (scriptList) scriptList.style.display = 'none';
         if (notesList) notesList.style.display = 'none';
         if (todoContainer) todoContainer.style.display = 'none';
+        if (calendarContainer) calendarContainer.style.display = 'none';
         if (projectsContainer) projectsContainer.style.display = 'none';
 
         const newBtn = document.getElementById('library-new-btn');
@@ -300,6 +194,12 @@ const LibraryUI = (() => {
             if (newBtn) newBtn.style.display = '';
             renderTodoList();
             if (todoLoaded) backgroundRefreshTodo();
+        } else if (tab === 'calendar') {
+            if (heading) heading.textContent = 'Calendar';
+            if (calendarContainer) calendarContainer.style.display = '';
+            if (newBtn) newBtn.style.display = '';
+            renderCalendarList();
+            if (calendarLoaded) backgroundRefreshCalendar();
         } else if (tab === 'projects') {
             if (heading) heading.textContent = 'Projects';
             if (projectsContainer) projectsContainer.style.display = '';
@@ -321,11 +221,17 @@ const LibraryUI = (() => {
         if (!data.results) return [];
         return data.results
             .filter(b => b.type === 'to_do')
-            .map(b => ({
-                id: b.id,
-                text: (b.to_do.rich_text || []).map(t => t.plain_text).join(''),
-                done: b.to_do.checked || false
-            }));
+            .map(b => {
+                const rawText = (b.to_do.rich_text || []).map(t => t.plain_text).join('');
+                const isWeekly = rawText.startsWith('[W] ');
+                return {
+                    id: b.id,
+                    rawText,
+                    text: isWeekly ? rawText.slice(4) : rawText,
+                    done: b.to_do.checked || false,
+                    category: isWeekly ? 'weekly' : 'daily'
+                };
+            });
     }
 
     let todoBusy = false; // true while an add/delete/toggle API call is in progress
@@ -367,25 +273,47 @@ const LibraryUI = (() => {
     function renderTodoContent(el) {
         if (!el) return;
 
+        const dailyItems = todoItems.filter(i => i.category === 'daily');
+        const weeklyItems = todoItems.filter(i => i.category === 'weekly');
+
+        function renderSection(label, items) {
+            if (items.length === 0) return '';
+            return `
+                <div class="library-todo-section-header">${escHtml(label)}</div>
+                ${items.map(item => {
+                    const idx = todoItems.indexOf(item);
+                    return `
+                    <div class="library-todo-item ${item.done ? 'done' : ''}" data-idx="${idx}">
+                        <button class="library-todo-check" data-idx="${idx}">${item.done ? '&#10003;' : ''}</button>
+                        <span class="library-todo-text">${escHtml(item.text)}</span>
+                        <button class="library-todo-delete" data-idx="${idx}">&times;</button>
+                    </div>`;
+                }).join('')}
+            `;
+        }
+
         el.innerHTML = `
             <div class="library-todo-input-row">
                 <input type="text" class="library-todo-input" id="library-todo-input" placeholder="Add a new task..." />
+                <button class="library-todo-category-btn" id="library-todo-category-btn" title="Toggle Daily/General">${todoCategory === 'daily' ? 'D' : 'G'}</button>
                 <button class="library-todo-add-btn" id="library-todo-add-btn">Add</button>
             </div>
             ${todoItems.length === 0 ? '<div class="library-todo-empty">No tasks yet. Type above to add one.</div>' : ''}
             <div class="library-todo-items" id="library-todo-items">
-                ${todoItems.map((item, i) => `
-                    <div class="library-todo-item ${item.done ? 'done' : ''}" data-idx="${i}">
-                        <button class="library-todo-check" data-idx="${i}">${item.done ? '&#10003;' : ''}</button>
-                        <span class="library-todo-text">${escHtml(item.text)}</span>
-                        <button class="library-todo-delete" data-idx="${i}">&times;</button>
-                    </div>
-                `).join('')}
+                ${renderSection('Daily', dailyItems)}
+                ${renderSection('General', weeklyItems)}
             </div>
         `;
 
         const input = document.getElementById('library-todo-input');
         const addBtn = document.getElementById('library-todo-add-btn');
+        const catBtn = document.getElementById('library-todo-category-btn');
+
+        catBtn.addEventListener('click', () => {
+            todoCategory = todoCategory === 'daily' ? 'weekly' : 'daily';
+            catBtn.textContent = todoCategory === 'daily' ? 'D' : 'G';
+            catBtn.classList.toggle('general', todoCategory === 'weekly');
+        });
 
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && input.value.trim()) {
@@ -417,7 +345,9 @@ const LibraryUI = (() => {
     async function addTodoItem(text) {
         if (!todoPageId) { alert('To-Do page not configured.'); return; }
         todoBusy = true;
-        const tempItem = { id: null, text, done: false };
+        const isWeekly = todoCategory === 'weekly';
+        const rawText = isWeekly ? '[W] ' + text : text;
+        const tempItem = { id: null, text, rawText, done: false, category: todoCategory };
         todoItems.unshift(tempItem);
         renderTodoList();
         updateTodoBadge();
@@ -431,7 +361,7 @@ const LibraryUI = (() => {
                         object: 'block',
                         type: 'to_do',
                         to_do: {
-                            rich_text: [{ type: 'text', text: { content: text } }],
+                            rich_text: [{ type: 'text', text: { content: rawText } }],
                             checked: false
                         }
                     }]
@@ -467,7 +397,7 @@ const LibraryUI = (() => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         to_do: {
-                            rich_text: [{ type: 'text', text: { content: item.text } }],
+                            rich_text: [{ type: 'text', text: { content: item.rawText } }],
                             checked: item.done
                         }
                     })
@@ -507,6 +437,435 @@ const LibraryUI = (() => {
     }
 
     // =====================
+    // --- CALENDAR (Notion to_do blocks with date|time|title format) ---
+    // =====================
+
+    async function ensureCalendarPage() {
+        if (calendarPageId) return calendarPageId;
+        try {
+            const res = await fetch('/api/notion/ensure-calendar-page', { method: 'POST' });
+            if (!res.ok) return '';
+            const data = await res.json();
+            if (data.calendarPageId) {
+                calendarPageId = data.calendarPageId;
+                return calendarPageId;
+            }
+        } catch (e) { console.warn('Library: ensure calendar page failed', e); }
+        return '';
+    }
+
+    async function fetchCalendarEvents() {
+        const pageId = await ensureCalendarPage();
+        if (!pageId) return [];
+        const res = await fetch(`/api/notion/blocks/${pageId}/children`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        if (!data.results) return [];
+        return data.results
+            .filter(b => b.type === 'to_do')
+            .map(b => {
+                const raw = (b.to_do.rich_text || []).map(t => t.plain_text).join('');
+                // Format: YYYY-MM-DD HH:MM | Event Title
+                const pipeIdx = raw.indexOf(' | ');
+                if (pipeIdx === -1) return { id: b.id, raw, date: '', time: '', text: raw, done: b.to_do.checked || false };
+                const dtPart = raw.slice(0, pipeIdx).trim();
+                const title = raw.slice(pipeIdx + 3).trim();
+                const spaceIdx = dtPart.indexOf(' ');
+                const date = spaceIdx > -1 ? dtPart.slice(0, spaceIdx) : dtPart;
+                const time = spaceIdx > -1 ? dtPart.slice(spaceIdx + 1) : '';
+                return { id: b.id, raw, date, time, text: title, done: b.to_do.checked || false };
+            });
+    }
+
+    function renderCalendarList() {
+        const el = document.getElementById('library-calendar-container');
+        if (!el) return;
+        if (!calendarLoaded) {
+            el.innerHTML = '<div class="library-empty">Loading calendar...</div>';
+            fetchCalendarEvents().then(items => {
+                calendarItems = items;
+                calendarLoaded = true;
+                renderCalendarList();
+                updateCalendarBadge();
+            }).catch(() => {
+                el.innerHTML = '<div class="library-empty">Could not load calendar.</div>';
+            });
+            return;
+        }
+        renderCalendarContent(el);
+    }
+
+    function backgroundRefreshCalendar() {
+        if (calendarBusy) return;
+        fetchCalendarEvents().then(fresh => {
+            if (calendarBusy) return;
+            if (fresh && fresh.length >= 0) {
+                calendarItems = fresh;
+                updateCalendarBadge();
+                const el = document.getElementById('library-calendar-container');
+                if (el) renderCalendarContent(el);
+            }
+        }).catch(() => {});
+    }
+
+    function todayStr() {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    // --- Calendar helpers ---
+    function startOfWeek(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = (day === 0 ? -6 : 1) - day; // Monday = start
+        d.setDate(d.getDate() + diff);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+
+    function formatDateKey(date) {
+        return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    }
+
+    function isSameDay(d1, d2) {
+        return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+    }
+
+    function getEventsForDate(dateKey) {
+        return calendarItems.filter(e => e.date === dateKey);
+    }
+
+    function generateTimeOptions() {
+        const opts = [];
+        for (let h = 6; h < 24; h++) {
+            for (let m = 0; m < 60; m += 15) {
+                const hh = String(h).padStart(2, '0');
+                const mm = String(m).padStart(2, '0');
+                const hour12 = h % 12 || 12;
+                const ampm = h < 12 ? 'AM' : 'PM';
+                opts.push({ value: `${hh}:${mm}`, label: `${hour12}:${mm} ${ampm}` });
+            }
+        }
+        return opts;
+    }
+
+    function getDayLabel(date) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        if (isSameDay(date, today)) return 'Today';
+        if (isSameDay(date, tomorrow)) return 'Tomorrow';
+        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+
+    function formatTime12(timeStr) {
+        if (!timeStr) return '';
+        const [hh, mm] = timeStr.split(':');
+        const h = parseInt(hh);
+        const hour12 = h % 12 || 12;
+        const ampm = h < 12 ? 'AM' : 'PM';
+        return `${hour12}:${mm} ${ampm}`;
+    }
+
+    function formatCalDate(dateStr) {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-');
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return months[parseInt(m) - 1] + ' ' + parseInt(d);
+    }
+
+    function renderCalendarContent(el) {
+        if (!el) return;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Default selected date to today
+        if (!calendarSelectedDate) calendarSelectedDate = new Date(today);
+
+        const selectedKey = formatDateKey(calendarSelectedDate);
+        const todayKey = formatDateKey(today);
+        const weekMonday = startOfWeek(calendarViewMode === 'week' ? calendarSelectedDate : calendarSelectedDate);
+
+        // Build days with event indicators
+        function hasEvents(dateKey) {
+            return calendarItems.some(e => e.date === dateKey);
+        }
+
+        let navHtml = '';
+        if (calendarViewMode === 'week') {
+            // Week strip
+            const days = [];
+            const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(weekMonday);
+                d.setDate(weekMonday.getDate() + i);
+                const key = formatDateKey(d);
+                const isToday = key === todayKey;
+                const isSelected = key === selectedKey;
+                const dot = hasEvents(key) ? '<div class="library-cal-dot"></div>' : '';
+                days.push(`
+                    <div class="library-cal-day-card ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}" data-date="${key}">
+                        <div class="library-cal-day-name">${dayNames[i]}</div>
+                        <div class="library-cal-day-num">${d.getDate()}</div>
+                        ${dot}
+                    </div>`);
+            }
+            // Week navigation
+            const prevWeek = new Date(weekMonday);
+            prevWeek.setDate(prevWeek.getDate() - 7);
+            const nextWeek = new Date(weekMonday);
+            nextWeek.setDate(nextWeek.getDate() + 7);
+            navHtml = `
+                <div class="library-cal-nav">
+                    <button class="library-cal-nav-btn" id="library-cal-prev" title="Previous week">&lsaquo;</button>
+                    <div class="library-cal-strip">${days.join('')}</div>
+                    <button class="library-cal-nav-btn" id="library-cal-next" title="Next week">&rsaquo;</button>
+                </div>
+                <div class="library-cal-toggle-row">
+                    <button class="library-cal-toggle" id="library-cal-toggle-mode">Month</button>
+                </div>`;
+        } else {
+            // Month grid — 4 weeks starting from selected week's Monday
+            const gridMonday = startOfWeek(calendarSelectedDate);
+            const monthName = calendarSelectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            let cells = '';
+            const dayHeaders = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+            cells += dayHeaders.map(d => `<div class="library-cal-month-header-cell">${d}</div>`).join('');
+            for (let i = 0; i < 28; i++) {
+                const d = new Date(gridMonday);
+                d.setDate(gridMonday.getDate() + i);
+                const key = formatDateKey(d);
+                const isToday = key === todayKey;
+                const isSelected = key === selectedKey;
+                const dot = hasEvents(key) ? '<div class="library-cal-dot"></div>' : '';
+                cells += `
+                    <div class="library-cal-month-cell ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}" data-date="${key}">
+                        <span>${d.getDate()}</span>
+                        ${dot}
+                    </div>`;
+            }
+            navHtml = `
+                <div class="library-cal-month-nav">
+                    <button class="library-cal-nav-btn" id="library-cal-prev" title="Previous 4 weeks">&lsaquo;</button>
+                    <span class="library-cal-month-label">${monthName}</span>
+                    <button class="library-cal-nav-btn" id="library-cal-next" title="Next 4 weeks">&rsaquo;</button>
+                </div>
+                <div class="library-cal-month-grid">${cells}</div>
+                <div class="library-cal-toggle-row">
+                    <button class="library-cal-toggle" id="library-cal-toggle-mode">Week</button>
+                </div>`;
+        }
+
+        // Quick add bar — time select with 15-min increments
+        const timeOpts = generateTimeOptions();
+        const now = new Date();
+        const nowH = String(now.getHours()).padStart(2, '0');
+        const nowM = String(Math.ceil(now.getMinutes() / 15) * 15).padStart(2, '0');
+        const defaultTime = nowM === '60' ? `${String(parseInt(nowH) + 1).padStart(2, '0')}:00` : `${nowH}:${nowM}`;
+
+        const quickAddHtml = `
+            <div class="library-cal-quick-add">
+                <select class="library-cal-time-select" id="library-cal-time-select">
+                    ${timeOpts.map(o => `<option value="${o.value}" ${o.value === defaultTime ? 'selected' : ''}>${o.label}</option>`).join('')}
+                </select>
+                <input type="text" class="library-cal-title-input" id="library-cal-title-input" placeholder="Event title..." />
+                <button class="library-cal-add-btn" id="library-cal-add-btn">+ Add</button>
+            </div>`;
+
+        // Day events panel
+        const dayEvents = getEventsForDate(selectedKey).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+        const dayLabel = getDayLabel(calendarSelectedDate);
+        const fullDateLabel = calendarSelectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+        const dayHeaderText = dayLabel === 'Today' || dayLabel === 'Tomorrow'
+            ? `${dayLabel} — ${fullDateLabel}`
+            : fullDateLabel;
+
+        let eventsHtml = '';
+        if (dayEvents.length === 0) {
+            eventsHtml = '<div class="library-cal-no-events">No events</div>';
+        } else {
+            eventsHtml = dayEvents.map(item => {
+                const idx = calendarItems.indexOf(item);
+                return `
+                    <div class="library-cal-event ${item.done ? 'done' : ''}" data-idx="${idx}">
+                        <span class="library-cal-event-time">${formatTime12(item.time) || ''}</span>
+                        <span class="library-cal-event-title">${escHtml(item.text)}</span>
+                        <button class="library-cal-event-delete" data-idx="${idx}">&times;</button>
+                    </div>`;
+            }).join('');
+        }
+
+        el.innerHTML = `
+            ${navHtml}
+            ${quickAddHtml}
+            <div class="library-cal-day-panel">
+                <div class="library-cal-day-header">${dayHeaderText}</div>
+                <div class="library-cal-day-events">${eventsHtml}</div>
+            </div>
+        `;
+
+        // --- Event listeners ---
+        // Day card clicks (week strip or month grid)
+        el.querySelectorAll('[data-date]').forEach(card => {
+            if (card.classList.contains('library-cal-month-header-cell')) return;
+            card.addEventListener('click', () => {
+                const [y, m, d] = card.dataset.date.split('-').map(Number);
+                calendarSelectedDate = new Date(y, m - 1, d);
+                renderCalendarContent(el);
+            });
+        });
+
+        // Week/month navigation
+        const prevBtn = document.getElementById('library-cal-prev');
+        const nextBtn = document.getElementById('library-cal-next');
+        if (prevBtn) prevBtn.addEventListener('click', () => {
+            const offset = calendarViewMode === 'week' ? -7 : -28;
+            calendarSelectedDate.setDate(calendarSelectedDate.getDate() + offset);
+            renderCalendarContent(el);
+        });
+        if (nextBtn) nextBtn.addEventListener('click', () => {
+            const offset = calendarViewMode === 'week' ? 7 : 28;
+            calendarSelectedDate.setDate(calendarSelectedDate.getDate() + offset);
+            renderCalendarContent(el);
+        });
+
+        // Toggle week/month
+        const toggleBtn = document.getElementById('library-cal-toggle-mode');
+        if (toggleBtn) toggleBtn.addEventListener('click', () => {
+            calendarViewMode = calendarViewMode === 'week' ? 'month' : 'week';
+            renderCalendarContent(el);
+        });
+
+        // Quick add
+        const titleInput = document.getElementById('library-cal-title-input');
+        const timeSelect = document.getElementById('library-cal-time-select');
+        const addBtn = document.getElementById('library-cal-add-btn');
+
+        function doAdd() {
+            const title = titleInput.value.trim();
+            if (!title) return;
+            const date = selectedKey;
+            const time = timeSelect.value;
+            addCalendarEvent(date, time, title);
+            titleInput.value = '';
+            titleInput.focus();
+        }
+
+        if (titleInput) titleInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
+        if (addBtn) addBtn.addEventListener('click', doAdd);
+
+        // Event delete buttons
+        el.querySelectorAll('.library-cal-event-delete').forEach(btn => {
+            btn.addEventListener('click', () => deleteCalendarEvent(parseInt(btn.dataset.idx)));
+        });
+    }
+
+    function focusCalendarInput() {
+        const input = document.getElementById('library-cal-title-input');
+        if (input) input.focus();
+    }
+
+    async function addCalendarEvent(date, time, title) {
+        const pageId = await ensureCalendarPage();
+        if (!pageId) { alert('Calendar page not available.'); return; }
+        calendarBusy = true;
+        const raw = (date ? date : '') + (time ? ' ' + time : '') + ' | ' + title;
+        const tempItem = { id: null, raw, date: date || '', time: time || '', text: title, done: false };
+        calendarItems.unshift(tempItem);
+        renderCalendarList();
+        updateCalendarBadge();
+
+        try {
+            const res = await fetch(`/api/notion/blocks/${pageId}/children`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    children: [{
+                        object: 'block', type: 'to_do',
+                        to_do: { rich_text: [{ type: 'text', text: { content: raw } }], checked: false }
+                    }]
+                })
+            });
+            if (!res.ok) throw new Error('Failed');
+            const data = await res.json();
+            const newBlock = data.results && data.results[0];
+            if (newBlock) tempItem.id = newBlock.id;
+        } catch (e) {
+            console.warn('Library: add calendar event failed', e);
+            calendarItems = calendarItems.filter(i => i !== tempItem);
+            renderCalendarList();
+            updateCalendarBadge();
+            alert('Failed to add event.');
+        } finally {
+            calendarBusy = false;
+        }
+    }
+
+    async function toggleCalendarEvent(idx) {
+        if (idx < 0 || idx >= calendarItems.length) return;
+        calendarBusy = true;
+        const item = calendarItems[idx];
+        item.done = !item.done;
+        renderCalendarList();
+        updateCalendarBadge();
+
+        if (item.id) {
+            try {
+                await fetch(`/api/notion/blocks/${item.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to_do: {
+                            rich_text: [{ type: 'text', text: { content: item.raw } }],
+                            checked: item.done
+                        }
+                    })
+                });
+            } catch (e) {
+                console.warn('Library: toggle calendar event failed', e);
+                item.done = !item.done;
+                renderCalendarList();
+                updateCalendarBadge();
+            }
+        }
+        calendarBusy = false;
+    }
+
+    async function deleteCalendarEvent(idx) {
+        if (idx < 0 || idx >= calendarItems.length) return;
+        if (!confirm('Delete this event?')) return;
+        calendarBusy = true;
+        const item = calendarItems[idx];
+        calendarItems.splice(idx, 1);
+        renderCalendarList();
+        updateCalendarBadge();
+
+        if (item.id) {
+            try {
+                const res = await fetch(`/api/notion/blocks/${item.id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error('Delete failed');
+            } catch (e) {
+                console.warn('Library: delete calendar event failed', e);
+                calendarItems.splice(idx, 0, item);
+                renderCalendarList();
+                updateCalendarBadge();
+                alert('Failed to delete event.');
+            }
+        }
+        calendarBusy = false;
+    }
+
+    function updateCalendarBadge() {
+        const badge = document.getElementById('calendar-badge');
+        if (!badge) return;
+        const today = todayStr();
+        const count = calendarItems.filter(e => e.date === today && !e.done).length;
+        badge.textContent = count;
+        badge.style.display = count > 0 ? '' : 'none';
+    }
+
+    // =====================
     // --- IDEAS ---
     // =====================
     function renderNotesList() {
@@ -520,8 +879,7 @@ const LibraryUI = (() => {
         }
         el.innerHTML = ideas.map(n => {
             const isConverted = n.type === 'converted';
-            const parsed = parseIdeaContent(n.content);
-            const preview = parsed.hook || parsed.context || '';
+            const preview = n.hook || n.context || '';
             const badge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.project) : '';
             // Show actual pipeline status if converted
             let statusHtml = '';
@@ -585,12 +943,10 @@ const LibraryUI = (() => {
             incubatorSection = `<button class="library-send-btn" id="library-send-incubator">Send to Incubator</button>`;
         }
 
-        const parsed = parseIdeaContent(note.content);
-
         // Script linker section
         let scriptSection = '';
         if (note.linkedScriptId) {
-            const linkedScript = scripts.find(s => s.id === note.linkedScriptId);
+            const linkedScript = ScriptService.getAll().find(s => s.id === note.linkedScriptId);
             const scriptName = linkedScript ? linkedScript.title : 'Linked Script';
             scriptSection = `
                 <div class="library-idea-field">
@@ -633,11 +989,11 @@ const LibraryUI = (() => {
                 </div>
                 <div class="library-idea-field">
                     <label class="library-idea-label">Hook</label>
-                    <textarea class="library-idea-hook" id="library-idea-hook" placeholder="What's the hook? (optional)">${escHtml(parsed.hook)}</textarea>
+                    <textarea class="library-idea-hook" id="library-idea-hook" placeholder="What's the hook? (optional)">${escHtml(note.hook || '')}</textarea>
                 </div>
                 <div class="library-idea-field">
                     <label class="library-idea-label">Context</label>
-                    <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(parsed.context)}</textarea>
+                    <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(note.context || '')}</textarea>
                 </div>
                 ${scriptSection}
                 <div class="library-incubator-section">${incubatorSection}</div>
@@ -681,23 +1037,15 @@ const LibraryUI = (() => {
         });
     }
 
-    function getLinkedScriptIds() {
-        // Collect all linkedScriptIds from all ideas and videos
-        const fromIdeas = NotesService.getAll().filter(n => n.linkedScriptId).map(n => n.linkedScriptId);
-        const fromVideos = VideoService.getAll().filter(v => v.linkedScriptId).map(v => v.linkedScriptId);
-        const currentId = selectedNote ? selectedNote.linkedScriptId : '';
-        const set = new Set([...fromIdeas, ...fromVideos]);
-        if (currentId) set.delete(currentId); // don't exclude the current note's own linked script
-        return set;
-    }
+    // getLinkedScriptIds removed — use LinkService.getLinkedScriptIds() instead
 
     function showIdeaScriptPicker() {
         const overlay = document.getElementById('library-script-picker-overlay');
         const listEl = document.getElementById('library-script-picker-list');
         if (!overlay || !listEl) return;
 
-        const linkedIds = getLinkedScriptIds();
-        const available = scripts.filter(s => !linkedIds.has(s.id));
+        const linkedIds = LinkService.getLinkedScriptIds(selectedNote ? selectedNote.linkedScriptId : '');
+        const available = ScriptService.getAll().filter(s => !linkedIds.has(s.id));
 
         if (available.length === 0) {
             listEl.innerHTML = '<div class="library-empty">No available scripts. Create one with "New Script".</div>';
@@ -712,14 +1060,19 @@ const LibraryUI = (() => {
                 </div>`).join('');
             async function doLink(scriptId) {
                 if (!selectedNote) return;
+                const btn = listEl.querySelector(`.library-script-picker-link-btn[data-id="${scriptId}"]`);
+                if (navigator.vibrate) navigator.vibrate(30);
+                if (btn) { btn.textContent = 'Linking...'; btn.disabled = true; }
                 try {
-                    await NotesService.update(selectedNote.id, { linkedScriptId: scriptId });
+                    await LinkService.linkScriptToIdea(scriptId, selectedNote.id);
+                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
                     selectedNote = NotesService.getById(selectedNote.id);
                     overlay.style.display = 'none';
                     renderNoteEditor(selectedNote);
                 } catch (e) {
                     console.warn('Library: link script failed', e);
                     alert('Failed to link script.');
+                    if (btn) { btn.textContent = 'Link'; btn.disabled = false; }
                 }
             }
             listEl.querySelectorAll('.library-script-picker-link-btn').forEach(btn => {
@@ -737,12 +1090,8 @@ const LibraryUI = (() => {
         const btn = document.getElementById('library-new-script-for-idea');
         if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
         try {
-            const title = ensureScriptSuffix(selectedNote.name || 'Untitled');
-            const page = await createPage(title, '');
-            const meta = { project: selectedNote.project || '', linkedIdeaId: selectedNote.id };
-            await saveScriptMeta(page.id, meta);
-            scripts.unshift({ id: page.id, title, project: meta.project, created: page.created_time, lastEdited: page.last_edited_time });
-            await NotesService.update(selectedNote.id, { linkedScriptId: page.id });
+            const script = await ScriptService.create(selectedNote.name || 'Untitled', selectedNote.project || '');
+            await LinkService.linkScriptToIdea(script.id, selectedNote.id);
             selectedNote = NotesService.getById(selectedNote.id);
             renderNoteEditor(selectedNote);
         } catch (e) {
@@ -755,9 +1104,19 @@ const LibraryUI = (() => {
 
     async function unlinkScriptFromIdea() {
         if (!selectedNote) return;
-        await NotesService.update(selectedNote.id, { linkedScriptId: '' });
-        selectedNote = NotesService.getById(selectedNote.id);
-        renderNoteEditor(selectedNote);
+        const btn = document.getElementById('library-unlink-script');
+        if (navigator.vibrate) navigator.vibrate(30);
+        if (btn) { btn.textContent = 'Unlinking...'; btn.disabled = true; }
+        try {
+            await LinkService.unlinkFromIdea(selectedNote.id);
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+            selectedNote = NotesService.getById(selectedNote.id);
+            renderNoteEditor(selectedNote);
+        } catch (e) {
+            console.warn('Library: unlink script failed', e);
+            alert('Failed to unlink script.');
+            if (btn) { btn.textContent = 'Unlink'; btn.disabled = false; }
+        }
     }
 
     async function sendToIncubator() {
@@ -773,12 +1132,43 @@ const LibraryUI = (() => {
         const context = ctxEl?.value || '';
         const project = projectEl?.value || '';
 
+        // Show sending overlay
+        const sendBtn = document.getElementById('library-send-incubator');
+        if (sendBtn) { sendBtn.textContent = 'Sending...'; sendBtn.disabled = true; }
+        const overlay = document.createElement('div');
+        overlay.className = 'library-sending-overlay';
+        overlay.innerHTML = `<div class="library-sending-content"><div class="library-sending-egg">&#129370;</div><div class="library-sending-text">Sending to Incubator...</div></div>`;
+        const editorBody = document.querySelector('.library-editor-body');
+        if (editorBody) editorBody.style.position = 'relative';
+        if (editorBody) editorBody.appendChild(overlay);
+
+        // Haptic feedback
+        if (navigator.vibrate) navigator.vibrate(50);
+
         try {
-            await VideoService.create({ name, hook, context, project, sourceIdeaId: selectedNote.id });
+            const video = await VideoService.create({ name, hook, context, project, sourceIdeaId: selectedNote.id, linkedScriptId: selectedNote.linkedScriptId || '' });
+            // Fix reverse-pointer: update script's meta to point to video instead of idea
+            if (selectedNote.linkedScriptId && video) {
+                LinkService.linkScriptToVideo(selectedNote.linkedScriptId, video.id).catch(() => {});
+            }
             await NotesService.update(selectedNote.id, { type: 'converted' });
+
+            // Success animation
+            overlay.querySelector('.library-sending-text').textContent = 'Sent!';
+            overlay.classList.add('sent');
+            if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+
+            await new Promise(r => setTimeout(r, 800));
+            overlay.remove();
+
             selectedNote = NotesService.getById(selectedNote.id);
             renderNoteEditor(selectedNote);
-        } catch (e) { console.warn('Library: send to incubator failed', e); alert('Failed to send to Incubator. Check connection.'); }
+        } catch (e) {
+            console.warn('Library: send to incubator failed', e);
+            overlay.remove();
+            if (sendBtn) { sendBtn.textContent = 'Send to Incubator'; sendBtn.disabled = false; }
+            alert('Failed to send to Incubator. Check connection.');
+        }
     }
 
     function scheduleNoteSave() {
@@ -796,20 +1186,20 @@ const LibraryUI = (() => {
         if (!titleEl) return;
         setSaveStatus('Saving...'); noteDirty = false;
         try {
-            const content = ideaContentToString(hookEl?.value || '', ctxEl?.value || '');
             const newName = titleEl.value.trim() || 'Untitled';
+            const newHook = hookEl?.value || '';
+            const newContext = ctxEl?.value || '';
             const newProject = projectEl?.value || '';
             await NotesService.update(selectedNote.id, {
                 name: newName,
-                content,
+                hook: newHook,
+                context: newContext,
                 project: newProject
             });
             selectedNote = NotesService.getById(selectedNote.id);
             // Bidirectional sync: if this idea has a linked video, update it too
             const linkedVideo = VideoService.getByIdeaId(selectedNote.id);
             if (linkedVideo) {
-                const newHook = hookEl?.value || '';
-                const newContext = ctxEl?.value || '';
                 VideoService.update(linkedVideo.id, { name: newName, hook: newHook, context: newContext, project: newProject }).catch(() => {});
             }
             setSaveStatus('Saved');
@@ -825,7 +1215,7 @@ const LibraryUI = (() => {
 
     async function handleNewNote() {
         try {
-            const note = await NotesService.create({ name: 'Untitled', type: 'idea', content: ideaContentToString('', '') });
+            const note = await NotesService.create({ name: 'Untitled', type: 'idea' });
             selectedNote = note;
             showEditorPage();
             await renderNoteEditor(note);
@@ -874,7 +1264,7 @@ const LibraryUI = (() => {
         // Script linker
         let scriptSection = '';
         if (v.linkedScriptId) {
-            const linkedScript = scripts.find(s => s.id === v.linkedScriptId);
+            const linkedScript = ScriptService.getAll().find(s => s.id === v.linkedScriptId);
             const scriptName = linkedScript ? linkedScript.title : 'Linked Script';
             scriptSection = `
                 <div class="library-idea-field">
@@ -991,16 +1381,8 @@ const LibraryUI = (() => {
             const hook = hookEl?.value || '';
             const context = ctxEl?.value || '';
             const project = projectEl?.value || '';
-            await VideoService.update(selectedVideo.id, { name, hook, context, project });
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, hook, context, project });
             selectedVideo = VideoService.getById(selectedVideo.id);
-            // Bidirectional sync: update linked idea
-            if (selectedVideo.sourceIdeaId) {
-                const idea = NotesService.getById(selectedVideo.sourceIdeaId);
-                if (idea) {
-                    const content = JSON.stringify({ hook, context });
-                    NotesService.update(idea.id, { name, content, project }).catch(() => {});
-                }
-            }
             setSaveStatus('Saved');
         } catch (e) { setSaveStatus('Save failed'); videoDirty = true; }
     }
@@ -1018,8 +1400,8 @@ const LibraryUI = (() => {
         const listEl = document.getElementById('library-video-script-picker-list');
         if (!overlay || !listEl) return;
 
-        const linkedIds = getLinkedScriptIds();
-        const available = scripts.filter(s => !linkedIds.has(s.id));
+        const linkedIds = LinkService.getLinkedScriptIds(selectedVideo ? selectedVideo.linkedScriptId : '');
+        const available = ScriptService.getAll().filter(s => !linkedIds.has(s.id));
 
         if (available.length === 0) {
             listEl.innerHTML = '<div class="library-empty">No available scripts. Create one with "New Script".</div>';
@@ -1034,14 +1416,19 @@ const LibraryUI = (() => {
                 </div>`).join('');
             async function doLink(scriptId) {
                 if (!selectedVideo) return;
+                const btn = listEl.querySelector(`.library-script-picker-link-btn[data-id="${scriptId}"]`);
+                if (navigator.vibrate) navigator.vibrate(30);
+                if (btn) { btn.textContent = 'Linking...'; btn.disabled = true; }
                 try {
-                    await VideoService.update(selectedVideo.id, { linkedScriptId: scriptId });
+                    await LinkService.linkScriptToVideo(scriptId, selectedVideo.id);
+                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
                     selectedVideo = VideoService.getById(selectedVideo.id);
                     overlay.style.display = 'none';
                     renderVideoEditor();
                 } catch (e) {
                     console.warn('Library: link script to video failed', e);
                     alert('Failed to link script.');
+                    if (btn) { btn.textContent = 'Link'; btn.disabled = false; }
                 }
             }
             listEl.querySelectorAll('.library-script-picker-link-btn').forEach(btn => {
@@ -1059,12 +1446,8 @@ const LibraryUI = (() => {
         const btn = document.getElementById('library-video-new-script');
         if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
         try {
-            const title = ensureScriptSuffix(selectedVideo.name || 'Untitled');
-            const page = await createPage(title, '');
-            const meta = { project: selectedVideo.project || '', linkedVideoId: selectedVideo.id };
-            await saveScriptMeta(page.id, meta);
-            scripts.unshift({ id: page.id, title, project: meta.project, created: page.created_time, lastEdited: page.last_edited_time });
-            await VideoService.update(selectedVideo.id, { linkedScriptId: page.id });
+            const script = await ScriptService.create(selectedVideo.name || 'Untitled', selectedVideo.project || '');
+            await LinkService.linkScriptToVideo(script.id, selectedVideo.id);
             selectedVideo = VideoService.getById(selectedVideo.id);
             renderVideoEditor();
         } catch (e) {
@@ -1077,9 +1460,19 @@ const LibraryUI = (() => {
 
     async function unlinkScriptFromVideo() {
         if (!selectedVideo) return;
-        await VideoService.update(selectedVideo.id, { linkedScriptId: '' });
-        selectedVideo = VideoService.getById(selectedVideo.id);
-        renderVideoEditor();
+        const btn = document.getElementById('library-video-unlink-script');
+        if (navigator.vibrate) navigator.vibrate(30);
+        if (btn) { btn.textContent = 'Unlinking...'; btn.disabled = true; }
+        try {
+            await LinkService.unlinkFromVideo(selectedVideo.id);
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+            selectedVideo = VideoService.getById(selectedVideo.id);
+            renderVideoEditor();
+        } catch (e) {
+            console.warn('Library: unlink script from video failed', e);
+            alert('Failed to unlink script.');
+            if (btn) { btn.textContent = 'Unlink'; btn.disabled = false; }
+        }
     }
 
     // =====================
@@ -1091,14 +1484,13 @@ const LibraryUI = (() => {
 
     async function loadScriptMetaBulk() {
         if (scriptMetaLoaded) return;
-        for (const s of scripts) {
-            if (s.project) continue; // already loaded
+        const needsMeta = ScriptService.getAll().filter(s => !s.project);
+        await Promise.all(needsMeta.map(async s => {
             try {
-                const blocks = await fetchPageContent(s.id);
-                const meta = extractScriptMeta(blocks);
-                s.project = meta.project || '';
+                const data = await ScriptService.loadContent(s.id);
+                s.project = (data.meta && data.meta.project) || '';
             } catch (e) {}
-        }
+        }));
         scriptMetaLoaded = true;
     }
 
@@ -1184,7 +1576,7 @@ const LibraryUI = (() => {
             html += projectVideos.map(v => {
                 let scriptInfo = '';
                 if (v.linkedScriptId) {
-                    const linked = scripts.find(s => s.id === v.linkedScriptId);
+                    const linked = ScriptService.getAll().find(s => s.id === v.linkedScriptId);
                     scriptInfo = `<div class="library-project-item-sub" data-script-id="${v.linkedScriptId}">Script: ${escHtml(linked ? linked.title : 'Linked')}</div>`;
                 }
                 return `
@@ -1205,7 +1597,7 @@ const LibraryUI = (() => {
             html += projectIdeas.map(n => {
                 let scriptInfo = '';
                 if (n.linkedScriptId) {
-                    const linked = scripts.find(s => s.id === n.linkedScriptId);
+                    const linked = ScriptService.getAll().find(s => s.id === n.linkedScriptId);
                     scriptInfo = `<div class="library-project-item-sub" data-script-id="${n.linkedScriptId}">Script: ${escHtml(linked ? linked.title : 'Linked')}</div>`;
                 }
                 return `
@@ -1251,7 +1643,7 @@ const LibraryUI = (() => {
 
         document.getElementById('library-project-add-note').addEventListener('click', async () => {
             try {
-                const note = await NotesService.create({ name: 'Untitled', type: 'idea', project: p, content: ideaContentToString('', '') });
+                const note = await NotesService.create({ name: 'Untitled', type: 'idea', project: p });
                 switchTab('notes');
                 selectedNote = note;
                 showEditorPage();
@@ -1271,6 +1663,7 @@ const LibraryUI = (() => {
     function renderList() {
         const listEl = document.getElementById('library-list');
         if (!listEl) return;
+        const scripts = ScriptService.getAll();
         if (scripts.length === 0) { listEl.innerHTML = '<div class="library-empty">No scripts yet</div>'; return; }
         listEl.innerHTML = scripts.map(s => {
             const isSelected = s.id === selectedId;
@@ -1370,16 +1763,25 @@ const LibraryUI = (() => {
         if (linkToBtn) linkToBtn.addEventListener('click', () => showScriptLinkToPicker());
         const unlinkBtn = document.getElementById('library-script-unlink');
         if (unlinkBtn) unlinkBtn.addEventListener('click', async () => {
-            if (selectedScriptMeta) {
-                selectedScriptMeta.linkedIdeaId = '';
-                selectedScriptMeta.linkedVideoId = '';
-                selectedScriptMeta.project = '';
-                const s = scripts.find(s => s.id === selectedId);
-                if (s) s.project = '';
+            if (!selectedId) return;
+            if (navigator.vibrate) navigator.vibrate(30);
+            unlinkBtn.textContent = 'Unlinking...';
+            unlinkBtn.disabled = true;
+            try {
+                // Save any pending content first
+                if (dirty) await saveContent();
+                await LinkService.unlinkScript(selectedId);
+                if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+                // Refresh local meta
+                selectedScriptMeta = { project: '' };
+                const script = ScriptService.getAll().find(s => s.id === selectedId);
+                await renderEditor(script ? script.title : '', document.getElementById('library-editor-textarea')?.value || '');
+            } catch (e) {
+                console.warn('Library: unlink script failed', e);
+                alert('Failed to unlink script.');
+                unlinkBtn.textContent = 'Unlink';
+                unlinkBtn.disabled = false;
             }
-            scheduleContentSave();
-            const script = scripts.find(s => s.id === selectedId);
-            await renderEditor(script ? script.title : '', document.getElementById('library-editor-textarea')?.value || '');
         });
         const linkClose = document.getElementById('library-script-link-close');
         if (linkClose) linkClose.addEventListener('click', () => {
@@ -1448,31 +1850,28 @@ const LibraryUI = (() => {
             listEl.innerHTML = html;
 
             async function doLinkTo(type, id) {
+                const btn = listEl.querySelector(`.library-script-picker-link-btn[data-type="${type}"][data-id="${id}"]`);
+                if (navigator.vibrate) navigator.vibrate(30);
+                if (btn) { btn.textContent = 'Linking...'; btn.disabled = true; }
                 try {
-                    if (selectedScriptMeta) {
-                        if (type === 'idea') {
-                            selectedScriptMeta.linkedIdeaId = id;
-                            selectedScriptMeta.linkedVideoId = '';
-                            const idea = NotesService.getById(id);
-                            if (idea) { selectedScriptMeta.project = idea.project || ''; }
-                            await NotesService.update(id, { linkedScriptId: selectedId });
-                        } else {
-                            selectedScriptMeta.linkedVideoId = id;
-                            selectedScriptMeta.linkedIdeaId = '';
-                            const video = VideoService.getById(id);
-                            if (video) { selectedScriptMeta.project = video.project || ''; }
-                            await VideoService.update(id, { linkedScriptId: selectedId });
-                        }
-                        const s = scripts.find(s => s.id === selectedId);
-                        if (s) s.project = selectedScriptMeta.project;
+                    // Save any pending content first
+                    if (dirty && selectedId) await saveContent();
+                    if (type === 'idea') {
+                        await LinkService.linkScriptToIdea(selectedId, id);
+                    } else {
+                        await LinkService.linkScriptToVideo(selectedId, id);
                     }
-                    scheduleContentSave();
+                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+                    // Refresh local meta from what LinkService wrote
+                    const data = await ScriptService.loadContent(selectedId);
+                    selectedScriptMeta = data.meta;
                     overlay.style.display = 'none';
-                    const script = scripts.find(s => s.id === selectedId);
+                    const script = ScriptService.getAll().find(s => s.id === selectedId);
                     await renderEditor(script ? script.title : '', document.getElementById('library-editor-textarea')?.value || '');
                 } catch (e) {
                     console.warn('Library: link script to item failed', e);
                     alert('Failed to link. Check connection.');
+                    if (btn) { btn.textContent = 'Link'; btn.disabled = false; }
                 }
             }
             listEl.querySelectorAll('.library-script-picker-link-btn').forEach(btn => {
@@ -1493,40 +1892,39 @@ const LibraryUI = (() => {
         selectedId = id; renderList(); showEditorPage();
         const editorEl = document.getElementById('library-editor');
         if (editorEl) editorEl.innerHTML = '<div class="library-loading">Loading...</div>';
-        const script = scripts.find(s => s.id === id);
-        selectedBlocks = await fetchPageContent(id);
-        selectedScriptMeta = extractScriptMeta(selectedBlocks);
+        const script = ScriptService.getAll().find(s => s.id === id);
+        const data = await ScriptService.loadContent(id);
+        selectedScriptMeta = data.meta;
         if (script) script.project = selectedScriptMeta.project || '';
-        await renderEditor(script ? script.title : '', blocksToText(selectedBlocks));
+        await renderEditor(script ? script.title : '', data.text);
     }
 
     async function handleNew() {
-        const title = ensureScriptSuffix('Untitled');
+        const btn = document.getElementById('library-new-btn');
+        if (navigator.vibrate) navigator.vibrate(30);
+        if (btn) { btn.disabled = true; }
         try {
-            const page = await createPage(title, '');
-            scripts.unshift({ id: page.id, title, project: '', created: page.created_time, lastEdited: page.last_edited_time });
-            selectedId = page.id; selectedBlocks = [];
+            const script = await ScriptService.create('Untitled', '');
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+            selectedId = script.id;
             selectedScriptMeta = { project: '' };
-            renderList(); showEditorPage(); await renderEditor(title, '');
+            renderList(); showEditorPage(); await renderEditor(script.title, '');
             const titleInput = document.getElementById('library-editor-title');
             if (titleInput) { titleInput.focus(); titleInput.select(); }
             setSaveStatus('Saved');
         } catch (e) { console.warn('Library: create failed', e); alert('Failed to create script. Check connection.'); }
+        finally { if (btn) btn.disabled = false; }
     }
 
     async function handleDelete(id) {
-        const script = scripts.find(s => s.id === id);
+        const script = ScriptService.getAll().find(s => s.id === id);
         if (!script || !confirm(`Delete "${script.title}"?`)) return;
         try {
-            await archivePage(id);
-            scripts = scripts.filter(s => s.id !== id);
-            if (selectedId === id) { selectedId = null; selectedBlocks = []; if (currentPage === 'editor') showListPage(); }
+            await ScriptService.remove(id);
+            if (selectedId === id) { selectedId = null; if (currentPage === 'editor') showListPage(); }
             renderList();
         } catch (e) { console.warn('Library: delete failed', e); }
     }
-
-    function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-    function escAttr(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
     function updateTodoBadge() {
         const badge = document.getElementById('todo-badge');
@@ -1540,9 +1938,11 @@ const LibraryUI = (() => {
         async open(bodyEl, opts) {
             await loadConfig();
             render(bodyEl);
-            scripts = await fetchScripts();
+            await Promise.all([
+                ScriptService.sync(),
+                NotesService.sync().catch(() => {}),
+            ]);
             renderList();
-            NotesService.sync().catch(() => {});
             if (opts && opts.tab) switchTab(opts.tab);
         },
         close() {
@@ -1550,42 +1950,13 @@ const LibraryUI = (() => {
             if (titleSaveTimer) { clearTimeout(titleSaveTimer); saveTitleNow(); }
             if (noteSaveTimer) { clearTimeout(noteSaveTimer); saveNote(); }
             if (videoSaveTimer) { clearTimeout(videoSaveTimer); saveVideo(); }
-            container = null; selectedId = null; selectedBlocks = []; selectedScriptMeta = null; selectedNote = null;
+            container = null; selectedId = null; selectedScriptMeta = null; selectedNote = null;
             selectedVideo = null; videoDirty = false;
             dirty = false; noteDirty = false;
-            // Keep todoLoaded and todoItems cached across close/open
+            // Keep todoLoaded/todoItems and calendarLoaded/calendarItems cached across close/open
+            calendarViewMode = 'week'; calendarSelectedDate = null;
             projectsLoaded = false; selectedProject = null; scriptMetaLoaded = false;
             currentPage = 'list'; activeTab = 'scripts';
-        },
-        // Public: access scripts from other buildings (e.g. Incubator)
-        getScripts() { return scripts; },
-        async fetchScriptsIfNeeded() {
-            if (scripts.length === 0) {
-                await loadConfig();
-                scripts = await fetchScripts();
-            }
-            return scripts;
-        },
-        // Public: load script content for inline editing in other buildings
-        async loadScriptContent(scriptId) {
-            const blocks = await fetchPageContent(scriptId);
-            const meta = extractScriptMeta(blocks);
-            const text = blocksToText(blocks);
-            return { blocks, meta, text };
-        },
-        // Public: save script content from inline editing in other buildings
-        async saveScriptContent(scriptId, text, meta) {
-            const blocks = await fetchPageContent(scriptId);
-            for (const b of blocks) {
-                if (b.type === 'paragraph' || b.type === 'code') {
-                    await deleteBlock(b.id);
-                }
-            }
-            const newBlocks = textToBlocks(text);
-            if (meta) {
-                newBlocks.push({ object: 'block', type: 'code', code: { language: 'json', rich_text: [{ type: 'text', text: { content: JSON.stringify(meta) } }] } });
-            }
-            await appendBlocks(scriptId, newBlocks);
         },
         // Public: preload to-do count for badge (called on page load)
         async preloadTodoCount() {
@@ -1600,6 +1971,21 @@ const LibraryUI = (() => {
         },
         getTodoCount() {
             return todoItems.filter(i => !i.done).length;
+        },
+        // Public: preload calendar count for HUD badge
+        async preloadCalendarCount() {
+            await loadConfig();
+            if (!calendarLoaded) {
+                try {
+                    calendarItems = await fetchCalendarEvents();
+                    calendarLoaded = true;
+                } catch (e) {}
+            }
+            updateCalendarBadge();
+        },
+        getCalendarTodayCount() {
+            const today = todayStr();
+            return calendarItems.filter(e => e.date === today && !e.done).length;
         }
     };
 })();

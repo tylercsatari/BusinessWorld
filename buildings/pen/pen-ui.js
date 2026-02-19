@@ -11,15 +11,8 @@ const PenUI = (() => {
     let selectedVideo = null;
     let currentPage = 'list';
 
-    function escHtml(s) {
-        const d = document.createElement('div');
-        d.textContent = s || '';
-        return d.innerHTML;
-    }
-
-    function escAttr(s) {
-        return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    }
+    const escHtml = NotionHelpers.escHtml;
+    const escAttr = NotionHelpers.escAttr;
 
     function formatDate(dateStr) {
         if (!dateStr) return '';
@@ -35,119 +28,6 @@ const PenUI = (() => {
         });
     }
 
-    // ============ SCRIPT LINKER ============
-
-    function getLinkedScriptIds() {
-        const fromVideos = VideoService.getAll().filter(v => v.linkedScriptId).map(v => v.linkedScriptId);
-        const fromIdeas = NotesService.getAll().filter(n => n.linkedScriptId).map(n => n.linkedScriptId);
-        const currentId = selectedVideo ? selectedVideo.linkedScriptId : '';
-        const set = new Set([...fromVideos, ...fromIdeas]);
-        if (currentId) set.delete(currentId);
-        return set;
-    }
-
-    function renderScriptLinker(v) {
-        if (v.linkedScriptId) {
-            const libScripts = LibraryUI.getScripts();
-            const linked = libScripts.find(s => s.id === v.linkedScriptId);
-            const name = linked ? linked.title : 'Linked Script';
-            if (window.EggRenderer) {
-                return window.EggRenderer.inlineScriptEditorHtml('pen-inline-script', name);
-            }
-            return `<div class="pen-script-linked">
-                <span class="pen-script-badge">${escHtml(name)}</span>
-                <button class="pen-script-unlink" id="pen-unlink-script">Unlink</button>
-            </div>`;
-        }
-        return `<div class="pen-script-actions">
-            <button class="pen-script-btn" id="pen-link-script">Link Script</button>
-            <button class="pen-script-btn primary" id="pen-new-script">New Script</button>
-        </div>`;
-    }
-
-    async function showScriptPicker() {
-        const overlay = document.getElementById('pen-script-picker-overlay');
-        const listEl = document.getElementById('pen-script-picker-list');
-        if (!overlay || !listEl) return;
-
-        let libraryScripts = [];
-        try { libraryScripts = await LibraryUI.fetchScriptsIfNeeded(); } catch (e) {}
-
-        const linkedIds = getLinkedScriptIds();
-        const available = libraryScripts.filter(s => !linkedIds.has(s.id));
-
-        if (available.length === 0) {
-            listEl.innerHTML = '<div class="pen-picker-empty">No available scripts. Create one with "New Script".</div>';
-        } else {
-            listEl.innerHTML = available.map(s => `
-                <div class="pen-picker-item" data-id="${s.id}">
-                    <div class="pen-picker-name">${escHtml(s.title)}</div>
-                    <button class="pen-picker-link-btn" data-id="${s.id}">Link</button>
-                </div>`).join('');
-            listEl.querySelectorAll('.pen-picker-link-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => { e.stopPropagation(); linkScript(btn.dataset.id); });
-            });
-            listEl.querySelectorAll('.pen-picker-item').forEach(item => {
-                item.addEventListener('click', () => linkScript(item.dataset.id));
-            });
-        }
-        overlay.style.display = 'flex';
-    }
-
-    async function linkScript(scriptId) {
-        if (!selectedVideo) return;
-        selectedVideo.linkedScriptId = scriptId;
-        await VideoService.update(selectedVideo.id, { linkedScriptId: scriptId });
-        document.getElementById('pen-script-picker-overlay').style.display = 'none';
-        renderDetail();
-    }
-
-    async function unlinkScript() {
-        if (!selectedVideo) return;
-        selectedVideo.linkedScriptId = '';
-        await VideoService.update(selectedVideo.id, { linkedScriptId: '' });
-        renderDetail();
-    }
-
-    async function createNewScript() {
-        if (!selectedVideo) return;
-        const btn = document.getElementById('pen-new-script');
-        if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
-        try {
-            await LibraryUI.fetchScriptsIfNeeded();
-            const scriptName = (selectedVideo.name || 'Untitled') + ' Script';
-            const cfgRes = await fetch('/api/config');
-            const cfg = await cfgRes.json();
-            const videosPageId = cfg.notion && cfg.notion.videosPageId;
-            if (!videosPageId) throw new Error('Videos page not configured');
-
-            const res = await fetch('/api/notion/pages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    parent: { page_id: videosPageId },
-                    properties: { title: { title: [{ text: { content: scriptName } }] } },
-                    children: [{
-                        object: 'block', type: 'code',
-                        code: { language: 'json', rich_text: [{ type: 'text', text: { content: JSON.stringify({ project: selectedVideo.project || '', linkedVideoId: selectedVideo.id }) } }] }
-                    }]
-                })
-            });
-            if (!res.ok) throw new Error(`Create script failed: ${res.status}`);
-            const result = await res.json();
-            const libScripts = LibraryUI.getScripts();
-            libScripts.unshift({ id: result.id, title: scriptName, project: selectedVideo.project || '', created: result.created_time, lastEdited: result.last_edited_time });
-            selectedVideo.linkedScriptId = result.id;
-            await VideoService.update(selectedVideo.id, { linkedScriptId: result.id });
-            renderDetail();
-        } catch (e) {
-            console.warn('Pen: create script failed', e);
-            alert('Failed to create script.');
-        } finally {
-            if (btn) { btn.textContent = 'New Script'; btn.disabled = false; }
-        }
-    }
-
     // ============ RENDER ============
 
     function render() {
@@ -160,7 +40,13 @@ const PenUI = (() => {
                     </div>
                     <div class="pen-filters" id="pen-filters"></div>
                     <div class="pen-videos" id="pen-videos">
-                        <div class="pen-loading">Loading...</div>
+                        ${Array(4).fill(`<div class="pen-skeleton-card">
+                            <div class="pen-skeleton-creature"></div>
+                            <div class="pen-skeleton-lines">
+                                <div class="pen-skeleton-line"></div>
+                                <div class="pen-skeleton-line short"></div>
+                            </div>
+                        </div>`).join('')}
                     </div>
                 </div>
                 <div class="pen-page pen-detail-page">
@@ -210,7 +96,6 @@ const PenUI = (() => {
 
         el.innerHTML = posted.map(v => {
             const isBacklog = !v.hook && !v.context && v.links;
-            const color = window.EggRenderer ? window.EggRenderer.getProjectColor(v.project || v.name) : '#ccc';
             const projBadge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(v.project) : escHtml(v.project || 'No project');
             return `
             <div class="pen-video-card ${isBacklog ? 'backlog' : ''}" data-id="${v.id}">
@@ -295,44 +180,23 @@ const PenUI = (() => {
                     <label>Context</label>
                     <textarea id="pen-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
                     <label>Script</label>
-                    ${renderScriptLinker(v)}
+                    ${ScriptLinker.renderLinker({ prefix: 'pen', linkedScriptId: v.linkedScriptId, useInlineEditor: true })}
                     <label>Links</label>
                     <textarea id="pen-links" placeholder="YouTube, TikTok, Instagram URLs...">${escHtml(v.links)}</textarea>
                 </div>
             </div>
-            <div class="pen-picker-overlay" id="pen-script-picker-overlay" style="display:none;">
-                <div class="pen-picker">
-                    <div class="pen-picker-header">
-                        <h3>Link a Script</h3>
-                        <button class="pen-picker-close" id="pen-script-picker-close">&times;</button>
-                    </div>
-                    <div class="pen-picker-list" id="pen-script-picker-list"></div>
-                </div>
-            </div>
+            ${ScriptLinker.renderPickerOverlay('pen')}
         `;
 
         document.getElementById('pen-back-btn').addEventListener('click', () => saveAndBack());
         document.getElementById('pen-delete-btn').addEventListener('click', () => handleDelete());
 
-        // Script linker events — inline editor or link/new buttons
-        if (v.linkedScriptId && window.EggRenderer) {
-            window.EggRenderer.initInlineScriptEditor('pen-inline-script', v.linkedScriptId, unlinkScript);
-        } else {
-            const unlinkBtn = document.getElementById('pen-unlink-script');
-            if (unlinkBtn) unlinkBtn.addEventListener('click', unlinkScript);
-        }
-        const linkBtn = document.getElementById('pen-link-script');
-        if (linkBtn) linkBtn.addEventListener('click', showScriptPicker);
-        const newBtn = document.getElementById('pen-new-script');
-        if (newBtn) newBtn.addEventListener('click', createNewScript);
-
-        const pickerClose = document.getElementById('pen-script-picker-close');
-        if (pickerClose) pickerClose.addEventListener('click', () => {
-            document.getElementById('pen-script-picker-overlay').style.display = 'none';
-        });
-        const pickerOverlay = document.getElementById('pen-script-picker-overlay');
-        if (pickerOverlay) pickerOverlay.addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) pickerOverlay.style.display = 'none';
+        // Script linker events
+        ScriptLinker.bindEvents({
+            prefix: 'pen',
+            getTarget: () => selectedVideo,
+            isIdea: false,
+            onRefresh: () => { selectedVideo = VideoService.getById(selectedVideo.id); renderDetail(); }
         });
 
         // Init 3D creature preview
@@ -349,7 +213,7 @@ const PenUI = (() => {
             const hook = document.getElementById('pen-hook')?.value || '';
             const context = document.getElementById('pen-context')?.value || '';
             const links = document.getElementById('pen-links')?.value || '';
-            await VideoService.update(selectedVideo.id, { name, project, postedDate, hook, context, links });
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, postedDate, hook, context, links });
         }
         showList();
     }
@@ -389,14 +253,27 @@ const PenUI = (() => {
                 // Load remaining data in background for Back navigation
                 VideoService.getProjects().then(p => { projects = p; }).catch(() => {});
                 VideoService.sync().catch(() => {});
-                LibraryUI.fetchScriptsIfNeeded().catch(() => {});
+                ScriptService.sync().catch(() => {});
+                NotesService.sync().catch(() => {});
                 return;
             }
-            projects = await VideoService.getProjects();
-            await VideoService.sync();
-            LibraryUI.fetchScriptsIfNeeded().catch(() => {});
+            // Render immediately from in-memory cache (posted videos appear instantly)
+            projects = VideoService.getCachedProjects() || [];
             renderFilters();
             renderVideos();
+            // Then sync in background for any remote updates
+            Promise.all([
+                VideoService.getProjects(),
+                VideoService.sync(),
+                ScriptService.sync().catch(() => {}),
+                NotesService.sync().catch(() => {}),
+            ]).then(([p]) => {
+                projects = p;
+                if (container && currentPage === 'list') {
+                    renderFilters();
+                    renderVideos();
+                }
+            }).catch(() => {});
         },
         close() {
             if (currentPage === 'detail' && selectedVideo) {
@@ -405,7 +282,9 @@ const PenUI = (() => {
                 const hook = document.getElementById('pen-hook')?.value;
                 const context = document.getElementById('pen-context')?.value;
                 const links = document.getElementById('pen-links')?.value;
-                if (name) VideoService.update(selectedVideo.id, { name, project, hook, context, links }).catch(() => {});
+                if (name) {
+                    VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, hook, context, links }).catch(() => {});
+                }
             }
             container = null;
             selectedVideo = null;

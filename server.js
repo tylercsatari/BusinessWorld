@@ -17,6 +17,9 @@ const PORT = process.env.PORT || 8002;
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
 
+// Strip hyphens from Notion UUIDs so we can compare IDs regardless of format
+function normalizeId(id) { return id ? id.replace(/-/g, '') : ''; }
+
 const MIME_TYPES = {
     '.html': 'text/html',
     '.js': 'application/javascript',
@@ -105,7 +108,8 @@ const server = http.createServer(async (req, res) => {
                 videosPageId: process.env.NOTION_VIDEOS_PAGE_ID || '',
                 videosDataPageId: process.env.NOTION_VIDEOS_DATA_PAGE_ID || '',
                 ideasPageId: process.env.NOTION_IDEAS_PAGE_ID || '',
-                todoPageId: process.env.NOTION_TODO_PAGE_ID || ''
+                todoPageId: process.env.NOTION_TODO_PAGE_ID || '',
+                calendarPageId: process.env.NOTION_CALENDAR_PAGE_ID || ''
             },
             dropbox: { rootPath: process.env.DROPBOX_ROOT_PATH || '' }
         }));
@@ -233,8 +237,22 @@ const server = http.createServer(async (req, res) => {
     // PATCH /api/notion/pages/:id — update page (title, archive)
     const notionPagePatch = pathname.match(/^\/api\/notion\/pages\/([^/]+)$/);
     if (notionPagePatch && req.method === 'PATCH') {
+        const pageId = notionPagePatch[1];
         const body = await readBody(req);
-        await proxyFetch(res, `https://api.notion.com/v1/pages/${notionPagePatch[1]}`, {
+        // Protect critical system pages from being archived/deleted
+        const protectedIds = [
+            process.env.NOTION_VIDEOS_DATA_PAGE_ID,
+            process.env.NOTION_VIDEOS_PAGE_ID,
+            process.env.NOTION_IDEAS_PAGE_ID,
+            process.env.NOTION_TODO_PAGE_ID,
+            process.env.NOTION_CALENDAR_PAGE_ID,
+        ].filter(Boolean).map(normalizeId);
+        if (body.archived && protectedIds.includes(normalizeId(pageId))) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Cannot delete protected system page' }));
+            return;
+        }
+        await proxyFetch(res, `https://api.notion.com/v1/pages/${pageId}`, {
             method: 'PATCH', headers: NOTION_HEADERS, body: JSON.stringify(body)
         });
         return;
@@ -269,9 +287,89 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // POST /api/notion/ensure-calendar-page — auto-create calendar page if needed
+    if (pathname === '/api/notion/ensure-calendar-page' && req.method === 'POST') {
+        // If already configured, return it
+        if (process.env.NOTION_CALENDAR_PAGE_ID) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ calendarPageId: process.env.NOTION_CALENDAR_PAGE_ID }));
+            return;
+        }
+        // Need a parent page to create under
+        const parentId = process.env.NOTION_VIDEOS_PAGE_ID;
+        if (!parentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No parent page configured' }));
+            return;
+        }
+        try {
+            // Search existing children for a "Calendar" page
+            const listRes = await fetch(`https://api.notion.com/v1/blocks/${parentId}/children`, {
+                method: 'GET', headers: NOTION_HEADERS
+            });
+            if (listRes.ok) {
+                const listData = await listRes.json();
+                const existing = (listData.results || []).find(b => b.type === 'child_page' && b.child_page.title === 'Calendar');
+                if (existing) {
+                    process.env.NOTION_CALENDAR_PAGE_ID = existing.id;
+                    // Save to .env if local dev
+                    if (!process.env.RENDER) {
+                        try {
+                            let envContent = fs.readFileSync(envPath, 'utf8');
+                            envContent = envContent.replace(/^NOTION_CALENDAR_PAGE_ID=.*$/m, `NOTION_CALENDAR_PAGE_ID=${existing.id}`);
+                            fs.writeFileSync(envPath, envContent, 'utf8');
+                        } catch (e) {}
+                    }
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ calendarPageId: existing.id }));
+                    return;
+                }
+            }
+            // Create new Calendar page
+            const createRes = await fetch('https://api.notion.com/v1/pages', {
+                method: 'POST', headers: NOTION_HEADERS,
+                body: JSON.stringify({
+                    parent: { page_id: parentId },
+                    properties: { title: { title: [{ text: { content: 'Calendar' } }] } }
+                })
+            });
+            if (!createRes.ok) throw new Error('Failed to create Calendar page');
+            const newPage = await createRes.json();
+            process.env.NOTION_CALENDAR_PAGE_ID = newPage.id;
+            // Save to .env if local dev
+            if (!process.env.RENDER) {
+                try {
+                    let envContent = fs.readFileSync(envPath, 'utf8');
+                    envContent = envContent.replace(/^NOTION_CALENDAR_PAGE_ID=.*$/m, `NOTION_CALENDAR_PAGE_ID=${newPage.id}`);
+                    fs.writeFileSync(envPath, envContent, 'utf8');
+                } catch (e) {}
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ calendarPageId: newPage.id }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     // DELETE /api/notion/blocks/:id — delete a block
     if (notionBlockPatch && req.method === 'DELETE') {
-        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockPatch[1]}`, {
+        const blockId = notionBlockPatch[1];
+        // Protect critical system pages (child pages are also blocks in Notion)
+        const protectedIds = [
+            process.env.NOTION_VIDEOS_DATA_PAGE_ID,
+            process.env.NOTION_VIDEOS_PAGE_ID,
+            process.env.NOTION_IDEAS_PAGE_ID,
+            process.env.NOTION_TODO_PAGE_ID,
+            process.env.NOTION_CALENDAR_PAGE_ID,
+        ].filter(Boolean).map(normalizeId);
+        if (protectedIds.includes(normalizeId(blockId))) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Cannot delete protected system page' }));
+            return;
+        }
+        await proxyFetch(res, `https://api.notion.com/v1/blocks/${blockId}`, {
             method: 'DELETE', headers: NOTION_HEADERS
         });
         return;

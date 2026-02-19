@@ -146,6 +146,8 @@
 }
 .workshop-btn { background: #00b894; color: white; }
 .workshop-btn:hover { background: #00a884; }
+.library-btn { background: #6c5ce7; color: white; }
+.library-btn:hover { background: #5a4bd1; }
 .delete-btn { background: #ff6b6b; color: white; }
 .delete-btn:hover { background: #ee5a5a; }
 
@@ -503,6 +505,56 @@
 .egg-hatch-overlay.done {
     opacity: 0;
     transition: opacity 0.4s ease;
+}
+
+/* Nest loading animation */
+.incubator-nest-loader {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #fef8f0;
+    z-index: 3;
+    transition: opacity 0.4s ease;
+}
+.incubator-nest-loader.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+.nest-loader-svg {
+    width: 180px;
+    height: 140px;
+}
+.nest-loader-ring {
+    animation: nestRingSpin 3s linear infinite;
+    transform-origin: 100px 115px;
+}
+@keyframes nestRingSpin {
+    0% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: 48; }
+}
+.nest-loader-egg {
+    animation: eggPulse 1.5s ease-in-out infinite;
+}
+.nest-loader-egg.egg1 { animation-delay: 0s; }
+.nest-loader-egg.egg2 { animation-delay: 0.3s; }
+.nest-loader-egg.egg3 { animation-delay: 0.6s; }
+@keyframes eggPulse {
+    0%, 100% { opacity: 0.1; transform: translateY(0); }
+    50% { opacity: 0.35; transform: translateY(-4px); }
+}
+.nest-loader-text {
+    margin-top: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #b8956a;
+    animation: textPulse 1.5s ease-in-out infinite;
+}
+@keyframes textPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
 }
 
 @media (max-width: 600px) {

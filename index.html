@@ -19,6 +19,9 @@
         #todo-bell-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
         #todo-bell-btn:hover { transform: scale(1.1); }
         #todo-badge { position: absolute; top: -5px; right: -5px; background: #e74c3c; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        #calendar-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
+        #calendar-hud-btn:hover { transform: scale(1.1); }
+        #calendar-badge { position: absolute; top: -5px; right: -5px; background: #0984e3; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
         #money-display { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,250,240,0.95)); border: 3px solid #5a3e1b; border-radius: 18px; padding: 12px 22px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); min-width: 280px; }
         #level-text { font-family: 'Fredoka One', cursive; font-size: 20px; color: #5a3e1b; margin-bottom: 6px; }
         #money-bar-container { background: #e0d5c0; border-radius: 12px; height: 26px; overflow: hidden; border: 2px solid #5a3e1b; box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); }
@@ -70,6 +73,7 @@
             #path-btn { padding: 10px 20px; font-size: 14px; bottom: 30px; }
             #hamburger-btn { width: 44px; height: 44px; }
             #todo-bell-btn { width: 36px; height: 36px; }
+            #calendar-hud-btn { width: 36px; height: 36px; }
         }
         #loading-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #2d5016, #4a8c2a); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         #loading-overlay .title { font-family: 'Fredoka One', cursive; font-size: 48px; color: #fff; text-shadow: 0 4px 12px rgba(0,0,0,0.3); margin-bottom: 30px; }
@@ -91,6 +95,10 @@
         <button id="todo-bell-btn" onclick="openModal('Library', null, {tab:'todo'})">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             <span id="todo-badge" style="display:none;">0</span>
+        </button>
+        <button id="calendar-hud-btn" onclick="openModal('Library', null, {tab:'calendar'})">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span id="calendar-badge" style="display:none;">0</span>
         </button>
     </div>
     <div id="money-display">
@@ -171,8 +179,12 @@ function hashString(str) {
 }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/geopattern/1.2.3/js/geopattern.min.js"></script>
+<script src="buildings/notion-helpers.js"></script>
 <script src="buildings/video-service.js"></script>
 <script src="buildings/library/notes-service.js"></script>
+<script src="buildings/library/script-service.js"></script>
+<script src="buildings/library/link-service.js"></script>
+<script src="buildings/library/script-linker.js"></script>
 <script src="buildings/library/library-ui.js"></script>
 <script src="buildings/movietheatre/movietheatre-ui.js"></script>
 <script src="buildings/incubator/incubator-ui.js"></script>
@@ -289,11 +301,14 @@ async function loadAllModels() {
         island: 'assets/models/buildings/island.glb',
     };
     const entries = Object.entries(models);
-    for (let i = 0; i < entries.length; i++) {
-        const [name, path] = entries[i];
-        setLoadProgress(((i / entries.length) * 80) + 10, `Loading ${name}...`);
-        await loadModel(name, path);
-    }
+    let loaded = 0;
+    setLoadProgress(10, 'Loading models...');
+    await Promise.all(entries.map(([name, path]) =>
+        loadModel(name, path).then(() => {
+            loaded++;
+            setLoadProgress(10 + (loaded / entries.length) * 80, `Loaded ${name} (${loaded}/${entries.length})`);
+        })
+    ));
     setLoadProgress(95, 'Setting up world...');
 }
 
@@ -2202,10 +2217,13 @@ async function init() {
             if (emp) { emp.position.x = se.x; emp.position.z = se.z; }
         });
     }
-    // Create project flags from Dropbox folders
-    initProjectFlags(saved && saved.flags).catch(e => console.warn('Project flags init failed:', e));
-    // Create pen creatures from posted videos (no demo fluffball)
-    spawnPostedCreatures().catch(e => console.warn('Pen creatures failed:', e));
+    // Fire all async API calls in parallel
+    Promise.all([
+        initProjectFlags(saved && saved.flags).catch(e => console.warn('Project flags init failed:', e)),
+        spawnPostedCreatures().catch(e => console.warn('Pen creatures failed:', e)),
+        typeof LibraryUI !== 'undefined' ? LibraryUI.preloadTodoCount().catch(() => {}) : Promise.resolve(),
+        typeof LibraryUI !== 'undefined' ? LibraryUI.preloadCalendarCount().catch(() => {}) : Promise.resolve(),
+    ]);
     saveLayout();
     // Create ambient particles
     initAmbientParticles();
@@ -2214,8 +2232,6 @@ async function init() {
     // Hide loading screen
     setLoadProgress(100, 'Ready!');
     document.getElementById('loading-overlay').style.display = 'none';
-    // Preload to-do count for bell badge
-    if (typeof LibraryUI !== 'undefined') LibraryUI.preloadTodoCount().catch(() => {});
     // Start animation
     animate();
     // Expose for testing
@@ -2491,9 +2507,9 @@ function initPenCreature() {
 }
 
 // Spawn fluffballs for posted videos
-async function spawnPostedCreatures() {
+async function spawnPostedCreatures(skipSync) {
     try {
-        await VideoService.sync();
+        if (!skipSync) await VideoService.sync();
         const posted = VideoService.getByStatus('posted');
         if (posted.length === 0) return;
 

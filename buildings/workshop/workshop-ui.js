@@ -10,22 +10,10 @@ const WorkshopUI = (() => {
     let currentPage = 'list';
     let filterProject = '';
 
-    function escHtml(s) {
-        const d = document.createElement('div');
-        d.textContent = s || '';
-        return d.innerHTML;
-    }
-
-    function escAttr(s) {
-        return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    }
+    const escHtml = NotionHelpers.escHtml;
+    const escAttr = NotionHelpers.escAttr;
 
     const WORKERS = ['You', 'Robin', 'Jordan', 'Tennille'];
-
-    function getWorkerLabel(assignedTo) {
-        if (!assignedTo) return 'Unassigned';
-        return assignedTo;
-    }
 
     // Render 3D egg snapshots + character avatars onto card canvases after DOM insertion
     async function renderCardAssets() {
@@ -40,119 +28,6 @@ const WorkshopUI = (() => {
         await Promise.all(eggPromises);
     }
 
-    // ============ SCRIPT LINKER ============
-
-    function getLinkedScriptIds() {
-        const fromVideos = VideoService.getAll().filter(v => v.linkedScriptId).map(v => v.linkedScriptId);
-        const fromIdeas = NotesService.getAll().filter(n => n.linkedScriptId).map(n => n.linkedScriptId);
-        const currentId = selectedVideo ? selectedVideo.linkedScriptId : '';
-        const set = new Set([...fromVideos, ...fromIdeas]);
-        if (currentId) set.delete(currentId);
-        return set;
-    }
-
-    function renderScriptLinker(v) {
-        if (v.linkedScriptId) {
-            const libScripts = LibraryUI.getScripts();
-            const linked = libScripts.find(s => s.id === v.linkedScriptId);
-            const name = linked ? linked.title : 'Linked Script';
-            if (window.EggRenderer) {
-                return window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', name);
-            }
-            return `<div class="workshop-script-linked">
-                <span class="workshop-script-badge">${escHtml(name)}</span>
-                <button class="workshop-script-unlink" id="workshop-unlink-script">Unlink</button>
-            </div>`;
-        }
-        return `<div class="workshop-script-actions">
-            <button class="workshop-script-btn" id="workshop-link-script">Link Script</button>
-            <button class="workshop-script-btn primary" id="workshop-new-script">New Script</button>
-        </div>`;
-    }
-
-    async function showScriptPicker() {
-        const overlay = document.getElementById('workshop-script-picker-overlay');
-        const listEl = document.getElementById('workshop-script-picker-list');
-        if (!overlay || !listEl) return;
-
-        let libraryScripts = [];
-        try { libraryScripts = await LibraryUI.fetchScriptsIfNeeded(); } catch (e) {}
-
-        const linkedIds = getLinkedScriptIds();
-        const available = libraryScripts.filter(s => !linkedIds.has(s.id));
-
-        if (available.length === 0) {
-            listEl.innerHTML = '<div class="workshop-picker-empty">No available scripts. Create one with "New Script".</div>';
-        } else {
-            listEl.innerHTML = available.map(s => `
-                <div class="workshop-picker-item" data-id="${s.id}">
-                    <div class="workshop-picker-name">${escHtml(s.title)}</div>
-                    <button class="workshop-picker-link-btn" data-id="${s.id}">Link</button>
-                </div>`).join('');
-            listEl.querySelectorAll('.workshop-picker-link-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => { e.stopPropagation(); linkScript(btn.dataset.id); });
-            });
-            listEl.querySelectorAll('.workshop-picker-item').forEach(item => {
-                item.addEventListener('click', () => linkScript(item.dataset.id));
-            });
-        }
-        overlay.style.display = 'flex';
-    }
-
-    async function linkScript(scriptId) {
-        if (!selectedVideo) return;
-        selectedVideo.linkedScriptId = scriptId;
-        await VideoService.update(selectedVideo.id, { linkedScriptId: scriptId });
-        document.getElementById('workshop-script-picker-overlay').style.display = 'none';
-        renderDetail();
-    }
-
-    async function unlinkScript() {
-        if (!selectedVideo) return;
-        selectedVideo.linkedScriptId = '';
-        await VideoService.update(selectedVideo.id, { linkedScriptId: '' });
-        renderDetail();
-    }
-
-    async function createNewScript() {
-        if (!selectedVideo) return;
-        const btn = document.getElementById('workshop-new-script');
-        if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
-        try {
-            await LibraryUI.fetchScriptsIfNeeded();
-            const scriptName = (selectedVideo.name || 'Untitled') + ' Script';
-            const cfgRes = await fetch('/api/config');
-            const cfg = await cfgRes.json();
-            const videosPageId = cfg.notion && cfg.notion.videosPageId;
-            if (!videosPageId) throw new Error('Videos page not configured');
-
-            const res = await fetch('/api/notion/pages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    parent: { page_id: videosPageId },
-                    properties: { title: { title: [{ text: { content: scriptName } }] } },
-                    children: [{
-                        object: 'block', type: 'code',
-                        code: { language: 'json', rich_text: [{ type: 'text', text: { content: JSON.stringify({ project: selectedVideo.project || '', linkedVideoId: selectedVideo.id }) } }] }
-                    }]
-                })
-            });
-            if (!res.ok) throw new Error(`Create script failed: ${res.status}`);
-            const result = await res.json();
-            const libScripts = LibraryUI.getScripts();
-            libScripts.unshift({ id: result.id, title: scriptName, project: selectedVideo.project || '', created: result.created_time, lastEdited: result.last_edited_time });
-            selectedVideo.linkedScriptId = result.id;
-            await VideoService.update(selectedVideo.id, { linkedScriptId: result.id });
-            renderDetail();
-        } catch (e) {
-            console.warn('Workshop: create script failed', e);
-            alert('Failed to create script.');
-        } finally {
-            if (btn) { btn.textContent = 'New Script'; btn.disabled = false; }
-        }
-    }
-
     // ============ RENDER ============
 
     function render() {
@@ -165,7 +40,13 @@ const WorkshopUI = (() => {
                     </div>
                     <div class="workshop-filters" id="workshop-filters"></div>
                     <div class="workshop-items" id="workshop-items">
-                        <div class="workshop-loading">Loading...</div>
+                        ${Array(3).fill(`<div class="workshop-skeleton-card">
+                            <div class="workshop-skeleton-egg"></div>
+                            <div class="workshop-skeleton-lines">
+                                <div class="workshop-skeleton-line"></div>
+                                <div class="workshop-skeleton-line short"></div>
+                            </div>
+                        </div>`).join('')}
                     </div>
                 </div>
                 <div class="workshop-page workshop-detail-page">
@@ -213,7 +94,6 @@ const WorkshopUI = (() => {
             return;
         }
         el.innerHTML = active.map(v => {
-            const color = window.EggRenderer ? window.EggRenderer.getProjectColor(v.project) : '#ccc';
             const projBadge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(v.project) : escHtml(v.project || 'No project');
             return `
             <div class="workshop-card" data-id="${v.id}">
@@ -317,44 +197,22 @@ const WorkshopUI = (() => {
                     <label>Context</label>
                     <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
                     <label>Script</label>
-                    ${renderScriptLinker(v)}
+                    ${ScriptLinker.renderLinker({ prefix: 'workshop', linkedScriptId: v.linkedScriptId, useInlineEditor: true })}
                 </div>
             </div>
-            <div class="workshop-picker-overlay" id="workshop-script-picker-overlay" style="display:none;">
-                <div class="workshop-picker">
-                    <div class="workshop-picker-header">
-                        <h3>Link a Script</h3>
-                        <button class="workshop-picker-close" id="workshop-script-picker-close">&times;</button>
-                    </div>
-                    <div class="workshop-picker-list" id="workshop-script-picker-list"></div>
-                </div>
-            </div>
+            ${ScriptLinker.renderPickerOverlay('workshop')}
         `;
 
         document.getElementById('workshop-back-btn').addEventListener('click', () => saveAndBack());
         document.getElementById('workshop-post').addEventListener('click', () => postVideo());
         document.getElementById('workshop-to-incubator').addEventListener('click', () => backToIncubator());
 
-        // Script linker events — inline editor or link/new buttons
-        if (v.linkedScriptId && window.EggRenderer) {
-            window.EggRenderer.initInlineScriptEditor('workshop-inline-script', v.linkedScriptId, unlinkScript);
-        } else {
-            const unlinkBtn = document.getElementById('workshop-unlink-script');
-            if (unlinkBtn) unlinkBtn.addEventListener('click', unlinkScript);
-        }
-        const linkBtn = document.getElementById('workshop-link-script');
-        if (linkBtn) linkBtn.addEventListener('click', showScriptPicker);
-        const newBtn = document.getElementById('workshop-new-script');
-        if (newBtn) newBtn.addEventListener('click', createNewScript);
-
-        // Picker close
-        const pickerClose = document.getElementById('workshop-script-picker-close');
-        if (pickerClose) pickerClose.addEventListener('click', () => {
-            document.getElementById('workshop-script-picker-overlay').style.display = 'none';
-        });
-        const pickerOverlay = document.getElementById('workshop-script-picker-overlay');
-        if (pickerOverlay) pickerOverlay.addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) pickerOverlay.style.display = 'none';
+        // Script linker events
+        ScriptLinker.bindEvents({
+            prefix: 'workshop',
+            getTarget: () => selectedVideo,
+            isIdea: false,
+            onRefresh: () => { selectedVideo = VideoService.getById(selectedVideo.id); renderDetail(); }
         });
 
         // Init animated 3D egg preview for detail view
@@ -377,15 +235,7 @@ const WorkshopUI = (() => {
             const assignedTo = document.getElementById('workshop-assigned')?.value || '';
             const hook = document.getElementById('workshop-hook')?.value || '';
             const context = document.getElementById('workshop-context')?.value || '';
-            await VideoService.update(selectedVideo.id, { name, project, assignedTo, hook, context });
-            // Bidirectional sync: update linked idea if exists
-            if (selectedVideo.sourceIdeaId) {
-                const idea = NotesService.getById(selectedVideo.sourceIdeaId);
-                if (idea) {
-                    const content = JSON.stringify({ hook, context });
-                    NotesService.update(idea.id, { name, content, project }).catch(() => {});
-                }
-            }
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, assignedTo, hook, context });
         }
         showList();
     }
@@ -408,10 +258,11 @@ const WorkshopUI = (() => {
         const context = document.getElementById('workshop-context')?.value || '';
 
         try {
-            await VideoService.update(selectedVideo.id, { name, project, hook, context });
-            await VideoService.moveToPosted(selectedVideo.id);
-            // Spawn creature in 3D world immediately
-            if (typeof spawnPostedCreatures === 'function') spawnPostedCreatures();
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, hook, context, status: 'posted', postedDate: new Date().toISOString() });
+            // Spawn creature in 3D world immediately (skip sync — in-memory cache already updated)
+            if (typeof spawnPostedCreatures === 'function') spawnPostedCreatures(true);
+            // Notify Pen to auto-refresh if open
+            window.dispatchEvent(new CustomEvent('video-posted'));
             // Play hatch animation then return to list
             const panel = container.querySelector('.workshop-panel');
             if (panel && window.EggRenderer && project) {
@@ -428,17 +279,36 @@ const WorkshopUI = (() => {
 
     async function backToIncubator() {
         if (!selectedVideo) return;
-        await VideoService.moveToIncubator(selectedVideo.id);
-        showList();
+        const btn = container.querySelector('.back-to-incubator-btn');
+        if (btn) { btn.textContent = 'Moving...'; btn.disabled = true; }
+        try {
+            await VideoService.moveToIncubator(selectedVideo.id);
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+            const panel = container.querySelector('.workshop-panel');
+            const project = selectedVideo.project || '';
+            if (panel && window.EggRenderer && project) {
+                window.EggRenderer.showHatchAnimation(project, panel, () => showList());
+            } else {
+                showList();
+            }
+        } catch (e) {
+            console.warn('Workshop: back to incubator failed', e);
+            alert('Failed to move to Incubator.');
+            if (btn) { btn.textContent = 'Back to Incubator'; btn.disabled = false; }
+        }
     }
 
     return {
         async open(bodyEl) {
             container = bodyEl;
             render();
-            projects = await VideoService.getProjects();
-            await VideoService.sync();
-            LibraryUI.fetchScriptsIfNeeded().catch(() => {});
+            const [p] = await Promise.all([
+                VideoService.getProjects(),
+                VideoService.sync(),
+                ScriptService.sync().catch(() => {}),
+                NotesService.sync().catch(() => {}),
+            ]);
+            projects = p;
             renderFilters();
             renderItems();
         },
@@ -450,15 +320,7 @@ const WorkshopUI = (() => {
                 const hook = document.getElementById('workshop-hook')?.value;
                 const context = document.getElementById('workshop-context')?.value;
                 if (name) {
-                    VideoService.update(selectedVideo.id, { name, project, assignedTo, hook, context }).catch(() => {});
-                    // Bidirectional sync on close
-                    if (selectedVideo.sourceIdeaId) {
-                        const idea = NotesService.getById(selectedVideo.sourceIdeaId);
-                        if (idea) {
-                            const content = JSON.stringify({ hook, context });
-                            NotesService.update(idea.id, { name, content, project }).catch(() => {});
-                        }
-                    }
+                    VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, assignedTo, hook, context }).catch(() => {});
                 }
             }
             // Cleanup 3D egg preview

@@ -2,77 +2,19 @@
  * Video Pipeline Service — shared CRUD for the video lifecycle.
  * Videos flow: Incubator (queued) -> Workshop (active) -> Pen (posted)
  * Backed by Notion — each video is a child page under videosDataPageId.
- * Metadata stored as a JSON code block (same pattern as NotesService).
+ * Metadata stored as a JSON code block (via NotionHelpers).
  */
 const VideoService = (() => {
     let videos = [];
     let projects = []; // cached Dropbox project folder names
     let videosDataPageId = '';
+    let _lastSync = 0;
+    let _syncPromise = null; // dedup concurrent sync() calls
 
     async function loadConfig() {
         if (videosDataPageId) return;
-        try {
-            const res = await fetch('/api/config');
-            const cfg = await res.json();
-            if (cfg.notion && cfg.notion.videosDataPageId) videosDataPageId = cfg.notion.videosDataPageId;
-        } catch (e) { console.warn('VideoService: config load failed', e); }
-    }
-
-    // --- Notion helpers ---
-    async function fetchChildPages() {
-        if (!videosDataPageId) return [];
-        const res = await fetch(`/api/notion/blocks/${videosDataPageId}/children`);
-        if (!res.ok) throw new Error(`Notion fetch failed: ${res.status}`);
-        const data = await res.json();
-        if (!data.results) return [];
-        return data.results
-            .filter(b => b.type === 'child_page' && !b.archived)
-            .map(b => ({
-                id: b.id,
-                name: b.child_page.title,
-                _loaded: false
-            }));
-    }
-
-    async function loadPageContent(pageId) {
-        const res = await fetch(`/api/notion/blocks/${pageId}/children`);
-        if (!res.ok) return {};
-        const data = await res.json();
-        if (!data.results) return {};
-        for (const block of data.results) {
-            if (block.type === 'code') {
-                const text = (block.code.rich_text || []).map(t => t.plain_text).join('');
-                try { return JSON.parse(text); } catch (e) {}
-            }
-        }
-        return {};
-    }
-
-    async function savePageContent(pageId, meta) {
-        // Delete existing code blocks, then append new one
-        const res = await fetch(`/api/notion/blocks/${pageId}/children`);
-        if (res.ok) {
-            const data = await res.json();
-            for (const block of (data.results || [])) {
-                if (block.type === 'code') {
-                    await fetch(`/api/notion/blocks/${block.id}`, { method: 'DELETE' });
-                }
-            }
-        }
-        await fetch(`/api/notion/blocks/${pageId}/children`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                children: [{
-                    object: 'block',
-                    type: 'code',
-                    code: {
-                        language: 'json',
-                        rich_text: [{ type: 'text', text: { content: JSON.stringify(meta) } }]
-                    }
-                }]
-            })
-        });
+        const cfg = await NotionHelpers.getConfig();
+        if (cfg.notion && cfg.notion.videosDataPageId) videosDataPageId = cfg.notion.videosDataPageId;
     }
 
     function pageToVideo(page, meta) {
@@ -109,8 +51,7 @@ const VideoService = (() => {
     async function fetchProjects() {
         if (projects.length > 0) return projects;
         try {
-            const cfgRes = await fetch('/api/config');
-            const cfg = await cfgRes.json();
+            const cfg = await NotionHelpers.getConfig();
             const rootPath = (cfg.dropbox && cfg.dropbox.rootPath) || '';
             const res = await fetch('/api/dropbox/list_folder', {
                 method: 'POST',
@@ -132,21 +73,27 @@ const VideoService = (() => {
 
     return {
         // --- Sync ---
-        async sync() {
-            await loadConfig();
-            const pages = await fetchChildPages();
-            const loaded = [];
-            for (const page of pages) {
-                try {
-                    const meta = await loadPageContent(page.id);
-                    loaded.push(pageToVideo(page, meta));
-                } catch (e) {
-                    console.warn('VideoService: load content failed for', page.id, e);
-                    loaded.push(pageToVideo(page, {}));
-                }
-            }
-            videos = loaded;
-            return videos;
+        async sync(force) {
+            if (!force && videos.length > 0 && Date.now() - _lastSync < 60000) return videos;
+            // Dedup concurrent sync() calls — return the same in-flight promise
+            if (_syncPromise) return _syncPromise;
+            _syncPromise = (async () => {
+                await loadConfig();
+                const pages = await NotionHelpers.fetchChildPages(videosDataPageId);
+                const loaded = await Promise.all(pages.map(async page => {
+                    try {
+                        const meta = await NotionHelpers.loadPageMeta(page.id);
+                        return pageToVideo(page, meta);
+                    } catch (e) {
+                        console.warn('VideoService: load content failed for', page.id, e);
+                        return pageToVideo(page, {});
+                    }
+                }));
+                videos = loaded;
+                _lastSync = Date.now();
+                return videos;
+            })();
+            try { return await _syncPromise; } finally { _syncPromise = null; }
         },
 
         getAll() { return videos; },
@@ -182,24 +129,7 @@ const VideoService = (() => {
             const name = videoData.name || 'Untitled Video';
             const meta = videoToMeta({ status: 'incubator', ...videoData });
 
-            const res = await fetch('/api/notion/pages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    parent: { page_id: videosDataPageId },
-                    properties: { title: { title: [{ text: { content: name } }] } },
-                    children: [{
-                        object: 'block',
-                        type: 'code',
-                        code: {
-                            language: 'json',
-                            rich_text: [{ type: 'text', text: { content: JSON.stringify(meta) } }]
-                        }
-                    }]
-                })
-            });
-            if (!res.ok) throw new Error(`Create video failed: ${res.status}`);
-            const result = await res.json();
+            const result = await NotionHelpers.createChildPage(videosDataPageId, name, meta);
             const video = {
                 id: result.id,
                 name,
@@ -215,47 +145,48 @@ const VideoService = (() => {
 
             // Update title if changed
             if (changes.name !== undefined && changes.name !== videos[idx].name) {
-                await fetch(`/api/notion/pages/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        properties: { title: { title: [{ text: { content: changes.name } }] } }
-                    })
-                });
+                await NotionHelpers.updatePageTitle(id, changes.name);
             }
 
             // Apply changes to local copy
             Object.assign(videos[idx], changes);
+            // Bump sync timestamp so subsequent sync() returns this updated cache
+            // instead of re-fetching from Notion (which could race with the write below)
+            _lastSync = Date.now();
 
             // Save metadata code block
-            await savePageContent(id, videoToMeta(videos[idx]));
+            await NotionHelpers.savePageMeta(id, videoToMeta(videos[idx]));
             return videos[idx];
         },
 
         async remove(id) {
-            await fetch(`/api/notion/pages/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ archived: true })
-            });
+            await NotionHelpers.archivePage(id);
             videos = videos.filter(v => v.id !== id);
         },
 
         // --- Status transitions ---
-        async moveToWorkshop(id, assignedTo = '') {
-            return this.update(id, { status: 'workshop', assignedTo });
-        },
-
-        async moveToPosted(id, links = '') {
-            return this.update(id, {
-                status: 'posted',
-                postedDate: new Date().toISOString(),
-                links
-            });
-        },
-
         async moveToIncubator(id) {
             return this.update(id, { status: 'incubator', assignedTo: '' });
+        },
+
+        // --- Bidirectional save+sync ---
+        async saveWithIdeaSync(id, changes) {
+            await this.update(id, changes);
+            const video = this.getById(id);
+            if (video && video.sourceIdeaId) {
+                const idea = NotesService.getById(video.sourceIdeaId);
+                if (idea) {
+                    const syncChanges = {};
+                    if (changes.name !== undefined) syncChanges.name = changes.name;
+                    if (changes.hook !== undefined) syncChanges.hook = changes.hook;
+                    if (changes.context !== undefined) syncChanges.context = changes.context;
+                    if (changes.project !== undefined) syncChanges.project = changes.project;
+                    if (Object.keys(syncChanges).length > 0) {
+                        NotesService.update(idea.id, syncChanges).catch(() => {});
+                    }
+                }
+            }
+            return video;
         }
     };
 })();

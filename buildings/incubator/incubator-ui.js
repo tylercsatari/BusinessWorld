@@ -21,8 +21,8 @@ const IncubatorUI = (() => {
 
     const GEO_GENERATORS = ['chevrons','octogons','overlappingCircles','plusSigns','xes','sineWaves','hexagons','overlappingRings','plaid','triangles','squares','nestedSquares','mosaicSquares','concentricCircles','diamonds','tessellation'];
 
-    function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-    function escAttr(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+    const escHtml = NotionHelpers.escHtml;
+    const escAttr = NotionHelpers.escAttr;
 
     // Silhouette egg SVG (black egg with "?" — used for drafts / ungenerated eggs)
     function renderSilhouetteEgg() {
@@ -36,7 +36,6 @@ const IncubatorUI = (() => {
 
     // Render a small 3D egg preview in a canvas (for saved video detail view)
     function renderEggPreviewCanvas(project, canvasId) {
-        // Returns an HTML placeholder; after DOM insertion, call initEggPreview(canvasId, project)
         return `<canvas id="${canvasId}" class="incubator-egg-preview-canvas" width="160" height="200"></canvas>`;
     }
 
@@ -113,7 +112,6 @@ const IncubatorUI = (() => {
         const overlay = document.createElement('div');
         overlay.className = 'incubator-reveal-overlay';
 
-        const color = getProjectColor(project);
         overlay.innerHTML = `
             <div class="incubator-reveal-content">
                 <div class="incubator-reveal-silhouette">
@@ -128,14 +126,11 @@ const IncubatorUI = (() => {
         `;
         container.querySelector('.incubator-panel').appendChild(overlay);
 
-        // Phase 1: Show silhouette (0.6s), then fade it out and reveal 3D egg
         setTimeout(() => {
             overlay.classList.add('revealing');
-            // Init 3D egg on the reveal canvas
             initEggPreview('incubator-reveal-canvas', project);
         }, 600);
 
-        // Phase 2: After reveal completes, auto-dismiss
         setTimeout(() => {
             overlay.classList.add('done');
             setTimeout(() => {
@@ -241,17 +236,14 @@ const IncubatorUI = (() => {
             const elapsed = (performance.now() - startTime) / 1000;
 
             if (elapsed < 0.8) {
-                // Wobble phase — intensifying
                 const intensity = elapsed / 0.8;
                 egg.rotation.z = Math.sin(elapsed * 15) * 0.08 * intensity;
                 egg.rotation.x = Math.cos(elapsed * 12) * 0.05 * intensity;
             } else if (elapsed < 1.6) {
-                // Crack phase — violent shaking
                 egg.rotation.z = Math.sin(elapsed * 30) * 0.15;
                 egg.rotation.x = Math.cos(elapsed * 25) * 0.1;
                 egg.position.x = Math.sin(elapsed * 40) * 0.03;
             } else if (elapsed < 2.4) {
-                // Break phase — egg gone, fragments fly, creature grows
                 if (egg.visible) {
                     egg.visible = false;
                     fragments.forEach(f => {
@@ -264,17 +256,15 @@ const IncubatorUI = (() => {
                 const dt = 0.016;
                 fragments.forEach(f => {
                     f.position.add(f.userData.vel.clone().multiplyScalar(dt));
-                    f.userData.vel.y -= 9.8 * dt; // gravity
+                    f.userData.vel.y -= 9.8 * dt;
                     f.rotation.x += f.userData.rotVel.x * dt;
                     f.rotation.y += f.userData.rotVel.y * dt;
                     f.material.opacity = Math.max(0, 1 - breakT * 1.5);
                     f.material.transparent = true;
                 });
-                // Creature scales up
                 const scale = Math.min(1, breakT / 0.6);
                 creatureGroup.scale.set(scale, scale, scale);
             } else {
-                // Idle phase — gentle bounce
                 const idleT = elapsed - 2.4;
                 creatureGroup.position.y = Math.sin(idleT * 3) * 0.05;
                 fragments.forEach(f => { f.visible = false; });
@@ -287,12 +277,10 @@ const IncubatorUI = (() => {
         }
         animate();
 
-        // Auto-dismiss at 3.2s
         setTimeout(() => {
             overlay.classList.add('done');
             setTimeout(() => {
                 cancelAnimationFrame(frameId);
-                // Dispose
                 eggGeo.dispose(); eggMat.dispose();
                 fragGeo.dispose();
                 fragments.forEach(f => f.material.dispose());
@@ -307,7 +295,7 @@ const IncubatorUI = (() => {
         }, 3200);
     }
 
-    // Same color algorithm as project flags (index.html:1983-1991)
+    // Same color algorithm as project flags (index.html)
     function getProjectColor(project) {
         if (!project) return '#d4cfc4';
         const rng = seededRng(hashString(project));
@@ -358,7 +346,6 @@ const IncubatorUI = (() => {
         const containerEl = document.getElementById('incubator-3d-container');
         if (!containerEl) return;
 
-        // Renderer
         renderer3d = new T.WebGLRenderer({ antialias: true, alpha: false });
         renderer3d.setClearColor(0xfef8f0);
         renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -366,16 +353,13 @@ const IncubatorUI = (() => {
         renderer3d.setSize(rect.width, rect.height);
         containerEl.appendChild(renderer3d.domElement);
 
-        // Scene
         scene3d = new T.Scene();
         scene3d.background = new T.Color(0xfef8f0);
 
-        // Camera
         camera3d = new T.PerspectiveCamera(50, rect.width / rect.height, 0.1, 100);
         camera3d.position.set(0, 5, 6);
         camera3d.lookAt(0, 0, 0);
 
-        // Controls
         controls3d = new OC(camera3d, renderer3d.domElement);
         controls3d.enableDamping = true;
         controls3d.dampingFactor = 0.08;
@@ -384,7 +368,6 @@ const IncubatorUI = (() => {
         controls3d.maxDistance = 15;
         controls3d.target.set(0, 0.3, 0);
 
-        // Lighting
         const ambient = new T.AmbientLight(0xfff5e6, 0.6);
         scene3d.add(ambient);
 
@@ -396,32 +379,26 @@ const IncubatorUI = (() => {
         warm.position.set(0, 3, 0);
         scene3d.add(warm);
 
-        // Raycaster
         raycaster3d = new T.Raycaster();
         mouse3d = new T.Vector2();
 
-        // Events
         renderer3d.domElement.addEventListener('mousemove', onMouseMove3D);
         renderer3d.domElement.addEventListener('click', onClick3D);
         renderer3d.domElement.addEventListener('touchend', onTouch3D);
         renderer3d.domElement.style.cursor = 'grab';
 
-        // Resize observer
         const ro = new ResizeObserver(() => onResize3D());
         ro.observe(containerEl);
         renderer3d._resizeObserver = ro;
 
-        // Build the static nest (always visible)
         buildNest(1.5);
 
-        // Start render loop
         const startTime = performance.now();
         function animate() {
             animFrameId = requestAnimationFrame(animate);
             controls3d.update();
             const t = (performance.now() - startTime) / 1000;
 
-            // Egg wobble
             for (const entry of eggMeshes) {
                 const offset = entry.mesh.userData.wobbleOffset || 0;
                 entry.mesh.rotation.z = Math.sin(t * 1.2 + offset) * 0.04;
@@ -436,11 +413,9 @@ const IncubatorUI = (() => {
         const T = window.THREE;
         if (!T || !scene3d) return;
 
-        // Remove old nest
         if (nestGroup) { scene3d.remove(nestGroup); }
         nestGroup = new T.Group();
 
-        // Nest ring (torus)
         const torusGeo = new T.TorusGeometry(radius, 0.25, 8, 32);
         const nestMat = new T.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.9, metalness: 0.0 });
         const nestRing = new T.Mesh(torusGeo, nestMat);
@@ -448,7 +423,6 @@ const IncubatorUI = (() => {
         nestRing.position.y = 0.15;
         nestGroup.add(nestRing);
 
-        // Floor disc inside nest
         const floorGeo = new T.CircleGeometry(radius - 0.1, 32);
         const floorMat = new T.MeshStandardMaterial({ color: 0xe8d5b0, roughness: 1.0 });
         const floor = new T.Mesh(floorGeo, floorMat);
@@ -456,7 +430,6 @@ const IncubatorUI = (() => {
         floor.position.y = 0.05;
         nestGroup.add(floor);
 
-        // Straw bits
         for (let i = 0; i < 12; i++) {
             const strawGeo = new T.CylinderGeometry(0.02, 0.02, 0.3 + Math.random() * 0.4, 4);
             const strawMat = new T.MeshStandardMaterial({ color: 0xc9a86c, roughness: 0.95 });
@@ -558,7 +531,6 @@ const IncubatorUI = (() => {
         const T = window.THREE;
         if (!T || !scene3d) return;
 
-        // Remove old eggs only
         for (const entry of eggMeshes) {
             scene3d.remove(entry.mesh);
             if (entry.mesh.geometry) entry.mesh.geometry.dispose();
@@ -573,12 +545,10 @@ const IncubatorUI = (() => {
         let queued = VideoService.getByStatus('incubator');
         if (filterProject) queued = queued.filter(v => v.project === filterProject);
 
-        // Show/hide empty state
         const emptyEl = document.querySelector('.incubator-3d-empty');
         if (emptyEl) emptyEl.style.display = queued.length === 0 ? 'block' : 'none';
 
         if (queued.length === 0) {
-            // Rebuild nest at default size (empty nest)
             buildNest(1.5);
             return;
         }
@@ -586,20 +556,16 @@ const IncubatorUI = (() => {
         const count = queued.length;
         const nestRadius = Math.max(1.5, 0.5 + count * 0.25);
 
-        // Rebuild nest to fit egg count
         buildNest(nestRadius);
 
-        // Place eggs in circular arrangement
         const eggRadius = nestRadius * 0.6;
         for (let i = 0; i < count; i++) {
             const v = queued[i];
             const color = getProjectColor(v.project);
 
-            // Egg geometry
             const eggGeo = new T.SphereGeometry(0.35, 16, 16);
             eggGeo.scale(1, 1.4, 1);
 
-            // Main material — use project color + GeoPattern texture
             const matOpts = {
                 color: new T.Color(color),
                 roughness: 0.4,
@@ -609,18 +575,16 @@ const IncubatorUI = (() => {
             const patternTex = makeEggTexture(v.project);
             if (patternTex) {
                 matOpts.map = patternTex;
-                matOpts.color = new T.Color(0xffffff); // let texture color through
+                matOpts.color = new T.Color(0xffffff);
             }
             const eggMat = new T.MeshStandardMaterial(matOpts);
             const egg = new T.Mesh(eggGeo, eggMat);
 
-            // Position in circle
             const angle = (i / count) * Math.PI * 2;
             const r = count === 1 ? 0 : eggRadius;
             egg.position.set(Math.cos(angle) * r, 0.45, Math.sin(angle) * r);
             egg.userData.wobbleOffset = i * 1.7;
 
-            // Outline (BackSide shader — same as index.html addOutline)
             const outlineMat = new T.ShaderMaterial({
                 side: T.BackSide,
                 uniforms: {
@@ -635,6 +599,33 @@ const IncubatorUI = (() => {
             scene3d.add(egg);
             eggMeshes.push({ mesh: egg, videoId: v.id });
         }
+    }
+
+    // ============ LOADING ANIMATION ============
+
+    function showNestLoader() {
+        const el = document.getElementById('incubator-3d-container');
+        if (!el) return;
+        const loader = document.createElement('div');
+        loader.className = 'incubator-nest-loader';
+        loader.innerHTML = `
+            <svg viewBox="0 0 200 160" class="nest-loader-svg">
+                <ellipse cx="100" cy="120" rx="80" ry="20" fill="#d4a574" opacity="0.3" class="nest-loader-base"/>
+                <ellipse cx="100" cy="115" rx="75" ry="18" fill="none" stroke="#c4956a" stroke-width="3" stroke-dasharray="8 4" class="nest-loader-ring"/>
+                <ellipse cx="70" cy="90" rx="16" ry="22" fill="#888" opacity="0.15" class="nest-loader-egg egg1"/>
+                <ellipse cx="100" cy="85" rx="16" ry="22" fill="#888" opacity="0.15" class="nest-loader-egg egg2"/>
+                <ellipse cx="130" cy="90" rx="16" ry="22" fill="#888" opacity="0.15" class="nest-loader-egg egg3"/>
+            </svg>
+            <div class="nest-loader-text">Gathering eggs...</div>
+        `;
+        el.appendChild(loader);
+    }
+
+    function hideNestLoader() {
+        const el = document.querySelector('.incubator-nest-loader');
+        if (!el) return;
+        el.classList.add('fade-out');
+        setTimeout(() => el.remove(), 400);
     }
 
     // ============ RENDER ============
@@ -669,25 +660,12 @@ const IncubatorUI = (() => {
                     <div class="incubator-picker-list" id="incubator-picker-list"></div>
                 </div>
             </div>
-            <div class="incubator-picker-overlay" id="incubator-script-picker-overlay" style="display:none;">
-                <div class="incubator-picker">
-                    <div class="incubator-picker-header">
-                        <h3>Link a Script</h3>
-                        <button class="incubator-picker-close" id="incubator-script-picker-close">&times;</button>
-                    </div>
-                    <div class="incubator-picker-list" id="incubator-script-picker-list"></div>
-                </div>
-            </div>
         `;
         document.getElementById('incubator-add-btn').addEventListener('click', handleAdd);
         document.getElementById('incubator-from-library').addEventListener('click', showLibraryPicker);
         document.getElementById('incubator-picker-close').addEventListener('click', hideLibraryPicker);
         document.getElementById('incubator-picker-overlay').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) hideLibraryPicker();
-        });
-        document.getElementById('incubator-script-picker-close').addEventListener('click', hideScriptPicker);
-        document.getElementById('incubator-script-picker-overlay').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) hideScriptPicker();
         });
     }
 
@@ -727,7 +705,6 @@ const IncubatorUI = (() => {
     }
 
     function showList() {
-        // Cleanup detail egg preview if it exists
         const previewCanvas = document.getElementById('incubator-detail-egg-canvas');
         if (previewCanvas && previewCanvas._cleanup) previewCanvas._cleanup();
 
@@ -743,7 +720,6 @@ const IncubatorUI = (() => {
         const el = document.getElementById('incubator-detail');
         if (!el) return;
 
-        // For drafts, use empty/default values; for existing videos, use selectedVideo
         const v = isDraft
             ? { name: '', project: '', hook: '', context: '', linkedScriptId: '', sourceIdeaId: '' }
             : selectedVideo;
@@ -755,20 +731,17 @@ const IncubatorUI = (() => {
             sourceIdeaHtml = `<div class="incubator-source-idea">Source Idea: ${escHtml(idea ? idea.name : v.sourceIdeaId)}</div>`;
         }
 
-        // Script linker section — scripts are Library objects (LibraryUI.getScripts())
+        // Script linker section
         let scriptHtml = '';
         if (v.linkedScriptId) {
-            const libScripts = LibraryUI.getScripts();
-            const linkedScript = libScripts.find(s => s.id === v.linkedScriptId);
+            const scripts = ScriptService.getAll();
+            const linkedScript = scripts.find(s => s.id === v.linkedScriptId);
             const scriptName = linkedScript ? linkedScript.title : 'Linked Script';
             scriptHtml = `<div class="incubator-script-linker">${inlineScriptEditorHtml('incubator-inline-script', scriptName)}</div>`;
         } else {
             scriptHtml = `
                 <div class="incubator-script-linker">
-                    <div class="incubator-script-actions">
-                        <button class="incubator-script-btn" id="incubator-link-script">Link Script</button>
-                        <button class="incubator-script-btn primary" id="incubator-new-script">New Script</button>
-                    </div>
+                    ${ScriptLinker.renderLinker({ prefix: 'incubator', linkedScriptId: '', useInlineEditor: false })}
                 </div>`;
         }
 
@@ -776,6 +749,7 @@ const IncubatorUI = (() => {
         const toolbarActions = isDraft
             ? `<button class="incubator-action-btn workshop-btn" id="incubator-save-draft">Save</button>`
             : `<button class="incubator-action-btn workshop-btn" id="incubator-to-workshop">Move to Workshop</button>
+               <button class="incubator-action-btn library-btn" id="incubator-to-library">Back to Library</button>
                <button class="incubator-action-btn delete-btn" id="incubator-delete">Delete</button>`;
 
         el.innerHTML = `
@@ -813,12 +787,12 @@ const IncubatorUI = (() => {
                     ${scriptHtml}
                 </div>
             </div>
+            ${ScriptLinker.renderPickerOverlay('incubator')}
         `;
 
         // Back button
         document.getElementById('incubator-back-btn').addEventListener('click', () => {
             if (isDraft) {
-                // Discard draft, just go back
                 showList();
             } else {
                 saveAndBack();
@@ -830,17 +804,35 @@ const IncubatorUI = (() => {
             document.getElementById('incubator-save-draft').addEventListener('click', () => saveDraft());
         } else {
             document.getElementById('incubator-to-workshop').addEventListener('click', () => moveToWorkshop());
+            document.getElementById('incubator-to-library').addEventListener('click', () => backToLibrary());
             document.getElementById('incubator-delete').addEventListener('click', () => handleDelete());
         }
 
         // Script linker events
         if (v.linkedScriptId) {
-            initInlineScriptEditor('incubator-inline-script', v.linkedScriptId, unlinkScript);
+            initInlineScriptEditor('incubator-inline-script', v.linkedScriptId, async () => {
+                // Unlink callback
+                if (!selectedVideo || isDraft) return;
+                if (navigator.vibrate) navigator.vibrate(30);
+                try {
+                    await LinkService.unlinkFromVideo(selectedVideo.id);
+                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+                    selectedVideo = VideoService.getById(selectedVideo.id);
+                    renderDetail();
+                } catch (e) {
+                    console.warn('Incubator: unlink script failed', e);
+                    alert('Failed to unlink script.');
+                }
+            });
+        } else {
+            ScriptLinker.bindEvents({
+                prefix: 'incubator',
+                getTarget: () => isDraft ? null : selectedVideo,
+                isIdea: false,
+                onRefresh: () => { selectedVideo = VideoService.getById(selectedVideo.id); renderDetail(); },
+                isDraft
+            });
         }
-        const linkBtn = document.getElementById('incubator-link-script');
-        if (linkBtn) linkBtn.addEventListener('click', showScriptPicker);
-        const newBtn = document.getElementById('incubator-new-script');
-        if (newBtn) newBtn.addEventListener('click', createNewScript);
 
         // Project search/dropdown
         const searchInput = document.getElementById('incubator-project-search');
@@ -874,134 +866,9 @@ const IncubatorUI = (() => {
             });
         }
 
-        // Init 3D egg preview for saved videos (after DOM is ready)
+        // Init 3D egg preview for saved videos
         if (!isDraft && v.project) {
             requestAnimationFrame(() => initEggPreview('incubator-detail-egg-canvas', v.project));
-        }
-    }
-
-    // ============ SCRIPT LINKER ============
-    // Scripts are Library objects (child pages under videosPageId), accessed via LibraryUI.
-
-    function getLinkedScriptIds() {
-        // Collect all linkedScriptIds from all videos and ideas so we know which are taken
-        const fromVideos = VideoService.getAll().filter(v => v.linkedScriptId).map(v => v.linkedScriptId);
-        const fromIdeas = NotesService.getAll().filter(n => n.linkedScriptId).map(n => n.linkedScriptId);
-        const currentId = selectedVideo ? selectedVideo.linkedScriptId : '';
-        const set = new Set([...fromVideos, ...fromIdeas]);
-        if (currentId) set.delete(currentId); // don't exclude this video's own script
-        return set;
-    }
-
-    async function showScriptPicker() {
-        const overlay = document.getElementById('incubator-script-picker-overlay');
-        const listEl = document.getElementById('incubator-script-picker-list');
-        if (!overlay || !listEl) return;
-
-        // Ensure Library scripts are loaded
-        let libraryScripts = [];
-        try {
-            libraryScripts = await LibraryUI.fetchScriptsIfNeeded();
-        } catch (e) {
-            console.warn('Incubator: could not load library scripts', e);
-        }
-
-        const linkedIds = getLinkedScriptIds();
-        const available = libraryScripts.filter(s => !linkedIds.has(s.id));
-
-        if (available.length === 0) {
-            listEl.innerHTML = '<div class="incubator-picker-empty">No available scripts. Create one with "New Script".</div>';
-        } else {
-            listEl.innerHTML = available.map(s => `
-                <div class="incubator-picker-item" data-id="${s.id}">
-                    <div class="incubator-picker-item-info">
-                        <div class="incubator-picker-name">${escHtml(s.title)}</div>
-                        <div class="incubator-picker-preview">${escHtml(s.project || 'No project')}</div>
-                    </div>
-                    <button class="incubator-picker-link-btn" data-id="${s.id}">Link</button>
-                </div>`).join('');
-            listEl.querySelectorAll('.incubator-picker-link-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => { e.stopPropagation(); linkScript(btn.dataset.id); });
-            });
-            listEl.querySelectorAll('.incubator-picker-item').forEach(item => {
-                item.addEventListener('click', () => linkScript(item.dataset.id));
-            });
-        }
-        overlay.style.display = 'flex';
-    }
-
-    function hideScriptPicker() {
-        const overlay = document.getElementById('incubator-script-picker-overlay');
-        if (overlay) overlay.style.display = 'none';
-    }
-
-    async function linkScript(scriptId) {
-        if (!selectedVideo || isDraft) return;
-        try {
-            selectedVideo.linkedScriptId = scriptId;
-            await VideoService.update(selectedVideo.id, { linkedScriptId: scriptId });
-            hideScriptPicker();
-            renderDetail();
-        } catch (e) {
-            console.warn('Incubator: link script failed', e);
-            selectedVideo.linkedScriptId = '';
-            alert('Failed to link script. Check connection.');
-        }
-    }
-
-    async function unlinkScript() {
-        if (!selectedVideo || isDraft) return;
-        selectedVideo.linkedScriptId = '';
-        await VideoService.update(selectedVideo.id, { linkedScriptId: '' });
-        renderDetail();
-    }
-
-    async function createNewScript() {
-        if (isDraft) {
-            alert('Save the video first before creating a script.');
-            return;
-        }
-        if (!selectedVideo) return;
-        const btn = document.getElementById('incubator-new-script');
-        if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
-        try {
-            // Ensure Library scripts are loaded for the create function
-            await LibraryUI.fetchScriptsIfNeeded();
-            const scriptName = (selectedVideo.name || 'Untitled') + ' Script';
-            // Create via Notion (same pattern as Library creates scripts)
-            const cfgRes = await fetch('/api/config');
-            const cfg = await cfgRes.json();
-            const videosPageId = cfg.notion && cfg.notion.videosPageId;
-            if (!videosPageId) throw new Error('Videos page not configured');
-
-            const res = await fetch('/api/notion/pages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    parent: { page_id: videosPageId },
-                    properties: { title: { title: [{ text: { content: scriptName } }] } },
-                    children: [{
-                        object: 'block', type: 'code',
-                        code: { language: 'json', rich_text: [{ type: 'text', text: { content: JSON.stringify({ project: selectedVideo.project || '', linkedVideoId: selectedVideo.id }) } }] }
-                    }]
-                })
-            });
-            if (!res.ok) throw new Error(`Create script failed: ${res.status}`);
-            const result = await res.json();
-
-            // Update Library's scripts cache
-            const libScripts = LibraryUI.getScripts();
-            libScripts.unshift({ id: result.id, title: scriptName, project: selectedVideo.project || '', created: result.created_time, lastEdited: result.last_edited_time });
-
-            // Link to this video
-            selectedVideo.linkedScriptId = result.id;
-            await VideoService.update(selectedVideo.id, { linkedScriptId: result.id });
-            renderDetail();
-        } catch (e) {
-            console.warn('Incubator: create script failed', e);
-            alert('Failed to create script. Check connection.');
-        } finally {
-            if (btn) { btn.textContent = 'New Script'; btn.disabled = false; }
         }
     }
 
@@ -1015,7 +882,6 @@ const IncubatorUI = (() => {
         return match || val;
     }
 
-    // Save a new draft video to Notion (creates the egg)
     async function saveDraft() {
         const name = document.getElementById('incubator-name')?.value.trim() || 'Untitled Video';
         const project = getProjectFromDetail();
@@ -1036,7 +902,6 @@ const IncubatorUI = (() => {
             const video = await VideoService.create({ name, project, hook, context });
             selectedVideo = video;
             isDraft = false;
-            // Show egg reveal animation, then go back to nest
             showEggReveal(project, () => {
                 showList();
             });
@@ -1049,20 +914,14 @@ const IncubatorUI = (() => {
     }
 
     async function saveAndBack() {
+        const backBtn = container.querySelector('.incubator-back-btn');
+        if (backBtn) backBtn.textContent = 'Saving...';
         if (selectedVideo) {
             const name = document.getElementById('incubator-name')?.value.trim() || selectedVideo.name;
             const project = getProjectFromDetail();
             const hook = document.getElementById('incubator-hook')?.value || '';
             const context = document.getElementById('incubator-context')?.value || '';
-            await VideoService.update(selectedVideo.id, { name, project, hook, context });
-            // Bidirectional sync: update linked idea if exists
-            if (selectedVideo.sourceIdeaId) {
-                const idea = NotesService.getById(selectedVideo.sourceIdeaId);
-                if (idea) {
-                    const content = JSON.stringify({ hook, context });
-                    NotesService.update(idea.id, { name, content, project }).catch(() => {});
-                }
-            }
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, hook, context });
         }
         showList();
     }
@@ -1081,13 +940,16 @@ const IncubatorUI = (() => {
             return;
         }
 
+        const btn = container.querySelector('.workshop-btn');
+        if (btn) { btn.textContent = 'Moving...'; btn.disabled = true; }
+
         try {
-            await VideoService.update(selectedVideo.id, { name, project, hook, context });
-            await VideoService.moveToWorkshop(selectedVideo.id);
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, hook, context, status: 'workshop' });
             showEggReveal(project, () => showList(), 'Moved to Workshop!');
         } catch (e) {
             console.warn('Incubator: move to workshop failed', e);
             alert('Failed to move to Workshop. Check connection.');
+            if (btn) { btn.textContent = 'Move to Workshop'; btn.disabled = false; }
         }
     }
 
@@ -1099,7 +961,52 @@ const IncubatorUI = (() => {
         } catch (e) { console.warn('Incubator: delete failed', e); }
     }
 
-    // "+ New Video" — opens detail in draft mode (nothing created in Notion yet)
+    async function backToLibrary() {
+        if (!selectedVideo) return;
+        if (!confirm('Move this back to Library as an idea? The video entry will be removed.')) return;
+        const btn = document.getElementById('incubator-to-library');
+        if (btn) { btn.textContent = 'Moving...'; btn.disabled = true; }
+
+        try {
+            const v = selectedVideo;
+            if (v.sourceIdeaId) {
+                const idea = NotesService.getById(v.sourceIdeaId);
+                if (idea) {
+                    await NotesService.update(idea.id, { type: 'idea' });
+                    // Fix reverse-pointer: if script was linked to this video, relink to the idea
+                    if (v.linkedScriptId) {
+                        try {
+                            await LinkService.linkScriptToIdea(v.linkedScriptId, idea.id);
+                        } catch (e) { console.warn('Incubator: re-link script to idea failed', e); }
+                    }
+                }
+            } else {
+                // No source idea — create a new idea in the Library
+                const newIdea = await NotesService.create({
+                    name: v.name || 'Untitled',
+                    type: 'idea',
+                    hook: v.hook || '',
+                    context: v.context || '',
+                    project: v.project || '',
+                    linkedScriptId: v.linkedScriptId || ''
+                });
+                // Fix reverse-pointer: relink script from video to new idea
+                if (v.linkedScriptId && newIdea) {
+                    try {
+                        await LinkService.linkScriptToIdea(v.linkedScriptId, newIdea.id);
+                    } catch (e) { console.warn('Incubator: re-link script to new idea failed', e); }
+                }
+            }
+            await VideoService.remove(v.id);
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+            showEggReveal(v.project, () => showList(), 'Moved to Library!');
+        } catch (e) {
+            console.warn('Incubator: back to library failed', e);
+            alert('Failed to move back to Library. Check connection.');
+            if (btn) { btn.textContent = 'Back to Library'; btn.disabled = false; }
+        }
+    }
+
     function handleAdd() {
         isDraft = true;
         selectedVideo = null;
@@ -1124,8 +1031,7 @@ const IncubatorUI = (() => {
             listEl.innerHTML = '<div class="incubator-picker-empty">No ideas in Library yet. Create ideas in the Library first.</div>';
         } else {
             listEl.innerHTML = unlinked.map(n => {
-                let preview = '';
-                try { const p = JSON.parse(n.content); preview = p.hook || p.context || ''; } catch (e) { preview = n.content || ''; }
+                const preview = n.hook || n.context || '';
                 return `
                 <div class="incubator-picker-item" data-id="${n.id}">
                     <div class="incubator-picker-name">${escHtml(n.name)}</div>
@@ -1150,22 +1056,25 @@ const IncubatorUI = (() => {
         const existing = VideoService.getByIdeaId(noteId);
         if (existing) { alert('This idea is already in the Incubator.'); hideLibraryPicker(); return; }
 
-        let hook = '', context = '';
-        try {
-            const p = JSON.parse(note.content);
-            hook = p.hook || '';
-            context = p.context || '';
-        } catch (e) { context = note.content || ''; }
+        const item = document.querySelector(`.incubator-picker-item[data-id="${noteId}"]`);
+        if (item) { item.style.opacity = '0.5'; item.style.pointerEvents = 'none'; }
 
         try {
             const video = await VideoService.create({
                 name: note.name || 'Untitled Video',
-                hook,
-                context,
+                hook: note.hook || '',
+                context: note.context || '',
                 project: note.project || '',
-                sourceIdeaId: note.id
+                sourceIdeaId: note.id,
+                linkedScriptId: note.linkedScriptId || ''
             });
             await NotesService.update(note.id, { type: 'converted' });
+            // Fix reverse-pointer: if idea had a linked script, update it to point to the video
+            if (note.linkedScriptId) {
+                try {
+                    await LinkService.linkScriptToVideo(note.linkedScriptId, video.id);
+                } catch (e) { console.warn('Incubator: re-link script to video failed', e); }
+            }
             hideLibraryPicker();
             openDetail(video.id);
         } catch (e) {
@@ -1176,8 +1085,6 @@ const IncubatorUI = (() => {
 
     // ============ SHARED EGG RENDERER ============
 
-    // Creates a GeoPattern texture synchronously by drawing to canvas inline.
-    // Returns a ready-to-use CanvasTexture (no async image load).
     function makeEggTextureSync(project) {
         if (typeof GeoPattern === 'undefined' || !project) return null;
         const color = getProjectColor(project);
@@ -1185,23 +1092,17 @@ const IncubatorUI = (() => {
         const pattern = GeoPattern.generate(project, { color, generator: gen });
         const svgStr = pattern.toSvg();
 
-        // Draw SVG to an offscreen canvas synchronously via a data URI trick:
-        // We render to canvas using a temporary Image, but since this is async,
-        // we return a promise-based approach. Instead, draw the raw color + pattern
-        // tile by rendering the SVG inline.
         const T = window.THREE;
         const canvas = document.createElement('canvas');
         canvas.width = 256; canvas.height = 256;
         const ctx = canvas.getContext('2d');
 
-        // Fill with base color first (so even before SVG loads we have the right color)
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, 256, 256);
 
         const tex = new T.CanvasTexture(canvas);
         tex.colorSpace = T.SRGBColorSpace;
 
-        // Load SVG async and update texture when ready
         const blob = new Blob([svgStr], { type: 'image/svg+xml' });
         const url = URL.createObjectURL(blob);
         const img = new Image();
@@ -1220,7 +1121,6 @@ const IncubatorUI = (() => {
         return tex;
     }
 
-    // Renders a single-frame 3D egg to a canvas. Waits for texture to load first.
     async function renderEggSnapshot(project, canvas, size) {
         const T = window.THREE;
         if (!T || !canvas) return;
@@ -1232,7 +1132,6 @@ const IncubatorUI = (() => {
 
         const color = getProjectColor(project);
 
-        // Create texture and wait for it to load
         const patternTex = makeEggTextureSync(project);
         if (patternTex && patternTex._loadPromise) {
             await patternTex._loadPromise;
@@ -1276,7 +1175,6 @@ const IncubatorUI = (() => {
 
         r.render(s, cam);
 
-        // Dispose immediately
         eggGeo.dispose();
         egg.material.dispose();
         outlineMat.dispose();
@@ -1284,7 +1182,6 @@ const IncubatorUI = (() => {
         r.dispose();
     }
 
-    // Renders a hatchling creature (sphere body + eyes) to a canvas. Used in Pen.
     function renderCreatureSnapshot(project, canvas, size) {
         const T = window.THREE;
         if (!T || !canvas) return;
@@ -1310,13 +1207,11 @@ const IncubatorUI = (() => {
         dl.position.set(3, 5, 4);
         scene.add(dl);
 
-        // Body
         const bodyGeo = new T.SphereGeometry(0.4, 24, 24);
         const bodyMat = new T.MeshStandardMaterial({ color: new T.Color(color), roughness: 0.85 });
         const body = new T.Mesh(bodyGeo, bodyMat);
         scene.add(body);
 
-        // Eyes
         const eyeWhiteGeo = new T.SphereGeometry(0.11, 12, 12);
         const eyeWhiteMat = new T.MeshBasicMaterial({ color: 0xffffff });
         const pupilGeo = new T.SphereGeometry(0.065, 12, 12);
@@ -1329,7 +1224,6 @@ const IncubatorUI = (() => {
             const eh = new T.Mesh(highlightGeo, eyeWhiteMat); eh.position.set(x + 0.03, y + 0.04, z + 0.09); scene.add(eh);
         });
 
-        // Initial render with solid color
         renderer.render(scene, cam);
 
         function dispose() {
@@ -1340,7 +1234,6 @@ const IncubatorUI = (() => {
             renderer.dispose();
         }
 
-        // Apply GeoPattern texture (async image load, then re-render)
         if (typeof GeoPattern !== 'undefined' && project) {
             const gen = GEO_GENERATORS[Math.abs(hashString(project)) % GEO_GENERATORS.length];
             const pattern = GeoPattern.generate(project, { color, generator: gen });
@@ -1368,7 +1261,6 @@ const IncubatorUI = (() => {
         }
     }
 
-    // Renders a character head portrait to a canvas at high res and disposes immediately.
     const CHARACTER_HEX = { 'You': 0x3498db, 'Robin': 0xe74c3c, 'Jordan': 0x9b59b6, 'Tennille': 0xff69b4 };
 
     function renderCharacterAvatar(name, canvas, size) {
@@ -1377,7 +1269,6 @@ const IncubatorUI = (() => {
         const color = CHARACTER_HEX[name] || 0x888888;
 
         const w = size || 32;
-        // Render at 4x for sharp output
         const res = w * 4;
         canvas.width = res;
         canvas.height = res;
@@ -1388,7 +1279,6 @@ const IncubatorUI = (() => {
         r.setSize(res, res);
 
         const s = new T.Scene();
-        // Camera zoomed tight on head only
         const cam = new T.PerspectiveCamera(28, 1, 0.1, 50);
         cam.position.set(0, 1.7, 1.8);
         cam.lookAt(0, 1.6, 0);
@@ -1408,13 +1298,10 @@ const IncubatorUI = (() => {
         });
 
         const geos = [];
-        // Head only
         const headGeo = new T.SphereGeometry(0.38, 32, 32);
         const head = new T.Mesh(headGeo, cMat); head.position.y = 1.65; s.add(head); geos.push(headGeo);
-        // Neck hint (visible at bottom)
         const neckGeo = new T.CylinderGeometry(0.15, 0.2, 0.2, 16);
         const neck = new T.Mesh(neckGeo, cMat); neck.position.y = 1.28; s.add(neck); geos.push(neckGeo);
-        // Eyes — higher segment count for sharpness
         const eyeM = new T.MeshBasicMaterial({ color: 0x1a1a2e });
         const eyeW = new T.MeshBasicMaterial({ color: 0xffffff });
         const eyeGeos = [];
@@ -1435,7 +1322,6 @@ const IncubatorUI = (() => {
         r.dispose();
     }
 
-    // Badge helpers — shared across all buildings
     function projectFlagSvg(project, size, rectangular) {
         const sz = size || 20;
         if (typeof GeoPattern === 'undefined' || !project) return '';
@@ -1469,8 +1355,6 @@ const IncubatorUI = (() => {
         return `<span class="status-badge ${info.cls}">${info.emoji} ${info.label}</span>`;
     }
 
-    // Inline script editor — renders an expandable script editor in any building's detail view
-    // Returns HTML string. After DOM insertion, call initInlineScriptEditor(containerId, scriptId, onUnlink)
     function inlineScriptEditorHtml(containerId, scriptName) {
         return `<div class="inline-script-editor" id="${containerId}">
             <div class="inline-script-header">
@@ -1488,27 +1372,24 @@ const IncubatorUI = (() => {
     }
 
     function initInlineScriptEditor(containerId, scriptId, onUnlink) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        const header = container.querySelector('.inline-script-header');
+        const containerDiv = document.getElementById(containerId);
+        if (!containerDiv) return;
+        const header = containerDiv.querySelector('.inline-script-header');
         const textarea = document.getElementById(containerId + '-textarea');
         const statusEl = document.getElementById(containerId + '-status');
-        const unlinkBtn = container.querySelector('[data-action="unlink"]');
+        const unlinkBtn = containerDiv.querySelector('[data-action="unlink"]');
         let saveTimer = null;
         let scriptMeta = null;
         let dirty = false;
 
-        // Toggle expand/collapse
         header.addEventListener('click', (e) => {
             if (e.target.closest('[data-action="unlink"]')) return;
-            container.classList.toggle('expanded');
-            // Load on first expand
-            if (container.classList.contains('expanded') && !textarea.dataset.loaded) {
+            containerDiv.classList.toggle('expanded');
+            if (containerDiv.classList.contains('expanded') && !textarea.dataset.loaded) {
                 loadContent();
             }
         });
 
-        // Unlink button
         if (unlinkBtn) {
             unlinkBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -1520,7 +1401,7 @@ const IncubatorUI = (() => {
         async function loadContent() {
             textarea.dataset.loaded = '1';
             try {
-                const data = await LibraryUI.loadScriptContent(scriptId);
+                const data = await ScriptService.loadContent(scriptId);
                 scriptMeta = data.meta;
                 textarea.value = data.text;
                 textarea.placeholder = 'Start writing your script...';
@@ -1539,7 +1420,6 @@ const IncubatorUI = (() => {
             textarea.style.height = textarea.scrollHeight + 'px';
         }
 
-        // Auto-save on typing
         textarea.addEventListener('input', () => {
             autoResize();
             dirty = true;
@@ -1555,7 +1435,7 @@ const IncubatorUI = (() => {
             statusEl.textContent = 'Saving...';
             statusEl.className = 'inline-script-status saving';
             try {
-                await LibraryUI.saveScriptContent(scriptId, textarea.value, scriptMeta);
+                await ScriptService.saveContent(scriptId, textarea.value, scriptMeta);
                 statusEl.textContent = 'Saved';
                 statusEl.className = 'inline-script-status saved';
             } catch (e) {
@@ -1566,7 +1446,6 @@ const IncubatorUI = (() => {
             }
         }
 
-        // Return cleanup function
         return () => {
             if (saveTimer) { clearTimeout(saveTimer); doSave(); }
         };
@@ -1581,16 +1460,19 @@ const IncubatorUI = (() => {
         async open(bodyEl) {
             container = bodyEl;
             render();
-            projects = await VideoService.getProjects();
-            await VideoService.sync();
-            NotesService.sync().catch(() => {});
-            LibraryUI.fetchScriptsIfNeeded().catch(() => {});
+            showNestLoader();
+            requestAnimationFrame(() => init3DScene());
+            const [p] = await Promise.all([
+                VideoService.getProjects(),
+                VideoService.sync(),
+                NotesService.sync().catch(() => {}),
+                ScriptService.sync().catch(() => {}),
+            ]);
+            projects = p;
             renderFilters();
-            // Init 3D scene after DOM is ready
-            requestAnimationFrame(() => {
-                init3DScene();
-                render3DEggs();
-            });
+            if (!scene3d) await new Promise(r => requestAnimationFrame(() => { if (!scene3d) init3DScene(); r(); }));
+            render3DEggs();
+            hideNestLoader();
         },
         close() {
             if (currentPage === 'detail' && selectedVideo && !isDraft) {
@@ -1599,14 +1481,7 @@ const IncubatorUI = (() => {
                 const hook = document.getElementById('incubator-hook')?.value || '';
                 const context = document.getElementById('incubator-context')?.value || '';
                 if (name) {
-                    VideoService.update(selectedVideo.id, { name, project, hook, context }).catch(() => {});
-                    if (selectedVideo.sourceIdeaId) {
-                        const idea = NotesService.getById(selectedVideo.sourceIdeaId);
-                        if (idea) {
-                            const content = JSON.stringify({ hook, context });
-                            NotesService.update(idea.id, { name, content, project }).catch(() => {});
-                        }
-                    }
+                    VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, hook, context }).catch(() => {});
                 }
             }
             cleanup3D();
