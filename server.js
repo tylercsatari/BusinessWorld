@@ -101,7 +101,12 @@ const server = http.createServer(async (req, res) => {
                 boxesNameField: 'Name', itemsNameField: 'Name', itemsQuantityField: 'Quantity'
             },
             search: { semanticMatchThreshold: parseFloat(process.env.SEMANTIC_MATCH_THRESHOLD) || 0.75 },
-            notion: { videosPageId: process.env.NOTION_VIDEOS_PAGE_ID || '' },
+            notion: {
+                videosPageId: process.env.NOTION_VIDEOS_PAGE_ID || '',
+                videosDataPageId: process.env.NOTION_VIDEOS_DATA_PAGE_ID || '',
+                ideasPageId: process.env.NOTION_IDEAS_PAGE_ID || '',
+                todoPageId: process.env.NOTION_TODO_PAGE_ID || ''
+            },
             dropbox: { rootPath: process.env.DROPBOX_ROOT_PATH || '' }
         }));
         return;
@@ -273,33 +278,77 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
-    // API: Dropbox proxy — file browser
+    // API: Dropbox proxy — file browser (with auto token refresh)
     // =========================================
+    async function getDropboxToken() {
+        // If we have a refresh token, check if current access token works and refresh if needed
+        if (process.env.DROPBOX_REFRESH_TOKEN && process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET) {
+            // Try refreshing proactively if no token or token looks expired
+            if (!process.env.DROPBOX_ACCESS_TOKEN || process.env._DROPBOX_TOKEN_EXPIRED) {
+                try {
+                    const params = new URLSearchParams({
+                        grant_type: 'refresh_token',
+                        refresh_token: process.env.DROPBOX_REFRESH_TOKEN
+                    });
+                    const authHeader = 'Basic ' + Buffer.from(`${process.env.DROPBOX_APP_KEY}:${process.env.DROPBOX_APP_SECRET}`).toString('base64');
+                    const tokenRes = await fetch('https://api.dropboxapi.com/oauth2/token', {
+                        method: 'POST',
+                        headers: { 'Authorization': authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: params.toString()
+                    });
+                    if (tokenRes.ok) {
+                        const tokenData = await tokenRes.json();
+                        process.env.DROPBOX_ACCESS_TOKEN = tokenData.access_token;
+                        delete process.env._DROPBOX_TOKEN_EXPIRED;
+                        console.log('Dropbox: token refreshed');
+                    }
+                } catch (e) { console.warn('Dropbox: refresh failed', e); }
+            }
+        }
+        return process.env.DROPBOX_ACCESS_TOKEN;
+    }
+
+    async function dropboxFetch(res, url, opts) {
+        const token = await getDropboxToken();
+        opts.headers = { ...opts.headers, 'Authorization': `Bearer ${token}` };
+        const response = await fetch(url, opts);
+        // If 401, try refresh once
+        if (response.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
+            process.env._DROPBOX_TOKEN_EXPIRED = '1';
+            const newToken = await getDropboxToken();
+            opts.headers['Authorization'] = `Bearer ${newToken}`;
+            return proxyFetch(res, url, opts);
+        }
+        // Forward response
+        const body = await response.text();
+        res.writeHead(response.status, { 'Content-Type': response.headers.get('content-type') || 'application/json' });
+        res.end(body);
+    }
+
     const DROPBOX_HEADERS = {
-        'Authorization': `Bearer ${process.env.DROPBOX_ACCESS_TOKEN}`,
         'Content-Type': 'application/json'
     };
 
     if (pathname === '/api/dropbox/list_folder' && req.method === 'POST') {
         const body = await readBody(req);
-        await proxyFetch(res, 'https://api.dropboxapi.com/2/files/list_folder', {
-            method: 'POST', headers: DROPBOX_HEADERS, body: JSON.stringify(body)
+        await dropboxFetch(res, 'https://api.dropboxapi.com/2/files/list_folder', {
+            method: 'POST', headers: { ...DROPBOX_HEADERS }, body: JSON.stringify(body)
         });
         return;
     }
 
     if (pathname === '/api/dropbox/list_folder/continue' && req.method === 'POST') {
         const body = await readBody(req);
-        await proxyFetch(res, 'https://api.dropboxapi.com/2/files/list_folder/continue', {
-            method: 'POST', headers: DROPBOX_HEADERS, body: JSON.stringify(body)
+        await dropboxFetch(res, 'https://api.dropboxapi.com/2/files/list_folder/continue', {
+            method: 'POST', headers: { ...DROPBOX_HEADERS }, body: JSON.stringify(body)
         });
         return;
     }
 
     if (pathname === '/api/dropbox/get_temporary_link' && req.method === 'POST') {
         const body = await readBody(req);
-        await proxyFetch(res, 'https://api.dropboxapi.com/2/files/get_temporary_link', {
-            method: 'POST', headers: DROPBOX_HEADERS, body: JSON.stringify(body)
+        await dropboxFetch(res, 'https://api.dropboxapi.com/2/files/get_temporary_link', {
+            method: 'POST', headers: { ...DROPBOX_HEADERS }, body: JSON.stringify(body)
         });
         return;
     }
@@ -308,10 +357,11 @@ const server = http.createServer(async (req, res) => {
         const filePath = url.searchParams.get('path');
         if (!filePath) { res.writeHead(400); res.end('Missing path'); return; }
         try {
+            const token = await getDropboxToken();
             const response = await fetch('https://content.dropboxapi.com/2/files/get_thumbnail_v2', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${process.env.DROPBOX_ACCESS_TOKEN}`,
+                    'Authorization': `Bearer ${token}`,
                     'Dropbox-API-Arg': JSON.stringify({
                         resource: { '.tag': 'path', path: filePath },
                         format: 'jpeg',

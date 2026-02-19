@@ -76,6 +76,26 @@ const StorageAirtable = (() => {
             return request('PATCH', CONFIG.airtable.itemsTable, `/${itemId}`, {
                 fields: { [CONFIG.airtable.itemsLinkField]: [newBoxId] }
             });
+        },
+
+        async listHistory() {
+            const records = await listAll(CONFIG.airtable.historyTable);
+            return records.map(r => ({
+                id: r.id,
+                action: r.fields[CONFIG.airtable.historyActionField] || '',
+                details: r.fields[CONFIG.airtable.historyDetailsField] || '',
+                time: r.fields[CONFIG.airtable.historyTimeField] || ''
+            }));
+        },
+
+        async addHistoryRecord(action, details, time) {
+            return request('POST', CONFIG.airtable.historyTable, '', {
+                fields: {
+                    [CONFIG.airtable.historyActionField]: action,
+                    [CONFIG.airtable.historyDetailsField]: details,
+                    [CONFIG.airtable.historyTimeField]: time
+                }
+            });
         }
     };
 })();

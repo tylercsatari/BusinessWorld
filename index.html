@@ -15,6 +15,10 @@
         #hamburger-btn { width: 52px; height: 52px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 3px solid #5a3e1b; border-radius: 14px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); transition: transform 0.2s; }
         #hamburger-btn:hover { transform: scale(1.1); }
         #hamburger-btn span { display: block; width: 24px; height: 3px; background: #5a3e1b; border-radius: 2px; }
+        #hud-left-btns { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+        #todo-bell-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
+        #todo-bell-btn:hover { transform: scale(1.1); }
+        #todo-badge { position: absolute; top: -5px; right: -5px; background: #e74c3c; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
         #money-display { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,250,240,0.95)); border: 3px solid #5a3e1b; border-radius: 18px; padding: 12px 22px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); min-width: 280px; }
         #level-text { font-family: 'Fredoka One', cursive; font-size: 20px; color: #5a3e1b; margin-bottom: 6px; }
         #money-bar-container { background: #e0d5c0; border-radius: 12px; height: 26px; overflow: hidden; border: 2px solid #5a3e1b; box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); }
@@ -65,6 +69,7 @@
             #edit-btn { padding: 10px 20px; font-size: 14px; bottom: 30px; }
             #path-btn { padding: 10px 20px; font-size: 14px; bottom: 30px; }
             #hamburger-btn { width: 44px; height: 44px; }
+            #todo-bell-btn { width: 36px; height: 36px; }
         }
         #loading-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #2d5016, #4a8c2a); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         #loading-overlay .title { font-family: 'Fredoka One', cursive; font-size: 48px; color: #fff; text-shadow: 0 4px 12px rgba(0,0,0,0.3); margin-bottom: 30px; }
@@ -75,10 +80,19 @@
     <link rel="stylesheet" href="buildings/storage/storage.css">
     <link rel="stylesheet" href="buildings/library/library.css">
     <link rel="stylesheet" href="buildings/movietheatre/movietheatre.css">
+    <link rel="stylesheet" href="buildings/incubator/incubator.css">
+    <link rel="stylesheet" href="buildings/workshop/workshop.css">
+    <link rel="stylesheet" href="buildings/pen/pen.css">
 </head>
 <body>
 <div id="hud">
-    <button id="hamburger-btn" onclick="toggleMenu()"><span></span><span></span><span></span></button>
+    <div id="hud-left-btns">
+        <button id="hamburger-btn" onclick="toggleMenu()"><span></span><span></span><span></span></button>
+        <button id="todo-bell-btn" onclick="openModal('Library', null, {tab:'todo'})">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span id="todo-badge" style="display:none;">0</span>
+        </button>
+    </div>
     <div id="money-display">
         <div id="level-text">Lv. 1</div>
         <div id="money-bar-container"><div id="money-bar-fill" style="width: 20%"></div></div>
@@ -137,19 +151,48 @@
 <script src="buildings/storage/storage-service.js"></script>
 <script src="buildings/storage/storage-intent.js"></script>
 <script src="buildings/storage/storage-ui.js"></script>
+<script>
+// Global utility functions used by video pipeline buildings + index.html module
+function seededRng(seed) {
+    let s = seed | 0;
+    return function () {
+        s = (s + 0x6D2B79F5) | 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+function hashString(str) {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+    }
+    return hash;
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/geopattern/1.2.3/js/geopattern.min.js"></script>
+<script src="buildings/video-service.js"></script>
+<script src="buildings/library/notes-service.js"></script>
 <script src="buildings/library/library-ui.js"></script>
 <script src="buildings/movietheatre/movietheatre-ui.js"></script>
+<script src="buildings/incubator/incubator-ui.js"></script>
+<script src="buildings/workshop/workshop-ui.js"></script>
+<script src="buildings/pen/pen-ui.js"></script>
 
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
 </script>
 <script type="module">
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+window.THREE = THREE;
+window.OrbitControls = OrbitControls;
 
 // ============================================================
 // BUSINESS WORLD - 3D Model Assets Edition
@@ -309,7 +352,7 @@ const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const dragOffset = new THREE.Vector3();
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-let clickables = [], draggables = [], employees = [];
+let clickables = [], draggables = [], employees = [], projectFlags = [];
 let cameraAngle = Math.PI / 4, cameraPitch = Math.PI / 3.5, cameraDistance = 45;
 const cameraTarget = new THREE.Vector3();
 let isRMB = false, lastMX = 0, lastMY = 0, keys = {};
@@ -557,7 +600,7 @@ function createIncubator() {
 let moneyPitGoldFill = null; // gold fill cylinder for dynamic Y-scale
 let moneyPitGoldSurface = null; // bumpy top surface
 let moneyPitGoldCoins = []; // 3D coin meshes on top
-let moneyPitDomeRadius = 7;
+let moneyPitDomeRadius = 5;
 
 // Canvas texture: hundreds of tiny gold coins packed together
 function makeGoldCoinTex() {
@@ -595,271 +638,173 @@ function makeGoldCoinTex() {
 
 function createMoneyPit() {
     const g = new THREE.Group();
-    const R = moneyPitDomeRadius;
+    const R = moneyPitDomeRadius; // 5
+    const wallH = 2.5; // short walls so gold is visible from sides
 
-    // Stone circular base platform
-    const baseMat = new THREE.MeshStandardMaterial({ color: 0x9a8a7a, roughness: 0.7, flatShading: true });
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(R + 1.2, R + 1.8, 0.6, 32), baseMat);
-    base.position.y = -0.3; base.receiveShadow = true; base.castShadow = true; g.add(base);
+    // --- Stone base platform (chunky, wider at bottom) ---
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x888078, roughness: 0.85, flatShading: true });
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(R + 1.0, R + 1.8, 1.0, 8), baseMat);
+    base.position.y = -0.5; base.receiveShadow = true; base.castShadow = true; g.add(base);
 
-    // Decorative stone rim
-    const rimMat = new THREE.MeshStandardMaterial({ color: 0x7a6a4a, roughness: 0.8, flatShading: true });
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.8, 0.35, 8, 32), rimMat);
-    rim.rotation.x = -Math.PI / 2; rim.position.y = 0.02; rim.castShadow = true; g.add(rim);
-
-    // === GEODESIC DOME SHELL (3D tube struts + glass panels) ===
-    const strutMat = new THREE.MeshStandardMaterial({
-        color: 0xc0c8d0, roughness: 0.25, metalness: 0.8,
-        emissive: 0x222233, emissiveIntensity: 0.1
-    });
-    // Build struts from icosahedron edges - extract unique edges from geometry
-    const icoGeo = new THREE.IcosahedronGeometry(R, 2);
-    const posAttr = icoGeo.getAttribute('position');
-    const idx = icoGeo.index ? icoGeo.index.array : null;
-    const edgeSet = new Set();
-    const verts = [];
-    for (let i = 0; i < posAttr.count; i++) {
-        verts.push(new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)));
-    }
-    // Deduplicate vertices (icosahedron has shared positions)
-    const uniqueVerts = [];
-    const vertMap = new Array(verts.length);
-    for (let i = 0; i < verts.length; i++) {
-        let found = -1;
-        for (let j = 0; j < uniqueVerts.length; j++) {
-            if (verts[i].distanceTo(uniqueVerts[j]) < 0.01) { found = j; break; }
-        }
-        if (found >= 0) { vertMap[i] = found; }
-        else { vertMap[i] = uniqueVerts.length; uniqueVerts.push(verts[i].clone()); }
-    }
-    // Collect unique edges
-    const triCount = idx ? idx.length / 3 : posAttr.count / 3;
-    for (let t = 0; t < triCount; t++) {
-        const i0 = vertMap[idx ? idx[t * 3] : t * 3];
-        const i1 = vertMap[idx ? idx[t * 3 + 1] : t * 3 + 1];
-        const i2 = vertMap[idx ? idx[t * 3 + 2] : t * 3 + 2];
-        [[i0,i1],[i1,i2],[i2,i0]].forEach(([a,b]) => {
-            const key = Math.min(a,b) + ',' + Math.max(a,b);
-            edgeSet.add(key);
-        });
-    }
-    // Create tube mesh for each edge in the upper hemisphere (both verts y >= -0.1)
-    const strutR = 0.08; // strut tube radius
-    const domeGroup = new THREE.Group();
-    edgeSet.forEach(key => {
-        const [ai, bi] = key.split(',').map(Number);
-        const a = uniqueVerts[ai], b = uniqueVerts[bi];
-        // Only keep edges where at least one vertex is above ground
-        if (a.y < -0.1 && b.y < -0.1) return;
-        // Clip edge endpoints to ground plane
-        const ca = a.clone(), cb = b.clone();
-        if (ca.y < 0) { const t = -ca.y / (cb.y - ca.y); ca.lerp(cb, t); ca.y = 0; }
-        if (cb.y < 0) { const t2 = -cb.y / (ca.y - cb.y); cb.lerp(ca, t2); cb.y = 0; }
-        const mid = ca.clone().add(cb).multiplyScalar(0.5);
-        const dir = cb.clone().sub(ca);
-        const len = dir.length();
-        if (len < 0.05) return;
-        const tube = new THREE.Mesh(new THREE.CylinderGeometry(strutR, strutR, len, 6, 1), strutMat);
-        tube.position.copy(mid);
-        tube.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
-        tube.castShadow = true;
-        domeGroup.add(tube);
-    });
-    // Add joint spheres at each vertex above ground
-    uniqueVerts.forEach(v => {
-        if (v.y < -0.05) return;
-        const joint = new THREE.Mesh(new THREE.SphereGeometry(strutR * 1.6, 6, 6), strutMat);
-        joint.position.copy(v);
-        if (joint.position.y < 0) joint.position.y = 0;
-        domeGroup.add(joint);
-    });
-    g.add(domeGroup);
-
-    // Glass panels - semi-transparent hemisphere shell (visible clear dome)
-    const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.05);
-    const glassMat = new THREE.MeshStandardMaterial({
-        color: 0xddeeff, roughness: 0.05, metalness: 0.1,
-        transparent: true, opacity: 0.22, side: THREE.DoubleSide,
-        emissive: 0x334466, emissiveIntensity: 0.05,
-        clippingPlanes: [clipPlane], clipShadows: true
-    });
-    const glassShell = new THREE.Mesh(new THREE.IcosahedronGeometry(R - 0.12, 2), glassMat);
-    g.add(glassShell);
-
-    // Base ring - thick torus at ground level where dome meets platform
-    const baseRingMat = new THREE.MeshStandardMaterial({ color: 0xa0a8b0, roughness: 0.3, metalness: 0.7 });
-    const baseRing = new THREE.Mesh(new THREE.TorusGeometry(R, 0.15, 8, 48), baseRingMat);
-    baseRing.rotation.x = -Math.PI / 2; baseRing.position.y = 0.01; baseRing.castShadow = true;
-    g.add(baseRing);
-
-    // Floor inside dome
-    const domeFloor = new THREE.Mesh(
-        new THREE.CircleGeometry(R - 0.1, 32),
-        new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.8 })
+    // --- Stone walls: short, tapered, chunky low-poly (open top) ---
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x777068, roughness: 0.9, flatShading: true });
+    const wall = new THREE.Mesh(
+        new THREE.CylinderGeometry(R + 0.2, R - 0.5, wallH, 8, 1, true),
+        wallMat
     );
-    domeFloor.rotation.x = -Math.PI / 2; domeFloor.position.y = 0.02; domeFloor.receiveShadow = true;
-    g.add(domeFloor);
+    wall.position.y = wallH / 2;
+    wall.castShadow = true; wall.receiveShadow = true;
+    g.add(wall);
 
-    // === GOLD COIN FILL ===
-    // The gold fill is a cylinder with a coin-pile texture, scaled to fill percentage
-    const coinTex = makeGoldCoinTex();
-    coinTex.wrapS = coinTex.wrapT = THREE.RepeatWrapping;
-    coinTex.repeat.set(3, 3);
-    const coinTopTex = makeGoldCoinTex();
-
-    const goldFillMat = new THREE.MeshStandardMaterial({
-        map: coinTex, color: 0xFFE833, roughness: 0.3, metalness: 0.75,
-        emissive: 0xBB9900, emissiveIntensity: 0.2
-    });
-    const goldFillTopMat = new THREE.MeshStandardMaterial({
-        map: coinTopTex, color: 0xFFE833, roughness: 0.25, metalness: 0.8,
-        emissive: 0xCCAA00, emissiveIntensity: 0.18
-    });
-    // Cylinder: fills from floor up. Max height = R (full hemisphere)
-    const goldCyl = new THREE.Mesh(
-        new THREE.CylinderGeometry(R - 0.5, R - 0.3, R, 32, 1, false),
-        [goldFillMat, goldFillTopMat, goldFillMat] // side, top, bottom
+    // Inner wall visible from above
+    const innerWallMat = new THREE.MeshStandardMaterial({ color: 0x665e50, roughness: 0.95, side: THREE.BackSide, flatShading: true });
+    const innerWall = new THREE.Mesh(
+        new THREE.CylinderGeometry(R + 0.1, R - 0.6, wallH, 8, 1, true),
+        innerWallMat
     );
-    // Assign material indices: side=0, top cap=1, bottom cap=2
-    const cylGeo = new THREE.CylinderGeometry(R - 0.5, R - 0.3, R, 32, 1, false);
-    // Three.js CylinderGeometry has groups: [0]=side, [1]=top, [2]=bottom
-    goldCyl.geometry = cylGeo;
-    goldCyl.material = [goldFillMat, goldFillTopMat, goldFillMat];
-    goldCyl.position.y = R / 2; // will be scaled down
-    goldCyl.castShadow = true;
-    g.add(goldCyl);
-    moneyPitGoldFill = goldCyl;
+    innerWall.position.y = wallH / 2;
+    g.add(innerWall);
 
-    // Bumpy surface on top to look like a heap of coins rather than flat
-    const goldSurfaceMat = new THREE.MeshStandardMaterial({
-        map: coinTopTex, color: 0xFFDD00, roughness: 0.28, metalness: 0.78,
-        emissive: 0x997700, emissiveIntensity: 0.12, flatShading: true
+    // --- Wooden planks visible inside the barrel ---
+    const plankMat = new THREE.MeshStandardMaterial({ color: 0xA0762C, roughness: 0.7, flatShading: true });
+    const plankCount = 12;
+    for (let i = 0; i < plankCount; i++) {
+        const angle = (i / plankCount) * Math.PI * 2;
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(0.5, wallH - 0.2, 0.08), plankMat);
+        const pr = R - 0.15;
+        plank.position.set(Math.cos(angle) * pr, wallH / 2, Math.sin(angle) * pr);
+        plank.rotation.y = -angle + Math.PI / 2;
+        plank.castShadow = true;
+        g.add(plank);
+    }
+
+    // --- Iron reinforcement bands (2 torus rings) ---
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0x505050, roughness: 0.45, metalness: 0.75, flatShading: true });
+    const band1 = new THREE.Mesh(new THREE.TorusGeometry(R + 0.25, 0.15, 6, 24), bandMat);
+    band1.rotation.x = -Math.PI / 2; band1.position.y = wallH * 0.35; band1.castShadow = true; g.add(band1);
+    const band2 = new THREE.Mesh(new THREE.TorusGeometry(R + 0.22, 0.15, 6, 24), bandMat);
+    band2.rotation.x = -Math.PI / 2; band2.position.y = wallH * 0.75; band2.castShadow = true; g.add(band2);
+
+    // --- Dark rim at the top lip ---
+    const rimMat = new THREE.MeshStandardMaterial({ color: 0x555050, roughness: 0.7, metalness: 0.5, flatShading: true });
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.15, 0.2, 6, 24), rimMat);
+    rim.rotation.x = -Math.PI / 2; rim.position.y = wallH; rim.castShadow = true; g.add(rim);
+
+    // --- Floor inside barrel ---
+    const barrelFloor = new THREE.Mesh(
+        new THREE.CircleGeometry(R - 0.5, 16),
+        new THREE.MeshStandardMaterial({ color: 0x5a5040, roughness: 0.9 })
+    );
+    barrelFloor.rotation.x = -Math.PI / 2; barrelFloor.position.y = 0.05; barrelFloor.receiveShadow = true;
+    g.add(barrelFloor);
+
+    // === GOLD: individual 3D coins and ingots piled in a dome shape ===
+    const brightGold2 = new THREE.MeshStandardMaterial({
+        color: 0xFFEE33, roughness: 0.35, metalness: 0.3,
+        emissive: 0xFFDD00, emissiveIntensity: 0.6
     });
-    const goldSurface = new THREE.Mesh(new THREE.DodecahedronGeometry(R - 0.8, 2), goldSurfaceMat);
-    goldSurface.scale.set(1, 0.18, 1);
-    goldSurface.position.y = 0.1;
-    goldSurface.userData.isGoldSurface = true;
-    g.add(goldSurface);
-    moneyPitGoldSurface = goldSurface;
+    const lightGold2 = new THREE.MeshStandardMaterial({
+        color: 0xFFF044, roughness: 0.3, metalness: 0.25,
+        emissive: 0xFFEE11, emissiveIntensity: 0.55
+    });
+    const deepGold = new THREE.MeshStandardMaterial({
+        color: 0xFFDD00, roughness: 0.4, metalness: 0.35,
+        emissive: 0xFFCC00, emissiveIntensity: 0.5
+    });
+    const goldMats = [brightGold2, lightGold2, deepGold];
 
-    // 3D coins scattered on the top surface for close-up detail
+    // Shared geometries for performance
+    const coinGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.1, 8);
+    const ingotGeo = new THREE.BoxGeometry(0.5, 0.25, 0.35);
+    const smallCoinGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.08, 6);
+
+    moneyPitGoldFill = null; // no fill cylinder needed
+    moneyPitGoldSurface = null;
     moneyPitGoldCoins = [];
-    for (let i = 0; i < 80; i++) {
-        const coinR = 0.1 + Math.random() * 0.18;
-        const coin = new THREE.Mesh(new THREE.CylinderGeometry(coinR, coinR, 0.03, 8), goldBright);
-        const a = Math.random() * Math.PI * 2, r = Math.random() * (R - 1.5);
-        coin.position.set(Math.cos(a) * r, 0.1, Math.sin(a) * r);
-        coin.rotation.set(Math.random() * 0.8 - 0.4, 0, Math.random() * 0.8 - 0.4);
-        coin.userData = { isGoldCoin: true, baseYFraction: Math.random(), baseR: r, baseA: a };
-        g.add(coin);
-        moneyPitGoldCoins.push(coin);
-    }
 
-    // A few green money bills poking out
-    const moneyColors = [0x2ecc71, 0x27ae60, 0x229954, 0x1e8449];
-    for (let i = 0; i < 15; i++) {
-        const bw = 0.3 + Math.random() * 0.25, bd = 0.15 + Math.random() * 0.12;
-        const bm = new THREE.MeshStandardMaterial({ color: moneyColors[Math.floor(Math.random() * 4)], roughness: 0.5, emissive: 0x114411, emissiveIntensity: 0.12 });
-        const bill = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.015, bd), bm);
-        const a = Math.random() * Math.PI * 2, r = Math.random() * (R - 1.2);
-        bill.position.set(Math.cos(a) * r, 0.15, Math.sin(a) * r);
-        bill.rotation.set(Math.random() * 0.6 - 0.3, Math.random() * Math.PI, Math.random() * 0.6 - 0.3);
-        bill.userData = { isGoldCoin: true, baseYFraction: Math.random() };
-        moneyPitGoldCoins.push(bill);
-        g.add(bill);
-    }
+    // Generate gold pieces in a dome/heap shape
+    // The heap goes from y=0 up to about y=6 (well above the 2.5 wall)
+    const maxPileH = 6;
+    const totalPieces = 200;
+    for (let i = 0; i < totalPieces; i++) {
+        // Distribute evenly 0-1 so fill % maps linearly to visible pieces
+        const yFrac = i / totalPieces;
+        const y = yFrac * maxPileH;
+        // Radius shrinks as y increases (dome shape)
+        const maxR = (R - 0.8) * (1 - (y / maxPileH) * 0.85);
+        const r = Math.random() * maxR;
+        const a = Math.random() * Math.PI * 2;
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
 
-    // Gems on the surface
-    const gemColors = [0xff2222, 0x2244ff, 0x22ff44, 0xff44ff, 0x44ffff, 0xffaa00];
-    for (let i = 0; i < 8; i++) {
-        const gem = new THREE.Mesh(
-            new THREE.OctahedronGeometry(0.15 + Math.random() * 0.1, 0),
-            new THREE.MeshStandardMaterial({ color: gemColors[i % 6], roughness: 0.1, metalness: 0.3, emissive: gemColors[i % 6], emissiveIntensity: 0.25 })
+        // Pick geometry type
+        const geoType = Math.random();
+        let piece;
+        const mat = goldMats[Math.floor(Math.random() * goldMats.length)];
+        if (geoType < 0.45) {
+            piece = new THREE.Mesh(coinGeo, mat);
+        } else if (geoType < 0.75) {
+            piece = new THREE.Mesh(ingotGeo, mat);
+        } else {
+            piece = new THREE.Mesh(smallCoinGeo, mat);
+        }
+        piece.position.set(x, y, z);
+        piece.rotation.set(
+            Math.random() * 0.8 - 0.4,
+            Math.random() * Math.PI,
+            Math.random() * 0.8 - 0.4
         );
-        const a = Math.random() * Math.PI * 2, r = Math.random() * (R - 2);
-        gem.position.set(Math.cos(a) * r, 0.2, Math.sin(a) * r);
+        piece.castShadow = true;
+        piece.userData = { isGoldCoin: true, baseYFraction: yFrac };
+        g.add(piece);
+        moneyPitGoldCoins.push(piece);
+    }
+
+    // A few gems scattered in the pile
+    const gemColors = [0xff2222, 0x2244ff, 0x22ff44, 0xff44ff, 0x44ffff];
+    for (let i = 0; i < 6; i++) {
+        const gem = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.2 + Math.random() * 0.12, 0),
+            new THREE.MeshStandardMaterial({ color: gemColors[i % 5], roughness: 0.1, metalness: 0.3, emissive: gemColors[i % 5], emissiveIntensity: 0.3 })
+        );
+        const yFrac = 0.3 + Math.random() * 0.5;
+        const y = yFrac * maxPileH;
+        const maxR2 = (R - 1) * (1 - (y / maxPileH) * 0.85);
+        const r = Math.random() * maxR2;
+        const a = Math.random() * Math.PI * 2;
+        gem.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
         gem.rotation.set(Math.random(), Math.random(), Math.random());
-        gem.userData = { isGoldCoin: true, baseYFraction: Math.random() };
+        gem.userData = { isGoldCoin: true, baseYFraction: yFrac };
         moneyPitGoldCoins.push(gem);
         g.add(gem);
     }
 
-    // Floating money/coins rising above the dome
-    for (let i = 0; i < 12; i++) {
-        const w = 0.2 + Math.random() * 0.3, d = 0.12 + Math.random() * 0.12;
-        const bm = new THREE.MeshStandardMaterial({ color: moneyColors[Math.floor(Math.random() * 4)], roughness: 0.5, emissive: 0x114411, emissiveIntensity: 0.1 });
-        const bill = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), bm);
-        const a = Math.random() * Math.PI * 2, r = Math.random() * 2;
-        bill.position.set(Math.cos(a) * r, R + Math.random() * 4, Math.sin(a) * r);
-        bill.rotation.set(Math.random() * 0.3, Math.random() * Math.PI, Math.random() * 0.3);
-        bill.userData = { isMoneyBill: true, floatOffset: Math.random() * Math.PI * 2 };
-        g.add(bill);
-    }
-    for (let i = 0; i < 6; i++) {
-        const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.035, 10), goldBright);
-        const a = Math.random() * Math.PI * 2, r = Math.random() * 2.5;
-        coin.position.set(Math.cos(a) * r, R + 1 + Math.random() * 3, Math.sin(a) * r);
-        coin.rotation.set(Math.random() * Math.PI, 0, Math.random() * Math.PI);
-        coin.userData = { isMoneyBill: true, floatOffset: Math.random() * Math.PI * 2 };
-        g.add(coin);
-    }
-
-    // Golden glow from inside dome
-    const goldLight = new THREE.PointLight(0xFFD700, 2.0, 25);
-    goldLight.position.set(0, R * 0.3, 0); goldLight.userData.isGoldLight = true; g.add(goldLight);
-    const goldLight2 = new THREE.PointLight(0xFFAA00, 1.0, 15);
-    goldLight2.position.set(0, 1, 0); g.add(goldLight2);
-
-    // Sparkle particles inside dome
-    const mCnt = 40, mGeo = new THREE.BufferGeometry();
-    const mP = new Float32Array(mCnt * 3), mC = new Float32Array(mCnt * 3);
-    for (let i = 0; i < mCnt; i++) {
-        const a = Math.random() * Math.PI * 2, r = Math.random() * R * 0.8;
-        mP[i * 3] = Math.cos(a) * r; mP[i * 3 + 1] = Math.random() * R; mP[i * 3 + 2] = Math.sin(a) * r;
-        const c = new THREE.Color().setHSL(0.12 + Math.random() * 0.06, 0.9, 0.6 + Math.random() * 0.3);
-        mC[i * 3] = c.r; mC[i * 3 + 1] = c.g; mC[i * 3 + 2] = c.b;
-    }
-    mGeo.setAttribute('position', new THREE.BufferAttribute(mP, 3));
-    mGeo.setAttribute('color', new THREE.BufferAttribute(mC, 3));
-    const mPts = new THREE.Points(mGeo, new THREE.PointsMaterial({ size: 0.25, vertexColors: true, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
-    mPts.userData = { isParticle: true, isMoneyParticle: true }; g.add(mPts);
-
-    // Gold finial on top of dome
-    const signPole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.5, 6), new THREE.MeshStandardMaterial({ color: 0xD4AF37, roughness: 0.3, metalness: 0.6 }));
-    signPole.position.set(0, R + 1.25, 0); signPole.castShadow = true; g.add(signPole);
-    const finial = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), goldBright);
-    finial.position.set(0, R + 2.6, 0); g.add(finial);
+    // Bright yellow glow from inside
+    const goldLight = new THREE.PointLight(0xFFFF44, 3.0, 20);
+    goldLight.position.set(0, 2, 0); goldLight.userData.isGoldLight = true; g.add(goldLight);
+    const goldLight2 = new THREE.PointLight(0xFFEE00, 2.0, 15);
+    goldLight2.position.set(0, 4, 0); goldLight2.userData.isGoldLight = true; g.add(goldLight2);
 
     return makeClickable(g, 'Money Pit');
 }
 
 // Update money pit gold fill level based on progress percentage (0-1)
 function updateMoneyPitFill(pct) {
-    if (!moneyPitGoldFill) return;
-    const R = moneyPitDomeRadius;
-    // Scale the gold cylinder height: at pct=0 very thin, at pct=1 fills dome
-    const fillHeight = Math.max(0.05, pct); // 0-1 of full dome height
-    moneyPitGoldFill.scale.y = fillHeight;
-    moneyPitGoldFill.position.y = (R * fillHeight) / 2;
-    // Also taper the top radius at lower fills (cone of coins vs full cylinder)
-    // Surface bumps track the top of the fill
-    if (moneyPitGoldSurface) {
-        const surfaceY = R * fillHeight;
-        moneyPitGoldSurface.position.y = surfaceY;
-        moneyPitGoldSurface.scale.set(0.5 + fillHeight * 0.5, 0.12 + fillHeight * 0.1, 0.5 + fillHeight * 0.5);
-    }
-    // Position coins/bills/gems on top of the gold pile
-    const topY = R * fillHeight;
-    moneyPitGoldCoins.forEach(coin => {
-        if (coin.userData.isGoldCoin) {
-            coin.position.y = topY + coin.userData.baseYFraction * 0.4;
-            coin.visible = (coin.userData.baseYFraction < fillHeight + 0.3); // hide coins above fill
+    if (!moneyPitGoldCoins.length) return;
+    // Round to nearest tenth (0.0, 0.1, 0.2, ... 1.0) so 20k/$100k = 0.2 = 20%
+    const rounded = Math.round(pct * 10) / 10;
+    const threshold = Math.max(0.05, rounded);
+    moneyPitGoldCoins.forEach(piece => {
+        if (piece.userData.isGoldCoin) {
+            piece.visible = (piece.userData.baseYFraction <= threshold);
         }
     });
     // Adjust glow intensity with fill
-    moneyPit.children.forEach(ch => {
-        if (ch.userData.isGoldLight) ch.intensity = 1.0 + pct * 2.0;
-    });
+    if (typeof moneyPit !== 'undefined' && moneyPit) {
+        moneyPit.children.forEach(ch => {
+            if (ch.userData.isGoldLight) ch.intensity = 0.5 + pct * 2.5;
+        });
+    }
 }
 
 // --- THE PEN: Resizable square fence area with drag handles in edit mode ---
@@ -1910,6 +1855,240 @@ function createMovieTheatre() {
     return makeClickable(g, 'Movie Theatre');
 }
 
+// --- Project Flags ---
+function createProjectFlag(name, x, z) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const waveOffset = Math.random() * Math.PI * 2;
+
+    // Pole
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7 });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 4, 8), poleMat);
+    pole.position.y = 2;
+    group.add(pole);
+
+    // Base disc
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 0.15, 12), baseMat);
+    base.position.y = 0.075;
+    group.add(base);
+
+    // Flag cloth — uses the same procedural pattern SVG as the Movie Theatre badge
+    const clothGeo = new THREE.PlaneGeometry(2.2, 1.5, 8, 1);
+    const clothMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9
+    });
+    const cloth = new THREE.Mesh(clothGeo, clothMat);
+    cloth.position.set(1.15, 3.25, 0);
+    cloth.userData.isFlagCloth = true;
+    cloth.userData.waveOffset = waveOffset;
+    group.add(cloth);
+
+    // Render GeoPattern as flag texture — same color/generator logic as badges
+    if (typeof GeoPattern !== 'undefined') {
+        const GEO_GENERATORS = [
+            'chevrons', 'octogons', 'overlappingCircles', 'plusSigns', 'xes',
+            'sineWaves', 'hexagons', 'overlappingRings', 'plaid', 'triangles',
+            'squares', 'nestedSquares', 'mosaicSquares', 'concentricCircles',
+            'diamonds', 'tessellation'
+        ];
+        const rng2 = seededRng(hashString(name));
+        const hue = Math.floor(rng2() * 360);
+        const sat = 65 + Math.floor(rng2() * 30);
+        const lit = 40 + Math.floor(rng2() * 20);
+        const h = hue, s = sat / 100, l = lit / 100;
+        const k = n => (n + h / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+        const color = '#' + [f(0), f(8), f(4)].map(v => v.toString(16).padStart(2, '0')).join('');
+        const genIndex = Math.abs(hashString(name)) % GEO_GENERATORS.length;
+        const pattern = GeoPattern.generate(name, { color, generator: GEO_GENERATORS[genIndex] });
+        const svgStr = pattern.toSvg();
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            const W = 256, H = 256;
+            const canvas = document.createElement('canvas');
+            canvas.width = W;
+            canvas.height = H;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, W, H);
+            URL.revokeObjectURL(url);
+
+            // Flag-inspired overlay for extra differentiation
+            const rng3 = seededRng(hashString(name + '_overlay'));
+            const overlayType = Math.floor(rng3() * 12);
+            const useWhite = rng3() > 0.4; // bias toward white overlays
+            const overlayColor = useWhite ? 'rgba(255,255,255,' : 'rgba(0,0,0,';
+            const alpha = (0.25 + rng3() * 0.35).toFixed(2); // 0.25-0.60
+            ctx.fillStyle = overlayColor + alpha + ')';
+            ctx.strokeStyle = overlayColor + (parseFloat(alpha) + 0.1).toFixed(2) + ')';
+
+            switch (overlayType) {
+                case 0: { // Nordic cross (offset cross like Scandinavian flags)
+                    const cw = W * 0.12;
+                    const cx = W * 0.35;
+                    ctx.fillRect(cx - cw / 2, 0, cw, H);
+                    ctx.fillRect(0, H / 2 - cw / 2, W, cw);
+                    break;
+                }
+                case 1: { // Diagonal saltire (X cross like Scotland/Jamaica)
+                    ctx.lineWidth = W * 0.1;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0); ctx.lineTo(W, H);
+                    ctx.moveTo(W, 0); ctx.lineTo(0, H);
+                    ctx.stroke();
+                    break;
+                }
+                case 2: { // Center disc (like Japan/Bangladesh)
+                    const r = W * (0.15 + rng3() * 0.12);
+                    ctx.beginPath();
+                    ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                }
+                case 3: { // Horizontal triband (three stripes)
+                    const bh = H / 3;
+                    ctx.fillRect(0, 0, W, bh);
+                    ctx.fillRect(0, bh * 2, W, bh);
+                    break;
+                }
+                case 4: { // Vertical stripe on hoist (like France/Ireland)
+                    const sw = W * (0.28 + rng3() * 0.1);
+                    ctx.fillRect(0, 0, sw, H);
+                    break;
+                }
+                case 5: { // Canton (corner rectangle like USA/Australia)
+                    const cw2 = W * (0.35 + rng3() * 0.1);
+                    const ch2 = H * (0.4 + rng3() * 0.1);
+                    ctx.fillRect(0, 0, cw2, ch2);
+                    break;
+                }
+                case 6: { // Chevron/arrow on hoist (like Czech/Philippines)
+                    const depth = W * (0.3 + rng3() * 0.15);
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(depth, H / 2);
+                    ctx.lineTo(0, H);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                }
+                case 7: { // Border/frame
+                    const bw = W * 0.06;
+                    ctx.fillRect(0, 0, W, bw);
+                    ctx.fillRect(0, H - bw, W, bw);
+                    ctx.fillRect(0, 0, bw, H);
+                    ctx.fillRect(W - bw, 0, bw, H);
+                    break;
+                }
+                case 8: { // Centered cross (like Switzerland/England)
+                    const cw3 = W * 0.14;
+                    ctx.fillRect(W / 2 - cw3 / 2, 0, cw3, H);
+                    ctx.fillRect(0, H / 2 - cw3 / 2, W, cw3);
+                    break;
+                }
+                case 9: { // Diagonal band (like DR Congo/Tanzania)
+                    ctx.save();
+                    ctx.lineWidth = W * 0.15;
+                    ctx.beginPath();
+                    ctx.moveTo(0, H); ctx.lineTo(W, 0);
+                    ctx.stroke();
+                    ctx.restore();
+                    break;
+                }
+                case 10: { // Horizontal split (bicolor like Poland/Monaco)
+                    ctx.fillRect(0, 0, W, H / 2);
+                    break;
+                }
+                case 11: { // Star in center
+                    const sx = W / 2, sy = H / 2, sr = W * 0.15;
+                    ctx.beginPath();
+                    for (let p = 0; p < 10; p++) {
+                        const angle = (p * Math.PI) / 5 - Math.PI / 2;
+                        const rad = p % 2 === 0 ? sr : sr * 0.4;
+                        const px = sx + Math.cos(angle) * rad;
+                        const py = sy + Math.sin(angle) * rad;
+                        p === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                }
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            clothMat.map = tex;
+            clothMat.needsUpdate = true;
+        };
+        img.src = url;
+    }
+
+    group.userData = {
+        name: name,
+        type: 'flag',
+        isClickable: true,
+        isDraggable: true,
+        projectName: name
+    };
+
+    scene.add(group);
+    clickables.push(group);
+    draggables.push(group);
+    projectFlags.push(group);
+    return group;
+}
+
+async function initProjectFlags(savedFlags) {
+    let folders = [];
+    try {
+        const cfgRes = await fetch('/api/config');
+        const cfg = await cfgRes.json();
+        const rootPath = (cfg.dropbox && cfg.dropbox.rootPath) || '';
+
+        const res = await fetch('/api/dropbox/list_folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: rootPath || '' })
+        });
+        const data = await res.json();
+        if (data.entries) {
+            folders = data.entries
+                .filter(e => e['.tag'] === 'folder' && e.name !== 'Full Camera Roll')
+                .map(e => e.name);
+        }
+    } catch (e) {
+        console.warn('Project flags: Dropbox fetch failed', e);
+        return;
+    }
+
+    if (folders.length === 0) return;
+
+    // Build a lookup of saved positions
+    const savedMap = {};
+    if (savedFlags && Array.isArray(savedFlags)) {
+        savedFlags.forEach(f => { savedMap[f.name] = { x: f.x, z: f.z }; });
+    }
+
+    // Default placement: arc near Movie Theatre
+    const mtPos = movieTheatre ? { x: movieTheatre.position.x, z: movieTheatre.position.z } : { x: -51, z: 3 };
+    folders.forEach((name, i) => {
+        const saved = savedMap[name];
+        if (saved) {
+            createProjectFlag(name, saved.x, saved.z);
+        } else {
+            // Grid arc: spread flags in a row near movie theatre
+            const col = i % 5;
+            const row = Math.floor(i / 5);
+            const x = snapToGrid(mtPos.x - 6 + col * 3);
+            const z = snapToGrid(mtPos.z + 12 + row * 3);
+            createProjectFlag(name, x, z);
+        }
+    });
+}
+
 // --- Save / Load Layout ---
 const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre'];
 function getBuildingByName(n) {
@@ -1922,6 +2101,7 @@ function saveLayout() {
         trees: allTrees.map(t => ({ x: t.position.x, z: t.position.z, s: t.scale.x })),
         employees: employees.map(e => ({ name: e.userData.name, x: e.position.x, z: e.position.z })),
         penSize: { w: penSize.w, d: penSize.d },
+        flags: projectFlags.map(f => ({ name: f.userData.projectName, x: f.position.x, z: f.position.z })),
     };
     BUILDING_NAMES.forEach(n => {
         const b = getBuildingByName(n);
@@ -2022,6 +2202,10 @@ async function init() {
             if (emp) { emp.position.x = se.x; emp.position.z = se.z; }
         });
     }
+    // Create project flags from Dropbox folders
+    initProjectFlags(saved && saved.flags).catch(e => console.warn('Project flags init failed:', e));
+    // Create pen creatures from posted videos (no demo fluffball)
+    spawnPostedCreatures().catch(e => console.warn('Pen creatures failed:', e));
     saveLayout();
     // Create ambient particles
     initAmbientParticles();
@@ -2030,6 +2214,8 @@ async function init() {
     // Hide loading screen
     setLoadProgress(100, 'Ready!');
     document.getElementById('loading-overlay').style.display = 'none';
+    // Preload to-do count for bell badge
+    if (typeof LibraryUI !== 'undefined') LibraryUI.preloadTodoCount().catch(() => {});
     // Start animation
     animate();
     // Expose for testing
@@ -2155,6 +2341,198 @@ function initCharacters() {
     scene.add(zeusMesh); clickables.push(zeusMesh);
 }
 
+// --- Pen Creature: Fluff Ball ---
+let penCreature = null; // single demo creature (legacy)
+let penCreatures = []; // all video fluffballs in the pen
+function createPenCreature(creatureName = 'Fluffball', isBacklog = false) {
+    const rng = (typeof seededRng === 'function') ? seededRng(hashString(creatureName)) : () => Math.random();
+
+    const g = new THREE.Group();
+    g.userData = { name: creatureName, type: 'creature', isClickable: true, isBacklog };
+
+    // Body — sphere with GeoPattern texture (matches one of the project flags)
+    const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide,
+        transparent: isBacklog, opacity: isBacklog ? 0.5 : 1.0
+    });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 24), bodyMat);
+    body.position.y = 0.55;
+    body.castShadow = true;
+    addOutline(body, 0.025, 0x1a1a2e);
+    g.add(body);
+
+    // Apply GeoPattern texture to body (same logic as flags)
+    if (typeof GeoPattern !== 'undefined' && typeof hashString === 'function' && typeof seededRng === 'function') {
+        const patternName = creatureName;
+        const GEO_GENERATORS = [
+            'chevrons', 'octogons', 'overlappingCircles', 'plusSigns', 'xes',
+            'sineWaves', 'hexagons', 'overlappingRings', 'plaid', 'triangles',
+            'squares', 'nestedSquares', 'mosaicSquares', 'concentricCircles',
+            'diamonds', 'tessellation'
+        ];
+        const rng2 = seededRng(hashString(patternName));
+        const hue = Math.floor(rng2() * 360);
+        const sat = 65 + Math.floor(rng2() * 30);
+        const lit = 40 + Math.floor(rng2() * 20);
+        const h = hue, s = sat / 100, l = lit / 100;
+        const k = n => (n + h / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+        const color = '#' + [f(0), f(8), f(4)].map(v => v.toString(16).padStart(2, '0')).join('');
+        const genIndex = Math.abs(hashString(patternName)) % GEO_GENERATORS.length;
+        const pattern = GeoPattern.generate(patternName, { color, generator: GEO_GENERATORS[genIndex] });
+        const svgStr = pattern.toSvg();
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 256, 256);
+            URL.revokeObjectURL(url);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            bodyMat.map = tex;
+            bodyMat.needsUpdate = true;
+            // Color the feet and fluff shell to match the pattern
+            const pixel = ctx.getImageData(128, 128, 1, 1).data;
+            const matchColor = new THREE.Color(pixel[0] / 255, pixel[1] / 255, pixel[2] / 255);
+            g.children.forEach(ch => {
+                if (ch.userData.isFoot && ch.material) ch.material.color.copy(matchColor.clone().multiplyScalar(0.6));
+                if (ch.userData.isFluffShell && ch.material.uniforms) ch.material.uniforms.uColor.value.copy(matchColor);
+            });
+        };
+        img.src = url;
+    }
+
+    // Fluffy halo — semi-transparent shell with fresnel fade for soft fuzzy edges
+    const fluffShellMat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        side: THREE.FrontSide,
+        uniforms: {
+            uColor: { value: new THREE.Color(0xaaaaaa) },
+            uTime: { value: 0 }
+        },
+        vertexShader: `
+            varying vec3 vNormal, vViewDir;
+            varying float vNoise;
+            uniform float uTime;
+            void main() {
+                vNormal = normalize(normalMatrix * normal);
+                vec4 mv = modelViewMatrix * vec4(position, 1.0);
+                vViewDir = normalize(-mv.xyz);
+                // Subtle vertex displacement for organic fuzzy edge
+                float n = sin(position.x * 12.0 + uTime * 0.5) * sin(position.y * 10.0 + uTime * 0.7) * sin(position.z * 11.0 + uTime * 0.3);
+                vNoise = n;
+                vec3 displaced = position + normal * (0.08 + n * 0.03);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+            }`,
+        fragmentShader: `
+            uniform vec3 uColor;
+            varying vec3 vNormal, vViewDir;
+            varying float vNoise;
+            void main() {
+                float fresnel = 1.0 - max(0.0, dot(normalize(vNormal), normalize(vViewDir)));
+                float edge = pow(fresnel, 1.5);
+                // Soft fuzzy glow at edges, transparent at center
+                float alpha = edge * 0.5 + 0.05;
+                // Add noise variation for organic feel
+                alpha += vNoise * 0.06;
+                vec3 col = uColor + vec3(0.15) * edge;
+                gl_FragColor = vec4(col, alpha);
+            }`
+    });
+    const fluffShell = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 24), fluffShellMat);
+    fluffShell.position.y = 0.55;
+    fluffShell.userData.isFluffShell = true;
+    g.add(fluffShell);
+
+    // Big cute eyes
+    const eyeW = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eyeM = new THREE.MeshBasicMaterial({ color: 0x1a1a2e });
+    [[-0.18, 0.7, 0.38], [0.18, 0.7, 0.38]].forEach(([x, y, z]) => {
+        const white = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), eyeW);
+        white.position.set(x, y, z); g.add(white);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), eyeM);
+        pupil.position.set(x, y, z + 0.06); g.add(pupil);
+        const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), eyeW);
+        highlight.position.set(x + 0.03, y + 0.04, z + 0.1); g.add(highlight);
+    });
+
+    // Tiny feet
+    const feetMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8 });
+    [[-0.2, 0.08, 0.15], [0.2, 0.08, 0.15], [-0.15, 0.08, -0.15], [0.15, 0.08, -0.15]].forEach(([x, y, z]) => {
+        const foot = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), feetMat.clone());
+        foot.position.set(x, y, z);
+        foot.scale.y = 0.5;
+        foot.userData.isFoot = true;
+        g.add(foot);
+    });
+
+    // Wander state — slow waddle
+    g.userData.wanderAngle = rng() * Math.PI * 2;
+    g.userData.wanderTimer = 0;
+    g.userData.hopPhase = 0;
+    g.userData.hopSpeed = 0.4 + rng() * 0.3;
+    g.userData.moveSpeed = 0.3 + rng() * 0.2;
+
+    return g;
+}
+
+function initPenCreature() {
+    // Spawn a demo fluffball (will be replaced by posted videos once synced)
+    penCreature = createPenCreature('Fluffball');
+    penCreature.position.set(pen.position.x, 0, pen.position.z);
+    scene.add(penCreature);
+    clickables.push(penCreature);
+    penCreatures.push(penCreature);
+}
+
+// Spawn fluffballs for posted videos
+async function spawnPostedCreatures() {
+    try {
+        await VideoService.sync();
+        const posted = VideoService.getByStatus('posted');
+        if (posted.length === 0) return;
+
+        // Clear any existing creatures first (idempotent)
+        penCreatures.forEach(c => {
+            scene.remove(c);
+            const ci = clickables.indexOf(c);
+            if (ci >= 0) clickables.splice(ci, 1);
+        });
+        penCreatures = [];
+        penCreature = null;
+
+        const hw = penSize.w / 2 - 1;
+        const hd = penSize.d / 2 - 1;
+        posted.forEach((v, i) => {
+            const isBacklog = !v.linkedScriptId && !v.hook && !v.context && v.links;
+            const name = v.project || v.name;
+            const c = createPenCreature(name, isBacklog);
+            c.userData.name = v.name;
+            c.userData.videoId = v.id;
+            c.userData.project = v.project || '';
+            // Spread creatures inside the pen
+            const angle = (i / posted.length) * Math.PI * 2;
+            const r = Math.min(hw, hd) * 0.5 * Math.sqrt(((i + 1) / posted.length));
+            c.position.set(
+                pen.position.x + Math.cos(angle) * r,
+                0,
+                pen.position.z + Math.sin(angle) * r
+            );
+            scene.add(c);
+            clickables.push(c);
+            penCreatures.push(c);
+        });
+        penCreature = penCreatures[0] || null;
+    } catch (e) {
+        console.warn('spawnPostedCreatures failed:', e);
+    }
+}
+
 // --- Tile-Based Pathways ---
 function addPathTile(gx, gz) {
     const key = gridKey(gx, gz);
@@ -2269,7 +2647,7 @@ window.togglePathMode = function () {
     document.getElementById('path-btn').textContent = pathPlaceMode ? 'Done Paths' : 'Place Paths';
     document.getElementById('edit-indicator').textContent = pathPlaceMode ? 'PATH MODE - Click grid to place/remove paths' : 'EDIT MODE - Drag to rearrange';
 };
-function openModal(n, t) {
+window.openModal = function openModal(n, t, opts) {
     const modal = document.getElementById('modal');
     const title = document.getElementById('modal-title');
     const body = document.getElementById('modal-body');
@@ -2281,7 +2659,16 @@ function openModal(n, t) {
         title.style.display = 'none';
         body.innerHTML = '';
         document.getElementById('modal-overlay').classList.add('visible');
-        BuildingRegistry.get(n).open(body);
+        BuildingRegistry.get(n).open(body, opts);
+    } else if (t === 'creature') {
+        // Creature clicked — open The Pen and navigate to this video
+        title.textContent = 'The Pen';
+        modal.classList.add('modal-expanded');
+        title.style.display = 'none';
+        body.innerHTML = '';
+        document.getElementById('modal-overlay').classList.add('visible');
+        const videoId = opts && opts.videoId;
+        BuildingRegistry.get('The Pen').open(body, videoId ? { openVideoId: videoId } : undefined);
     } else {
         body.textContent = t === 'character' ? `This is ${n}. Assign them by dragging in edit mode!` : t === 'tree' ? 'A lovely tree. Move it around in edit mode!' : 'Nothing here yet... Check back soon!';
         document.getElementById('modal-overlay').classList.add('visible');
@@ -2352,7 +2739,7 @@ renderer.domElement.addEventListener('mousedown', e => {
                     dragOffset.copy(hit.position).sub(hp);
                     renderer.domElement.style.cursor = 'grabbing';
                 } else if (!editMode) {
-                    openModal(hit.userData.name, hit.userData.type);
+                    openModal(hit.userData.name, hit.userData.type, { videoId: hit.userData.videoId });
                 }
             }
         }
@@ -2606,7 +2993,7 @@ if (isTouchDevice && joystickZone) {
                     const hits = touchHitTest(t.clientX, t.clientY);
                     if (hits.length > 0) {
                         const hit = hits[0].object.userData.parentClickable;
-                        if (hit) openModal(hit.userData.name, hit.userData.type);
+                        if (hit) openModal(hit.userData.name, hit.userData.type, { videoId: hit.userData.videoId });
                     }
                 }
             }
@@ -2636,12 +3023,7 @@ function animate() {
     camera.lookAt(cameraTarget.x, cameraTarget.y + 2, cameraTarget.z);
     // Employees
     employees.forEach((e, i) => { e.position.y = Math.sin(time * 2 + i * 1.5) * 0.06; e.rotation.y = Math.sin(time * 0.5 + i * 2) * 0.4; });
-    // Money float (bills/coins floating above dome)
-    moneyPit.children.forEach(ch => { if (ch.userData.isMoneyBill) { const R = moneyPitDomeRadius; ch.position.y = R + 1 + Math.sin(time * 0.8 + ch.userData.floatOffset) * 2; ch.rotation.y = time * 0.3 + ch.userData.floatOffset; } });
-    // Gold coins shimmer on pile surface
-    moneyPitGoldCoins.forEach(c => { if (c.userData.isGoldCoin && c.visible) c.rotation.y += dt * 0.15; });
-    // Money particles (sparkles inside dome)
-    moneyPit.children.forEach(o => { if (o.isPoints && o.userData.isMoneyParticle) { const R = moneyPitDomeRadius; const p = o.geometry.attributes.position.array; for (let i = 0; i < p.length; i += 3) { p[i + 1] = ((p[i + 1] + time * 0.3 + i * 0.01) % R + R) % R; p[i] += Math.sin(time * 2 + i) * 0.003; } o.geometry.attributes.position.needsUpdate = true; } });
+    // (Money Pit: no animations — static gold pile)
     // Egg wobble
     incubator.children.forEach(ch => { if (ch.userData.isEgg) ch.rotation.z = Math.sin(time * 3 + ch.userData.eggOffset) * 0.08; });
     // Tree wind
@@ -2701,6 +3083,39 @@ function animate() {
         zeusMesh.position.y = Math.sin(time * 3) * 0.02;
         zeusMesh.rotation.y = zeusMesh.userData.wanderAngle;
     }
+    // Pen creatures: hop around inside the pen
+    penCreatures.forEach(penC => {
+        if (!penC || !pen) return;
+        const pc = penC.userData;
+        pc.wanderTimer -= dt;
+        if (pc.wanderTimer <= 0) {
+            pc.wanderAngle = Math.random() * Math.PI * 2;
+            pc.wanderTimer = 3 + Math.random() * 5;
+        }
+        const cSpd = pc.moveSpeed;
+        let nx = penC.position.x + Math.cos(pc.wanderAngle) * cSpd * dt;
+        let nz = penC.position.z + Math.sin(pc.wanderAngle) * cSpd * dt;
+        const phw = penSize.w / 2 - 0.6, phd = penSize.d / 2 - 0.6;
+        const plx = nx - pen.position.x, plz = nz - pen.position.z;
+        if (Math.abs(plx) > phw) { pc.wanderAngle = Math.PI - pc.wanderAngle; pc.wanderTimer = 0.5; nx = penC.position.x; }
+        if (Math.abs(plz) > phd) { pc.wanderAngle = -pc.wanderAngle; pc.wanderTimer = 0.5; nz = penC.position.z; }
+        penC.position.x = nx;
+        penC.position.z = nz;
+        pc.hopPhase += dt * pc.hopSpeed * 2;
+        const bob = Math.abs(Math.sin(pc.hopPhase));
+        penC.position.y = bob * 0.12;
+        const sq = 1 - bob * 0.06;
+        penC.scale.set(1 + (1 - sq) * 0.1, sq + bob * 0.08, 1 + (1 - sq) * 0.1);
+        penC.rotation.z = Math.sin(pc.hopPhase * 1.3) * 0.08;
+        const targetY = pc.wanderAngle + Math.PI / 2;
+        let diff = targetY - penC.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        penC.rotation.y += diff * dt * 2;
+        penC.children.forEach(ch => {
+            if (ch.userData.isFluffShell && ch.material.uniforms) ch.material.uniforms.uTime.value = time;
+        });
+    });
     // Library: Floating book particles orbit
     libraryBooks.forEach(bp => {
         const d = bp.userData;
@@ -2712,6 +3127,18 @@ function animate() {
         bp.rotation.x = Math.sin(time + d.bobOffset) * 0.2;
         bp.material.opacity = 0.5 + Math.sin(time * 2 + d.bobOffset) * 0.2;
     });
+    // Project flags: gentle wave
+    projectFlags.forEach(fg => fg.children.forEach(ch => {
+        if (ch.userData.isFlagCloth) {
+            const pos = ch.geometry.attributes.position;
+            const orig = ch.geometry.userData.original || (ch.geometry.userData.original = pos.array.slice());
+            for (let i = 0; i < pos.count; i++) {
+                const ox = orig[i * 3]; // original x (local)
+                pos.array[i * 3 + 2] = Math.sin(time * 2.5 + ch.userData.waveOffset + ox * 2) * 0.1 * (ox + 0.6);
+            }
+            pos.needsUpdate = true;
+        }
+    }));
     // Finance: Rotating dollar sign, spinning rotor, ticker pulse
     if (financeDollarSign) financeDollarSign.rotation.y += dt * 0.6;
     if (financeRotorGroup) financeRotorGroup.rotation.y += dt * 8;

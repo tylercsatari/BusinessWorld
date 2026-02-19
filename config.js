@@ -7,7 +7,11 @@ const CONFIG = {
         itemsLinkField: 'Link To Box',
         boxesNameField: 'Name',
         itemsNameField: 'Name',
-        itemsQuantityField: 'Quantity'
+        itemsQuantityField: 'Quantity',
+        historyTable: 'History',
+        historyActionField: 'Action',
+        historyDetailsField: 'Details',
+        historyTimeField: 'Time'
     },
     search: {
         semanticMatchThreshold: 0.75

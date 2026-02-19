@@ -228,12 +228,20 @@ const MovieTheatreUI = (() => {
             return;
         }
 
+        const isRoot = currentPath === rootPath;
+
         grid.innerHTML = entries.map((e, i) => {
             const useThumb = hasThumbnail(e);
             const iconHtml = useThumb
                 ? `<div class="theatre-card-thumb" data-path="${escAttr(e.path_lower)}"><div class="theatre-card-icon">${getFileIcon(e)}</div></div>`
                 : `<div class="theatre-card-icon">${getFileIcon(e)}</div>`;
-            return `<div class="theatre-card" data-index="${i}">${iconHtml}<div class="theatre-card-name">${escHtml(e.name)}</div></div>`;
+
+            let badgeHtml = '';
+            if (isRoot && e['.tag'] === 'folder' && e.name !== 'Full Camera Roll') {
+                badgeHtml = renderPatternBadge(e.name);
+            }
+
+            return `<div class="theatre-card" data-index="${i}">${badgeHtml}${iconHtml}<div class="theatre-card-name">${escHtml(e.name)}</div></div>`;
         }).join('');
 
         grid.querySelectorAll('.theatre-card').forEach(card => {
@@ -317,6 +325,65 @@ const MovieTheatreUI = (() => {
         }
     }
 
+    // --- Project Flag Badges ---
+    // Seeded PRNG (mulberry32) — deterministic sequence from a single seed
+    function seededRng(seed) {
+        let s = seed | 0;
+        return function () {
+            s = (s + 0x6D2B79F5) | 0;
+            let t = Math.imul(s ^ (s >>> 15), 1 | s);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    function hashString(str) {
+        let hash = 5381;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+        }
+        return hash;
+    }
+
+    // All GeoPattern generators for maximum variety
+    const GEO_GENERATORS = [
+        'chevrons', 'octogons', 'overlappingCircles', 'plusSigns', 'xes',
+        'sineWaves', 'hexagons', 'overlappingRings', 'plaid', 'triangles',
+        'squares', 'nestedSquares', 'mosaicSquares', 'concentricCircles',
+        'diamonds', 'tessellation'
+    ];
+
+    // Convert HSL to hex for GeoPattern color option
+    function hslToHex(h, s, l) {
+        s /= 100; l /= 100;
+        const k = n => (n + h / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+        return '#' + [f(0), f(8), f(4)].map(v => v.toString(16).padStart(2, '0')).join('');
+    }
+
+    function renderPatternBadge(name) {
+        // Use GeoPattern with custom vivid color spread across full spectrum
+        if (typeof GeoPattern !== 'undefined') {
+            const rng = seededRng(hashString(name));
+            const hue = Math.floor(rng() * 360); // full rainbow
+            const sat = 65 + Math.floor(rng() * 30); // 65-95% saturation
+            const lit = 40 + Math.floor(rng() * 20); // 40-60% lightness for contrast
+            const color = hslToHex(hue, sat, lit);
+            const genIndex = Math.abs(hashString(name)) % GEO_GENERATORS.length;
+            const generator = GEO_GENERATORS[genIndex];
+
+            const pattern = GeoPattern.generate(name, { color, generator });
+            const svg = pattern.toSvg();
+            const uid = 'fb' + Math.abs(hashString(name));
+            return `<svg class="theatre-card-badge" width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><clipPath id="c${uid}"><circle cx="10" cy="10" r="10"/></clipPath><g clip-path="url(#c${uid})"><foreignObject width="20" height="20">${svg}</foreignObject></g></svg>`;
+        }
+        // Fallback: simple colored square
+        const rng = seededRng(hashString(name));
+        const hue = Math.floor(rng() * 360);
+        return `<svg class="theatre-card-badge" width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="hsl(${hue},70%,50%)"/></svg>`;
+    }
+
     // --- Helpers ---
     function escHtml(s) {
         const d = document.createElement('div');
@@ -327,6 +394,11 @@ const MovieTheatreUI = (() => {
     function escAttr(s) {
         return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     }
+
+    // Expose for 3D flag colors in index.html
+    window.hashString = hashString;
+    window.seededRng = seededRng;
+    window.renderPatternBadge = renderPatternBadge;
 
     // --- Public ---
     return {

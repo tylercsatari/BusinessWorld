@@ -16,29 +16,29 @@ const StorageUI = (() => {
     let history = []; // activity history log
     let historyVisible = false;
 
-    function loadHistory() {
+    async function loadHistory() {
+        // Airtable is the sole source of truth — no localStorage
         try {
-            const raw = localStorage.getItem('storageHistory');
-            if (raw) history = JSON.parse(raw);
-        } catch (e) { history = []; }
+            const records = await StorageAirtable.listHistory();
+            history = records.sort((a, b) => a.time.localeCompare(b.time));
+        } catch (e) {
+            console.warn('History: Airtable load failed', e);
+            history = [];
+        }
     }
 
-    function saveHistory() {
-        try {
-            // Keep last 200 entries
-            if (history.length > 200) history = history.slice(-200);
-            localStorage.setItem('storageHistory', JSON.stringify(history));
-        } catch (e) {}
-    }
-
-    function addHistory(action, details) {
-        history.push({
-            time: new Date().toISOString(),
-            action,
-            details
-        });
-        saveHistory();
+    async function addHistory(action, details) {
+        const time = new Date().toISOString();
+        const entry = { time, action, details };
+        // Add to in-memory list for immediate display
+        history.push(entry);
         if (historyVisible) renderHistory();
+        // Write to Airtable — await so we know if it fails
+        try {
+            await StorageAirtable.addHistoryRecord(action, details, time);
+        } catch (e) {
+            console.warn('History: Airtable write failed', e);
+        }
     }
 
     function renderHistory() {
@@ -499,7 +499,7 @@ const StorageUI = (() => {
         async open(bodyEl) {
             container = bodyEl;
             container.innerHTML = render();
-            loadHistory();
+            await loadHistory();
 
             try {
                 await StorageService.sync();
