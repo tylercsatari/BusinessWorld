@@ -27,7 +27,22 @@ const NotesService = (() => {
         for (const block of data.results) {
             if (block.type === 'code') {
                 const text = (block.code.rich_text || []).map(t => t.plain_text).join('');
-                try { return JSON.parse(text); } catch (e) {}
+                try {
+                    const meta = JSON.parse(text);
+                    // Backward compat: old format stored hook/context as JSON inside a `content` field
+                    if (meta.content && !meta.hook && !meta.context) {
+                        try {
+                            const parsed = JSON.parse(meta.content);
+                            meta.hook = parsed.hook || '';
+                            meta.context = parsed.context || '';
+                        } catch (e) {
+                            // Legacy plain text content — treat as context
+                            meta.context = meta.content;
+                        }
+                        delete meta.content;
+                    }
+                    return meta;
+                } catch (e) {}
             }
         }
 
