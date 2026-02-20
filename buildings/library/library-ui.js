@@ -295,12 +295,12 @@ const LibraryUI = (() => {
         el.innerHTML = `
             <div class="library-todo-input-row">
                 <input type="text" class="library-todo-input" id="library-todo-input" placeholder="Add a new task..." />
-                <button class="library-todo-category-btn" id="library-todo-category-btn" title="Toggle Daily/General">${todoCategory === 'daily' ? 'D' : 'G'}</button>
+                <button class="library-todo-category-btn" id="library-todo-category-btn" title="Toggle Today/General">${todoCategory === 'daily' ? 'T' : 'G'}</button>
                 <button class="library-todo-add-btn" id="library-todo-add-btn">Add</button>
             </div>
             ${todoItems.length === 0 ? '<div class="library-todo-empty">No tasks yet. Type above to add one.</div>' : ''}
             <div class="library-todo-items" id="library-todo-items">
-                ${renderSection('Daily', dailyItems)}
+                ${renderSection('Today', dailyItems)}
                 ${renderSection('General', weeklyItems)}
             </div>
         `;
@@ -311,7 +311,7 @@ const LibraryUI = (() => {
 
         catBtn.addEventListener('click', () => {
             todoCategory = todoCategory === 'daily' ? 'weekly' : 'daily';
-            catBtn.textContent = todoCategory === 'daily' ? 'D' : 'G';
+            catBtn.textContent = todoCategory === 'daily' ? 'T' : 'G';
             catBtn.classList.toggle('general', todoCategory === 'weekly');
         });
 

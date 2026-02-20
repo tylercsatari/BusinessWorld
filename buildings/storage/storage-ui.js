@@ -240,7 +240,11 @@ const StorageUI = (() => {
 
         rec.onerror = (event) => {
             if (sessionId !== voiceSessionId) return; // stale session
-            if (event.error !== 'aborted' && event.error !== 'no-speech') {
+            if (event.error === 'not-allowed') {
+                addChatMsg('Microphone access denied. Check browser permissions.', 'error');
+                setMicState('idle');
+                hideVoicePreview();
+            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
                 addChatMsg(`Voice error: ${event.error}`, 'error');
             }
         };
@@ -249,16 +253,20 @@ const StorageUI = (() => {
             if (sessionId !== voiceSessionId) return; // stale session
             // On mobile, recognition can auto-stop mid-sentence. Restart if still recording.
             if (micState === 'recording') {
-                try {
-                    rec.start();
-                } catch (e) {
-                    // If restart fails, create a brand new instance after brief delay
-                    setTimeout(() => {
-                        if (micState === 'recording' && sessionId === voiceSessionId) {
-                            startNewRecognition();
-                        }
-                    }, 100);
-                }
+                // Brief delay lets mobile browsers fully release the mic before restarting
+                setTimeout(() => {
+                    if (micState !== 'recording' || sessionId !== voiceSessionId) return;
+                    try {
+                        rec.start();
+                    } catch (e) {
+                        // If restart fails, create a brand new instance
+                        setTimeout(() => {
+                            if (micState === 'recording' && sessionId === voiceSessionId) {
+                                startNewRecognition();
+                            }
+                        }, 200);
+                    }
+                }, 50);
             }
         };
 
@@ -513,7 +521,13 @@ const StorageUI = (() => {
         },
 
         close() {
-            if (recognition) { try { recognition.abort(); } catch (e) {} }
+            if (recognition) {
+                recognition.onresult = null;
+                recognition.onerror = null;
+                recognition.onend = null;
+                try { recognition.abort(); } catch (e) {}
+                recognition = null;
+            }
             if (ttsAudio) { ttsAudio.pause(); ttsAudio = null; }
             if ('speechSynthesis' in window) window.speechSynthesis.cancel();
             voiceTranscript = '';
@@ -534,7 +548,13 @@ const StorageUI = (() => {
             if (micState === 'recording') {
                 // Stop recording and send accumulated transcript
                 micState = 'processing'; // prevent auto-restart in onend
-                if (recognition) { try { recognition.stop(); } catch (e) {} }
+                if (recognition) {
+                    recognition.onresult = null;
+                    recognition.onerror = null;
+                    recognition.onend = null;
+                    try { recognition.stop(); } catch (e) {}
+                    recognition = null; // release immediately so next session starts clean
+                }
                 finishVoiceInput();
             } else if (micState === 'idle') {
                 voiceTranscript = '';
