@@ -1608,7 +1608,7 @@ const LibraryUI = (() => {
             return `<div class="library-list-item${isSelected ? ' selected' : ''}" data-id="${s.id}">
                 <div class="library-list-item-content">
                     <div class="library-list-title">${escHtml(s.title)}</div>
-                    <div class="library-list-date">${badge}${linkedInfo}${!badge && !linkedInfo ? formatDate(s.lastEdited || s.created) : ''}</div>
+                    <div class="library-list-date">${badge}${linkedInfo}${!badge && !linkedInfo ? formatDate(s.lastEdited || s.created || s.updatedAt || s.createdAt) : ''}</div>
                 </div>
                 <button class="library-delete-btn" data-id="${s.id}" title="Delete">&times;</button>
             </div>`;
