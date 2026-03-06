@@ -13,7 +13,10 @@ function r2Key(name) { return `data/${name}.json`; }
 
 async function load(name) {
     if (cache[name]) return cache[name];
-    if (!isR2Ready()) { cache[name] = { lastModified: new Date().toISOString(), records: [] }; return cache[name]; }
+    if (!isR2Ready()) {
+        // Don't cache when R2 isn't ready — return empty but allow retry once R2 initializes
+        return { lastModified: new Date().toISOString(), records: [] };
+    }
     const buf = await downloadFromR2(r2Key(name));
     if (buf) {
         cache[name] = JSON.parse(buf.toString('utf8'));

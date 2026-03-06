@@ -1273,10 +1273,10 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
+// Initialize R2 cloud storage before accepting requests
+cloud.initR2();
+
 server.listen(PORT, () => {
     console.log(`Business World running at http://localhost:${PORT}`);
-
-    // Initialize R2 cloud storage and resume interrupted jobs
-    cloud.initR2();
     videoAnalyzer.resumeJobs(process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
 });
