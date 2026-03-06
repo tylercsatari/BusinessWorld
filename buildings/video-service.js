@@ -1,57 +1,18 @@
 /**
  * Video Pipeline Service — shared CRUD for the video lifecycle.
  * Videos flow: Incubator (queued) -> Workshop (active) -> Pen (posted)
- * Backed by Notion — each video is a child page under videosDataPageId.
- * Metadata stored as a JSON code block (via NotionHelpers).
+ * Backed by R2 via /api/data/videos.
  */
 const VideoService = (() => {
     let videos = [];
     let projects = []; // cached Dropbox project folder names
-    let videosDataPageId = '';
     let _lastSync = 0;
-    let _syncPromise = null; // dedup concurrent sync() calls
+    let _syncPromise = null;
 
-    async function loadConfig() {
-        if (videosDataPageId) return;
-        const cfg = await NotionHelpers.getConfig();
-        if (cfg.notion && cfg.notion.videosDataPageId) videosDataPageId = cfg.notion.videosDataPageId;
-    }
-
-    function pageToVideo(page, meta) {
-        return {
-            id: page.id,
-            name: page.name || '',
-            project: meta.project || '',
-            status: meta.status || 'incubator',
-            hook: meta.hook || '',
-            context: meta.context || meta.notes || '', // backward compat: old notes → context
-            linkedScriptId: meta.linkedScriptId || '',
-            assignedTo: meta.assignedTo || '',
-            postedDate: meta.postedDate || '',
-            links: meta.links || '',
-            sourceIdeaId: meta.sourceIdeaId || ''
-        };
-    }
-
-    function videoToMeta(v) {
-        return {
-            project: v.project || '',
-            status: v.status || 'incubator',
-            hook: v.hook || '',
-            context: v.context || '',
-            linkedScriptId: v.linkedScriptId || '',
-            assignedTo: v.assignedTo || '',
-            postedDate: v.postedDate || '',
-            links: v.links || '',
-            sourceIdeaId: v.sourceIdeaId || ''
-        };
-    }
-
-    // --- Dropbox project folders ---
     async function fetchProjects() {
         if (projects.length > 0) return projects;
         try {
-            const cfg = await NotionHelpers.getConfig();
+            const cfg = await HtmlUtils.getConfig();
             const rootPath = (cfg.dropbox && cfg.dropbox.rootPath) || '';
             const res = await fetch('/api/dropbox/list_folder', {
                 method: 'POST',
@@ -72,24 +33,13 @@ const VideoService = (() => {
     }
 
     return {
-        // --- Sync ---
         async sync(force) {
             if (!force && videos.length > 0 && Date.now() - _lastSync < 60000) return videos;
-            // Dedup concurrent sync() calls — return the same in-flight promise
             if (_syncPromise) return _syncPromise;
             _syncPromise = (async () => {
-                await loadConfig();
-                const pages = await NotionHelpers.fetchChildPages(videosDataPageId);
-                const loaded = await Promise.all(pages.map(async page => {
-                    try {
-                        const meta = await NotionHelpers.loadPageMeta(page.id);
-                        return pageToVideo(page, meta);
-                    } catch (e) {
-                        console.warn('VideoService: load content failed for', page.id, e);
-                        return pageToVideo(page, {});
-                    }
-                }));
-                videos = loaded;
+                const res = await fetch('/api/data/videos');
+                if (!res.ok) throw new Error(`Videos fetch failed: ${res.status}`);
+                videos = await res.json();
                 _lastSync = Date.now();
                 return videos;
             })();
@@ -124,17 +74,26 @@ const VideoService = (() => {
 
         // --- CRUD ---
         async create(videoData) {
-            await loadConfig();
-            if (!videosDataPageId) throw new Error('Videos data page not configured');
-            const name = videoData.name || 'Untitled Video';
-            const meta = videoToMeta({ status: 'incubator', ...videoData });
-
-            const result = await NotionHelpers.createChildPage(videosDataPageId, name, meta);
-            const video = {
-                id: result.id,
-                name,
-                ...meta
-            };
+            const res = await fetch('/api/data/videos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: videoData.name || 'Untitled Video',
+                    project: videoData.project || '',
+                    status: videoData.status || 'incubator',
+                    hook: videoData.hook || '',
+                    context: videoData.context || '',
+                    linkedScriptId: videoData.linkedScriptId || '',
+                    assignedTo: videoData.assignedTo || '',
+                    postedDate: videoData.postedDate || '',
+                    links: videoData.links || '',
+                    sourceIdeaId: videoData.sourceIdeaId || '',
+                    youtubeVideoId: videoData.youtubeVideoId || '',
+                    analysisStatus: videoData.analysisStatus || ''
+                })
+            });
+            if (!res.ok) throw new Error(`Create video failed: ${res.status}`);
+            const video = await res.json();
             videos.push(video);
             return video;
         },
@@ -143,30 +102,62 @@ const VideoService = (() => {
             const idx = videos.findIndex(v => v.id === id);
             if (idx < 0) return null;
 
-            // Update title if changed
-            if (changes.name !== undefined && changes.name !== videos[idx].name) {
-                await NotionHelpers.updatePageTitle(id, changes.name);
-            }
-
-            // Apply changes to local copy
-            Object.assign(videos[idx], changes);
-            // Bump sync timestamp so subsequent sync() returns this updated cache
-            // instead of re-fetching from Notion (which could race with the write below)
+            const res = await fetch(`/api/data/videos/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(changes)
+            });
+            if (!res.ok) throw new Error(`Update video failed: ${res.status}`);
+            const updated = await res.json();
+            videos[idx] = updated;
             _lastSync = Date.now();
-
-            // Save metadata code block
-            await NotionHelpers.savePageMeta(id, videoToMeta(videos[idx]));
-            return videos[idx];
+            return updated;
         },
 
         async remove(id) {
-            await NotionHelpers.archivePage(id);
+            const res = await fetch(`/api/data/videos/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(`Delete video failed: ${res.status}`);
             videos = videos.filter(v => v.id !== id);
         },
 
         // --- Status transitions ---
         async moveToIncubator(id) {
             return this.update(id, { status: 'incubator', assignedTo: '' });
+        },
+
+        // --- Video Analysis ---
+        async startVideoAnalysis(url) {
+            const res = await fetch('/api/video/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            return res.json();
+        },
+
+        async getAnalysisStatus(ytId) {
+            const res = await fetch(`/api/video/status/${ytId}`);
+            if (!res.ok) return null;
+            return res.json();
+        },
+
+        async discoverChannelShorts(channelUrl) {
+            const res = await fetch('/api/video/discover-shorts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelUrl })
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `HTTP ${res.status}`);
+            }
+            return res.json();
+        },
+
+        async getVideoAnalysis(ytId) {
+            const res = await fetch(`/api/video/analysis/${ytId}`);
+            if (!res.ok) return null;
+            return res.json();
         },
 
         // --- Bidirectional save+sync ---

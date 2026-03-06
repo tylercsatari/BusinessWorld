@@ -9,7 +9,7 @@ const IncubatorUI = (() => {
     let selectedVideo = null;
     let currentPage = 'list';
     let filterProject = '';
-    let isDraft = false; // true when creating a new video (not yet saved to Notion)
+    let isDraft = false; // true when creating a new video (not yet saved)
 
     // 3D state
     let renderer3d = null, scene3d = null, camera3d = null, controls3d = null;
@@ -21,8 +21,8 @@ const IncubatorUI = (() => {
 
     const GEO_GENERATORS = ['chevrons','octogons','overlappingCircles','plusSigns','xes','sineWaves','hexagons','overlappingRings','plaid','triangles','squares','nestedSquares','mosaicSquares','concentricCircles','diamonds','tessellation'];
 
-    const escHtml = NotionHelpers.escHtml;
-    const escAttr = NotionHelpers.escAttr;
+    const escHtml = HtmlUtils.escHtml;
+    const escAttr = HtmlUtils.escAttr;
 
     // Silhouette egg SVG (black egg with "?" — used for drafts / ungenerated eggs)
     function renderSilhouetteEgg() {
@@ -1182,15 +1182,16 @@ const IncubatorUI = (() => {
         r.dispose();
     }
 
-    function renderCreatureSnapshot(project, canvas, size) {
+    function renderCreatureSnapshot(project, canvas, size, opts) {
         const T = window.THREE;
         if (!T || !canvas) return;
+        const ghost = opts && opts.ghost;
 
         const w = size || 50;
         canvas.width = w * 2;
         canvas.height = w * 2;
 
-        const color = getProjectColor(project);
+        const color = ghost ? '#ffffff' : getProjectColor(project);
 
         const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: true });
         renderer.setClearColor(0x000000, 0);
@@ -1202,13 +1203,16 @@ const IncubatorUI = (() => {
         cam.position.set(0, 0.1, 2.2);
         cam.lookAt(0, 0, 0);
 
-        scene.add(new T.AmbientLight(0xfff5e6, 0.7));
-        const dl = new T.DirectionalLight(0xffffff, 0.9);
+        scene.add(new T.AmbientLight(ghost ? 0xffffff : 0xfff5e6, ghost ? 1.0 : 0.7));
+        const dl = new T.DirectionalLight(0xffffff, ghost ? 1.0 : 0.9);
         dl.position.set(3, 5, 4);
         scene.add(dl);
 
         const bodyGeo = new T.SphereGeometry(0.4, 24, 24);
-        const bodyMat = new T.MeshStandardMaterial({ color: new T.Color(color), roughness: 0.85 });
+        const bodyMat = new T.MeshStandardMaterial({
+            color: new T.Color(color), roughness: ghost ? 0.3 : 0.85,
+            transparent: false, opacity: 1.0
+        });
         const body = new T.Mesh(bodyGeo, bodyMat);
         scene.add(body);
 
@@ -1234,7 +1238,7 @@ const IncubatorUI = (() => {
             renderer.dispose();
         }
 
-        if (typeof GeoPattern !== 'undefined' && project) {
+        if (!ghost && typeof GeoPattern !== 'undefined' && project) {
             const gen = GEO_GENERATORS[Math.abs(hashString(project)) % GEO_GENERATORS.length];
             const pattern = GeoPattern.generate(project, { color, generator: gen });
             const svgStr = pattern.toSvg();

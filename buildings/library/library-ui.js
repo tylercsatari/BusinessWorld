@@ -1,13 +1,13 @@
 /**
  * Library UI — Scripts, Ideas, and To-Do list.
- * Scripts tab: Notion-backed script editor.
- * Ideas tab: Notion-backed ideas with hook + context (via NotesService).
- * To-Do tab: Notion-backed to_do blocks.
+ * All data stored in R2 JSON files via /api/data/* routes.
  */
 const LibraryUI = (() => {
     let container = null;
-    let todoPageId = '';       // for to-do list
-    let calendarPageId = '';   // for calendar
+    let invoiceItems = [];     // [{id, company, amount, currency, expectedDate, notes, paid}]
+    let invoicesLoaded = false;
+    let invoicesBusy = false;
+    const CAD_RATES = { CAD: 1, USD: 1.36, EUR: 1.50, GBP: 1.73 };
     let selectedId = null;
     let selectedScriptMeta = null; // {project, linkedIdeaId, linkedVideoId}
     let saveTimer = null;
@@ -18,7 +18,7 @@ const LibraryUI = (() => {
     let selectedNote = null;
     let noteSaveTimer = null;
     let noteDirty = false;
-    let todoItems = [];  // [{id, text, rawText, done, category}] — Notion to_do blocks
+    let todoItems = [];  // [{id, text, done, category}]
     let todoCategory = 'daily'; // current add category toggle
     let calendarItems = []; // [{id, text, date, time, done}]
     let calendarLoaded = false;
@@ -29,20 +29,11 @@ const LibraryUI = (() => {
     let videoSaveTimer = null;
     let videoDirty = false;
 
-    const escHtml = NotionHelpers.escHtml;
-    const escAttr = NotionHelpers.escAttr;
+    const escHtml = HtmlUtils.escHtml;
+    const escAttr = HtmlUtils.escAttr;
 
-    // --- Config (only for todo/calendar page IDs) ---
-    async function loadConfig() {
-        if (todoPageId) return;
-        try {
-            const cfg = await NotionHelpers.getConfig();
-            if (cfg.notion) {
-                if (cfg.notion.todoPageId) todoPageId = cfg.notion.todoPageId;
-                if (cfg.notion.calendarPageId) calendarPageId = cfg.notion.calendarPageId;
-            }
-        } catch (e) { console.warn('Library: config load failed', e); }
-    }
+    // Config no longer needed for page IDs — data comes from /api/data/* routes
+    async function loadConfig() { /* no-op — kept for call-site compat */ }
 
     function formatDate(dateStr) {
         const d = new Date(dateStr);
@@ -91,7 +82,11 @@ const LibraryUI = (() => {
         const title = ScriptService.ensureScriptSuffix(input.value.trim());
         setSaveStatus('Saving...');
         try {
-            await NotionHelpers.updatePageTitle(selectedId, title);
+            await fetch(`/api/data/scripts/${selectedId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title })
+            });
             const s = ScriptService.getAll().find(s => s.id === selectedId);
             if (s) s.title = title;
             setSaveStatus('Saved');
@@ -131,6 +126,7 @@ const LibraryUI = (() => {
                         <button class="library-tab" data-tab="todo">To-Do</button>
                         <button class="library-tab" data-tab="calendar">Calendar</button>
                         <button class="library-tab" data-tab="projects">Projects</button>
+                        <button class="library-tab" data-tab="invoices">Invoices</button>
                     </div>
                     <div class="library-list-header" id="library-list-header">
                         <h2 class="library-list-heading" id="library-list-heading">Scripts</h2>
@@ -141,6 +137,7 @@ const LibraryUI = (() => {
                     <div class="library-todo-container" id="library-todo-container" style="display:none;"></div>
                     <div class="library-calendar-container" id="library-calendar-container" style="display:none;"></div>
                     <div class="library-projects-container" id="library-projects-container" style="display:none;"></div>
+                    <div class="library-invoices-container" id="library-invoices-container" style="display:none;"></div>
                 </div>
                 <div class="library-page library-editor-page" id="library-editor-page">
                     <div class="library-editor" id="library-editor">
@@ -170,12 +167,14 @@ const LibraryUI = (() => {
         const todoContainer = document.getElementById('library-todo-container');
         const calendarContainer = document.getElementById('library-calendar-container');
         const projectsContainer = document.getElementById('library-projects-container');
+        const invoicesContainer = document.getElementById('library-invoices-container');
 
         if (scriptList) scriptList.style.display = 'none';
         if (notesList) notesList.style.display = 'none';
         if (todoContainer) todoContainer.style.display = 'none';
         if (calendarContainer) calendarContainer.style.display = 'none';
         if (projectsContainer) projectsContainer.style.display = 'none';
+        if (invoicesContainer) invoicesContainer.style.display = 'none';
 
         const newBtn = document.getElementById('library-new-btn');
 
@@ -205,33 +204,24 @@ const LibraryUI = (() => {
             if (projectsContainer) projectsContainer.style.display = '';
             if (newBtn) newBtn.style.display = 'none';
             renderProjectsList();
+        } else if (tab === 'invoices') {
+            if (heading) heading.textContent = 'Invoices';
+            if (invoicesContainer) invoicesContainer.style.display = '';
+            if (newBtn) newBtn.style.display = 'none';
+            renderInvoicesList();
+            if (invoicesLoaded) backgroundRefreshInvoices();
         }
     }
 
     // =====================
-    // --- TO-DO LIST (Notion to_do blocks) ---
+    // --- TO-DO LIST ---
     // =====================
     let todoLoaded = false;
 
     async function fetchTodoItems() {
-        if (!todoPageId) return [];
-        const res = await fetch(`/api/notion/blocks/${todoPageId}/children`);
+        const res = await fetch('/api/data/todos');
         if (!res.ok) return [];
-        const data = await res.json();
-        if (!data.results) return [];
-        return data.results
-            .filter(b => b.type === 'to_do')
-            .map(b => {
-                const rawText = (b.to_do.rich_text || []).map(t => t.plain_text).join('');
-                const isWeekly = rawText.startsWith('[W] ');
-                return {
-                    id: b.id,
-                    rawText,
-                    text: isWeekly ? rawText.slice(4) : rawText,
-                    done: b.to_do.checked || false,
-                    category: isWeekly ? 'weekly' : 'daily'
-                };
-            });
+        return await res.json();
     }
 
     let todoBusy = false; // true while an add/delete/toggle API call is in progress
@@ -343,34 +333,21 @@ const LibraryUI = (() => {
     }
 
     async function addTodoItem(text) {
-        if (!todoPageId) { alert('To-Do page not configured.'); return; }
         todoBusy = true;
-        const isWeekly = todoCategory === 'weekly';
-        const rawText = isWeekly ? '[W] ' + text : text;
-        const tempItem = { id: null, text, rawText, done: false, category: todoCategory };
+        const tempItem = { id: null, text, done: false, category: todoCategory };
         todoItems.unshift(tempItem);
         renderTodoList();
         updateTodoBadge();
 
         try {
-            const res = await fetch(`/api/notion/blocks/${todoPageId}/children`, {
-                method: 'PATCH',
+            const res = await fetch('/api/data/todos', {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    children: [{
-                        object: 'block',
-                        type: 'to_do',
-                        to_do: {
-                            rich_text: [{ type: 'text', text: { content: rawText } }],
-                            checked: false
-                        }
-                    }]
-                })
+                body: JSON.stringify({ text, done: false, category: todoCategory })
             });
             if (!res.ok) throw new Error('Failed');
-            const data = await res.json();
-            const newBlock = data.results && data.results[0];
-            if (newBlock) tempItem.id = newBlock.id;
+            const created = await res.json();
+            Object.assign(tempItem, created);
         } catch (e) {
             console.warn('Library: add todo failed', e);
             todoItems = todoItems.filter(i => i !== tempItem);
@@ -392,15 +369,10 @@ const LibraryUI = (() => {
 
         if (item.id) {
             try {
-                await fetch(`/api/notion/blocks/${item.id}`, {
+                await fetch(`/api/data/todos/${item.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to_do: {
-                            rich_text: [{ type: 'text', text: { content: item.rawText } }],
-                            checked: item.done
-                        }
-                    })
+                    body: JSON.stringify({ done: item.done })
                 });
             } catch (e) {
                 console.warn('Library: toggle todo failed', e);
@@ -423,7 +395,7 @@ const LibraryUI = (() => {
 
         if (item.id) {
             try {
-                const res = await fetch(`/api/notion/blocks/${item.id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/data/todos/${item.id}`, { method: 'DELETE' });
                 if (!res.ok) throw new Error('Delete failed');
             } catch (e) {
                 console.warn('Library: delete todo failed', e);
@@ -437,44 +409,13 @@ const LibraryUI = (() => {
     }
 
     // =====================
-    // --- CALENDAR (Notion to_do blocks with date|time|title format) ---
+    // --- CALENDAR ---
     // =====================
 
-    async function ensureCalendarPage() {
-        if (calendarPageId) return calendarPageId;
-        try {
-            const res = await fetch('/api/notion/ensure-calendar-page', { method: 'POST' });
-            if (!res.ok) return '';
-            const data = await res.json();
-            if (data.calendarPageId) {
-                calendarPageId = data.calendarPageId;
-                return calendarPageId;
-            }
-        } catch (e) { console.warn('Library: ensure calendar page failed', e); }
-        return '';
-    }
-
     async function fetchCalendarEvents() {
-        const pageId = await ensureCalendarPage();
-        if (!pageId) return [];
-        const res = await fetch(`/api/notion/blocks/${pageId}/children`);
+        const res = await fetch('/api/data/calendar');
         if (!res.ok) return [];
-        const data = await res.json();
-        if (!data.results) return [];
-        return data.results
-            .filter(b => b.type === 'to_do')
-            .map(b => {
-                const raw = (b.to_do.rich_text || []).map(t => t.plain_text).join('');
-                // Format: YYYY-MM-DD HH:MM | Event Title
-                const pipeIdx = raw.indexOf(' | ');
-                if (pipeIdx === -1) return { id: b.id, raw, date: '', time: '', text: raw, done: b.to_do.checked || false };
-                const dtPart = raw.slice(0, pipeIdx).trim();
-                const title = raw.slice(pipeIdx + 3).trim();
-                const spaceIdx = dtPart.indexOf(' ');
-                const date = spaceIdx > -1 ? dtPart.slice(0, spaceIdx) : dtPart;
-                const time = spaceIdx > -1 ? dtPart.slice(spaceIdx + 1) : '';
-                return { id: b.id, raw, date, time, text: title, done: b.to_do.checked || false };
-            });
+        return await res.json();
     }
 
     function renderCalendarList() {
@@ -767,30 +708,21 @@ const LibraryUI = (() => {
     }
 
     async function addCalendarEvent(date, time, title) {
-        const pageId = await ensureCalendarPage();
-        if (!pageId) { alert('Calendar page not available.'); return; }
         calendarBusy = true;
-        const raw = (date ? date : '') + (time ? ' ' + time : '') + ' | ' + title;
-        const tempItem = { id: null, raw, date: date || '', time: time || '', text: title, done: false };
+        const tempItem = { id: null, date: date || '', time: time || '', text: title, done: false };
         calendarItems.unshift(tempItem);
         renderCalendarList();
         updateCalendarBadge();
 
         try {
-            const res = await fetch(`/api/notion/blocks/${pageId}/children`, {
-                method: 'PATCH',
+            const res = await fetch('/api/data/calendar', {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    children: [{
-                        object: 'block', type: 'to_do',
-                        to_do: { rich_text: [{ type: 'text', text: { content: raw } }], checked: false }
-                    }]
-                })
+                body: JSON.stringify({ date: date || '', time: time || '', text: title, done: false })
             });
             if (!res.ok) throw new Error('Failed');
-            const data = await res.json();
-            const newBlock = data.results && data.results[0];
-            if (newBlock) tempItem.id = newBlock.id;
+            const created = await res.json();
+            Object.assign(tempItem, created);
         } catch (e) {
             console.warn('Library: add calendar event failed', e);
             calendarItems = calendarItems.filter(i => i !== tempItem);
@@ -812,15 +744,10 @@ const LibraryUI = (() => {
 
         if (item.id) {
             try {
-                await fetch(`/api/notion/blocks/${item.id}`, {
+                await fetch(`/api/data/calendar/${item.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to_do: {
-                            rich_text: [{ type: 'text', text: { content: item.raw } }],
-                            checked: item.done
-                        }
-                    })
+                    body: JSON.stringify({ done: item.done })
                 });
             } catch (e) {
                 console.warn('Library: toggle calendar event failed', e);
@@ -843,7 +770,7 @@ const LibraryUI = (() => {
 
         if (item.id) {
             try {
-                const res = await fetch(`/api/notion/blocks/${item.id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/data/calendar/${item.id}`, { method: 'DELETE' });
                 if (!res.ok) throw new Error('Delete failed');
             } catch (e) {
                 console.warn('Library: delete calendar event failed', e);
@@ -1934,6 +1861,280 @@ const LibraryUI = (() => {
         badge.style.display = count > 0 ? '' : 'none';
     }
 
+    // =====================
+    // --- INVOICES (R2-backed records) ---
+    // =====================
+
+    async function fetchInvoices() {
+        const res = await fetch('/api/data/invoices');
+        if (!res.ok) return [];
+        return await res.json();
+    }
+
+    function toCAD(amount, currency) {
+        const rate = CAD_RATES[currency] || 1;
+        return amount * rate;
+    }
+
+    function getExpectedIncomeCADInternal() {
+        return invoiceItems
+            .filter(i => !i.paid)
+            .reduce((sum, i) => sum + toCAD(i.amount, i.currency), 0);
+    }
+
+    function renderInvoicesList() {
+        const el = document.getElementById('library-invoices-container');
+        if (!el) return;
+        if (!invoicesLoaded) {
+            el.innerHTML = '<div class="library-empty">Loading invoices...</div>';
+            fetchInvoices().then(items => {
+                invoiceItems = items;
+                invoicesLoaded = true;
+                renderInvoicesList();
+                updateInvoicesBadge();
+                if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+            }).catch(() => {
+                el.innerHTML = '<div class="library-empty">Could not load invoices.</div>';
+            });
+            return;
+        }
+        renderInvoicesContent(el);
+    }
+
+    function backgroundRefreshInvoices() {
+        if (invoicesBusy) return;
+        fetchInvoices().then(fresh => {
+            if (invoicesBusy) return;
+            if (fresh && fresh.length >= 0) {
+                invoiceItems = fresh;
+                updateInvoicesBadge();
+                if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+                const el = document.getElementById('library-invoices-container');
+                if (el) renderInvoicesContent(el);
+            }
+        }).catch(() => {});
+    }
+
+    function renderInvoicesContent(el) {
+        if (!el) return;
+
+        const unpaid = invoiceItems.filter(i => !i.paid);
+        const paid = invoiceItems.filter(i => i.paid);
+        const totalCAD = getExpectedIncomeCADInternal();
+
+        const currencies = Object.keys(CAD_RATES);
+        const todayStr2 = new Date().toISOString().slice(0, 10);
+
+        let html = `
+            <div class="library-invoice-total">
+                Expected: <strong>$${Math.round(totalCAD).toLocaleString()} CAD</strong>
+                <span style="color:#888;font-size:12px;margin-left:6px;">(${unpaid.length} unpaid)</span>
+            </div>
+            <div class="library-invoice-form">
+                <input type="text" class="library-invoice-input" id="library-invoice-company" placeholder="Company name" />
+                <input type="number" class="library-invoice-input library-invoice-amount-input" id="library-invoice-amount" placeholder="Amount" step="0.01" min="0" />
+                <select class="library-invoice-select" id="library-invoice-currency">
+                    ${currencies.map(c => `<option value="${c}">${c}</option>`).join('')}
+                </select>
+                <input type="date" class="library-invoice-input" id="library-invoice-date" value="${todayStr2}" />
+                <input type="text" class="library-invoice-input" id="library-invoice-notes" placeholder="Notes (optional)" />
+                <button class="library-invoice-add-btn" id="library-invoice-add-btn">Add</button>
+            </div>
+        `;
+
+        if (unpaid.length === 0 && paid.length === 0) {
+            html += '<div class="library-empty">No invoices yet. Add one above.</div>';
+        }
+
+        if (unpaid.length > 0) {
+            html += '<div class="library-todo-section-header">Unpaid</div>';
+            html += unpaid.map(item => {
+                const idx = invoiceItems.indexOf(item);
+                const cadAmt = toCAD(item.amount, item.currency);
+                const cadNote = item.currency !== 'CAD' ? ` <span style="color:#888;font-size:12px;">(~$${Math.round(cadAmt).toLocaleString()} CAD)</span>` : '';
+                const dateStr = item.expectedDate ? formatCalDate(item.expectedDate) : '';
+                return `
+                    <div class="library-invoice-item" data-idx="${idx}">
+                        <div class="library-invoice-info">
+                            <div class="library-invoice-company">${escHtml(item.company)}</div>
+                            <div class="library-invoice-details">
+                                <span class="library-invoice-amount-display">$${item.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(item.currency)}${cadNote}</span>
+                                ${dateStr ? `<span class="library-invoice-date">${dateStr}</span>` : ''}
+                                ${item.notes ? `<span class="library-invoice-notes-text">${escHtml(item.notes)}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="library-invoice-actions">
+                            <button class="library-invoice-paid-btn" data-idx="${idx}" title="Mark paid">&#10003;</button>
+                            <button class="library-invoice-delete-btn" data-idx="${idx}" title="Delete">&times;</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        if (paid.length > 0) {
+            html += `<div class="library-todo-section-header" style="cursor:pointer;" id="library-invoices-paid-toggle">Paid (${paid.length}) &#9662;</div>`;
+            html += `<div id="library-invoices-paid-section" style="display:none;">`;
+            html += paid.map(item => {
+                const idx = invoiceItems.indexOf(item);
+                return `
+                    <div class="library-invoice-item library-invoice-paid" data-idx="${idx}">
+                        <div class="library-invoice-info">
+                            <div class="library-invoice-company">${escHtml(item.company)}</div>
+                            <div class="library-invoice-details">
+                                <span class="library-invoice-amount-display">$${item.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(item.currency)}</span>
+                                ${item.notes ? `<span class="library-invoice-notes-text">${escHtml(item.notes)}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="library-invoice-actions">
+                            <button class="library-invoice-delete-btn" data-idx="${idx}" title="Delete">&times;</button>
+                        </div>
+                    </div>`;
+            }).join('');
+            html += `</div>`;
+        }
+
+        el.innerHTML = html;
+
+        // Event listeners
+        const addBtn = document.getElementById('library-invoice-add-btn');
+        if (addBtn) addBtn.addEventListener('click', addInvoice);
+
+        // Enter key on inputs
+        ['library-invoice-company', 'library-invoice-amount', 'library-invoice-notes'].forEach(id => {
+            const inp = document.getElementById(id);
+            if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') addInvoice(); });
+        });
+
+        el.querySelectorAll('.library-invoice-paid-btn').forEach(btn => {
+            btn.addEventListener('click', () => toggleInvoicePaid(parseInt(btn.dataset.idx)));
+        });
+        el.querySelectorAll('.library-invoice-delete-btn').forEach(btn => {
+            btn.addEventListener('click', () => deleteInvoice(parseInt(btn.dataset.idx)));
+        });
+
+        const paidToggle = document.getElementById('library-invoices-paid-toggle');
+        if (paidToggle) {
+            paidToggle.addEventListener('click', () => {
+                const section = document.getElementById('library-invoices-paid-section');
+                if (section) {
+                    const showing = section.style.display !== 'none';
+                    section.style.display = showing ? 'none' : '';
+                    paidToggle.innerHTML = `Paid (${paid.length}) ${showing ? '&#9662;' : '&#9652;'}`;
+                }
+            });
+        }
+    }
+
+    async function addInvoice() {
+        const companyEl = document.getElementById('library-invoice-company');
+        const amountEl = document.getElementById('library-invoice-amount');
+        const currencyEl = document.getElementById('library-invoice-currency');
+        const dateEl = document.getElementById('library-invoice-date');
+        const notesEl = document.getElementById('library-invoice-notes');
+
+        const company = (companyEl && companyEl.value.trim()) || '';
+        const amount = amountEl ? parseFloat(amountEl.value) : 0;
+        const currency = currencyEl ? currencyEl.value : 'CAD';
+        const expectedDate = dateEl ? dateEl.value : '';
+        const notes = (notesEl && notesEl.value.trim()) || '';
+
+        if (!company || !amount) { alert('Company and amount are required.'); return; }
+
+        invoicesBusy = true;
+        const tempItem = { id: null, company, amount, currency, expectedDate, notes, paid: false };
+        invoiceItems.unshift(tempItem);
+
+        // Clear form
+        if (companyEl) companyEl.value = '';
+        if (amountEl) amountEl.value = '';
+        if (notesEl) notesEl.value = '';
+
+        renderInvoicesList();
+        updateInvoicesBadge();
+        if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+
+        try {
+            const res = await fetch('/api/data/invoices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ company, amount, currency, expectedDate, notes, paid: false })
+            });
+            if (!res.ok) throw new Error('Failed');
+            const created = await res.json();
+            Object.assign(tempItem, created);
+        } catch (e) {
+            console.warn('Library: add invoice failed', e);
+            invoiceItems = invoiceItems.filter(i => i !== tempItem);
+            renderInvoicesList();
+            updateInvoicesBadge();
+            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+            alert('Failed to add invoice. Check connection.');
+        } finally {
+            invoicesBusy = false;
+        }
+    }
+
+    async function toggleInvoicePaid(idx) {
+        if (idx < 0 || idx >= invoiceItems.length) return;
+        invoicesBusy = true;
+        const item = invoiceItems[idx];
+        item.paid = !item.paid;
+        renderInvoicesList();
+        updateInvoicesBadge();
+        if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+
+        if (item.id) {
+            try {
+                await fetch(`/api/data/invoices/${item.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paid: item.paid })
+                });
+            } catch (e) {
+                console.warn('Library: toggle invoice failed', e);
+                item.paid = !item.paid;
+                renderInvoicesList();
+                updateInvoicesBadge();
+                if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+            }
+        }
+        invoicesBusy = false;
+    }
+
+    async function deleteInvoice(idx) {
+        if (idx < 0 || idx >= invoiceItems.length) return;
+        if (!confirm('Delete this invoice?')) return;
+        invoicesBusy = true;
+        const item = invoiceItems[idx];
+        invoiceItems.splice(idx, 1);
+        renderInvoicesList();
+        updateInvoicesBadge();
+        if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+
+        if (item.id) {
+            try {
+                const res = await fetch(`/api/data/invoices/${item.id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error('Delete failed');
+            } catch (e) {
+                console.warn('Library: delete invoice failed', e);
+                invoiceItems.splice(idx, 0, item);
+                renderInvoicesList();
+                updateInvoicesBadge();
+                if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+                alert('Failed to delete invoice. It has been restored.');
+            }
+        }
+        invoicesBusy = false;
+    }
+
+    function updateInvoicesBadge() {
+        const badge = document.getElementById('invoices-badge');
+        if (!badge) return;
+        const count = invoiceItems.filter(i => !i.paid).length;
+        badge.textContent = count;
+        badge.style.display = count > 0 ? '' : 'none';
+    }
+
     return {
         async open(bodyEl, opts) {
             await loadConfig();
@@ -1953,8 +2154,9 @@ const LibraryUI = (() => {
             container = null; selectedId = null; selectedScriptMeta = null; selectedNote = null;
             selectedVideo = null; videoDirty = false;
             dirty = false; noteDirty = false;
-            // Keep todoLoaded/todoItems and calendarLoaded/calendarItems cached across close/open
+            // Keep todoLoaded/todoItems, calendarLoaded/calendarItems, invoicesLoaded/invoiceItems cached across close/open
             calendarViewMode = 'week'; calendarSelectedDate = null;
+            invoicesLoaded = false;
             projectsLoaded = false; selectedProject = null; scriptMetaLoaded = false;
             currentPage = 'list'; activeTab = 'scripts';
         },
@@ -1986,6 +2188,24 @@ const LibraryUI = (() => {
         getCalendarTodayCount() {
             const today = todayStr();
             return calendarItems.filter(e => e.date === today && !e.done).length;
+        },
+        // Public: preload invoices count for HUD badge + expected income
+        async preloadInvoicesCount() {
+            await loadConfig();
+            if (!invoicesLoaded) {
+                try {
+                    invoiceItems = await fetchInvoices();
+                    invoicesLoaded = true;
+                } catch (e) {}
+            }
+            updateInvoicesBadge();
+            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+        },
+        getExpectedIncomeCAD() {
+            return getExpectedIncomeCADInternal();
+        },
+        getInvoicesBadgeCount() {
+            return invoiceItems.filter(i => !i.paid).length;
         }
     };
 })();

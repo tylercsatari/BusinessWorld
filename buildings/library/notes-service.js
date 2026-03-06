@@ -1,83 +1,21 @@
 /**
- * Notes Service — Notion-backed ideas for the Library.
- * Each idea = a child page under the Ideas parent page.
- * Content stored as a code block with JSON metadata (via NotionHelpers).
- *
+ * Notes Service — R2-backed ideas for the Library.
+ * Each idea = a record in /api/data/ideas.
  * Ideas store hook/context as top-level fields (matching Videos).
  */
 const NotesService = (() => {
     let notes = [];
-    let ideasPageId = '';
     let _lastSync = 0;
-    let _syncPromise = null; // dedup concurrent sync() calls
-
-    async function loadConfig() {
-        if (ideasPageId) return;
-        const cfg = await NotionHelpers.getConfig();
-        if (cfg.notion && cfg.notion.ideasPageId) ideasPageId = cfg.notion.ideasPageId;
-    }
-
-    async function loadPageContent(pageId) {
-        const res = await fetch(`/api/notion/blocks/${pageId}/children`);
-        if (!res.ok) return { hook: '', context: '', project: '', type: 'idea' };
-        const data = await res.json();
-        if (!data.results) return { hook: '', context: '', project: '', type: 'idea' };
-
-        // Look for a code block with JSON metadata
-        for (const block of data.results) {
-            if (block.type === 'code') {
-                const text = (block.code.rich_text || []).map(t => t.plain_text).join('');
-                try {
-                    const meta = JSON.parse(text);
-                    // Backward compat: old format stored hook/context as JSON inside a `content` field
-                    if (meta.content && !meta.hook && !meta.context) {
-                        try {
-                            const parsed = JSON.parse(meta.content);
-                            meta.hook = parsed.hook || '';
-                            meta.context = parsed.context || '';
-                        } catch (e) {
-                            // Legacy plain text content — treat as context
-                            meta.context = meta.content;
-                        }
-                        delete meta.content;
-                    }
-                    return meta;
-                } catch (e) {}
-            }
-        }
-
-        // Fallback: read paragraphs as plain text context
-        const text = data.results
-            .filter(b => b.type === 'paragraph')
-            .map(b => (b.paragraph.rich_text || []).map(t => t.plain_text).join(''))
-            .join('\n');
-        return { hook: '', context: text, project: '', type: 'idea' };
-    }
+    let _syncPromise = null;
 
     return {
         async sync(force) {
             if (!force && notes.length > 0 && Date.now() - _lastSync < 60000) return notes;
-            // Dedup concurrent sync() calls
             if (_syncPromise) return _syncPromise;
             _syncPromise = (async () => {
-                await loadConfig();
-                const pages = await NotionHelpers.fetchChildPages(ideasPageId);
-                await Promise.all(pages.map(async page => {
-                    try {
-                        const meta = await loadPageContent(page.id);
-                        // Store hook/context as top-level fields (matching Videos)
-                        page.hook = meta.hook || '';
-                        page.context = meta.context || '';
-                        page.project = meta.project || '';
-                        page.linkedScriptId = meta.linkedScriptId || '';
-                        page.type = meta.type || 'idea';
-                        if (meta.lastEdited) page.lastEdited = meta.lastEdited;
-                        page._loaded = true;
-                    } catch (e) {
-                        console.warn('NotesService: load content failed for', page.id, e);
-                    }
-                }));
-                notes = pages;
+                const res = await fetch('/api/data/ideas');
+                if (!res.ok) throw new Error(`Ideas fetch failed: ${res.status}`);
+                notes = await res.json();
                 _lastSync = Date.now();
                 return notes;
             })();
@@ -90,31 +28,21 @@ const NotesService = (() => {
         getById(id) { return notes.find(n => n.id === id); },
 
         async create(data) {
-            await loadConfig();
-            if (!ideasPageId) throw new Error('Ideas page not configured');
-            const name = data.name || 'Untitled';
-            const now = new Date().toISOString();
-            const meta = {
-                hook: data.hook || '',
-                context: data.context || '',
-                project: data.project || '',
-                linkedScriptId: data.linkedScriptId || '',
-                type: data.type || 'idea',
-                lastEdited: now
-            };
-
-            const result = await NotionHelpers.createChildPage(ideasPageId, name, meta);
-            const note = {
-                id: result.id,
-                name,
-                hook: meta.hook,
-                context: meta.context,
-                project: meta.project,
-                linkedScriptId: meta.linkedScriptId,
-                type: meta.type,
-                lastEdited: now,
-                _loaded: true
-            };
+            const res = await fetch('/api/data/ideas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: data.name || 'Untitled',
+                    hook: data.hook || '',
+                    context: data.context || '',
+                    project: data.project || '',
+                    linkedScriptId: data.linkedScriptId || '',
+                    type: data.type || 'idea',
+                    lastEdited: new Date().toISOString()
+                })
+            });
+            if (!res.ok) throw new Error(`Create idea failed: ${res.status}`);
+            const note = await res.json();
             notes.push(note);
             return note;
         },
@@ -123,39 +51,22 @@ const NotesService = (() => {
             const note = notes.find(n => n.id === id);
             if (!note) return null;
 
-            // Update title if changed
-            if (changes.name !== undefined && changes.name !== note.name) {
-                await NotionHelpers.updatePageTitle(id, changes.name);
-                note.name = changes.name;
-            }
-
-            // Apply field changes
-            let needsMetaUpdate = false;
-            for (const key of ['hook', 'context', 'project', 'linkedScriptId', 'type']) {
-                if (changes[key] !== undefined) {
-                    note[key] = changes[key];
-                    needsMetaUpdate = true;
-                }
-            }
-
-            if (needsMetaUpdate) {
-                const now = new Date().toISOString();
-                await NotionHelpers.savePageMeta(id, {
-                    hook: note.hook || '',
-                    context: note.context || '',
-                    project: note.project || '',
-                    linkedScriptId: note.linkedScriptId || '',
-                    type: note.type || 'idea',
-                    lastEdited: now
-                });
-                note.lastEdited = now;
-            }
-
-            return note;
+            const fields = { ...changes, lastEdited: new Date().toISOString() };
+            const res = await fetch(`/api/data/ideas/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(fields)
+            });
+            if (!res.ok) throw new Error(`Update idea failed: ${res.status}`);
+            const updated = await res.json();
+            const idx = notes.findIndex(n => n.id === id);
+            if (idx >= 0) notes[idx] = updated;
+            return updated;
         },
 
         async remove(id) {
-            await NotionHelpers.archivePage(id);
+            const res = await fetch(`/api/data/ideas/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(`Delete idea failed: ${res.status}`);
             notes = notes.filter(n => n.id !== id);
         }
     };

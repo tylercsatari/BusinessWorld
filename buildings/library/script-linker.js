@@ -15,8 +15,8 @@
  *   });
  */
 const ScriptLinker = (() => {
-    const escHtml = NotionHelpers.escHtml;
-    const escAttr = NotionHelpers.escAttr;
+    const escHtml = HtmlUtils.escHtml;
+    const escAttr = HtmlUtils.escAttr;
 
     return {
         /**

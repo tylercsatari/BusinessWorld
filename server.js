@@ -13,12 +13,13 @@ if (fs.existsSync(envPath)) {
     });
 }
 
+const videoAnalyzer = require('./video-analyzer');
+const cloud = require('./cloud-storage');
+const swipeScraper = require('./swipe-scraper');
+const dataStore = require('./data-store');
 const PORT = process.env.PORT || 8002;
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
-
-// Strip hyphens from Notion UUIDs so we can compare IDs regardless of format
-function normalizeId(id) { return id ? id.replace(/-/g, '') : ''; }
 
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -104,13 +105,6 @@ const server = http.createServer(async (req, res) => {
                 boxesNameField: 'Name', itemsNameField: 'Name', itemsQuantityField: 'Quantity'
             },
             search: { semanticMatchThreshold: parseFloat(process.env.SEMANTIC_MATCH_THRESHOLD) || 0.75 },
-            notion: {
-                videosPageId: process.env.NOTION_VIDEOS_PAGE_ID || '',
-                videosDataPageId: process.env.NOTION_VIDEOS_DATA_PAGE_ID || '',
-                ideasPageId: process.env.NOTION_IDEAS_PAGE_ID || '',
-                todoPageId: process.env.NOTION_TODO_PAGE_ID || '',
-                calendarPageId: process.env.NOTION_CALENDAR_PAGE_ID || ''
-            },
             dropbox: { rootPath: process.env.DROPBOX_ROOT_PATH || '' }
         }));
         return;
@@ -217,135 +211,43 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
-    // API: Notion proxy — full CRUD for pages and blocks
+    // API: Generic data store — /api/data/:collection[/:id]
     // =========================================
-    const NOTION_HEADERS = {
-        'Authorization': `Bearer ${process.env.NOTION_API_KEY}`,
-        'Notion-Version': '2022-06-28',
-        'Content-Type': 'application/json'
-    };
-
-    // POST /api/notion/pages — create a page
-    if (pathname === '/api/notion/pages' && req.method === 'POST') {
-        const body = await readBody(req);
-        await proxyFetch(res, 'https://api.notion.com/v1/pages', {
-            method: 'POST', headers: NOTION_HEADERS, body: JSON.stringify(body)
-        });
-        return;
-    }
-
-    // PATCH /api/notion/pages/:id — update page (title, archive)
-    const notionPagePatch = pathname.match(/^\/api\/notion\/pages\/([^/]+)$/);
-    if (notionPagePatch && req.method === 'PATCH') {
-        const pageId = notionPagePatch[1];
-        const body = await readBody(req);
-        // Protect critical system pages from being archived/deleted
-        const protectedIds = [
-            process.env.NOTION_VIDEOS_DATA_PAGE_ID,
-            process.env.NOTION_VIDEOS_PAGE_ID,
-            process.env.NOTION_IDEAS_PAGE_ID,
-            process.env.NOTION_TODO_PAGE_ID,
-            process.env.NOTION_CALENDAR_PAGE_ID,
-        ].filter(Boolean).map(normalizeId);
-        if (body.archived && protectedIds.includes(normalizeId(pageId))) {
-            res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Cannot delete protected system page' }));
-            return;
-        }
-        await proxyFetch(res, `https://api.notion.com/v1/pages/${pageId}`, {
-            method: 'PATCH', headers: NOTION_HEADERS, body: JSON.stringify(body)
-        });
-        return;
-    }
-
-    // GET /api/notion/blocks/:id/children — list block children
-    const notionBlockChildren = pathname.match(/^\/api\/notion\/blocks\/([^/]+)\/children$/);
-    if (notionBlockChildren && req.method === 'GET') {
-        const qs = url.search || '';
-        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockChildren[1]}/children${qs}`, {
-            method: 'GET', headers: NOTION_HEADERS
-        });
-        return;
-    }
-
-    // PATCH /api/notion/blocks/:id/children — append block children
-    if (notionBlockChildren && req.method === 'PATCH') {
-        const body = await readBody(req);
-        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockChildren[1]}/children`, {
-            method: 'PATCH', headers: NOTION_HEADERS, body: JSON.stringify(body)
-        });
-        return;
-    }
-
-    // PATCH /api/notion/blocks/:id — update a block
-    const notionBlockPatch = pathname.match(/^\/api\/notion\/blocks\/([^/]+)$/);
-    if (notionBlockPatch && req.method === 'PATCH') {
-        const body = await readBody(req);
-        await proxyFetch(res, `https://api.notion.com/v1/blocks/${notionBlockPatch[1]}`, {
-            method: 'PATCH', headers: NOTION_HEADERS, body: JSON.stringify(body)
-        });
-        return;
-    }
-
-    // POST /api/notion/ensure-calendar-page — auto-create calendar page if needed
-    if (pathname === '/api/notion/ensure-calendar-page' && req.method === 'POST') {
-        // If already configured, return it
-        if (process.env.NOTION_CALENDAR_PAGE_ID) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ calendarPageId: process.env.NOTION_CALENDAR_PAGE_ID }));
-            return;
-        }
-        // Need a parent page to create under
-        const parentId = process.env.NOTION_VIDEOS_PAGE_ID;
-        if (!parentId) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'No parent page configured' }));
+    const dataMatch = pathname.match(/^\/api\/data\/([a-z]+)(?:\/([^/]+))?$/);
+    if (dataMatch) {
+        const collection = dataMatch[1];
+        const id = dataMatch[2] || null;
+        if (!dataStore.COLLECTIONS.includes(collection)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Unknown collection: ${collection}` }));
             return;
         }
         try {
-            // Search existing children for a "Calendar" page
-            const listRes = await fetch(`https://api.notion.com/v1/blocks/${parentId}/children`, {
-                method: 'GET', headers: NOTION_HEADERS
-            });
-            if (listRes.ok) {
-                const listData = await listRes.json();
-                const existing = (listData.results || []).find(b => b.type === 'child_page' && b.child_page.title === 'Calendar');
-                if (existing) {
-                    process.env.NOTION_CALENDAR_PAGE_ID = existing.id;
-                    // Save to .env if local dev
-                    if (!process.env.RENDER) {
-                        try {
-                            let envContent = fs.readFileSync(envPath, 'utf8');
-                            envContent = envContent.replace(/^NOTION_CALENDAR_PAGE_ID=.*$/m, `NOTION_CALENDAR_PAGE_ID=${existing.id}`);
-                            fs.writeFileSync(envPath, envContent, 'utf8');
-                        } catch (e) {}
-                    }
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ calendarPageId: existing.id }));
-                    return;
-                }
+            if (req.method === 'GET') {
+                const result = id ? await dataStore.getById(collection, id) : await dataStore.getAll(collection);
+                if (id && !result) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } else if (req.method === 'POST') {
+                const body = await readBody(req);
+                const record = await dataStore.create(collection, body);
+                res.writeHead(201, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(record));
+            } else if (req.method === 'PATCH' && id) {
+                const body = await readBody(req);
+                const record = await dataStore.update(collection, id, body);
+                if (!record) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(record));
+            } else if (req.method === 'DELETE' && id) {
+                const ok = await dataStore.remove(collection, id);
+                if (!ok) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true }));
+            } else {
+                res.writeHead(405, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Method not allowed' }));
             }
-            // Create new Calendar page
-            const createRes = await fetch('https://api.notion.com/v1/pages', {
-                method: 'POST', headers: NOTION_HEADERS,
-                body: JSON.stringify({
-                    parent: { page_id: parentId },
-                    properties: { title: { title: [{ text: { content: 'Calendar' } }] } }
-                })
-            });
-            if (!createRes.ok) throw new Error('Failed to create Calendar page');
-            const newPage = await createRes.json();
-            process.env.NOTION_CALENDAR_PAGE_ID = newPage.id;
-            // Save to .env if local dev
-            if (!process.env.RENDER) {
-                try {
-                    let envContent = fs.readFileSync(envPath, 'utf8');
-                    envContent = envContent.replace(/^NOTION_CALENDAR_PAGE_ID=.*$/m, `NOTION_CALENDAR_PAGE_ID=${newPage.id}`);
-                    fs.writeFileSync(envPath, envContent, 'utf8');
-                } catch (e) {}
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ calendarPageId: newPage.id }));
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
@@ -353,67 +255,17 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // DELETE /api/notion/blocks/:id — delete a block
-    if (notionBlockPatch && req.method === 'DELETE') {
-        const blockId = notionBlockPatch[1];
-        // Protect critical system pages (child pages are also blocks in Notion)
-        const protectedIds = [
-            process.env.NOTION_VIDEOS_DATA_PAGE_ID,
-            process.env.NOTION_VIDEOS_PAGE_ID,
-            process.env.NOTION_IDEAS_PAGE_ID,
-            process.env.NOTION_TODO_PAGE_ID,
-            process.env.NOTION_CALENDAR_PAGE_ID,
-        ].filter(Boolean).map(normalizeId);
-        if (protectedIds.includes(normalizeId(blockId))) {
-            res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Cannot delete protected system page' }));
-            return;
-        }
-        await proxyFetch(res, `https://api.notion.com/v1/blocks/${blockId}`, {
-            method: 'DELETE', headers: NOTION_HEADERS
-        });
-        return;
-    }
-
     // =========================================
     // API: Dropbox proxy — file browser (with auto token refresh)
     // =========================================
-    async function getDropboxToken() {
-        // If we have a refresh token, check if current access token works and refresh if needed
-        if (process.env.DROPBOX_REFRESH_TOKEN && process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET) {
-            // Try refreshing proactively if no token or token looks expired
-            if (!process.env.DROPBOX_ACCESS_TOKEN || process.env._DROPBOX_TOKEN_EXPIRED) {
-                try {
-                    const params = new URLSearchParams({
-                        grant_type: 'refresh_token',
-                        refresh_token: process.env.DROPBOX_REFRESH_TOKEN
-                    });
-                    const authHeader = 'Basic ' + Buffer.from(`${process.env.DROPBOX_APP_KEY}:${process.env.DROPBOX_APP_SECRET}`).toString('base64');
-                    const tokenRes = await fetch('https://api.dropboxapi.com/oauth2/token', {
-                        method: 'POST',
-                        headers: { 'Authorization': authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: params.toString()
-                    });
-                    if (tokenRes.ok) {
-                        const tokenData = await tokenRes.json();
-                        process.env.DROPBOX_ACCESS_TOKEN = tokenData.access_token;
-                        delete process.env._DROPBOX_TOKEN_EXPIRED;
-                        console.log('Dropbox: token refreshed');
-                    }
-                } catch (e) { console.warn('Dropbox: refresh failed', e); }
-            }
-        }
-        return process.env.DROPBOX_ACCESS_TOKEN;
-    }
-
     async function dropboxFetch(res, url, opts) {
-        const token = await getDropboxToken();
+        const token = await cloud.getDropboxToken();
         opts.headers = { ...opts.headers, 'Authorization': `Bearer ${token}` };
         const response = await fetch(url, opts);
         // If 401, try refresh once
         if (response.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
             process.env._DROPBOX_TOKEN_EXPIRED = '1';
-            const newToken = await getDropboxToken();
+            const newToken = await cloud.getDropboxToken();
             opts.headers['Authorization'] = `Bearer ${newToken}`;
             return proxyFetch(res, url, opts);
         }
@@ -455,7 +307,7 @@ const server = http.createServer(async (req, res) => {
         const filePath = url.searchParams.get('path');
         if (!filePath) { res.writeHead(400); res.end('Missing path'); return; }
         try {
-            const token = await getDropboxToken();
+            const token = await cloud.getDropboxToken();
             const response = await fetch('https://content.dropboxapi.com/2/files/get_thumbnail_v2', {
                 method: 'POST',
                 headers: {
@@ -481,6 +333,873 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
         }
+        return;
+    }
+
+    // =========================================
+    // API: Video Analyzer
+    // =========================================
+
+    // POST /api/video/analyze — start analysis
+    if (pathname === '/api/video/analyze' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (!body.url) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing url' })); return; }
+            const result = await videoAnalyzer.startAnalysis(body.url, process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // POST /api/video/discover-shorts — discover Shorts from a channel URL
+    if (pathname === '/api/video/discover-shorts' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (!body.channelUrl) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing channelUrl' })); return; }
+            const parsed = videoAnalyzer.parseChannelUrl(body.channelUrl);
+            if (!parsed) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Invalid channel URL' })); return; }
+
+            const allIds = await videoAnalyzer.discoverChannelShorts(parsed);
+
+            // Filter out IDs already in video records
+            const videos = await dataStore.getAll('videos');
+            const knownYtIds = new Set(videos.map(v => v.youtubeVideoId).filter(Boolean));
+
+            // Filter out IDs already analyzed in R2
+            const newIds = [];
+            for (const id of allIds) {
+                if (knownYtIds.has(id)) continue;
+                if (cloud.isR2Ready() && await cloud.existsInR2(`videos/${id}/analysis.json`)) continue;
+                newIds.push(id);
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ total: allIds.length, alreadyAnalyzed: allIds.length - newIds.length, newIds }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/video/status/:id — poll progress (in-memory first, then R2)
+    const videoStatusMatch = pathname.match(/^\/api\/video\/status\/([a-zA-Z0-9_-]+)$/);
+    if (videoStatusMatch && req.method === 'GET') {
+        let status = videoAnalyzer.getStatus(videoStatusMatch[1]);
+        if (!status && cloud.isR2Ready()) {
+            try {
+                const r2Job = await cloud.loadJobState(videoStatusMatch[1]);
+                if (r2Job) status = r2Job;
+            } catch (e) {}
+        }
+        if (!status) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
+        return;
+    }
+
+    // GET /api/video/analysis/:id — return analysis.json (local first, then R2)
+    const videoAnalysisMatch = pathname.match(/^\/api\/video\/analysis\/([a-zA-Z0-9_-]+)$/);
+    if (videoAnalysisMatch && req.method === 'GET') {
+        const analysis = await videoAnalyzer.getAnalysis(videoAnalysisMatch[1]);
+        if (!analysis) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(analysis));
+        return;
+    }
+
+    // GET /api/video/frame/:id/:file — serve frame JPEG (local first, then R2 redirect)
+    const videoFrameMatch = pathname.match(/^\/api\/video\/frame\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_.-]+)$/);
+    if (videoFrameMatch && req.method === 'GET') {
+        const framePath = videoAnalyzer.getFramePath(videoFrameMatch[1], videoFrameMatch[2]);
+        if (framePath) {
+            const data = fs.readFileSync(framePath);
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+            res.end(data);
+            return;
+        }
+        // Fall back to R2 signed URL redirect
+        const r2Url = await videoAnalyzer.getFrameR2Url(videoFrameMatch[1], videoFrameMatch[2]);
+        if (r2Url) {
+            res.writeHead(302, { 'Location': r2Url, 'Cache-Control': 'public, max-age=3600' });
+            res.end();
+            return;
+        }
+        res.writeHead(404); res.end('Not found');
+        return;
+    }
+
+    // POST /api/video/reanalyze-frames — re-run frame analysis on existing frames
+    // GET /api/video/incomplete-frames — find videos with missing frame analyses
+    if (pathname === '/api/video/incomplete-frames' && req.method === 'GET') {
+        try {
+            const videos = await dataStore.getAll('videos');
+            const posted = videos.filter(v => v.youtubeVideoId && v.analysisStatus === 'complete');
+            const incomplete = [];
+            for (const v of posted) {
+                const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+                if (!analysis || !analysis.frames || analysis.frames.length === 0) continue;
+                const missing = analysis.frames.filter(f => !f.analysis || f.analysis.error).length;
+                if (missing > 0) {
+                    incomplete.push({ id: v.id, ytId: v.youtubeVideoId, name: v.name, totalFrames: analysis.frames.length, missingFrames: missing });
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ total: posted.length, incomplete }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/video/reanalyze-frames' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (!body.videoId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing videoId' })); return; }
+            const result = await videoAnalyzer.reanalyzeFrames(body.videoId, process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/video/missing-transcripts — find videos with empty/missing transcripts
+    if (pathname === '/api/video/missing-transcripts' && req.method === 'GET') {
+        try {
+            const videos = await dataStore.getAll('videos');
+            const posted = videos.filter(v => v.youtubeVideoId && v.analysisStatus === 'complete');
+            const missing = [];
+            for (const v of posted) {
+                const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+                if (analysis && (!analysis.transcript || !analysis.transcript.fullText)) {
+                    missing.push({ id: v.id, ytId: v.youtubeVideoId, name: v.name });
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ total: posted.length, missing }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // POST /api/video/refetch-transcript — re-download captions for a video
+    if (pathname === '/api/video/refetch-transcript' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (!body.videoId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing videoId' })); return; }
+            const result = await videoAnalyzer.refetchTranscript(body.videoId, process.env.OPENAI_API_KEY);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/video/missing-dropbox — find videos without dropboxPath
+    if (pathname === '/api/video/missing-dropbox' && req.method === 'GET') {
+        try {
+            const videos = await dataStore.getAll('videos');
+            const posted = videos.filter(v => v.youtubeVideoId && v.analysisStatus === 'complete');
+            const missing = [];
+            for (const v of posted) {
+                const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+                if (!analysis || !analysis.dropboxPath) {
+                    missing.push({ id: v.id, ytId: v.youtubeVideoId, name: v.name });
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ total: posted.length, missing }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/video/missing-hd — find videos without dropboxHDPath
+    if (pathname === '/api/video/missing-hd' && req.method === 'GET') {
+        try {
+            const videos = await dataStore.getAll('videos');
+            const posted = videos.filter(v => v.youtubeVideoId && v.analysisStatus === 'complete');
+            const missing = [];
+            for (const v of posted) {
+                const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+                if (!analysis || !analysis.dropboxHDPath) {
+                    missing.push({ id: v.id, ytId: v.youtubeVideoId, name: v.name });
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ total: posted.length, missing }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // POST /api/video/reupload-dropbox — re-download and upload to Dropbox
+    if (pathname === '/api/video/reupload-dropbox' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (!body.videoId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing videoId' })); return; }
+            const result = await videoAnalyzer.reuploadToDropbox(body.videoId);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // POST /api/video/download-hd — download HD and upload to Dropbox
+    if (pathname === '/api/video/download-hd' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (!body.videoId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing videoId' })); return; }
+            const result = await videoAnalyzer.downloadHD(body.videoId);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/youtube/status — check if YouTube credentials are configured
+    if (pathname === '/api/youtube/status' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            hasCredentials: !!(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET),
+            isConnected: !!process.env.YOUTUBE_REFRESH_TOKEN
+        }));
+        return;
+    }
+
+    // POST /api/youtube/save-credentials — save Client ID + Secret to .env
+    if (pathname === '/api/youtube/save-credentials' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (!body.clientId || !body.clientSecret) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing clientId or clientSecret' }));
+                return;
+            }
+            process.env.YOUTUBE_CLIENT_ID = body.clientId.trim();
+            process.env.YOUTUBE_CLIENT_SECRET = body.clientSecret.trim();
+            // Persist to .env
+            if (!process.env.RENDER) {
+                try {
+                    let envContent = fs.readFileSync(envPath, 'utf8');
+                    // Update or add CLIENT_ID
+                    if (envContent.match(/^YOUTUBE_CLIENT_ID=/m)) {
+                        envContent = envContent.replace(/^YOUTUBE_CLIENT_ID=.*$/m, `YOUTUBE_CLIENT_ID=${process.env.YOUTUBE_CLIENT_ID}`);
+                    } else {
+                        envContent += `\nYOUTUBE_CLIENT_ID=${process.env.YOUTUBE_CLIENT_ID}`;
+                    }
+                    // Update or add CLIENT_SECRET
+                    if (envContent.match(/^YOUTUBE_CLIENT_SECRET=/m)) {
+                        envContent = envContent.replace(/^YOUTUBE_CLIENT_SECRET=.*$/m, `YOUTUBE_CLIENT_SECRET=${process.env.YOUTUBE_CLIENT_SECRET}`);
+                    } else {
+                        envContent += `\nYOUTUBE_CLIENT_SECRET=${process.env.YOUTUBE_CLIENT_SECRET}`;
+                    }
+                    fs.writeFileSync(envPath, envContent, 'utf8');
+                } catch (e) {}
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // POST /api/youtube/clear-token — clear stored refresh token to force re-auth
+    if (pathname === '/api/youtube/clear-token' && req.method === 'POST') {
+        delete process.env.YOUTUBE_REFRESH_TOKEN;
+        delete process.env._YOUTUBE_ACCESS_TOKEN;
+        // Also remove from .env file
+        if (!process.env.RENDER) {
+            try {
+                let envContent = fs.readFileSync(envPath, 'utf8');
+                envContent = envContent.replace(/^YOUTUBE_REFRESH_TOKEN=.*\n?/m, '');
+                fs.writeFileSync(envPath, envContent, 'utf8');
+            } catch (e) {}
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+    }
+
+    // GET /api/youtube/auth-url — build OAuth2 authorize URL
+    if (pathname === '/api/youtube/auth-url' && req.method === 'GET') {
+        const clientId = process.env.YOUTUBE_CLIENT_ID;
+        if (!clientId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'YOUTUBE_CLIENT_ID not configured' })); return; }
+        const redirect = `http://localhost:${PORT}/api/youtube/callback`;
+        const scope = 'https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/yt-analytics-monetary.readonly https://www.googleapis.com/auth/youtube.readonly';
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ url: authUrl }));
+        return;
+    }
+
+    // GET /api/youtube/callback — exchange code for tokens
+    if (pathname === '/api/youtube/callback' && req.method === 'GET') {
+        const code = url.searchParams.get('code');
+        if (!code) { res.writeHead(400); res.end('Missing code'); return; }
+        try {
+            const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    code,
+                    client_id: process.env.YOUTUBE_CLIENT_ID,
+                    client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                    redirect_uri: `http://localhost:${PORT}/api/youtube/callback`,
+                    grant_type: 'authorization_code'
+                }).toString()
+            });
+            const tokenData = await tokenRes.json();
+            if (tokenData.refresh_token) {
+                process.env.YOUTUBE_REFRESH_TOKEN = tokenData.refresh_token;
+                if (!process.env.RENDER) {
+                    try {
+                        let envContent = fs.readFileSync(envPath, 'utf8');
+                        if (envContent.match(/^YOUTUBE_REFRESH_TOKEN=/m)) {
+                            envContent = envContent.replace(/^YOUTUBE_REFRESH_TOKEN=.*$/m, `YOUTUBE_REFRESH_TOKEN=${tokenData.refresh_token}`);
+                        } else {
+                            envContent += `\nYOUTUBE_REFRESH_TOKEN=${tokenData.refresh_token}`;
+                        }
+                        fs.writeFileSync(envPath, envContent, 'utf8');
+                    } catch (e) {}
+                }
+            }
+            if (tokenData.access_token) process.env._YOUTUBE_ACCESS_TOKEN = tokenData.access_token;
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end('<html><body><h2>YouTube connected!</h2><p>You can close this window.</p><script>window.close()</script></body></html>');
+        } catch (e) {
+            res.writeHead(500); res.end('OAuth failed: ' + e.message);
+        }
+        return;
+    }
+
+    // GET /api/youtube/analytics/:id — fetch retention data
+    const ytAnalyticsMatch = pathname.match(/^\/api\/youtube\/analytics\/([a-zA-Z0-9_-]+)$/);
+    if (ytAnalyticsMatch && req.method === 'GET') {
+        const ytVideoId = ytAnalyticsMatch[1];
+        try {
+            // Refresh access token if we have a refresh token
+            let accessToken = process.env._YOUTUBE_ACCESS_TOKEN;
+            if (!accessToken && process.env.YOUTUBE_REFRESH_TOKEN) {
+                const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+                        client_id: process.env.YOUTUBE_CLIENT_ID,
+                        client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                        grant_type: 'refresh_token'
+                    }).toString()
+                });
+                const tokenData = await tokenRes.json();
+                if (tokenData.access_token) {
+                    accessToken = tokenData.access_token;
+                    process.env._YOUTUBE_ACCESS_TOKEN = accessToken;
+                }
+            }
+            if (!accessToken) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not authenticated. Connect YouTube first.' })); return; }
+
+            const authHeaders = { 'Authorization': `Bearer ${accessToken}` };
+            const ytApi = (params) => `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2000-01-01&endDate=2099-12-31&filters=video==${ytVideoId}&${params}`;
+
+            // Fire all queries in parallel
+            const subFilter = encodeURIComponent(`video==${ytVideoId};subscribedStatus==SUBSCRIBED`);
+            const nonSubFilter = encodeURIComponent(`video==${ytVideoId};subscribedStatus==UNSUBSCRIBED`);
+
+            const [retentionRes, statsRes, engagementRes, subViewsRes, nonSubViewsRes, revenueRes, swipeRes, dailyViewsRes] = await Promise.all([
+                // 1. Retention curve — every 1% mark
+                fetch(ytApi('metrics=audienceWatchRatio&dimensions=elapsedVideoTimeRatio&sort=elapsedVideoTimeRatio'), { headers: authHeaders }),
+                // 2. Basic stats
+                fetch(ytApi('metrics=views,averageViewDuration,averageViewPercentage'), { headers: authHeaders }),
+                // 3. Engagement — likes, shares, comments, subscribersGained
+                fetch(ytApi('metrics=likes,shares,comments,subscribersGained,subscribersLost'), { headers: authHeaders }),
+                // 4. Subscriber views
+                fetch(`https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2000-01-01&endDate=2099-12-31&metrics=views,averageViewPercentage&filters=${subFilter}`, { headers: authHeaders }),
+                // 5. Non-subscriber views
+                fetch(`https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2000-01-01&endDate=2099-12-31&metrics=views,averageViewPercentage&filters=${nonSubFilter}`, { headers: authHeaders }),
+                // 6. Revenue (requires monetary scope)
+                fetch(ytApi('metrics=estimatedRevenue'), { headers: authHeaders }),
+                // 7. Engagement rate: engagedViews = views past initial seconds
+                fetch(ytApi('metrics=views,engagedViews'), { headers: authHeaders }),
+                // 8. Daily views breakdown for time-interval comparison
+                fetch(ytApi('metrics=views,estimatedMinutesWatched&dimensions=day&sort=day'), { headers: authHeaders }),
+            ]);
+
+            const [retentionData, statsData, engagementData, subViewsData, nonSubViewsData, revenueData, swipeData, dailyViewsData] = await Promise.all([
+                retentionRes.json(), statsRes.json(), engagementRes.json(), subViewsRes.json(), nonSubViewsRes.json(), revenueRes.json(), swipeRes.json(), dailyViewsRes.json()
+            ]);
+
+            // Parse retention curve (100 data points, every 1%)
+            const retentionCurve = [];
+            let avgRetention = null, retentionVariation = null;
+
+            if (retentionData.rows && retentionData.rows.length > 0) {
+                const retentions = [];
+                for (const row of retentionData.rows) {
+                    retentionCurve.push({ second: row[0], retention: row[1] });
+                    retentions.push(row[1]);
+                }
+                avgRetention = retentions.reduce((a, b) => a + b, 0) / retentions.length;
+                const mean = avgRetention;
+                retentionVariation = Math.sqrt(retentions.reduce((sum, r) => sum + (r - mean) ** 2, 0) / retentions.length);
+            }
+
+            // Parse basic stats
+            let avgPercentViewed = null, avgViewDuration = null, totalViews = null;
+            if (statsData.rows && statsData.rows.length > 0) {
+                totalViews = statsData.rows[0][0];
+                avgViewDuration = statsData.rows[0][1];
+                avgPercentViewed = statsData.rows[0][2];
+            }
+
+            // Parse swipe-away rate from engagedViews
+            // views = all plays (Shorts: includes when Short starts playing in feed)
+            // engagedViews = views that watched past the initial seconds (stayed to watch)
+            // swipedAwayRate = (views - engagedViews) / views * 100
+            let engagedViews = null, swipedAwayRate = null, viewedRate = null;
+            if (swipeData.rows && swipeData.rows.length > 0) {
+                const swipeViews = swipeData.rows[0][0];
+                engagedViews = swipeData.rows[0][1];
+                if (engagedViews != null && swipeViews > 0) {
+                    viewedRate = (engagedViews / swipeViews) * 100;
+                    swipedAwayRate = 100 - viewedRate;
+                }
+            }
+
+            // Parse engagement
+            let likes = null, shares = null, ytComments = null, subscribersGained = null, subscribersLost = null;
+            if (engagementData.rows && engagementData.rows.length > 0) {
+                likes = engagementData.rows[0][0];
+                shares = engagementData.rows[0][1];
+                ytComments = engagementData.rows[0][2];
+                subscribersGained = engagementData.rows[0][3];
+                subscribersLost = engagementData.rows[0][4];
+            }
+
+            // Parse subscriber vs non-subscriber
+            let subscriberViews = null, nonSubscriberViews = null;
+            let subscriberAvgPercent = null, nonSubscriberAvgPercent = null;
+            if (subViewsData.rows && subViewsData.rows.length > 0) {
+                subscriberViews = subViewsData.rows[0][0];
+                subscriberAvgPercent = subViewsData.rows[0][1];
+            }
+            if (nonSubViewsData.rows && nonSubViewsData.rows.length > 0) {
+                nonSubscriberViews = nonSubViewsData.rows[0][0];
+                nonSubscriberAvgPercent = nonSubViewsData.rows[0][1];
+            }
+
+            // Parse revenue
+            let estimatedRevenue = null;
+            if (revenueData.rows && revenueData.rows.length > 0) {
+                estimatedRevenue = revenueData.rows[0][0];
+            }
+
+            // Parse daily views for time-interval comparison
+            const dailyViews = [];
+            if (dailyViewsData.rows) {
+                let cumulative = 0;
+                for (const row of dailyViewsData.rows) {
+                    if (row[1] === 0 && cumulative === 0) continue; // skip days before video existed
+                    cumulative += row[1];
+                    dailyViews.push({ date: row[0], views: row[1], cumulative, watchMinutes: row[2] });
+                }
+            }
+
+            const analytics = {
+                avgRetention, retentionVariation, avgPercentViewed, avgViewDuration,
+                totalViews,
+                engagedViews, viewedRate, swipedAwayRate,
+                likes, shares, comments: ytComments,
+                subscribersGained, subscribersLost,
+                subscriberViews, nonSubscriberViews,
+                subscriberAvgPercent, nonSubscriberAvgPercent,
+                estimatedRevenue,
+                retentionCurve,
+                dailyViews
+            };
+
+            // Merge into analysis.json if it exists — also update likes in metadata
+            const analysis = await videoAnalyzer.getAnalysis(ytVideoId);
+            if (analysis) {
+                analysis.analytics = analytics;
+                // Update likes/comments from analytics (more accurate than yt-dlp which may get 0 for private counts)
+                if (likes != null) analysis.metadata.likeCount = likes;
+                if (ytComments != null) analysis.metadata.commentCount = ytComments;
+                if (totalViews != null) analysis.metadata.viewCount = totalViews;
+                const analysisPath = path.join(__dirname, 'video_data', ytVideoId, 'analysis.json');
+                fs.mkdirSync(path.dirname(analysisPath), { recursive: true });
+                fs.writeFileSync(analysisPath, JSON.stringify(analysis, null, 2));
+                // Also upload to R2
+                videoAnalyzer.uploadAnalysisToR2(ytVideoId, analysis);
+
+                // Save analytics snapshot for history tracking
+                try {
+                    await cloud.saveAnalyticsSnapshot(ytVideoId, {
+                        totalViews, engagedViews, viewedRate, swipedAwayRate,
+                        subscriberViews, nonSubscriberViews,
+                        avgRetention, avgPercentViewed,
+                        likes, shares, subscribersGained,
+                    });
+                } catch (snapErr) {
+                    console.warn(`Analytics snapshot save failed for ${ytVideoId}:`, snapErr.message);
+                }
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(analytics));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/youtube/analytics-missing — return video IDs that have analysis but no analytics
+    if (pathname === '/api/youtube/analytics-missing' && req.method === 'GET') {
+        try {
+            const videos = await dataStore.getAll('videos');
+            const posted = videos.filter(v => v.youtubeVideoId && v.analysisStatus === 'complete');
+            const missing = [];
+            for (const v of posted) {
+                const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+                if (analysis && (analysis.analytics == null || analysis.analytics.totalViews == null)) {
+                    missing.push({ id: v.id, ytId: v.youtubeVideoId, name: v.name });
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ total: posted.length, missing }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Analytics History — list snapshots from R2
+    // =========================================
+    const analyticsHistoryMatch = pathname.match(/^\/api\/video\/analytics-history\/([a-zA-Z0-9_-]+)$/);
+    if (analyticsHistoryMatch && req.method === 'GET') {
+        const vid = analyticsHistoryMatch[1];
+        try {
+            const snapshots = await cloud.getAllAnalyticsSnapshots(vid);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ videoId: vid, snapshots }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Swipe Ratio Scraper — Playwright-based YouTube Studio scraping
+    // =========================================
+
+    // Check scrape status (for polling from frontend)
+    if (pathname === '/api/youtube/swipe-status' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(swipeScraper.getStatus()));
+        return;
+    }
+
+    // One-button flow: opens Chrome, logs in if needed, scrapes all videos
+    if (pathname === '/api/youtube/fetch-swipe-ratios' && req.method === 'POST') {
+        // Gather video IDs first (before launching browser)
+        const videoIds = [];
+        try {
+            if (cloud.isR2Ready()) {
+                const keys = await cloud.listR2Keys('videos/');
+                const ids = [...new Set(keys.filter(k => k.endsWith('/analysis.json')).map(k => k.split('/')[1]))];
+                console.log(`[swipe] Found ${ids.length} videos in R2`);
+                for (const vid of ids) {
+                    try {
+                        const analysis = await videoAnalyzer.getAnalysis(vid);
+                        if (analysis && !analysis?.analytics?.swipeRatio?.scrapedAt) {
+                            videoIds.push(vid);
+                        }
+                    } catch (e) {}
+                }
+            }
+            // Also check local video_data
+            const videoDataDir = path.join(__dirname, 'video_data');
+            if (fs.existsSync(videoDataDir)) {
+                const dirs = fs.readdirSync(videoDataDir).filter(d =>
+                    fs.existsSync(path.join(videoDataDir, d, 'analysis.json'))
+                );
+                for (const vid of dirs) {
+                    if (videoIds.includes(vid)) continue;
+                    try {
+                        const analysis = JSON.parse(fs.readFileSync(path.join(videoDataDir, vid, 'analysis.json'), 'utf8'));
+                        if (!analysis?.analytics?.swipeRatio) {
+                            videoIds.push(vid);
+                        }
+                    } catch (e) {}
+                }
+            }
+            console.log(`[swipe] ${videoIds.length} videos need swipe data`);
+        } catch (e) {
+            console.error('[swipe] Error gathering videos:', e.message);
+        }
+
+        if (videoIds.length === 0) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ message: 'No videos found needing swipe data', results: {}, total: 0 }));
+            return;
+        }
+
+        // Respond immediately, run scraper in background
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'started', total: videoIds.length, message: 'Chrome is opening. Log in if prompted, then scraping will begin automatically.' }));
+
+        // Run the scraper in background
+        swipeScraper.scrapeAll(videoIds, (progress) => {
+            console.log(`[swipe] ${progress.current}/${progress.total}: ${progress.videoId}`);
+        }).then(async (results) => {
+            // Save results into each video's analysis
+            for (const [videoId, data] of Object.entries(results)) {
+                if (data.error) continue;
+                try {
+                    const analysis = await videoAnalyzer.getAnalysis(videoId);
+                    if (analysis) {
+                        if (!analysis.analytics) analysis.analytics = {};
+                        analysis.analytics.swipeRatio = {
+                            stayedToWatch: data.stayedToWatch,
+                            swipedAway: data.swipedAway,
+                            subscriberStayed: data.subscriberStayed || null,
+                            subscriberSwiped: data.subscriberSwiped || null,
+                            nonSubscriberStayed: data.nonSubscriberStayed || null,
+                            nonSubscriberSwiped: data.nonSubscriberSwiped || null,
+                            scrapedAt: data.scrapedAt
+                        };
+                        const analysisPath = path.join(__dirname, 'video_data', videoId, 'analysis.json');
+                        fs.mkdirSync(path.dirname(analysisPath), { recursive: true });
+                        fs.writeFileSync(analysisPath, JSON.stringify(analysis, null, 2));
+                        videoAnalyzer.uploadAnalysisToR2(videoId, analysis);
+                    }
+                } catch (e) {
+                    console.error(`[swipe] Failed to save ${videoId}:`, e.message);
+                }
+            }
+            const ok = Object.values(results).filter(r => !r.error).length;
+            const fail = Object.values(results).filter(r => r.error).length;
+            console.log(`[swipe] Done! ${ok} scraped, ${fail} failed`);
+        }).catch(err => {
+            console.error('[swipe] Scrape failed:', err.message);
+        });
+
+        return;
+    }
+
+    // =========================================
+    // API: Performance Scoring — rank video against last 10 at same time interval
+    // =========================================
+    const perfScoreMatch = pathname.match(/^\/api\/video\/performance-score\/([a-zA-Z0-9_-]+)$/);
+    if (perfScoreMatch && req.method === 'GET') {
+        const targetId = perfScoreMatch[1];
+        try {
+            // Load the target video's analysis
+            const targetAnalysis = await videoAnalyzer.getAnalysis(targetId);
+            if (!targetAnalysis || !targetAnalysis.analytics || !targetAnalysis.analytics.totalViews) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No analytics data for this video. Fetch analytics first.' }));
+                return;
+            }
+
+            // How many days since this video was uploaded?
+            function getUploadDate(analysis) {
+                const ud = analysis.metadata?.uploadDate;
+                if (!ud) return null;
+                return new Date(ud.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
+            }
+            const targetUpload = getUploadDate(targetAnalysis);
+            const targetDaysSinceUpload = targetUpload
+                ? Math.max(1, Math.floor((Date.now() - targetUpload.getTime()) / 86400000))
+                : null;
+
+            // Get cumulative views at the target's current age from dailyViews
+            function getCumulativeAtDay(analysis, dayNum) {
+                const dv = analysis.analytics?.dailyViews;
+                if (!dv || dv.length === 0) return null;
+                // dailyViews is sorted chronologically, cumulative is pre-computed
+                if (dayNum >= dv.length) return dv[dv.length - 1].cumulative;
+                return dv[Math.max(0, dayNum - 1)]?.cumulative ?? null;
+            }
+
+            const targetViewsAtAge = targetDaysSinceUpload
+                ? getCumulativeAtDay(targetAnalysis, targetDaysSinceUpload)
+                : targetAnalysis.analytics.totalViews;
+
+            // Format the time label (e.g., "First 6 days")
+            const timeLabel = targetDaysSinceUpload
+                ? `First ${targetDaysSinceUpload} day${targetDaysSinceUpload !== 1 ? 's' : ''}`
+                : 'All time';
+
+            // Load all analysis files from R2 to find comparison videos
+            const allVideos = [];
+            if (cloud.isR2Ready()) {
+                const keys = await cloud.listR2Keys('videos/');
+                const videoIds = [...new Set(keys.filter(k => k.endsWith('/analysis.json')).map(k => k.split('/')[1]))];
+                for (const vid of videoIds) {
+                    if (vid === targetId) continue;
+                    try {
+                        const a = await videoAnalyzer.getAnalysis(vid);
+                        if (a && a.analytics && a.analytics.totalViews != null && a.analyzedAt) {
+                            allVideos.push(a);
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            // Sort by upload date (most recent first), take last 10
+            allVideos.sort((a, b) => {
+                const da = a.metadata?.uploadDate || '';
+                const db = b.metadata?.uploadDate || '';
+                return db.localeCompare(da);
+            });
+            const comparisons = allVideos.slice(0, 10);
+
+            // For each comparison video, get their cumulative views at the SAME day count
+            const compViewsAtAge = comparisons.map(a => {
+                if (!targetDaysSinceUpload) return a.analytics.totalViews;
+                return getCumulativeAtDay(a, targetDaysSinceUpload);
+            }).filter(v => v != null);
+
+            const compRetentions = comparisons.map(a => a.analytics.avgRetention || 0);
+            const compRevenues = comparisons.map(a => a.analytics.estimatedRevenue || 0);
+            const compEngagementRates = comparisons.map(a => {
+                if (a.analytics.engagedViews && a.analytics.totalViews)
+                    return (a.analytics.engagedViews / a.analytics.totalViews) * 100;
+                return null;
+            }).filter(v => v != null);
+
+            const targetEngagementRate = (targetAnalysis.analytics.engagedViews && targetAnalysis.analytics.totalViews)
+                ? (targetAnalysis.analytics.engagedViews / targetAnalysis.analytics.totalViews) * 100
+                : null;
+            const targetRevenue = targetAnalysis.analytics.estimatedRevenue || 0;
+            const targetAvgRet = targetAnalysis.analytics.avgRetention || 0;
+
+            // Rank: position among comparisons (1 = best, 10 = worst)
+            function rankScore(val, compArr) {
+                if (compArr.length === 0) return null;
+                const beaten = compArr.filter(c => val > c).length;
+                return Math.max(1, Math.min(10, 11 - (Math.round((beaten / compArr.length) * 9) + 1)));
+            }
+
+            // Build typical range from comparisons
+            let typicalLow = null, typicalHigh = null, typicalMedian = null;
+            if (compViewsAtAge.length > 0) {
+                const sorted = [...compViewsAtAge].sort((a, b) => a - b);
+                typicalLow = sorted[Math.floor(sorted.length * 0.25)];
+                typicalHigh = sorted[Math.floor(sorted.length * 0.75)];
+                typicalMedian = sorted[Math.floor(sorted.length / 2)];
+            }
+
+            const viewsScore = compViewsAtAge.length > 0 ? rankScore(targetViewsAtAge, compViewsAtAge) : null;
+            const retScore = comparisons.length > 0 ? rankScore(targetAvgRet, compRetentions) : null;
+            const revScore = comparisons.length > 0 ? rankScore(targetRevenue, compRevenues) : null;
+            const engScore = (targetEngagementRate != null && compEngagementRates.length > 0)
+                ? rankScore(targetEngagementRate, compEngagementRates) : null;
+
+            // Overall score = views-based ranking (like YouTube Studio)
+            const typical = viewsScore;
+
+            // Balanced = weighted composite
+            let balanced = null;
+            if (viewsScore != null && retScore != null) {
+                const hasRev = targetRevenue > 0 || compRevenues.some(r => r > 0);
+                const hasEng = engScore != null;
+                if (hasRev && hasEng) {
+                    balanced = Math.round(viewsScore * 0.3 + retScore * 0.25 + engScore * 0.2 + revScore * 0.25);
+                } else if (hasRev) {
+                    balanced = Math.round(viewsScore * 0.4 + retScore * 0.3 + revScore * 0.3);
+                } else if (hasEng) {
+                    balanced = Math.round(viewsScore * 0.4 + retScore * 0.3 + engScore * 0.3);
+                } else {
+                    balanced = Math.round(viewsScore * 0.5 + retScore * 0.5);
+                }
+                balanced = Math.max(1, Math.min(10, balanced));
+            }
+
+            const metricsObj = {
+                views: { value: targetViewsAtAge || targetAnalysis.analytics.totalViews, score: viewsScore },
+                avgRetention: { value: targetAvgRet, score: retScore },
+                revenue: { value: targetRevenue, score: revScore },
+            };
+            if (engScore != null) {
+                metricsObj.engagementRate = { value: targetEngagementRate, score: engScore };
+            }
+
+            // Comparison video list (for UI display)
+            const compList = comparisons.map((a, i) => ({
+                videoId: a.videoId,
+                title: a.metadata?.title || a.videoId,
+                viewsAtAge: compViewsAtAge[i] ?? a.analytics.totalViews,
+            })).sort((a, b) => (b.viewsAtAge || 0) - (a.viewsAtAge || 0));
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                typical,
+                balanced,
+                metrics: metricsObj,
+                comparedTo: comparisons.length,
+                timeLabel,
+                daysSinceUpload: targetDaysSinceUpload,
+                targetViews: targetViewsAtAge || targetAnalysis.analytics.totalViews,
+                typicalRange: typicalLow != null ? { low: typicalLow, median: typicalMedian, high: typicalHigh } : null,
+                compList
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // Privacy Policy (for Google OAuth app publishing)
+    // =========================================
+    if (pathname === '/privacy-policy' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`<!DOCTYPE html><html><head><title>Privacy Policy - Business World</title>
+<style>body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:0 20px;color:#333;line-height:1.6;}h1{color:#5a3e1b;}</style></head><body>
+<h1>Privacy Policy</h1>
+<p><strong>Last updated:</strong> February 2026</p>
+<p>Business World is a personal productivity tool. This application accesses YouTube Analytics data solely for the account owner's personal use.</p>
+<h2>Data We Access</h2>
+<ul><li>YouTube Analytics data (video performance, retention, revenue metrics)</li>
+<li>This data is only displayed to you within the application and is not shared with any third parties.</li></ul>
+<h2>Data Storage</h2>
+<p>Analytics data is cached locally and in private cloud storage (Cloudflare R2) solely for your convenience. No data is sold, shared, or used for advertising.</p>
+<h2>Third-Party Services</h2>
+<p>This app uses Google OAuth to authenticate with YouTube. No data is sent to any other third parties.</p>
+<h2>Contact</h2>
+<p>Tyler Csatari — tyler@tylercsatari.com</p>
+</body></html>`);
         return;
     }
 
@@ -556,4 +1275,8 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
     console.log(`Business World running at http://localhost:${PORT}`);
+
+    // Initialize R2 cloud storage and resume interrupted jobs
+    cloud.initR2();
+    videoAnalyzer.resumeJobs(process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
 });

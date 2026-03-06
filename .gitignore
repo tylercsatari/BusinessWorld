@@ -1,3 +1,7 @@
 node_modules/
 .env
 StorageAI/api_keys.json
+video_data/
+yt-session.json
+yt-chrome-profile/
+swipe-debug-*.txt

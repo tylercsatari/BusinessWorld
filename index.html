@@ -22,12 +22,24 @@
         #calendar-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
         #calendar-hud-btn:hover { transform: scale(1.1); }
         #calendar-badge { position: absolute; top: -5px; right: -5px; background: #0984e3; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        #invoices-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
+        #invoices-hud-btn:hover { transform: scale(1.1); }
+        #invoices-badge { position: absolute; top: -5px; right: -5px; background: #27ae60; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        #finance-breakdown { margin-top: 6px; font-size: 12px; }
+        .finance-row { display: flex; align-items: center; padding: 1px 0; gap: 6px; }
+        .finance-label { font-family: 'Fredoka One', cursive; color: #8B5E3C; min-width: 62px; font-size: 11px; }
+        .finance-value { font-family: 'Fredoka One', cursive; text-align: right; flex: 1; font-size: 12px; color: #5a3e1b; }
+        .finance-green { color: #27ae60; }
+        .finance-red { color: #e74c3c; }
+        .finance-edit-btn { width: 18px; height: 18px; border: none; background: transparent; cursor: pointer; color: #bbb; font-size: 12px; padding: 0; line-height: 18px; }
+        .finance-edit-btn:hover { color: #5a3e1b; }
+        .finance-divider { height: 1px; background: #e0d5c0; margin: 3px 0; }
+        .finance-net-row .finance-value { font-size: 14px; font-weight: bold; }
         #money-display { background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,250,240,0.95)); border: 3px solid #5a3e1b; border-radius: 18px; padding: 12px 22px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); min-width: 280px; }
         #level-text { font-family: 'Fredoka One', cursive; font-size: 20px; color: #5a3e1b; margin-bottom: 6px; }
         #money-bar-container { background: #e0d5c0; border-radius: 12px; height: 26px; overflow: hidden; border: 2px solid #5a3e1b; box-shadow: inset 0 2px 4px rgba(0,0,0,0.15); }
         #money-bar-fill { height: 100%; border-radius: 10px; transition: width 0.5s; background: linear-gradient(90deg, #2ecc71, #27ae60, #f1c40f, #f39c12); background-size: 200% 100%; animation: shimmer 2s linear infinite; }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        #money-text { font-family: 'Fredoka One', cursive; font-size: 17px; color: #27ae60; margin-top: 5px; text-align: right; }
         #edit-btn { position: fixed; bottom: 20px; right: 20px; z-index: 100; padding: 14px 28px; background: linear-gradient(135deg, #3498db, #2980b9); color: white; border: 3px solid #1a5276; border-radius: 18px; font-family: 'Fredoka One', cursive; font-size: 16px; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.3); transition: all 0.2s; }
         #edit-btn:hover { transform: scale(1.05); }
         #edit-btn.active { background: linear-gradient(135deg, #e74c3c, #c0392b); border-color: #7b241c; }
@@ -67,13 +79,17 @@
             #joystick-zone { display: block; }
             #money-display { min-width: 180px; padding: 8px 14px; }
             #level-text { font-size: 16px; }
-            #money-text { font-size: 14px; }
             #money-bar-container { height: 20px; }
             #edit-btn { padding: 10px 20px; font-size: 14px; bottom: 30px; }
             #path-btn { padding: 10px 20px; font-size: 14px; bottom: 30px; }
             #hamburger-btn { width: 44px; height: 44px; }
             #todo-bell-btn { width: 36px; height: 36px; }
             #calendar-hud-btn { width: 36px; height: 36px; }
+            #invoices-hud-btn { width: 36px; height: 36px; }
+            #finance-breakdown { font-size: 11px; }
+            .finance-label { font-size: 10px; min-width: 52px; }
+            .finance-value { font-size: 11px; }
+            .finance-net-row .finance-value { font-size: 12px; }
         }
         #loading-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #2d5016, #4a8c2a); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         #loading-overlay .title { font-family: 'Fredoka One', cursive; font-size: 48px; color: #fff; text-shadow: 0 4px 12px rgba(0,0,0,0.3); margin-bottom: 30px; }
@@ -87,6 +103,7 @@
     <link rel="stylesheet" href="buildings/incubator/incubator.css">
     <link rel="stylesheet" href="buildings/workshop/workshop.css">
     <link rel="stylesheet" href="buildings/pen/pen.css">
+    <link rel="stylesheet" href="buildings/pen/pen-analysis.css">
 </head>
 <body>
 <div id="hud">
@@ -100,11 +117,35 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <span id="calendar-badge" style="display:none;">0</span>
         </button>
+        <button id="invoices-hud-btn" onclick="openModal('Library', null, {tab:'invoices'})">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span id="invoices-badge" style="display:none;">0</span>
+        </button>
     </div>
     <div id="money-display">
         <div id="level-text">Lv. 1</div>
         <div id="money-bar-container"><div id="money-bar-fill" style="width: 20%"></div></div>
-        <div id="money-text">$20,000</div>
+        <div id="finance-breakdown">
+            <div class="finance-row">
+                <span class="finance-label">Bank</span>
+                <span class="finance-value" id="finance-bank">$0</span>
+                <button class="finance-edit-btn" onclick="editFinance('bank')">&#9998;</button>
+            </div>
+            <div class="finance-row">
+                <span class="finance-label">Expected</span>
+                <span class="finance-value finance-green" id="finance-expected">+$0</span>
+            </div>
+            <div class="finance-row">
+                <span class="finance-label">Expenses</span>
+                <span class="finance-value finance-red" id="finance-expenses">-$0/mo</span>
+                <button class="finance-edit-btn" onclick="editFinance('expenses')">&#9998;</button>
+            </div>
+            <div class="finance-divider"></div>
+            <div class="finance-row finance-net-row">
+                <span class="finance-label">Net</span>
+                <span class="finance-value" id="finance-net">$0</span>
+            </div>
+        </div>
     </div>
 </div>
 <button id="edit-btn" onclick="toggleEditMode()">Edit Mode</button>
@@ -149,6 +190,11 @@
     <div class="control-row"><span class="control-desc">Finance - Wall Street tower</span></div>
     <div class="control-row"><span class="control-desc">The House - Home sweet home</span></div>
     <div class="control-row"><span class="control-desc">Movie Theatre - Art-deco cinema</span></div>
+    <div class="divider"></div>
+    <h3>Settings</h3>
+    <div id="menu-yt-settings" style="margin-bottom:12px;">
+        <div style="color:#888;font-size:13px;">Loading...</div>
+    </div>
 </div>
 
 <script src="config.js"></script>
@@ -179,7 +225,7 @@ function hashString(str) {
 }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/geopattern/1.2.3/js/geopattern.min.js"></script>
-<script src="buildings/notion-helpers.js"></script>
+<script src="buildings/html-utils.js"></script>
 <script src="buildings/video-service.js"></script>
 <script src="buildings/library/notes-service.js"></script>
 <script src="buildings/library/script-service.js"></script>
@@ -360,7 +406,9 @@ function gridKey(gx, gz) { return `${gx},${gz}`; }
 let gridHelper = null;
 
 // --- Global State ---
-let editMode = false, pathPlaceMode = false, money = 20000, level = 1;
+let editMode = false, pathPlaceMode = false, level = 1;
+let finances = { bank: 20000, expenses: 0 };
+Object.defineProperty(window, 'money', { get() { return finances.bank; }, set(v) { finances.bank = v; } });
 const LEVEL_THRESHOLD = 100000;
 let dragObject = null;
 const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -2117,6 +2165,7 @@ function saveLayout() {
         employees: employees.map(e => ({ name: e.userData.name, x: e.position.x, z: e.position.z })),
         penSize: { w: penSize.w, d: penSize.d },
         flags: projectFlags.map(f => ({ name: f.userData.projectName, x: f.position.x, z: f.position.z })),
+        finances: finances,
     };
     BUILDING_NAMES.forEach(n => {
         const b = getBuildingByName(n);
@@ -2217,12 +2266,18 @@ async function init() {
             if (emp) { emp.position.x = se.x; emp.position.z = se.z; }
         });
     }
+    // Restore finances
+    if (saved && saved.finances) {
+        if (saved.finances.bank) finances.bank = saved.finances.bank;
+        if (saved.finances.expenses) finances.expenses = saved.finances.expenses;
+    }
     // Fire all async API calls in parallel
     Promise.all([
         initProjectFlags(saved && saved.flags).catch(e => console.warn('Project flags init failed:', e)),
         spawnPostedCreatures().catch(e => console.warn('Pen creatures failed:', e)),
         typeof LibraryUI !== 'undefined' ? LibraryUI.preloadTodoCount().catch(() => {}) : Promise.resolve(),
         typeof LibraryUI !== 'undefined' ? LibraryUI.preloadCalendarCount().catch(() => {}) : Promise.resolve(),
+        typeof LibraryUI !== 'undefined' ? LibraryUI.preloadInvoicesCount().catch(() => {}) : Promise.resolve(),
     ]);
     saveLayout();
     // Create ambient particles
@@ -2360,16 +2415,18 @@ function initCharacters() {
 // --- Pen Creature: Fluff Ball ---
 let penCreature = null; // single demo creature (legacy)
 let penCreatures = []; // all video fluffballs in the pen
-function createPenCreature(creatureName = 'Fluffball', isBacklog = false) {
+function createPenCreature(creatureName = 'Fluffball', isBacklog = false, isGhost = false) {
     const rng = (typeof seededRng === 'function') ? seededRng(hashString(creatureName)) : () => Math.random();
 
     const g = new THREE.Group();
-    g.userData = { name: creatureName, type: 'creature', isClickable: true, isBacklog };
+    g.userData = { name: creatureName, type: 'creature', isClickable: true, isBacklog, isGhost };
 
+    const needsTransparency = isBacklog || isGhost;
     // Body — sphere with GeoPattern texture (matches one of the project flags)
     const bodyMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide,
-        transparent: isBacklog, opacity: isBacklog ? 0.5 : 1.0
+        color: isGhost ? 0xffffff : 0xffffff, roughness: 0.85, side: THREE.DoubleSide,
+        transparent: needsTransparency, opacity: isGhost ? 0.45 : (isBacklog ? 0.5 : 1.0),
+        emissive: isGhost ? 0xffffff : 0x000000, emissiveIntensity: isGhost ? 0.3 : 0
     });
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 24), bodyMat);
     body.position.y = 0.55;
@@ -2377,8 +2434,8 @@ function createPenCreature(creatureName = 'Fluffball', isBacklog = false) {
     addOutline(body, 0.025, 0x1a1a2e);
     g.add(body);
 
-    // Apply GeoPattern texture to body (same logic as flags)
-    if (typeof GeoPattern !== 'undefined' && typeof hashString === 'function' && typeof seededRng === 'function') {
+    // Apply GeoPattern texture to body (same logic as flags) — skip for ghosts
+    if (!isGhost && typeof GeoPattern !== 'undefined' && typeof hashString === 'function' && typeof seededRng === 'function') {
         const patternName = creatureName;
         const GEO_GENERATORS = [
             'chevrons', 'octogons', 'overlappingCircles', 'plusSigns', 'xes',
@@ -2428,8 +2485,9 @@ function createPenCreature(creatureName = 'Fluffball', isBacklog = false) {
         depthWrite: false,
         side: THREE.FrontSide,
         uniforms: {
-            uColor: { value: new THREE.Color(0xaaaaaa) },
-            uTime: { value: 0 }
+            uColor: { value: new THREE.Color(isGhost ? 0xffffff : 0xaaaaaa) },
+            uTime: { value: 0 },
+            uOpacity: { value: isGhost ? 0.25 : 1.0 }
         },
         vertexShader: `
             varying vec3 vNormal, vViewDir;
@@ -2447,6 +2505,7 @@ function createPenCreature(creatureName = 'Fluffball', isBacklog = false) {
             }`,
         fragmentShader: `
             uniform vec3 uColor;
+            uniform float uOpacity;
             varying vec3 vNormal, vViewDir;
             varying float vNoise;
             void main() {
@@ -2456,6 +2515,7 @@ function createPenCreature(creatureName = 'Fluffball', isBacklog = false) {
                 float alpha = edge * 0.5 + 0.05;
                 // Add noise variation for organic feel
                 alpha += vNoise * 0.06;
+                alpha *= uOpacity;
                 vec3 col = uColor + vec3(0.15) * edge;
                 gl_FragColor = vec4(col, alpha);
             }`
@@ -2478,7 +2538,7 @@ function createPenCreature(creatureName = 'Fluffball', isBacklog = false) {
     });
 
     // Tiny feet
-    const feetMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8 });
+    const feetMat = new THREE.MeshStandardMaterial({ color: isGhost ? 0xeeeeee : 0x666666, roughness: 0.8, transparent: isGhost, opacity: isGhost ? 0.35 : 1.0 });
     [[-0.2, 0.08, 0.15], [0.2, 0.08, 0.15], [-0.15, 0.08, -0.15], [0.15, 0.08, -0.15]].forEach(([x, y, z]) => {
         const foot = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), feetMat.clone());
         foot.position.set(x, y, z);
@@ -2526,8 +2586,9 @@ async function spawnPostedCreatures(skipSync) {
         const hd = penSize.d / 2 - 1;
         posted.forEach((v, i) => {
             const isBacklog = !v.linkedScriptId && !v.hook && !v.context && v.links;
+            const isGhost = !v.project;
             const name = v.project || v.name;
-            const c = createPenCreature(name, isBacklog);
+            const c = createPenCreature(name, isBacklog, isGhost);
             c.userData.name = v.name;
             c.userData.videoId = v.id;
             c.userData.project = v.project || '';
@@ -2644,7 +2705,90 @@ function initAmbientParticles() {
 }
 
 // --- UI ---
-window.toggleMenu = function () { document.getElementById('menu-panel').classList.toggle('open'); document.getElementById('menu-overlay').classList.toggle('visible'); };
+window.toggleMenu = function () {
+    const panel = document.getElementById('menu-panel');
+    const overlay = document.getElementById('menu-overlay');
+    panel.classList.toggle('open');
+    overlay.classList.toggle('visible');
+    if (panel.classList.contains('open')) renderYouTubeSettings();
+};
+
+function renderYouTubeSettings() {
+    const el = document.getElementById('menu-yt-settings');
+    if (!el) return;
+    el.innerHTML = '<div style="color:#888;font-size:13px;">Checking...</div>';
+    fetch('/api/youtube/status').then(r => r.json()).then(status => {
+        if (status.isConnected) {
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:#27ae60;">YouTube Connected</div>
+                        <div style="font-size:11px;color:#888;">Analytics + Revenue permissions</div>
+                    </div>
+                    <button id="menu-yt-disconnect" style="background:none;color:#e74c3c;border:1px solid #e74c3c;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;">Disconnect</button>
+                </div>
+            `;
+            document.getElementById('menu-yt-disconnect').addEventListener('click', async () => {
+                const btn = document.getElementById('menu-yt-disconnect');
+                btn.disabled = true; btn.textContent = 'Disconnecting...';
+                await fetch('/api/youtube/clear-token', { method: 'POST' });
+                renderYouTubeSettings();
+            });
+        } else if (status.hasCredentials) {
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:#856404;">YouTube Disconnected</div>
+                        <div style="font-size:11px;color:#888;">Sign in to enable analytics</div>
+                    </div>
+                    <button id="menu-yt-signin" style="background:#ff0000;color:white;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;">Sign In</button>
+                </div>
+            `;
+            document.getElementById('menu-yt-signin').addEventListener('click', async () => {
+                try {
+                    const res = await fetch('/api/youtube/auth-url');
+                    const data = await res.json();
+                    if (data.error) { alert(data.error); return; }
+                    if (data.url) {
+                        const popup = window.open(data.url, 'youtube-auth', 'width=500,height=700');
+                        const check = setInterval(() => {
+                            if (!popup || popup.closed) { clearInterval(check); renderYouTubeSettings(); }
+                        }, 1000);
+                    }
+                } catch (e) { alert('Failed to get auth URL'); }
+            });
+        } else {
+            el.innerHTML = `
+                <div>
+                    <div style="font-size:14px;font-weight:700;color:#888;margin-bottom:8px;">YouTube Analytics</div>
+                    <div style="font-size:12px;color:#888;margin-bottom:10px;">Enter Google Cloud OAuth credentials to connect.</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <input type="text" id="menu-yt-cid" placeholder="Client ID" style="border:1px solid #d8e4d8;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;">
+                        <input type="text" id="menu-yt-csec" placeholder="Client Secret" style="border:1px solid #d8e4d8;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;">
+                        <button id="menu-yt-save" style="background:#00b894;color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">Save & Connect</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('menu-yt-save').addEventListener('click', async () => {
+                const clientId = document.getElementById('menu-yt-cid').value.trim();
+                const clientSecret = document.getElementById('menu-yt-csec').value.trim();
+                if (!clientId || !clientSecret) { alert('Enter both Client ID and Client Secret'); return; }
+                const btn = document.getElementById('menu-yt-save');
+                btn.disabled = true; btn.textContent = 'Saving...';
+                try {
+                    await fetch('/api/youtube/save-credentials', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ clientId, clientSecret })
+                    });
+                    renderYouTubeSettings();
+                } catch (e) { alert('Failed: ' + e.message); btn.disabled = false; btn.textContent = 'Save & Connect'; }
+            });
+        }
+    }).catch(() => {
+        el.innerHTML = '<div style="color:#e74c3c;font-size:13px;">Could not check YouTube status</div>';
+    });
+}
 window.toggleEditMode = function () {
     editMode = !editMode;
     if (!editMode) { pathPlaceMode = false; document.getElementById('path-btn').classList.remove('active'); }
@@ -2701,7 +2845,28 @@ window.closeModal = function () {
     modal.classList.remove('modal-expanded');
     document.getElementById('modal-overlay').classList.remove('visible');
 };
-function updateMoney() { level = Math.floor(money / LEVEL_THRESHOLD) + 1; const p = (money % LEVEL_THRESHOLD) / LEVEL_THRESHOLD; document.getElementById('level-text').textContent = `Lv. ${level}`; document.getElementById('money-bar-fill').style.width = `${p * 100}%`; document.getElementById('money-text').textContent = `$${money.toLocaleString()}`; updateMoneyPitFill(p); }
+function updateMoney() { level = Math.floor(money / LEVEL_THRESHOLD) + 1; const p = (money % LEVEL_THRESHOLD) / LEVEL_THRESHOLD; document.getElementById('level-text').textContent = `Lv. ${level}`; document.getElementById('money-bar-fill').style.width = `${p * 100}%`; updateMoneyPitFill(p); updateFinanceDisplay(); }
+window.updateFinanceDisplay = function updateFinanceDisplay() {
+    const expected = typeof LibraryUI !== 'undefined' ? LibraryUI.getExpectedIncomeCAD() : 0;
+    const net = finances.bank + expected - finances.expenses;
+    document.getElementById('finance-bank').textContent = '$' + finances.bank.toLocaleString();
+    document.getElementById('finance-expected').textContent = '+$' + Math.round(expected).toLocaleString();
+    document.getElementById('finance-expenses').textContent = '-$' + finances.expenses.toLocaleString() + '/mo';
+    const netEl = document.getElementById('finance-net');
+    netEl.textContent = (net >= 0 ? '$' : '-$') + Math.abs(Math.round(net)).toLocaleString();
+    netEl.style.color = net >= 0 ? '#27ae60' : '#e74c3c';
+};
+window.editFinance = function(field) {
+    const label = field === 'bank' ? 'bank balance' : 'monthly expenses';
+    const val = prompt('Enter current ' + label + ':');
+    if (val === null) return;
+    const num = parseFloat(val.replace(/[^0-9.]/g, ''));
+    if (isNaN(num)) return;
+    finances[field] = num;
+    if (field === 'bank') updateMoney();
+    else updateFinanceDisplay();
+    saveLayout();
+};
 updateMoney();
 
 // --- Input ---
