@@ -75,7 +75,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
         if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     }
 
@@ -1226,6 +1226,318 @@ const server = http.createServer(async (req, res) => {
                 res.end('Invalid JSON');
             }
         });
+        return;
+    }
+
+    // =========================================
+    // READ-ONLY API v1 — /api/v1/*
+    // External programs can query all data without modifying anything.
+    // Auth: set API_READ_KEY in .env to require ?key= or X-API-Key header.
+    // =========================================
+    if (pathname.startsWith('/api/v1/')) {
+        // Auth check
+        const apiKey = process.env.API_READ_KEY;
+        if (apiKey) {
+            const provided = url.searchParams.get('key') || req.headers['x-api-key'];
+            if (provided !== apiKey) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid or missing API key' }));
+                return;
+            }
+        }
+
+        // Only GET allowed
+        if (req.method !== 'GET') {
+            res.writeHead(405, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Read-only API: only GET requests allowed' }));
+            return;
+        }
+
+        const json = (data, status = 200) => {
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        };
+
+        try {
+            const v1path = pathname.slice('/api/v1'.length); // e.g. "/videos" or "/videos/abc123"
+
+            // --- Overview: summary stats across everything ---
+            if (v1path === '/overview') {
+                const [videos, ideas, scripts, todos, calendar, invoices] = await Promise.all(
+                    ['videos', 'ideas', 'scripts', 'todos', 'calendar', 'invoices'].map(c => dataStore.getAll(c))
+                );
+                // Inventory from Airtable
+                let boxCount = 0, itemCount = 0;
+                try {
+                    const boxRes = await fetch(`https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent('Box')}?pageSize=100`, {
+                        headers: { 'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}` }
+                    });
+                    const boxData = await boxRes.json();
+                    boxCount = boxData.records?.length || 0;
+                    const itemRes = await fetch(`https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent('Items')}?pageSize=100`, {
+                        headers: { 'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}` }
+                    });
+                    const itemData = await itemRes.json();
+                    itemCount = itemData.records?.length || 0;
+                } catch (e) {}
+
+                json({
+                    videos: { total: videos.length, complete: videos.filter(v => v.analysisStatus === 'complete').length },
+                    ideas: { total: ideas.length },
+                    scripts: { total: scripts.length },
+                    todos: { total: todos.length },
+                    calendar: { total: calendar.length },
+                    invoices: { total: invoices.length },
+                    inventory: { boxes: boxCount, items: itemCount }
+                });
+                return;
+            }
+
+            // --- Data store collections: videos, ideas, scripts, todos, calendar, invoices ---
+            const collectionMatch = v1path.match(/^\/(videos|ideas|scripts|todos|calendar|invoices)(?:\/([^/]+))?$/);
+            if (collectionMatch) {
+                const collection = collectionMatch[1];
+                const id = collectionMatch[2];
+
+                if (id) {
+                    const record = await dataStore.getById(collection, id);
+                    if (!record) { json({ error: 'Not found' }, 404); return; }
+                    json(record);
+                } else {
+                    const records = await dataStore.getAll(collection);
+                    json(records);
+                }
+                return;
+            }
+
+            // --- Video analysis (by YouTube video ID) ---
+            const analysisMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/analysis$/);
+            if (analysisMatch) {
+                const analysis = await videoAnalyzer.getAnalysis(analysisMatch[1]);
+                if (!analysis) { json({ error: 'No analysis found' }, 404); return; }
+                json(analysis);
+                return;
+            }
+
+            // --- Video analytics only ---
+            const analyticsMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/analytics$/);
+            if (analyticsMatch) {
+                const analysis = await videoAnalyzer.getAnalysis(analyticsMatch[1]);
+                if (!analysis || !analysis.analytics) { json({ error: 'No analytics found' }, 404); return; }
+                json(analysis.analytics);
+                return;
+            }
+
+            // --- Video analytics history (snapshots over time) ---
+            const analyticsHistMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/analytics\/history$/);
+            if (analyticsHistMatch) {
+                const snapshots = await cloud.getAllAnalyticsSnapshots(analyticsHistMatch[1]);
+                json({ videoId: analyticsHistMatch[1], snapshots });
+                return;
+            }
+
+            // --- Video transcript ---
+            const transcriptMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/transcript$/);
+            if (transcriptMatch) {
+                const analysis = await videoAnalyzer.getAnalysis(transcriptMatch[1]);
+                if (!analysis || !analysis.transcript) { json({ error: 'No transcript found' }, 404); return; }
+                json(analysis.transcript);
+                return;
+            }
+
+            // --- Video frames list ---
+            const framesMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/frames$/);
+            if (framesMatch) {
+                const analysis = await videoAnalyzer.getAnalysis(framesMatch[1]);
+                if (!analysis || !analysis.frames) { json({ error: 'No frames found' }, 404); return; }
+                json(analysis.frames.map(f => ({
+                    timestamp: f.timestamp,
+                    filename: f.filename,
+                    analysis: f.analysis || null,
+                    url: `/api/v1/videos/${framesMatch[1]}/frames/${f.filename}${apiKey ? '?key=' + apiKey : ''}`
+                })));
+                return;
+            }
+
+            // --- Video single frame image ---
+            const frameMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/frames\/([a-zA-Z0-9_.-]+)$/);
+            if (frameMatch) {
+                const [, vid, filename] = frameMatch;
+                // Try local first
+                const framePath = videoAnalyzer.getFramePath(vid, filename);
+                if (framePath) {
+                    const data = fs.readFileSync(framePath);
+                    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+                    res.end(data);
+                    return;
+                }
+                // Try R2 signed URL redirect
+                const r2Url = await videoAnalyzer.getFrameR2Url(vid, filename);
+                if (r2Url) {
+                    res.writeHead(302, { 'Location': r2Url, 'Cache-Control': 'public, max-age=3600' });
+                    res.end();
+                    return;
+                }
+                res.writeHead(404); res.end('Not found');
+                return;
+            }
+
+            // --- Video metadata (title, description, duration, etc.) ---
+            const metadataMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/metadata$/);
+            if (metadataMatch) {
+                const analysis = await videoAnalyzer.getAnalysis(metadataMatch[1]);
+                if (!analysis || !analysis.metadata) { json({ error: 'No metadata found' }, 404); return; }
+                json(analysis.metadata);
+                return;
+            }
+
+            // --- Video performance score ---
+            const perfMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/performance$/);
+            if (perfMatch) {
+                const targetId = perfMatch[1];
+                const targetAnalysis = await videoAnalyzer.getAnalysis(targetId);
+                if (!targetAnalysis || !targetAnalysis.analytics || !targetAnalysis.analytics.totalViews) {
+                    json({ error: 'No analytics data for this video' }, 404);
+                    return;
+                }
+                // Redirect to existing performance endpoint logic by forwarding internally
+                // We'll compute inline for the read-only API
+                function getUploadDate(a) {
+                    const ud = a.metadata?.uploadDate;
+                    if (!ud) return null;
+                    return new Date(ud.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
+                }
+                const targetUpload = getUploadDate(targetAnalysis);
+                const daysAge = targetUpload ? Math.max(1, Math.floor((Date.now() - targetUpload.getTime()) / 86400000)) : null;
+                function getCumAt(a, d) {
+                    const dv = a.analytics?.dailyViews;
+                    if (!dv || !dv.length) return null;
+                    if (d >= dv.length) return dv[dv.length - 1].cumulative;
+                    return dv[Math.max(0, d - 1)]?.cumulative ?? null;
+                }
+                const targetViewsAtAge = daysAge ? getCumAt(targetAnalysis, daysAge) : targetAnalysis.analytics.totalViews;
+
+                json({
+                    videoId: targetId,
+                    title: targetAnalysis.metadata?.title,
+                    daysSinceUpload: daysAge,
+                    viewsAtAge: targetViewsAtAge,
+                    totalViews: targetAnalysis.analytics.totalViews,
+                    avgRetention: targetAnalysis.analytics.avgRetention,
+                    engagedViews: targetAnalysis.analytics.engagedViews,
+                    estimatedRevenue: targetAnalysis.analytics.estimatedRevenue,
+                    swipedAwayRate: targetAnalysis.analytics.swipedAwayRate,
+                    viewedRate: targetAnalysis.analytics.viewedRate
+                });
+                return;
+            }
+
+            // --- All video analyses (bulk: returns all analyzed videos with full data) ---
+            if (v1path === '/videos/all/analyses') {
+                const videos = await dataStore.getAll('videos');
+                const results = [];
+                for (const v of videos) {
+                    if (!v.youtubeVideoId) continue;
+                    const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+                    if (analysis) {
+                        results.push({ record: v, analysis });
+                    }
+                }
+                json(results);
+                return;
+            }
+
+            // --- Inventory: boxes ---
+            if (v1path === '/inventory/boxes') {
+                const boxRes = await fetch(`https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent('Box')}?pageSize=100`, {
+                    headers: { 'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}` }
+                });
+                const boxData = await boxRes.json();
+                json(boxData.records || []);
+                return;
+            }
+
+            // --- Inventory: items ---
+            if (v1path === '/inventory/items') {
+                let allItems = [];
+                let offset = null;
+                do {
+                    const qs = offset ? `?pageSize=100&offset=${offset}` : '?pageSize=100';
+                    const itemRes = await fetch(`https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent('Items')}${qs}`, {
+                        headers: { 'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}` }
+                    });
+                    const data = await itemRes.json();
+                    allItems = allItems.concat(data.records || []);
+                    offset = data.offset || null;
+                } while (offset);
+                json(allItems);
+                return;
+            }
+
+            // --- Inventory: history ---
+            if (v1path === '/inventory/history') {
+                const histRes = await fetch(`https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent('History')}?pageSize=100&sort%5B0%5D%5Bfield%5D=Time&sort%5B0%5D%5Bdirection%5D=desc`, {
+                    headers: { 'Authorization': `Bearer ${process.env.AIRTABLE_TOKEN}` }
+                });
+                const histData = await histRes.json();
+                json(histData.records || []);
+                return;
+            }
+
+            // --- Dropbox file listing ---
+            if (v1path === '/dropbox/files') {
+                const folderPath = url.searchParams.get('path') || '';
+                const token = await cloud.getDropboxToken();
+                const dbxRes = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: folderPath || '', recursive: false, limit: 2000 })
+                });
+                const dbxData = await dbxRes.json();
+                json(dbxData);
+                return;
+            }
+
+            // --- Search across all collections ---
+            if (v1path === '/search') {
+                const q = (url.searchParams.get('q') || '').toLowerCase().trim();
+                if (!q) { json({ error: 'Missing ?q= parameter' }, 400); return; }
+
+                const results = {};
+                for (const col of dataStore.COLLECTIONS) {
+                    const records = await dataStore.getAll(col);
+                    const matches = records.filter(r => {
+                        const text = JSON.stringify(r).toLowerCase();
+                        return text.includes(q);
+                    });
+                    if (matches.length > 0) results[col] = matches;
+                }
+                json(results);
+                return;
+            }
+
+            // --- Not found ---
+            json({ error: 'Unknown endpoint', available: [
+                '/api/v1/overview',
+                '/api/v1/videos', '/api/v1/videos/:id',
+                '/api/v1/videos/:ytId/analysis', '/api/v1/videos/:ytId/analytics',
+                '/api/v1/videos/:ytId/analytics/history', '/api/v1/videos/:ytId/transcript',
+                '/api/v1/videos/:ytId/frames', '/api/v1/videos/:ytId/frames/:filename',
+                '/api/v1/videos/:ytId/metadata', '/api/v1/videos/:ytId/performance',
+                '/api/v1/videos/all/analyses',
+                '/api/v1/scripts', '/api/v1/scripts/:id',
+                '/api/v1/ideas', '/api/v1/ideas/:id',
+                '/api/v1/todos', '/api/v1/todos/:id',
+                '/api/v1/calendar', '/api/v1/calendar/:id',
+                '/api/v1/invoices', '/api/v1/invoices/:id',
+                '/api/v1/inventory/boxes', '/api/v1/inventory/items', '/api/v1/inventory/history',
+                '/api/v1/dropbox/files?path=',
+                '/api/v1/search?q='
+            ] }, 404);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
         return;
     }
 
