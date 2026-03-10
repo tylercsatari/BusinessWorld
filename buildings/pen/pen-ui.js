@@ -571,19 +571,6 @@ const PenUI = (() => {
             return;
         }
 
-        // Compute proportional scale when sorting by metric
-        let scaleMap = null;
-        if (sortMetric !== 'date' && metricsCache) {
-            const values = posted.map(v => getMetricValue(v.id, sortMetric));
-            const maxVal = Math.max(...values, 0.001); // avoid division by zero
-            scaleMap = {};
-            posted.forEach((v, i) => {
-                const ratio = values[i] / maxVal;
-                // Scale range: 0.45 (smallest) to 1.0 (largest)
-                scaleMap[v.id] = 0.45 + ratio * 0.55;
-            });
-        }
-
         const visible = posted.slice(0, visibleCount);
         const hasMore = posted.length > visibleCount;
 
@@ -592,11 +579,9 @@ const PenUI = (() => {
             const projBadge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(v.project) : escHtml(v.project || 'No project');
             const isAnalyzing = v.analysisStatus === 'analyzing';
             const noProject = !v.project;
-            const scale = scaleMap ? scaleMap[v.id] : 1;
-            const scaleStyle = scaleMap ? `style="--pen-scale:${scale.toFixed(3)}"` : '';
             const metricHtml = (sortMetric !== 'date' && metricsCache) ? `<span class="pen-metric-badge">${formatMetricValue(getMetricValue(v.id, sortMetric), sortMetric)}</span>` : '';
             return `
-            <div class="pen-video-card ${isBacklog ? 'backlog' : ''} ${noProject ? 'pen-no-project' : ''}" data-id="${v.id}" ${scaleStyle}>
+            <div class="pen-video-card ${isBacklog ? 'backlog' : ''} ${noProject ? 'pen-no-project' : ''}" data-id="${v.id}">
                 <div class="pen-video-badge">
                     <canvas class="pen-creature-canvas" data-project="${escAttr(v.project || v.name)}" data-ghost="${!v.project}" width="88" height="88"></canvas>
                 </div>
@@ -2792,11 +2777,8 @@ const PenUI = (() => {
             selectedVideo = null;
             analysisData = null;
             filterProject = '';
-            sortMetric = 'date';
-            metricsCache = null;
             currentPage = 'list';
-            // Reset 3D creature scales back to uniform
-            if (typeof updatePenCreatureScales === 'function') updatePenCreatureScales(null);
+            // Keep sortMetric, metricsCache, and 3D creature scales across close/open
         }
     };
 })();
