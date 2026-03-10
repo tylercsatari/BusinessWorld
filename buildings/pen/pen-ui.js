@@ -540,7 +540,11 @@ const PenUI = (() => {
         document.getElementById('pen-sort-select').addEventListener('change', async (e) => {
             sortMetric = e.target.value;
             if (sortMetric !== 'date' && !metricsCache) {
+                // Show loading state
+                const el = document.getElementById('pen-videos');
+                if (el) el.style.opacity = '0.4';
                 await fetchMetricsSummary();
+                if (el) el.style.opacity = '';
             }
             visibleCount = 50;
             renderVideos();
@@ -575,8 +579,8 @@ const PenUI = (() => {
             scaleMap = {};
             posted.forEach((v, i) => {
                 const ratio = values[i] / maxVal;
-                // Scale range: 0.6 (smallest) to 1.0 (largest)
-                scaleMap[v.id] = 0.6 + ratio * 0.4;
+                // Scale range: 0.45 (smallest) to 1.0 (largest)
+                scaleMap[v.id] = 0.45 + ratio * 0.55;
             });
         }
 
@@ -2763,7 +2767,7 @@ const PenUI = (() => {
                 NotesService.sync().catch(() => {}),
             ]).then(([p]) => {
                 projects = p;
-                if (container && currentPage === 'list') {
+                if (container && currentPage === 'list' && !metricsFetching) {
                     renderFilters();
                     renderVideos();
                 }
