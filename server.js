@@ -403,37 +403,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     // GET /api/video/metrics-summary — bulk metrics for all posted videos (for sorting in Pen)
-    // Server-side cache: rebuilds every 5 minutes max, instant for subsequent requests
+    // Fast path: single pre-built R2 file, memory cache, rebuilds every 5 min
     if (pathname === '/api/video/metrics-summary' && req.method === 'GET') {
         try {
-            const now = Date.now();
-            if (!global._metricsCache || now - global._metricsCacheTime > 300000) {
-                const videos = await dataStore.getAll('videos');
-                const posted = videos.filter(v => v.status === 'posted' && v.youtubeVideoId);
-                const summary = {};
-                await Promise.all(posted.map(async (v) => {
-                    try {
-                        const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
-                        if (!analysis) return;
-                        const meta = analysis.metadata || {};
-                        const an = analysis.analytics || {};
-                        summary[v.id] = {
-                            views: an.totalViews ?? meta.viewCount ?? 0,
-                            likes: an.likes ?? meta.likeCount ?? 0,
-                            comments: meta.commentCount ?? 0,
-                            revenue: an.estimatedRevenue ?? 0,
-                            shares: an.shares ?? 0,
-                            subsGained: an.subscribersGained ?? 0,
-                            avgRetention: an.avgRetention ?? 0,
-                            avgPercentViewed: an.avgPercentViewed ?? 0,
-                            engagementRate: (an.engagedViews && an.totalViews > 0) ? (an.engagedViews / an.totalViews) : 0
-                        };
-                    } catch (e) {}
-                }));
-                global._metricsCache = JSON.stringify(summary);
-                global._metricsCacheTime = now;
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' });
+            if (!global._metricsCache) await _loadOrBuildMetrics();
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=120' });
             res.end(global._metricsCache);
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -907,6 +881,8 @@ const server = http.createServer(async (req, res) => {
                 } catch (snapErr) {
                     console.warn(`Analytics snapshot save failed for ${ytVideoId}:`, snapErr.message);
                 }
+                // Invalidate metrics cache so next request rebuilds with fresh data
+                global._metricsCacheTime = 0;
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1624,10 +1600,66 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
+// Build or load metrics summary (single R2 file instead of 50+ individual reads)
+async function _loadOrBuildMetrics() {
+    // 1. Try memory cache (5-min TTL)
+    if (global._metricsCache && Date.now() - global._metricsCacheTime < 300000) return;
+    // 2. Try single pre-built R2 file (instant — one download)
+    if (cloud.isR2Ready()) {
+        try {
+            const buf = await cloud.downloadFromR2('cache/metrics-summary.json');
+            if (buf) {
+                global._metricsCache = buf.toString('utf8');
+                global._metricsCacheTime = Date.now();
+                console.log('Metrics: loaded from R2 cache');
+                return;
+            }
+        } catch (e) {}
+    }
+    // 3. Rebuild from individual analysis files (slow path — only on first ever build)
+    await _rebuildMetrics();
+}
+
+async function _rebuildMetrics() {
+    console.log('Metrics: rebuilding from analysis files...');
+    const t0 = Date.now();
+    const videos = await dataStore.getAll('videos');
+    const posted = videos.filter(v => v.status === 'posted' && v.youtubeVideoId);
+    const summary = {};
+    await Promise.all(posted.map(async (v) => {
+        try {
+            const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+            if (!analysis) return;
+            const meta = analysis.metadata || {};
+            const an = analysis.analytics || {};
+            summary[v.id] = {
+                views: an.totalViews ?? meta.viewCount ?? 0,
+                likes: an.likes ?? meta.likeCount ?? 0,
+                comments: meta.commentCount ?? 0,
+                revenue: an.estimatedRevenue ?? 0,
+                shares: an.shares ?? 0,
+                subsGained: an.subscribersGained ?? 0,
+                avgRetention: an.avgRetention ?? 0,
+                avgPercentViewed: an.avgPercentViewed ?? 0,
+                engagementRate: (an.engagedViews && an.totalViews > 0) ? (an.engagedViews / an.totalViews) : 0
+            };
+        } catch (e) {}
+    }));
+    global._metricsCache = JSON.stringify(summary);
+    global._metricsCacheTime = Date.now();
+    console.log(`Metrics: rebuilt in ${Date.now() - t0}ms (${Object.keys(summary).length} videos)`);
+    // Persist to R2 for fast loads on next cold start
+    if (cloud.isR2Ready()) {
+        cloud.uploadToR2('cache/metrics-summary.json', Buffer.from(global._metricsCache), 'application/json').catch(() => {});
+    }
+}
+
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();
 
 server.listen(PORT, () => {
     console.log(`Business World running at http://localhost:${PORT}`);
     videoAnalyzer.resumeJobs(process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
+    // Pre-warm metrics cache in background (ready before user opens Pen)
+    _loadOrBuildMetrics().catch(e => console.warn('Metrics pre-warm failed:', e.message));
 });

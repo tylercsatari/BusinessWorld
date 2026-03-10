@@ -82,18 +82,22 @@ const PenUI = (() => {
         const el = document.getElementById('pen-videos');
         if (!el) return;
         if (show) {
-            // Insert loading bar at top of video list
-            let bar = document.getElementById('pen-sort-loading');
-            if (!bar) {
-                bar = document.createElement('div');
-                bar.id = 'pen-sort-loading';
-                bar.className = 'pen-sort-loading';
-                bar.innerHTML = '<div class="pen-sort-loading-bar"></div><span>Loading metrics…</span>';
-                el.prepend(bar);
+            let overlay = document.getElementById('pen-sort-loading');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'pen-sort-loading';
+                overlay.className = 'pen-sort-overlay';
+                overlay.innerHTML = `
+                    <div class="pen-sort-overlay-icon">🔨</div>
+                    <div class="pen-sort-overlay-text">Organizing the pen…</div>
+                    <div class="pen-sort-loading-track"><div class="pen-sort-loading-bar"></div></div>
+                `;
+                el.style.position = 'relative';
+                el.appendChild(overlay);
             }
         } else {
-            const bar = document.getElementById('pen-sort-loading');
-            if (bar) bar.remove();
+            const overlay = document.getElementById('pen-sort-loading');
+            if (overlay) overlay.remove();
         }
     }
 
@@ -2756,10 +2760,10 @@ const PenUI = (() => {
                 NotesService.sync().catch(() => {});
                 return;
             }
-            // Preload metrics if a non-date sort is active (so data is ready fast)
-            if (sortMetric !== 'date' && !metricsCache && !metricsFetching) {
+            // Always preload metrics in background (so sorting is instant when user picks a metric)
+            if (!metricsCache && !metricsFetching) {
                 fetchMetricsSummary().then(() => {
-                    if (container && currentPage === 'list') {
+                    if (container && currentPage === 'list' && sortMetric !== 'date') {
                         renderVideos();
                         update3DCreatureScales();
                     }
