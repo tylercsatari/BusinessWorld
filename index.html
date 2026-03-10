@@ -25,6 +25,10 @@
         #invoices-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
         #invoices-hud-btn:hover { transform: scale(1.1); }
         #invoices-badge { position: absolute; top: -5px; right: -5px; background: #27ae60; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        #pen-scale-slider-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 2px; }
+        #pen-scale-slider { -webkit-appearance: none; appearance: none; width: 42px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #d4c5a9, #5a3e1b); outline: none; cursor: pointer; }
+        #pen-scale-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: linear-gradient(135deg, #fff, #f0ece4); border: 2px solid #5a3e1b; box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer; }
+        #pen-scale-label { font-family: 'Fredoka One', cursive; font-size: 9px; color: #5a3e1b; opacity: 0.7; }
         #finance-breakdown { margin-top: 6px; font-size: 12px; }
         .finance-row { display: flex; align-items: center; padding: 1px 0; gap: 6px; }
         .finance-label { font-family: 'Fredoka One', cursive; color: #8B5E3C; min-width: 62px; font-size: 11px; }
@@ -121,6 +125,10 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             <span id="invoices-badge" style="display:none;">0</span>
         </button>
+        <div id="pen-scale-slider-wrap" style="display:none;">
+            <input type="range" id="pen-scale-slider" min="0" max="100" value="70" />
+            <label id="pen-scale-label">Size</label>
+        </div>
     </div>
     <div id="money-display">
         <div id="level-text">Lv. 1</div>
@@ -2289,6 +2297,8 @@ async function init() {
     document.getElementById('loading-overlay').style.display = 'none';
     // Start animation
     animate();
+    // Pen scale slider
+    document.getElementById('pen-scale-slider').addEventListener('input', () => _applyPenCreatureScales());
     // Expose for testing
     window._bw = { playerMesh, camera, cameraTarget, scene, workshop, storage, incubator, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house };
     console.log('Business World loaded!');
@@ -2612,17 +2622,27 @@ async function spawnPostedCreatures(skipSync) {
 }
 
 // Update 3D creature scales based on metric data from Pen UI
-// scaleMap: { videoId: scaleValue (0.5–2.0) } or null to reset
-window.updatePenCreatureScales = function updatePenCreatureScales(scaleMap) {
+// ratioMap: { videoId: 0.0–1.0 ratio } or null to reset
+let _penScaleRatios = null; // stored so slider can reapply
+window.updatePenCreatureScales = function updatePenCreatureScales(ratioMap) {
+    _penScaleRatios = ratioMap;
+    const slider = document.getElementById('pen-scale-slider-wrap');
+    if (slider) slider.style.display = ratioMap ? '' : 'none';
+    _applyPenCreatureScales();
+};
+function _applyPenCreatureScales() {
+    const spread = (document.getElementById('pen-scale-slider')?.value || 70) / 100;
     penCreatures.forEach(c => {
-        if (!scaleMap) {
+        if (!_penScaleRatios) {
             c.userData.baseScale = 1.0;
         } else {
-            const s = scaleMap[c.userData.videoId];
-            c.userData.baseScale = s != null ? s : 0.5;
+            const ratio = _penScaleRatios[c.userData.videoId];
+            const r = ratio != null ? ratio : 0;
+            // At spread=0: all 1.0. At spread=1: range 0.4–1.8
+            c.userData.baseScale = 1.0 + (0.4 + r * 1.4 - 1.0) * spread;
         }
     });
-};
+}
 
 // --- Tile-Based Pathways ---
 function addPathTile(gx, gz) {

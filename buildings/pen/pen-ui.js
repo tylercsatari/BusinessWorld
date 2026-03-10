@@ -69,13 +69,11 @@ const PenUI = (() => {
         const posted = VideoService.getByStatus('posted');
         const values = posted.map(v => getMetricValue(v.id, sortMetric));
         const maxVal = Math.max(...values, 0.001);
-        const scaleMap = {};
+        const ratioMap = {};
         posted.forEach((v, i) => {
-            const ratio = values[i] / maxVal;
-            // 3D scale range: 0.4 (smallest) to 1.8 (largest)
-            scaleMap[v.id] = 0.4 + ratio * 1.4;
+            ratioMap[v.id] = values[i] / maxVal; // 0.0–1.0
         });
-        updatePenCreatureScales(scaleMap);
+        updatePenCreatureScales(ratioMap);
     }
 
     function showSortLoading(show) {
