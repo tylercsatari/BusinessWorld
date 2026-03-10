@@ -78,6 +78,25 @@ const PenUI = (() => {
         updatePenCreatureScales(scaleMap);
     }
 
+    function showSortLoading(show) {
+        const el = document.getElementById('pen-videos');
+        if (!el) return;
+        if (show) {
+            // Insert loading bar at top of video list
+            let bar = document.getElementById('pen-sort-loading');
+            if (!bar) {
+                bar = document.createElement('div');
+                bar.id = 'pen-sort-loading';
+                bar.className = 'pen-sort-loading';
+                bar.innerHTML = '<div class="pen-sort-loading-bar"></div><span>Loading metrics…</span>';
+                el.prepend(bar);
+            }
+        } else {
+            const bar = document.getElementById('pen-sort-loading');
+            if (bar) bar.remove();
+        }
+    }
+
     function formatMetricValue(value, metric) {
         if (metric === 'revenue') return 'C$' + (value * USD_TO_CAD).toFixed(2);
         if (metric === 'avgRetention') return (value * 100).toFixed(1) + '%';
@@ -540,15 +559,12 @@ const PenUI = (() => {
         document.getElementById('pen-sort-select').addEventListener('change', async (e) => {
             sortMetric = e.target.value;
             if (sortMetric !== 'date' && !metricsCache) {
-                // Show loading state
-                const el = document.getElementById('pen-videos');
-                if (el) el.style.opacity = '0.4';
+                showSortLoading(true);
                 await fetchMetricsSummary();
-                if (el) el.style.opacity = '';
+                showSortLoading(false);
             }
             visibleCount = 50;
             renderVideos();
-            // Update 3D creature scales in the pen world
             update3DCreatureScales();
         });
     }
@@ -2739,6 +2755,15 @@ const PenUI = (() => {
                 ScriptService.sync().catch(() => {});
                 NotesService.sync().catch(() => {});
                 return;
+            }
+            // Preload metrics if a non-date sort is active (so data is ready fast)
+            if (sortMetric !== 'date' && !metricsCache && !metricsFetching) {
+                fetchMetricsSummary().then(() => {
+                    if (container && currentPage === 'list') {
+                        renderVideos();
+                        update3DCreatureScales();
+                    }
+                });
             }
             // Render immediately from in-memory cache (posted videos appear instantly)
             projects = VideoService.getCachedProjects() || [];
