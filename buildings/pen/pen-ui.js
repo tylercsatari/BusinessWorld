@@ -139,7 +139,7 @@ const PenUI = (() => {
 
     function renderCardCreatures() {
         if (!window.EggRenderer) return;
-        const canvases = container.querySelectorAll('.pen-creature-canvas');
+        const canvases = container ? container.querySelectorAll('.pen-creature-canvas') : [];
         if (canvases.length === 0) return;
 
         // Group canvases by cache key to minimize renders
@@ -165,6 +165,7 @@ const PenUI = (() => {
             }
 
             // Render once to first canvas, then cache and copy
+            // (EggRenderer uses a shared WebGL renderer — safe for many projects)
             const [proj, ghostStr] = key.split('|');
             const ghost = ghostStr === 'true';
             const first = targets[0];

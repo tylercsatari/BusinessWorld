@@ -1144,6 +1144,27 @@ const IncubatorUI = (() => {
         r.dispose();
     }
 
+    // Shared offscreen renderer — avoids creating multiple WebGL contexts (which kills the main 3D world)
+    let _sharedRenderer = null;
+    let _sharedCanvas = null;
+
+    function _getSharedRenderer(w, h) {
+        const T = window.THREE;
+        if (!_sharedCanvas) {
+            _sharedCanvas = document.createElement('canvas');
+        }
+        _sharedCanvas.width = w;
+        _sharedCanvas.height = h;
+        if (!_sharedRenderer || _sharedRenderer.getContext().isContextLost()) {
+            if (_sharedRenderer) _sharedRenderer.dispose();
+            _sharedRenderer = new T.WebGLRenderer({ canvas: _sharedCanvas, antialias: true, alpha: true });
+        }
+        _sharedRenderer.setClearColor(0x000000, 0);
+        _sharedRenderer.setPixelRatio(1);
+        _sharedRenderer.setSize(w, h);
+        return _sharedRenderer;
+    }
+
     function renderCreatureSnapshot(project, canvas, size, opts) {
         const T = window.THREE;
         if (!T || !canvas) return;
@@ -1155,20 +1176,18 @@ const IncubatorUI = (() => {
 
         const color = ghost ? '#ffffff' : getProjectColor(project);
 
-        const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: true });
-        renderer.setClearColor(0x000000, 0);
-        renderer.setPixelRatio(1);
-        renderer.setSize(w * 2, w * 2);
+        // Use shared renderer (1 WebGL context) and copy to target canvas via 2D
+        const sRenderer = _getSharedRenderer(w * 2, w * 2);
 
-        const scene = new T.Scene();
+        const sc = new T.Scene();
         const cam = new T.PerspectiveCamera(36, 1, 0.1, 50);
         cam.position.set(0, 0.1, 2.2);
         cam.lookAt(0, 0, 0);
 
-        scene.add(new T.AmbientLight(ghost ? 0xffffff : 0xfff5e6, ghost ? 1.0 : 0.7));
+        sc.add(new T.AmbientLight(ghost ? 0xffffff : 0xfff5e6, ghost ? 1.0 : 0.7));
         const dl = new T.DirectionalLight(0xffffff, ghost ? 1.0 : 0.9);
         dl.position.set(3, 5, 4);
-        scene.add(dl);
+        sc.add(dl);
 
         const bodyGeo = new T.SphereGeometry(0.4, 24, 24);
         const bodyMat = new T.MeshStandardMaterial({
@@ -1176,7 +1195,7 @@ const IncubatorUI = (() => {
             transparent: false, opacity: 1.0
         });
         const body = new T.Mesh(bodyGeo, bodyMat);
-        scene.add(body);
+        sc.add(body);
 
         const eyeWhiteGeo = new T.SphereGeometry(0.11, 12, 12);
         const eyeWhiteMat = new T.MeshBasicMaterial({ color: 0xffffff });
@@ -1185,19 +1204,21 @@ const IncubatorUI = (() => {
         const highlightGeo = new T.SphereGeometry(0.025, 8, 8);
 
         [[-0.15, 0.08, 0.32], [0.15, 0.08, 0.32]].forEach(([x, y, z]) => {
-            const ew = new T.Mesh(eyeWhiteGeo, eyeWhiteMat); ew.position.set(x, y, z); scene.add(ew);
-            const ep = new T.Mesh(pupilGeo, pupilMat); ep.position.set(x, y, z + 0.05); scene.add(ep);
-            const eh = new T.Mesh(highlightGeo, eyeWhiteMat); eh.position.set(x + 0.03, y + 0.04, z + 0.09); scene.add(eh);
+            const ew = new T.Mesh(eyeWhiteGeo, eyeWhiteMat); ew.position.set(x, y, z); sc.add(ew);
+            const ep = new T.Mesh(pupilGeo, pupilMat); ep.position.set(x, y, z + 0.05); sc.add(ep);
+            const eh = new T.Mesh(highlightGeo, eyeWhiteMat); eh.position.set(x + 0.03, y + 0.04, z + 0.09); sc.add(eh);
         });
 
-        renderer.render(scene, cam);
+        sRenderer.render(sc, cam);
+        // Copy to target canvas via 2D context
+        const ctx2d = canvas.getContext('2d');
+        ctx2d.drawImage(_sharedCanvas, 0, 0);
 
-        function dispose() {
+        function disposeGeo() {
             bodyGeo.dispose(); bodyMat.dispose();
             eyeWhiteGeo.dispose(); eyeWhiteMat.dispose();
             pupilGeo.dispose(); pupilMat.dispose();
             highlightGeo.dispose();
-            renderer.dispose();
         }
 
         if (!ghost && typeof GeoPattern !== 'undefined' && project) {
@@ -1217,13 +1238,15 @@ const IncubatorUI = (() => {
                 bodyMat.map = tex;
                 bodyMat.color = new T.Color(0xffffff);
                 bodyMat.needsUpdate = true;
-                renderer.render(scene, cam);
+                const sr = _getSharedRenderer(w * 2, w * 2);
+                sr.render(sc, cam);
+                ctx2d.drawImage(_sharedCanvas, 0, 0);
                 tex.dispose();
-                dispose();
+                disposeGeo();
             };
             img.src = url;
         } else {
-            dispose();
+            disposeGeo();
         }
     }
 
