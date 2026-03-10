@@ -2553,6 +2553,7 @@ function createPenCreature(creatureName = 'Fluffball', isBacklog = false, isGhos
     g.userData.hopPhase = 0;
     g.userData.hopSpeed = 0.4 + rng() * 0.3;
     g.userData.moveSpeed = 0.3 + rng() * 0.2;
+    g.userData.baseScale = 1.0;
 
     return g;
 }
@@ -2608,6 +2609,19 @@ async function spawnPostedCreatures(skipSync) {
     } catch (e) {
         console.warn('spawnPostedCreatures failed:', e);
     }
+}
+
+// Update 3D creature scales based on metric data from Pen UI
+// scaleMap: { videoId: scaleValue (0.5–2.0) } or null to reset
+function updatePenCreatureScales(scaleMap) {
+    penCreatures.forEach(c => {
+        if (!scaleMap) {
+            c.userData.baseScale = 1.0;
+        } else {
+            const s = scaleMap[c.userData.videoId];
+            c.userData.baseScale = s != null ? s : 0.5;
+        }
+    });
 }
 
 // --- Tile-Based Pathways ---
@@ -3284,9 +3298,10 @@ function animate() {
         penC.position.z = nz;
         pc.hopPhase += dt * pc.hopSpeed * 2;
         const bob = Math.abs(Math.sin(pc.hopPhase));
-        penC.position.y = bob * 0.12;
+        const bs = pc.baseScale || 1;
+        penC.position.y = bob * 0.12 * bs;
         const sq = 1 - bob * 0.06;
-        penC.scale.set(1 + (1 - sq) * 0.1, sq + bob * 0.08, 1 + (1 - sq) * 0.1);
+        penC.scale.set((1 + (1 - sq) * 0.1) * bs, (sq + bob * 0.08) * bs, (1 + (1 - sq) * 0.1) * bs);
         penC.rotation.z = Math.sin(pc.hopPhase * 1.3) * 0.08;
         const targetY = pc.wanderAngle + Math.PI / 2;
         let diff = targetY - penC.rotation.y;

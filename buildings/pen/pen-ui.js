@@ -60,6 +60,24 @@ const PenUI = (() => {
         return metricsCache[videoId][metric] || 0;
     }
 
+    function update3DCreatureScales() {
+        if (typeof updatePenCreatureScales !== 'function') return;
+        if (sortMetric === 'date' || !metricsCache) {
+            updatePenCreatureScales(null); // reset to default
+            return;
+        }
+        const posted = VideoService.getByStatus('posted');
+        const values = posted.map(v => getMetricValue(v.id, sortMetric));
+        const maxVal = Math.max(...values, 0.001);
+        const scaleMap = {};
+        posted.forEach((v, i) => {
+            const ratio = values[i] / maxVal;
+            // 3D scale range: 0.4 (smallest) to 1.8 (largest)
+            scaleMap[v.id] = 0.4 + ratio * 1.4;
+        });
+        updatePenCreatureScales(scaleMap);
+    }
+
     function formatMetricValue(value, metric) {
         if (metric === 'revenue') return 'C$' + (value * USD_TO_CAD).toFixed(2);
         if (metric === 'avgRetention') return (value * 100).toFixed(1) + '%';
@@ -526,6 +544,8 @@ const PenUI = (() => {
             }
             visibleCount = 50;
             renderVideos();
+            // Update 3D creature scales in the pen world
+            update3DCreatureScales();
         });
     }
 
@@ -569,7 +589,7 @@ const PenUI = (() => {
             const isAnalyzing = v.analysisStatus === 'analyzing';
             const noProject = !v.project;
             const scale = scaleMap ? scaleMap[v.id] : 1;
-            const scaleStyle = scaleMap ? `style="transform:scale(${scale.toFixed(3)});transform-origin:left center;"` : '';
+            const scaleStyle = scaleMap ? `style="--pen-scale:${scale.toFixed(3)}"` : '';
             const metricHtml = (sortMetric !== 'date' && metricsCache) ? `<span class="pen-metric-badge">${formatMetricValue(getMetricValue(v.id, sortMetric), sortMetric)}</span>` : '';
             return `
             <div class="pen-video-card ${isBacklog ? 'backlog' : ''} ${noProject ? 'pen-no-project' : ''}" data-id="${v.id}" ${scaleStyle}>
@@ -2771,6 +2791,8 @@ const PenUI = (() => {
             sortMetric = 'date';
             metricsCache = null;
             currentPage = 'list';
+            // Reset 3D creature scales back to uniform
+            if (typeof updatePenCreatureScales === 'function') updatePenCreatureScales(null);
         }
     };
 })();
