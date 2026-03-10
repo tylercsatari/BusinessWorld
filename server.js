@@ -1263,8 +1263,8 @@ const server = http.createServer(async (req, res) => {
 
             // --- Overview: summary stats across everything ---
             if (v1path === '/overview') {
-                const [videos, ideas, scripts, todos, calendar, invoices] = await Promise.all(
-                    ['videos', 'ideas', 'scripts', 'todos', 'calendar', 'invoices'].map(c => dataStore.getAll(c))
+                const [videos, ideas, todos, calendar, invoices] = await Promise.all(
+                    ['videos', 'ideas', 'todos', 'calendar', 'invoices'].map(c => dataStore.getAll(c))
                 );
                 // Inventory from Airtable
                 let boxCount = 0, itemCount = 0;
@@ -1284,7 +1284,6 @@ const server = http.createServer(async (req, res) => {
                 json({
                     videos: { total: videos.length, complete: videos.filter(v => v.analysisStatus === 'complete').length },
                     ideas: { total: ideas.length },
-                    scripts: { total: scripts.length },
                     todos: { total: todos.length },
                     calendar: { total: calendar.length },
                     invoices: { total: invoices.length },
@@ -1294,7 +1293,7 @@ const server = http.createServer(async (req, res) => {
             }
 
             // --- Data store collections: videos, ideas, scripts, todos, calendar, invoices ---
-            const collectionMatch = v1path.match(/^\/(videos|ideas|scripts|todos|calendar|invoices)(?:\/([^/]+))?$/);
+            const collectionMatch = v1path.match(/^\/(videos|ideas|todos|calendar|invoices)(?:\/([^/]+))?$/);
             if (collectionMatch) {
                 const collection = collectionMatch[1];
                 const id = collectionMatch[2];
@@ -1525,7 +1524,6 @@ const server = http.createServer(async (req, res) => {
                 '/api/v1/videos/:ytId/frames', '/api/v1/videos/:ytId/frames/:filename',
                 '/api/v1/videos/:ytId/metadata', '/api/v1/videos/:ytId/performance',
                 '/api/v1/videos/all/analyses',
-                '/api/v1/scripts', '/api/v1/scripts/:id',
                 '/api/v1/ideas', '/api/v1/ideas/:id',
                 '/api/v1/todos', '/api/v1/todos/:id',
                 '/api/v1/calendar', '/api/v1/calendar/:id',

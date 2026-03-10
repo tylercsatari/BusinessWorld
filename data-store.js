@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 const { uploadToR2, downloadFromR2, isR2Ready } = require('./cloud-storage');
 
-const COLLECTIONS = ['videos', 'ideas', 'scripts', 'todos', 'calendar', 'invoices'];
+const COLLECTIONS = ['videos', 'ideas', 'todos', 'calendar', 'invoices'];
 const cache = {};  // { collectionName: { lastModified, records } }
 
 function r2Key(name) { return `data/${name}.json`; }

@@ -35,8 +35,8 @@ const NotesService = (() => {
                     name: data.name || 'Untitled',
                     hook: data.hook || '',
                     context: data.context || '',
+                    script: data.script || '',
                     project: data.project || '',
-                    linkedScriptId: data.linkedScriptId || '',
                     type: data.type || 'idea',
                     lastEdited: new Date().toISOString()
                 })

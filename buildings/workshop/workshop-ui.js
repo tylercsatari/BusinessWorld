@@ -197,23 +197,26 @@ const WorkshopUI = (() => {
                     <label>Context</label>
                     <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
                     <label>Script</label>
-                    ${ScriptLinker.renderLinker({ prefix: 'workshop', linkedScriptId: v.linkedScriptId, useInlineEditor: true })}
+                    ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
                 </div>
             </div>
-            ${ScriptLinker.renderPickerOverlay('workshop')}
         `;
 
         document.getElementById('workshop-back-btn').addEventListener('click', () => saveAndBack());
         document.getElementById('workshop-post').addEventListener('click', () => postVideo());
         document.getElementById('workshop-to-incubator').addEventListener('click', () => backToIncubator());
 
-        // Script linker events
-        ScriptLinker.bindEvents({
-            prefix: 'workshop',
-            getTarget: () => selectedVideo,
-            isIdea: false,
-            onRefresh: () => { selectedVideo = VideoService.getById(selectedVideo.id); renderDetail(); }
-        });
+        // Inline script editor — reads/writes video.script directly
+        if (window.EggRenderer) {
+            window.EggRenderer.initInlineScriptEditor('workshop-inline-script', {
+                get: () => (selectedVideo && selectedVideo.script) || '',
+                save: async (text) => {
+                    if (!selectedVideo) return;
+                    selectedVideo.script = text;
+                    await VideoService.update(selectedVideo.id, { script: text });
+                }
+            });
+        }
 
         // Init animated 3D egg preview for detail view
         if (v.project && window.EggRenderer) {
@@ -243,9 +246,9 @@ const WorkshopUI = (() => {
     async function postVideo() {
         if (!selectedVideo) return;
 
-        // Require a linked script before posting
-        if (!selectedVideo.linkedScriptId) {
-            alert('A script is required before posting. Link or create a script first.');
+        // Require a script before posting
+        if (!selectedVideo.script) {
+            alert('A script is required before posting. Write a script first.');
             return;
         }
 

@@ -721,7 +721,7 @@ const IncubatorUI = (() => {
         if (!el) return;
 
         const v = isDraft
-            ? { name: '', project: '', hook: '', context: '', linkedScriptId: '', sourceIdeaId: '' }
+            ? { name: '', project: '', hook: '', context: '', script: '', sourceIdeaId: '' }
             : selectedVideo;
         if (!v) return;
 
@@ -731,19 +731,7 @@ const IncubatorUI = (() => {
             sourceIdeaHtml = `<div class="incubator-source-idea">Source Idea: ${escHtml(idea ? idea.name : v.sourceIdeaId)}</div>`;
         }
 
-        // Script linker section
-        let scriptHtml = '';
-        if (v.linkedScriptId) {
-            const scripts = ScriptService.getAll();
-            const linkedScript = scripts.find(s => s.id === v.linkedScriptId);
-            const scriptName = linkedScript ? linkedScript.title : 'Linked Script';
-            scriptHtml = `<div class="incubator-script-linker">${inlineScriptEditorHtml('incubator-inline-script', scriptName)}</div>`;
-        } else {
-            scriptHtml = `
-                <div class="incubator-script-linker">
-                    ${ScriptLinker.renderLinker({ prefix: 'incubator', linkedScriptId: '', useInlineEditor: false })}
-                </div>`;
-        }
+        const scriptHtml = `<div class="incubator-script-linker">${inlineScriptEditorHtml('incubator-inline-script', 'Script')}</div>`;
 
         // Toolbar buttons change based on draft vs existing
         const toolbarActions = isDraft
@@ -787,7 +775,6 @@ const IncubatorUI = (() => {
                     ${scriptHtml}
                 </div>
             </div>
-            ${ScriptLinker.renderPickerOverlay('incubator')}
         `;
 
         // Back button
@@ -808,29 +795,21 @@ const IncubatorUI = (() => {
             document.getElementById('incubator-delete').addEventListener('click', () => handleDelete());
         }
 
-        // Script linker events
-        if (v.linkedScriptId) {
-            initInlineScriptEditor('incubator-inline-script', v.linkedScriptId, async () => {
-                // Unlink callback
-                if (!selectedVideo || isDraft) return;
-                if (navigator.vibrate) navigator.vibrate(30);
-                try {
-                    await LinkService.unlinkFromVideo(selectedVideo.id);
-                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-                    selectedVideo = VideoService.getById(selectedVideo.id);
-                    renderDetail();
-                } catch (e) {
-                    console.warn('Incubator: unlink script failed', e);
-                    alert('Failed to unlink script.');
+        // Inline script editor — reads/writes video.script directly
+        if (!isDraft) {
+            initInlineScriptEditor('incubator-inline-script', {
+                get: () => (selectedVideo && selectedVideo.script) || '',
+                save: async (text) => {
+                    if (!selectedVideo) return;
+                    selectedVideo.script = text;
+                    await VideoService.update(selectedVideo.id, { script: text });
                 }
             });
         } else {
-            ScriptLinker.bindEvents({
-                prefix: 'incubator',
-                getTarget: () => isDraft ? null : selectedVideo,
-                isIdea: false,
-                onRefresh: () => { selectedVideo = VideoService.getById(selectedVideo.id); renderDetail(); },
-                isDraft
+            // For drafts, just initialize with empty — will be saved on draft save
+            initInlineScriptEditor('incubator-inline-script', {
+                get: () => '',
+                save: async () => {} // no-op, draft save handles it
             });
         }
 
@@ -899,7 +878,8 @@ const IncubatorUI = (() => {
         if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
         try {
-            const video = await VideoService.create({ name, project, hook, context });
+            const scriptText = document.getElementById('incubator-inline-script-textarea')?.value || '';
+            const video = await VideoService.create({ name, project, hook, context, script: scriptText });
             selectedVideo = video;
             isDraft = false;
             showEggReveal(project, () => {
@@ -972,30 +952,18 @@ const IncubatorUI = (() => {
             if (v.sourceIdeaId) {
                 const idea = NotesService.getById(v.sourceIdeaId);
                 if (idea) {
-                    await NotesService.update(idea.id, { type: 'idea' });
-                    // Fix reverse-pointer: if script was linked to this video, relink to the idea
-                    if (v.linkedScriptId) {
-                        try {
-                            await LinkService.linkScriptToIdea(v.linkedScriptId, idea.id);
-                        } catch (e) { console.warn('Incubator: re-link script to idea failed', e); }
-                    }
+                    await NotesService.update(idea.id, { type: 'idea', script: v.script || idea.script || '' });
                 }
             } else {
                 // No source idea — create a new idea in the Library
-                const newIdea = await NotesService.create({
+                await NotesService.create({
                     name: v.name || 'Untitled',
                     type: 'idea',
                     hook: v.hook || '',
                     context: v.context || '',
-                    project: v.project || '',
-                    linkedScriptId: v.linkedScriptId || ''
+                    script: v.script || '',
+                    project: v.project || ''
                 });
-                // Fix reverse-pointer: relink script from video to new idea
-                if (v.linkedScriptId && newIdea) {
-                    try {
-                        await LinkService.linkScriptToIdea(v.linkedScriptId, newIdea.id);
-                    } catch (e) { console.warn('Incubator: re-link script to new idea failed', e); }
-                }
             }
             await VideoService.remove(v.id);
             if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
@@ -1064,17 +1032,11 @@ const IncubatorUI = (() => {
                 name: note.name || 'Untitled Video',
                 hook: note.hook || '',
                 context: note.context || '',
+                script: note.script || '',
                 project: note.project || '',
-                sourceIdeaId: note.id,
-                linkedScriptId: note.linkedScriptId || ''
+                sourceIdeaId: note.id
             });
             await NotesService.update(note.id, { type: 'converted' });
-            // Fix reverse-pointer: if idea had a linked script, update it to point to the video
-            if (note.linkedScriptId) {
-                try {
-                    await LinkService.linkScriptToVideo(note.linkedScriptId, video.id);
-                } catch (e) { console.warn('Incubator: re-link script to video failed', e); }
-            }
             hideLibraryPicker();
             openDetail(video.id);
         } catch (e) {
@@ -1359,65 +1321,45 @@ const IncubatorUI = (() => {
         return `<span class="status-badge ${info.cls}">${info.emoji} ${info.label}</span>`;
     }
 
-    function inlineScriptEditorHtml(containerId, scriptName) {
+    function inlineScriptEditorHtml(containerId, label) {
         return `<div class="inline-script-editor" id="${containerId}">
             <div class="inline-script-header">
-                <span class="inline-script-title">${escHtml(scriptName)}</span>
+                <span class="inline-script-title">${escHtml(label || 'Script')}</span>
                 <div class="inline-script-actions">
-                    <button class="inline-script-unlink" data-action="unlink">Unlink</button>
                     <span class="inline-script-toggle">&#9654;</span>
                 </div>
             </div>
             <div class="inline-script-body">
-                <div class="inline-script-status" id="${containerId}-status">Loading...</div>
-                <textarea class="inline-script-textarea" id="${containerId}-textarea" placeholder="Loading script..."></textarea>
+                <div class="inline-script-status" id="${containerId}-status">Saved</div>
+                <textarea class="inline-script-textarea" id="${containerId}-textarea" placeholder="Start writing your script..."></textarea>
             </div>
         </div>`;
     }
 
-    function initInlineScriptEditor(containerId, scriptId, onUnlink) {
+    /**
+     * Initialize inline script editor.
+     * @param {string} containerId - DOM id of the editor container
+     * @param {object} opts - { get: () => string, save: (text) => Promise }
+     */
+    function initInlineScriptEditor(containerId, opts) {
         const containerDiv = document.getElementById(containerId);
         if (!containerDiv) return;
         const header = containerDiv.querySelector('.inline-script-header');
         const textarea = document.getElementById(containerId + '-textarea');
         const statusEl = document.getElementById(containerId + '-status');
-        const unlinkBtn = containerDiv.querySelector('[data-action="unlink"]');
         let saveTimer = null;
-        let scriptMeta = null;
         let dirty = false;
 
-        header.addEventListener('click', (e) => {
-            if (e.target.closest('[data-action="unlink"]')) return;
+        // Load initial text
+        textarea.value = opts.get() || '';
+        autoResize();
+        statusEl.textContent = 'Saved';
+        statusEl.className = 'inline-script-status saved';
+
+        header.addEventListener('click', () => {
             containerDiv.classList.toggle('expanded');
-            if (containerDiv.classList.contains('expanded') && !textarea.dataset.loaded) {
-                loadContent();
-            }
+            if (containerDiv.classList.contains('expanded')) autoResize();
         });
-
-        if (unlinkBtn) {
-            unlinkBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (saveTimer) { clearTimeout(saveTimer); doSave(); }
-                if (onUnlink) onUnlink();
-            });
-        }
-
-        async function loadContent() {
-            textarea.dataset.loaded = '1';
-            try {
-                const data = await ScriptService.loadContent(scriptId);
-                scriptMeta = data.meta;
-                textarea.value = data.text;
-                textarea.placeholder = 'Start writing your script...';
-                statusEl.textContent = 'Saved';
-                statusEl.className = 'inline-script-status saved';
-                autoResize();
-            } catch (e) {
-                textarea.placeholder = 'Could not load script.';
-                statusEl.textContent = 'Load failed';
-                console.warn('Inline script: load failed', e);
-            }
-        }
 
         function autoResize() {
             textarea.style.height = 'auto';
@@ -1439,7 +1381,7 @@ const IncubatorUI = (() => {
             statusEl.textContent = 'Saving...';
             statusEl.className = 'inline-script-status saving';
             try {
-                await ScriptService.saveContent(scriptId, textarea.value, scriptMeta);
+                await opts.save(textarea.value);
                 statusEl.textContent = 'Saved';
                 statusEl.className = 'inline-script-status saved';
             } catch (e) {

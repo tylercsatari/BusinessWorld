@@ -1,6 +1,7 @@
 /**
- * Library UI — Scripts, Ideas, and To-Do list.
+ * Library UI — Ideas, To-Do list, Calendar, Projects, Invoices.
  * All data stored in R2 JSON files via /api/data/* routes.
+ * Scripts are now embedded in ideas (idea.script field).
  */
 const LibraryUI = (() => {
     let container = null;
@@ -8,13 +9,8 @@ const LibraryUI = (() => {
     let invoicesLoaded = false;
     let invoicesBusy = false;
     const CAD_RATES = { CAD: 1, USD: 1.36, EUR: 1.50, GBP: 1.73 };
-    let selectedId = null;
-    let selectedScriptMeta = null; // {project, linkedIdeaId, linkedVideoId}
-    let saveTimer = null;
-    let titleSaveTimer = null;
-    let dirty = false;
     let currentPage = 'list';
-    let activeTab = 'scripts';
+    let activeTab = 'notes';
     let selectedNote = null;
     let noteSaveTimer = null;
     let noteDirty = false;
@@ -52,47 +48,6 @@ const LibraryUI = (() => {
         el.className = 'library-save-status' + (status === 'Saved' ? ' saved' : status === 'Saving...' ? ' saving' : '');
     }
 
-    // --- Script auto-save ---
-    function scheduleContentSave() {
-        dirty = true; setSaveStatus('Editing...');
-        if (saveTimer) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => saveContent(), 1500);
-    }
-
-    async function saveContent() {
-        if (!selectedId || !dirty) return;
-        const textarea = document.getElementById('library-editor-textarea');
-        if (!textarea) return;
-        setSaveStatus('Saving...'); dirty = false;
-        try {
-            await ScriptService.saveContent(selectedId, textarea.value, selectedScriptMeta);
-            setSaveStatus('Saved');
-        } catch (e) { console.warn('Library: save failed', e); setSaveStatus('Save failed'); dirty = true; }
-    }
-
-    function scheduleTitleSave() {
-        if (titleSaveTimer) clearTimeout(titleSaveTimer);
-        titleSaveTimer = setTimeout(() => saveTitleNow(), 1200);
-    }
-
-    async function saveTitleNow() {
-        if (!selectedId) return;
-        const input = document.getElementById('library-editor-title');
-        if (!input) return;
-        const title = ScriptService.ensureScriptSuffix(input.value.trim());
-        setSaveStatus('Saving...');
-        try {
-            await fetch(`/api/data/scripts/${selectedId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title })
-            });
-            const s = ScriptService.getAll().find(s => s.id === selectedId);
-            if (s) s.title = title;
-            setSaveStatus('Saved');
-        } catch (e) { console.warn('Library: title save failed', e); setSaveStatus('Save failed'); }
-    }
-
     // --- Navigation ---
     function showListPage() {
         currentPage = 'list';
@@ -100,8 +55,7 @@ const LibraryUI = (() => {
         if (!panel) return;
         panel.classList.remove('show-editor');
         panel.classList.add('show-list');
-        if (activeTab === 'scripts') renderList();
-        else if (activeTab === 'notes') renderNotesList();
+        if (activeTab === 'notes') renderNotesList();
         else if (activeTab === 'calendar') renderCalendarList();
         else if (activeTab === 'projects') renderProjectsList();
     }
@@ -121,19 +75,17 @@ const LibraryUI = (() => {
             <div class="library-panel show-list">
                 <div class="library-page library-list-page" id="library-list-page">
                     <div class="library-tabs">
-                        <button class="library-tab active" data-tab="scripts">Scripts</button>
-                        <button class="library-tab" data-tab="notes">Ideas</button>
+                        <button class="library-tab active" data-tab="notes">Ideas</button>
                         <button class="library-tab" data-tab="todo">To-Do</button>
                         <button class="library-tab" data-tab="calendar">Calendar</button>
                         <button class="library-tab" data-tab="projects">Projects</button>
                         <button class="library-tab" data-tab="invoices">Invoices</button>
                     </div>
                     <div class="library-list-header" id="library-list-header">
-                        <h2 class="library-list-heading" id="library-list-heading">Scripts</h2>
+                        <h2 class="library-list-heading" id="library-list-heading">Ideas</h2>
                         <button class="library-new-btn" id="library-new-btn" title="New">+</button>
                     </div>
-                    <div class="library-list" id="library-list">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
-                    <div class="library-notes-list" id="library-notes-list" style="display:none;">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
+                    <div class="library-notes-list" id="library-notes-list">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
                     <div class="library-todo-container" id="library-todo-container" style="display:none;"></div>
                     <div class="library-calendar-container" id="library-calendar-container" style="display:none;"></div>
                     <div class="library-projects-container" id="library-projects-container" style="display:none;"></div>
@@ -147,8 +99,7 @@ const LibraryUI = (() => {
             </div>
         `;
         document.getElementById('library-new-btn').addEventListener('click', () => {
-            if (activeTab === 'scripts') handleNew();
-            else if (activeTab === 'notes') handleNewNote();
+            if (activeTab === 'notes') handleNewNote();
             // todo/calendar use inline input, no + button action needed — but we'll focus the input
             else if (activeTab === 'todo') focusTodoInput();
             else if (activeTab === 'calendar') focusCalendarInput();
@@ -162,14 +113,12 @@ const LibraryUI = (() => {
         activeTab = tab;
         container.querySelectorAll('.library-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
         const heading = document.getElementById('library-list-heading');
-        const scriptList = document.getElementById('library-list');
         const notesList = document.getElementById('library-notes-list');
         const todoContainer = document.getElementById('library-todo-container');
         const calendarContainer = document.getElementById('library-calendar-container');
         const projectsContainer = document.getElementById('library-projects-container');
         const invoicesContainer = document.getElementById('library-invoices-container');
 
-        if (scriptList) scriptList.style.display = 'none';
         if (notesList) notesList.style.display = 'none';
         if (todoContainer) todoContainer.style.display = 'none';
         if (calendarContainer) calendarContainer.style.display = 'none';
@@ -178,11 +127,7 @@ const LibraryUI = (() => {
 
         const newBtn = document.getElementById('library-new-btn');
 
-        if (tab === 'scripts') {
-            if (heading) heading.textContent = 'Scripts';
-            if (scriptList) scriptList.style.display = '';
-            if (newBtn) newBtn.style.display = '';
-        } else if (tab === 'notes') {
+        if (tab === 'notes') {
             if (heading) heading.textContent = 'Ideas';
             if (notesList) notesList.style.display = '';
             if (newBtn) newBtn.style.display = '';
@@ -870,30 +815,12 @@ const LibraryUI = (() => {
             incubatorSection = `<button class="library-send-btn" id="library-send-incubator">Send to Incubator</button>`;
         }
 
-        // Script linker section
-        let scriptSection = '';
-        if (note.linkedScriptId) {
-            const linkedScript = ScriptService.getAll().find(s => s.id === note.linkedScriptId);
-            const scriptName = linkedScript ? linkedScript.title : 'Linked Script';
-            scriptSection = `
-                <div class="library-idea-field">
-                    <label class="library-idea-label">Script</label>
-                    <div class="library-script-linked">
-                        <span class="library-script-badge">${escHtml(scriptName)}</span>
-                        <button class="library-script-open-btn" id="library-open-script">Open</button>
-                        <button class="library-script-unlink-btn" id="library-unlink-script">Unlink</button>
-                    </div>
-                </div>`;
-        } else {
-            scriptSection = `
-                <div class="library-idea-field">
-                    <label class="library-idea-label">Script</label>
-                    <div class="library-script-actions">
-                        <button class="library-script-link-btn" id="library-link-script">Link Script</button>
-                        <button class="library-script-new-btn" id="library-new-script-for-idea">New Script</button>
-                    </div>
-                </div>`;
-        }
+        // Script field — inline textarea
+        const scriptSection = `
+            <div class="library-idea-field">
+                <label class="library-idea-label">Script</label>
+                <textarea class="library-idea-script" id="library-idea-script" placeholder="Write your script here...">${escHtml(note.script || '')}</textarea>
+            </div>`;
 
         editorEl.innerHTML = `
             <div class="library-editor-toolbar">
@@ -925,125 +852,15 @@ const LibraryUI = (() => {
                 ${scriptSection}
                 <div class="library-incubator-section">${incubatorSection}</div>
             </div>
-            <div class="library-script-picker-overlay" id="library-script-picker-overlay" style="display:none;">
-                <div class="library-script-picker">
-                    <div class="library-script-picker-header">
-                        <h3>Link a Script</h3>
-                        <button class="library-script-picker-close" id="library-script-picker-close">&times;</button>
-                    </div>
-                    <div class="library-script-picker-list" id="library-script-picker-list"></div>
-                </div>
-            </div>
         `;
         document.getElementById('library-back-btn').addEventListener('click', () => saveNoteAndBack());
         document.getElementById('library-idea-hook').addEventListener('input', scheduleNoteSave);
         document.getElementById('library-idea-context').addEventListener('input', scheduleNoteSave);
+        document.getElementById('library-idea-script').addEventListener('input', scheduleNoteSave);
         document.getElementById('library-editor-title').addEventListener('input', scheduleNoteSave);
         document.getElementById('library-note-project').addEventListener('change', scheduleNoteSave);
         const sendBtn = document.getElementById('library-send-incubator');
         if (sendBtn) sendBtn.addEventListener('click', () => sendToIncubator());
-
-        // Script linker events
-        const linkBtn = document.getElementById('library-link-script');
-        if (linkBtn) linkBtn.addEventListener('click', () => showIdeaScriptPicker());
-        const newScriptBtn = document.getElementById('library-new-script-for-idea');
-        if (newScriptBtn) newScriptBtn.addEventListener('click', () => createScriptForIdea());
-        const unlinkBtn = document.getElementById('library-unlink-script');
-        if (unlinkBtn) unlinkBtn.addEventListener('click', () => unlinkScriptFromIdea());
-        const openBtn = document.getElementById('library-open-script');
-        if (openBtn) openBtn.addEventListener('click', () => {
-            if (note.linkedScriptId) { switchTab('scripts'); selectScript(note.linkedScriptId); }
-        });
-        const pickerClose = document.getElementById('library-script-picker-close');
-        if (pickerClose) pickerClose.addEventListener('click', () => {
-            document.getElementById('library-script-picker-overlay').style.display = 'none';
-        });
-        const pickerOverlay = document.getElementById('library-script-picker-overlay');
-        if (pickerOverlay) pickerOverlay.addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) pickerOverlay.style.display = 'none';
-        });
-    }
-
-    // getLinkedScriptIds removed — use LinkService.getLinkedScriptIds() instead
-
-    function showIdeaScriptPicker() {
-        const overlay = document.getElementById('library-script-picker-overlay');
-        const listEl = document.getElementById('library-script-picker-list');
-        if (!overlay || !listEl) return;
-
-        const linkedIds = LinkService.getLinkedScriptIds(selectedNote ? selectedNote.linkedScriptId : '');
-        const available = ScriptService.getAll().filter(s => !linkedIds.has(s.id));
-
-        if (available.length === 0) {
-            listEl.innerHTML = '<div class="library-empty">No available scripts. Create one with "New Script".</div>';
-        } else {
-            listEl.innerHTML = available.map(s => `
-                <div class="library-script-picker-item" data-id="${s.id}">
-                    <div class="library-script-picker-info">
-                        <div class="library-script-picker-name">${escHtml(s.title)}</div>
-                        <div class="library-script-picker-project">${escHtml(s.project || 'No project')}</div>
-                    </div>
-                    <button class="library-script-picker-link-btn" data-id="${s.id}">Link</button>
-                </div>`).join('');
-            async function doLink(scriptId) {
-                if (!selectedNote) return;
-                const btn = listEl.querySelector(`.library-script-picker-link-btn[data-id="${scriptId}"]`);
-                if (navigator.vibrate) navigator.vibrate(30);
-                if (btn) { btn.textContent = 'Linking...'; btn.disabled = true; }
-                try {
-                    await LinkService.linkScriptToIdea(scriptId, selectedNote.id);
-                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-                    selectedNote = NotesService.getById(selectedNote.id);
-                    overlay.style.display = 'none';
-                    renderNoteEditor(selectedNote);
-                } catch (e) {
-                    console.warn('Library: link script failed', e);
-                    alert('Failed to link script.');
-                    if (btn) { btn.textContent = 'Link'; btn.disabled = false; }
-                }
-            }
-            listEl.querySelectorAll('.library-script-picker-link-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => { e.stopPropagation(); doLink(btn.dataset.id); });
-            });
-            listEl.querySelectorAll('.library-script-picker-item').forEach(item => {
-                item.addEventListener('click', () => doLink(item.dataset.id));
-            });
-        }
-        overlay.style.display = 'flex';
-    }
-
-    async function createScriptForIdea() {
-        if (!selectedNote) return;
-        const btn = document.getElementById('library-new-script-for-idea');
-        if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
-        try {
-            const script = await ScriptService.create(selectedNote.name || 'Untitled', selectedNote.project || '');
-            await LinkService.linkScriptToIdea(script.id, selectedNote.id);
-            selectedNote = NotesService.getById(selectedNote.id);
-            renderNoteEditor(selectedNote);
-        } catch (e) {
-            console.warn('Library: create script for idea failed', e);
-            alert('Failed to create script.');
-        } finally {
-            if (btn) { btn.textContent = 'New Script'; btn.disabled = false; }
-        }
-    }
-
-    async function unlinkScriptFromIdea() {
-        if (!selectedNote) return;
-        const btn = document.getElementById('library-unlink-script');
-        if (navigator.vibrate) navigator.vibrate(30);
-        if (btn) { btn.textContent = 'Unlinking...'; btn.disabled = true; }
-        try {
-            await LinkService.unlinkFromIdea(selectedNote.id);
-            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-            selectedNote = NotesService.getById(selectedNote.id);
-            renderNoteEditor(selectedNote);
-        } catch (e) {
-            console.warn('Library: unlink script failed', e);
-            alert('Failed to unlink script.');
-            if (btn) { btn.textContent = 'Unlink'; btn.disabled = false; }
-        }
     }
 
     async function sendToIncubator() {
@@ -1073,11 +890,9 @@ const LibraryUI = (() => {
         if (navigator.vibrate) navigator.vibrate(50);
 
         try {
-            const video = await VideoService.create({ name, hook, context, project, sourceIdeaId: selectedNote.id, linkedScriptId: selectedNote.linkedScriptId || '' });
-            // Fix reverse-pointer: update script's meta to point to video instead of idea
-            if (selectedNote.linkedScriptId && video) {
-                LinkService.linkScriptToVideo(selectedNote.linkedScriptId, video.id).catch(() => {});
-            }
+            const scriptEl = document.getElementById('library-idea-script');
+            const script = scriptEl?.value || selectedNote.script || '';
+            const video = await VideoService.create({ name, hook, context, script, project, sourceIdeaId: selectedNote.id });
             await NotesService.update(selectedNote.id, { type: 'converted' });
 
             // Success animation
@@ -1117,10 +932,13 @@ const LibraryUI = (() => {
             const newHook = hookEl?.value || '';
             const newContext = ctxEl?.value || '';
             const newProject = projectEl?.value || '';
+            const scriptEl = document.getElementById('library-idea-script');
+            const newScript = scriptEl?.value || '';
             await NotesService.update(selectedNote.id, {
                 name: newName,
                 hook: newHook,
                 context: newContext,
+                script: newScript,
                 project: newProject
             });
             selectedNote = NotesService.getById(selectedNote.id);
@@ -1188,30 +1006,12 @@ const LibraryUI = (() => {
             projectOptions = projs.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
         } catch (e) {}
 
-        // Script linker
-        let scriptSection = '';
-        if (v.linkedScriptId) {
-            const linkedScript = ScriptService.getAll().find(s => s.id === v.linkedScriptId);
-            const scriptName = linkedScript ? linkedScript.title : 'Linked Script';
-            scriptSection = `
-                <div class="library-idea-field">
-                    <label class="library-idea-label">Script</label>
-                    <div class="library-script-linked">
-                        <span class="library-script-badge">${escHtml(scriptName)}</span>
-                        <button class="library-script-open-btn" id="library-video-open-script">Open</button>
-                        <button class="library-script-unlink-btn" id="library-video-unlink-script">Unlink</button>
-                    </div>
-                </div>`;
-        } else {
-            scriptSection = `
-                <div class="library-idea-field">
-                    <label class="library-idea-label">Script</label>
-                    <div class="library-script-actions">
-                        <button class="library-script-link-btn" id="library-video-link-script">Link Script</button>
-                        <button class="library-script-new-btn" id="library-video-new-script">New Script</button>
-                    </div>
-                </div>`;
-        }
+        // Script field — inline textarea
+        const scriptSection = `
+            <div class="library-idea-field">
+                <label class="library-idea-label">Script</label>
+                <textarea class="library-idea-script" id="library-video-script" placeholder="Write your script here...">${escHtml(v.script || '')}</textarea>
+            </div>`;
 
         // Source idea badge
         let sourceIdeaHtml = '';
@@ -1251,42 +1051,14 @@ const LibraryUI = (() => {
                 </div>
                 ${scriptSection}
             </div>
-            <div class="library-script-picker-overlay" id="library-video-script-picker-overlay" style="display:none;">
-                <div class="library-script-picker">
-                    <div class="library-script-picker-header">
-                        <h3>Link a Script</h3>
-                        <button class="library-script-picker-close" id="library-video-script-picker-close">&times;</button>
-                    </div>
-                    <div class="library-script-picker-list" id="library-video-script-picker-list"></div>
-                </div>
-            </div>
         `;
 
         document.getElementById('library-back-btn').addEventListener('click', () => saveVideoAndBack());
         document.getElementById('library-editor-title').addEventListener('input', scheduleVideoSave);
         document.getElementById('library-video-hook').addEventListener('input', scheduleVideoSave);
         document.getElementById('library-video-context').addEventListener('input', scheduleVideoSave);
+        document.getElementById('library-video-script').addEventListener('input', scheduleVideoSave);
         document.getElementById('library-video-project').addEventListener('change', scheduleVideoSave);
-
-        // Script linker events
-        const linkBtn = document.getElementById('library-video-link-script');
-        if (linkBtn) linkBtn.addEventListener('click', () => showVideoScriptPicker());
-        const newBtn = document.getElementById('library-video-new-script');
-        if (newBtn) newBtn.addEventListener('click', () => createScriptForVideo());
-        const unlinkBtn = document.getElementById('library-video-unlink-script');
-        if (unlinkBtn) unlinkBtn.addEventListener('click', () => unlinkScriptFromVideo());
-        const openBtn = document.getElementById('library-video-open-script');
-        if (openBtn) openBtn.addEventListener('click', () => {
-            if (v.linkedScriptId) { switchTab('scripts'); selectScript(v.linkedScriptId); }
-        });
-        const pickerClose = document.getElementById('library-video-script-picker-close');
-        if (pickerClose) pickerClose.addEventListener('click', () => {
-            document.getElementById('library-video-script-picker-overlay').style.display = 'none';
-        });
-        const pickerOverlay = document.getElementById('library-video-script-picker-overlay');
-        if (pickerOverlay) pickerOverlay.addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) pickerOverlay.style.display = 'none';
-        });
     }
 
     function scheduleVideoSave() {
@@ -1308,7 +1080,9 @@ const LibraryUI = (() => {
             const hook = hookEl?.value || '';
             const context = ctxEl?.value || '';
             const project = projectEl?.value || '';
-            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, hook, context, project });
+            const scriptEl = document.getElementById('library-video-script');
+            const script = scriptEl?.value || '';
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, hook, context, script, project });
             selectedVideo = VideoService.getById(selectedVideo.id);
             setSaveStatus('Saved');
         } catch (e) { setSaveStatus('Save failed'); videoDirty = true; }
@@ -1322,105 +1096,11 @@ const LibraryUI = (() => {
         switchTab('projects');
     }
 
-    function showVideoScriptPicker() {
-        const overlay = document.getElementById('library-video-script-picker-overlay');
-        const listEl = document.getElementById('library-video-script-picker-list');
-        if (!overlay || !listEl) return;
-
-        const linkedIds = LinkService.getLinkedScriptIds(selectedVideo ? selectedVideo.linkedScriptId : '');
-        const available = ScriptService.getAll().filter(s => !linkedIds.has(s.id));
-
-        if (available.length === 0) {
-            listEl.innerHTML = '<div class="library-empty">No available scripts. Create one with "New Script".</div>';
-        } else {
-            listEl.innerHTML = available.map(s => `
-                <div class="library-script-picker-item" data-id="${s.id}">
-                    <div class="library-script-picker-info">
-                        <div class="library-script-picker-name">${escHtml(s.title)}</div>
-                        <div class="library-script-picker-project">${escHtml(s.project || 'No project')}</div>
-                    </div>
-                    <button class="library-script-picker-link-btn" data-id="${s.id}">Link</button>
-                </div>`).join('');
-            async function doLink(scriptId) {
-                if (!selectedVideo) return;
-                const btn = listEl.querySelector(`.library-script-picker-link-btn[data-id="${scriptId}"]`);
-                if (navigator.vibrate) navigator.vibrate(30);
-                if (btn) { btn.textContent = 'Linking...'; btn.disabled = true; }
-                try {
-                    await LinkService.linkScriptToVideo(scriptId, selectedVideo.id);
-                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-                    selectedVideo = VideoService.getById(selectedVideo.id);
-                    overlay.style.display = 'none';
-                    renderVideoEditor();
-                } catch (e) {
-                    console.warn('Library: link script to video failed', e);
-                    alert('Failed to link script.');
-                    if (btn) { btn.textContent = 'Link'; btn.disabled = false; }
-                }
-            }
-            listEl.querySelectorAll('.library-script-picker-link-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => { e.stopPropagation(); doLink(btn.dataset.id); });
-            });
-            listEl.querySelectorAll('.library-script-picker-item').forEach(item => {
-                item.addEventListener('click', () => doLink(item.dataset.id));
-            });
-        }
-        overlay.style.display = 'flex';
-    }
-
-    async function createScriptForVideo() {
-        if (!selectedVideo) return;
-        const btn = document.getElementById('library-video-new-script');
-        if (btn) { btn.textContent = 'Creating...'; btn.disabled = true; }
-        try {
-            const script = await ScriptService.create(selectedVideo.name || 'Untitled', selectedVideo.project || '');
-            await LinkService.linkScriptToVideo(script.id, selectedVideo.id);
-            selectedVideo = VideoService.getById(selectedVideo.id);
-            renderVideoEditor();
-        } catch (e) {
-            console.warn('Library: create script for video failed', e);
-            alert('Failed to create script.');
-        } finally {
-            if (btn) { btn.textContent = 'New Script'; btn.disabled = false; }
-        }
-    }
-
-    async function unlinkScriptFromVideo() {
-        if (!selectedVideo) return;
-        const btn = document.getElementById('library-video-unlink-script');
-        if (navigator.vibrate) navigator.vibrate(30);
-        if (btn) { btn.textContent = 'Unlinking...'; btn.disabled = true; }
-        try {
-            await LinkService.unlinkFromVideo(selectedVideo.id);
-            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-            selectedVideo = VideoService.getById(selectedVideo.id);
-            renderVideoEditor();
-        } catch (e) {
-            console.warn('Library: unlink script from video failed', e);
-            alert('Failed to unlink script.');
-            if (btn) { btn.textContent = 'Unlink'; btn.disabled = false; }
-        }
-    }
-
     // =====================
     // --- PROJECTS ---
     // =====================
     let projectsLoaded = false;
     let selectedProject = null;
-    let scriptMetaLoaded = false;
-
-    async function loadScriptMetaBulk() {
-        if (scriptMetaLoaded) return;
-        const needsMeta = ScriptService.getAll().filter(s => !s.project);
-        await Promise.all(needsMeta.map(async s => {
-            try {
-                const data = await ScriptService.loadContent(s.id);
-                s.project = (data.meta && data.meta.project) || '';
-            } catch (e) {}
-        }));
-        scriptMetaLoaded = true;
-    }
-
     async function renderProjectsList() {
         const el = document.getElementById('library-projects-container');
         if (!el) return;
@@ -1429,7 +1109,6 @@ const LibraryUI = (() => {
             el.innerHTML = '<div class="library-empty">Loading projects...</div>';
             try {
                 await VideoService.getProjects();
-                await loadScriptMetaBulk();
                 projectsLoaded = true;
                 renderProjectsList();
             } catch (e) {
@@ -1501,17 +1180,12 @@ const LibraryUI = (() => {
             html += '<div class="library-project-section-empty">No videos in this project</div>';
         } else {
             html += projectVideos.map(v => {
-                let scriptInfo = '';
-                if (v.linkedScriptId) {
-                    const linked = ScriptService.getAll().find(s => s.id === v.linkedScriptId);
-                    scriptInfo = `<div class="library-project-item-sub" data-script-id="${v.linkedScriptId}">Script: ${escHtml(linked ? linked.title : 'Linked')}</div>`;
-                }
+                const hasScript = v.script ? '<span style="font-size:11px;color:#888;margin-left:6px;">has script</span>' : '';
                 return `
                 <div class="library-project-item library-project-item-clickable" data-video-id="${v.id}">
-                    <span class="library-project-item-name">${escHtml(v.name)}</span>
+                    <span class="library-project-item-name">${escHtml(v.name)}${hasScript}</span>
                     <span class="library-project-item-status status-${v.status}">${statusLabel(v.status)}</span>
-                </div>
-                ${scriptInfo}`;
+                </div>`;
             }).join('');
         }
         html += '</div>';
@@ -1522,17 +1196,12 @@ const LibraryUI = (() => {
             html += '<div class="library-project-section-empty">No ideas in this project</div>';
         } else {
             html += projectIdeas.map(n => {
-                let scriptInfo = '';
-                if (n.linkedScriptId) {
-                    const linked = ScriptService.getAll().find(s => s.id === n.linkedScriptId);
-                    scriptInfo = `<div class="library-project-item-sub" data-script-id="${n.linkedScriptId}">Script: ${escHtml(linked ? linked.title : 'Linked')}</div>`;
-                }
+                const hasScript = n.script ? '<span style="font-size:11px;color:#888;margin-left:6px;">has script</span>' : '';
                 return `
                 <div class="library-project-item library-project-item-clickable" data-note-id="${n.id}">
-                    <span class="library-project-item-name">${escHtml(n.name)}</span>
+                    <span class="library-project-item-name">${escHtml(n.name)}${hasScript}</span>
                     <span class="library-project-item-status">${n.type === 'converted' ? 'Sent' : 'Idea'}</span>
-                </div>
-                ${scriptInfo}`;
+                </div>`;
             }).join('');
         }
         html += '</div>';
@@ -1561,13 +1230,6 @@ const LibraryUI = (() => {
             });
         });
 
-        el.querySelectorAll('[data-script-id]').forEach(item => {
-            item.addEventListener('click', () => {
-                switchTab('scripts');
-                selectScript(item.dataset.scriptId);
-            });
-        });
-
         document.getElementById('library-project-add-note').addEventListener('click', async () => {
             try {
                 const note = await NotesService.create({ name: 'Untitled', type: 'idea', project: p });
@@ -1582,275 +1244,6 @@ const LibraryUI = (() => {
                 alert('Failed to create note.');
             }
         });
-    }
-
-    // =====================
-    // --- SCRIPTS ---
-    // =====================
-    function renderList() {
-        const listEl = document.getElementById('library-list');
-        if (!listEl) return;
-        const scripts = ScriptService.getAll();
-        if (scripts.length === 0) { listEl.innerHTML = '<div class="library-empty">No scripts yet</div>'; return; }
-        listEl.innerHTML = scripts.map(s => {
-            const isSelected = s.id === selectedId;
-            const badge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(s.project) : '';
-            // Find linked video/idea for this script
-            let linkedInfo = '';
-            const linkedVideo = VideoService.getAll().find(v => v.linkedScriptId === s.id);
-            const linkedIdea = !linkedVideo ? NotesService.getAll().find(n => n.linkedScriptId === s.id) : null;
-            if (linkedVideo) {
-                const stBadge = window.EggRenderer ? window.EggRenderer.statusBadgeHtml(linkedVideo.status) : '';
-                linkedInfo = `<span style="margin-left:6px;font-size:12px;color:#888;">${escHtml(linkedVideo.name)}</span> ${stBadge}`;
-            } else if (linkedIdea) {
-                linkedInfo = `<span style="margin-left:6px;font-size:12px;color:#888;">${escHtml(linkedIdea.name)}</span>`;
-            }
-            return `<div class="library-list-item${isSelected ? ' selected' : ''}" data-id="${s.id}">
-                <div class="library-list-item-content">
-                    <div class="library-list-title">${escHtml(s.title)}</div>
-                    <div class="library-list-date">${badge}${linkedInfo}${!badge && !linkedInfo ? formatDate(s.lastEdited || s.created || s.updatedAt || s.createdAt) : ''}</div>
-                </div>
-                <button class="library-delete-btn" data-id="${s.id}" title="Delete">&times;</button>
-            </div>`;
-        }).join('');
-        listEl.querySelectorAll('.library-list-item').forEach(el => {
-            el.addEventListener('click', (e) => { if (!e.target.classList.contains('library-delete-btn')) selectScript(el.dataset.id); });
-        });
-        listEl.querySelectorAll('.library-delete-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => { e.stopPropagation(); handleDelete(btn.dataset.id); });
-        });
-    }
-
-    async function renderEditor(title, content) {
-        const editorEl = document.getElementById('library-editor');
-        if (!editorEl) return;
-        const displayTitle = title.replace(/\s*Script$/i, '');
-
-        // Build "Linked to" section — show what idea/video this script belongs to
-        let linkedToHtml = '';
-        const linkedIdeaId = selectedScriptMeta ? selectedScriptMeta.linkedIdeaId || '' : '';
-        const linkedVideoId = selectedScriptMeta ? selectedScriptMeta.linkedVideoId || '' : '';
-        if (linkedIdeaId) {
-            const idea = NotesService.getById(linkedIdeaId);
-            linkedToHtml = `
-                <div class="library-script-linked">
-                    <span class="library-script-badge">${escHtml(idea ? idea.name : 'Idea')}</span>
-                    <button class="library-script-unlink-btn" id="library-script-unlink">Unlink</button>
-                </div>`;
-        } else if (linkedVideoId) {
-            const video = VideoService.getById(linkedVideoId);
-            linkedToHtml = `
-                <div class="library-script-linked">
-                    <span class="library-script-badge">${escHtml(video ? video.name : 'Video')}</span>
-                    <button class="library-script-unlink-btn" id="library-script-unlink">Unlink</button>
-                </div>`;
-        } else {
-            linkedToHtml = `
-                <div class="library-script-actions">
-                    <button class="library-script-link-btn" id="library-script-link-to">Link to Idea / Video</button>
-                </div>`;
-        }
-
-        editorEl.innerHTML = `
-            <div class="library-editor-toolbar">
-                <button class="library-back-btn" id="library-back-btn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                    Scripts
-                </button>
-                <span class="library-save-status saved" id="library-save-status">Saved</span>
-            </div>
-            <div class="library-editor-body">
-                <div class="library-editor-title-row">
-                    <input type="text" class="library-editor-title" id="library-editor-title" value="${escAttr(displayTitle)}" placeholder="Title" />
-                    <span class="library-editor-suffix">Script</span>
-                </div>
-                <div class="library-meta-row">
-                    <label class="library-meta-label">Linked to</label>
-                    ${linkedToHtml}
-                </div>
-                <textarea class="library-editor-textarea" id="library-editor-textarea" placeholder="Start writing...">${escHtml(content)}</textarea>
-            </div>
-            <div class="library-script-picker-overlay" id="library-script-link-overlay" style="display:none;">
-                <div class="library-script-picker">
-                    <div class="library-script-picker-header">
-                        <h3>Link to Idea or Video</h3>
-                        <button class="library-script-picker-close" id="library-script-link-close">&times;</button>
-                    </div>
-                    <div class="library-script-link-filter" id="library-script-link-filter"></div>
-                    <div class="library-script-picker-list" id="library-script-link-list"></div>
-                </div>
-            </div>
-        `;
-        document.getElementById('library-back-btn').addEventListener('click', handleBack);
-        document.getElementById('library-editor-textarea').addEventListener('input', scheduleContentSave);
-        document.getElementById('library-editor-title').addEventListener('input', scheduleTitleSave);
-
-        // Linked to events
-        const linkToBtn = document.getElementById('library-script-link-to');
-        if (linkToBtn) linkToBtn.addEventListener('click', () => showScriptLinkToPicker());
-        const unlinkBtn = document.getElementById('library-script-unlink');
-        if (unlinkBtn) unlinkBtn.addEventListener('click', async () => {
-            if (!selectedId) return;
-            if (navigator.vibrate) navigator.vibrate(30);
-            unlinkBtn.textContent = 'Unlinking...';
-            unlinkBtn.disabled = true;
-            try {
-                // Save any pending content first
-                if (dirty) await saveContent();
-                await LinkService.unlinkScript(selectedId);
-                if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-                // Refresh local meta
-                selectedScriptMeta = { project: '' };
-                const script = ScriptService.getAll().find(s => s.id === selectedId);
-                await renderEditor(script ? script.title : '', document.getElementById('library-editor-textarea')?.value || '');
-            } catch (e) {
-                console.warn('Library: unlink script failed', e);
-                alert('Failed to unlink script.');
-                unlinkBtn.textContent = 'Unlink';
-                unlinkBtn.disabled = false;
-            }
-        });
-        const linkClose = document.getElementById('library-script-link-close');
-        if (linkClose) linkClose.addEventListener('click', () => {
-            document.getElementById('library-script-link-overlay').style.display = 'none';
-        });
-        const linkOverlay = document.getElementById('library-script-link-overlay');
-        if (linkOverlay) linkOverlay.addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) linkOverlay.style.display = 'none';
-        });
-    }
-
-    function showScriptLinkToPicker() {
-        const overlay = document.getElementById('library-script-link-overlay');
-        const listEl = document.getElementById('library-script-link-list');
-        const filterEl = document.getElementById('library-script-link-filter');
-        if (!overlay || !listEl) return;
-
-        // Build filter bar with projects
-        const allProjs = VideoService.getCachedProjects();
-        let filterProject = '';
-        if (filterEl) {
-            filterEl.innerHTML = `
-                <button class="incubator-filter-btn active" data-project="">All</button>
-                ${allProjs.map(p => `<button class="incubator-filter-btn" data-project="${escAttr(p)}">${escHtml(p)}</button>`).join('')}
-            `;
-            filterEl.style.cssText = 'display:flex;gap:6px;padding:8px 16px;overflow-x:auto;flex-shrink:0;';
-            filterEl.querySelectorAll('.incubator-filter-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    filterProject = btn.dataset.project;
-                    filterEl.querySelectorAll('.incubator-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
-                    renderLinkItems();
-                });
-            });
-        }
-
-        function renderLinkItems() {
-            const ideas = NotesService.getAll().filter(n => n.type !== 'converted' && n.type !== 'todo');
-            const videos = VideoService.getAll();
-            let filteredIdeas = filterProject ? ideas.filter(n => n.project === filterProject) : ideas;
-            let filteredVideos = filterProject ? videos.filter(v => v.project === filterProject) : videos;
-
-            let html = '';
-            if (filteredVideos.length > 0) {
-                html += `<div style="padding:8px 14px;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Videos</div>`;
-                html += filteredVideos.map(v => `
-                    <div class="library-script-picker-item" data-type="video" data-id="${v.id}">
-                        <div class="library-script-picker-info">
-                            <div class="library-script-picker-name">${escHtml(v.name)}</div>
-                            <div class="library-script-picker-project">${escHtml(v.project || 'No project')} · ${v.status}</div>
-                        </div>
-                        <button class="library-script-picker-link-btn" data-type="video" data-id="${v.id}">Link</button>
-                    </div>`).join('');
-            }
-            if (filteredIdeas.length > 0) {
-                html += `<div style="padding:8px 14px;font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Ideas</div>`;
-                html += filteredIdeas.map(n => `
-                    <div class="library-script-picker-item" data-type="idea" data-id="${n.id}">
-                        <div class="library-script-picker-info">
-                            <div class="library-script-picker-name">${escHtml(n.name)}</div>
-                            <div class="library-script-picker-project">${escHtml(n.project || 'No project')}</div>
-                        </div>
-                        <button class="library-script-picker-link-btn" data-type="idea" data-id="${n.id}">Link</button>
-                    </div>`).join('');
-            }
-            if (!html) html = '<div class="library-empty">No ideas or videos found.</div>';
-            listEl.innerHTML = html;
-
-            async function doLinkTo(type, id) {
-                const btn = listEl.querySelector(`.library-script-picker-link-btn[data-type="${type}"][data-id="${id}"]`);
-                if (navigator.vibrate) navigator.vibrate(30);
-                if (btn) { btn.textContent = 'Linking...'; btn.disabled = true; }
-                try {
-                    // Save any pending content first
-                    if (dirty && selectedId) await saveContent();
-                    if (type === 'idea') {
-                        await LinkService.linkScriptToIdea(selectedId, id);
-                    } else {
-                        await LinkService.linkScriptToVideo(selectedId, id);
-                    }
-                    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-                    // Refresh local meta from what LinkService wrote
-                    const data = await ScriptService.loadContent(selectedId);
-                    selectedScriptMeta = data.meta;
-                    overlay.style.display = 'none';
-                    const script = ScriptService.getAll().find(s => s.id === selectedId);
-                    await renderEditor(script ? script.title : '', document.getElementById('library-editor-textarea')?.value || '');
-                } catch (e) {
-                    console.warn('Library: link script to item failed', e);
-                    alert('Failed to link. Check connection.');
-                    if (btn) { btn.textContent = 'Link'; btn.disabled = false; }
-                }
-            }
-            listEl.querySelectorAll('.library-script-picker-link-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => { e.stopPropagation(); doLinkTo(btn.dataset.type, btn.dataset.id); });
-            });
-            listEl.querySelectorAll('.library-script-picker-item').forEach(item => {
-                item.addEventListener('click', () => doLinkTo(item.dataset.type, item.dataset.id));
-            });
-        }
-        renderLinkItems();
-        overlay.style.display = 'flex';
-    }
-
-    async function handleBack() { if (dirty && selectedId) await saveContent(); showListPage(); }
-
-    async function selectScript(id) {
-        if (dirty && selectedId) await saveContent();
-        selectedId = id; renderList(); showEditorPage();
-        const editorEl = document.getElementById('library-editor');
-        if (editorEl) editorEl.innerHTML = '<div class="library-loading">Loading...</div>';
-        const script = ScriptService.getAll().find(s => s.id === id);
-        const data = await ScriptService.loadContent(id);
-        selectedScriptMeta = data.meta;
-        if (script) script.project = selectedScriptMeta.project || '';
-        await renderEditor(script ? script.title : '', data.text);
-    }
-
-    async function handleNew() {
-        const btn = document.getElementById('library-new-btn');
-        if (navigator.vibrate) navigator.vibrate(30);
-        if (btn) { btn.disabled = true; }
-        try {
-            const script = await ScriptService.create('Untitled', '');
-            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-            selectedId = script.id;
-            selectedScriptMeta = { project: '' };
-            renderList(); showEditorPage(); await renderEditor(script.title, '');
-            const titleInput = document.getElementById('library-editor-title');
-            if (titleInput) { titleInput.focus(); titleInput.select(); }
-            setSaveStatus('Saved');
-        } catch (e) { console.warn('Library: create failed', e); alert('Failed to create script. Check connection.'); }
-        finally { if (btn) btn.disabled = false; }
-    }
-
-    async function handleDelete(id) {
-        const script = ScriptService.getAll().find(s => s.id === id);
-        if (!script || !confirm(`Delete "${script.title}"?`)) return;
-        try {
-            await ScriptService.remove(id);
-            if (selectedId === id) { selectedId = null; if (currentPage === 'editor') showListPage(); }
-            renderList();
-        } catch (e) { console.warn('Library: delete failed', e); }
     }
 
     function updateTodoBadge() {
@@ -2139,26 +1532,21 @@ const LibraryUI = (() => {
         async open(bodyEl, opts) {
             await loadConfig();
             render(bodyEl);
-            await Promise.all([
-                ScriptService.sync(),
-                NotesService.sync().catch(() => {}),
-            ]);
-            renderList();
+            await NotesService.sync().catch(() => {});
+            renderNotesList();
             if (opts && opts.tab) switchTab(opts.tab);
         },
         close() {
-            if (saveTimer) { clearTimeout(saveTimer); saveContent(); }
-            if (titleSaveTimer) { clearTimeout(titleSaveTimer); saveTitleNow(); }
             if (noteSaveTimer) { clearTimeout(noteSaveTimer); saveNote(); }
             if (videoSaveTimer) { clearTimeout(videoSaveTimer); saveVideo(); }
-            container = null; selectedId = null; selectedScriptMeta = null; selectedNote = null;
+            container = null; selectedNote = null;
             selectedVideo = null; videoDirty = false;
-            dirty = false; noteDirty = false;
+            noteDirty = false;
             // Keep todoLoaded/todoItems, calendarLoaded/calendarItems, invoicesLoaded/invoiceItems cached across close/open
             calendarViewMode = 'week'; calendarSelectedDate = null;
             invoicesLoaded = false;
-            projectsLoaded = false; selectedProject = null; scriptMetaLoaded = false;
-            currentPage = 'list'; activeTab = 'scripts';
+            projectsLoaded = false; selectedProject = null;
+            currentPage = 'list'; activeTab = 'notes';
         },
         // Public: preload to-do count for badge (called on page load)
         async preloadTodoCount() {

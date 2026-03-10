@@ -1468,22 +1468,25 @@ const PenUI = (() => {
                     <label>Context</label>
                     <textarea id="pen-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
                     <label>Script</label>
-                    ${ScriptLinker.renderLinker({ prefix: 'pen', linkedScriptId: v.linkedScriptId, useInlineEditor: true })}
+                    ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('pen-inline-script', 'Script') : '<textarea id="pen-script"></textarea>'}
                     <label>Links</label>
                     <textarea id="pen-links" placeholder="YouTube, TikTok, Instagram URLs...">${escHtml(autoLinks)}</textarea>
                 </div>
                 ${linkYouTubeHtml}
             </div>
-            ${ScriptLinker.renderPickerOverlay('pen')}
         `;
 
-        // Script linker events
-        ScriptLinker.bindEvents({
-            prefix: 'pen',
-            getTarget: () => selectedVideo,
-            isIdea: false,
-            onRefresh: () => { selectedVideo = VideoService.getById(selectedVideo.id); renderDetail(); }
-        });
+        // Inline script editor — reads/writes video.script directly
+        if (window.EggRenderer) {
+            window.EggRenderer.initInlineScriptEditor('pen-inline-script', {
+                get: () => (selectedVideo && selectedVideo.script) || '',
+                save: async (text) => {
+                    if (!selectedVideo) return;
+                    selectedVideo.script = text;
+                    await VideoService.update(selectedVideo.id, { script: text });
+                }
+            });
+        }
 
         // Init 3D creature preview
         function updateCreaturePreview() {

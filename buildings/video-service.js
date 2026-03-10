@@ -83,7 +83,7 @@ const VideoService = (() => {
                     status: videoData.status || 'incubator',
                     hook: videoData.hook || '',
                     context: videoData.context || '',
-                    linkedScriptId: videoData.linkedScriptId || '',
+                    script: videoData.script || '',
                     assignedTo: videoData.assignedTo || '',
                     postedDate: videoData.postedDate || '',
                     links: videoData.links || '',

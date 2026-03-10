@@ -487,7 +487,8 @@
     margin-bottom: 4px;
 }
 .library-idea-hook,
-.library-idea-context {
+.library-idea-context,
+.library-idea-script {
     width: 100%;
     border: 1px solid #e0dcd6;
     border-radius: 10px;
@@ -506,14 +507,20 @@
 .library-idea-context {
     min-height: 100px;
 }
+.library-idea-script {
+    min-height: 150px;
+    font-size: 14px;
+}
 
 .library-idea-hook:focus,
-.library-idea-context:focus {
+.library-idea-context:focus,
+.library-idea-script:focus {
     border-color: #5a3e1b;
     background: #fff;
 }
 .library-idea-hook::placeholder,
-.library-idea-context::placeholder {
+.library-idea-context::placeholder,
+.library-idea-script::placeholder {
     color: #c7c7cc;
 }
 
