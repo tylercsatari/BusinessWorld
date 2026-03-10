@@ -126,7 +126,7 @@
             <span id="invoices-badge" style="display:none;">0</span>
         </button>
         <div id="pen-scale-slider-wrap" style="display:none;">
-            <input type="range" id="pen-scale-slider" min="0" max="100" value="70" />
+            <input type="range" id="pen-scale-slider" min="0" max="100" value="50" />
             <label id="pen-scale-label">Size</label>
         </div>
     </div>
@@ -2631,15 +2631,33 @@ window.updatePenCreatureScales = function updatePenCreatureScales(ratioMap) {
     _applyPenCreatureScales();
 };
 function _applyPenCreatureScales() {
-    const spread = (document.getElementById('pen-scale-slider')?.value || 70) / 100;
+    const slider = (document.getElementById('pen-scale-slider')?.value || 50) / 100;
     penCreatures.forEach(c => {
         if (!_penScaleRatios) {
             c.userData.baseScale = 1.0;
         } else {
             const ratio = _penScaleRatios[c.userData.videoId];
             const r = ratio != null ? ratio : 0;
-            // At spread=0: all 1.0. At spread=1: range 0.4–1.8
-            c.userData.baseScale = 1.0 + (0.4 + r * 1.4 - 1.0) * spread;
+            // slider 0 = all same size (1.0)
+            // slider 0.5 = gentle spread (0.4–1.8 range)
+            // slider 1.0 = true proportional (actual value ratios)
+            let scale;
+            if (slider <= 0.5) {
+                // 0–0.5: interpolate from uniform (1.0) to gentle spread (0.4–1.8)
+                const t = slider * 2; // 0–1
+                const gentle = 0.4 + r * 1.4; // 0.4–1.8
+                scale = 1.0 + (gentle - 1.0) * t;
+            } else {
+                // 0.5–1.0: interpolate from gentle spread to true proportional
+                const t = (slider - 0.5) * 2; // 0–1
+                const gentle = 0.4 + r * 1.4;
+                // True proportional: r is already value/maxValue, so r=1 is biggest
+                // Use sqrt to keep things visible (pure linear would make small ones invisible)
+                const minScale = 0.15;
+                const proportional = minScale + r * (3.0 - minScale);
+                scale = gentle + (proportional - gentle) * t;
+            }
+            c.userData.baseScale = Math.max(0.1, scale);
         }
     });
 }
