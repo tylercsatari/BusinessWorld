@@ -475,6 +475,55 @@
     100% { background-position: -200% 0; }
 }
 
+/* --- Free Notes list --- */
+.library-freenotes-list {
+    flex: 1;
+    overflow-y: auto;
+}
+.library-freenote-pin {
+    font-size: 12px;
+    vertical-align: middle;
+}
+.library-freenote-linked-idea {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6c5ce7;
+    background: #f0ecfa;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+.library-freenote-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.library-freenote-pin-btn {
+    background: none;
+    border: 1px solid #e0dcd6;
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+    opacity: 0.4;
+}
+.library-freenote-pin-btn:hover {
+    background: #f0ece4;
+    opacity: 0.7;
+}
+.library-freenote-pin-btn.pinned {
+    opacity: 1;
+    background: #fff3e0;
+    border-color: #ffb74d;
+}
+
 /* --- Idea fields (hook / context textareas) --- */
 .library-idea-field {
     margin-bottom: 12px;

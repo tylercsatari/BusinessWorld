@@ -25,6 +25,14 @@ const LibraryUI = (() => {
     let videoSaveTimer = null;
     let videoDirty = false;
 
+    // --- Free Notes state ---
+    let freeNotes = [];
+    let freeNotesLoaded = false;
+    let freeNotesBusy = false;
+    let selectedFreeNote = null;
+    let freeNoteSaveTimer = null;
+    let freeNoteDirty = false;
+
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
 
@@ -55,7 +63,8 @@ const LibraryUI = (() => {
         if (!panel) return;
         panel.classList.remove('show-editor');
         panel.classList.add('show-list');
-        if (activeTab === 'notes') renderNotesList();
+        if (activeTab === 'freenotes') renderFreeNotesList();
+        else if (activeTab === 'notes') renderNotesList();
         else if (activeTab === 'calendar') renderCalendarList();
         else if (activeTab === 'projects') renderProjectsList();
     }
@@ -75,6 +84,7 @@ const LibraryUI = (() => {
             <div class="library-panel show-list">
                 <div class="library-page library-list-page" id="library-list-page">
                     <div class="library-tabs">
+                        <button class="library-tab" data-tab="freenotes">Notes</button>
                         <button class="library-tab active" data-tab="notes">Ideas</button>
                         <button class="library-tab" data-tab="todo">To-Do</button>
                         <button class="library-tab" data-tab="calendar">Calendar</button>
@@ -85,6 +95,7 @@ const LibraryUI = (() => {
                         <h2 class="library-list-heading" id="library-list-heading">Ideas</h2>
                         <button class="library-new-btn" id="library-new-btn" title="New">+</button>
                     </div>
+                    <div class="library-freenotes-list" id="library-freenotes-list" style="display:none;"></div>
                     <div class="library-notes-list" id="library-notes-list">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
                     <div class="library-todo-container" id="library-todo-container" style="display:none;"></div>
                     <div class="library-calendar-container" id="library-calendar-container" style="display:none;"></div>
@@ -99,7 +110,8 @@ const LibraryUI = (() => {
             </div>
         `;
         document.getElementById('library-new-btn').addEventListener('click', () => {
-            if (activeTab === 'notes') handleNewNote();
+            if (activeTab === 'freenotes') handleNewFreeNote();
+            else if (activeTab === 'notes') handleNewNote();
             // todo/calendar use inline input, no + button action needed — but we'll focus the input
             else if (activeTab === 'todo') focusTodoInput();
             else if (activeTab === 'calendar') focusCalendarInput();
@@ -113,12 +125,14 @@ const LibraryUI = (() => {
         activeTab = tab;
         container.querySelectorAll('.library-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
         const heading = document.getElementById('library-list-heading');
+        const freeNotesList = document.getElementById('library-freenotes-list');
         const notesList = document.getElementById('library-notes-list');
         const todoContainer = document.getElementById('library-todo-container');
         const calendarContainer = document.getElementById('library-calendar-container');
         const projectsContainer = document.getElementById('library-projects-container');
         const invoicesContainer = document.getElementById('library-invoices-container');
 
+        if (freeNotesList) freeNotesList.style.display = 'none';
         if (notesList) notesList.style.display = 'none';
         if (todoContainer) todoContainer.style.display = 'none';
         if (calendarContainer) calendarContainer.style.display = 'none';
@@ -127,7 +141,12 @@ const LibraryUI = (() => {
 
         const newBtn = document.getElementById('library-new-btn');
 
-        if (tab === 'notes') {
+        if (tab === 'freenotes') {
+            if (heading) heading.textContent = 'Notes';
+            if (freeNotesList) freeNotesList.style.display = '';
+            if (newBtn) newBtn.style.display = '';
+            renderFreeNotesList();
+        } else if (tab === 'notes') {
             if (heading) heading.textContent = 'Ideas';
             if (notesList) notesList.style.display = '';
             if (newBtn) newBtn.style.display = '';
@@ -735,6 +754,243 @@ const LibraryUI = (() => {
         const count = calendarItems.filter(e => e.date === today && !e.done).length;
         badge.textContent = count;
         badge.style.display = count > 0 ? '' : 'none';
+    }
+
+    // =====================
+    // --- FREE NOTES ---
+    // =====================
+
+    async function fetchFreeNotes() {
+        const res = await fetch('/api/data/notes');
+        if (!res.ok) return [];
+        return await res.json();
+    }
+
+    function renderFreeNotesList() {
+        const el = document.getElementById('library-freenotes-list');
+        if (!el) return;
+
+        if (!freeNotesLoaded) {
+            el.innerHTML = '<div class="library-empty">Loading notes...</div>';
+            fetchFreeNotes().then(items => {
+                freeNotes = items;
+                freeNotesLoaded = true;
+                renderFreeNotesList();
+            }).catch(() => {
+                el.innerHTML = '<div class="library-empty">Could not load notes.</div>';
+            });
+            return;
+        }
+
+        // Sort: pinned first, then by lastEdited descending
+        const sorted = [...freeNotes].sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return (b.lastEdited || b.createdAt || '').localeCompare(a.lastEdited || a.createdAt || '');
+        });
+
+        if (sorted.length === 0) {
+            el.innerHTML = '<div class="library-empty">No notes yet. Tap + to create one.</div>';
+            return;
+        }
+
+        el.innerHTML = sorted.map(n => {
+            const preview = (n.body || '').substring(0, 80).replace(/\n/g, ' ');
+            const pinIcon = n.pinned ? '<span class="library-freenote-pin" title="Pinned">&#128204;</span> ' : '';
+            let metaHtml = '';
+            if (n.linkedProject) {
+                const badge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.linkedProject) : escHtml(n.linkedProject);
+                metaHtml += badge;
+            }
+            if (n.linkedIdeaId) {
+                const idea = NotesService.getById(n.linkedIdeaId);
+                if (idea) metaHtml += `<span class="library-freenote-linked-idea">${escHtml(idea.name)}</span>`;
+            }
+            return `
+            <div class="library-list-item" data-freenote-id="${n.id}">
+                <div class="library-list-item-content">
+                    <div class="library-list-title">${pinIcon}${escHtml(n.title || 'Untitled')}</div>
+                    <div class="library-list-date">${metaHtml || escHtml(preview || 'Empty note')}</div>
+                </div>
+                <button class="library-delete-btn" data-freenote-id="${n.id}" title="Delete">&times;</button>
+            </div>`;
+        }).join('');
+
+        el.querySelectorAll('.library-list-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.classList.contains('library-delete-btn')) return;
+                selectFreeNote(item.dataset.freenoteId);
+            });
+        });
+        el.querySelectorAll('.library-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => { e.stopPropagation(); handleDeleteFreeNote(btn.dataset.freenoteId); });
+        });
+    }
+
+    function selectFreeNote(id) {
+        selectedFreeNote = freeNotes.find(n => n.id === id);
+        if (!selectedFreeNote) return;
+        showEditorPage();
+        renderFreeNoteEditor(selectedFreeNote);
+    }
+
+    async function renderFreeNoteEditor(note) {
+        const editorEl = document.getElementById('library-editor');
+        if (!editorEl) return;
+
+        // Project dropdown
+        let projectOptions = '';
+        try {
+            const projs = await VideoService.getProjects();
+            projectOptions = projs.map(p => `<option value="${escAttr(p)}" ${p === note.linkedProject ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
+        } catch (e) {}
+
+        // Idea dropdown
+        const ideas = NotesService.getAll().filter(n => n.type !== 'todo');
+        const ideaOptions = ideas.map(i => `<option value="${escAttr(i.id)}" ${i.id === note.linkedIdeaId ? 'selected' : ''}>${escHtml(i.name)}</option>`).join('');
+
+        editorEl.innerHTML = `
+            <div class="library-editor-toolbar">
+                <button class="library-back-btn" id="library-back-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    Notes
+                </button>
+                <div class="library-freenote-toolbar-right">
+                    <button class="library-freenote-pin-btn ${note.pinned ? 'pinned' : ''}" id="library-freenote-pin" title="${note.pinned ? 'Unpin' : 'Pin to top'}">&#128204;</button>
+                    <span class="library-save-status saved" id="library-save-status">Saved</span>
+                </div>
+            </div>
+            <div class="library-editor-body">
+                <div class="library-editor-title-row">
+                    <input type="text" class="library-editor-title" id="library-freenote-title" value="${escAttr(note.title || '')}" placeholder="Note title..." />
+                </div>
+                <div class="library-meta-row">
+                    <label class="library-meta-label">Project</label>
+                    <select class="library-project-select" id="library-freenote-project">
+                        <option value="">None</option>
+                        ${projectOptions}
+                    </select>
+                </div>
+                <div class="library-meta-row">
+                    <label class="library-meta-label">Idea</label>
+                    <select class="library-project-select" id="library-freenote-idea">
+                        <option value="">None</option>
+                        ${ideaOptions}
+                    </select>
+                </div>
+                <textarea class="library-editor-textarea" id="library-freenote-body" placeholder="Write anything here...">${escHtml(note.body || '')}</textarea>
+            </div>
+        `;
+
+        document.getElementById('library-back-btn').addEventListener('click', () => saveFreeNoteAndBack());
+        document.getElementById('library-freenote-title').addEventListener('input', scheduleFreeNoteSave);
+        document.getElementById('library-freenote-body').addEventListener('input', scheduleFreeNoteSave);
+        document.getElementById('library-freenote-project').addEventListener('change', scheduleFreeNoteSave);
+        document.getElementById('library-freenote-idea').addEventListener('change', scheduleFreeNoteSave);
+        document.getElementById('library-freenote-pin').addEventListener('click', toggleFreeNotePin);
+    }
+
+    async function toggleFreeNotePin() {
+        if (!selectedFreeNote) return;
+        selectedFreeNote.pinned = !selectedFreeNote.pinned;
+        const pinBtn = document.getElementById('library-freenote-pin');
+        if (pinBtn) {
+            pinBtn.classList.toggle('pinned', selectedFreeNote.pinned);
+            pinBtn.title = selectedFreeNote.pinned ? 'Unpin' : 'Pin to top';
+        }
+        try {
+            await fetch(`/api/data/notes/${selectedFreeNote.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pinned: selectedFreeNote.pinned })
+            });
+        } catch (e) {
+            console.warn('Library: toggle pin failed', e);
+            selectedFreeNote.pinned = !selectedFreeNote.pinned;
+        }
+    }
+
+    function scheduleFreeNoteSave() {
+        freeNoteDirty = true; setSaveStatus('Editing...');
+        if (freeNoteSaveTimer) clearTimeout(freeNoteSaveTimer);
+        freeNoteSaveTimer = setTimeout(() => saveFreeNote(), 1500);
+    }
+
+    async function saveFreeNote() {
+        if (!selectedFreeNote || !freeNoteDirty) return;
+        const titleEl = document.getElementById('library-freenote-title');
+        const bodyEl = document.getElementById('library-freenote-body');
+        const projectEl = document.getElementById('library-freenote-project');
+        const ideaEl = document.getElementById('library-freenote-idea');
+        if (!titleEl) return;
+        setSaveStatus('Saving...'); freeNoteDirty = false;
+        try {
+            const fields = {
+                title: titleEl.value.trim() || 'Untitled',
+                body: bodyEl?.value || '',
+                linkedProject: projectEl?.value || '',
+                linkedIdeaId: ideaEl?.value || '',
+                lastEdited: new Date().toISOString()
+            };
+            const res = await fetch(`/api/data/notes/${selectedFreeNote.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(fields)
+            });
+            if (!res.ok) throw new Error('Save failed');
+            const updated = await res.json();
+            const idx = freeNotes.findIndex(n => n.id === selectedFreeNote.id);
+            if (idx >= 0) freeNotes[idx] = updated;
+            selectedFreeNote = updated;
+            setSaveStatus('Saved');
+        } catch (e) { setSaveStatus('Save failed'); freeNoteDirty = true; }
+    }
+
+    async function saveFreeNoteAndBack() {
+        if (freeNoteDirty && selectedFreeNote) await saveFreeNote();
+        selectedFreeNote = null;
+        showListPage();
+        renderFreeNotesList();
+    }
+
+    async function handleNewFreeNote() {
+        try {
+            const res = await fetch('/api/data/notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Untitled',
+                    body: '',
+                    linkedProject: '',
+                    linkedIdeaId: '',
+                    pinned: false,
+                    lastEdited: new Date().toISOString()
+                })
+            });
+            if (!res.ok) throw new Error('Create failed');
+            const note = await res.json();
+            freeNotes.push(note);
+            selectedFreeNote = note;
+            showEditorPage();
+            await renderFreeNoteEditor(note);
+            const titleInput = document.getElementById('library-freenote-title');
+            if (titleInput) { titleInput.focus(); titleInput.select(); }
+        } catch (e) {
+            console.warn('Library: create free note failed', e);
+            alert('Failed to create note. Check connection.');
+        }
+    }
+
+    async function handleDeleteFreeNote(id) {
+        const note = freeNotes.find(n => n.id === id);
+        if (!note || !confirm(`Delete "${note.title || 'Untitled'}"?`)) return;
+        try {
+            const res = await fetch(`/api/data/notes/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Delete failed');
+            freeNotes = freeNotes.filter(n => n.id !== id);
+            if (selectedFreeNote && selectedFreeNote.id === id) { selectedFreeNote = null; if (currentPage === 'editor') showListPage(); }
+            renderFreeNotesList();
+        } catch (e) { console.warn('Library: delete free note failed', e); }
     }
 
     // =====================
@@ -1537,12 +1793,15 @@ const LibraryUI = (() => {
             if (opts && opts.tab) switchTab(opts.tab);
         },
         close() {
+            if (freeNoteSaveTimer) { clearTimeout(freeNoteSaveTimer); saveFreeNote(); }
             if (noteSaveTimer) { clearTimeout(noteSaveTimer); saveNote(); }
             if (videoSaveTimer) { clearTimeout(videoSaveTimer); saveVideo(); }
             container = null; selectedNote = null;
             selectedVideo = null; videoDirty = false;
+            selectedFreeNote = null; freeNoteDirty = false;
             noteDirty = false;
             // Keep todoLoaded/todoItems, calendarLoaded/calendarItems, invoicesLoaded/invoiceItems cached across close/open
+            freeNotesLoaded = false;
             calendarViewMode = 'week'; calendarSelectedDate = null;
             invoicesLoaded = false;
             projectsLoaded = false; selectedProject = null;

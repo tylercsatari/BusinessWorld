@@ -1263,8 +1263,8 @@ const server = http.createServer(async (req, res) => {
 
             // --- Overview: summary stats across everything ---
             if (v1path === '/overview') {
-                const [videos, ideas, todos, calendar, invoices] = await Promise.all(
-                    ['videos', 'ideas', 'todos', 'calendar', 'invoices'].map(c => dataStore.getAll(c))
+                const [videos, ideas, todos, calendar, invoices, notes] = await Promise.all(
+                    ['videos', 'ideas', 'todos', 'calendar', 'invoices', 'notes'].map(c => dataStore.getAll(c))
                 );
                 // Inventory from Airtable
                 let boxCount = 0, itemCount = 0;
@@ -1287,13 +1287,14 @@ const server = http.createServer(async (req, res) => {
                     todos: { total: todos.length },
                     calendar: { total: calendar.length },
                     invoices: { total: invoices.length },
+                    notes: { total: notes.length },
                     inventory: { boxes: boxCount, items: itemCount }
                 });
                 return;
             }
 
             // --- Data store collections: videos, ideas, scripts, todos, calendar, invoices ---
-            const collectionMatch = v1path.match(/^\/(videos|ideas|todos|calendar|invoices)(?:\/([^/]+))?$/);
+            const collectionMatch = v1path.match(/^\/(videos|ideas|todos|calendar|invoices|notes)(?:\/([^/]+))?$/);
             if (collectionMatch) {
                 const collection = collectionMatch[1];
                 const id = collectionMatch[2];
