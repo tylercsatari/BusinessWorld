@@ -17,10 +17,56 @@ const PenUI = (() => {
     let listPollTimer = null;
     let expandedFrameIdx = null;
     let visibleCount = 50; // pagination: how many cards to show
+    let sortMetric = 'date'; // 'date' | 'views' | 'likes' | 'comments' | 'revenue' | 'shares' | 'subsGained' | 'avgRetention' | 'avgPercentViewed' | 'engagementRate'
+    let metricsCache = null; // { videoId: { views, likes, ... } }
+    let metricsFetching = false;
 
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
     const USD_TO_CAD = 1.36;
+
+    const SORT_OPTIONS = [
+        { key: 'date', label: 'Date Posted' },
+        { key: 'views', label: 'Views' },
+        { key: 'likes', label: 'Likes' },
+        { key: 'comments', label: 'Comments' },
+        { key: 'revenue', label: 'Revenue' },
+        { key: 'shares', label: 'Shares' },
+        { key: 'subsGained', label: 'Subs Gained' },
+        { key: 'avgRetention', label: 'Avg Retention' },
+        { key: 'avgPercentViewed', label: 'Avg % Viewed' },
+        { key: 'engagementRate', label: 'Engagement Rate' }
+    ];
+
+    async function fetchMetricsSummary() {
+        if (metricsCache) return metricsCache;
+        if (metricsFetching) return null;
+        metricsFetching = true;
+        try {
+            const res = await fetch('/api/video/metrics-summary');
+            if (!res.ok) throw new Error('Metrics fetch failed');
+            metricsCache = await res.json();
+            return metricsCache;
+        } catch (e) {
+            console.warn('Pen: metrics summary fetch failed', e);
+            return null;
+        } finally {
+            metricsFetching = false;
+        }
+    }
+
+    function getMetricValue(videoId, metric) {
+        if (!metricsCache || !metricsCache[videoId]) return 0;
+        return metricsCache[videoId][metric] || 0;
+    }
+
+    function formatMetricValue(value, metric) {
+        if (metric === 'revenue') return 'C$' + (value * USD_TO_CAD).toFixed(2);
+        if (metric === 'avgRetention') return (value * 100).toFixed(1) + '%';
+        if (metric === 'avgPercentViewed') return value.toFixed(1) + '%';
+        if (metric === 'engagementRate') return (value * 100).toFixed(1) + '%';
+        return formatNumber(value);
+    }
 
     // Detect if a name is still a raw YouTube video ID (11 chars, base64url)
     function looksLikeYouTubeId(name) {
@@ -448,11 +494,20 @@ const PenUI = (() => {
         const usedProjects = [...new Set(posted.map(v => v.project).filter(Boolean))].sort();
 
         el.innerHTML = `
-            <button class="pen-filter-btn ${!filterProject ? 'active' : ''}" data-project="">All (${posted.length})</button>
-            ${usedProjects.map(p => {
-                const count = posted.filter(v => v.project === p).length;
-                return `<button class="pen-filter-btn ${filterProject === p ? 'active' : ''}" data-project="${escAttr(p)}">${escHtml(p)} (${count})</button>`;
-            }).join('')}
+            <div class="pen-filter-row">
+                <div class="pen-project-filters">
+                    <button class="pen-filter-btn ${!filterProject ? 'active' : ''}" data-project="">All (${posted.length})</button>
+                    ${usedProjects.map(p => {
+                        const count = posted.filter(v => v.project === p).length;
+                        return `<button class="pen-filter-btn ${filterProject === p ? 'active' : ''}" data-project="${escAttr(p)}">${escHtml(p)} (${count})</button>`;
+                    }).join('')}
+                </div>
+                <div class="pen-sort-wrap">
+                    <select class="pen-sort-select" id="pen-sort-select">
+                        ${SORT_OPTIONS.map(o => `<option value="${o.key}" ${sortMetric === o.key ? 'selected' : ''}>${o.label}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
         `;
 
         el.querySelectorAll('.pen-filter-btn').forEach(btn => {
@@ -463,6 +518,15 @@ const PenUI = (() => {
                 renderVideos();
             });
         });
+
+        document.getElementById('pen-sort-select').addEventListener('change', async (e) => {
+            sortMetric = e.target.value;
+            if (sortMetric !== 'date' && !metricsCache) {
+                await fetchMetricsSummary();
+            }
+            visibleCount = 50;
+            renderVideos();
+        });
     }
 
     function renderVideos() {
@@ -471,12 +535,29 @@ const PenUI = (() => {
         let posted = VideoService.getByStatus('posted');
         if (filterProject) posted = posted.filter(v => v.project === filterProject);
 
-        // Sort by posted date, newest first
-        posted.sort((a, b) => (b.postedDate || '').localeCompare(a.postedDate || ''));
+        // Sort by selected metric
+        if (sortMetric === 'date') {
+            posted.sort((a, b) => (b.postedDate || '').localeCompare(a.postedDate || ''));
+        } else if (metricsCache) {
+            posted.sort((a, b) => getMetricValue(b.id, sortMetric) - getMetricValue(a.id, sortMetric));
+        }
 
         if (posted.length === 0) {
             el.innerHTML = '<div class="pen-empty">No posted videos yet. Hatch eggs from the Workshop!</div>';
             return;
+        }
+
+        // Compute proportional scale when sorting by metric
+        let scaleMap = null;
+        if (sortMetric !== 'date' && metricsCache) {
+            const values = posted.map(v => getMetricValue(v.id, sortMetric));
+            const maxVal = Math.max(...values, 0.001); // avoid division by zero
+            scaleMap = {};
+            posted.forEach((v, i) => {
+                const ratio = values[i] / maxVal;
+                // Scale range: 0.6 (smallest) to 1.0 (largest)
+                scaleMap[v.id] = 0.6 + ratio * 0.4;
+            });
         }
 
         const visible = posted.slice(0, visibleCount);
@@ -487,13 +568,16 @@ const PenUI = (() => {
             const projBadge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(v.project) : escHtml(v.project || 'No project');
             const isAnalyzing = v.analysisStatus === 'analyzing';
             const noProject = !v.project;
+            const scale = scaleMap ? scaleMap[v.id] : 1;
+            const scaleStyle = scaleMap ? `style="transform:scale(${scale.toFixed(3)});transform-origin:left center;"` : '';
+            const metricHtml = (sortMetric !== 'date' && metricsCache) ? `<span class="pen-metric-badge">${formatMetricValue(getMetricValue(v.id, sortMetric), sortMetric)}</span>` : '';
             return `
-            <div class="pen-video-card ${isBacklog ? 'backlog' : ''} ${noProject ? 'pen-no-project' : ''}" data-id="${v.id}">
+            <div class="pen-video-card ${isBacklog ? 'backlog' : ''} ${noProject ? 'pen-no-project' : ''}" data-id="${v.id}" ${scaleStyle}>
                 <div class="pen-video-badge">
                     <canvas class="pen-creature-canvas" data-project="${escAttr(v.project || v.name)}" data-ghost="${!v.project}" width="88" height="88"></canvas>
                 </div>
                 <div class="pen-video-info">
-                    <div class="pen-video-name">${escHtml(v.name)}</div>
+                    <div class="pen-video-name">${escHtml(v.name)}${metricHtml}</div>
                     <div class="pen-video-meta">
                         <span class="pen-video-project">${projBadge}</span>
                         ${v.postedDate ? `<span class="pen-video-date">${formatDate(v.postedDate)}</span>` : ''}
@@ -2684,6 +2768,8 @@ const PenUI = (() => {
             selectedVideo = null;
             analysisData = null;
             filterProject = '';
+            sortMetric = 'date';
+            metricsCache = null;
             currentPage = 'list';
         }
     };

@@ -64,9 +64,17 @@
 .pen-dropdown-item:hover { background: #e8f5e9; }
 
 .pen-filters {
-    display: flex; gap: 8px; padding: 12px 20px; overflow-x: auto;
-    border-bottom: 1px solid #e8f0e8; flex-shrink: 0;
+    padding: 0 20px 0; flex-shrink: 0;
+    border-bottom: 1px solid #e8f0e8;
 }
+.pen-filter-row {
+    display: flex; align-items: center; gap: 8px; padding: 10px 0;
+}
+.pen-project-filters {
+    display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0;
+    scrollbar-width: none;
+}
+.pen-project-filters::-webkit-scrollbar { display: none; }
 .pen-filter-btn {
     border: 1px solid #d0dcd0; border-radius: 20px; padding: 6px 14px;
     font-size: 13px; font-weight: 500; cursor: pointer;
@@ -75,6 +83,18 @@
 }
 .pen-filter-btn.active { background: #00b894; color: white; border-color: #00b894; }
 .pen-filter-btn:hover:not(.active) { background: #e8f5e9; }
+.pen-sort-wrap { flex-shrink: 0; }
+.pen-sort-select {
+    border: 1px solid #d0dcd0; border-radius: 8px; padding: 6px 10px;
+    font-size: 12px; font-family: inherit; background: white; color: #555;
+    cursor: pointer; outline: none;
+}
+.pen-sort-select:focus { border-color: #00b894; }
+.pen-metric-badge {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    color: #00b894; background: #e8f5e9; padding: 1px 7px;
+    border-radius: 5px; margin-left: 6px; vertical-align: middle;
+}
 
 .pen-videos {
     flex: 1; overflow-y: auto; padding: 16px;

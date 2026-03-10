@@ -402,6 +402,40 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // GET /api/video/metrics-summary — bulk metrics for all posted videos (for sorting in Pen)
+    if (pathname === '/api/video/metrics-summary' && req.method === 'GET') {
+        try {
+            const videos = await dataStore.getAll('videos');
+            const posted = videos.filter(v => v.status === 'posted' && v.youtubeVideoId);
+            const summary = {};
+            await Promise.all(posted.map(async (v) => {
+                try {
+                    const analysis = await videoAnalyzer.getAnalysis(v.youtubeVideoId);
+                    if (!analysis) return;
+                    const meta = analysis.metadata || {};
+                    const an = analysis.analytics || {};
+                    summary[v.id] = {
+                        views: an.totalViews ?? meta.viewCount ?? 0,
+                        likes: an.likes ?? meta.likeCount ?? 0,
+                        comments: meta.commentCount ?? 0,
+                        revenue: an.estimatedRevenue ?? 0,
+                        shares: an.shares ?? 0,
+                        subsGained: an.subscribersGained ?? 0,
+                        avgRetention: an.avgRetention ?? 0,
+                        avgPercentViewed: an.avgPercentViewed ?? 0,
+                        engagementRate: (an.engagedViews && an.totalViews > 0) ? (an.engagedViews / an.totalViews) : 0
+                    };
+                } catch (e) {}
+            }));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(summary));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to load metrics' }));
+        }
+        return;
+    }
+
     // GET /api/video/analysis/:id — return analysis.json (local first, then R2)
     const videoAnalysisMatch = pathname.match(/^\/api\/video\/analysis\/([a-zA-Z0-9_-]+)$/);
     if (videoAnalysisMatch && req.method === 'GET') {
