@@ -2613,7 +2613,7 @@ async function spawnPostedCreatures(skipSync) {
 
 // Update 3D creature scales based on metric data from Pen UI
 // scaleMap: { videoId: scaleValue (0.5–2.0) } or null to reset
-function updatePenCreatureScales(scaleMap) {
+window.updatePenCreatureScales = function updatePenCreatureScales(scaleMap) {
     penCreatures.forEach(c => {
         if (!scaleMap) {
             c.userData.baseScale = 1.0;
@@ -2622,7 +2622,7 @@ function updatePenCreatureScales(scaleMap) {
             c.userData.baseScale = s != null ? s : 0.5;
         }
     });
-}
+};
 
 // --- Tile-Based Pathways ---
 function addPathTile(gx, gz) {
