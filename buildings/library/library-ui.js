@@ -1740,7 +1740,6 @@ const LibraryUI = (() => {
         const label = SPONSOR_STATUS_LABELS[v.status] || v.status;
         const cadAmt = toCAD(v.amount || 0, v.currency || 'CAD');
         const cadNote = (v.currency && v.currency !== 'CAD' && v.amount) ? ` (~$${Math.round(cadAmt).toLocaleString()} CAD)` : '';
-        const dueDateStr = v.dueDate ? formatCalDate(v.dueDate) : '';
         const hasInvoice = !!v.invoiceId;
         return `
             <div class="sponsor-video-card" data-id="${escAttr(v.id)}">
@@ -1749,7 +1748,6 @@ const LibraryUI = (() => {
                     <div class="sponsor-video-company">${escHtml(company)}</div>
                     <div class="sponsor-video-details">
                         ${v.amount ? `<span class="sponsor-video-amount">$${v.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(v.currency || 'CAD')}${cadNote}</span>` : ''}
-                        ${dueDateStr ? `<span class="sponsor-video-due">Due: ${dueDateStr}</span>` : ''}
                     </div>
                 </div>
                 <div class="sponsor-video-actions">
@@ -1910,7 +1908,6 @@ const LibraryUI = (() => {
         const v = isNew ? {} : sponsorVideos.find(x => x.id === editingSponsorVideo) || {};
         const currencies = Object.keys(CAD_RATES);
         const statuses = Object.keys(SPONSOR_STATUS_LABELS);
-        const todayVal = new Date().toISOString().slice(0, 10);
         const hasInvoice = !!v.invoiceId;
         el.innerHTML = `
             <div class="sponsor-form-header">
@@ -1937,18 +1934,10 @@ const LibraryUI = (() => {
                         </select>
                     </div>
                 </div>
-                <div class="sponsor-form-row">
-                    <div class="sponsor-form-col">
-                        <label class="sponsor-label">Status</label>
-                        <select class="sponsor-select" id="sv-status">
-                            ${statuses.map(s => `<option value="${s}"${s === (v.status || 'pending') ? ' selected' : ''}>${SPONSOR_STATUS_LABELS[s]}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="sponsor-form-col">
-                        <label class="sponsor-label">Due Date</label>
-                        <input class="sponsor-input" id="sv-due" type="date" value="${v.dueDate || todayVal}" />
-                    </div>
-                </div>
+                <label class="sponsor-label">Status</label>
+                <select class="sponsor-select" id="sv-status">
+                    ${statuses.map(s => `<option value="${s}"${s === (v.status || 'pending') ? ' selected' : ''}>${SPONSOR_STATUS_LABELS[s]}</option>`).join('')}
+                </select>
                 <label class="sponsor-label">Deliverables</label>
                 <textarea class="sponsor-textarea" id="sv-deliverables" placeholder="What needs to be delivered...">${escHtml(v.deliverables || '')}</textarea>
                 <label class="sponsor-label">Notes</label>
@@ -1983,7 +1972,6 @@ const LibraryUI = (() => {
             title, companyId, amount,
             currency: document.getElementById('sv-currency')?.value || 'CAD',
             status: document.getElementById('sv-status')?.value || 'pending',
-            dueDate: document.getElementById('sv-due')?.value || '',
             deliverables: document.getElementById('sv-deliverables')?.value.trim() || '',
             notes: document.getElementById('sv-notes')?.value.trim() || ''
         };
@@ -2083,7 +2071,10 @@ const LibraryUI = (() => {
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         overlay.querySelector('.sponsor-invoice-popup-pdf').addEventListener('click', () => {
             const iframe = overlay.querySelector('.sponsor-invoice-iframe');
-            if (iframe?.contentWindow) { iframe.contentWindow.print(); }
+            if (iframe?.contentWindow) {
+                try { iframe.contentDocument.title = ' '; } catch(e) {}
+                iframe.contentWindow.print();
+            }
         });
     }
 

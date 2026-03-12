@@ -282,7 +282,7 @@ const server = http.createServer(async (req, res) => {
             const currency = video.currency || 'CAD';
 
             const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Invoice INV-${String(invoiceNumber).padStart(4,'0')}</title>
+<html><head><meta charset="utf-8"><title> </title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#333;padding:40px;max-width:800px;margin:0 auto}
 .inv-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #2d3436}
@@ -302,7 +302,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 .inv-bank-title{font-size:12px;font-weight:700;color:#636e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
 .inv-bank-row{display:flex;gap:8px}.inv-bank-label{color:#888;min-width:130px}.inv-bank-value{font-weight:600}
 .inv-footer{margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;font-size:12px;color:#888;line-height:1.6}
-@media print{body{padding:20px}@page{margin:1cm}}
+@media print{body{padding:20px;margin:0}@page{margin:10mm;size:auto}html{-webkit-print-color-adjust:exact}}
 </style></head><body>
 <div class="inv-header"><div><div class="inv-title">INVOICE</div><div class="inv-number">INV-${String(invoiceNumber).padStart(4,'0')}</div></div></div>
 <div class="inv-parties">
