@@ -6,7 +6,7 @@
 const LibraryUI = (() => {
     let container = null;
     // --- Sponsors state ---
-    let sponsorCompanies = [];   // [{id, name, contactName, contactEmail, phone, website, address, city, province, postalCode, country, notes}]
+    let sponsorCompanies = [];   // [{id, name, address, notes}]
     let sponsorVideos = [];      // [{id, companyId, title, amount, currency, status, dueDate, deliverables, notes, invoiceId}]
     let sponsorsLoaded = false;
     let sponsorsBusy = false;
@@ -1664,14 +1664,12 @@ const LibraryUI = (() => {
         return sponsorCompanies.map(c => {
             const dealCount = sponsorVideos.filter(v => v.companyId === c.id).length;
             const totalAmount = sponsorVideos.filter(v => v.companyId === c.id).reduce((s, v) => s + toCAD(v.amount || 0, v.currency || 'CAD'), 0);
+            const addrPreview = (c.address || '').split('\n')[0];
             return `
                 <div class="sponsor-company-card" data-id="${escAttr(c.id)}">
                     <div class="sponsor-company-info">
                         <div class="sponsor-company-name">${escHtml(c.name)}</div>
-                        <div class="sponsor-company-meta">
-                            ${c.contactName ? `<span>${escHtml(c.contactName)}</span>` : ''}
-                            ${c.contactEmail ? `<span>${escHtml(c.contactEmail)}</span>` : ''}
-                        </div>
+                        ${addrPreview ? `<div class="sponsor-company-meta"><span>${escHtml(addrPreview)}</span></div>` : ''}
                         <div class="sponsor-company-stats">
                             <span>${dealCount} deal${dealCount !== 1 ? 's' : ''}</span>
                             ${totalAmount > 0 ? `<span class="sponsor-company-total">$${Math.round(totalAmount).toLocaleString()} CAD</span>` : ''}
@@ -1728,7 +1726,6 @@ const LibraryUI = (() => {
     function renderSponsorForm(el) {
         const isNew = editingSponsor === 'new';
         const c = isNew ? {} : sponsorCompanies.find(x => x.id === editingSponsor) || {};
-        const currencies = Object.keys(CAD_RATES);
         el.innerHTML = `
             <div class="sponsor-form-header">
                 <button class="sponsor-form-back" id="sponsor-form-back">&#8592; Back</button>
@@ -1737,38 +1734,10 @@ const LibraryUI = (() => {
             <div class="sponsor-form-body">
                 <label class="sponsor-label">Company Name *</label>
                 <input class="sponsor-input" id="sp-name" value="${escAttr(c.name || '')}" placeholder="Company name" />
-                <label class="sponsor-label">Contact Name</label>
-                <input class="sponsor-input" id="sp-contact-name" value="${escAttr(c.contactName || '')}" placeholder="Contact person" />
-                <label class="sponsor-label">Contact Email</label>
-                <input class="sponsor-input" id="sp-contact-email" value="${escAttr(c.contactEmail || '')}" placeholder="email@example.com" type="email" />
-                <label class="sponsor-label">Phone</label>
-                <input class="sponsor-input" id="sp-phone" value="${escAttr(c.phone || '')}" placeholder="Phone number" />
-                <label class="sponsor-label">Website</label>
-                <input class="sponsor-input" id="sp-website" value="${escAttr(c.website || '')}" placeholder="https://..." />
                 <label class="sponsor-label">Address</label>
-                <input class="sponsor-input" id="sp-address" value="${escAttr(c.address || '')}" placeholder="Street address" />
-                <div class="sponsor-form-row">
-                    <div class="sponsor-form-col">
-                        <label class="sponsor-label">City</label>
-                        <input class="sponsor-input" id="sp-city" value="${escAttr(c.city || '')}" placeholder="City" />
-                    </div>
-                    <div class="sponsor-form-col">
-                        <label class="sponsor-label">Province/State</label>
-                        <input class="sponsor-input" id="sp-province" value="${escAttr(c.province || '')}" placeholder="Province" />
-                    </div>
-                </div>
-                <div class="sponsor-form-row">
-                    <div class="sponsor-form-col">
-                        <label class="sponsor-label">Postal Code</label>
-                        <input class="sponsor-input" id="sp-postal" value="${escAttr(c.postalCode || '')}" placeholder="Postal code" />
-                    </div>
-                    <div class="sponsor-form-col">
-                        <label class="sponsor-label">Country</label>
-                        <input class="sponsor-input" id="sp-country" value="${escAttr(c.country || 'Canada')}" placeholder="Country" />
-                    </div>
-                </div>
+                <textarea class="sponsor-textarea" id="sp-address" placeholder="Full address...">${escHtml(c.address || '')}</textarea>
                 <label class="sponsor-label">Notes</label>
-                <textarea class="sponsor-textarea" id="sp-notes" placeholder="Notes about this sponsor...">${escHtml(c.notes || '')}</textarea>
+                <textarea class="sponsor-textarea" id="sp-notes" placeholder="Campaign briefs, contact info, or anything else...">${escHtml(c.notes || '')}</textarea>
                 <button class="sponsor-save-btn" id="sp-save-btn">${isNew ? 'Add Company' : 'Save Changes'}</button>
                 ${!isNew ? `<div class="sponsor-form-section-header">Video Deals (${sponsorVideos.filter(v => v.companyId === c.id).length})</div>` : ''}
                 ${!isNew ? sponsorVideos.filter(v => v.companyId === c.id).map(v => {
@@ -1795,15 +1764,7 @@ const LibraryUI = (() => {
         if (!name) { alert('Company name is required.'); return; }
         const fields = {
             name,
-            contactName: document.getElementById('sp-contact-name')?.value.trim() || '',
-            contactEmail: document.getElementById('sp-contact-email')?.value.trim() || '',
-            phone: document.getElementById('sp-phone')?.value.trim() || '',
-            website: document.getElementById('sp-website')?.value.trim() || '',
             address: document.getElementById('sp-address')?.value.trim() || '',
-            city: document.getElementById('sp-city')?.value.trim() || '',
-            province: document.getElementById('sp-province')?.value.trim() || '',
-            postalCode: document.getElementById('sp-postal')?.value.trim() || '',
-            country: document.getElementById('sp-country')?.value.trim() || '',
             notes: document.getElementById('sp-notes')?.value.trim() || ''
         };
         sponsorsBusy = true;
