@@ -314,7 +314,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 <div class="inv-total-row"><span class="inv-total-label">Subtotal</span><span class="inv-total-value">${currency} $${subtotal.toFixed(2)}</span></div>
 <div class="inv-total-row inv-grand-total"><span class="inv-total-label">Total</span><span class="inv-total-value">${currency} $${total.toFixed(2)}</span></div>
 </div>
-<div class="inv-bank"><div class="inv-bank-title">Payment Details</div><div class="inv-bank-row"><span class="inv-bank-label">Institution Number:</span><span class="inv-bank-value">010</span></div><div class="inv-bank-row"><span class="inv-bank-label">Transit Number:</span><span class="inv-bank-value">00329</span></div><div class="inv-bank-row"><span class="inv-bank-label">Account Number:</span><span class="inv-bank-value">6686230</span></div></div>
+<div class="inv-bank"><div class="inv-bank-title">Payment Details</div><div class="inv-bank-row"><span class="inv-bank-label">Institution Number:</span><span class="inv-bank-value">001</span></div><div class="inv-bank-row"><span class="inv-bank-label">Transit Number:</span><span class="inv-bank-value">30489</span></div><div class="inv-bank-row"><span class="inv-bank-label">Account Number:</span><span class="inv-bank-value">1987-607</span></div></div>
 ${video.notes ? `<div class="inv-footer"><strong>Notes:</strong><br>${esc(video.notes)}</div>` : ''}
 </body></html>`;
 
