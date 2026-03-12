@@ -1539,7 +1539,7 @@ const LibraryUI = (() => {
 
     function getExpectedIncomeCADInternal() {
         return sponsorVideos
-            .filter(v => v.status !== 'paid' && v.status !== 'cancelled')
+            .filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced')
             .reduce((sum, v) => sum + toCAD(v.amount || 0, v.currency || 'CAD'), 0);
     }
 
@@ -1601,11 +1601,11 @@ const LibraryUI = (() => {
         if (!el) return;
 
         const totalCAD = getExpectedIncomeCADInternal();
-        const activeDeals = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled');
+        const activeDeals = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced');
 
         const openCompanies = sponsorCompanies.filter(c => (c.companyStatus || 'open') !== 'closed');
         const closedCompanies = sponsorCompanies.filter(c => (c.companyStatus || 'open') === 'closed');
-        const finishedVideos = sponsorVideos.filter(v => v.status === 'paid' || v.status === 'cancelled');
+        const finishedVideos = sponsorVideos.filter(v => v.status === 'paid' || v.status === 'cancelled' || v.status === 'invoiced');
 
         let html = `
             <div class="sponsor-summary-bar">
@@ -1683,7 +1683,7 @@ const LibraryUI = (() => {
                     const showing = section.style.display !== 'none';
                     section.style.display = showing ? 'none' : '';
                     const count = finishedToggle.textContent.match(/\d+/)?.[0] || '';
-                    finishedToggle.innerHTML = `Finished (${count}) ${showing ? '&#9662;' : '&#9652;'}`;
+                    finishedToggle.innerHTML = `Closed (${count}) ${showing ? '&#9662;' : '&#9652;'}`;
                 }
             });
         }
@@ -1756,7 +1756,7 @@ const LibraryUI = (() => {
                     <span class="sponsor-status-badge" style="background:${color}20;color:${color}">${label}</span>
                     ${hasInvoice
                         ? `<button class="sponsor-video-view-btn" data-invoiceid="${escAttr(v.invoiceId)}" title="View Invoice">&#128196;</button>`
-                        : (v.status !== 'paid' && v.status !== 'cancelled'
+                        : (v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced'
                             ? `<button class="sponsor-video-invoice-btn" data-id="${escAttr(v.id)}" title="Create Invoice">&#9993;</button>`
                             : '')}
                     <button class="sponsor-video-delete" data-id="${escAttr(v.id)}" title="Delete">&times;</button>
@@ -1777,8 +1777,8 @@ const LibraryUI = (() => {
         if (sponsorVideos.length === 0) {
             return '<div class="library-empty">No video deals yet. Tap + to add one.</div>';
         }
-        const active = sortVideos(sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled'));
-        const finished = sortVideos(sponsorVideos.filter(v => v.status === 'paid' || v.status === 'cancelled'));
+        const active = sortVideos(sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced'));
+        const finished = sortVideos(sponsorVideos.filter(v => v.status === 'paid' || v.status === 'cancelled' || v.status === 'invoiced'));
 
         let html = '';
         if (active.length > 0) {
@@ -1787,7 +1787,7 @@ const LibraryUI = (() => {
             html += '<div class="library-empty">No active deals.</div>';
         }
         if (finished.length > 0) {
-            html += `<div class="library-todo-section-header sponsor-finished-toggle" style="cursor:pointer">Finished (${finished.length}) &#9662;</div>`;
+            html += `<div class="library-todo-section-header sponsor-finished-toggle" style="cursor:pointer">Closed (${finished.length}) &#9662;</div>`;
             html += `<div class="sponsor-finished-section" style="display:none">${finished.map(renderVideoCardHtml).join('')}</div>`;
         }
         return html;
@@ -2126,7 +2126,7 @@ const LibraryUI = (() => {
     function updateSponsorsBadge() {
         const badge = document.getElementById('sponsors-badge');
         if (!badge) return;
-        const count = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled').length;
+        const count = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced').length;
         badge.textContent = count;
         badge.style.display = count > 0 ? '' : 'none';
     }
@@ -2202,7 +2202,7 @@ const LibraryUI = (() => {
             return getExpectedIncomeCADInternal();
         },
         getSponsorsBadgeCount() {
-            return sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled').length;
+            return sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced').length;
         }
     };
 })();
