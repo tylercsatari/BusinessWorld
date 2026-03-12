@@ -270,7 +270,7 @@ const server = http.createServer(async (req, res) => {
 
             const company = video.companyId ? await dataStore.getById('sponsors', video.companyId) : null;
             const allInvoices = await dataStore.getAll('invoices');
-            const maxNum = allInvoices.reduce((m, i) => Math.max(m, i.invoiceNumber || 0), 0);
+            const maxNum = allInvoices.reduce((m, i) => Math.max(m, i.invoiceNumber || 0), 4);
             const invoiceNumber = maxNum + 1;
             const invoiceDate = new Date().toISOString().split('T')[0];
             const dueDate = video.dueDate || invoiceDate;
