@@ -6,7 +6,7 @@
 const LibraryUI = (() => {
     let container = null;
     // --- Sponsors state ---
-    let sponsorCompanies = [];   // [{id, name, address, notes}]
+    let sponsorCompanies = [];   // [{id, name, address, notes, companyStatus}]
     let sponsorVideos = [];      // [{id, companyId, title, amount, currency, status, dueDate, deliverables, notes, invoiceId}]
     let sponsorsLoaded = false;
     let sponsorsBusy = false;
@@ -1556,6 +1556,8 @@ const LibraryUI = (() => {
         pending: '#ff9500', active: '#0984e3', delivered: '#6c5ce7',
         invoiced: '#e67e22', paid: '#27ae60', cancelled: '#999'
     };
+    const COMPANY_STATUS_LABELS = { pending: 'Pending', open: 'Open', closed: 'Closed' };
+    const COMPANY_STATUS_COLORS = { pending: '#ff9500', open: '#0984e3', closed: '#999' };
 
     function renderSponsorsTab() {
         const el = document.getElementById('library-sponsors-container');
@@ -1601,14 +1603,18 @@ const LibraryUI = (() => {
         const totalCAD = getExpectedIncomeCADInternal();
         const activeDeals = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled');
 
+        const openCompanies = sponsorCompanies.filter(c => (c.companyStatus || 'open') !== 'closed');
+        const closedCompanies = sponsorCompanies.filter(c => (c.companyStatus || 'open') === 'closed');
+        const finishedVideos = sponsorVideos.filter(v => v.status === 'paid' || v.status === 'cancelled');
+
         let html = `
             <div class="sponsor-summary-bar">
                 Expected: <strong>$${Math.round(totalCAD).toLocaleString()} CAD</strong>
                 <span style="color:#888;font-size:12px;margin-left:6px;">(${activeDeals.length} active deal${activeDeals.length !== 1 ? 's' : ''})</span>
             </div>
             <div class="sponsor-sub-tabs">
-                <button class="sponsor-sub-tab${sponsorsSubTab === 'companies' ? ' active' : ''}" data-subtab="companies">Companies (${sponsorCompanies.length})</button>
-                <button class="sponsor-sub-tab${sponsorsSubTab === 'videos' ? ' active' : ''}" data-subtab="videos">Video Deals (${sponsorVideos.length})</button>
+                <button class="sponsor-sub-tab${sponsorsSubTab === 'companies' ? ' active' : ''}" data-subtab="companies">Companies (${openCompanies.length})</button>
+                <button class="sponsor-sub-tab${sponsorsSubTab === 'videos' ? ' active' : ''}" data-subtab="videos">Video Deals (${activeDeals.length})</button>
             </div>
         `;
 
@@ -1655,85 +1661,162 @@ const LibraryUI = (() => {
         el.querySelectorAll('.sponsor-video-download-btn').forEach(btn => {
             btn.addEventListener('click', e => { e.stopPropagation(); downloadInvoice(btn.dataset.invoiceid); });
         });
+
+        // Collapsible sections
+        const closedToggle = el.querySelector('.sponsor-closed-toggle');
+        if (closedToggle) {
+            closedToggle.addEventListener('click', () => {
+                const section = el.querySelector('.sponsor-closed-section');
+                if (section) {
+                    const showing = section.style.display !== 'none';
+                    section.style.display = showing ? 'none' : '';
+                    const count = closedToggle.textContent.match(/\d+/)?.[0] || '';
+                    closedToggle.innerHTML = `Closed (${count}) ${showing ? '&#9662;' : '&#9652;'}`;
+                }
+            });
+        }
+        const finishedToggle = el.querySelector('.sponsor-finished-toggle');
+        if (finishedToggle) {
+            finishedToggle.addEventListener('click', () => {
+                const section = el.querySelector('.sponsor-finished-section');
+                if (section) {
+                    const showing = section.style.display !== 'none';
+                    section.style.display = showing ? 'none' : '';
+                    const count = finishedToggle.textContent.match(/\d+/)?.[0] || '';
+                    finishedToggle.innerHTML = `Finished (${count}) ${showing ? '&#9662;' : '&#9652;'}`;
+                }
+            });
+        }
+    }
+
+    function renderCompanyCardHtml(c) {
+        const dealCount = sponsorVideos.filter(v => v.companyId === c.id).length;
+        const totalAmount = sponsorVideos.filter(v => v.companyId === c.id).reduce((s, v) => s + toCAD(v.amount || 0, v.currency || 'CAD'), 0);
+        const addrPreview = (c.address || '').split('\n')[0];
+        const cs = c.companyStatus || 'open';
+        const csColor = COMPANY_STATUS_COLORS[cs] || '#999';
+        const csLabel = COMPANY_STATUS_LABELS[cs] || cs;
+        return `
+            <div class="sponsor-company-card" data-id="${escAttr(c.id)}">
+                <div class="sponsor-company-info">
+                    <div class="sponsor-company-name">${escHtml(c.name)} <span class="sponsor-status-badge" style="background:${csColor}20;color:${csColor};font-size:10px;margin-left:4px">${csLabel}</span></div>
+                    ${addrPreview ? `<div class="sponsor-company-meta"><span>${escHtml(addrPreview)}</span></div>` : ''}
+                    <div class="sponsor-company-stats">
+                        <span>${dealCount} deal${dealCount !== 1 ? 's' : ''}</span>
+                        ${totalAmount > 0 ? `<span class="sponsor-company-total">$${Math.round(totalAmount).toLocaleString()} CAD</span>` : ''}
+                    </div>
+                </div>
+                <button class="sponsor-company-delete" data-id="${escAttr(c.id)}" title="Delete">&times;</button>
+            </div>`;
     }
 
     function renderCompaniesListHtml() {
         if (sponsorCompanies.length === 0) {
             return '<div class="library-empty">No sponsor companies yet. Tap + to add one.</div>';
         }
-        return sponsorCompanies.map(c => {
-            const dealCount = sponsorVideos.filter(v => v.companyId === c.id).length;
-            const totalAmount = sponsorVideos.filter(v => v.companyId === c.id).reduce((s, v) => s + toCAD(v.amount || 0, v.currency || 'CAD'), 0);
-            const addrPreview = (c.address || '').split('\n')[0];
-            return `
-                <div class="sponsor-company-card" data-id="${escAttr(c.id)}">
-                    <div class="sponsor-company-info">
-                        <div class="sponsor-company-name">${escHtml(c.name)}</div>
-                        ${addrPreview ? `<div class="sponsor-company-meta"><span>${escHtml(addrPreview)}</span></div>` : ''}
-                        <div class="sponsor-company-stats">
-                            <span>${dealCount} deal${dealCount !== 1 ? 's' : ''}</span>
-                            ${totalAmount > 0 ? `<span class="sponsor-company-total">$${Math.round(totalAmount).toLocaleString()} CAD</span>` : ''}
-                        </div>
+        const pending = sponsorCompanies.filter(c => (c.companyStatus || 'open') === 'pending');
+        const open = sponsorCompanies.filter(c => (c.companyStatus || 'open') === 'open');
+        const closed = sponsorCompanies.filter(c => (c.companyStatus || 'open') === 'closed');
+
+        let html = '';
+        if (pending.length > 0) {
+            html += '<div class="library-todo-section-header">Pending</div>';
+            html += pending.map(renderCompanyCardHtml).join('');
+        }
+        if (open.length > 0) {
+            html += '<div class="library-todo-section-header">Open</div>';
+            html += open.map(renderCompanyCardHtml).join('');
+        }
+        if (closed.length > 0) {
+            html += `<div class="library-todo-section-header sponsor-closed-toggle" style="cursor:pointer">Closed (${closed.length}) &#9662;</div>`;
+            html += `<div class="sponsor-closed-section" style="display:none">${closed.map(renderCompanyCardHtml).join('')}</div>`;
+        }
+        return html;
+    }
+
+    function renderVideoCardHtml(v) {
+        const company = getCompanyName(v.companyId);
+        const color = SPONSOR_STATUS_COLORS[v.status] || '#999';
+        const label = SPONSOR_STATUS_LABELS[v.status] || v.status;
+        const cadAmt = toCAD(v.amount || 0, v.currency || 'CAD');
+        const cadNote = (v.currency && v.currency !== 'CAD' && v.amount) ? ` (~$${Math.round(cadAmt).toLocaleString()} CAD)` : '';
+        const dueDateStr = v.dueDate ? formatCalDate(v.dueDate) : '';
+        const hasInvoice = !!v.invoiceId;
+        return `
+            <div class="sponsor-video-card" data-id="${escAttr(v.id)}">
+                <div class="sponsor-video-info">
+                    <div class="sponsor-video-title">${escHtml(v.title || 'Untitled Deal')}</div>
+                    <div class="sponsor-video-company">${escHtml(company)}</div>
+                    <div class="sponsor-video-details">
+                        ${v.amount ? `<span class="sponsor-video-amount">$${v.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(v.currency || 'CAD')}${cadNote}</span>` : ''}
+                        ${dueDateStr ? `<span class="sponsor-video-due">Due: ${dueDateStr}</span>` : ''}
                     </div>
-                    <button class="sponsor-company-delete" data-id="${escAttr(c.id)}" title="Delete">&times;</button>
-                </div>`;
-        }).join('');
+                </div>
+                <div class="sponsor-video-actions">
+                    <span class="sponsor-status-badge" style="background:${color}20;color:${color}">${label}</span>
+                    ${hasInvoice
+                        ? `<button class="sponsor-video-download-btn" data-invoiceid="${escAttr(v.invoiceId)}" title="Download Invoice">&#8595;</button>`
+                        : (v.status !== 'paid' && v.status !== 'cancelled'
+                            ? `<button class="sponsor-video-invoice-btn" data-id="${escAttr(v.id)}" title="Create Invoice">&#9993;</button>`
+                            : '')}
+                    <button class="sponsor-video-delete" data-id="${escAttr(v.id)}" title="Delete">&times;</button>
+                </div>
+            </div>`;
+    }
+
+    function sortVideos(list) {
+        const order = { pending: 0, active: 1, delivered: 2, invoiced: 3, paid: 4, cancelled: 5 };
+        return [...list].sort((a, b) => {
+            const diff = (order[a.status] || 0) - (order[b.status] || 0);
+            if (diff !== 0) return diff;
+            return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
     }
 
     function renderVideoDealsListHtml() {
         if (sponsorVideos.length === 0) {
             return '<div class="library-empty">No video deals yet. Tap + to add one.</div>';
         }
-        // Sort: active first, then by date
-        const sorted = [...sponsorVideos].sort((a, b) => {
-            const order = { pending: 0, active: 1, delivered: 2, invoiced: 3, paid: 4, cancelled: 5 };
-            const diff = (order[a.status] || 0) - (order[b.status] || 0);
-            if (diff !== 0) return diff;
-            return (b.createdAt || '').localeCompare(a.createdAt || '');
-        });
-        return sorted.map(v => {
-            const company = getCompanyName(v.companyId);
-            const color = SPONSOR_STATUS_COLORS[v.status] || '#999';
-            const label = SPONSOR_STATUS_LABELS[v.status] || v.status;
-            const cadAmt = toCAD(v.amount || 0, v.currency || 'CAD');
-            const cadNote = (v.currency && v.currency !== 'CAD' && v.amount) ? ` (~$${Math.round(cadAmt).toLocaleString()} CAD)` : '';
-            const dueDateStr = v.dueDate ? formatCalDate(v.dueDate) : '';
-            const hasInvoice = !!v.invoiceId;
-            return `
-                <div class="sponsor-video-card" data-id="${escAttr(v.id)}">
-                    <div class="sponsor-video-info">
-                        <div class="sponsor-video-title">${escHtml(v.title || 'Untitled Deal')}</div>
-                        <div class="sponsor-video-company">${escHtml(company)}</div>
-                        <div class="sponsor-video-details">
-                            ${v.amount ? `<span class="sponsor-video-amount">$${v.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(v.currency || 'CAD')}${cadNote}</span>` : ''}
-                            ${dueDateStr ? `<span class="sponsor-video-due">Due: ${dueDateStr}</span>` : ''}
-                        </div>
-                    </div>
-                    <div class="sponsor-video-actions">
-                        <span class="sponsor-status-badge" style="background:${color}20;color:${color}">${label}</span>
-                        ${hasInvoice
-                            ? `<button class="sponsor-video-download-btn" data-invoiceid="${escAttr(v.invoiceId)}" title="Download Invoice">&#8595;</button>`
-                            : (v.status !== 'paid' && v.status !== 'cancelled'
-                                ? `<button class="sponsor-video-invoice-btn" data-id="${escAttr(v.id)}" title="Create Invoice">&#9993;</button>`
-                                : '')}
-                        <button class="sponsor-video-delete" data-id="${escAttr(v.id)}" title="Delete">&times;</button>
-                    </div>
-                </div>`;
-        }).join('');
+        const active = sortVideos(sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled'));
+        const finished = sortVideos(sponsorVideos.filter(v => v.status === 'paid' || v.status === 'cancelled'));
+
+        let html = '';
+        if (active.length > 0) {
+            html += active.map(renderVideoCardHtml).join('');
+        } else {
+            html += '<div class="library-empty">No active deals.</div>';
+        }
+        if (finished.length > 0) {
+            html += `<div class="library-todo-section-header sponsor-finished-toggle" style="cursor:pointer">Finished (${finished.length}) &#9662;</div>`;
+            html += `<div class="sponsor-finished-section" style="display:none">${finished.map(renderVideoCardHtml).join('')}</div>`;
+        }
+        return html;
     }
 
     // --- Company Form ---
     function renderSponsorForm(el) {
         const isNew = editingSponsor === 'new';
         const c = isNew ? {} : sponsorCompanies.find(x => x.id === editingSponsor) || {};
+        const companyStatuses = Object.keys(COMPANY_STATUS_LABELS);
+        const curStatus = c.companyStatus || 'open';
         el.innerHTML = `
             <div class="sponsor-form-header">
                 <button class="sponsor-form-back" id="sponsor-form-back">&#8592; Back</button>
                 <span class="sponsor-form-title">${isNew ? 'New Company' : 'Edit Company'}</span>
             </div>
             <div class="sponsor-form-body">
-                <label class="sponsor-label">Company Name *</label>
-                <input class="sponsor-input" id="sp-name" value="${escAttr(c.name || '')}" placeholder="Company name" />
+                <div class="sponsor-form-row">
+                    <div class="sponsor-form-col" style="flex:2">
+                        <label class="sponsor-label">Company Name *</label>
+                        <input class="sponsor-input" id="sp-name" value="${escAttr(c.name || '')}" placeholder="Company name" />
+                    </div>
+                    <div class="sponsor-form-col" style="flex:1">
+                        <label class="sponsor-label">Status</label>
+                        <select class="sponsor-select" id="sp-status">
+                            ${companyStatuses.map(s => `<option value="${s}"${s === curStatus ? ' selected' : ''}>${COMPANY_STATUS_LABELS[s]}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
                 <label class="sponsor-label">Address</label>
                 <textarea class="sponsor-textarea" id="sp-address" placeholder="Full address...">${escHtml(c.address || '')}</textarea>
                 <label class="sponsor-label">Notes</label>
@@ -1764,6 +1847,7 @@ const LibraryUI = (() => {
         if (!name) { alert('Company name is required.'); return; }
         const fields = {
             name,
+            companyStatus: document.getElementById('sp-status')?.value || 'open',
             address: document.getElementById('sp-address')?.value.trim() || '',
             notes: document.getElementById('sp-notes')?.value.trim() || ''
         };
