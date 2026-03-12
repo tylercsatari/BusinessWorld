@@ -1658,8 +1658,8 @@ const LibraryUI = (() => {
         el.querySelectorAll('.sponsor-video-invoice-btn').forEach(btn => {
             btn.addEventListener('click', e => { e.stopPropagation(); generateInvoice(btn.dataset.id); });
         });
-        el.querySelectorAll('.sponsor-video-download-btn').forEach(btn => {
-            btn.addEventListener('click', e => { e.stopPropagation(); downloadInvoice(btn.dataset.invoiceid); });
+        el.querySelectorAll('.sponsor-video-view-btn').forEach(btn => {
+            btn.addEventListener('click', e => { e.stopPropagation(); previewInvoice(btn.dataset.invoiceid); });
         });
 
         // Collapsible sections
@@ -1755,7 +1755,7 @@ const LibraryUI = (() => {
                 <div class="sponsor-video-actions">
                     <span class="sponsor-status-badge" style="background:${color}20;color:${color}">${label}</span>
                     ${hasInvoice
-                        ? `<button class="sponsor-video-download-btn" data-invoiceid="${escAttr(v.invoiceId)}" title="Download Invoice">&#8595;</button>`
+                        ? `<button class="sponsor-video-view-btn" data-invoiceid="${escAttr(v.invoiceId)}" title="View Invoice">&#128196;</button>`
                         : (v.status !== 'paid' && v.status !== 'cancelled'
                             ? `<button class="sponsor-video-invoice-btn" data-id="${escAttr(v.id)}" title="Create Invoice">&#9993;</button>`
                             : '')}
@@ -1955,15 +1955,23 @@ const LibraryUI = (() => {
                 <textarea class="sponsor-textarea" id="sv-notes" placeholder="Additional notes...">${escHtml(v.notes || '')}</textarea>
                 <button class="sponsor-save-btn" id="sv-save-btn">${isNew ? 'Add Deal' : 'Save Changes'}</button>
                 ${!isNew && !hasInvoice ? `<button class="sponsor-invoice-btn" id="sv-gen-invoice">Create Invoice</button>` : ''}
-                ${hasInvoice ? `<button class="sponsor-download-btn" id="sv-dl-invoice" data-invoiceid="${escAttr(v.invoiceId)}">Download Invoice</button>` : ''}
+                ${hasInvoice ? `<div class="sponsor-invoice-actions-row">
+                    <button class="sponsor-view-btn" id="sv-view-invoice" data-invoiceid="${escAttr(v.invoiceId)}">View Invoice</button>
+                    <button class="sponsor-download-btn" id="sv-dl-invoice" data-invoiceid="${escAttr(v.invoiceId)}">Save as PDF</button>
+                    <button class="sponsor-delete-invoice-btn" id="sv-del-invoice" data-invoiceid="${escAttr(v.invoiceId)}">Delete Invoice</button>
+                </div>` : ''}
             </div>
         `;
         document.getElementById('sponsor-form-back').addEventListener('click', () => { editingSponsorVideo = null; renderSponsorsTab(); });
         document.getElementById('sv-save-btn').addEventListener('click', saveSponsorVideo);
         const genBtn = document.getElementById('sv-gen-invoice');
         if (genBtn) genBtn.addEventListener('click', () => generateInvoice(editingSponsorVideo));
+        const viewBtn = document.getElementById('sv-view-invoice');
+        if (viewBtn) viewBtn.addEventListener('click', () => previewInvoice(viewBtn.dataset.invoiceid));
         const dlBtn = document.getElementById('sv-dl-invoice');
-        if (dlBtn) dlBtn.addEventListener('click', () => downloadInvoice(dlBtn.dataset.invoiceid));
+        if (dlBtn) dlBtn.addEventListener('click', () => downloadInvoiceAsPdf(dlBtn.dataset.invoiceid));
+        const delInvBtn = document.getElementById('sv-del-invoice');
+        if (delInvBtn) delInvBtn.addEventListener('click', () => deleteInvoice(delInvBtn.dataset.invoiceid, editingSponsorVideo));
     }
 
     async function saveSponsorVideo() {
@@ -2053,9 +2061,66 @@ const LibraryUI = (() => {
         }
     }
 
-    async function downloadInvoice(invoiceId) {
+    function previewInvoice(invoiceId) {
         if (!invoiceId) return;
-        window.open(`/api/invoices/${invoiceId}/download`, '_blank');
+        // Create popup overlay with iframe
+        const overlay = document.createElement('div');
+        overlay.className = 'sponsor-invoice-overlay';
+        overlay.innerHTML = `
+            <div class="sponsor-invoice-popup">
+                <div class="sponsor-invoice-popup-header">
+                    <span>Invoice Preview</span>
+                    <div class="sponsor-invoice-popup-actions">
+                        <button class="sponsor-invoice-popup-pdf" title="Save as PDF">Save PDF</button>
+                        <button class="sponsor-invoice-popup-close" title="Close">&times;</button>
+                    </div>
+                </div>
+                <iframe class="sponsor-invoice-iframe" src="/api/invoices/${encodeURIComponent(invoiceId)}/download"></iframe>
+            </div>
+        `;
+        (container || document.body).appendChild(overlay);
+        overlay.querySelector('.sponsor-invoice-popup-close').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        overlay.querySelector('.sponsor-invoice-popup-pdf').addEventListener('click', () => {
+            const iframe = overlay.querySelector('.sponsor-invoice-iframe');
+            if (iframe?.contentWindow) { iframe.contentWindow.print(); }
+        });
+    }
+
+    function downloadInvoiceAsPdf(invoiceId) {
+        if (!invoiceId) return;
+        // Open in hidden window and trigger print (Save as PDF)
+        const win = window.open(`/api/invoices/${encodeURIComponent(invoiceId)}/download`, '_blank');
+        if (win) {
+            win.addEventListener('load', () => { win.print(); });
+        }
+    }
+
+    async function deleteInvoice(invoiceId, videoId) {
+        if (!invoiceId) return;
+        if (!confirm('Delete this invoice? This cannot be undone.')) return;
+        sponsorsBusy = true;
+        try {
+            const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed');
+            // Clear invoiceId from the video deal
+            if (videoId) {
+                const v = sponsorVideos.find(x => x.id === videoId);
+                if (v) {
+                    v.invoiceId = null;
+                    await fetch(`/api/data/sponsorvideos/${videoId}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ invoiceId: null })
+                    }).catch(() => {});
+                }
+            }
+            renderSponsorsTab();
+        } catch (e) {
+            console.warn('Sponsors: delete invoice failed', e);
+            alert('Failed to delete invoice.');
+        } finally {
+            sponsorsBusy = false;
+        }
     }
 
     function updateSponsorsBadge() {

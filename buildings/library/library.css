@@ -1751,21 +1751,130 @@
     font-family: inherit;
 }
 .sponsor-invoice-btn:hover { background: #e67e22; color: #fff; }
-.sponsor-download-btn {
-    width: 100%;
+.sponsor-invoice-actions-row {
+    display: flex;
+    gap: 8px;
     margin-top: 10px;
-    border: 2px solid #27ae60;
-    background: #fff;
-    color: #27ae60;
+}
+.sponsor-view-btn,
+.sponsor-download-btn,
+.sponsor-delete-invoice-btn {
+    flex: 1;
     border-radius: 10px;
     padding: 10px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
     font-family: inherit;
+    text-align: center;
+}
+.sponsor-view-btn {
+    border: 2px solid #0984e3;
+    background: #fff;
+    color: #0984e3;
+}
+.sponsor-view-btn:hover { background: #0984e3; color: #fff; }
+.sponsor-download-btn {
+    border: 2px solid #27ae60;
+    background: #fff;
+    color: #27ae60;
 }
 .sponsor-download-btn:hover { background: #27ae60; color: #fff; }
+.sponsor-delete-invoice-btn {
+    border: 2px solid #e74c3c;
+    background: #fff;
+    color: #e74c3c;
+}
+.sponsor-delete-invoice-btn:hover { background: #e74c3c; color: #fff; }
+
+/* Invoice preview popup */
+.sponsor-invoice-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    border-radius: 16px;
+}
+.sponsor-invoice-popup {
+    background: #fff;
+    border-radius: 12px;
+    width: 95%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+    overflow: hidden;
+}
+.sponsor-invoice-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e8e8e8;
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    flex-shrink: 0;
+}
+.sponsor-invoice-popup-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.sponsor-invoice-popup-pdf {
+    border: 1px solid #27ae60;
+    background: #fff;
+    color: #27ae60;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+}
+.sponsor-invoice-popup-pdf:hover { background: #27ae60; color: #fff; }
+.sponsor-invoice-popup-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    font-size: 22px;
+    color: #999;
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.sponsor-invoice-popup-close:hover { background: #f0f0f0; }
+.sponsor-invoice-iframe {
+    flex: 1;
+    border: none;
+    width: 100%;
+}
+
+/* View button in video card list */
+.sponsor-video-view-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #e0dcd6;
+    background: #faf8f5;
+    color: #5a3e1b;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+}
+.sponsor-video-view-btn:hover { background: #e3f2fd; border-color: #0984e3; color: #0984e3; }
+
 .sponsor-form-section-header {
     font-size: 12px;
     font-weight: 700;
