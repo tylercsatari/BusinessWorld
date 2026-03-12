@@ -273,7 +273,8 @@ const server = http.createServer(async (req, res) => {
             const maxNum = allInvoices.reduce((m, i) => Math.max(m, i.invoiceNumber || 0), 4);
             const invoiceNumber = maxNum + 1;
             const invoiceDate = new Date().toISOString().split('T')[0];
-            const dueDate = video.dueDate || invoiceDate;
+            const due = new Date(); due.setDate(due.getDate() + 30);
+            const dueDate = due.toISOString().split('T')[0];
             const companyAddr = (company?.address || '').replace(/\n/g, '<br>');
             const lineItems = [{ description: video.title || 'Sponsored Video', amount: video.amount || 0 }];
             const subtotal = lineItems.reduce((s, li) => s + (li.amount || 0), 0);
@@ -315,7 +316,6 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 <div class="inv-total-row inv-grand-total"><span class="inv-total-label">Total</span><span class="inv-total-value">${currency} $${total.toFixed(2)}</span></div>
 </div>
 <div class="inv-bank"><div class="inv-bank-title">Payment Details</div><div class="inv-bank-row"><span class="inv-bank-label">Institution Number:</span><span class="inv-bank-value">001</span></div><div class="inv-bank-row"><span class="inv-bank-label">Transit Number:</span><span class="inv-bank-value">30489</span></div><div class="inv-bank-row"><span class="inv-bank-label">Account Number:</span><span class="inv-bank-value">1987-607</span></div></div>
-${video.notes ? `<div class="inv-footer"><strong>Notes:</strong><br>${esc(video.notes)}</div>` : ''}
 </body></html>`;
 
             const r2Key = `invoices/INV-${String(invoiceNumber).padStart(4, '0')}.html`;
