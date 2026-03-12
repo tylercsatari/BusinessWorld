@@ -1,13 +1,18 @@
 /**
- * Library UI — Ideas, To-Do list, Calendar, Projects, Invoices.
+ * Library UI — Ideas, To-Do list, Calendar, Projects, Sponsors.
  * All data stored in R2 JSON files via /api/data/* routes.
  * Scripts are now embedded in ideas (idea.script field).
  */
 const LibraryUI = (() => {
     let container = null;
-    let invoiceItems = [];     // [{id, company, amount, currency, expectedDate, notes, paid}]
-    let invoicesLoaded = false;
-    let invoicesBusy = false;
+    // --- Sponsors state ---
+    let sponsorCompanies = [];   // [{id, name, contactName, contactEmail, phone, website, address, city, province, postalCode, country, notes}]
+    let sponsorVideos = [];      // [{id, companyId, title, amount, currency, status, dueDate, deliverables, notes, invoiceId}]
+    let sponsorsLoaded = false;
+    let sponsorsBusy = false;
+    let sponsorsSubTab = 'companies'; // 'companies' | 'videos'
+    let editingSponsor = null;   // company id being edited, or 'new'
+    let editingSponsorVideo = null; // video deal id being edited, or 'new'
     const CAD_RATES = { CAD: 1, USD: 1.36, EUR: 1.50, GBP: 1.73 };
     let currentPage = 'list';
     let activeTab = 'notes';
@@ -89,7 +94,7 @@ const LibraryUI = (() => {
                         <button class="library-tab" data-tab="todo">To-Do</button>
                         <button class="library-tab" data-tab="calendar">Calendar</button>
                         <button class="library-tab" data-tab="projects">Projects</button>
-                        <button class="library-tab" data-tab="invoices">Invoices</button>
+                        <button class="library-tab" data-tab="sponsors">Sponsors</button>
                     </div>
                     <div class="library-list-header" id="library-list-header">
                         <h2 class="library-list-heading" id="library-list-heading">Ideas</h2>
@@ -100,7 +105,7 @@ const LibraryUI = (() => {
                     <div class="library-todo-container" id="library-todo-container" style="display:none;"></div>
                     <div class="library-calendar-container" id="library-calendar-container" style="display:none;"></div>
                     <div class="library-projects-container" id="library-projects-container" style="display:none;"></div>
-                    <div class="library-invoices-container" id="library-invoices-container" style="display:none;"></div>
+                    <div class="library-sponsors-container" id="library-sponsors-container" style="display:none;"></div>
                 </div>
                 <div class="library-page library-editor-page" id="library-editor-page">
                     <div class="library-editor" id="library-editor">
@@ -112,9 +117,12 @@ const LibraryUI = (() => {
         document.getElementById('library-new-btn').addEventListener('click', () => {
             if (activeTab === 'freenotes') handleNewFreeNote();
             else if (activeTab === 'notes') handleNewNote();
-            // todo/calendar use inline input, no + button action needed — but we'll focus the input
             else if (activeTab === 'todo') focusTodoInput();
             else if (activeTab === 'calendar') focusCalendarInput();
+            else if (activeTab === 'sponsors') {
+                if (sponsorsSubTab === 'companies') { editingSponsor = 'new'; renderSponsorsTab(); }
+                else { editingSponsorVideo = 'new'; renderSponsorsTab(); }
+            }
         });
         container.querySelectorAll('.library-tab').forEach(tab => {
             tab.addEventListener('click', () => switchTab(tab.dataset.tab));
@@ -130,14 +138,14 @@ const LibraryUI = (() => {
         const todoContainer = document.getElementById('library-todo-container');
         const calendarContainer = document.getElementById('library-calendar-container');
         const projectsContainer = document.getElementById('library-projects-container');
-        const invoicesContainer = document.getElementById('library-invoices-container');
+        const sponsorsContainer = document.getElementById('library-sponsors-container');
 
         if (freeNotesList) freeNotesList.style.display = 'none';
         if (notesList) notesList.style.display = 'none';
         if (todoContainer) todoContainer.style.display = 'none';
         if (calendarContainer) calendarContainer.style.display = 'none';
         if (projectsContainer) projectsContainer.style.display = 'none';
-        if (invoicesContainer) invoicesContainer.style.display = 'none';
+        if (sponsorsContainer) sponsorsContainer.style.display = 'none';
 
         const newBtn = document.getElementById('library-new-btn');
 
@@ -168,12 +176,12 @@ const LibraryUI = (() => {
             if (projectsContainer) projectsContainer.style.display = '';
             if (newBtn) newBtn.style.display = 'none';
             renderProjectsList();
-        } else if (tab === 'invoices') {
-            if (heading) heading.textContent = 'Invoices';
-            if (invoicesContainer) invoicesContainer.style.display = '';
-            if (newBtn) newBtn.style.display = 'none';
-            renderInvoicesList();
-            if (invoicesLoaded) backgroundRefreshInvoices();
+        } else if (tab === 'sponsors') {
+            if (heading) heading.textContent = 'Sponsors';
+            if (sponsorsContainer) sponsorsContainer.style.display = '';
+            if (newBtn) newBtn.style.display = '';
+            renderSponsorsTab();
+            if (sponsorsLoaded) backgroundRefreshSponsors();
         }
     }
 
@@ -1511,13 +1519,17 @@ const LibraryUI = (() => {
     }
 
     // =====================
-    // --- INVOICES (R2-backed records) ---
+    // --- SPONSORS (Companies + Video Deals, R2-backed) ---
     // =====================
 
-    async function fetchInvoices() {
-        const res = await fetch('/api/data/invoices');
-        if (!res.ok) return [];
-        return await res.json();
+    async function fetchSponsors() {
+        const [compRes, vidRes] = await Promise.all([
+            fetch('/api/data/sponsors'),
+            fetch('/api/data/sponsorvideos')
+        ]);
+        const companies = compRes.ok ? await compRes.json() : [];
+        const videos = vidRes.ok ? await vidRes.json() : [];
+        return { companies, videos };
     }
 
     function toCAD(amount, currency) {
@@ -1526,260 +1538,485 @@ const LibraryUI = (() => {
     }
 
     function getExpectedIncomeCADInternal() {
-        return invoiceItems
-            .filter(i => !i.paid)
-            .reduce((sum, i) => sum + toCAD(i.amount, i.currency), 0);
+        return sponsorVideos
+            .filter(v => v.status !== 'paid' && v.status !== 'cancelled')
+            .reduce((sum, v) => sum + toCAD(v.amount || 0, v.currency || 'CAD'), 0);
     }
 
-    function renderInvoicesList() {
-        const el = document.getElementById('library-invoices-container');
+    function getCompanyName(companyId) {
+        const c = sponsorCompanies.find(x => x.id === companyId);
+        return c ? c.name : 'Unknown';
+    }
+
+    const SPONSOR_STATUS_LABELS = {
+        pending: 'Pending', active: 'Active', delivered: 'Delivered',
+        invoiced: 'Invoiced', paid: 'Paid', cancelled: 'Cancelled'
+    };
+    const SPONSOR_STATUS_COLORS = {
+        pending: '#ff9500', active: '#0984e3', delivered: '#6c5ce7',
+        invoiced: '#e67e22', paid: '#27ae60', cancelled: '#999'
+    };
+
+    function renderSponsorsTab() {
+        const el = document.getElementById('library-sponsors-container');
         if (!el) return;
-        if (!invoicesLoaded) {
-            el.innerHTML = '<div class="library-empty">Loading invoices...</div>';
-            fetchInvoices().then(items => {
-                invoiceItems = items;
-                invoicesLoaded = true;
-                renderInvoicesList();
-                updateInvoicesBadge();
+        if (!sponsorsLoaded) {
+            el.innerHTML = '<div class="library-empty">Loading sponsors...</div>';
+            fetchSponsors().then(data => {
+                sponsorCompanies = data.companies;
+                sponsorVideos = data.videos;
+                sponsorsLoaded = true;
+                renderSponsorsTab();
+                updateSponsorsBadge();
                 if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
             }).catch(() => {
-                el.innerHTML = '<div class="library-empty">Could not load invoices.</div>';
+                el.innerHTML = '<div class="library-empty">Could not load sponsors.</div>';
             });
             return;
         }
-        renderInvoicesContent(el);
+        // If editing a company or video deal, show the form
+        if (editingSponsor) { renderSponsorForm(el); return; }
+        if (editingSponsorVideo) { renderSponsorVideoForm(el); return; }
+        renderSponsorsContent(el);
     }
 
-    function backgroundRefreshInvoices() {
-        if (invoicesBusy) return;
-        fetchInvoices().then(fresh => {
-            if (invoicesBusy) return;
-            if (fresh && fresh.length >= 0) {
-                invoiceItems = fresh;
-                updateInvoicesBadge();
-                if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
-                const el = document.getElementById('library-invoices-container');
-                if (el) renderInvoicesContent(el);
+    function backgroundRefreshSponsors() {
+        if (sponsorsBusy) return;
+        fetchSponsors().then(data => {
+            if (sponsorsBusy) return;
+            sponsorCompanies = data.companies;
+            sponsorVideos = data.videos;
+            updateSponsorsBadge();
+            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+            if (!editingSponsor && !editingSponsorVideo) {
+                const el = document.getElementById('library-sponsors-container');
+                if (el) renderSponsorsContent(el);
             }
         }).catch(() => {});
     }
 
-    function renderInvoicesContent(el) {
+    function renderSponsorsContent(el) {
         if (!el) return;
 
-        const unpaid = invoiceItems.filter(i => !i.paid);
-        const paid = invoiceItems.filter(i => i.paid);
         const totalCAD = getExpectedIncomeCADInternal();
-
-        const currencies = Object.keys(CAD_RATES);
-        const todayStr2 = new Date().toISOString().slice(0, 10);
+        const activeDeals = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled');
 
         let html = `
-            <div class="library-invoice-total">
+            <div class="sponsor-summary-bar">
                 Expected: <strong>$${Math.round(totalCAD).toLocaleString()} CAD</strong>
-                <span style="color:#888;font-size:12px;margin-left:6px;">(${unpaid.length} unpaid)</span>
+                <span style="color:#888;font-size:12px;margin-left:6px;">(${activeDeals.length} active deal${activeDeals.length !== 1 ? 's' : ''})</span>
             </div>
-            <div class="library-invoice-form">
-                <input type="text" class="library-invoice-input" id="library-invoice-company" placeholder="Company name" />
-                <input type="number" class="library-invoice-input library-invoice-amount-input" id="library-invoice-amount" placeholder="Amount" step="0.01" min="0" />
-                <select class="library-invoice-select" id="library-invoice-currency">
-                    ${currencies.map(c => `<option value="${c}">${c}</option>`).join('')}
-                </select>
-                <input type="date" class="library-invoice-input" id="library-invoice-date" value="${todayStr2}" />
-                <input type="text" class="library-invoice-input" id="library-invoice-notes" placeholder="Notes (optional)" />
-                <button class="library-invoice-add-btn" id="library-invoice-add-btn">Add</button>
+            <div class="sponsor-sub-tabs">
+                <button class="sponsor-sub-tab${sponsorsSubTab === 'companies' ? ' active' : ''}" data-subtab="companies">Companies (${sponsorCompanies.length})</button>
+                <button class="sponsor-sub-tab${sponsorsSubTab === 'videos' ? ' active' : ''}" data-subtab="videos">Video Deals (${sponsorVideos.length})</button>
             </div>
         `;
 
-        if (unpaid.length === 0 && paid.length === 0) {
-            html += '<div class="library-empty">No invoices yet. Add one above.</div>';
-        }
-
-        if (unpaid.length > 0) {
-            html += '<div class="library-todo-section-header">Unpaid</div>';
-            html += unpaid.map(item => {
-                const idx = invoiceItems.indexOf(item);
-                const cadAmt = toCAD(item.amount, item.currency);
-                const cadNote = item.currency !== 'CAD' ? ` <span style="color:#888;font-size:12px;">(~$${Math.round(cadAmt).toLocaleString()} CAD)</span>` : '';
-                const dateStr = item.expectedDate ? formatCalDate(item.expectedDate) : '';
-                return `
-                    <div class="library-invoice-item" data-idx="${idx}">
-                        <div class="library-invoice-info">
-                            <div class="library-invoice-company">${escHtml(item.company)}</div>
-                            <div class="library-invoice-details">
-                                <span class="library-invoice-amount-display">$${item.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(item.currency)}${cadNote}</span>
-                                ${dateStr ? `<span class="library-invoice-date">${dateStr}</span>` : ''}
-                                ${item.notes ? `<span class="library-invoice-notes-text">${escHtml(item.notes)}</span>` : ''}
-                            </div>
-                        </div>
-                        <div class="library-invoice-actions">
-                            <button class="library-invoice-paid-btn" data-idx="${idx}" title="Mark paid">&#10003;</button>
-                            <button class="library-invoice-delete-btn" data-idx="${idx}" title="Delete">&times;</button>
-                        </div>
-                    </div>`;
-            }).join('');
-        }
-
-        if (paid.length > 0) {
-            html += `<div class="library-todo-section-header" style="cursor:pointer;" id="library-invoices-paid-toggle">Paid (${paid.length}) &#9662;</div>`;
-            html += `<div id="library-invoices-paid-section" style="display:none;">`;
-            html += paid.map(item => {
-                const idx = invoiceItems.indexOf(item);
-                return `
-                    <div class="library-invoice-item library-invoice-paid" data-idx="${idx}">
-                        <div class="library-invoice-info">
-                            <div class="library-invoice-company">${escHtml(item.company)}</div>
-                            <div class="library-invoice-details">
-                                <span class="library-invoice-amount-display">$${item.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(item.currency)}</span>
-                                ${item.notes ? `<span class="library-invoice-notes-text">${escHtml(item.notes)}</span>` : ''}
-                            </div>
-                        </div>
-                        <div class="library-invoice-actions">
-                            <button class="library-invoice-delete-btn" data-idx="${idx}" title="Delete">&times;</button>
-                        </div>
-                    </div>`;
-            }).join('');
-            html += `</div>`;
+        if (sponsorsSubTab === 'companies') {
+            html += renderCompaniesListHtml();
+        } else {
+            html += renderVideoDealsListHtml();
         }
 
         el.innerHTML = html;
 
-        // Event listeners
-        const addBtn = document.getElementById('library-invoice-add-btn');
-        if (addBtn) addBtn.addEventListener('click', addInvoice);
-
-        // Enter key on inputs
-        ['library-invoice-company', 'library-invoice-amount', 'library-invoice-notes'].forEach(id => {
-            const inp = document.getElementById(id);
-            if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') addInvoice(); });
-        });
-
-        el.querySelectorAll('.library-invoice-paid-btn').forEach(btn => {
-            btn.addEventListener('click', () => toggleInvoicePaid(parseInt(btn.dataset.idx)));
-        });
-        el.querySelectorAll('.library-invoice-delete-btn').forEach(btn => {
-            btn.addEventListener('click', () => deleteInvoice(parseInt(btn.dataset.idx)));
-        });
-
-        const paidToggle = document.getElementById('library-invoices-paid-toggle');
-        if (paidToggle) {
-            paidToggle.addEventListener('click', () => {
-                const section = document.getElementById('library-invoices-paid-section');
-                if (section) {
-                    const showing = section.style.display !== 'none';
-                    section.style.display = showing ? 'none' : '';
-                    paidToggle.innerHTML = `Paid (${paid.length}) ${showing ? '&#9662;' : '&#9652;'}`;
-                }
+        // Sub-tab clicks
+        el.querySelectorAll('.sponsor-sub-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sponsorsSubTab = btn.dataset.subtab;
+                renderSponsorsContent(el);
             });
+        });
+
+        // Company card clicks
+        el.querySelectorAll('.sponsor-company-card').forEach(card => {
+            card.addEventListener('click', () => {
+                editingSponsor = card.dataset.id;
+                renderSponsorsTab();
+            });
+        });
+        el.querySelectorAll('.sponsor-company-delete').forEach(btn => {
+            btn.addEventListener('click', e => { e.stopPropagation(); deleteSponsorCompany(btn.dataset.id); });
+        });
+
+        // Video deal clicks
+        el.querySelectorAll('.sponsor-video-card').forEach(card => {
+            card.addEventListener('click', () => {
+                editingSponsorVideo = card.dataset.id;
+                renderSponsorsTab();
+            });
+        });
+        el.querySelectorAll('.sponsor-video-delete').forEach(btn => {
+            btn.addEventListener('click', e => { e.stopPropagation(); deleteSponsorVideo(btn.dataset.id); });
+        });
+        el.querySelectorAll('.sponsor-video-invoice-btn').forEach(btn => {
+            btn.addEventListener('click', e => { e.stopPropagation(); generateInvoice(btn.dataset.id); });
+        });
+        el.querySelectorAll('.sponsor-video-download-btn').forEach(btn => {
+            btn.addEventListener('click', e => { e.stopPropagation(); downloadInvoice(btn.dataset.invoiceid); });
+        });
+    }
+
+    function renderCompaniesListHtml() {
+        if (sponsorCompanies.length === 0) {
+            return '<div class="library-empty">No sponsor companies yet. Tap + to add one.</div>';
+        }
+        return sponsorCompanies.map(c => {
+            const dealCount = sponsorVideos.filter(v => v.companyId === c.id).length;
+            const totalAmount = sponsorVideos.filter(v => v.companyId === c.id).reduce((s, v) => s + toCAD(v.amount || 0, v.currency || 'CAD'), 0);
+            return `
+                <div class="sponsor-company-card" data-id="${escAttr(c.id)}">
+                    <div class="sponsor-company-info">
+                        <div class="sponsor-company-name">${escHtml(c.name)}</div>
+                        <div class="sponsor-company-meta">
+                            ${c.contactName ? `<span>${escHtml(c.contactName)}</span>` : ''}
+                            ${c.contactEmail ? `<span>${escHtml(c.contactEmail)}</span>` : ''}
+                        </div>
+                        <div class="sponsor-company-stats">
+                            <span>${dealCount} deal${dealCount !== 1 ? 's' : ''}</span>
+                            ${totalAmount > 0 ? `<span class="sponsor-company-total">$${Math.round(totalAmount).toLocaleString()} CAD</span>` : ''}
+                        </div>
+                    </div>
+                    <button class="sponsor-company-delete" data-id="${escAttr(c.id)}" title="Delete">&times;</button>
+                </div>`;
+        }).join('');
+    }
+
+    function renderVideoDealsListHtml() {
+        if (sponsorVideos.length === 0) {
+            return '<div class="library-empty">No video deals yet. Tap + to add one.</div>';
+        }
+        // Sort: active first, then by date
+        const sorted = [...sponsorVideos].sort((a, b) => {
+            const order = { pending: 0, active: 1, delivered: 2, invoiced: 3, paid: 4, cancelled: 5 };
+            const diff = (order[a.status] || 0) - (order[b.status] || 0);
+            if (diff !== 0) return diff;
+            return (b.createdAt || '').localeCompare(a.createdAt || '');
+        });
+        return sorted.map(v => {
+            const company = getCompanyName(v.companyId);
+            const color = SPONSOR_STATUS_COLORS[v.status] || '#999';
+            const label = SPONSOR_STATUS_LABELS[v.status] || v.status;
+            const cadAmt = toCAD(v.amount || 0, v.currency || 'CAD');
+            const cadNote = (v.currency && v.currency !== 'CAD' && v.amount) ? ` (~$${Math.round(cadAmt).toLocaleString()} CAD)` : '';
+            const dueDateStr = v.dueDate ? formatCalDate(v.dueDate) : '';
+            const hasInvoice = !!v.invoiceId;
+            return `
+                <div class="sponsor-video-card" data-id="${escAttr(v.id)}">
+                    <div class="sponsor-video-info">
+                        <div class="sponsor-video-title">${escHtml(v.title || 'Untitled Deal')}</div>
+                        <div class="sponsor-video-company">${escHtml(company)}</div>
+                        <div class="sponsor-video-details">
+                            ${v.amount ? `<span class="sponsor-video-amount">$${v.amount.toLocaleString(undefined, {minimumFractionDigits: 2})} ${escHtml(v.currency || 'CAD')}${cadNote}</span>` : ''}
+                            ${dueDateStr ? `<span class="sponsor-video-due">Due: ${dueDateStr}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="sponsor-video-actions">
+                        <span class="sponsor-status-badge" style="background:${color}20;color:${color}">${label}</span>
+                        ${hasInvoice
+                            ? `<button class="sponsor-video-download-btn" data-invoiceid="${escAttr(v.invoiceId)}" title="Download Invoice">&#8595;</button>`
+                            : (v.status !== 'paid' && v.status !== 'cancelled'
+                                ? `<button class="sponsor-video-invoice-btn" data-id="${escAttr(v.id)}" title="Create Invoice">&#9993;</button>`
+                                : '')}
+                        <button class="sponsor-video-delete" data-id="${escAttr(v.id)}" title="Delete">&times;</button>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    // --- Company Form ---
+    function renderSponsorForm(el) {
+        const isNew = editingSponsor === 'new';
+        const c = isNew ? {} : sponsorCompanies.find(x => x.id === editingSponsor) || {};
+        const currencies = Object.keys(CAD_RATES);
+        el.innerHTML = `
+            <div class="sponsor-form-header">
+                <button class="sponsor-form-back" id="sponsor-form-back">&#8592; Back</button>
+                <span class="sponsor-form-title">${isNew ? 'New Company' : 'Edit Company'}</span>
+            </div>
+            <div class="sponsor-form-body">
+                <label class="sponsor-label">Company Name *</label>
+                <input class="sponsor-input" id="sp-name" value="${escAttr(c.name || '')}" placeholder="Company name" />
+                <label class="sponsor-label">Contact Name</label>
+                <input class="sponsor-input" id="sp-contact-name" value="${escAttr(c.contactName || '')}" placeholder="Contact person" />
+                <label class="sponsor-label">Contact Email</label>
+                <input class="sponsor-input" id="sp-contact-email" value="${escAttr(c.contactEmail || '')}" placeholder="email@example.com" type="email" />
+                <label class="sponsor-label">Phone</label>
+                <input class="sponsor-input" id="sp-phone" value="${escAttr(c.phone || '')}" placeholder="Phone number" />
+                <label class="sponsor-label">Website</label>
+                <input class="sponsor-input" id="sp-website" value="${escAttr(c.website || '')}" placeholder="https://..." />
+                <label class="sponsor-label">Address</label>
+                <input class="sponsor-input" id="sp-address" value="${escAttr(c.address || '')}" placeholder="Street address" />
+                <div class="sponsor-form-row">
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">City</label>
+                        <input class="sponsor-input" id="sp-city" value="${escAttr(c.city || '')}" placeholder="City" />
+                    </div>
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">Province/State</label>
+                        <input class="sponsor-input" id="sp-province" value="${escAttr(c.province || '')}" placeholder="Province" />
+                    </div>
+                </div>
+                <div class="sponsor-form-row">
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">Postal Code</label>
+                        <input class="sponsor-input" id="sp-postal" value="${escAttr(c.postalCode || '')}" placeholder="Postal code" />
+                    </div>
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">Country</label>
+                        <input class="sponsor-input" id="sp-country" value="${escAttr(c.country || 'Canada')}" placeholder="Country" />
+                    </div>
+                </div>
+                <label class="sponsor-label">Notes</label>
+                <textarea class="sponsor-textarea" id="sp-notes" placeholder="Notes about this sponsor...">${escHtml(c.notes || '')}</textarea>
+                <button class="sponsor-save-btn" id="sp-save-btn">${isNew ? 'Add Company' : 'Save Changes'}</button>
+                ${!isNew ? `<div class="sponsor-form-section-header">Video Deals (${sponsorVideos.filter(v => v.companyId === c.id).length})</div>` : ''}
+                ${!isNew ? sponsorVideos.filter(v => v.companyId === c.id).map(v => {
+                    const color = SPONSOR_STATUS_COLORS[v.status] || '#999';
+                    const label = SPONSOR_STATUS_LABELS[v.status] || v.status;
+                    return `<div class="sponsor-linked-deal" data-vid="${escAttr(v.id)}">
+                        <span class="sponsor-linked-deal-title">${escHtml(v.title || 'Untitled')}</span>
+                        <span class="sponsor-status-badge" style="background:${color}20;color:${color}">${label}</span>
+                        ${v.amount ? `<span class="sponsor-linked-deal-amount">$${v.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>` : ''}
+                    </div>`;
+                }).join('') : ''}
+            </div>
+        `;
+        document.getElementById('sponsor-form-back').addEventListener('click', () => { editingSponsor = null; renderSponsorsTab(); });
+        document.getElementById('sp-save-btn').addEventListener('click', saveSponsorCompany);
+        // Click linked deals to edit them
+        el.querySelectorAll('.sponsor-linked-deal').forEach(d => {
+            d.addEventListener('click', () => { editingSponsor = null; editingSponsorVideo = d.dataset.vid; renderSponsorsTab(); });
+        });
+    }
+
+    async function saveSponsorCompany() {
+        const name = (document.getElementById('sp-name')?.value || '').trim();
+        if (!name) { alert('Company name is required.'); return; }
+        const fields = {
+            name,
+            contactName: document.getElementById('sp-contact-name')?.value.trim() || '',
+            contactEmail: document.getElementById('sp-contact-email')?.value.trim() || '',
+            phone: document.getElementById('sp-phone')?.value.trim() || '',
+            website: document.getElementById('sp-website')?.value.trim() || '',
+            address: document.getElementById('sp-address')?.value.trim() || '',
+            city: document.getElementById('sp-city')?.value.trim() || '',
+            province: document.getElementById('sp-province')?.value.trim() || '',
+            postalCode: document.getElementById('sp-postal')?.value.trim() || '',
+            country: document.getElementById('sp-country')?.value.trim() || '',
+            notes: document.getElementById('sp-notes')?.value.trim() || ''
+        };
+        sponsorsBusy = true;
+        try {
+            if (editingSponsor === 'new') {
+                const res = await fetch('/api/data/sponsors', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields)
+                });
+                if (!res.ok) throw new Error('Failed');
+                const created = await res.json();
+                sponsorCompanies.push(created);
+            } else {
+                const res = await fetch(`/api/data/sponsors/${editingSponsor}`, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields)
+                });
+                if (!res.ok) throw new Error('Failed');
+                const updated = await res.json();
+                const idx = sponsorCompanies.findIndex(c => c.id === editingSponsor);
+                if (idx >= 0) sponsorCompanies[idx] = updated;
+            }
+            editingSponsor = null;
+            renderSponsorsTab();
+            updateSponsorsBadge();
+        } catch (e) {
+            console.warn('Sponsors: save company failed', e);
+            alert('Failed to save company.');
+        } finally {
+            sponsorsBusy = false;
         }
     }
 
-    async function addInvoice() {
-        const companyEl = document.getElementById('library-invoice-company');
-        const amountEl = document.getElementById('library-invoice-amount');
-        const currencyEl = document.getElementById('library-invoice-currency');
-        const dateEl = document.getElementById('library-invoice-date');
-        const notesEl = document.getElementById('library-invoice-notes');
-
-        const company = (companyEl && companyEl.value.trim()) || '';
-        const amount = amountEl ? parseFloat(amountEl.value) : 0;
-        const currency = currencyEl ? currencyEl.value : 'CAD';
-        const expectedDate = dateEl ? dateEl.value : '';
-        const notes = (notesEl && notesEl.value.trim()) || '';
-
-        if (!company || !amount) { alert('Company and amount are required.'); return; }
-
-        invoicesBusy = true;
-        const tempItem = { id: null, company, amount, currency, expectedDate, notes, paid: false };
-        invoiceItems.unshift(tempItem);
-
-        // Clear form
-        if (companyEl) companyEl.value = '';
-        if (amountEl) amountEl.value = '';
-        if (notesEl) notesEl.value = '';
-
-        renderInvoicesList();
-        updateInvoicesBadge();
-        if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
-
+    async function deleteSponsorCompany(id) {
+        if (!confirm('Delete this company and all its video deals?')) return;
+        sponsorsBusy = true;
         try {
-            const res = await fetch('/api/data/invoices', {
+            // Delete linked video deals first
+            const linked = sponsorVideos.filter(v => v.companyId === id);
+            for (const v of linked) {
+                await fetch(`/api/data/sponsorvideos/${v.id}`, { method: 'DELETE' });
+            }
+            const res = await fetch(`/api/data/sponsors/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed');
+            sponsorCompanies = sponsorCompanies.filter(c => c.id !== id);
+            sponsorVideos = sponsorVideos.filter(v => v.companyId !== id);
+            renderSponsorsTab();
+            updateSponsorsBadge();
+            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+        } catch (e) {
+            console.warn('Sponsors: delete company failed', e);
+            alert('Failed to delete company.');
+        } finally {
+            sponsorsBusy = false;
+        }
+    }
+
+    // --- Video Deal Form ---
+    function renderSponsorVideoForm(el) {
+        const isNew = editingSponsorVideo === 'new';
+        const v = isNew ? {} : sponsorVideos.find(x => x.id === editingSponsorVideo) || {};
+        const currencies = Object.keys(CAD_RATES);
+        const statuses = Object.keys(SPONSOR_STATUS_LABELS);
+        const todayVal = new Date().toISOString().slice(0, 10);
+        const hasInvoice = !!v.invoiceId;
+        el.innerHTML = `
+            <div class="sponsor-form-header">
+                <button class="sponsor-form-back" id="sponsor-form-back">&#8592; Back</button>
+                <span class="sponsor-form-title">${isNew ? 'New Video Deal' : 'Edit Video Deal'}</span>
+            </div>
+            <div class="sponsor-form-body">
+                <label class="sponsor-label">Video Title *</label>
+                <input class="sponsor-input" id="sv-title" value="${escAttr(v.title || '')}" placeholder="Video title / campaign" />
+                <label class="sponsor-label">Company *</label>
+                <select class="sponsor-select" id="sv-company">
+                    <option value="">— Select company —</option>
+                    ${sponsorCompanies.map(c => `<option value="${escAttr(c.id)}"${c.id === v.companyId ? ' selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+                </select>
+                <div class="sponsor-form-row">
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">Amount *</label>
+                        <input class="sponsor-input" id="sv-amount" type="number" step="0.01" min="0" value="${v.amount || ''}" placeholder="0.00" />
+                    </div>
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">Currency</label>
+                        <select class="sponsor-select" id="sv-currency">
+                            ${currencies.map(c => `<option value="${c}"${c === (v.currency || 'CAD') ? ' selected' : ''}>${c}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div class="sponsor-form-row">
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">Status</label>
+                        <select class="sponsor-select" id="sv-status">
+                            ${statuses.map(s => `<option value="${s}"${s === (v.status || 'pending') ? ' selected' : ''}>${SPONSOR_STATUS_LABELS[s]}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="sponsor-form-col">
+                        <label class="sponsor-label">Due Date</label>
+                        <input class="sponsor-input" id="sv-due" type="date" value="${v.dueDate || todayVal}" />
+                    </div>
+                </div>
+                <label class="sponsor-label">Deliverables</label>
+                <textarea class="sponsor-textarea" id="sv-deliverables" placeholder="What needs to be delivered...">${escHtml(v.deliverables || '')}</textarea>
+                <label class="sponsor-label">Notes</label>
+                <textarea class="sponsor-textarea" id="sv-notes" placeholder="Additional notes...">${escHtml(v.notes || '')}</textarea>
+                <button class="sponsor-save-btn" id="sv-save-btn">${isNew ? 'Add Deal' : 'Save Changes'}</button>
+                ${!isNew && !hasInvoice ? `<button class="sponsor-invoice-btn" id="sv-gen-invoice">Create Invoice</button>` : ''}
+                ${hasInvoice ? `<button class="sponsor-download-btn" id="sv-dl-invoice" data-invoiceid="${escAttr(v.invoiceId)}">Download Invoice</button>` : ''}
+            </div>
+        `;
+        document.getElementById('sponsor-form-back').addEventListener('click', () => { editingSponsorVideo = null; renderSponsorsTab(); });
+        document.getElementById('sv-save-btn').addEventListener('click', saveSponsorVideo);
+        const genBtn = document.getElementById('sv-gen-invoice');
+        if (genBtn) genBtn.addEventListener('click', () => generateInvoice(editingSponsorVideo));
+        const dlBtn = document.getElementById('sv-dl-invoice');
+        if (dlBtn) dlBtn.addEventListener('click', () => downloadInvoice(dlBtn.dataset.invoiceid));
+    }
+
+    async function saveSponsorVideo() {
+        const title = (document.getElementById('sv-title')?.value || '').trim();
+        const companyId = document.getElementById('sv-company')?.value || '';
+        const amount = parseFloat(document.getElementById('sv-amount')?.value) || 0;
+        if (!title || !companyId) { alert('Title and company are required.'); return; }
+        const fields = {
+            title, companyId, amount,
+            currency: document.getElementById('sv-currency')?.value || 'CAD',
+            status: document.getElementById('sv-status')?.value || 'pending',
+            dueDate: document.getElementById('sv-due')?.value || '',
+            deliverables: document.getElementById('sv-deliverables')?.value.trim() || '',
+            notes: document.getElementById('sv-notes')?.value.trim() || ''
+        };
+        sponsorsBusy = true;
+        try {
+            if (editingSponsorVideo === 'new') {
+                const res = await fetch('/api/data/sponsorvideos', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields)
+                });
+                if (!res.ok) throw new Error('Failed');
+                const created = await res.json();
+                sponsorVideos.push(created);
+            } else {
+                const res = await fetch(`/api/data/sponsorvideos/${editingSponsorVideo}`, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fields)
+                });
+                if (!res.ok) throw new Error('Failed');
+                const updated = await res.json();
+                const idx = sponsorVideos.findIndex(v => v.id === editingSponsorVideo);
+                if (idx >= 0) sponsorVideos[idx] = updated;
+            }
+            editingSponsorVideo = null;
+            renderSponsorsTab();
+            updateSponsorsBadge();
+            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+        } catch (e) {
+            console.warn('Sponsors: save video deal failed', e);
+            alert('Failed to save video deal.');
+        } finally {
+            sponsorsBusy = false;
+        }
+    }
+
+    async function deleteSponsorVideo(id) {
+        if (!confirm('Delete this video deal?')) return;
+        sponsorsBusy = true;
+        try {
+            const res = await fetch(`/api/data/sponsorvideos/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed');
+            sponsorVideos = sponsorVideos.filter(v => v.id !== id);
+            renderSponsorsTab();
+            updateSponsorsBadge();
+            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+        } catch (e) {
+            console.warn('Sponsors: delete video deal failed', e);
+            alert('Failed to delete video deal.');
+        } finally {
+            sponsorsBusy = false;
+        }
+    }
+
+    async function generateInvoice(videoId) {
+        const v = sponsorVideos.find(x => x.id === videoId);
+        if (!v) return;
+        if (!confirm(`Generate invoice for "${v.title || 'this deal'}"?`)) return;
+        sponsorsBusy = true;
+        try {
+            const res = await fetch('/api/invoices/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ company, amount, currency, expectedDate, notes, paid: false })
+                body: JSON.stringify({ sponsorVideoId: videoId })
             });
-            if (!res.ok) throw new Error('Failed');
-            const created = await res.json();
-            Object.assign(tempItem, created);
+            if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed'); }
+            const data = await res.json();
+            // Update local video with invoiceId
+            v.invoiceId = data.invoice.id;
+            if (v.status === 'pending' || v.status === 'active' || v.status === 'delivered') v.status = 'invoiced';
+            renderSponsorsTab();
+            updateSponsorsBadge();
         } catch (e) {
-            console.warn('Library: add invoice failed', e);
-            invoiceItems = invoiceItems.filter(i => i !== tempItem);
-            renderInvoicesList();
-            updateInvoicesBadge();
-            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
-            alert('Failed to add invoice. Check connection.');
+            console.warn('Sponsors: generate invoice failed', e);
+            alert('Failed to generate invoice: ' + e.message);
         } finally {
-            invoicesBusy = false;
+            sponsorsBusy = false;
         }
     }
 
-    async function toggleInvoicePaid(idx) {
-        if (idx < 0 || idx >= invoiceItems.length) return;
-        invoicesBusy = true;
-        const item = invoiceItems[idx];
-        item.paid = !item.paid;
-        renderInvoicesList();
-        updateInvoicesBadge();
-        if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
-
-        if (item.id) {
-            try {
-                await fetch(`/api/data/invoices/${item.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ paid: item.paid })
-                });
-            } catch (e) {
-                console.warn('Library: toggle invoice failed', e);
-                item.paid = !item.paid;
-                renderInvoicesList();
-                updateInvoicesBadge();
-                if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
-            }
-        }
-        invoicesBusy = false;
+    async function downloadInvoice(invoiceId) {
+        if (!invoiceId) return;
+        window.open(`/api/invoices/${invoiceId}/download`, '_blank');
     }
 
-    async function deleteInvoice(idx) {
-        if (idx < 0 || idx >= invoiceItems.length) return;
-        if (!confirm('Delete this invoice?')) return;
-        invoicesBusy = true;
-        const item = invoiceItems[idx];
-        invoiceItems.splice(idx, 1);
-        renderInvoicesList();
-        updateInvoicesBadge();
-        if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
-
-        if (item.id) {
-            try {
-                const res = await fetch(`/api/data/invoices/${item.id}`, { method: 'DELETE' });
-                if (!res.ok) throw new Error('Delete failed');
-            } catch (e) {
-                console.warn('Library: delete invoice failed', e);
-                invoiceItems.splice(idx, 0, item);
-                renderInvoicesList();
-                updateInvoicesBadge();
-                if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
-                alert('Failed to delete invoice. It has been restored.');
-            }
-        }
-        invoicesBusy = false;
-    }
-
-    function updateInvoicesBadge() {
-        const badge = document.getElementById('invoices-badge');
+    function updateSponsorsBadge() {
+        const badge = document.getElementById('sponsors-badge');
         if (!badge) return;
-        const count = invoiceItems.filter(i => !i.paid).length;
+        const count = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled').length;
         badge.textContent = count;
         badge.style.display = count > 0 ? '' : 'none';
     }
@@ -1800,10 +2037,11 @@ const LibraryUI = (() => {
             selectedVideo = null; videoDirty = false;
             selectedFreeNote = null; freeNoteDirty = false;
             noteDirty = false;
-            // Keep todoLoaded/todoItems, calendarLoaded/calendarItems, invoicesLoaded/invoiceItems cached across close/open
+            // Keep todoLoaded/todoItems, calendarLoaded/calendarItems, sponsorsLoaded cached across close/open
             freeNotesLoaded = false;
             calendarViewMode = 'week'; calendarSelectedDate = null;
-            invoicesLoaded = false;
+            sponsorsLoaded = false;
+            editingSponsor = null; editingSponsorVideo = null; sponsorsSubTab = 'companies';
             projectsLoaded = false; selectedProject = null;
             currentPage = 'list'; activeTab = 'notes';
         },
@@ -1836,23 +2074,25 @@ const LibraryUI = (() => {
             const today = todayStr();
             return calendarItems.filter(e => e.date === today && !e.done).length;
         },
-        // Public: preload invoices count for HUD badge + expected income
-        async preloadInvoicesCount() {
+        // Public: preload sponsors count for HUD badge + expected income
+        async preloadSponsorsCount() {
             await loadConfig();
-            if (!invoicesLoaded) {
+            if (!sponsorsLoaded) {
                 try {
-                    invoiceItems = await fetchInvoices();
-                    invoicesLoaded = true;
+                    const data = await fetchSponsors();
+                    sponsorCompanies = data.companies;
+                    sponsorVideos = data.videos;
+                    sponsorsLoaded = true;
                 } catch (e) {}
             }
-            updateInvoicesBadge();
+            updateSponsorsBadge();
             if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
         },
         getExpectedIncomeCAD() {
             return getExpectedIncomeCADInternal();
         },
-        getInvoicesBadgeCount() {
-            return invoiceItems.filter(i => !i.paid).length;
+        getSponsorsBadgeCount() {
+            return sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled').length;
         }
     };
 })();

@@ -22,9 +22,9 @@
         #calendar-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
         #calendar-hud-btn:hover { transform: scale(1.1); }
         #calendar-badge { position: absolute; top: -5px; right: -5px; background: #0984e3; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
-        #invoices-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
-        #invoices-hud-btn:hover { transform: scale(1.1); }
-        #invoices-badge { position: absolute; top: -5px; right: -5px; background: #27ae60; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        #sponsors-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
+        #sponsors-hud-btn:hover { transform: scale(1.1); }
+        #sponsors-badge { position: absolute; top: -5px; right: -5px; background: #27ae60; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
         #pen-scale-slider-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 2px; }
         #pen-scale-slider { -webkit-appearance: none; appearance: none; width: 42px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #d4c5a9, #5a3e1b); outline: none; cursor: pointer; }
         #pen-scale-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: linear-gradient(135deg, #fff, #f0ece4); border: 2px solid #5a3e1b; box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer; }
@@ -89,7 +89,7 @@
             #hamburger-btn { width: 44px; height: 44px; }
             #todo-bell-btn { width: 36px; height: 36px; }
             #calendar-hud-btn { width: 36px; height: 36px; }
-            #invoices-hud-btn { width: 36px; height: 36px; }
+            #sponsors-hud-btn { width: 36px; height: 36px; }
             #finance-breakdown { font-size: 11px; }
             .finance-label { font-size: 10px; min-width: 52px; }
             .finance-value { font-size: 11px; }
@@ -121,9 +121,9 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             <span id="calendar-badge" style="display:none;">0</span>
         </button>
-        <button id="invoices-hud-btn" onclick="openModal('Library', null, {tab:'invoices'})">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            <span id="invoices-badge" style="display:none;">0</span>
+        <button id="sponsors-hud-btn" onclick="openModal('Library', null, {tab:'sponsors'})">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span id="sponsors-badge" style="display:none;">0</span>
         </button>
         <div id="pen-scale-slider-wrap" style="display:none;">
             <input type="range" id="pen-scale-slider" min="0" max="100" value="50" />
@@ -2285,7 +2285,7 @@ async function init() {
         spawnPostedCreatures().catch(e => console.warn('Pen creatures failed:', e)),
         typeof LibraryUI !== 'undefined' ? LibraryUI.preloadTodoCount().catch(() => {}) : Promise.resolve(),
         typeof LibraryUI !== 'undefined' ? LibraryUI.preloadCalendarCount().catch(() => {}) : Promise.resolve(),
-        typeof LibraryUI !== 'undefined' ? LibraryUI.preloadInvoicesCount().catch(() => {}) : Promise.resolve(),
+        typeof LibraryUI !== 'undefined' ? LibraryUI.preloadSponsorsCount().catch(() => {}) : Promise.resolve(),
     ]);
     saveLayout();
     // Create ambient particles

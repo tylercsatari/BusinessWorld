@@ -1452,136 +1452,84 @@
     }
 }
 
-/* --- Invoices tab --- */
-.library-invoices-container {
+/* --- Sponsors tab --- */
+.library-sponsors-container {
     flex: 1;
     overflow-y: auto;
-    padding: 0 12px 12px;
+    padding: 0;
     -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
 }
-.library-invoice-total {
-    padding: 12px 14px;
+.sponsor-summary-bar {
+    padding: 10px 16px;
     font-size: 15px;
     color: #27ae60;
     border-bottom: 1px solid #f0f0f0;
-    margin-bottom: 4px;
+    flex-shrink: 0;
 }
-.library-invoice-form {
-    display: grid;
-    grid-template-columns: 1fr 90px 70px;
-    gap: 6px;
-    padding: 10px 14px 8px;
+.sponsor-sub-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
 }
-.library-invoice-input,
-.library-invoice-select {
-    border: 1px solid #e0dcd6;
-    border-radius: 10px;
-    padding: 8px 10px;
-    font-size: 14px;
-    font-family: inherit;
-    background: #faf8f5;
-    outline: none;
-    box-sizing: border-box;
-}
-.library-invoice-input:focus,
-.library-invoice-select:focus {
-    border-color: #5a3e1b;
-    background: #fff;
-}
-.library-invoice-input::placeholder {
-    color: #c7c7cc;
-}
-.library-invoice-add-btn {
+.sponsor-sub-tab {
+    flex: 1;
+    background: none;
     border: none;
-    background: #27ae60;
-    color: white;
-    border-radius: 10px;
-    padding: 8px 14px;
+    border-bottom: 2px solid transparent;
+    padding: 10px 8px;
     font-size: 13px;
     font-weight: 600;
+    color: #999;
     cursor: pointer;
-    transition: background 0.15s, transform 0.15s;
+    transition: color 0.15s, border-color 0.15s;
+    text-align: center;
     font-family: inherit;
 }
-.library-invoice-add-btn:hover {
-    background: #219a52;
-    transform: scale(1.02);
+.sponsor-sub-tab.active {
+    color: #333;
+    border-bottom-color: #0984e3;
 }
-.library-invoice-add-btn:active {
-    transform: scale(0.98);
-}
-.library-invoice-item {
+.sponsor-sub-tab:hover:not(.active) { color: #666; }
+
+/* Company cards */
+.sponsor-company-card {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border-radius: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f5f5f5;
+    cursor: pointer;
     transition: background 0.15s;
-    margin-bottom: 2px;
 }
-.library-invoice-item:hover {
-    background: rgba(0, 0, 0, 0.03);
-}
-.library-invoice-paid {
-    opacity: 0.5;
-}
-.library-invoice-paid .library-invoice-company {
-    text-decoration: line-through;
-}
-.library-invoice-info {
-    flex: 1;
-    min-width: 0;
-}
-.library-invoice-company {
-    font-size: 15px;
+.sponsor-company-card:hover { background: rgba(0,0,0,0.03); }
+.sponsor-company-info { flex: 1; min-width: 0; }
+.sponsor-company-name {
+    font-size: 16px;
     font-weight: 600;
     color: #1d1d1f;
 }
-.library-invoice-details {
+.sponsor-company-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #888;
     margin-top: 2px;
 }
-.library-invoice-amount-display {
-    font-size: 14px;
+.sponsor-company-stats {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+}
+.sponsor-company-total {
     font-weight: 700;
     color: #27ae60;
 }
-.library-invoice-date {
-    font-size: 12px;
-    color: #0984e3;
-    font-weight: 600;
-}
-.library-invoice-notes-text {
-    font-size: 12px;
-    color: #888;
-}
-.library-invoice-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-}
-.library-invoice-paid-btn {
-    width: 28px;
-    height: 28px;
-    border: 2px solid #27ae60;
-    background: white;
-    color: #27ae60;
-    border-radius: 50%;
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, color 0.15s;
-}
-.library-invoice-paid-btn:hover {
-    background: #27ae60;
-    color: white;
-}
-.library-invoice-delete-btn {
+.sponsor-company-delete {
     width: 28px;
     height: 28px;
     border: none;
@@ -1595,13 +1543,269 @@
     justify-content: center;
     transition: color 0.15s;
     line-height: 1;
+    flex-shrink: 0;
+    opacity: 0;
 }
-.library-invoice-delete-btn:hover {
-    color: #ff3b30;
+.sponsor-company-card:hover .sponsor-company-delete { opacity: 1; }
+.sponsor-company-delete:hover { color: #ff3b30; }
+
+/* Video deal cards */
+.sponsor-video-card {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f5f5f5;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.sponsor-video-card:hover { background: rgba(0,0,0,0.03); }
+.sponsor-video-info { flex: 1; min-width: 0; }
+.sponsor-video-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1d1d1f;
+}
+.sponsor-video-company {
+    font-size: 13px;
+    color: #888;
+    margin-top: 1px;
+}
+.sponsor-video-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 3px;
+}
+.sponsor-video-amount {
+    font-size: 14px;
+    font-weight: 700;
+    color: #27ae60;
+}
+.sponsor-video-due {
+    font-size: 12px;
+    color: #0984e3;
+    font-weight: 600;
+}
+.sponsor-video-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+.sponsor-status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+.sponsor-video-invoice-btn,
+.sponsor-video-download-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #e0dcd6;
+    background: #faf8f5;
+    color: #5a3e1b;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+}
+.sponsor-video-invoice-btn:hover { background: #f0ece4; border-color: #5a3e1b; }
+.sponsor-video-download-btn:hover { background: #e8f5e9; border-color: #27ae60; color: #27ae60; }
+.sponsor-video-delete {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: #c0c0c0;
+    font-size: 20px;
+    cursor: pointer;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s;
+    line-height: 1;
+    opacity: 0;
+}
+.sponsor-video-card:hover .sponsor-video-delete { opacity: 1; }
+.sponsor-video-delete:hover { color: #ff3b30; }
+
+/* Sponsor form */
+.sponsor-form-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e8e8e8;
+    flex-shrink: 0;
+}
+.sponsor-form-back {
+    background: none;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    color: #5a3e1b;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: background 0.15s;
+    font-family: inherit;
+}
+.sponsor-form-back:hover { background: rgba(90,62,27,0.08); }
+.sponsor-form-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+}
+.sponsor-form-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    -webkit-overflow-scrolling: touch;
+}
+.sponsor-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #8e8e93;
+    margin-bottom: 4px;
+    margin-top: 12px;
+}
+.sponsor-label:first-child { margin-top: 0; }
+.sponsor-input,
+.sponsor-select {
+    width: 100%;
+    border: 1px solid #e0dcd6;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 15px;
+    font-family: inherit;
+    background: #faf8f5;
+    outline: none;
+    box-sizing: border-box;
+}
+.sponsor-input:focus,
+.sponsor-select:focus {
+    border-color: #5a3e1b;
+    background: #fff;
+}
+.sponsor-input::placeholder { color: #c7c7cc; }
+.sponsor-textarea {
+    width: 100%;
+    min-height: 80px;
+    border: 1px solid #e0dcd6;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #faf8f5;
+    outline: none;
+    resize: vertical;
+    box-sizing: border-box;
+    line-height: 1.5;
+}
+.sponsor-textarea:focus { border-color: #5a3e1b; background: #fff; }
+.sponsor-textarea::placeholder { color: #c7c7cc; }
+.sponsor-form-row {
+    display: flex;
+    gap: 10px;
+}
+.sponsor-form-col {
+    flex: 1;
+    min-width: 0;
+}
+.sponsor-save-btn {
+    width: 100%;
+    margin-top: 18px;
+    border: none;
+    background: #5a3e1b;
+    color: white;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+    font-family: inherit;
+}
+.sponsor-save-btn:hover { background: #8B5E3C; transform: scale(1.01); }
+.sponsor-save-btn:active { transform: scale(0.99); }
+.sponsor-invoice-btn {
+    width: 100%;
+    margin-top: 10px;
+    border: 2px solid #e67e22;
+    background: #fff;
+    color: #e67e22;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-family: inherit;
+}
+.sponsor-invoice-btn:hover { background: #e67e22; color: #fff; }
+.sponsor-download-btn {
+    width: 100%;
+    margin-top: 10px;
+    border: 2px solid #27ae60;
+    background: #fff;
+    color: #27ae60;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-family: inherit;
+}
+.sponsor-download-btn:hover { background: #27ae60; color: #fff; }
+.sponsor-form-section-header {
+    font-size: 12px;
+    font-weight: 700;
+    color: #8e8e93;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 16px 0 6px;
+    border-bottom: 1px solid #f0f0f0;
+    margin-top: 16px;
+}
+.sponsor-linked-deal {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 4px;
+    border-bottom: 1px solid #f8f8f8;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.sponsor-linked-deal:hover { background: rgba(0,0,0,0.03); }
+.sponsor-linked-deal-title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sponsor-linked-deal-amount {
+    font-size: 13px;
+    font-weight: 700;
+    color: #27ae60;
+    flex-shrink: 0;
 }
 
 @media (pointer: coarse) {
-    .library-invoice-delete-btn {
+    .sponsor-company-delete,
+    .sponsor-video-delete {
         opacity: 1;
     }
 }
@@ -1619,7 +1823,8 @@
         font-size: 15px;
     }
 
-    .library-invoice-form {
-        grid-template-columns: 1fr;
+    .sponsor-form-row {
+        flex-direction: column;
+        gap: 0;
     }
 }
