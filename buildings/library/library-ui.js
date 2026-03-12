@@ -2036,9 +2036,13 @@ const LibraryUI = (() => {
             });
             if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed'); }
             const data = await res.json();
-            // Update local video with invoiceId
+            // Update local video with invoiceId and persist status change
             v.invoiceId = data.invoice.id;
             if (v.status === 'pending' || v.status === 'active' || v.status === 'delivered') v.status = 'invoiced';
+            await fetch(`/api/data/sponsorvideos/${videoId}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invoiceId: v.invoiceId, status: v.status })
+            });
             renderSponsorsTab();
             updateSponsorsBadge();
         } catch (e) {
@@ -2094,14 +2098,15 @@ const LibraryUI = (() => {
         try {
             const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}`, { method: 'DELETE' });
             if (!res.ok) throw new Error('Failed');
-            // Clear invoiceId from the video deal
+            // Clear invoiceId and reset status back to active
             if (videoId) {
                 const v = sponsorVideos.find(x => x.id === videoId);
                 if (v) {
                     v.invoiceId = null;
+                    if (v.status === 'invoiced') v.status = 'active';
                     await fetch(`/api/data/sponsorvideos/${videoId}`, {
                         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ invoiceId: null })
+                        body: JSON.stringify({ invoiceId: null, status: v.status })
                     }).catch(() => {});
                 }
             }

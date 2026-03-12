@@ -301,8 +301,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 .inv-bank{margin-top:32px;padding:16px;background:#f8f9fa;border-radius:8px;font-size:13px;line-height:1.6}
 .inv-bank-title{font-size:12px;font-weight:700;color:#636e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
 .inv-bank-row{display:flex;gap:8px}.inv-bank-label{color:#888;min-width:130px}.inv-bank-value{font-weight:600}
-.inv-footer{margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;font-size:12px;color:#888;line-height:1.6}
-@media print{body{padding:20px;margin:0}@page{margin:10mm;size:auto}html{-webkit-print-color-adjust:exact}}
+@media print{body{padding:15mm;margin:0}@page{margin:0;size:auto}html{-webkit-print-color-adjust:exact}}
 </style></head><body>
 <div class="inv-header"><div><div class="inv-title">INVOICE</div><div class="inv-number">INV-${String(invoiceNumber).padStart(4,'0')}</div></div></div>
 <div class="inv-parties">
