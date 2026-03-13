@@ -372,7 +372,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             doc.on('end', () => {
                 const pdf = Buffer.concat(chunks);
                 res.writeHead(200, {
-                    'Content-Type': 'application/pdf',
+                    'Content-Type': 'application/octet-stream',
                     'Content-Disposition': `attachment; filename="${fileName}"`,
                     'Content-Length': pdf.length
                 });
