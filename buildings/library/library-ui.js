@@ -2080,13 +2080,9 @@ const LibraryUI = (() => {
 
     function downloadInvoiceAsPdf(invoiceId) {
         if (!invoiceId) return;
-        // Trigger actual PDF download via hidden link
-        const a = document.createElement('a');
-        a.href = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // Direct navigation triggers iOS Safari's native save/share sheet
+        // Content-Disposition: attachment prevents actual page navigation
+        window.location.href = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
     }
 
     async function deleteInvoice(invoiceId, videoId) {
