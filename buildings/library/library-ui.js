@@ -2078,14 +2078,30 @@ const LibraryUI = (() => {
         });
     }
 
-    function downloadInvoiceAsPdf(invoiceId) {
+    async function downloadInvoiceAsPdf(invoiceId) {
         if (!invoiceId) return;
-        // Hidden iframe triggers download without navigating away from the app
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
-        document.body.appendChild(iframe);
-        setTimeout(() => iframe.remove(), 30000);
+        try {
+            const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/pdf`);
+            const blob = await res.blob();
+            const fileName = (res.headers.get('Content-Disposition') || '').match(/filename="(.+)"/)?.[1] || 'invoice.pdf';
+            const file = new File([blob], fileName, { type: 'application/pdf' });
+            // iOS: native share sheet (Save to Files, AirDrop, etc.)
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: fileName });
+            } else {
+                // Desktop: blob URL + anchor download
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        } catch (e) {
+            console.error('PDF download error:', e);
+        }
     }
 
     async function deleteInvoice(invoiceId, videoId) {
