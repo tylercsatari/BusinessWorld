@@ -2074,21 +2074,16 @@ const LibraryUI = (() => {
         overlay.querySelector('.sponsor-invoice-popup-close').addEventListener('click', () => overlay.remove());
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         overlay.querySelector('.sponsor-invoice-popup-pdf').addEventListener('click', () => {
-            const iframe = overlay.querySelector('.sponsor-invoice-iframe');
-            if (iframe?.contentWindow) {
-                try { iframe.contentDocument.title = ' '; } catch(e) {}
-                iframe.contentWindow.print();
-            }
+            // Open in its own tab so the browser uses the invoice's <title> for the PDF filename
+            const win = window.open(`/api/invoices/${encodeURIComponent(invoiceId)}/download`, '_blank');
+            if (win) win.addEventListener('load', () => win.print());
         });
     }
 
     function downloadInvoiceAsPdf(invoiceId) {
         if (!invoiceId) return;
-        // Open in hidden window and trigger print (Save as PDF)
         const win = window.open(`/api/invoices/${encodeURIComponent(invoiceId)}/download`, '_blank');
-        if (win) {
-            win.addEventListener('load', () => { win.print(); });
-        }
+        if (win) win.addEventListener('load', () => win.print());
     }
 
     async function deleteInvoice(invoiceId, videoId) {
