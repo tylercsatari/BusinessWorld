@@ -2080,9 +2080,12 @@ const LibraryUI = (() => {
 
     function downloadInvoiceAsPdf(invoiceId) {
         if (!invoiceId) return;
-        // Direct navigation triggers iOS Safari's native save/share sheet
-        // Content-Disposition: attachment prevents actual page navigation
-        window.location.href = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
+        // Hidden iframe triggers download without navigating away from the app
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
+        document.body.appendChild(iframe);
+        setTimeout(() => iframe.remove(), 30000);
     }
 
     async function deleteInvoice(invoiceId, videoId) {
