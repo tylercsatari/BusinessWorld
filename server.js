@@ -282,7 +282,7 @@ const server = http.createServer(async (req, res) => {
             const currency = video.currency || 'CAD';
 
             const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title> </title>
+<html><head><meta charset="utf-8"><title>INV-${String(invoiceNumber).padStart(4,'0')} ${esc(company?.name || 'Invoice')} ${invoiceDate}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#333;padding:40px;max-width:800px;margin:0 auto}
 .inv-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #2d3436}
