@@ -346,7 +346,8 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             if (!invoice || !invoice.r2Key) { res.writeHead(404); res.end('Not found'); return; }
             const buf = await cloud.downloadFromR2(invoice.r2Key);
             if (!buf) { res.writeHead(404); res.end('Invoice file not found'); return; }
-            res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Disposition': `inline; filename="INV-${String(invoice.invoiceNumber).padStart(4, '0')}.html"` });
+            const invName = `INV-${String(invoice.invoiceNumber).padStart(4, '0')} ${(invoice.companyName || 'Invoice').replace(/[^a-zA-Z0-9 _-]/g, '')} ${invoice.invoiceDate || ''}`.trim();
+            res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Disposition': `inline; filename="${invName}.html"` });
             res.end(buf);
         } catch (e) {
             res.writeHead(500); res.end('Error: ' + e.message);

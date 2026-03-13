@@ -2074,16 +2074,35 @@ const LibraryUI = (() => {
         overlay.querySelector('.sponsor-invoice-popup-close').addEventListener('click', () => overlay.remove());
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         overlay.querySelector('.sponsor-invoice-popup-pdf').addEventListener('click', () => {
-            // Open in its own tab so the browser uses the invoice's <title> for the PDF filename
-            const win = window.open(`/api/invoices/${encodeURIComponent(invoiceId)}/download`, '_blank');
-            if (win) win.addEventListener('load', () => win.print());
+            printInvoiceAsPdf(invoiceId);
         });
     }
 
     function downloadInvoiceAsPdf(invoiceId) {
         if (!invoiceId) return;
-        const win = window.open(`/api/invoices/${encodeURIComponent(invoiceId)}/download`, '_blank');
-        if (win) win.addEventListener('load', () => win.print());
+        printInvoiceAsPdf(invoiceId);
+    }
+
+    async function printInvoiceAsPdf(invoiceId) {
+        try {
+            const res = await fetch(`/api/invoices/${encodeURIComponent(invoiceId)}/download`);
+            if (!res.ok) return;
+            let html = await res.text();
+            // Extract the title from the HTML to use as filename
+            const titleMatch = html.match(/<title>([^<]*)<\/title>/);
+            const title = titleMatch ? titleMatch[1].trim() : 'Invoice';
+            const win = window.open('', '_blank');
+            if (!win) return;
+            win.document.open();
+            win.document.write(html);
+            win.document.close();
+            win.document.title = title;
+            win.addEventListener('afterprint', () => win.close());
+            // Safari needs a delay before print
+            setTimeout(() => win.print(), 400);
+        } catch (e) {
+            console.warn('Print invoice failed', e);
+        }
     }
 
     async function deleteInvoice(invoiceId, videoId) {
