@@ -17,6 +17,7 @@ const videoAnalyzer = require('./video-analyzer');
 const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
+const PDFDocument = require('pdfkit');
 const PORT = process.env.PORT || 8002;
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 const DIR = __dirname;
@@ -349,6 +350,114 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             const invName = `INV-${String(invoice.invoiceNumber).padStart(4, '0')} ${(invoice.companyName || 'Invoice').replace(/[^a-zA-Z0-9 _-]/g, '')} ${invoice.invoiceDate || ''}`.trim();
             res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Disposition': `inline; filename="${invName}.html"` });
             res.end(buf);
+        } catch (e) {
+            res.writeHead(500); res.end('Error: ' + e.message);
+        }
+        return;
+    }
+
+    // GET /api/invoices/:id/pdf — generate and download actual PDF
+    const invoicePdfMatch = pathname.match(/^\/api\/invoices\/([^/]+)\/pdf$/);
+    if (invoicePdfMatch && req.method === 'GET') {
+        try {
+            const invoice = await dataStore.getById('invoices', invoicePdfMatch[1]);
+            if (!invoice) { res.writeHead(404); res.end('Not found'); return; }
+            const company = invoice.companyId ? await dataStore.getById('sponsors', invoice.companyId) : null;
+            const invNum = `INV-${String(invoice.invoiceNumber).padStart(4, '0')}`;
+            const fileName = `${invNum} ${(invoice.companyName || 'Invoice').replace(/[^a-zA-Z0-9 _-]/g, '')} ${invoice.invoiceDate || ''}`.trim() + '.pdf';
+
+            const doc = new PDFDocument({ size: 'LETTER', margin: 50 });
+            const chunks = [];
+            doc.on('data', c => chunks.push(c));
+            doc.on('end', () => {
+                const pdf = Buffer.concat(chunks);
+                res.writeHead(200, {
+                    'Content-Type': 'application/pdf',
+                    'Content-Disposition': `attachment; filename="${fileName}"`,
+                    'Content-Length': pdf.length
+                });
+                res.end(pdf);
+            });
+
+            const grey = '#636e72';
+            const dark = '#2d3436';
+            const green = '#27ae60';
+
+            // Header
+            doc.fontSize(28).font('Helvetica-Bold').fillColor(dark).text('INVOICE', 50, 50);
+            doc.fontSize(12).font('Helvetica').fillColor('#888').text(invNum, 50, 82);
+            doc.moveTo(50, 105).lineTo(562, 105).lineWidth(2).strokeColor(dark).stroke();
+
+            // From / Bill To
+            const col1 = 50, col2 = 310, topY = 125;
+            doc.fontSize(9).font('Helvetica-Bold').fillColor(grey).text('FROM', col1, topY);
+            doc.fontSize(14).font('Helvetica-Bold').fillColor(dark).text('Centrality LTD', col1, topY + 16);
+            doc.fontSize(10).font('Helvetica').fillColor('#666');
+            doc.text('14 Discovery Ridge Road SW', col1, topY + 34);
+            doc.text('Calgary AB Canada, T3H 4P8', col1, topY + 48);
+
+            doc.fontSize(9).font('Helvetica-Bold').fillColor(grey).text('BILL TO', col2, topY);
+            doc.fontSize(14).font('Helvetica-Bold').fillColor(dark).text(invoice.companyName || 'Company', col2, topY + 16);
+            if (company?.address) {
+                const addrLines = company.address.split('\n');
+                let ay = topY + 34;
+                doc.fontSize(10).font('Helvetica').fillColor('#666');
+                addrLines.forEach(line => { doc.text(line.trim(), col2, ay); ay += 14; });
+            }
+
+            // Dates
+            const dateY = 210;
+            doc.roundedRect(col1, dateY, 120, 40, 4).fill('#f8f9fa');
+            doc.fontSize(8).font('Helvetica-Bold').fillColor('#888').text('INVOICE DATE', col1 + 10, dateY + 8);
+            doc.fontSize(12).font('Helvetica-Bold').fillColor(dark).text(invoice.invoiceDate || '', col1 + 10, dateY + 20);
+
+            doc.roundedRect(col1 + 140, dateY, 120, 40, 4).fill('#f8f9fa');
+            doc.fontSize(8).font('Helvetica-Bold').fillColor('#888').text('DUE DATE', col1 + 150, dateY + 8);
+            doc.fontSize(12).font('Helvetica-Bold').fillColor(dark).text(invoice.dueDate || '', col1 + 150, dateY + 20);
+
+            // Table header
+            const tableY = 275;
+            doc.moveTo(col1, tableY + 20).lineTo(562, tableY + 20).lineWidth(1).strokeColor('#e0e0e0').stroke();
+            doc.fontSize(9).font('Helvetica-Bold').fillColor('#888');
+            doc.text('DESCRIPTION', col1, tableY + 4);
+            doc.text('AMOUNT', 460, tableY + 4, { width: 100, align: 'right' });
+
+            // Line items
+            let rowY = tableY + 30;
+            const items = invoice.lineItems || [{ description: invoice.companyName || 'Sponsored Video', amount: invoice.total || 0 }];
+            const currency = invoice.currency || 'CAD';
+            doc.font('Helvetica').fontSize(11).fillColor(dark);
+            items.forEach(li => {
+                doc.text(li.description || '', col1, rowY);
+                doc.text(`${currency} $${(li.amount || 0).toFixed(2)}`, 400, rowY, { width: 160, align: 'right' });
+                doc.moveTo(col1, rowY + 18).lineTo(562, rowY + 18).lineWidth(0.5).strokeColor('#f0f0f0').stroke();
+                rowY += 25;
+            });
+
+            // Totals
+            rowY += 10;
+            doc.fontSize(11).font('Helvetica').fillColor('#888').text('Subtotal', 370, rowY, { width: 90, align: 'right' });
+            doc.font('Helvetica-Bold').fillColor(dark).text(`${currency} $${(invoice.subtotal || invoice.total || 0).toFixed(2)}`, 460, rowY, { width: 100, align: 'right' });
+
+            rowY += 28;
+            doc.moveTo(370, rowY - 4).lineTo(562, rowY - 4).lineWidth(1.5).strokeColor(dark).stroke();
+            doc.fontSize(16).font('Helvetica-Bold').fillColor(dark).text('Total', 370, rowY, { width: 90, align: 'right' });
+            doc.text(`${currency} $${(invoice.total || 0).toFixed(2)}`, 440, rowY, { width: 120, align: 'right' });
+
+            // Payment details
+            rowY += 40;
+            doc.roundedRect(col1, rowY, 512, 70, 4).fill('#f8f9fa');
+            doc.fontSize(9).font('Helvetica-Bold').fillColor(grey).text('PAYMENT DETAILS', col1 + 12, rowY + 10);
+            doc.fontSize(10).font('Helvetica').fillColor('#888');
+            doc.text('Institution Number:', col1 + 12, rowY + 26);
+            doc.text('Transit Number:', col1 + 12, rowY + 40);
+            doc.text('Account Number:', col1 + 12, rowY + 54);
+            doc.font('Helvetica-Bold').fillColor(dark);
+            doc.text('001', col1 + 142, rowY + 26);
+            doc.text('30489', col1 + 142, rowY + 40);
+            doc.text('1987-607', col1 + 142, rowY + 54);
+
+            doc.end();
         } catch (e) {
             res.writeHead(500); res.end('Error: ' + e.message);
         }

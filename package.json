@@ -3,6 +3,7 @@
     "@aws-sdk/client-s3": "^3.995.0",
     "@aws-sdk/s3-request-presigner": "^3.995.0",
     "form-data": "^4.0.5",
+    "pdfkit": "^0.17.2",
     "playwright": "^1.58.2"
   },
   "devDependencies": {

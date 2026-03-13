@@ -2074,13 +2074,19 @@ const LibraryUI = (() => {
         overlay.querySelector('.sponsor-invoice-popup-close').addEventListener('click', () => overlay.remove());
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         overlay.querySelector('.sponsor-invoice-popup-pdf').addEventListener('click', () => {
-            window.open(`/api/invoices/${encodeURIComponent(invoiceId)}/download`, '_blank');
+            downloadInvoiceAsPdf(invoiceId);
         });
     }
 
     function downloadInvoiceAsPdf(invoiceId) {
         if (!invoiceId) return;
-        window.open(`/api/invoices/${encodeURIComponent(invoiceId)}/download`, '_blank');
+        // Trigger actual PDF download via hidden link
+        const a = document.createElement('a');
+        a.href = `/api/invoices/${encodeURIComponent(invoiceId)}/pdf`;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     async function deleteInvoice(invoiceId, videoId) {
