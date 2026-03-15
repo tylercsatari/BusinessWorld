@@ -296,6 +296,21 @@ const StorageUI = (() => {
         }
     }
 
+    // Release TTS audio session so microphone can capture on iOS.
+    // iOS Safari holds an audio session after Audio element playback, which
+    // blocks SpeechRecognition mic input and causes headphone play button to
+    // replay TTS. Clearing src + load() fully releases the session.
+    function releaseTTSAudio() {
+        if (ttsAudio) {
+            ttsAudio.pause();
+            const oldSrc = ttsAudio.src;
+            ttsAudio.src = '';
+            ttsAudio.load();
+            if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+        }
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    }
+
     // Unlock audio playback on mobile — must be called from a user gesture (tap/click)
     function unlockAudio() {
         if (audioUnlocked) return;
@@ -325,16 +340,20 @@ const StorageUI = (() => {
                     ttsAudio.pause();
                     const oldSrc = ttsAudio.src;
                     ttsAudio.src = url;
-                    ttsAudio.onended = () => URL.revokeObjectURL(url);
+                    ttsAudio.onended = () => {
+                        // Release audio session so mic and headphone controls work on iOS
+                        releaseTTSAudio();
+                    };
                     ttsAudio.play().catch(e => {
                         console.warn('Audio play failed:', e.message);
-                        // Fallback to browser TTS on play failure
                         fallbackBrowserTTS(text);
                     });
                     if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
                 } else {
                     ttsAudio = new Audio(url);
-                    ttsAudio.onended = () => URL.revokeObjectURL(url);
+                    ttsAudio.onended = () => {
+                        releaseTTSAudio();
+                    };
                     ttsAudio.play().catch(e => {
                         console.warn('Audio play failed:', e.message);
                         fallbackBrowserTTS(text);
@@ -565,6 +584,9 @@ const StorageUI = (() => {
             } else {
                 // idle or processing — start new recording
                 // (processing: previous result still being handled, but user wants to speak again)
+                // Release TTS audio session first — iOS holds it after playback,
+                // blocking mic input and hijacking headphone controls
+                releaseTTSAudio();
                 voiceTranscript = '';
                 interimText = '';
                 setMicState('recording');
