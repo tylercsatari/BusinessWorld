@@ -286,8 +286,14 @@ const StorageUI = (() => {
         }
         setMicState('processing');
         addChatMsg(text, 'user');
-        await processUserInput(text);
-        setMicState('idle');
+        try {
+            await processUserInput(text);
+        } catch (e) {
+            addChatMsg(`Error: ${e.message}`, 'error');
+        } finally {
+            // Only reset to idle if still processing (user may have started a new recording)
+            if (micState === 'processing') setMicState('idle');
+        }
     }
 
     // Unlock audio playback on mobile — must be called from a user gesture (tap/click)
@@ -556,7 +562,9 @@ const StorageUI = (() => {
                     recognition = null; // release immediately so next session starts clean
                 }
                 finishVoiceInput();
-            } else if (micState === 'idle') {
+            } else {
+                // idle or processing — start new recording
+                // (processing: previous result still being handled, but user wants to speak again)
                 voiceTranscript = '';
                 interimText = '';
                 setMicState('recording');
