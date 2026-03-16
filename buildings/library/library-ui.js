@@ -1545,7 +1545,7 @@ const LibraryUI = (() => {
 
     function getCompanyName(companyId) {
         const c = sponsorCompanies.find(x => x.id === companyId);
-        return c ? c.name : 'Unknown';
+        return c ? (c.nickname || c.name) : 'Unknown';
     }
 
     const SPONSOR_STATUS_LABELS = {
@@ -1699,7 +1699,7 @@ const LibraryUI = (() => {
         return `
             <div class="sponsor-company-card" data-id="${escAttr(c.id)}">
                 <div class="sponsor-company-info">
-                    <div class="sponsor-company-name">${escHtml(c.name)} <span class="sponsor-status-badge" style="background:${csColor}20;color:${csColor};font-size:10px;margin-left:4px">${csLabel}</span></div>
+                    <div class="sponsor-company-name">${escHtml(c.nickname || c.name)} <span class="sponsor-status-badge" style="background:${csColor}20;color:${csColor};font-size:10px;margin-left:4px">${csLabel}</span></div>
                     ${addrPreview ? `<div class="sponsor-company-meta"><span>${escHtml(addrPreview)}</span></div>` : ''}
                     <div class="sponsor-company-stats">
                         <span>${dealCount} deal${dealCount !== 1 ? 's' : ''}</span>
@@ -1806,7 +1806,7 @@ const LibraryUI = (() => {
                 <div class="sponsor-form-row">
                     <div class="sponsor-form-col" style="flex:2">
                         <label class="sponsor-label">Company Name *</label>
-                        <input class="sponsor-input" id="sp-name" value="${escAttr(c.name || '')}" placeholder="Company name" />
+                        <input class="sponsor-input" id="sp-name" value="${escAttr(c.name || '')}" placeholder="Full company name (used on invoices)" />
                     </div>
                     <div class="sponsor-form-col" style="flex:1">
                         <label class="sponsor-label">Status</label>
@@ -1815,6 +1815,8 @@ const LibraryUI = (() => {
                         </select>
                     </div>
                 </div>
+                <label class="sponsor-label">Nickname</label>
+                <input class="sponsor-input" id="sp-nickname" value="${escAttr(c.nickname || '')}" placeholder="Short name shown in list (defaults to company name)" />
                 <label class="sponsor-label">Address</label>
                 <textarea class="sponsor-textarea" id="sp-address" placeholder="Full address...">${escHtml(c.address || '')}</textarea>
                 <label class="sponsor-label">Notes</label>
@@ -1843,8 +1845,10 @@ const LibraryUI = (() => {
     async function saveSponsorCompany() {
         const name = (document.getElementById('sp-name')?.value || '').trim();
         if (!name) { alert('Company name is required.'); return; }
+        const nickname = (document.getElementById('sp-nickname')?.value || '').trim();
         const fields = {
             name,
+            nickname: nickname || '',
             companyStatus: document.getElementById('sp-status')?.value || 'open',
             address: document.getElementById('sp-address')?.value.trim() || '',
             notes: document.getElementById('sp-notes')?.value.trim() || ''
@@ -1920,7 +1924,7 @@ const LibraryUI = (() => {
                 <label class="sponsor-label">Company *</label>
                 <select class="sponsor-select" id="sv-company">
                     <option value="">— Select company —</option>
-                    ${sponsorCompanies.map(c => `<option value="${escAttr(c.id)}"${c.id === v.companyId ? ' selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+                    ${sponsorCompanies.map(c => `<option value="${escAttr(c.id)}"${c.id === v.companyId ? ' selected' : ''}>${escHtml(c.nickname || c.name)}</option>`).join('')}
                 </select>
                 <div class="sponsor-form-row">
                     <div class="sponsor-form-col">
