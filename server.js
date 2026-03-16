@@ -1150,6 +1150,241 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     }
 
     // =========================================
+    // API: Research — find viral YouTube videos
+    // =========================================
+
+    // Helper: get YouTube access token (reuses existing OAuth flow)
+    async function getYouTubeAccessToken() {
+        let accessToken = process.env._YOUTUBE_ACCESS_TOKEN;
+        if (!accessToken && process.env.YOUTUBE_REFRESH_TOKEN) {
+            const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+                    client_id: process.env.YOUTUBE_CLIENT_ID,
+                    client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                    grant_type: 'refresh_token'
+                }).toString()
+            });
+            const tokenData = await tokenRes.json();
+            if (tokenData.access_token) {
+                accessToken = tokenData.access_token;
+                process.env._YOUTUBE_ACCESS_TOKEN = accessToken;
+            }
+        }
+        return accessToken;
+    }
+
+    // GET /api/research/viral — search YouTube for viral videos
+    if (pathname === '/api/research/viral' && req.method === 'GET') {
+        try {
+            const accessToken = await getYouTubeAccessToken();
+            if (!accessToken) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'YouTube not connected. Connect in The Pen settings.' }));
+                return;
+            }
+
+            const minViews = parseInt(url.searchParams.get('minViews')) || 1000000;
+            const timeRange = url.searchParams.get('timeRange') || 'week';
+            const query = url.searchParams.get('query') || '';
+            const pageToken = url.searchParams.get('pageToken') || '';
+            const category = url.searchParams.get('category') || '';
+
+            // Calculate publishedAfter
+            const now = new Date();
+            const ranges = { '24h': 1, '3days': 3, 'week': 7, 'month': 30, '3months': 90, 'year': 365 };
+            const days = ranges[timeRange] || 7;
+            const publishedAfter = new Date(now - days * 86400000).toISOString();
+
+            const headers = { 'Authorization': `Bearer ${accessToken}` };
+
+            // Search for popular videos
+            const searchParams = new URLSearchParams({
+                part: 'snippet',
+                type: 'video',
+                order: 'viewCount',
+                publishedAfter,
+                maxResults: '50',
+                ...(query ? { q: query } : {}),
+                ...(category ? { videoCategoryId: category } : {}),
+                ...(pageToken ? { pageToken } : {})
+            });
+            const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams}`, { headers });
+            const searchData = await searchRes.json();
+
+            if (searchData.error) {
+                res.writeHead(searchRes.status, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: searchData.error.message }));
+                return;
+            }
+
+            const videoIds = (searchData.items || []).map(i => i.id.videoId).filter(Boolean);
+            if (videoIds.length === 0) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ videos: [], nextPageToken: null }));
+                return;
+            }
+
+            // Get full stats for all found videos
+            const statsRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${new URLSearchParams({
+                part: 'statistics,contentDetails,snippet',
+                id: videoIds.join(',')
+            })}`, { headers });
+            const statsData = await statsRes.json();
+
+            // Filter by minimum views and build results
+            const videos = (statsData.items || [])
+                .map(v => ({
+                    videoId: v.id,
+                    title: v.snippet.title,
+                    channelTitle: v.snippet.channelTitle,
+                    channelId: v.snippet.channelId,
+                    publishedAt: v.snippet.publishedAt,
+                    thumbnail: v.snippet.thumbnails?.maxres?.url || v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url,
+                    views: parseInt(v.statistics.viewCount) || 0,
+                    likes: parseInt(v.statistics.likeCount) || 0,
+                    comments: parseInt(v.statistics.commentCount) || 0,
+                    duration: v.contentDetails.duration,
+                    categoryId: v.snippet.categoryId
+                }))
+                .filter(v => v.views >= minViews)
+                .sort((a, b) => b.views - a.views);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                videos,
+                nextPageToken: searchData.nextPageToken || null,
+                totalResults: searchData.pageInfo?.totalResults || 0
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/research/trending — get currently trending videos
+    if (pathname === '/api/research/trending' && req.method === 'GET') {
+        try {
+            const accessToken = await getYouTubeAccessToken();
+            if (!accessToken) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'YouTube not connected.' }));
+                return;
+            }
+
+            const region = url.searchParams.get('region') || 'US';
+            const category = url.searchParams.get('category') || '';
+            const headers = { 'Authorization': `Bearer ${accessToken}` };
+
+            const params = new URLSearchParams({
+                part: 'snippet,statistics,contentDetails',
+                chart: 'mostPopular',
+                regionCode: region,
+                maxResults: '50',
+                ...(category ? { videoCategoryId: category } : {})
+            });
+            const trendRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params}`, { headers });
+            const trendData = await trendRes.json();
+
+            const videos = (trendData.items || []).map(v => ({
+                videoId: v.id,
+                title: v.snippet.title,
+                channelTitle: v.snippet.channelTitle,
+                channelId: v.snippet.channelId,
+                publishedAt: v.snippet.publishedAt,
+                thumbnail: v.snippet.thumbnails?.maxres?.url || v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url,
+                views: parseInt(v.statistics.viewCount) || 0,
+                likes: parseInt(v.statistics.likeCount) || 0,
+                comments: parseInt(v.statistics.commentCount) || 0,
+                duration: v.contentDetails.duration,
+                categoryId: v.snippet.categoryId
+            }));
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ videos }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // POST /api/research/grab-frames — download first N frames of an external video
+    if (pathname === '/api/research/grab-frames' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const videoId = body.videoId;
+            const seconds = Math.min(body.seconds || 10, 30); // max 30 seconds
+            if (!videoId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'videoId required' })); return; }
+
+            const dir = path.join(__dirname, 'video_data', `research_${videoId}`);
+            const framesDir = path.join(dir, 'frames');
+            fs.mkdirSync(framesDir, { recursive: true });
+
+            // Check if frames already exist
+            const existing = fs.readdirSync(framesDir).filter(f => f.endsWith('.jpg'));
+            if (existing.length > 0) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ frames: existing.sort(), videoId, cached: true }));
+                return;
+            }
+
+            // Download just the first N seconds
+            const videoPath = path.join(dir, 'video.mp4');
+            const { execFile } = require('child_process');
+            const YTDLP_BASE = ['--js-runtimes', 'node', '--remote-components', 'ejs:github'];
+            await new Promise((resolve, reject) => {
+                execFile('yt-dlp', [
+                    ...YTDLP_BASE,
+                    '-f', 'best[height<=720]/best',
+                    '--download-sections', `*0-${seconds}`,
+                    '-o', videoPath,
+                    `https://www.youtube.com/watch?v=${videoId}`
+                ], { timeout: 120000 }, (err) => err ? reject(err) : resolve());
+            });
+
+            // Extract frames at 1fps
+            await new Promise((resolve, reject) => {
+                execFile('ffmpeg', [
+                    '-i', videoPath,
+                    '-vf', 'fps=1',
+                    '-q:v', '2',
+                    path.join(framesDir, 'frame_%04d.jpg')
+                ], { timeout: 60000 }, (err) => err ? reject(err) : resolve());
+            });
+
+            // Clean up video file to save space
+            try { fs.unlinkSync(videoPath); } catch (e) {}
+
+            const frames = fs.readdirSync(framesDir).filter(f => f.endsWith('.jpg')).sort();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ frames, videoId, cached: false }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/research/frame/:videoId/:filename — serve research frame
+    const researchFrameMatch = pathname.match(/^\/api\/research\/frame\/([a-zA-Z0-9_-]+)\/(.+)$/);
+    if (researchFrameMatch && req.method === 'GET') {
+        const [, vid, file] = researchFrameMatch;
+        const framePath = path.join(__dirname, 'video_data', `research_${vid}`, 'frames', file);
+        if (fs.existsSync(framePath)) {
+            const data = fs.readFileSync(framePath);
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+            res.end(data);
+        } else {
+            res.writeHead(404); res.end('Frame not found');
+        }
+        return;
+    }
+
+    // =========================================
     // API: Analytics History — list snapshots from R2
     // =========================================
     const analyticsHistoryMatch = pathname.match(/^\/api\/video\/analytics-history\/([a-zA-Z0-9_-]+)$/);
