@@ -90,7 +90,7 @@ const ResearchUI = (() => {
                 <span class="research-status-count" id="research-count"></span>
                 <button class="research-load-more" id="research-load-more" style="display:none">Load More</button>
             </div>
-            <div class="research-results" id="research-results">
+            <div class="research-results" id="research-results" data-loaded="false">
                 <div class="research-empty">Choose a preset or customize your search to find viral videos.</div>
             </div>
         </div>`;
@@ -182,7 +182,13 @@ const ResearchUI = (() => {
             nextPageToken = data.nextPageToken || null;
             renderResults();
         } catch (e) {
-            if (results && !append) results.innerHTML = `<div class="research-error">${escHtml(e.message)}</div>`;
+            if (results && !append) {
+                const isAuth = e.message.includes('not configured') || e.message.includes('not connected') || e.message.includes('API key') || e.message.includes('expired') || e.message.includes('revoked') || e.message.includes('401');
+                results.innerHTML = isAuth
+                    ? `<div class="research-error">${escHtml(e.message)}<br><br><button class="research-search-btn" id="research-reconnect-yt">Reconnect YouTube</button><br><div style="color:#aaa;font-size:12px;margin-top:8px">Or add <code>YOUTUBE_API_KEY=your_key</code> to .env</div></div>`
+                    : `<div class="research-error">${escHtml(e.message)}</div>`;
+                document.getElementById('research-reconnect-yt')?.addEventListener('click', connectYouTube);
+            }
         } finally {
             loading = false;
             if (btn) btn.disabled = false;
@@ -207,7 +213,13 @@ const ResearchUI = (() => {
             videos = data.videos || [];
             renderResults();
         } catch (e) {
-            if (results) results.innerHTML = `<div class="research-error">${escHtml(e.message)}</div>`;
+            if (results) {
+                const isAuth = e.message.includes('not configured') || e.message.includes('not connected') || e.message.includes('API key') || e.message.includes('expired') || e.message.includes('revoked') || e.message.includes('401');
+                results.innerHTML = isAuth
+                    ? `<div class="research-error">${escHtml(e.message)}<br><br><button class="research-search-btn" id="research-reconnect-yt">Reconnect YouTube</button><br><div style="color:#aaa;font-size:12px;margin-top:8px">Or add <code>YOUTUBE_API_KEY=your_key</code> to .env</div></div>`
+                    : `<div class="research-error">${escHtml(e.message)}</div>`;
+                document.getElementById('research-reconnect-yt')?.addEventListener('click', connectYouTube);
+            }
         } finally {
             loading = false;
             if (btn) btn.disabled = false;
@@ -320,11 +332,54 @@ const ResearchUI = (() => {
         }
     }
 
+    async function checkYouTubeStatus() {
+        const results = document.getElementById('research-results');
+        if (!results) return;
+        try {
+            const res = await fetch('/api/youtube/status');
+            const data = await res.json();
+            if (!data.isConnected) {
+                results.innerHTML = `<div class="research-error" style="text-align:left;max-width:500px;margin:30px auto">
+                    <div style="font-size:16px;font-weight:600;color:#fff;margin-bottom:12px">YouTube Not Connected</div>
+                    <div style="color:#aaa;font-size:13px;line-height:1.6;margin-bottom:16px">
+                        The Research Facility needs YouTube access to search for viral videos.<br><br>
+                        <strong>Option 1:</strong> Click below to connect via OAuth (same as The Pen).<br>
+                        <strong>Option 2:</strong> Add <code>YOUTUBE_API_KEY=your_key</code> to your .env file.
+                    </div>
+                    <button class="research-search-btn" id="research-connect-yt">Connect YouTube</button>
+                </div>`;
+                document.getElementById('research-connect-yt')?.addEventListener('click', connectYouTube);
+                return;
+            }
+            results.innerHTML = '<div class="research-empty">Choose a preset or customize your search to find viral videos.</div>';
+        } catch (e) {
+            results.innerHTML = '<div class="research-empty">Choose a preset or customize your search to find viral videos.</div>';
+        }
+    }
+
+    async function connectYouTube() {
+        try {
+            const res = await fetch('/api/youtube/auth-url');
+            const data = await res.json();
+            if (data.url) {
+                window.open(data.url, '_blank', 'width=500,height=600');
+                // Show "waiting" state
+                const results = document.getElementById('research-results');
+                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Waiting for YouTube authorization...<br><small style="color:#666">Complete the login in the popup, then try a search.</small></div></div>';
+            } else {
+                alert('Could not get YouTube auth URL. Check that YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET are set in .env.');
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+
     return {
         open(bodyEl) {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
+            checkYouTubeStatus();
         },
         close() {
             container = null;

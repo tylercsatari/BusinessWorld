@@ -1153,36 +1153,60 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     // API: Research — find viral YouTube videos
     // =========================================
 
-    // Helper: get YouTube access token (reuses existing OAuth flow)
-    async function getYouTubeAccessToken() {
+    // Helper: get YouTube auth for Data API calls (public data).
+    // Prefers API key (no expiry), falls back to OAuth access token.
+    async function getYouTubeDataAuth() {
+        // Option 1: API key — simplest, never expires, works for all public data
+        if (process.env.YOUTUBE_API_KEY) {
+            return { type: 'key', key: process.env.YOUTUBE_API_KEY };
+        }
+        // Option 2: OAuth access token
         let accessToken = process.env._YOUTUBE_ACCESS_TOKEN;
         if (!accessToken && process.env.YOUTUBE_REFRESH_TOKEN) {
-            const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
-                    client_id: process.env.YOUTUBE_CLIENT_ID,
-                    client_secret: process.env.YOUTUBE_CLIENT_SECRET,
-                    grant_type: 'refresh_token'
-                }).toString()
-            });
-            const tokenData = await tokenRes.json();
-            if (tokenData.access_token) {
-                accessToken = tokenData.access_token;
-                process.env._YOUTUBE_ACCESS_TOKEN = accessToken;
+            try {
+                const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+                        client_id: process.env.YOUTUBE_CLIENT_ID,
+                        client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                        grant_type: 'refresh_token'
+                    }).toString()
+                });
+                const tokenData = await tokenRes.json();
+                if (tokenData.access_token) {
+                    accessToken = tokenData.access_token;
+                    process.env._YOUTUBE_ACCESS_TOKEN = accessToken;
+                } else {
+                    console.warn('Research: YouTube token refresh failed:', tokenData.error_description || JSON.stringify(tokenData));
+                }
+            } catch (e) {
+                console.warn('Research: YouTube token refresh error:', e.message);
             }
         }
-        return accessToken;
+        if (accessToken) return { type: 'bearer', token: accessToken };
+        return null;
+    }
+
+    // Build YouTube API URL with auth (key param or bearer header)
+    function ytDataUrl(base, params, auth) {
+        const p = new URLSearchParams(params);
+        if (auth.type === 'key') p.set('key', auth.key);
+        return `${base}?${p}`;
+    }
+    function ytDataHeaders(auth) {
+        if (auth.type === 'bearer') return { 'Authorization': `Bearer ${auth.token}` };
+        return {};
     }
 
     // GET /api/research/viral — search YouTube for viral videos
     if (pathname === '/api/research/viral' && req.method === 'GET') {
         try {
-            const accessToken = await getYouTubeAccessToken();
-            if (!accessToken) {
+            const auth = await getYouTubeDataAuth();
+            if (!auth) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'YouTube not connected. Connect in The Pen settings.' }));
+                res.end(JSON.stringify({ error: 'YouTube not configured. Either set YOUTUBE_API_KEY in .env, or reconnect YouTube OAuth in The Pen settings.' }));
                 return;
             }
 
@@ -1198,10 +1222,10 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             const days = ranges[timeRange] || 7;
             const publishedAfter = new Date(now - days * 86400000).toISOString();
 
-            const headers = { 'Authorization': `Bearer ${accessToken}` };
+            const headers = ytDataHeaders(auth);
 
             // Search for popular videos
-            const searchParams = new URLSearchParams({
+            const searchParams = {
                 part: 'snippet',
                 type: 'video',
                 order: 'viewCount',
@@ -1210,13 +1234,15 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 ...(query ? { q: query } : {}),
                 ...(category ? { videoCategoryId: category } : {}),
                 ...(pageToken ? { pageToken } : {})
-            });
-            const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams}`, { headers });
+            };
+            const searchRes = await fetch(ytDataUrl('https://www.googleapis.com/youtube/v3/search', searchParams, auth), { headers });
             const searchData = await searchRes.json();
 
             if (searchData.error) {
-                res.writeHead(searchRes.status, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: searchData.error.message }));
+                // If OAuth token expired, clear it so next request refreshes
+                if (searchData.error.code === 401) process.env._YOUTUBE_ACCESS_TOKEN = '';
+                res.writeHead(searchData.error.code || 400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: searchData.error.message || 'YouTube API error' }));
                 return;
             }
 
@@ -1228,10 +1254,10 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             }
 
             // Get full stats for all found videos
-            const statsRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${new URLSearchParams({
+            const statsRes = await fetch(ytDataUrl('https://www.googleapis.com/youtube/v3/videos', {
                 part: 'statistics,contentDetails,snippet',
                 id: videoIds.join(',')
-            })}`, { headers });
+            }, auth), { headers });
             const statsData = await statsRes.json();
 
             // Filter by minimum views and build results
@@ -1268,26 +1294,33 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     // GET /api/research/trending — get currently trending videos
     if (pathname === '/api/research/trending' && req.method === 'GET') {
         try {
-            const accessToken = await getYouTubeAccessToken();
-            if (!accessToken) {
+            const auth = await getYouTubeDataAuth();
+            if (!auth) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'YouTube not connected.' }));
+                res.end(JSON.stringify({ error: 'YouTube not configured. Set YOUTUBE_API_KEY in .env or reconnect OAuth.' }));
                 return;
             }
 
             const region = url.searchParams.get('region') || 'US';
             const category = url.searchParams.get('category') || '';
-            const headers = { 'Authorization': `Bearer ${accessToken}` };
+            const headers = ytDataHeaders(auth);
 
-            const params = new URLSearchParams({
+            const params = {
                 part: 'snippet,statistics,contentDetails',
                 chart: 'mostPopular',
                 regionCode: region,
                 maxResults: '50',
                 ...(category ? { videoCategoryId: category } : {})
-            });
-            const trendRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params}`, { headers });
+            };
+            const trendRes = await fetch(ytDataUrl('https://www.googleapis.com/youtube/v3/videos', params, auth), { headers });
             const trendData = await trendRes.json();
+
+            if (trendData.error) {
+                if (trendData.error.code === 401) process.env._YOUTUBE_ACCESS_TOKEN = '';
+                res.writeHead(trendData.error.code || 400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: trendData.error.message || 'YouTube API error' }));
+                return;
+            }
 
             const videos = (trendData.items || []).map(v => ({
                 videoId: v.id,
