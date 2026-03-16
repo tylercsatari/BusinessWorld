@@ -1877,7 +1877,8 @@ async function _rebuildMetrics() {
                 subsGained: an.subscribersGained ?? 0,
                 avgRetention: an.avgRetention ?? 0,
                 avgPercentViewed: an.avgPercentViewed ?? 0,
-                engagementRate: (an.engagedViews && an.totalViews > 0) ? (an.engagedViews / an.totalViews) : 0
+                engagementRate: (an.engagedViews && an.totalViews > 0) ? (an.engagedViews / an.totalViews) : 0,
+                swipeRatio: an.swipeRatio?.stayedToWatch ?? 0
             };
         } catch (e) {}
     }));

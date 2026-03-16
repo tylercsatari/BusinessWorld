@@ -35,7 +35,8 @@ const PenUI = (() => {
         { key: 'subsGained', label: 'Subs Gained' },
         { key: 'avgRetention', label: 'Avg Retention' },
         { key: 'avgPercentViewed', label: 'Avg % Viewed' },
-        { key: 'engagementRate', label: 'Engagement Rate' }
+        { key: 'engagementRate', label: 'Engagement Rate' },
+        { key: 'swipeRatio', label: 'Swipe Ratio' }
     ];
 
     async function fetchMetricsSummary() {
@@ -104,6 +105,7 @@ const PenUI = (() => {
         if (metric === 'avgRetention') return (value * 100).toFixed(1) + '%';
         if (metric === 'avgPercentViewed') return value.toFixed(1) + '%';
         if (metric === 'engagementRate') return (value * 100).toFixed(1) + '%';
+        if (metric === 'swipeRatio') return value.toFixed(1) + '% stayed';
         return formatNumber(value);
     }
 
