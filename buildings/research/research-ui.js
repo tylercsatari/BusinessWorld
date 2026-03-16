@@ -336,22 +336,27 @@ const ResearchUI = (() => {
         const results = document.getElementById('research-results');
         if (!results) return;
         try {
-            const res = await fetch('/api/youtube/status');
+            // Use ?verify=true to actually test if the token works
+            const res = await fetch('/api/youtube/status?verify=true');
             const data = await res.json();
-            if (!data.isConnected) {
-                results.innerHTML = `<div class="research-error" style="text-align:left;max-width:500px;margin:30px auto">
-                    <div style="font-size:16px;font-weight:600;color:#fff;margin-bottom:12px">YouTube Not Connected</div>
-                    <div style="color:#aaa;font-size:13px;line-height:1.6;margin-bottom:16px">
-                        The Research Facility needs YouTube access to search for viral videos.<br><br>
-                        <strong>Option 1:</strong> Click below to connect via OAuth (same as The Pen).<br>
-                        <strong>Option 2:</strong> Add <code>YOUTUBE_API_KEY=your_key</code> to your .env file.
-                    </div>
-                    <button class="research-search-btn" id="research-connect-yt">Connect YouTube</button>
-                </div>`;
-                document.getElementById('research-connect-yt')?.addEventListener('click', connectYouTube);
+
+            if (data.tokenWorks) {
+                results.innerHTML = '<div class="research-empty">Choose a preset or customize your search to find viral videos.</div>';
                 return;
             }
-            results.innerHTML = '<div class="research-empty">Choose a preset or customize your search to find viral videos.</div>';
+
+            // Token doesn't work — show reconnect UI
+            const reason = data.isConnected
+                ? 'Your YouTube OAuth token has expired. You need to reconnect.'
+                : 'The Research Facility needs YouTube access to search for viral videos.';
+
+            results.innerHTML = `<div class="research-error" style="text-align:left;max-width:500px;margin:30px auto">
+                <div style="font-size:16px;font-weight:600;color:#fff;margin-bottom:12px">YouTube Connection Required</div>
+                <div style="color:#aaa;font-size:13px;line-height:1.6;margin-bottom:16px">${reason}</div>
+                <button class="research-search-btn" id="research-connect-yt" style="font-size:15px;padding:10px 24px">Connect YouTube</button>
+                <div style="color:#666;font-size:11px;margin-top:12px">This opens Google's OAuth page. Approve access, then come back and search.</div>
+            </div>`;
+            document.getElementById('research-connect-yt')?.addEventListener('click', connectYouTube);
         } catch (e) {
             results.innerHTML = '<div class="research-empty">Choose a preset or customize your search to find viral videos.</div>';
         }

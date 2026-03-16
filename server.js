@@ -828,12 +828,48 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     }
 
     // GET /api/youtube/status — check if YouTube credentials are configured
+    // ?verify=true will actually test the token (slower but accurate)
     if (pathname === '/api/youtube/status' && req.method === 'GET') {
+        const hasCredentials = !!(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET);
+        const hasRefreshToken = !!process.env.YOUTUBE_REFRESH_TOKEN;
+        const hasApiKey = !!process.env.YOUTUBE_API_KEY;
+
+        // Quick check (default): just check if env vars exist
+        if (url.searchParams.get('verify') !== 'true') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ hasCredentials, isConnected: hasRefreshToken, hasApiKey }));
+            return;
+        }
+
+        // Deep check: actually try to use the credentials
+        let tokenWorks = false;
+        if (hasApiKey) {
+            try {
+                const testRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=id&chart=mostPopular&maxResults=1&key=${process.env.YOUTUBE_API_KEY}`);
+                tokenWorks = testRes.ok;
+            } catch (e) {}
+        }
+        if (!tokenWorks && hasRefreshToken) {
+            try {
+                const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+                        client_id: process.env.YOUTUBE_CLIENT_ID,
+                        client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                        grant_type: 'refresh_token'
+                    }).toString()
+                });
+                const tokenData = await tokenRes.json();
+                if (tokenData.access_token) {
+                    process.env._YOUTUBE_ACCESS_TOKEN = tokenData.access_token;
+                    tokenWorks = true;
+                }
+            } catch (e) {}
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-            hasCredentials: !!(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET),
-            isConnected: !!process.env.YOUTUBE_REFRESH_TOKEN
-        }));
+        res.end(JSON.stringify({ hasCredentials, isConnected: hasRefreshToken, hasApiKey, tokenWorks }));
         return;
     }
 
