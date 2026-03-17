@@ -8,6 +8,7 @@ const ResearchUI = (() => {
     let expandedId = null;
     let framesCache = {};
     let framesLoading = {};
+    let shortsDbCache = {}; // videoId -> DB entry (for cached frames)
 
     let currentTime = 'all';
     let currentType = 'all';
@@ -61,10 +62,36 @@ const ResearchUI = (() => {
             <div class="research-status" id="research-status" style="display:none">
                 <span class="research-status-count" id="research-count"></span>
             </div>
+            <div id="shorts-db-status" style="display:none;padding:6px 12px;background:#1a1a2e;border-bottom:1px solid #333;font-size:12px;color:#8af"></div>
             <div class="research-results" id="research-results">
                 <div class="research-empty">Pick your filters and tap Search.</div>
             </div>
         </div>`;
+    }
+
+    async function fetchShortsDbStats() {
+        const bar = document.getElementById('shorts-db-status');
+        if (!bar) return;
+        try {
+            const res = await fetch('/api/shorts-db/stats');
+            const stats = await res.json();
+            if (stats.totalVideos > 0) {
+                bar.style.display = '';
+                bar.textContent = `Local DB: ${stats.totalVideos} Shorts archived (${stats.framesReady} with frames, ${stats.framesPending} pending)`;
+            }
+        } catch { /* ignore */ }
+    }
+
+    async function fetchShortsDbLookup(videoIds) {
+        // Fetch the full shorts DB videos list and cache entries by videoId
+        try {
+            const res = await fetch('/api/shorts-db/videos?limit=200&minViews=0');
+            const data = await res.json();
+            shortsDbCache = {};
+            for (const v of (data.videos || [])) {
+                shortsDbCache[v.videoId] = v;
+            }
+        } catch { /* ignore */ }
     }
 
     function bindEvents() {
@@ -84,6 +111,8 @@ const ResearchUI = (() => {
                 container.querySelectorAll('#research-type-btns [data-type]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 cachedVideos = []; // clear cache so next Search re-fetches
+                // Update DB status bar visibility
+                fetchShortsDbStats();
             });
         });
         // View threshold — instant client-side filter, no re-fetch needed
@@ -118,6 +147,8 @@ const ResearchUI = (() => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
             cachedVideos = data.videos || [];
+            // Fetch shorts DB lookup for cached frames
+            await fetchShortsDbLookup();
             renderResults();
         } catch (e) {
             if (results) results.innerHTML = `<div class="research-error">${escHtml(e.message)}<br><br><button class="research-search-btn" onclick="ResearchUI._retry()">Retry</button></div>`;
@@ -154,6 +185,9 @@ const ResearchUI = (() => {
             const isExpanded = expandedId === v.videoId;
             const frames = framesCache[v.videoId];
             const isFramesLoading = framesLoading[v.videoId];
+            // Check shorts DB for pre-cached frames
+            const dbEntry = shortsDbCache[v.videoId];
+            const dbFramesDone = dbEntry && dbEntry.framesStatus === 'done' && dbEntry.framesR2Keys && dbEntry.framesR2Keys.length > 0;
             let detailHtml = '';
             if (isExpanded) {
                 let framesHtml = '';
@@ -161,10 +195,15 @@ const ResearchUI = (() => {
                     framesHtml = '<div class="research-frames-loading"><div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle"></div> Downloading frames...</div>';
                 } else if (frames && frames.length > 0) {
                     framesHtml = `<div class="research-frames-strip">${frames.map(f => `<img src="/api/research/frame/${v.videoId}/${f}" alt="${f}" />`).join('')}</div>`;
+                } else if (dbFramesDone) {
+                    // Show frames from shorts-db (already archived)
+                    const dbFrameFiles = dbEntry.framesR2Keys.map(k => k.split('/').pop());
+                    framesHtml = `<div class="research-frames-strip">${dbFrameFiles.map(f => `<img src="/api/shorts-db/frame/${v.videoId}/${f}" alt="${f}" />`).join('')}</div>`;
                 }
+                const hasAnyFrames = (frames && frames.length > 0) || dbFramesDone;
                 detailHtml = `<div class="research-detail">
                     <div class="research-detail-actions">
-                        <button class="research-detail-btn primary" data-action="grab-frames" data-vid="${escAttr(v.videoId)}"${frames ? ' disabled' : ''}>${frames ? 'Frames Downloaded' : 'Grab First Frames'}</button>
+                        <button class="research-detail-btn primary" data-action="grab-frames" data-vid="${escAttr(v.videoId)}"${hasAnyFrames ? ' disabled' : ''}>${hasAnyFrames ? 'Frames Available' : 'Grab First Frames'}</button>
                         <a href="https://www.youtube.com/watch?v=${escAttr(v.videoId)}" target="_blank" class="research-detail-btn">Open on YouTube</a>
                     </div>
                     ${framesHtml}
@@ -181,6 +220,7 @@ const ResearchUI = (() => {
                     <div class="research-video-channel">${escHtml(v.channelTitle)}${v.publishedAt ? ' &middot; ' + escHtml(v.publishedAt) : ''}</div>
                     <div class="research-video-stats">
                         <span class="research-stat"><span class="research-stat-value">${formatViews(v.views)}</span> <span class="research-stat-label">views</span></span>
+                        ${dbEntry ? '<span class="research-stat" style="color:#8af;font-size:10px">IN DB</span>' : ''}
                     </div>
                     ${detailHtml}
                 </div>
@@ -220,11 +260,14 @@ const ResearchUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
+            // Fetch shorts DB stats on open
+            fetchShortsDbStats();
         },
         _retry() { doSearch(); },
         close() {
             container = null; cachedVideos = []; expandedId = null;
             framesCache = {}; framesLoading = {}; loading = false;
+            shortsDbCache = {};
         }
     };
 })();

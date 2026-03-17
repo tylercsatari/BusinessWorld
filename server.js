@@ -17,6 +17,7 @@ const videoAnalyzer = require('./video-analyzer');
 const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
+const shortsCrawler = require('./shorts-crawler');
 const PDFDocument = require('pdfkit');
 const PORT = process.env.PORT || 8002;
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -727,6 +728,44 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         }
         // Fall back to R2 signed URL redirect
         const r2Url = await videoAnalyzer.getFrameR2Url(videoFrameMatch[1], videoFrameMatch[2]);
+        if (r2Url) {
+            res.writeHead(302, { 'Location': r2Url, 'Cache-Control': 'public, max-age=3600' });
+            res.end();
+            return;
+        }
+        res.writeHead(404); res.end('Not found');
+        return;
+    }
+
+    // GET /api/shorts-db/stats — shorts crawler database statistics
+    if (pathname === '/api/shorts-db/stats' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(shortsCrawler.getStats()));
+        return;
+    }
+
+    // GET /api/shorts-db/videos — paginated list from local shorts DB
+    if (pathname === '/api/shorts-db/videos' && req.method === 'GET') {
+        const page = parseInt(url.searchParams.get('page')) || 1;
+        const limit = parseInt(url.searchParams.get('limit')) || 50;
+        const minViews = parseInt(url.searchParams.get('minViews')) || 100000000;
+        const sort = url.searchParams.get('sort') || 'views';
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(shortsCrawler.getVideos({ page, limit, minViews, sort })));
+        return;
+    }
+
+    // GET /api/shorts-db/frame/:videoId/:filename — serve frame from local or R2
+    const shortsFrameMatch = pathname.match(/^\/api\/shorts-db\/frame\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_.-]+)$/);
+    if (shortsFrameMatch && req.method === 'GET') {
+        const framePath = shortsCrawler.getFramePath(shortsFrameMatch[1], shortsFrameMatch[2]);
+        if (framePath) {
+            const data = fs.readFileSync(framePath);
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+            res.end(data);
+            return;
+        }
+        const r2Url = await shortsCrawler.getFrameR2Url(shortsFrameMatch[1], shortsFrameMatch[2]);
         if (r2Url) {
             res.writeHead(302, { 'Location': r2Url, 'Cache-Control': 'public, max-age=3600' });
             res.end();
@@ -2622,4 +2661,7 @@ server.listen(PORT, () => {
     videoAnalyzer.resumeJobs(process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
     // Pre-warm metrics cache in background (ready before user opens Pen)
     _loadOrBuildMetrics().catch(e => console.warn('Metrics pre-warm failed:', e.message));
+    // Start shorts crawler — initial crawl after 5s, then every 30 minutes
+    setTimeout(() => shortsCrawler.crawl().then(() => shortsCrawler.processFrames()).catch(e => console.warn('shorts-crawler cycle error:', e.message)), 5000);
+    setInterval(() => shortsCrawler.crawl().then(() => shortsCrawler.processFrames()).catch(e => console.warn('shorts-crawler cycle error:', e.message)), 30 * 60 * 1000);
 });
