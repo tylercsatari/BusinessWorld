@@ -1343,9 +1343,46 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return parts[0] || -1;
     }
 
+    // YouTube Charts API — returns the ACTUAL top videos globally or by country.
+    // View counts are weekly views (views gained that week), which surfaces truly viral content.
+    async function fetchYouTubeCharts(region = 'global') {
+        const chartRes = await fetch('https://charts.youtube.com/youtubei/v1/browse?alt=json', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Referer': 'https://charts.youtube.com/' },
+            body: JSON.stringify({
+                context: { client: { clientName: 'WEB_MUSIC_ANALYTICS', clientVersion: '2.0', hl: 'en', gl: 'US' } },
+                browseId: 'FEmusic_analytics_charts_home',
+                query: `chart_params_type=WEEK&perspective=CHART&flags=viral_video_chart&selected_chart=VIDEOS&chart_params_id=weekly:0:0:${region}`
+            })
+        });
+        const data = await chartRes.json();
+        const videos = [];
+        function extract(obj, depth) {
+            if (!obj || typeof obj !== 'object' || depth > 20) return;
+            if (obj.videoViews) {
+                for (const v of obj.videoViews) {
+                    videos.push({
+                        videoId: v.id || '',
+                        title: v.title || '',
+                        channelTitle: (v.artists || []).map(a => a.name).join(', '),
+                        channelId: '',
+                        publishedAt: '',
+                        thumbnail: v.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
+                        views: parseInt((v.viewCount || '0').replace(/,/g, '')) || 0,
+                        likes: 0, comments: 0, duration: '',
+                        weeklyViews: true // flag that views are weekly, not lifetime
+                    });
+                }
+            }
+            if (Array.isArray(obj)) { for (const i of obj) extract(i, depth + 1); }
+            else { for (const val of Object.values(obj)) extract(val, depth + 1); }
+        }
+        extract(data, 0);
+        return videos;
+    }
+
     // GET /api/research/popular — most popular videos by time + type
-    // Runs multiple YouTube searches in parallel with viral-surfacing queries,
-    // merges/deduplicates, filters by type (shorts ≤60s, long >3min), sorts by views.
+    // Combines YouTube Charts (actual top videos) + search scraping for broader coverage.
     if (pathname === '/api/research/popular' && req.method === 'GET') {
         try {
             const timeRange = url.searchParams.get('timeRange') || 'week';
@@ -1356,27 +1393,30 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             const TIME_SP = { week: 'CAISBAgDEAE', month: 'CAISBAgEEAE', year: 'CAISBAgFEAE', all: 'CAISAhAB' };
             const sp = TIME_SP[timeRange] || TIME_SP.week;
 
-            // Search queries that surface truly viral content
+            // Search queries for each type
             const queries = type === 'shorts'
-                ? ['#shorts', 'viral shorts 2025', 'most viewed shorts', 'shorts trending', 'tiktok viral']
-                : ['viral video', 'most viewed', 'trending music video', 'viral 2025', 'most popular'];
+                ? ['#shorts viral', 'most viewed shorts this week', 'viral shorts']
+                : ['viral video', 'most viewed this week', 'trending'];
 
-            // Run all searches in parallel
-            const results = await Promise.all(queries.map(async (q) => {
-                try {
-                    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=${sp}`;
-                    const ytRes = await fetch(searchUrl, { headers: YT_SCRAPE_HEADERS });
-                    const html = await ytRes.text();
-                    return parseYtInitialData(html);
-                } catch (e) { return []; }
-            }));
+            // Run charts + search scrapes in parallel
+            const [chartsGlobal, chartsUS, ...searchResults] = await Promise.all([
+                fetchYouTubeCharts('global').catch(() => []),
+                fetchYouTubeCharts('us').catch(() => []),
+                ...queries.map(async (q) => {
+                    try {
+                        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=${sp}`;
+                        const ytRes = await fetch(searchUrl, { headers: YT_SCRAPE_HEADERS });
+                        return parseYtInitialData(await ytRes.text());
+                    } catch (e) { return []; }
+                })
+            ]);
 
-            // Merge and deduplicate
+            // Merge all sources, deduplicate by videoId
             const seen = new Set();
             let allVideos = [];
-            for (const batch of results) {
+            for (const batch of [chartsGlobal, chartsUS, ...searchResults]) {
                 for (const v of batch) {
-                    if (!seen.has(v.videoId)) {
+                    if (v.videoId && !seen.has(v.videoId)) {
                         seen.add(v.videoId);
                         v.durationSec = parseDurationToSeconds(v.duration);
                         allVideos.push(v);
@@ -1385,10 +1425,11 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             }
 
             // Filter by type: shorts ≤180s (YT Shorts can be up to 3 min), long >180s
+            // Charts videos have no duration info, so include them in 'all' and 'long'
             if (type === 'shorts') {
                 allVideos = allVideos.filter(v => v.durationSec > 0 && v.durationSec <= 180);
             } else if (type === 'long') {
-                allVideos = allVideos.filter(v => v.durationSec > 180);
+                allVideos = allVideos.filter(v => v.durationSec < 0 || v.durationSec > 180);
             }
 
             // Filter by minimum views
@@ -1399,8 +1440,8 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             // Sort by views descending
             allVideos.sort((a, b) => b.views - a.views);
 
-            // Clean up durationSec from response
-            allVideos.forEach(v => delete v.durationSec);
+            // Clean up internal fields
+            allVideos.forEach(v => { delete v.durationSec; });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ videos: allVideos }));
