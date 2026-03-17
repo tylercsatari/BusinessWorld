@@ -1,19 +1,17 @@
 /**
  * Research Facility UI — find viral YouTube videos sorted by popularity.
- * Fetches once per time+type combo, caches results, filters views client-side.
  */
 const ResearchUI = (() => {
     let container = null;
-    let cachedVideos = []; // full unfiltered result set
+    let cachedVideos = [];
     let loading = false;
     let expandedId = null;
     let framesCache = {};
     let framesLoading = {};
 
-    let currentTime = 'week';
+    let currentTime = 'all';
     let currentType = 'all';
     let currentMinViews = 0;
-    let cacheKey = ''; // tracks what's cached to avoid redundant fetches
 
     const TIME_OPTIONS = [
         { key: 'week', label: 'This Week' },
@@ -27,7 +25,7 @@ const ResearchUI = (() => {
         { key: 'shorts', label: 'Shorts' },
     ];
     const VIEW_OPTIONS = [
-        { key: 0, label: 'Any Views' },
+        { key: 0, label: 'Any' },
         { key: 1000000, label: '1M+' },
         { key: 10000000, label: '10M+' },
         { key: 50000000, label: '50M+' },
@@ -48,7 +46,7 @@ const ResearchUI = (() => {
         <div class="research-panel">
             <div class="research-header">
                 <h2>Research Facility</h2>
-                <div class="research-header-sub">Most popular YouTube videos by time period</div>
+                <div class="research-header-sub">Most popular YouTube videos</div>
             </div>
             <div class="research-presets" id="research-time-btns">
                 ${TIME_OPTIONS.map(t => `<button class="research-preset-btn${currentTime === t.key ? ' active' : ''}" data-time="${t.key}">${t.label}</button>`).join('')}
@@ -57,79 +55,72 @@ const ResearchUI = (() => {
                 ${TYPE_OPTIONS.map(t => `<button class="research-preset-btn${t.key === 'shorts' ? ' trending' : ''}${currentType === t.key ? ' active' : ''}" data-type="${t.key}">${t.label}</button>`).join('')}
                 <span style="width:1px;background:#333;margin:0 4px"></span>
                 ${VIEW_OPTIONS.map(v => `<button class="research-preset-btn${currentMinViews === v.key ? ' active' : ''}" data-views="${v.key}">${v.label}</button>`).join('')}
+                <span style="width:1px;background:#333;margin:0 4px"></span>
+                <button class="research-search-btn" id="research-go-btn">Search</button>
             </div>
             <div class="research-status" id="research-status" style="display:none">
                 <span class="research-status-count" id="research-count"></span>
             </div>
             <div class="research-results" id="research-results">
-                <div class="research-empty">Loading...</div>
+                <div class="research-empty">Pick your filters and tap Search.</div>
             </div>
         </div>`;
     }
 
     function bindEvents() {
+        // Time buttons — just update state, don't fetch
         container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentTime = btn.dataset.time;
                 container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                fetchVideos(); // time changed = new fetch
             });
         });
+        // Type buttons — just update state
         container.querySelectorAll('#research-type-btns .research-preset-btn[data-type]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentType = btn.dataset.type;
                 container.querySelectorAll('#research-type-btns [data-type]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                fetchVideos(); // type changed = new fetch
             });
         });
+        // View threshold — just update state, re-filter if we have data
         container.querySelectorAll('#research-type-btns .research-preset-btn[data-views]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentMinViews = parseInt(btn.dataset.views) || 0;
                 container.querySelectorAll('#research-type-btns [data-views]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                renderResults(); // views changed = just re-filter cached data, no new fetch
+                if (cachedVideos.length > 0) renderResults();
             });
         });
+        // Search button — always fetches fresh
+        document.getElementById('research-go-btn')?.addEventListener('click', () => doSearch());
     }
 
-    async function fetchVideos(retryCount = 0) {
-        const key = `${currentTime}_${currentType}`;
-        if (key === cacheKey && cachedVideos.length > 0) {
-            renderResults(); // already have this data
-            return;
-        }
+    async function doSearch() {
         if (loading) return;
         loading = true;
+        cachedVideos = [];
         expandedId = null;
         const results = document.getElementById('research-results');
-        if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Finding popular videos...</div></div>';
+        const goBtn = document.getElementById('research-go-btn');
+        if (goBtn) { goBtn.disabled = true; goBtn.textContent = 'Searching...'; }
+        if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Searching YouTube (' + currentTime + ', ' + currentType + ')...</div></div>';
 
         try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 50000);
+            const timeout = setTimeout(() => controller.abort(), 55000);
             const res = await fetch(`/api/research/popular?timeRange=${currentTime}&type=${currentType}`, { signal: controller.signal });
             clearTimeout(timeout);
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Search failed');
+            if (!res.ok) throw new Error(data.error || 'Failed');
             cachedVideos = data.videos || [];
-            cacheKey = key;
-            if (cachedVideos.length === 0 && retryCount === 0) {
-                loading = false;
-                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Retrying...</div></div>';
-                return fetchVideos(1);
-            }
             renderResults();
         } catch (e) {
-            if (retryCount === 0) {
-                loading = false;
-                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Retrying...</div></div>';
-                return fetchVideos(1);
-            }
             if (results) results.innerHTML = `<div class="research-error">${escHtml(e.message)}<br><br><button class="research-search-btn" onclick="ResearchUI._retry()">Retry</button></div>`;
         } finally {
             loading = false;
+            if (goBtn) { goBtn.disabled = false; goBtn.textContent = 'Search'; }
         }
     }
 
@@ -139,20 +130,20 @@ const ResearchUI = (() => {
         const countEl = document.getElementById('research-count');
         if (!results) return;
 
-        // Filter cached videos by min views (client-side, instant)
         const filtered = currentMinViews > 0
             ? cachedVideos.filter(v => v.views >= currentMinViews)
             : cachedVideos;
 
         if (status) status.style.display = filtered.length > 0 ? '' : 'none';
-        if (countEl) countEl.textContent = `${filtered.length} video${filtered.length !== 1 ? 's' : ''} found`;
+        if (countEl) countEl.textContent = `${filtered.length} video${filtered.length !== 1 ? 's' : ''} (${cachedVideos.length} loaded)`;
 
+        if (filtered.length === 0 && cachedVideos.length > 0) {
+            const topView = formatViews(cachedVideos[0].views);
+            results.innerHTML = `<div class="research-empty">No videos over ${formatViews(currentMinViews)} views in this set. ${cachedVideos.length} videos loaded, highest is ${topView}. Try a lower view threshold or tap Search again.</div>`;
+            return;
+        }
         if (filtered.length === 0) {
-            const total = cachedVideos.length;
-            const topView = total > 0 ? formatViews(cachedVideos[0].views) : '0';
-            results.innerHTML = total > 0
-                ? `<div class="research-empty">No videos over ${formatViews(currentMinViews)} views. ${total} videos loaded, highest is ${topView}. Try a lower threshold.</div>`
-                : '<div class="research-empty">No videos found. Try a different time period or type.</div>';
+            results.innerHTML = '<div class="research-empty">Pick your filters and tap Search.</div>';
             return;
         }
 
@@ -226,12 +217,11 @@ const ResearchUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
-            fetchVideos();
         },
-        _retry() { cacheKey = ''; fetchVideos(); },
+        _retry() { doSearch(); },
         close() {
-            container = null; cachedVideos = []; cacheKey = '';
-            expandedId = null; framesCache = {}; framesLoading = {}; loading = false;
+            container = null; cachedVideos = []; expandedId = null;
+            framesCache = {}; framesLoading = {}; loading = false;
         }
     };
 })();
