@@ -1440,8 +1440,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return p.length === 3 ? p[0]*3600+p[1]*60+p[2] : p[0]*60+(p[1]||0);
     }
 
-    // GET /api/research/popular — most popular videos by time + type
-    // Runs 10-15 parallel InnerTube searches for maximum coverage.
+    // GET /api/research/popular — multi-source popular video discovery
+    // Sources: (1) InnerTube search queries, (2) InnerTube browse FEcharts/FEshorts,
+    //          (3) YouTube OAuth mostPopular chart (if YOUTUBE_REFRESH_TOKEN set)
     // Returns ALL results (no minViews filter) — frontend filters client-side.
     if (pathname === '/api/research/popular' && req.method === 'GET') {
         try {
@@ -1450,6 +1451,8 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 
             const TIME_CODE = { week: 3, month: 4, year: 5, all: null };
             const uploadDate = TIME_CODE[timeRange] ?? null;
+
+            const BROWSE_REGIONS = ['US','IN','BR','MX','ID','GB','PH','DE','KR','TR'];
 
             // Every query returns ~20 unique videos sorted by view count.
             // More queries = more coverage. We cast a VERY wide net.
@@ -1519,8 +1522,8 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 'Indian shorts', 'hindi shorts', 'spanish shorts', 'kpop shorts',
             ];
 
+            // --- Source 1: InnerTube search queries ---
             let searches = [];
-
             if (type === 'shorts') {
                 const sp = buildSP(3, uploadDate, 6, null); // sort=viewcount, type=shorts
                 searches = SHORTS_QUERIES.map(q => innerTubeSearch(q, sp));
@@ -1537,54 +1540,115 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 ];
             }
 
-            const results = await Promise.all(searches.map(p => p.catch(() => [])));
+            // --- Source 2: InnerTube browse (FEcharts + FEshorts) for 10 regions ---
+            async function innerTubeBrowse(browseId, region) {
+                const videos = [];
+                try {
+                    const client = { ...INNERTUBE_CLIENT, gl: region };
+                    const browseRes = await fetch(`https://www.youtube.com/youtubei/v1/browse?key=${INNERTUBE_KEY}&prettyPrint=false`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ context: { client }, browseId })
+                    });
+                    const browseData = await browseRes.json();
+                    videos.push(...parseInnerTubeSearch(browseData));
 
-            // Merge and deduplicate
+                    // Follow up to 2 continuation pages
+                    let contToken = extractContinuationToken(browseData);
+                    for (let page = 0; page < 2 && contToken; page++) {
+                        const contRes = await fetch(`https://www.youtube.com/youtubei/v1/browse?key=${INNERTUBE_KEY}&prettyPrint=false`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ context: { client }, continuation: contToken })
+                        });
+                        const contData = await contRes.json();
+                        const pageVideos = parseInnerTubeSearch(contData);
+                        if (pageVideos.length === 0) break;
+                        videos.push(...pageVideos);
+                        contToken = extractContinuationToken(contData);
+                    }
+                } catch { /* ignore browse failures */ }
+                return videos;
+            }
+
+            const browseIds = (type === 'shorts') ? ['FEshorts']
+                            : (type === 'long') ? ['FEcharts']
+                            : ['FEcharts', 'FEshorts'];
+            const browseFetches = [];
+            for (const bid of browseIds) {
+                for (const region of BROWSE_REGIONS) {
+                    browseFetches.push(innerTubeBrowse(bid, region));
+                }
+            }
+
+            // --- Source 3: YouTube OAuth chart=mostPopular (if refresh token set) ---
+            const oauthFetches = [];
+            if (process.env.YOUTUBE_REFRESH_TOKEN && process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET) {
+                // Exchange refresh token for access token
+                const tokenPromise = (async () => {
+                    try {
+                        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({
+                                grant_type: 'refresh_token',
+                                refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+                                client_id: process.env.YOUTUBE_CLIENT_ID,
+                                client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                            }).toString()
+                        });
+                        const tokenData = await tokenRes.json();
+                        return tokenData.access_token || null;
+                    } catch { return null; }
+                })();
+
+                for (const rc of BROWSE_REGIONS) {
+                    oauthFetches.push((async () => {
+                        const accessToken = await tokenPromise;
+                        if (!accessToken) return [];
+                        try {
+                            const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&chart=mostPopular&regionCode=${rc}&maxResults=50`;
+                            const r = await fetch(apiUrl, {
+                                headers: { Authorization: `Bearer ${accessToken}` }
+                            });
+                            const d = await r.json();
+                            return (d.items || []).map(item => {
+                                const dur = item.contentDetails?.duration || '';
+                                const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+                                const secs = match ? (parseInt(match[1]||0)*3600 + parseInt(match[2]||0)*60 + parseInt(match[3]||0)) : 0;
+                                const mm = String(Math.floor(secs/60));
+                                const ss = String(secs%60).padStart(2,'0');
+                                const durStr = secs >= 3600 ? `${Math.floor(secs/3600)}:${String(Math.floor((secs%3600)/60)).padStart(2,'0')}:${ss}` : `${mm}:${ss}`;
+                                return {
+                                    videoId: item.id,
+                                    title: item.snippet?.title || '',
+                                    channelTitle: item.snippet?.channelTitle || '',
+                                    publishedAt: item.snippet?.publishedAt || '',
+                                    thumbnail: item.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
+                                    views: parseInt(item.statistics?.viewCount) || 0,
+                                    duration: durStr,
+                                };
+                            });
+                        } catch { return []; }
+                    })());
+                }
+            }
+
+            // Run all sources in parallel
+            const [searchResults, browseResults, oauthResults] = await Promise.all([
+                Promise.all(searches.map(p => p.catch(() => []))),
+                Promise.all(browseFetches),
+                Promise.all(oauthFetches),
+            ]);
+
+            // Merge and deduplicate all sources
             const seen = new Set();
             let allVideos = [];
-            for (const batch of results) {
+            for (const batch of [...searchResults, ...browseResults, ...oauthResults]) {
                 for (const v of batch) {
                     if (v.videoId && !seen.has(v.videoId)) {
                         seen.add(v.videoId);
                         allVideos.push(v);
-                    }
-                }
-            }
-
-            // For "all time": also pull YouTube Data API mostPopular by region
-            if (timeRange === 'all' && process.env.YOUTUBE_API_KEY) {
-                const regions = ['US', 'IN', 'BR', 'MX', 'ID', 'GB', 'PH'];
-                const popularFetches = regions.map(async (rc) => {
-                    try {
-                        const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&chart=mostPopular&regionCode=${rc}&maxResults=50&key=${process.env.YOUTUBE_API_KEY}`;
-                        const r = await fetch(apiUrl);
-                        const d = await r.json();
-                        return (d.items || []).map(item => {
-                            const dur = item.contentDetails?.duration || '';
-                            const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-                            const secs = match ? (parseInt(match[1]||0)*3600 + parseInt(match[2]||0)*60 + parseInt(match[3]||0)) : 0;
-                            const mm = String(Math.floor(secs/60)).padStart(secs>=3600?1:1,'0');
-                            const ss = String(secs%60).padStart(2,'0');
-                            const durStr = secs >= 3600 ? `${Math.floor(secs/3600)}:${String(Math.floor((secs%3600)/60)).padStart(2,'0')}:${ss}` : `${mm}:${ss}`;
-                            return {
-                                videoId: item.id,
-                                title: item.snippet?.title || '',
-                                channelTitle: item.snippet?.channelTitle || '',
-                                publishedAt: item.snippet?.publishedAt || '',
-                                thumbnail: item.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
-                                views: parseInt(item.statistics?.viewCount) || 0,
-                                duration: durStr,
-                            };
-                        });
-                    } catch { return []; }
-                });
-                const popularResults = await Promise.all(popularFetches);
-                for (const batch of popularResults) {
-                    for (const v of batch) {
-                        if (v.videoId && !seen.has(v.videoId)) {
-                            seen.add(v.videoId);
-                            allVideos.push(v);
-                        }
                     }
                 }
             }
