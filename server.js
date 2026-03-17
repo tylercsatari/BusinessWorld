@@ -929,15 +929,24 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return;
     }
 
+    // Build the correct base URL for OAuth redirects (works on localhost and Render)
+    function getBaseUrl(req) {
+        if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL;
+        const host = req.headers.host;
+        const proto = req.headers['x-forwarded-proto'] || 'http';
+        if (host) return `${proto}://${host}`;
+        return `http://localhost:${PORT}`;
+    }
+
     // GET /api/youtube/auth-url — build OAuth2 authorize URL
     if (pathname === '/api/youtube/auth-url' && req.method === 'GET') {
         const clientId = process.env.YOUTUBE_CLIENT_ID;
         if (!clientId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'YOUTUBE_CLIENT_ID not configured' })); return; }
-        const redirect = `http://localhost:${PORT}/api/youtube/callback`;
+        const redirect = `${getBaseUrl(req)}/api/youtube/callback`;
         const scope = 'https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/yt-analytics-monetary.readonly https://www.googleapis.com/auth/youtube.readonly';
         const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ url: authUrl }));
+        res.end(JSON.stringify({ url: authUrl, redirect }));
         return;
     }
 
@@ -946,6 +955,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         const code = url.searchParams.get('code');
         if (!code) { res.writeHead(400); res.end('Missing code'); return; }
         try {
+            const redirect = `${getBaseUrl(req)}/api/youtube/callback`;
             const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -953,7 +963,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                     code,
                     client_id: process.env.YOUTUBE_CLIENT_ID,
                     client_secret: process.env.YOUTUBE_CLIENT_SECRET,
-                    redirect_uri: `http://localhost:${PORT}/api/youtube/callback`,
+                    redirect_uri: redirect,
                     grant_type: 'authorization_code'
                 }).toString()
             });
@@ -974,7 +984,12 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             }
             if (tokenData.access_token) process.env._YOUTUBE_ACCESS_TOKEN = tokenData.access_token;
             res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end('<html><body><h2>YouTube connected!</h2><p>You can close this window.</p><script>window.close()</script></body></html>');
+            if (process.env.RENDER && tokenData.refresh_token) {
+                // On Render, we can't write .env — show token so user can save it
+                res.end(`<html><body><h2>YouTube connected!</h2><p>Token saved for this session.</p><p style="color:#888;font-size:13px">To make it permanent on Render, add this env var in your Render dashboard:<br><code>YOUTUBE_REFRESH_TOKEN=${tokenData.refresh_token}</code></p><script>window.close()</script></body></html>`);
+            } else {
+                res.end('<html><body><h2>YouTube connected!</h2><p>You can close this window.</p><script>window.close()</script></body></html>');
+            }
         } catch (e) {
             res.writeHead(500); res.end('OAuth failed: ' + e.message);
         }

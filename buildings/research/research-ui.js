@@ -368,9 +368,18 @@ const ResearchUI = (() => {
             const data = await res.json();
             if (data.url) {
                 window.open(data.url, '_blank', 'width=500,height=600');
-                // Show "waiting" state
+                // Show "waiting" state with the redirect URI info
                 const results = document.getElementById('research-results');
-                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Waiting for YouTube authorization...<br><small style="color:#666">Complete the login in the popup, then try a search.</small></div></div>';
+                if (results) results.innerHTML = `<div class="research-loading">
+                    <div class="spinner"></div>
+                    <div style="margin-top:8px">Waiting for YouTube authorization...</div>
+                    <div style="color:#666;font-size:12px;margin-top:12px">Complete the login in the popup, then try a search.</div>
+                    <div style="color:#888;font-size:11px;margin-top:16px;background:#111;padding:10px;border-radius:6px;text-align:left;max-width:500px">
+                        <strong>If you see "redirect_uri_mismatch":</strong><br>
+                        Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#0984e3">Google Cloud Console</a> &rarr; your OAuth Client &rarr; Authorized redirect URIs &rarr; add:<br>
+                        <code style="color:#fff;word-break:break-all">${escHtml(data.redirect)}</code>
+                    </div>
+                </div>`;
             } else {
                 alert('Could not get YouTube auth URL. Check that YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET are set in .env.');
             }
