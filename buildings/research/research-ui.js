@@ -1,31 +1,28 @@
 /**
- * Research Facility UI — find viral YouTube videos, extract frames, analyze outliers.
+ * Research Facility UI — find viral YouTube videos sorted by popularity.
  */
 const ResearchUI = (() => {
     let container = null;
     let videos = [];
-    let nextPageToken = null;
     let loading = false;
     let expandedId = null;
-    let framesCache = {}; // videoId -> [frame filenames]
-    let framesLoading = {}; // videoId -> boolean
+    let framesCache = {};
+    let framesLoading = {};
 
-    // Current search state
-    let currentPreset = null;
-    let currentMinViews = 10000000;
-    let currentTimeRange = 'week';
-    let currentQuery = '';
+    let currentTime = 'week';
+    let currentType = 'all'; // all | shorts | long
 
-    const PRESETS = [
-        { key: 'trending', label: 'Trending Now', trending: true },
-        { key: '100m_week', label: '100M+ (Week)', minViews: 100000000, timeRange: 'week' },
-        { key: '50m_week', label: '50M+ (Week)', minViews: 50000000, timeRange: 'week' },
-        { key: '10m_24h', label: '10M+ (24h)', minViews: 10000000, timeRange: '24h' },
-        { key: '10m_week', label: '10M+ (Week)', minViews: 10000000, timeRange: 'week' },
-        { key: '5m_24h', label: '5M+ (24h)', minViews: 5000000, timeRange: '24h' },
-        { key: '1m_month', label: '1M+ (Month)', minViews: 1000000, timeRange: 'month' },
-        { key: '50m_month', label: '50M+ (Month)', minViews: 50000000, timeRange: 'month' },
-        { key: '100m_year', label: '100M+ (Year)', minViews: 100000000, timeRange: 'year' },
+    const TIME_OPTIONS = [
+        { key: 'week', label: 'This Week' },
+        { key: 'month', label: 'This Month' },
+        { key: 'year', label: 'This Year' },
+        { key: 'all', label: 'All Time' },
+    ];
+
+    const TYPE_OPTIONS = [
+        { key: 'all', label: 'All' },
+        { key: 'long', label: 'Long-form' },
+        { key: 'shorts', label: 'Shorts' },
     ];
 
     function formatViews(n) {
@@ -33,28 +30,6 @@ const ResearchUI = (() => {
         if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
         if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
         return String(n);
-    }
-
-    function formatDuration(iso) {
-        if (!iso) return '';
-        const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-        if (!m) return '';
-        const h = parseInt(m[1]) || 0;
-        const min = parseInt(m[2]) || 0;
-        const s = parseInt(m[3]) || 0;
-        if (h > 0) return `${h}:${String(min).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-        return `${min}:${String(s).padStart(2, '0')}`;
-    }
-
-    function timeAgo(dateStr) {
-        const diff = Date.now() - new Date(dateStr).getTime();
-        const days = Math.floor(diff / 86400000);
-        if (days < 1) return 'Today';
-        if (days === 1) return '1 day ago';
-        if (days < 7) return days + ' days ago';
-        if (days < 30) return Math.floor(days / 7) + 'w ago';
-        if (days < 365) return Math.floor(days / 30) + 'mo ago';
-        return Math.floor(days / 365) + 'y ago';
     }
 
     function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -65,156 +40,62 @@ const ResearchUI = (() => {
         <div class="research-panel">
             <div class="research-header">
                 <h2>Research Facility</h2>
-                <div class="research-header-sub">Find viral outlier videos on YouTube</div>
+                <div class="research-header-sub">Most popular YouTube videos by time period</div>
             </div>
-            <div class="research-presets" id="research-presets">
-                ${PRESETS.map(p => `<button class="research-preset-btn${p.trending ? ' trending' : ''}${currentPreset === p.key ? ' active' : ''}" data-key="${p.key}">${p.label}</button>`).join('')}
+            <div class="research-presets" id="research-time-btns">
+                ${TIME_OPTIONS.map(t => `<button class="research-preset-btn${currentTime === t.key ? ' active' : ''}" data-time="${t.key}">${t.label}</button>`).join('')}
             </div>
-            <div class="research-custom">
-                <label>Min Views</label>
-                <input class="research-input" id="research-min-views" type="number" value="${currentMinViews}" placeholder="10000000" />
-                <label>Time</label>
-                <select class="research-select" id="research-time-range">
-                    <option value="24h"${currentTimeRange === '24h' ? ' selected' : ''}>Last 24h</option>
-                    <option value="3days"${currentTimeRange === '3days' ? ' selected' : ''}>Last 3 Days</option>
-                    <option value="week"${currentTimeRange === 'week' ? ' selected' : ''}>Last Week</option>
-                    <option value="month"${currentTimeRange === 'month' ? ' selected' : ''}>Last Month</option>
-                    <option value="3months"${currentTimeRange === '3months' ? ' selected' : ''}>Last 3 Months</option>
-                    <option value="year"${currentTimeRange === 'year' ? ' selected' : ''}>Last Year</option>
-                </select>
-                <label>Keyword</label>
-                <input class="research-input" id="research-query" value="${escAttr(currentQuery)}" placeholder="Optional..." style="width:140px" />
-                <button class="research-search-btn" id="research-search-btn">Search</button>
+            <div class="research-presets" id="research-type-btns" style="border-top:none;padding-top:0">
+                ${TYPE_OPTIONS.map(t => `<button class="research-preset-btn${t.key === 'shorts' ? ' trending' : ''}${currentType === t.key ? ' active' : ''}" data-type="${t.key}">${t.label}</button>`).join('')}
             </div>
             <div class="research-status" id="research-status" style="display:none">
                 <span class="research-status-count" id="research-count"></span>
-                <button class="research-load-more" id="research-load-more" style="display:none">Load More</button>
             </div>
             <div class="research-results" id="research-results">
-                <div class="research-empty">Choose a preset or customize your search to find viral videos.</div>
+                <div class="research-empty">Select a time period to see the most popular videos.</div>
             </div>
         </div>`;
     }
 
     function bindEvents() {
-        // Preset clicks
-        container.querySelectorAll('.research-preset-btn').forEach(btn => {
+        container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                const key = btn.dataset.key;
-                const preset = PRESETS.find(p => p.key === key);
-                if (!preset) return;
-                currentPreset = key;
-
-                // Update active state
-                container.querySelectorAll('.research-preset-btn').forEach(b => b.classList.remove('active'));
+                currentTime = btn.dataset.time;
+                container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-
-                if (preset.trending) {
-                    fetchTrending();
-                } else {
-                    currentMinViews = preset.minViews;
-                    currentTimeRange = preset.timeRange;
-                    // Update inputs to reflect preset
-                    const mvInput = document.getElementById('research-min-views');
-                    const trSelect = document.getElementById('research-time-range');
-                    if (mvInput) mvInput.value = currentMinViews;
-                    if (trSelect) trSelect.value = currentTimeRange;
-                    fetchViral();
-                }
+                fetchVideos();
             });
         });
 
-        // Custom search
-        document.getElementById('research-search-btn')?.addEventListener('click', () => {
-            currentPreset = null;
-            container.querySelectorAll('.research-preset-btn').forEach(b => b.classList.remove('active'));
-            currentMinViews = parseInt(document.getElementById('research-min-views')?.value) || 1000000;
-            currentTimeRange = document.getElementById('research-time-range')?.value || 'week';
-            currentQuery = (document.getElementById('research-query')?.value || '').trim();
-            fetchViral();
-        });
-
-        // Enter key in inputs
-        ['research-min-views', 'research-query'].forEach(id => {
-            document.getElementById(id)?.addEventListener('keydown', e => {
-                if (e.key === 'Enter') document.getElementById('research-search-btn')?.click();
+        container.querySelectorAll('#research-type-btns .research-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                currentType = btn.dataset.type;
+                container.querySelectorAll('#research-type-btns .research-preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                fetchVideos();
             });
-        });
-
-        // Load more
-        document.getElementById('research-load-more')?.addEventListener('click', () => {
-            if (nextPageToken && !loading) fetchViral(true);
         });
     }
 
-    async function fetchViral(append = false) {
+    async function fetchVideos() {
         if (loading) return;
         loading = true;
-        const results = document.getElementById('research-results');
-        const status = document.getElementById('research-status');
-        const btn = document.getElementById('research-search-btn');
-
-        if (!append) {
-            videos = [];
-            nextPageToken = null;
-            expandedId = null;
-            if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Searching YouTube...</div></div>';
-        }
-        if (btn) btn.disabled = true;
-
-        try {
-            const params = new URLSearchParams({
-                minViews: currentMinViews,
-                timeRange: currentTimeRange,
-                ...(currentQuery ? { query: currentQuery } : {}),
-                ...(nextPageToken && append ? { pageToken: nextPageToken } : {})
-            });
-            const res = await fetch(`/api/research/viral?${params}`);
-            const data = await res.json();
-
-            if (!res.ok) throw new Error(data.error || 'Search failed');
-
-            if (append) {
-                videos = videos.concat(data.videos || []);
-            } else {
-                videos = data.videos || [];
-            }
-            nextPageToken = data.nextPageToken || null;
-            renderResults();
-        } catch (e) {
-            if (results && !append) {
-                results.innerHTML = `<div class="research-error">${escHtml(e.message)}</div>`;
-            }
-        } finally {
-            loading = false;
-            if (btn) btn.disabled = false;
-        }
-    }
-
-    async function fetchTrending() {
-        if (loading) return;
-        loading = true;
-        const results = document.getElementById('research-results');
-        const btn = document.getElementById('research-search-btn');
         videos = [];
-        nextPageToken = null;
         expandedId = null;
-        if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Fetching trending...</div></div>';
-        if (btn) btn.disabled = true;
+        const results = document.getElementById('research-results');
+        if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Finding popular videos...</div></div>';
 
         try {
-            const res = await fetch('/api/research/trending');
+            const params = new URLSearchParams({ timeRange: currentTime, type: currentType });
+            const res = await fetch(`/api/research/popular?${params}`);
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed');
+            if (!res.ok) throw new Error(data.error || 'Search failed');
             videos = data.videos || [];
             renderResults();
         } catch (e) {
-            if (results) {
-                results.innerHTML = `<div class="research-error">${escHtml(e.message)}</div>`;
-            }
+            if (results) results.innerHTML = `<div class="research-error">${escHtml(e.message)}</div>`;
         } finally {
             loading = false;
-            if (btn) btn.disabled = false;
         }
     }
 
@@ -222,15 +103,13 @@ const ResearchUI = (() => {
         const results = document.getElementById('research-results');
         const status = document.getElementById('research-status');
         const countEl = document.getElementById('research-count');
-        const loadMore = document.getElementById('research-load-more');
         if (!results) return;
 
         if (status) status.style.display = videos.length > 0 ? '' : 'none';
         if (countEl) countEl.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''} found`;
-        if (loadMore) loadMore.style.display = nextPageToken ? '' : 'none';
 
         if (videos.length === 0) {
-            results.innerHTML = '<div class="research-empty">No videos found matching your criteria. Try lowering the view threshold or expanding the time range.</div>';
+            results.innerHTML = '<div class="research-empty">No videos found. Try a different time period or type.</div>';
             return;
         }
 
@@ -249,7 +128,6 @@ const ResearchUI = (() => {
                         `<img src="/api/research/frame/${v.videoId}/${f}" alt="${f}" />`
                     ).join('')}</div>`;
                 }
-
                 detailHtml = `
                 <div class="research-detail">
                     <div class="research-detail-actions">
@@ -266,26 +144,21 @@ const ResearchUI = (() => {
             <div class="research-video-card${isExpanded ? ' expanded' : ''}" data-vid="${escAttr(v.videoId)}">
                 <div class="research-thumb">
                     <img src="${escAttr(v.thumbnail || '')}" alt="" loading="lazy" />
-                    <span class="research-thumb-duration">${formatDuration(v.duration)}</span>
+                    ${v.duration ? `<span class="research-thumb-duration">${escHtml(v.duration)}</span>` : ''}
                 </div>
                 <div class="research-video-info">
                     <div class="research-video-title" title="${escAttr(v.title)}">${escHtml(v.title)}</div>
-                    <div class="research-video-channel">${escHtml(v.channelTitle)} &middot; ${timeAgo(v.publishedAt)}</div>
+                    <div class="research-video-channel">${escHtml(v.channelTitle)}${v.publishedAt ? ' &middot; ' + escHtml(v.publishedAt) : ''}</div>
                     <div class="research-video-stats">
                         <span class="research-stat"><span class="research-stat-value">${formatViews(v.views)}</span> <span class="research-stat-label">views</span></span>
-                        <span class="research-stat"><span class="research-stat-value">${formatViews(v.likes)}</span> <span class="research-stat-label">likes</span></span>
-                        <span class="research-stat"><span class="research-stat-value">${formatViews(v.comments)}</span> <span class="research-stat-label">comments</span></span>
-                        ${v.views > 0 && v.likes > 0 ? `<span class="research-stat"><span class="research-stat-value">${(v.likes / v.views * 100).toFixed(2)}%</span> <span class="research-stat-label">like ratio</span></span>` : ''}
                     </div>
                     ${detailHtml}
                 </div>
             </div>`;
         }).join('');
 
-        // Bind card clicks (expand/collapse)
         results.querySelectorAll('.research-video-card').forEach(card => {
             card.addEventListener('click', (e) => {
-                // Don't toggle if clicking a button or link
                 if (e.target.closest('button') || e.target.closest('a')) return;
                 const vid = card.dataset.vid;
                 expandedId = expandedId === vid ? null : vid;
@@ -293,7 +166,6 @@ const ResearchUI = (() => {
             });
         });
 
-        // Bind grab-frames buttons
         results.querySelectorAll('[data-action="grab-frames"]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -306,7 +178,6 @@ const ResearchUI = (() => {
         if (framesLoading[videoId] || framesCache[videoId]) return;
         framesLoading[videoId] = true;
         renderResults();
-
         try {
             const res = await fetch('/api/research/grab-frames', {
                 method: 'POST',
@@ -333,7 +204,6 @@ const ResearchUI = (() => {
         close() {
             container = null;
             videos = [];
-            nextPageToken = null;
             expandedId = null;
             framesCache = {};
             framesLoading = {};

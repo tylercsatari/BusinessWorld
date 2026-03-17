@@ -1334,6 +1334,48 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return parseYtInitialData(html).sort((a, b) => b.views - a.views);
     }
 
+    // GET /api/research/popular — most popular videos by time + type
+    // Uses YouTube search page sp params for time/duration filters + view count sort.
+    if (pathname === '/api/research/popular' && req.method === 'GET') {
+        try {
+            const timeRange = url.searchParams.get('timeRange') || 'week';
+            const type = url.searchParams.get('type') || 'all'; // all | shorts | long
+
+            // Build sp param (base64 protobuf): sort=viewCount, filter=video, time, duration
+            // Time codes: 3=week, 4=month, 5=year, omit=all time
+            // Duration codes: 1=under4min(shorts), 2=over20min(long), omit=all
+            const SP_MAP = {
+                'all_all':    'CAISAhAB',         // viewcount + video
+                'week_all':   'CAISBAgDEAE',       // viewcount + week + video
+                'month_all':  'CAISBAgEEAE',       // viewcount + month + video
+                'year_all':   'CAISBAgFEAE',       // viewcount + year + video
+                'all_shorts': 'CAISBBABGAE',       // viewcount + video + under4min
+                'week_shorts':'CAISBggDEAEYAQ',    // viewcount + week + video + under4min
+                'month_shorts':'CAISBggEEAEYAQ',   // viewcount + month + video + under4min
+                'year_shorts':'CAISBggFEAEYAQ',    // viewcount + year + video + under4min
+                'all_long':   'CAISBBABGAI',       // viewcount + video + over20min
+                'week_long':  'CAISBggDEAEYAg',    // viewcount + week + video + over20min
+                'month_long': 'CAISBggEEAEYAg',    // viewcount + month + video + over20min
+                'year_long':  'CAISBggFEAEYAg',    // viewcount + year + video + over20min
+            };
+
+            const spKey = `${timeRange}_${type}`;
+            const sp = SP_MAP[spKey] || SP_MAP['week_all'];
+
+            const searchUrl = `https://www.youtube.com/results?search_query=&sp=${sp}`;
+            const ytRes = await fetch(searchUrl, { headers: YT_SCRAPE_HEADERS });
+            const html = await ytRes.text();
+            const videos = parseYtInitialData(html).sort((a, b) => b.views - a.views);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ videos }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     // GET /api/research/viral — search YouTube for viral videos
     if (pathname === '/api/research/viral' && req.method === 'GET') {
         try {
