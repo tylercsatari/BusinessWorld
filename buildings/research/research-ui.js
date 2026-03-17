@@ -1,17 +1,19 @@
 /**
  * Research Facility UI — find viral YouTube videos sorted by popularity.
+ * Fetches once per time+type combo, caches results, filters views client-side.
  */
 const ResearchUI = (() => {
     let container = null;
-    let videos = [];
+    let cachedVideos = []; // full unfiltered result set
     let loading = false;
     let expandedId = null;
     let framesCache = {};
     let framesLoading = {};
 
     let currentTime = 'week';
-    let currentType = 'all'; // all | shorts | long
+    let currentType = 'all';
     let currentMinViews = 0;
+    let cacheKey = ''; // tracks what's cached to avoid redundant fetches
 
     const TIME_OPTIONS = [
         { key: 'week', label: 'This Week' },
@@ -19,13 +21,11 @@ const ResearchUI = (() => {
         { key: 'year', label: 'This Year' },
         { key: 'all', label: 'All Time' },
     ];
-
     const TYPE_OPTIONS = [
         { key: 'all', label: 'All' },
         { key: 'long', label: 'Long-form' },
         { key: 'shorts', label: 'Shorts' },
     ];
-
     const VIEW_OPTIONS = [
         { key: 0, label: 'Any Views' },
         { key: 1000000, label: '1M+' },
@@ -40,7 +40,6 @@ const ResearchUI = (() => {
         if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
         return String(n);
     }
-
     function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
     function escAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
@@ -63,7 +62,7 @@ const ResearchUI = (() => {
                 <span class="research-status-count" id="research-count"></span>
             </div>
             <div class="research-results" id="research-results">
-                <div class="research-empty">Select a time period to see the most popular videos.</div>
+                <div class="research-empty">Loading...</div>
             </div>
         </div>`;
     }
@@ -74,57 +73,58 @@ const ResearchUI = (() => {
                 currentTime = btn.dataset.time;
                 container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                fetchVideos();
+                fetchVideos(); // time changed = new fetch
             });
         });
-
         container.querySelectorAll('#research-type-btns .research-preset-btn[data-type]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentType = btn.dataset.type;
                 container.querySelectorAll('#research-type-btns [data-type]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                fetchVideos();
+                fetchVideos(); // type changed = new fetch
             });
         });
-
         container.querySelectorAll('#research-type-btns .research-preset-btn[data-views]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentMinViews = parseInt(btn.dataset.views) || 0;
                 container.querySelectorAll('#research-type-btns [data-views]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                fetchVideos();
+                renderResults(); // views changed = just re-filter cached data, no new fetch
             });
         });
     }
 
     async function fetchVideos(retryCount = 0) {
+        const key = `${currentTime}_${currentType}`;
+        if (key === cacheKey && cachedVideos.length > 0) {
+            renderResults(); // already have this data
+            return;
+        }
         if (loading) return;
         loading = true;
-        videos = [];
         expandedId = null;
         const results = document.getElementById('research-results');
         if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Finding popular videos...</div></div>';
 
         try {
-            const params = new URLSearchParams({ timeRange: currentTime, type: currentType, minViews: currentMinViews });
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for Render cold starts
-            const res = await fetch(`/api/research/popular?${params}`, { signal: controller.signal });
+            const timeout = setTimeout(() => controller.abort(), 50000);
+            const res = await fetch(`/api/research/popular?timeRange=${currentTime}&type=${currentType}`, { signal: controller.signal });
             clearTimeout(timeout);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Search failed');
-            videos = data.videos || [];
-            if (videos.length === 0 && retryCount === 0) {
-                // Sometimes the server just started — retry once
+            cachedVideos = data.videos || [];
+            cacheKey = key;
+            if (cachedVideos.length === 0 && retryCount === 0) {
                 loading = false;
+                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Retrying...</div></div>';
                 return fetchVideos(1);
             }
             renderResults();
         } catch (e) {
-            if (retryCount === 0 && (e.name === 'AbortError' || e.message.includes('Failed to fetch'))) {
-                // Server was probably waking up — retry
+            if (retryCount === 0) {
                 loading = false;
-                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Server waking up, retrying...</div></div>';
+                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Retrying...</div></div>';
                 return fetchVideos(1);
             }
             if (results) results.innerHTML = `<div class="research-error">${escHtml(e.message)}<br><br><button class="research-search-btn" onclick="ResearchUI._retry()">Retry</button></div>`;
@@ -139,41 +139,43 @@ const ResearchUI = (() => {
         const countEl = document.getElementById('research-count');
         if (!results) return;
 
-        if (status) status.style.display = videos.length > 0 ? '' : 'none';
-        if (countEl) countEl.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''} found`;
+        // Filter cached videos by min views (client-side, instant)
+        const filtered = currentMinViews > 0
+            ? cachedVideos.filter(v => v.views >= currentMinViews)
+            : cachedVideos;
 
-        if (videos.length === 0) {
-            results.innerHTML = '<div class="research-empty">No videos found. Try a different time period or type.</div>';
+        if (status) status.style.display = filtered.length > 0 ? '' : 'none';
+        if (countEl) countEl.textContent = `${filtered.length} video${filtered.length !== 1 ? 's' : ''} found`;
+
+        if (filtered.length === 0) {
+            const total = cachedVideos.length;
+            const topView = total > 0 ? formatViews(cachedVideos[0].views) : '0';
+            results.innerHTML = total > 0
+                ? `<div class="research-empty">No videos over ${formatViews(currentMinViews)} views. ${total} videos loaded, highest is ${topView}. Try a lower threshold.</div>`
+                : '<div class="research-empty">No videos found. Try a different time period or type.</div>';
             return;
         }
 
-        results.innerHTML = videos.map(v => {
+        results.innerHTML = filtered.map(v => {
             const isExpanded = expandedId === v.videoId;
             const frames = framesCache[v.videoId];
             const isFramesLoading = framesLoading[v.videoId];
-
             let detailHtml = '';
             if (isExpanded) {
                 let framesHtml = '';
                 if (isFramesLoading) {
                     framesHtml = '<div class="research-frames-loading"><div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle"></div> Downloading frames...</div>';
                 } else if (frames && frames.length > 0) {
-                    framesHtml = `<div class="research-frames-strip">${frames.map(f =>
-                        `<img src="/api/research/frame/${v.videoId}/${f}" alt="${f}" />`
-                    ).join('')}</div>`;
+                    framesHtml = `<div class="research-frames-strip">${frames.map(f => `<img src="/api/research/frame/${v.videoId}/${f}" alt="${f}" />`).join('')}</div>`;
                 }
-                detailHtml = `
-                <div class="research-detail">
+                detailHtml = `<div class="research-detail">
                     <div class="research-detail-actions">
-                        <button class="research-detail-btn primary" data-action="grab-frames" data-vid="${escAttr(v.videoId)}"${frames ? ' disabled' : ''}>
-                            ${frames ? 'Frames Downloaded' : 'Grab First Frames'}
-                        </button>
+                        <button class="research-detail-btn primary" data-action="grab-frames" data-vid="${escAttr(v.videoId)}"${frames ? ' disabled' : ''}>${frames ? 'Frames Downloaded' : 'Grab First Frames'}</button>
                         <a href="https://www.youtube.com/watch?v=${escAttr(v.videoId)}" target="_blank" class="research-detail-btn">Open on YouTube</a>
                     </div>
                     ${framesHtml}
                 </div>`;
             }
-
             return `
             <div class="research-video-card${isExpanded ? ' expanded' : ''}" data-vid="${escAttr(v.videoId)}">
                 <div class="research-thumb">
@@ -194,17 +196,12 @@ const ResearchUI = (() => {
         results.querySelectorAll('.research-video-card').forEach(card => {
             card.addEventListener('click', (e) => {
                 if (e.target.closest('button') || e.target.closest('a')) return;
-                const vid = card.dataset.vid;
-                expandedId = expandedId === vid ? null : vid;
+                expandedId = expandedId === card.dataset.vid ? null : card.dataset.vid;
                 renderResults();
             });
         });
-
         results.querySelectorAll('[data-action="grab-frames"]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                grabFrames(btn.dataset.vid);
-            });
+            btn.addEventListener('click', (e) => { e.stopPropagation(); grabFrames(btn.dataset.vid); });
         });
     }
 
@@ -214,19 +211,14 @@ const ResearchUI = (() => {
         renderResults();
         try {
             const res = await fetch('/api/research/grab-frames', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoId, seconds: 10 })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
             framesCache[videoId] = data.frames || [];
-        } catch (e) {
-            console.warn('Grab frames failed:', e.message);
-        } finally {
-            framesLoading[videoId] = false;
-            renderResults();
-        }
+        } catch (e) { console.warn('Grab frames failed:', e.message); }
+        finally { framesLoading[videoId] = false; renderResults(); }
     }
 
     return {
@@ -236,14 +228,10 @@ const ResearchUI = (() => {
             bindEvents();
             fetchVideos();
         },
-        _retry() { fetchVideos(); },
+        _retry() { cacheKey = ''; fetchVideos(); },
         close() {
-            container = null;
-            videos = [];
-            expandedId = null;
-            framesCache = {};
-            framesLoading = {};
-            loading = false;
+            container = null; cachedVideos = []; cacheKey = '';
+            expandedId = null; framesCache = {}; framesLoading = {}; loading = false;
         }
     };
 })();

@@ -1333,53 +1333,51 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return parseInnerTubeSearch(await res.json());
     }
 
+    // Duration string to seconds
+    function durToSec(dur) {
+        if (!dur) return -1;
+        const p = dur.split(':').map(Number);
+        return p.length === 3 ? p[0]*3600+p[1]*60+p[2] : p[0]*60+(p[1]||0);
+    }
+
     // GET /api/research/popular — most popular videos by time + type
-    // Uses InnerTube search API which returns TOTAL/lifetime view counts.
-    // Runs multiple searches in parallel for broad coverage.
+    // Runs 10-15 parallel InnerTube searches for maximum coverage.
+    // Returns ALL results (no minViews filter) — frontend filters client-side.
     if (pathname === '/api/research/popular' && req.method === 'GET') {
         try {
             const timeRange = url.searchParams.get('timeRange') || 'week';
             const type = url.searchParams.get('type') || 'all';
-            const minViews = parseInt(url.searchParams.get('minViews')) || 0;
 
-            // Upload date filter: 3=week, 4=month, 5=year, null=all
             const TIME_CODE = { week: 3, month: 4, year: 5, all: null };
             const uploadDate = TIME_CODE[timeRange] ?? null;
 
-            // Type filter: 1=video, 6=shorts
-            // For shorts: use type=6 (native YouTube Shorts filter)
-            // For long: use type=1 + duration=2 (over 20 min) — but also run type=1 general
-            // For all: use type=1 (video)
+            // Broad set of queries across many categories to maximize coverage
+            const VIRAL_QUERIES = [
+                'most viewed', 'viral', 'trending', 'popular', 'most watched',
+                'music video', 'song', 'official video', 'funny video', 'animation',
+                'dance', 'reaction', 'challenge', 'compilation', 'kids',
+            ];
+            const SHORTS_QUERIES = [
+                'viral', '#shorts', 'funny shorts', 'trending shorts', 'most viewed shorts',
+                'tiktok', 'satisfying', 'comedy shorts', 'dance shorts', 'challenge shorts',
+                'shorts viral 2025', 'shorts funny', 'meme', 'prank', 'shorts trending',
+            ];
+
             let searches = [];
 
             if (type === 'shorts') {
                 const sp = buildSP(3, uploadDate, 6, null); // sort=viewcount, type=shorts
-                searches = [
-                    innerTubeSearch('viral', sp),
-                    innerTubeSearch('shorts', sp),
-                    innerTubeSearch('most viewed', sp),
-                    innerTubeSearch('trending', sp),
-                    innerTubeSearch('funny', sp),
-                ];
+                searches = SHORTS_QUERIES.map(q => innerTubeSearch(q, sp));
             } else if (type === 'long') {
                 const sp = buildSP(3, uploadDate, 1, null); // sort=viewcount, type=video
-                searches = [
-                    innerTubeSearch('most viewed', sp),
-                    innerTubeSearch('viral', sp),
-                    innerTubeSearch('trending', sp),
-                    innerTubeSearch('music video', sp),
-                    innerTubeSearch('popular', sp),
-                ];
+                searches = VIRAL_QUERIES.map(q => innerTubeSearch(q, sp));
             } else {
-                // All: run both video and shorts searches
+                // All: both video and shorts
                 const spVid = buildSP(3, uploadDate, 1, null);
                 const spShort = buildSP(3, uploadDate, 6, null);
                 searches = [
-                    innerTubeSearch('most viewed', spVid),
-                    innerTubeSearch('viral', spVid),
-                    innerTubeSearch('trending', spVid),
-                    innerTubeSearch('most viewed', spShort),
-                    innerTubeSearch('viral', spShort),
+                    ...VIRAL_QUERIES.slice(0, 8).map(q => innerTubeSearch(q, spVid)),
+                    ...SHORTS_QUERIES.slice(0, 7).map(q => innerTubeSearch(q, spShort)),
                 ];
             }
 
@@ -1397,19 +1395,19 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 }
             }
 
-            // For "long" type, filter out short videos (keep > 3 min)
-            if (type === 'long') {
+            // Enforce type filtering with duration verification
+            if (type === 'shorts') {
+                // Shorts must have duration ≤ 180s (3 min max for YT Shorts)
                 allVideos = allVideos.filter(v => {
-                    if (!v.duration) return true;
-                    const parts = v.duration.split(':').map(Number);
-                    const secs = parts.length === 3 ? parts[0]*3600+parts[1]*60+parts[2] : parts[0]*60+(parts[1]||0);
-                    return secs > 180;
+                    const s = durToSec(v.duration);
+                    return s > 0 && s <= 180;
                 });
-            }
-
-            // Filter by minimum views
-            if (minViews > 0) {
-                allVideos = allVideos.filter(v => v.views >= minViews);
+            } else if (type === 'long') {
+                // Long-form: > 3 min
+                allVideos = allVideos.filter(v => {
+                    const s = durToSec(v.duration);
+                    return s < 0 || s > 180; // include no-duration (charts) as long
+                });
             }
 
             allVideos.sort((a, b) => b.views - a.views);
