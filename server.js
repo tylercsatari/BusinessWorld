@@ -1279,31 +1279,32 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return {};
     }
 
-    // InnerTube API — YouTube's internal API, no API key needed.
-    // Used as fallback when YouTube Data API auth is unavailable.
-    const INNERTUBE_CONTEXT = {
-        client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en', gl: 'US' }
-    };
-    const INNERTUBE_HEADERS = {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    // YouTube page scraper — fetches YouTube search/results pages and extracts
+    // video data from embedded ytInitialData JSON. No API key needed, just HTTP.
+    const YT_SCRAPE_HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
     };
 
-    function parseInnerTubeVideos(data) {
+    function parseYtInitialData(html) {
+        const m = html.match(/ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s);
+        if (!m) return [];
+        let data;
+        try { data = JSON.parse(m[1]); } catch (e) { return []; }
         const videos = [];
-        function extract(obj) {
-            if (!obj || typeof obj !== 'object') return;
+        function extract(obj, depth) {
+            if (!obj || typeof obj !== 'object' || depth > 25 || videos.length > 60) return;
             if (obj.videoRenderer) {
                 const vr = obj.videoRenderer;
                 const viewText = vr.viewCountText?.simpleText || vr.viewCountText?.runs?.[0]?.text || '0';
                 const viewNum = parseInt(viewText.replace(/[^0-9]/g, '')) || 0;
                 videos.push({
                     videoId: vr.videoId,
-                    title: vr.title?.runs?.[0]?.text || vr.title?.simpleText || '',
+                    title: vr.title?.runs?.[0]?.text || '',
                     channelTitle: vr.ownerText?.runs?.[0]?.text || vr.shortBylineText?.runs?.[0]?.text || '',
                     channelId: vr.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || '',
                     publishedAt: vr.publishedTimeText?.simpleText || '',
-                    thumbnail: vr.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || '',
+                    thumbnail: vr.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || `https://i.ytimg.com/vi/${vr.videoId}/hqdefault.jpg`,
                     views: viewNum,
                     likes: 0,
                     comments: 0,
@@ -1311,38 +1312,26 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 });
                 return;
             }
-            if (Array.isArray(obj)) { obj.forEach(extract); return; }
-            Object.values(obj).forEach(extract);
+            if (Array.isArray(obj)) { for (const item of obj) extract(item, depth + 1); return; }
+            for (const v of Object.values(obj)) extract(v, depth + 1);
         }
-        extract(data);
+        extract(data, 0);
         return videos;
     }
 
-    async function innerTubeSearch(query, maxResults = 50) {
-        const res = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
-            method: 'POST',
-            headers: INNERTUBE_HEADERS,
-            body: JSON.stringify({
-                context: INNERTUBE_CONTEXT,
-                query,
-                params: 'CAMSAhAB' // sort by view count, filter: videos only
-            })
-        });
-        const data = await res.json();
-        return parseInnerTubeVideos(data).slice(0, maxResults);
+    // sp=CAMSAhAB = sort by view count + type: video
+    async function ytScrapeSearch(query) {
+        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=CAMSAhAB`;
+        const res = await fetch(searchUrl, { headers: YT_SCRAPE_HEADERS });
+        const html = await res.text();
+        return parseYtInitialData(html);
     }
 
-    async function innerTubeTrending() {
-        const res = await fetch('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', {
-            method: 'POST',
-            headers: INNERTUBE_HEADERS,
-            body: JSON.stringify({
-                context: INNERTUBE_CONTEXT,
-                browseId: 'FEtrending'
-            })
-        });
-        const data = await res.json();
-        return parseInnerTubeVideos(data);
+    // sp=EgQQARgB = type: video, sorted by relevance (good proxy for trending)
+    async function ytScrapeTrending() {
+        const res = await fetch('https://www.youtube.com/results?search_query=&sp=EgQQARgB', { headers: YT_SCRAPE_HEADERS });
+        const html = await res.text();
+        return parseYtInitialData(html).sort((a, b) => b.views - a.views);
     }
 
     // GET /api/research/viral — search YouTube for viral videos
@@ -1397,9 +1386,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 if (searchData.error?.code === 401) process.env._YOUTUBE_ACCESS_TOKEN = '';
             }
 
-            // InnerTube fallback — no API key needed, just HTTP
+            // YouTube page scrape fallback — no API key needed, just HTTP
             const searchQuery = query || 'most viewed this week';
-            const items = await innerTubeSearch(searchQuery, 50);
+            const items = await ytScrapeSearch(searchQuery);
             const videos = items.filter(v => v.views >= minViews).sort((a, b) => b.views - a.views);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1443,8 +1432,8 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 if (trendData.error?.code === 401) process.env._YOUTUBE_ACCESS_TOKEN = '';
             }
 
-            // InnerTube fallback
-            const videos = await innerTubeTrending();
+            // YouTube page scrape fallback
+            const videos = await ytScrapeTrending();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ videos }));
         } catch (e) {
