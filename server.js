@@ -1406,31 +1406,53 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             const TIME_CODE = { week: 3, month: 4, year: 5, all: null };
             const uploadDate = TIME_CODE[timeRange] ?? null;
 
-            // Massive query list across every major category on YouTube.
-            // Each query returns ~20 unique videos sorted by view count.
-            // More queries = more coverage of YouTube's video catalog.
+            // Every query returns ~20 unique videos sorted by view count.
+            // More queries = more coverage. We cast a VERY wide net.
             const VIRAL_QUERIES = [
-                // Generic viral/popular
+                // Generic
                 'most viewed', 'viral', 'trending', 'popular', 'most watched',
                 'most viewed video', 'billion views', 'most popular video',
-                // Music (largest category on YouTube)
+                'most viewed video of all time', 'top videos', 'viral video',
+                // Music — by genre
                 'music video', 'official music video', 'song', 'official video',
                 'pop music', 'hip hop', 'rap', 'kpop', 'latin music', 'reggaeton',
                 'bollywood songs', 'punjabi song', 'arabic music', 'afrobeats',
-                'rock music video', 'country music', 'edm', 'r&b',
+                'rock music video', 'country music', 'edm', 'r&b', 'trap',
+                'spanish song', 'french song', 'turkish music', 'thai song',
+                'indonesian song', 'filipino song', 'vietnamese music',
+                'german music', 'italian song', 'russian music', 'portuguese music',
+                // Music — by artist/era
+                'taylor swift', 'ed sheeran', 'eminem', 'drake', 'bad bunny',
+                'bts', 'blackpink', 'justin bieber', 'ariana grande', 'dua lipa',
+                'bruno mars', 'shakira', 'rihanna', 'adele', 'katy perry',
+                'maroon 5', 'coldplay', 'imagine dragons', 'the weeknd',
+                'billie eilish', 'post malone', 'cardi b', 'nicki minaj',
+                'ozuna', 'j balvin', 'daddy yankee', 'maluma', 'anuel aa',
+                'alan walker', 'marshmello', 'sia', 'sam smith', 'doja cat',
+                'olivia rodrigo', 'sabrina carpenter', 'lil nas x',
+                '2024 music', '2025 music', '2023 music', '2022 music',
                 // Entertainment
                 'funny video', 'comedy', 'prank', 'challenge', 'reaction',
-                'animation', 'cartoon', 'anime', 'movie trailer', 'tv show',
+                'animation', 'cartoon', 'anime', 'movie trailer', 'tv show clip',
+                'mrbeast', 'pewdiepie', 'markiplier', 'dude perfect', 'sssniperwolf',
+                'like nastya', 'vlad and niki', 'ryan toysreview', 'diana roma',
                 // Kids & Education
                 'kids songs', 'nursery rhymes', 'baby shark', 'cocomelon',
                 'children songs', 'kids video', 'learning video', 'phonics',
+                'pinkfong', 'super simple songs', 'chuchu tv', 'little baby bum',
+                'dave and ava', 'mother goose club', 'baby ronnie', 'billion surprise toys',
                 // Sports & Gaming
-                'highlights', 'football', 'soccer', 'cricket', 'basketball',
-                'gaming', 'minecraft', 'fortnite', 'gta',
+                'highlights', 'football', 'soccer', 'cricket', 'basketball', 'nba',
+                'gaming', 'minecraft', 'fortnite', 'gta', 'free fire', 'roblox',
+                'world cup', 'champions league', 'nfl', 'wwe',
                 // Other high-view categories
                 'dance video', 'workout', 'cooking', 'asmr', 'compilation',
                 'satisfying', 'unboxing', 'review', 'tutorial', 'vlog',
                 'wedding dance', 'flash mob', 'talent show', 'audition',
+                'car review', 'tech review', 'travel vlog', 'mukbang',
+                'relaxing music', 'lofi', 'study music', 'sleep music',
+                'nature documentary', 'science experiment', 'magic trick',
+                'tiktok compilation', 'try not to laugh', 'fail compilation',
             ];
             const SHORTS_QUERIES = [
                 'viral', '#shorts', 'funny shorts', 'trending shorts', 'most viewed shorts',
@@ -1439,6 +1461,12 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 'cute', 'fails', 'magic trick', 'life hack', 'cooking shorts',
                 'pets', 'baby', 'car', 'sports shorts', 'gaming shorts',
                 'anime shorts', 'art', 'music shorts', 'singing', 'reaction shorts',
+                'scary shorts', 'horror shorts', 'diy shorts', 'beauty shorts',
+                'fitness shorts', 'science shorts', 'history shorts', 'asmr shorts',
+                'minecraft shorts', 'fortnite shorts', 'roblox shorts',
+                'mrbeast shorts', 'most viewed shorts ever', '#shorts viral',
+                'shorts 2025', 'shorts 2024', 'shorts billion views',
+                'Indian shorts', 'hindi shorts', 'spanish shorts', 'kpop shorts',
             ];
 
             let searches = [];

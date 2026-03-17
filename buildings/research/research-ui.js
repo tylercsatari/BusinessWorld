@@ -68,24 +68,22 @@ const ResearchUI = (() => {
     }
 
     function bindEvents() {
-        // Time buttons — change triggers fresh search
+        // Time buttons — set state only
         container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentTime = btn.dataset.time;
                 container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                cachedVideos = []; // clear cache so we re-fetch
-                doSearch();
+                cachedVideos = []; // clear cache so next Search re-fetches
             });
         });
-        // Type buttons — change triggers fresh search
+        // Type buttons — set state only
         container.querySelectorAll('#research-type-btns .research-preset-btn[data-type]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentType = btn.dataset.type;
                 container.querySelectorAll('#research-type-btns [data-type]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                cachedVideos = []; // clear cache so we re-fetch
-                doSearch();
+                cachedVideos = []; // clear cache so next Search re-fetches
             });
         });
         // View threshold — instant client-side filter, no re-fetch needed
@@ -222,7 +220,6 @@ const ResearchUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
-            doSearch();
         },
         _retry() { doSearch(); },
         close() {
