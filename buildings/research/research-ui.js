@@ -366,25 +366,80 @@ const ResearchUI = (() => {
         try {
             const res = await fetch('/api/youtube/auth-url');
             const data = await res.json();
-            if (data.url) {
-                window.open(data.url, '_blank', 'width=500,height=600');
-                // Show "waiting" state with the redirect URI info
-                const results = document.getElementById('research-results');
-                if (results) results.innerHTML = `<div class="research-loading">
+            if (!data.url) { alert('Could not get YouTube auth URL. Check YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET in .env.'); return; }
+
+            // Open Google's OAuth page
+            window.open(data.url, '_blank', 'width=500,height=600');
+
+            const results = document.getElementById('research-results');
+            if (!results) return;
+
+            if (data.isRemote) {
+                // On Render: Google will redirect to localhost which won't load.
+                // User needs to copy the auth code from the URL bar and paste it here.
+                results.innerHTML = `<div style="max-width:500px;margin:20px auto;text-align:left">
+                    <div style="font-size:16px;font-weight:600;color:#fff;margin-bottom:12px">Connect YouTube</div>
+                    <div style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px">
+                        <strong>Step 1:</strong> Approve access in the popup that just opened.<br>
+                        <strong>Step 2:</strong> After approving, the page will try to redirect to localhost and fail — that's OK!<br>
+                        <strong>Step 3:</strong> Copy the <code>code=</code> value from the URL bar. It looks like:<br>
+                        <code style="color:#0984e3;font-size:11px;word-break:break-all">http://localhost:8002/api/youtube/callback?code=<strong>4/0XXXXX...</strong></code><br>
+                        <strong>Step 4:</strong> Paste just the code value below:
+                    </div>
+                    <div style="display:flex;gap:8px">
+                        <input class="research-input" id="research-auth-code" placeholder="Paste the code here..." style="flex:1;width:auto" />
+                        <button class="research-search-btn" id="research-submit-code">Submit</button>
+                    </div>
+                    <div id="research-code-status" style="margin-top:8px;font-size:12px;color:#888"></div>
+                </div>`;
+                document.getElementById('research-submit-code')?.addEventListener('click', submitAuthCode);
+                document.getElementById('research-auth-code')?.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') submitAuthCode();
+                });
+            } else {
+                // On localhost: the redirect works automatically
+                results.innerHTML = `<div class="research-loading">
                     <div class="spinner"></div>
                     <div style="margin-top:8px">Waiting for YouTube authorization...</div>
                     <div style="color:#666;font-size:12px;margin-top:12px">Complete the login in the popup, then try a search.</div>
-                    <div style="color:#888;font-size:11px;margin-top:16px;background:#111;padding:10px;border-radius:6px;text-align:left;max-width:500px">
-                        <strong>If you see "redirect_uri_mismatch":</strong><br>
-                        Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#0984e3">Google Cloud Console</a> &rarr; your OAuth Client &rarr; Authorized redirect URIs &rarr; add:<br>
-                        <code style="color:#fff;word-break:break-all">${escHtml(data.redirect)}</code>
-                    </div>
                 </div>`;
-            } else {
-                alert('Could not get YouTube auth URL. Check that YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET are set in .env.');
             }
         } catch (e) {
             alert('Error: ' + e.message);
+        }
+    }
+
+    async function submitAuthCode() {
+        const input = document.getElementById('research-auth-code');
+        const status = document.getElementById('research-code-status');
+        if (!input || !status) return;
+
+        // Extract just the code from the full URL or raw code
+        let code = input.value.trim();
+        const codeMatch = code.match(/[?&]code=([^&]+)/);
+        if (codeMatch) code = decodeURIComponent(codeMatch[1]);
+        if (!code) { status.textContent = 'Please paste the code from the URL bar.'; status.style.color = '#e74c3c'; return; }
+
+        status.textContent = 'Exchanging code...';
+        status.style.color = '#888';
+
+        try {
+            const res = await fetch('/api/youtube/exchange-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+
+            status.textContent = 'YouTube connected! Try a search now.';
+            status.style.color = '#27ae60';
+
+            // Re-check status after a moment
+            setTimeout(() => checkYouTubeStatus(), 1000);
+        } catch (e) {
+            status.textContent = 'Error: ' + e.message;
+            status.style.color = '#e74c3c';
         }
     }
 

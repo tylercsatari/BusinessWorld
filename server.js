@@ -929,33 +929,28 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return;
     }
 
-    // Build the correct base URL for OAuth redirects (works on localhost and Render)
-    function getBaseUrl(req) {
-        if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL;
-        const host = req.headers.host;
-        const proto = req.headers['x-forwarded-proto'] || 'http';
-        if (host) return `${proto}://${host}`;
-        return `http://localhost:${PORT}`;
-    }
+    // OAuth redirect URI — always use localhost (already registered in Google Cloud Console).
+    // On Render, the auth URL redirects to localhost which won't load, but the auth code
+    // is in the URL. The user copies it and pastes it back via /api/youtube/exchange-code.
+    const OAUTH_REDIRECT = `http://localhost:${PORT}/api/youtube/callback`;
 
     // GET /api/youtube/auth-url — build OAuth2 authorize URL
     if (pathname === '/api/youtube/auth-url' && req.method === 'GET') {
         const clientId = process.env.YOUTUBE_CLIENT_ID;
         if (!clientId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'YOUTUBE_CLIENT_ID not configured' })); return; }
-        const redirect = `${getBaseUrl(req)}/api/youtube/callback`;
         const scope = 'https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/yt-analytics-monetary.readonly https://www.googleapis.com/auth/youtube.readonly';
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+        const isRemote = !!(process.env.RENDER || (req.headers.host && !req.headers.host.startsWith('localhost')));
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ url: authUrl, redirect }));
+        res.end(JSON.stringify({ url: authUrl, redirect: OAUTH_REDIRECT, isRemote }));
         return;
     }
 
-    // GET /api/youtube/callback — exchange code for tokens
+    // GET /api/youtube/callback — exchange code for tokens (works when running locally)
     if (pathname === '/api/youtube/callback' && req.method === 'GET') {
         const code = url.searchParams.get('code');
         if (!code) { res.writeHead(400); res.end('Missing code'); return; }
         try {
-            const redirect = `${getBaseUrl(req)}/api/youtube/callback`;
             const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -963,7 +958,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                     code,
                     client_id: process.env.YOUTUBE_CLIENT_ID,
                     client_secret: process.env.YOUTUBE_CLIENT_SECRET,
-                    redirect_uri: redirect,
+                    redirect_uri: OAUTH_REDIRECT,
                     grant_type: 'authorization_code'
                 }).toString()
             });
@@ -984,14 +979,45 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             }
             if (tokenData.access_token) process.env._YOUTUBE_ACCESS_TOKEN = tokenData.access_token;
             res.writeHead(200, { 'Content-Type': 'text/html' });
-            if (process.env.RENDER && tokenData.refresh_token) {
-                // On Render, we can't write .env — show token so user can save it
-                res.end(`<html><body><h2>YouTube connected!</h2><p>Token saved for this session.</p><p style="color:#888;font-size:13px">To make it permanent on Render, add this env var in your Render dashboard:<br><code>YOUTUBE_REFRESH_TOKEN=${tokenData.refresh_token}</code></p><script>window.close()</script></body></html>`);
-            } else {
-                res.end('<html><body><h2>YouTube connected!</h2><p>You can close this window.</p><script>window.close()</script></body></html>');
-            }
+            res.end('<html><body><h2>YouTube connected!</h2><p>You can close this window.</p><script>window.close()</script></body></html>');
         } catch (e) {
             res.writeHead(500); res.end('OAuth failed: ' + e.message);
+        }
+        return;
+    }
+
+    // POST /api/youtube/exchange-code — manual code exchange (for Render / remote deploys)
+    // User approves on Google, gets redirected to localhost (which fails), copies the code
+    // from the URL bar, and pastes it here.
+    if (pathname === '/api/youtube/exchange-code' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const code = (body.code || '').trim();
+            if (!code) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing code' })); return; }
+            const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    code,
+                    client_id: process.env.YOUTUBE_CLIENT_ID,
+                    client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+                    redirect_uri: OAUTH_REDIRECT,
+                    grant_type: 'authorization_code'
+                }).toString()
+            });
+            const tokenData = await tokenRes.json();
+            if (tokenData.error) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: tokenData.error_description || tokenData.error }));
+                return;
+            }
+            if (tokenData.refresh_token) process.env.YOUTUBE_REFRESH_TOKEN = tokenData.refresh_token;
+            if (tokenData.access_token) process.env._YOUTUBE_ACCESS_TOKEN = tokenData.access_token;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, hasRefresh: !!tokenData.refresh_token }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
         }
         return;
     }
