@@ -932,7 +932,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     // OAuth redirect URI — always use localhost (already registered in Google Cloud Console).
     // On Render, the auth URL redirects to localhost which won't load, but the auth code
     // is in the URL. The user copies it and pastes it back via /api/youtube/exchange-code.
-    const OAUTH_REDIRECT = `http://localhost:${PORT}/api/youtube/callback`;
+    // Always use port 8002 — that's what's registered in Google Cloud Console.
+    // On Render, PORT is a random value like 10000, which would cause redirect_uri_mismatch.
+    const OAUTH_REDIRECT = 'http://localhost:8002/api/youtube/callback';
 
     // GET /api/youtube/auth-url — build OAuth2 authorize URL
     if (pathname === '/api/youtube/auth-url' && req.method === 'GET') {
