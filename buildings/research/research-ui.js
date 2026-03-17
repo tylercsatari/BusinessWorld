@@ -97,7 +97,7 @@ const ResearchUI = (() => {
         });
     }
 
-    async function fetchVideos() {
+    async function fetchVideos(retryCount = 0) {
         if (loading) return;
         loading = true;
         videos = [];
@@ -107,13 +107,27 @@ const ResearchUI = (() => {
 
         try {
             const params = new URLSearchParams({ timeRange: currentTime, type: currentType, minViews: currentMinViews });
-            const res = await fetch(`/api/research/popular?${params}`);
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for Render cold starts
+            const res = await fetch(`/api/research/popular?${params}`, { signal: controller.signal });
+            clearTimeout(timeout);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Search failed');
             videos = data.videos || [];
+            if (videos.length === 0 && retryCount === 0) {
+                // Sometimes the server just started — retry once
+                loading = false;
+                return fetchVideos(1);
+            }
             renderResults();
         } catch (e) {
-            if (results) results.innerHTML = `<div class="research-error">${escHtml(e.message)}</div>`;
+            if (retryCount === 0 && (e.name === 'AbortError' || e.message.includes('Failed to fetch'))) {
+                // Server was probably waking up — retry
+                loading = false;
+                if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Server waking up, retrying...</div></div>';
+                return fetchVideos(1);
+            }
+            if (results) results.innerHTML = `<div class="research-error">${escHtml(e.message)}<br><br><button class="research-search-btn" onclick="ResearchUI._retry()">Retry</button></div>`;
         } finally {
             loading = false;
         }
@@ -220,9 +234,9 @@ const ResearchUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
-            // Auto-fetch on open
             fetchVideos();
         },
+        _retry() { fetchVideos(); },
         close() {
             container = null;
             videos = [];
