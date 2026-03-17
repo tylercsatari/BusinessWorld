@@ -220,6 +220,8 @@ const ResearchUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
+            // Auto-fetch on open
+            fetchVideos();
         },
         close() {
             container = null;
