@@ -1351,16 +1351,39 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             const TIME_CODE = { week: 3, month: 4, year: 5, all: null };
             const uploadDate = TIME_CODE[timeRange] ?? null;
 
-            // Broad set of queries across many categories to maximize coverage
+            // Massive query list across every major category on YouTube.
+            // Each query returns ~20 unique videos sorted by view count.
+            // More queries = more coverage of YouTube's video catalog.
             const VIRAL_QUERIES = [
+                // Generic viral/popular
                 'most viewed', 'viral', 'trending', 'popular', 'most watched',
-                'music video', 'song', 'official video', 'funny video', 'animation',
-                'dance', 'reaction', 'challenge', 'compilation', 'kids',
+                'most viewed video', 'billion views', 'most popular video',
+                // Music (largest category on YouTube)
+                'music video', 'official music video', 'song', 'official video',
+                'pop music', 'hip hop', 'rap', 'kpop', 'latin music', 'reggaeton',
+                'bollywood songs', 'punjabi song', 'arabic music', 'afrobeats',
+                'rock music video', 'country music', 'edm', 'r&b',
+                // Entertainment
+                'funny video', 'comedy', 'prank', 'challenge', 'reaction',
+                'animation', 'cartoon', 'anime', 'movie trailer', 'tv show',
+                // Kids & Education
+                'kids songs', 'nursery rhymes', 'baby shark', 'cocomelon',
+                'children songs', 'kids video', 'learning video', 'phonics',
+                // Sports & Gaming
+                'highlights', 'football', 'soccer', 'cricket', 'basketball',
+                'gaming', 'minecraft', 'fortnite', 'gta',
+                // Other high-view categories
+                'dance video', 'workout', 'cooking', 'asmr', 'compilation',
+                'satisfying', 'unboxing', 'review', 'tutorial', 'vlog',
+                'wedding dance', 'flash mob', 'talent show', 'audition',
             ];
             const SHORTS_QUERIES = [
                 'viral', '#shorts', 'funny shorts', 'trending shorts', 'most viewed shorts',
                 'tiktok', 'satisfying', 'comedy shorts', 'dance shorts', 'challenge shorts',
                 'shorts viral 2025', 'shorts funny', 'meme', 'prank', 'shorts trending',
+                'cute', 'fails', 'magic trick', 'life hack', 'cooking shorts',
+                'pets', 'baby', 'car', 'sports shorts', 'gaming shorts',
+                'anime shorts', 'art', 'music shorts', 'singing', 'reaction shorts',
             ];
 
             let searches = [];
@@ -1372,12 +1395,12 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 const sp = buildSP(3, uploadDate, 1, null); // sort=viewcount, type=video
                 searches = VIRAL_QUERIES.map(q => innerTubeSearch(q, sp));
             } else {
-                // All: both video and shorts
+                // All: run ALL video queries + all shorts queries
                 const spVid = buildSP(3, uploadDate, 1, null);
                 const spShort = buildSP(3, uploadDate, 6, null);
                 searches = [
-                    ...VIRAL_QUERIES.slice(0, 8).map(q => innerTubeSearch(q, spVid)),
-                    ...SHORTS_QUERIES.slice(0, 7).map(q => innerTubeSearch(q, spShort)),
+                    ...VIRAL_QUERIES.map(q => innerTubeSearch(q, spVid)),
+                    ...SHORTS_QUERIES.map(q => innerTubeSearch(q, spShort)),
                 ];
             }
 
