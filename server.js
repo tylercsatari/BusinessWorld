@@ -1279,21 +1279,29 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return {};
     }
 
-    // YouTube page scraper — fetches YouTube search/results pages and extracts
-    // video data from embedded ytInitialData JSON. No API key needed, just HTTP.
-    const YT_SCRAPE_HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-    };
+    // InnerTube search API — returns videos with TOTAL/lifetime view counts.
+    // No OAuth needed, uses YouTube's public InnerTube key.
+    const INNERTUBE_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+    const INNERTUBE_CLIENT = { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en', gl: 'US' };
 
-    function parseYtInitialData(html) {
-        const m = html.match(/ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s);
-        if (!m) return [];
-        let data;
-        try { data = JSON.parse(m[1]); } catch (e) { return []; }
+    // Build sp parameter from protobuf fields
+    // sort: 3=viewcount | uploadDate: 1=hour,2=today,3=week,4=month,5=year
+    // type: 1=video, 6=shorts | duration: 1=under4min, 2=over20min
+    function buildSP(sort, uploadDate, type, duration) {
+        const parts = [];
+        if (sort != null) parts.push(Buffer.from([0x08, sort]));
+        const fp = [];
+        if (uploadDate != null) fp.push(Buffer.from([0x08, uploadDate]));
+        if (type != null) fp.push(Buffer.from([0x10, type]));
+        if (duration != null) fp.push(Buffer.from([0x18, duration]));
+        if (fp.length) { const fb = Buffer.concat(fp); parts.push(Buffer.from([0x12, fb.length]), fb); }
+        return Buffer.concat(parts).toString('base64');
+    }
+
+    function parseInnerTubeSearch(data) {
         const videos = [];
         function extract(obj, depth) {
-            if (!obj || typeof obj !== 'object' || depth > 25 || videos.length > 60) return;
+            if (!obj || typeof obj !== 'object' || depth > 25 || videos.length > 100) return;
             if (obj.videoRenderer) {
                 const vr = obj.videoRenderer;
                 const viewText = vr.viewCountText?.simpleText || vr.viewCountText?.runs?.[0]?.text || '0';
@@ -1302,12 +1310,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                     videoId: vr.videoId,
                     title: vr.title?.runs?.[0]?.text || '',
                     channelTitle: vr.ownerText?.runs?.[0]?.text || vr.shortBylineText?.runs?.[0]?.text || '',
-                    channelId: vr.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || '',
                     publishedAt: vr.publishedTimeText?.simpleText || '',
                     thumbnail: vr.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || `https://i.ytimg.com/vi/${vr.videoId}/hqdefault.jpg`,
                     views: viewNum,
-                    likes: 0,
-                    comments: 0,
                     duration: vr.lengthText?.simpleText || '',
                 });
                 return;
@@ -1319,117 +1324,87 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return videos;
     }
 
-    // sp=CAMSAhAB = sort by view count + type: video
-    async function ytScrapeSearch(query) {
-        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=CAMSAhAB`;
-        const res = await fetch(searchUrl, { headers: YT_SCRAPE_HEADERS });
-        const html = await res.text();
-        return parseYtInitialData(html);
-    }
-
-    // sp=EgQQARgB = type: video, sorted by relevance (good proxy for trending)
-    async function ytScrapeTrending() {
-        const res = await fetch('https://www.youtube.com/results?search_query=&sp=EgQQARgB', { headers: YT_SCRAPE_HEADERS });
-        const html = await res.text();
-        return parseYtInitialData(html).sort((a, b) => b.views - a.views);
-    }
-
-    // Parse duration string "H:MM:SS" or "M:SS" or "0:SS" to seconds
-    function parseDurationToSeconds(dur) {
-        if (!dur) return -1;
-        const parts = dur.split(':').map(Number);
-        if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-        if (parts.length === 2) return parts[0] * 60 + parts[1];
-        return parts[0] || -1;
-    }
-
-    // YouTube Charts API — returns the ACTUAL top videos globally or by country.
-    // View counts are weekly views (views gained that week), which surfaces truly viral content.
-    async function fetchYouTubeCharts(region = 'global') {
-        const chartRes = await fetch('https://charts.youtube.com/youtubei/v1/browse?alt=json', {
+    async function innerTubeSearch(query, sp) {
+        const res = await fetch(`https://www.youtube.com/youtubei/v1/search?key=${INNERTUBE_KEY}&prettyPrint=false`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Referer': 'https://charts.youtube.com/' },
-            body: JSON.stringify({
-                context: { client: { clientName: 'WEB_MUSIC_ANALYTICS', clientVersion: '2.0', hl: 'en', gl: 'US' } },
-                browseId: 'FEmusic_analytics_charts_home',
-                query: `chart_params_type=WEEK&perspective=CHART&flags=viral_video_chart&selected_chart=VIDEOS&chart_params_id=weekly:0:0:${region}`
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context: { client: INNERTUBE_CLIENT }, query, params: sp })
         });
-        const data = await chartRes.json();
-        const videos = [];
-        function extract(obj, depth) {
-            if (!obj || typeof obj !== 'object' || depth > 20) return;
-            if (obj.videoViews) {
-                for (const v of obj.videoViews) {
-                    videos.push({
-                        videoId: v.id || '',
-                        title: v.title || '',
-                        channelTitle: (v.artists || []).map(a => a.name).join(', '),
-                        channelId: '',
-                        publishedAt: '',
-                        thumbnail: v.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
-                        views: parseInt((v.viewCount || '0').replace(/,/g, '')) || 0,
-                        likes: 0, comments: 0, duration: '',
-                        weeklyViews: true // flag that views are weekly, not lifetime
-                    });
-                }
-            }
-            if (Array.isArray(obj)) { for (const i of obj) extract(i, depth + 1); }
-            else { for (const val of Object.values(obj)) extract(val, depth + 1); }
-        }
-        extract(data, 0);
-        return videos;
+        return parseInnerTubeSearch(await res.json());
     }
 
     // GET /api/research/popular — most popular videos by time + type
-    // Combines YouTube Charts (actual top videos) + search scraping for broader coverage.
+    // Uses InnerTube search API which returns TOTAL/lifetime view counts.
+    // Runs multiple searches in parallel for broad coverage.
     if (pathname === '/api/research/popular' && req.method === 'GET') {
         try {
             const timeRange = url.searchParams.get('timeRange') || 'week';
             const type = url.searchParams.get('type') || 'all';
             const minViews = parseInt(url.searchParams.get('minViews')) || 0;
 
-            // sp params: sort=viewCount + video type + time filter
-            const TIME_SP = { week: 'CAISBAgDEAE', month: 'CAISBAgEEAE', year: 'CAISBAgFEAE', all: 'CAISAhAB' };
-            const sp = TIME_SP[timeRange] || TIME_SP.week;
+            // Upload date filter: 3=week, 4=month, 5=year, null=all
+            const TIME_CODE = { week: 3, month: 4, year: 5, all: null };
+            const uploadDate = TIME_CODE[timeRange] ?? null;
 
-            // Search queries for each type
-            const queries = type === 'shorts'
-                ? ['#shorts viral', 'most viewed shorts this week', 'viral shorts']
-                : ['viral video', 'most viewed this week', 'trending'];
+            // Type filter: 1=video, 6=shorts
+            // For shorts: use type=6 (native YouTube Shorts filter)
+            // For long: use type=1 + duration=2 (over 20 min) — but also run type=1 general
+            // For all: use type=1 (video)
+            let searches = [];
 
-            // Run charts + search scrapes in parallel
-            const [chartsGlobal, chartsUS, ...searchResults] = await Promise.all([
-                fetchYouTubeCharts('global').catch(() => []),
-                fetchYouTubeCharts('us').catch(() => []),
-                ...queries.map(async (q) => {
-                    try {
-                        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=${sp}`;
-                        const ytRes = await fetch(searchUrl, { headers: YT_SCRAPE_HEADERS });
-                        return parseYtInitialData(await ytRes.text());
-                    } catch (e) { return []; }
-                })
-            ]);
+            if (type === 'shorts') {
+                const sp = buildSP(3, uploadDate, 6, null); // sort=viewcount, type=shorts
+                searches = [
+                    innerTubeSearch('viral', sp),
+                    innerTubeSearch('shorts', sp),
+                    innerTubeSearch('most viewed', sp),
+                    innerTubeSearch('trending', sp),
+                    innerTubeSearch('funny', sp),
+                ];
+            } else if (type === 'long') {
+                const sp = buildSP(3, uploadDate, 1, null); // sort=viewcount, type=video
+                searches = [
+                    innerTubeSearch('most viewed', sp),
+                    innerTubeSearch('viral', sp),
+                    innerTubeSearch('trending', sp),
+                    innerTubeSearch('music video', sp),
+                    innerTubeSearch('popular', sp),
+                ];
+            } else {
+                // All: run both video and shorts searches
+                const spVid = buildSP(3, uploadDate, 1, null);
+                const spShort = buildSP(3, uploadDate, 6, null);
+                searches = [
+                    innerTubeSearch('most viewed', spVid),
+                    innerTubeSearch('viral', spVid),
+                    innerTubeSearch('trending', spVid),
+                    innerTubeSearch('most viewed', spShort),
+                    innerTubeSearch('viral', spShort),
+                ];
+            }
 
-            // Merge all sources, deduplicate by videoId
+            const results = await Promise.all(searches.map(p => p.catch(() => [])));
+
+            // Merge and deduplicate
             const seen = new Set();
             let allVideos = [];
-            for (const batch of [chartsGlobal, chartsUS, ...searchResults]) {
+            for (const batch of results) {
                 for (const v of batch) {
                     if (v.videoId && !seen.has(v.videoId)) {
                         seen.add(v.videoId);
-                        v.durationSec = parseDurationToSeconds(v.duration);
                         allVideos.push(v);
                     }
                 }
             }
 
-            // Filter by type: shorts ≤180s (YT Shorts can be up to 3 min), long >180s
-            // Charts videos have no duration info, so include them in 'all' and 'long'
-            if (type === 'shorts') {
-                allVideos = allVideos.filter(v => v.durationSec > 0 && v.durationSec <= 180);
-            } else if (type === 'long') {
-                allVideos = allVideos.filter(v => v.durationSec < 0 || v.durationSec > 180);
+            // For "long" type, filter out short videos (keep > 3 min)
+            if (type === 'long') {
+                allVideos = allVideos.filter(v => {
+                    if (!v.duration) return true;
+                    const parts = v.duration.split(':').map(Number);
+                    const secs = parts.length === 3 ? parts[0]*3600+parts[1]*60+parts[2] : parts[0]*60+(parts[1]||0);
+                    return secs > 180;
+                });
             }
 
             // Filter by minimum views
@@ -1437,11 +1412,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 allVideos = allVideos.filter(v => v.views >= minViews);
             }
 
-            // Sort by views descending
             allVideos.sort((a, b) => b.views - a.views);
-
-            // Clean up internal fields
-            allVideos.forEach(v => { delete v.durationSec; });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ videos: allVideos }));
