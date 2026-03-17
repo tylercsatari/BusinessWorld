@@ -196,6 +196,61 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
+    // API: OpenAI Whisper transcription
+    // =========================================
+    if (pathname === '/api/openai/transcribe' && req.method === 'POST') {
+        const body = await readBody(req);
+        if (!body.audio) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing audio field' }));
+            return;
+        }
+        const audioBuffer = Buffer.from(body.audio, 'base64');
+        const mimeType = body.mimeType || 'audio/webm';
+        const ext = mimeType.includes('mp4') ? 'mp4'
+                  : mimeType.includes('ogg') ? 'ogg'
+                  : mimeType.includes('wav') ? 'wav'
+                  : 'webm';
+
+        // Build multipart/form-data manually (no extra dependencies)
+        const boundary = '----Whisper' + Date.now() + Math.random().toString(36).slice(2);
+        const filePart = Buffer.concat([
+            Buffer.from(
+                `--${boundary}\r\n` +
+                `Content-Disposition: form-data; name="file"; filename="audio.${ext}"\r\n` +
+                `Content-Type: ${mimeType}\r\n\r\n`
+            ),
+            audioBuffer,
+            Buffer.from('\r\n')
+        ]);
+        const modelPart = Buffer.from(
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="model"\r\n\r\n` +
+            `whisper-1\r\n`
+        );
+        const closing = Buffer.from(`--${boundary}--\r\n`);
+        const multipartBody = Buffer.concat([filePart, modelPart, closing]);
+
+        try {
+            const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': `multipart/form-data; boundary=${boundary}`
+                },
+                body: multipartBody
+            });
+            const text = await response.text();
+            res.writeHead(response.status, { 'Content-Type': 'application/json' });
+            res.end(text);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Pinecone proxy  /api/pinecone/:action
     // =========================================
     const pineconeMatch = pathname.match(/^\/api\/pinecone\/(upsert|delete|query)$/);
@@ -1418,18 +1473,30 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 }
             }
 
-            // Enforce type filtering with duration verification
+            // Strict type filtering
             if (type === 'shorts') {
-                // Shorts must have duration ≤ 180s (3 min max for YT Shorts)
+                // A Short is: ≤60s (classic Short), OR ≤180s with "shorts" in title
+                // This excludes regular videos (CoComelon, music videos) that happen to be 2-3 min
                 allVideos = allVideos.filter(v => {
                     const s = durToSec(v.duration);
-                    return s > 0 && s <= 180;
+                    if (s <= 0) return false;
+                    if (s <= 60) return true;
+                    if (s <= 180) {
+                        const t = (v.title || '').toLowerCase();
+                        return t.includes('#shorts') || t.includes('#short') || t.includes('shorts');
+                    }
+                    return false;
                 });
             } else if (type === 'long') {
-                // Long-form: > 3 min
+                // Long-form: exclude anything that looks like a Short
                 allVideos = allVideos.filter(v => {
                     const s = durToSec(v.duration);
-                    return s < 0 || s > 180; // include no-duration (charts) as long
+                    if (s > 0 && s <= 60) return false;
+                    if (s > 0 && s <= 180) {
+                        const t = (v.title || '').toLowerCase();
+                        if (t.includes('#shorts') || t.includes('#short')) return false;
+                    }
+                    return true;
                 });
             }
 

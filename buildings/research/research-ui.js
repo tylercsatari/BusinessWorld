@@ -68,33 +68,38 @@ const ResearchUI = (() => {
     }
 
     function bindEvents() {
-        // Time buttons — just update state, don't fetch
+        // Time buttons — change triggers fresh search
         container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentTime = btn.dataset.time;
                 container.querySelectorAll('#research-time-btns .research-preset-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
+                cachedVideos = []; // clear cache so we re-fetch
+                doSearch();
             });
         });
-        // Type buttons — just update state
+        // Type buttons — change triggers fresh search
         container.querySelectorAll('#research-type-btns .research-preset-btn[data-type]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentType = btn.dataset.type;
                 container.querySelectorAll('#research-type-btns [data-type]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
+                cachedVideos = []; // clear cache so we re-fetch
+                doSearch();
             });
         });
-        // View threshold — just update state, re-filter if we have data
+        // View threshold — instant client-side filter, no re-fetch needed
         container.querySelectorAll('#research-type-btns .research-preset-btn[data-views]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentMinViews = parseInt(btn.dataset.views) || 0;
                 container.querySelectorAll('#research-type-btns [data-views]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 if (cachedVideos.length > 0) renderResults();
+                else doSearch();
             });
         });
         // Search button — always fetches fresh
-        document.getElementById('research-go-btn')?.addEventListener('click', () => doSearch());
+        document.getElementById('research-go-btn')?.addEventListener('click', () => { cachedVideos = []; doSearch(); });
     }
 
     async function doSearch() {
@@ -217,6 +222,7 @@ const ResearchUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
+            doSearch();
         },
         _retry() { doSearch(); },
         close() {
