@@ -1356,7 +1356,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     function parseInnerTubeSearch(data) {
         const videos = [];
         function extract(obj, depth) {
-            if (!obj || typeof obj !== 'object' || depth > 25 || videos.length > 100) return;
+            if (!obj || typeof obj !== 'object' || depth > 25) return;
             if (obj.videoRenderer) {
                 const vr = obj.videoRenderer;
                 const viewText = vr.viewCountText?.simpleText || vr.viewCountText?.runs?.[0]?.text || '0';
@@ -1379,13 +1379,58 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return videos;
     }
 
+    // Extract continuation token from InnerTube response
+    function extractContinuationToken(data) {
+        if (!data || typeof data !== 'object') return null;
+        if (data.token && data.continuationCommand) return data.token;
+        if (data.continuationItemRenderer) {
+            const ep = data.continuationItemRenderer.continuationEndpoint;
+            if (ep?.continuationCommand?.token) return ep.continuationCommand.token;
+        }
+        if (data.nextContinuationData?.continuation) return data.nextContinuationData.continuation;
+        if (Array.isArray(data)) {
+            for (const item of data) {
+                const t = extractContinuationToken(item);
+                if (t) return t;
+            }
+            return null;
+        }
+        for (const v of Object.values(data)) {
+            if (v && typeof v === 'object') {
+                const t = extractContinuationToken(v);
+                if (t) return t;
+            }
+        }
+        return null;
+    }
+
     async function innerTubeSearch(query, sp) {
+        // First page
         const res = await fetch(`https://www.youtube.com/youtubei/v1/search?key=${INNERTUBE_KEY}&prettyPrint=false`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ context: { client: INNERTUBE_CLIENT }, query, params: sp })
         });
-        return parseInnerTubeSearch(await res.json());
+        const firstData = await res.json();
+        const videos = parseInnerTubeSearch(firstData);
+
+        // Paginate up to 5 more pages via continuation tokens
+        let contToken = extractContinuationToken(firstData);
+        for (let page = 0; page < 5 && contToken; page++) {
+            try {
+                const contRes = await fetch(`https://www.youtube.com/youtubei/v1/search?key=${INNERTUBE_KEY}&prettyPrint=false`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ context: { client: INNERTUBE_CLIENT }, continuation: contToken })
+                });
+                const contData = await contRes.json();
+                const pageVideos = parseInnerTubeSearch(contData);
+                if (pageVideos.length === 0) break;
+                videos.push(...pageVideos);
+                contToken = extractContinuationToken(contData);
+            } catch { break; }
+        }
+        return videos;
     }
 
     // Duration string to seconds
@@ -1453,6 +1498,11 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 'relaxing music', 'lofi', 'study music', 'sleep music',
                 'nature documentary', 'science experiment', 'magic trick',
                 'tiktok compilation', 'try not to laugh', 'fail compilation',
+                // Iconic high-view videos
+                'despacito', 'shape of you', 'gangnam style', 'see you again', 'uptown funk',
+                'johny johny yes papa', 'wheels on the bus', 'bath song', 'finger family',
+                'most viewed video youtube', 'youtube most popular',
+                'alan walker faded', 'attention charlie puth',
             ];
             const SHORTS_QUERIES = [
                 'viral', '#shorts', 'funny shorts', 'trending shorts', 'most viewed shorts',
@@ -1497,6 +1547,44 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                     if (v.videoId && !seen.has(v.videoId)) {
                         seen.add(v.videoId);
                         allVideos.push(v);
+                    }
+                }
+            }
+
+            // For "all time": also pull YouTube Data API mostPopular by region
+            if (timeRange === 'all' && process.env.YOUTUBE_API_KEY) {
+                const regions = ['US', 'IN', 'BR', 'MX', 'ID', 'GB', 'PH'];
+                const popularFetches = regions.map(async (rc) => {
+                    try {
+                        const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&chart=mostPopular&regionCode=${rc}&maxResults=50&key=${process.env.YOUTUBE_API_KEY}`;
+                        const r = await fetch(apiUrl);
+                        const d = await r.json();
+                        return (d.items || []).map(item => {
+                            const dur = item.contentDetails?.duration || '';
+                            const match = dur.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+                            const secs = match ? (parseInt(match[1]||0)*3600 + parseInt(match[2]||0)*60 + parseInt(match[3]||0)) : 0;
+                            const mm = String(Math.floor(secs/60)).padStart(secs>=3600?1:1,'0');
+                            const ss = String(secs%60).padStart(2,'0');
+                            const durStr = secs >= 3600 ? `${Math.floor(secs/3600)}:${String(Math.floor((secs%3600)/60)).padStart(2,'0')}:${ss}` : `${mm}:${ss}`;
+                            return {
+                                videoId: item.id,
+                                title: item.snippet?.title || '',
+                                channelTitle: item.snippet?.channelTitle || '',
+                                publishedAt: item.snippet?.publishedAt || '',
+                                thumbnail: item.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
+                                views: parseInt(item.statistics?.viewCount) || 0,
+                                duration: durStr,
+                            };
+                        });
+                    } catch { return []; }
+                });
+                const popularResults = await Promise.all(popularFetches);
+                for (const batch of popularResults) {
+                    for (const v of batch) {
+                        if (v.videoId && !seen.has(v.videoId)) {
+                            seen.add(v.videoId);
+                            allVideos.push(v);
+                        }
                     }
                 }
             }
