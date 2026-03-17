@@ -1279,43 +1279,73 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return {};
     }
 
-    // yt-dlp helper for research: fetch video metadata without needing API keys
-    const YTDLP_BASE_RESEARCH = ['--js-runtimes', 'node', '--remote-components', 'ejs:github'];
-    function ytdlpSearch(ytUrl, maxResults = 50) {
-        const { execFile } = require('child_process');
-        return new Promise((resolve, reject) => {
-            execFile('yt-dlp', [
-                ...YTDLP_BASE_RESEARCH,
-                '--flat-playlist', '--dump-json',
-                '--playlist-end', String(maxResults),
-                ytUrl
-            ], { maxBuffer: 20 * 1024 * 1024, timeout: 60000 }, (err, stdout) => {
-                if (err) return reject(err);
-                const items = stdout.trim().split('\n').filter(Boolean).map(line => {
-                    try { return JSON.parse(line); } catch (e) { return null; }
-                }).filter(Boolean);
-                resolve(items);
-            });
-        });
+    // InnerTube API — YouTube's internal API, no API key needed.
+    // Used as fallback when YouTube Data API auth is unavailable.
+    const INNERTUBE_CONTEXT = {
+        client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en', gl: 'US' }
+    };
+    const INNERTUBE_HEADERS = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    };
+
+    function parseInnerTubeVideos(data) {
+        const videos = [];
+        function extract(obj) {
+            if (!obj || typeof obj !== 'object') return;
+            if (obj.videoRenderer) {
+                const vr = obj.videoRenderer;
+                const viewText = vr.viewCountText?.simpleText || vr.viewCountText?.runs?.[0]?.text || '0';
+                const viewNum = parseInt(viewText.replace(/[^0-9]/g, '')) || 0;
+                videos.push({
+                    videoId: vr.videoId,
+                    title: vr.title?.runs?.[0]?.text || vr.title?.simpleText || '',
+                    channelTitle: vr.ownerText?.runs?.[0]?.text || vr.shortBylineText?.runs?.[0]?.text || '',
+                    channelId: vr.ownerText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || '',
+                    publishedAt: vr.publishedTimeText?.simpleText || '',
+                    thumbnail: vr.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || '',
+                    views: viewNum,
+                    likes: 0,
+                    comments: 0,
+                    duration: vr.lengthText?.simpleText || '',
+                });
+                return;
+            }
+            if (Array.isArray(obj)) { obj.forEach(extract); return; }
+            Object.values(obj).forEach(extract);
+        }
+        extract(data);
+        return videos;
     }
 
-    function ytdlpItemToVideo(item) {
-        return {
-            videoId: item.id || item.url,
-            title: item.title || 'Untitled',
-            channelTitle: item.channel || item.uploader || '',
-            channelId: item.channel_id || '',
-            publishedAt: item.upload_date ? `${item.upload_date.slice(0,4)}-${item.upload_date.slice(4,6)}-${item.upload_date.slice(6,8)}` : '',
-            thumbnail: item.thumbnails?.[item.thumbnails.length - 1]?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
-            views: item.view_count || 0,
-            likes: item.like_count || 0,
-            comments: item.comment_count || 0,
-            duration: item.duration ? `PT${Math.floor(item.duration/3600)}H${Math.floor((item.duration%3600)/60)}M${item.duration%60}S` : '',
-        };
+    async function innerTubeSearch(query, maxResults = 50) {
+        const res = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+            method: 'POST',
+            headers: INNERTUBE_HEADERS,
+            body: JSON.stringify({
+                context: INNERTUBE_CONTEXT,
+                query,
+                params: 'CAMSAhAB' // sort by view count, filter: videos only
+            })
+        });
+        const data = await res.json();
+        return parseInnerTubeVideos(data).slice(0, maxResults);
+    }
+
+    async function innerTubeTrending() {
+        const res = await fetch('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+            method: 'POST',
+            headers: INNERTUBE_HEADERS,
+            body: JSON.stringify({
+                context: INNERTUBE_CONTEXT,
+                browseId: 'FEtrending'
+            })
+        });
+        const data = await res.json();
+        return parseInnerTubeVideos(data);
     }
 
     // GET /api/research/viral — search YouTube for viral videos
-    // Uses YouTube Data API if available, falls back to yt-dlp
     if (pathname === '/api/research/viral' && req.method === 'GET') {
         try {
             const minViews = parseInt(url.searchParams.get('minViews')) || 1000000;
@@ -1323,16 +1353,14 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             const query = url.searchParams.get('query') || '';
             const pageToken = url.searchParams.get('pageToken') || '';
 
+            // Try YouTube Data API first
             const auth = await getYouTubeDataAuth();
-
             if (auth) {
-                // YouTube Data API path (fast, proper view-count sorting)
                 const now = new Date();
                 const ranges = { '24h': 1, '3days': 3, 'week': 7, 'month': 30, '3months': 90, 'year': 365 };
                 const days = ranges[timeRange] || 7;
                 const publishedAfter = new Date(now - days * 86400000).toISOString();
                 const headers = ytDataHeaders(auth);
-
                 const searchParams = {
                     part: 'snippet', type: 'video', order: 'viewCount',
                     publishedAfter, maxResults: '50',
@@ -1341,7 +1369,6 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 };
                 const searchRes = await fetch(ytDataUrl('https://www.googleapis.com/youtube/v3/search', searchParams, auth), { headers });
                 const searchData = await searchRes.json();
-
                 if (!searchData.error) {
                     const videoIds = (searchData.items || []).map(i => i.id.videoId).filter(Boolean);
                     if (videoIds.length > 0) {
@@ -1367,27 +1394,13 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                         return;
                     }
                 }
-                // If API failed (expired token etc), clear it and fall through to yt-dlp
                 if (searchData.error?.code === 401) process.env._YOUTUBE_ACCESS_TOKEN = '';
             }
 
-            // yt-dlp fallback — no API key needed
-            const searchQuery = query || 'most viewed';
-            const items = await ytdlpSearch(`ytsearch50:${searchQuery}`, 50);
-            // Filter by min views and time range
-            const now = new Date();
-            const ranges = { '24h': 1, '3days': 3, 'week': 7, 'month': 30, '3months': 90, 'year': 365 };
-            const maxAgeDays = ranges[timeRange] || 7;
-            const cutoff = new Date(now - maxAgeDays * 86400000);
-
-            const videos = items
-                .map(ytdlpItemToVideo)
-                .filter(v => {
-                    if (v.views < minViews) return false;
-                    if (v.publishedAt && new Date(v.publishedAt) < cutoff) return false;
-                    return true;
-                })
-                .sort((a, b) => b.views - a.views);
+            // InnerTube fallback — no API key needed, just HTTP
+            const searchQuery = query || 'most viewed this week';
+            const items = await innerTubeSearch(searchQuery, 50);
+            const videos = items.filter(v => v.views >= minViews).sort((a, b) => b.views - a.views);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ videos, nextPageToken: null }));
@@ -1399,11 +1412,10 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     }
 
     // GET /api/research/trending — get currently trending videos
-    // Uses YouTube Data API if available, falls back to yt-dlp
     if (pathname === '/api/research/trending' && req.method === 'GET') {
         try {
+            // Try YouTube Data API first
             const auth = await getYouTubeDataAuth();
-
             if (auth) {
                 const region = url.searchParams.get('region') || 'US';
                 const headers = ytDataHeaders(auth);
@@ -1413,7 +1425,6 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 };
                 const trendRes = await fetch(ytDataUrl('https://www.googleapis.com/youtube/v3/videos', params, auth), { headers });
                 const trendData = await trendRes.json();
-
                 if (!trendData.error) {
                     const videos = (trendData.items || []).map(v => ({
                         videoId: v.id, title: v.snippet.title,
@@ -1432,10 +1443,8 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 if (trendData.error?.code === 401) process.env._YOUTUBE_ACCESS_TOKEN = '';
             }
 
-            // yt-dlp fallback — scrape YouTube trending page directly
-            const items = await ytdlpSearch('https://www.youtube.com/feed/trending', 50);
-            const videos = items.map(ytdlpItemToVideo).sort((a, b) => b.views - a.views);
-
+            // InnerTube fallback
+            const videos = await innerTubeTrending();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ videos }));
         } catch (e) {
