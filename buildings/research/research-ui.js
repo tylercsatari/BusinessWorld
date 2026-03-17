@@ -374,36 +374,48 @@ const ResearchUI = (() => {
             const results = document.getElementById('research-results');
             if (!results) return;
 
-            if (data.isRemote) {
-                // On Render: Google will redirect to localhost which won't load.
-                // User needs to copy the auth code from the URL bar and paste it here.
-                results.innerHTML = `<div style="max-width:500px;margin:20px auto;text-align:left">
-                    <div style="font-size:16px;font-weight:600;color:#fff;margin-bottom:12px">Connect YouTube</div>
-                    <div style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:16px">
-                        <strong>Step 1:</strong> Approve access in the popup that just opened.<br>
-                        <strong>Step 2:</strong> After approving, the page will try to redirect to localhost and fail — that's OK!<br>
-                        <strong>Step 3:</strong> Copy the <code>code=</code> value from the URL bar. It looks like:<br>
-                        <code style="color:#0984e3;font-size:11px;word-break:break-all">http://localhost:8002/api/youtube/callback?code=<strong>4/0XXXXX...</strong></code><br>
-                        <strong>Step 4:</strong> Paste just the code value below:
+            // Show waiting state and poll for connection
+            results.innerHTML = `<div class="research-loading">
+                <div class="spinner"></div>
+                <div style="margin-top:8px">Waiting for YouTube authorization...</div>
+                <div style="color:#666;font-size:12px;margin-top:12px">Complete the login in the popup.</div>
+                <div id="research-code-fallback" style="display:none;margin-top:20px;text-align:left;max-width:500px;background:#111;padding:14px;border-radius:8px">
+                    <div style="color:#aaa;font-size:13px;line-height:1.8;margin-bottom:10px">
+                        If the popup redirected to a page that won't load, copy the full URL from the popup's address bar and paste it below:
                     </div>
                     <div style="display:flex;gap:8px">
-                        <input class="research-input" id="research-auth-code" placeholder="Paste the code here..." style="flex:1;width:auto" />
+                        <input class="research-input" id="research-auth-code" placeholder="Paste the URL or code here..." style="flex:1;width:auto" />
                         <button class="research-search-btn" id="research-submit-code">Submit</button>
                     </div>
                     <div id="research-code-status" style="margin-top:8px;font-size:12px;color:#888"></div>
-                </div>`;
-                document.getElementById('research-submit-code')?.addEventListener('click', submitAuthCode);
-                document.getElementById('research-auth-code')?.addEventListener('keydown', e => {
-                    if (e.key === 'Enter') submitAuthCode();
-                });
-            } else {
-                // On localhost: the redirect works automatically
-                results.innerHTML = `<div class="research-loading">
-                    <div class="spinner"></div>
-                    <div style="margin-top:8px">Waiting for YouTube authorization...</div>
-                    <div style="color:#666;font-size:12px;margin-top:12px">Complete the login in the popup, then try a search.</div>
-                </div>`;
-            }
+                </div>
+            </div>`;
+
+            // Poll for successful connection (the callback may have worked automatically)
+            let pollCount = 0;
+            const pollInterval = setInterval(async () => {
+                pollCount++;
+                try {
+                    const statusRes = await fetch('/api/youtube/status?verify=true');
+                    const statusData = await statusRes.json();
+                    if (statusData.tokenWorks) {
+                        clearInterval(pollInterval);
+                        results.innerHTML = '<div class="research-empty" style="color:#27ae60;font-weight:600">YouTube connected! Choose a preset or search to find viral videos.</div>';
+                        return;
+                    }
+                } catch (e) {}
+                // After 8 seconds, show the manual code paste fallback
+                if (pollCount >= 4) {
+                    const fallback = document.getElementById('research-code-fallback');
+                    if (fallback) fallback.style.display = '';
+                    document.getElementById('research-submit-code')?.addEventListener('click', submitAuthCode);
+                    document.getElementById('research-auth-code')?.addEventListener('keydown', e => {
+                        if (e.key === 'Enter') submitAuthCode();
+                    });
+                }
+                // Stop polling after 60 seconds
+                if (pollCount >= 30) clearInterval(pollInterval);
+            }, 2000);
         } catch (e) {
             alert('Error: ' + e.message);
         }
