@@ -11,6 +11,7 @@ const ResearchUI = (() => {
 
     let currentTime = 'week';
     let currentType = 'all'; // all | shorts | long
+    let currentMinViews = 0;
 
     const TIME_OPTIONS = [
         { key: 'week', label: 'This Week' },
@@ -23,6 +24,14 @@ const ResearchUI = (() => {
         { key: 'all', label: 'All' },
         { key: 'long', label: 'Long-form' },
         { key: 'shorts', label: 'Shorts' },
+    ];
+
+    const VIEW_OPTIONS = [
+        { key: 0, label: 'Any Views' },
+        { key: 1000000, label: '1M+' },
+        { key: 10000000, label: '10M+' },
+        { key: 50000000, label: '50M+' },
+        { key: 100000000, label: '100M+' },
     ];
 
     function formatViews(n) {
@@ -47,6 +56,8 @@ const ResearchUI = (() => {
             </div>
             <div class="research-presets" id="research-type-btns" style="border-top:none;padding-top:0">
                 ${TYPE_OPTIONS.map(t => `<button class="research-preset-btn${t.key === 'shorts' ? ' trending' : ''}${currentType === t.key ? ' active' : ''}" data-type="${t.key}">${t.label}</button>`).join('')}
+                <span style="width:1px;background:#333;margin:0 4px"></span>
+                ${VIEW_OPTIONS.map(v => `<button class="research-preset-btn${currentMinViews === v.key ? ' active' : ''}" data-views="${v.key}">${v.label}</button>`).join('')}
             </div>
             <div class="research-status" id="research-status" style="display:none">
                 <span class="research-status-count" id="research-count"></span>
@@ -67,10 +78,19 @@ const ResearchUI = (() => {
             });
         });
 
-        container.querySelectorAll('#research-type-btns .research-preset-btn').forEach(btn => {
+        container.querySelectorAll('#research-type-btns .research-preset-btn[data-type]').forEach(btn => {
             btn.addEventListener('click', () => {
                 currentType = btn.dataset.type;
-                container.querySelectorAll('#research-type-btns .research-preset-btn').forEach(b => b.classList.remove('active'));
+                container.querySelectorAll('#research-type-btns [data-type]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                fetchVideos();
+            });
+        });
+
+        container.querySelectorAll('#research-type-btns .research-preset-btn[data-views]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                currentMinViews = parseInt(btn.dataset.views) || 0;
+                container.querySelectorAll('#research-type-btns [data-views]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 fetchVideos();
             });
@@ -86,7 +106,7 @@ const ResearchUI = (() => {
         if (results) results.innerHTML = '<div class="research-loading"><div class="spinner"></div><div style="margin-top:8px">Finding popular videos...</div></div>';
 
         try {
-            const params = new URLSearchParams({ timeRange: currentTime, type: currentType });
+            const params = new URLSearchParams({ timeRange: currentTime, type: currentType, minViews: currentMinViews });
             const res = await fetch(`/api/research/popular?${params}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Search failed');
