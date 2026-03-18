@@ -42,6 +42,14 @@ const LibraryUI = (() => {
     let realProjectsCache = null;
     VideoService.getProjects().then(p => { realProjectsCache = p; renderNotesList(); }).catch(() => { realProjectsCache = []; });
 
+    // --- Notes filter state ---
+    let notesFilterStatus = localStorage.getItem('notes-filter-status') || 'all';
+    let notesFilterCategory = localStorage.getItem('notes-filter-category') || 'all';
+    let notesSearchQuery = '';
+    let notesSearchResults = null; // null = no search, array = search active
+    let notesSearchLoading = false;
+    let notesSearchTimer = null;
+
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
 
@@ -106,6 +114,7 @@ const LibraryUI = (() => {
                         <button class="library-new-btn" id="library-new-btn" title="New">+</button>
                     </div>
                     <div class="library-freenotes-list" id="library-freenotes-list" style="display:none;"></div>
+                    <div class="library-notes-filter-wrap" id="library-notes-filter-bar"></div>
                     <div class="library-notes-list" id="library-notes-list">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
                     <div class="library-todo-container" id="library-todo-container" style="display:none;"></div>
                     <div class="library-calendar-container" id="library-calendar-container" style="display:none;"></div>
@@ -149,8 +158,11 @@ const LibraryUI = (() => {
         const sponsorsContainer = document.getElementById('library-sponsors-container');
         const ideamapContainer = document.getElementById('library-ideamap-container');
 
+        const notesFilterBar = document.getElementById('library-notes-filter-bar');
+
         if (freeNotesList) freeNotesList.style.display = 'none';
         if (notesList) notesList.style.display = 'none';
+        if (notesFilterBar) notesFilterBar.style.display = 'none';
         if (todoContainer) todoContainer.style.display = 'none';
         if (calendarContainer) calendarContainer.style.display = 'none';
         if (projectsContainer) projectsContainer.style.display = 'none';
@@ -166,6 +178,7 @@ const LibraryUI = (() => {
             renderFreeNotesList();
         } else if (tab === 'notes') {
             if (heading) heading.innerHTML = 'Ideas <span class="library-ideas-legend"><span class="library-legend-dot has-context"></span> Context &nbsp;<span class="library-legend-dot dot-script has-script"></span> Script</span>';
+            if (notesFilterBar) notesFilterBar.style.display = '';
             if (notesList) notesList.style.display = '';
             if (newBtn) newBtn.style.display = '';
             renderNotesList();
@@ -1029,16 +1042,220 @@ const LibraryUI = (() => {
     // =====================
     // --- IDEAS ---
     // =====================
+    function renderNotesFilterBar() {
+        const barEl = document.getElementById('library-notes-filter-bar');
+        if (!barEl) return;
+
+        const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
+
+        // Status counts (across all ideas, unfiltered)
+        const statusCounts = { all: allIdeas.length };
+        for (const idea of allIdeas) {
+            const s = ideaMapGetStatus(idea);
+            const key = (s === 'workshop' || s === 'edit' || s === 'posted') ? 'posted' : s;
+            statusCounts[key] = (statusCounts[key] || 0) + 1;
+        }
+
+        const sf = notesFilterStatus;
+        const statusFilters = [
+            { key: 'all', label: 'All' },
+            { key: 'idea', label: 'Ideas' },
+            { key: 'incubator', label: 'Incubator' },
+            { key: 'posted', label: 'Posted' }
+        ];
+
+        let html = `<div class="ideamap-filter-bar">`;
+        html += `<span class="ideamap-filter-row-label">Status:</span>`;
+        for (const f of statusFilters) {
+            const active = sf === f.key;
+            const cnt = statusCounts[f.key] || 0;
+            const cntHtml = cnt > 0 ? ` <span class="ideamap-pill-count">${cnt}</span>` : '';
+            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-notes-filter-status="${f.key}">${f.label}${cntHtml}</button>`;
+        }
+        html += `</div>`;
+
+        // Category filter row
+        const cf = notesFilterCategory;
+        const cats = ideaMapGetCategories();
+        const topCats = cats.filter(c => !c.parentId);
+        const ideaCatMap = ideaMapGetIdeaCategories();
+
+        const catCounts = {};
+        let uncategorizedCount = 0;
+        for (const idea of allIdeas) {
+            const catId = ideaCatMap[idea.id];
+            if (catId) {
+                catCounts[catId] = (catCounts[catId] || 0) + 1;
+                const cat = cats.find(c => c.id === catId);
+                if (cat && cat.parentId) catCounts[cat.parentId] = (catCounts[cat.parentId] || 0) + 1;
+            } else {
+                uncategorizedCount++;
+            }
+        }
+
+        html += `<div class="ideamap-filter-bar ideamap-filter-bar-cat">`;
+        html += `<span class="ideamap-filter-row-label">Category:</span>`;
+        html += `<button class="ideamap-filter-pill${cf === 'all' ? ' active' : ''}" data-notes-filter-cat="all">All <span class="ideamap-pill-count">${allIdeas.length}</span></button>`;
+        for (const tc of topCats) {
+            const isActive = cf === tc.id;
+            const cnt = catCounts[tc.id] || 0;
+            const cntHtml = cnt > 0 ? ` <span class="ideamap-pill-count">${cnt}</span>` : '';
+            html += `<button class="ideamap-filter-pill${isActive ? ' active' : ''}" data-notes-filter-cat="${tc.id}" style="border-left: 3px solid ${tc.color}">${escHtml(tc.name)}${cntHtml}</button>`;
+            // Show subcategories if this parent is active or a subcategory of it is active
+            const subCats = cats.filter(c => c.parentId === tc.id);
+            const showSubs = isActive || subCats.some(sc => cf === sc.id);
+            if (showSubs) {
+                for (const sc of subCats) {
+                    const scCnt = catCounts[sc.id] || 0;
+                    const scCntHtml = scCnt > 0 ? ` <span class="ideamap-pill-count">${scCnt}</span>` : '';
+                    html += `<button class="ideamap-filter-pill ideamap-filter-subpill${cf === sc.id ? ' active' : ''}" data-notes-filter-cat="${sc.id}">${escHtml(sc.name)}${scCntHtml}</button>`;
+                }
+            }
+        }
+        const uncatCntHtml = uncategorizedCount > 0 ? ` <span class="ideamap-pill-count">${uncategorizedCount}</span>` : '';
+        html += `<button class="ideamap-filter-pill${cf === 'uncategorized' ? ' active' : ''}" data-notes-filter-cat="uncategorized">Uncategorized${uncatCntHtml}</button>`;
+        html += `</div>`;
+
+        // Search bar
+        html += `<div class="ideamap-search-bar">
+            <input type="text" class="ideamap-search-input" id="notes-search-input" placeholder="Search ideas by meaning..." value="${escAttr(notesSearchQuery)}" />
+            ${notesSearchQuery ? `<button class="ideamap-search-clear" id="notes-search-clear" title="Clear search">&times;</button>` : ''}
+            <button class="ideamap-search-btn" id="notes-search-btn" title="Search">
+                ${notesSearchLoading ? '<span class="ideamap-search-spinner"></span>' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a3e1b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'}
+            </button>
+        </div>`;
+
+        barEl.innerHTML = html;
+
+        // Bind filter bar events
+        barEl.querySelectorAll('[data-notes-filter-status]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                notesFilterStatus = btn.dataset.notesFilterStatus;
+                localStorage.setItem('notes-filter-status', notesFilterStatus);
+                renderNotesFilterBar();
+                renderNotesList();
+            });
+        });
+        barEl.querySelectorAll('[data-notes-filter-cat]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                notesFilterCategory = btn.dataset.notesFilterCat;
+                localStorage.setItem('notes-filter-category', notesFilterCategory);
+                renderNotesFilterBar();
+                renderNotesList();
+            });
+        });
+
+        // Search events
+        const searchInput = barEl.querySelector('#notes-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                notesSearchQuery = searchInput.value;
+                if (notesSearchTimer) clearTimeout(notesSearchTimer);
+                if (!searchInput.value.trim()) {
+                    notesSearchResults = null;
+                    notesSearchLoading = false;
+                    renderNotesList();
+                    return;
+                }
+                notesSearchTimer = setTimeout(() => notesDoSearch(), 400);
+            });
+            searchInput.focus();
+            searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+        }
+        const searchBtn = barEl.querySelector('#notes-search-btn');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => {
+                if (notesSearchQuery.trim()) notesDoSearch();
+            });
+        }
+        const clearBtn = barEl.querySelector('#notes-search-clear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                notesSearchQuery = '';
+                notesSearchResults = null;
+                notesSearchLoading = false;
+                renderNotesFilterBar();
+                renderNotesList();
+            });
+        }
+    }
+
+    async function notesDoSearch() {
+        notesSearchLoading = true;
+        renderNotesFilterBar();
+        try {
+            const resp = await fetch('/api/ideas/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: notesSearchQuery,
+                    topK: 20,
+                    statusFilter: notesFilterStatus
+                })
+            });
+            if (!resp.ok) throw new Error('Search failed');
+            const data = await resp.json();
+            notesSearchResults = data.results || [];
+        } catch (e) {
+            console.error('Notes search error:', e);
+            notesSearchResults = [];
+        }
+        notesSearchLoading = false;
+        renderNotesFilterBar();
+        renderNotesList();
+    }
+
     function renderNotesList() {
         const el = document.getElementById('library-notes-list');
         if (!el) return;
-        const ideas = NotesService.getAll().filter(n => n.type !== 'todo')
-            .sort((a, b) => (b.lastEdited || '').localeCompare(a.lastEdited || ''));
+
+        // Render filter bar
+        renderNotesFilterBar();
+
+        const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
+        let ideas;
+
+        if (notesSearchResults !== null) {
+            // Search mode: map search results to full idea objects
+            ideas = notesSearchResults.map(r => allIdeas.find(i => i.id === r.id)).filter(Boolean);
+        } else {
+            ideas = allIdeas.slice().sort((a, b) => (b.lastEdited || '').localeCompare(a.lastEdited || ''));
+
+            // Apply status filter
+            if (notesFilterStatus !== 'all') {
+                ideas = ideas.filter(i => {
+                    const s = ideaMapGetStatus(i);
+                    if (notesFilterStatus === 'idea') return s === 'idea';
+                    if (notesFilterStatus === 'incubator') return s === 'incubator';
+                    if (notesFilterStatus === 'posted') return s === 'posted' || s === 'workshop' || s === 'edit';
+                    return s === notesFilterStatus;
+                });
+            }
+
+            // Apply category filter
+            if (notesFilterCategory !== 'all') {
+                const mapping = ideaMapGetIdeaCategories();
+                if (notesFilterCategory === 'uncategorized') {
+                    ideas = ideas.filter(i => !mapping[i.id]);
+                } else {
+                    const validIds = ideaMapGetCategoryDescendants(notesFilterCategory);
+                    ideas = ideas.filter(i => validIds.includes(mapping[i.id]));
+                }
+            }
+        }
+
         if (ideas.length === 0) {
-            el.innerHTML = '<div class="library-empty">No ideas yet. Tap + to add one.</div>';
+            const msg = notesSearchResults !== null ? 'No ideas found.' : (notesFilterStatus !== 'all' || notesFilterCategory !== 'all' ? 'No ideas match filters.' : 'No ideas yet. Tap + to add one.');
+            el.innerHTML = `<div class="library-empty">${msg}</div>`;
             return;
         }
-        el.innerHTML = ideas.map(n => {
+
+        let listHtml = '';
+        if (notesSearchResults !== null) {
+            listHtml += `<div class="ideamap-search-results-header"><span>Search results for '${escHtml(notesSearchQuery)}' (${notesSearchResults.length})</span><button class="ideamap-search-clear" id="notes-search-results-clear">&times;</button></div>`;
+        }
+
+        listHtml += ideas.map(n => {
             const isConverted = n.type === 'converted';
             const preview = n.hook || n.context || '';
             const isRealProject = realProjectsCache && n.project && realProjectsCache.includes(n.project);
@@ -1062,6 +1279,7 @@ const LibraryUI = (() => {
                 <button class="library-delete-btn" data-note-id="${n.id}" title="Delete">&times;</button>
             </div>`;
         }).join('');
+        el.innerHTML = listHtml;
 
         el.querySelectorAll('.library-list-item').forEach(item => {
             item.addEventListener('click', (e) => {
@@ -1080,6 +1298,17 @@ const LibraryUI = (() => {
                 if (proj) { switchTab('projects'); selectedProject = proj; renderProjectsList(); }
             });
         });
+        // Search results clear button
+        const resultsClear = el.querySelector('#notes-search-results-clear');
+        if (resultsClear) {
+            resultsClear.addEventListener('click', () => {
+                notesSearchQuery = '';
+                notesSearchResults = null;
+                notesSearchLoading = false;
+                renderNotesFilterBar();
+                renderNotesList();
+            });
+        }
     }
 
     function selectNote(id) {

@@ -78,6 +78,11 @@
 }
 .library-tab:hover:not(.active) { color: #666; }
 
+.library-notes-filter-wrap {
+    flex-shrink: 0;
+    border-bottom: 1px solid #f0ece4;
+}
+
 .library-notes-list {
     flex: 1;
     overflow-y: auto;
