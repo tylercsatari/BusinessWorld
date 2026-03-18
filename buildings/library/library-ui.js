@@ -1117,9 +1117,10 @@ const LibraryUI = (() => {
         }
 
         // Script field — inline textarea
+        const expandIcon = `<button class="library-script-expand-btn" data-expand-script="library-idea-script" title="Expand"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>`;
         const scriptSection = `
             <div class="library-idea-field">
-                <label class="library-idea-label">Script</label>
+                <label class="library-idea-label">Script ${expandIcon}</label>
                 <textarea class="library-idea-script" id="library-idea-script" placeholder="Write your script here...">${escHtml(note.script || '')}</textarea>
             </div>`;
 
@@ -1168,6 +1169,13 @@ const LibraryUI = (() => {
         document.getElementById('library-editor-title').addEventListener('input', scheduleNoteSave);
         document.getElementById('library-note-project').addEventListener('change', scheduleNoteSave);
         document.getElementById('library-idea-related').addEventListener('input', scheduleNoteSave);
+        document.getElementById('library-idea-script').addEventListener('click', () => {
+            openScriptOverlay(document.getElementById('library-idea-script'), scheduleNoteSave);
+        });
+        const ideaExpandBtn = document.querySelector('[data-expand-script="library-idea-script"]');
+        if (ideaExpandBtn) ideaExpandBtn.addEventListener('click', () => {
+            openScriptOverlay(document.getElementById('library-idea-script'), scheduleNoteSave);
+        });
         const viewProjBtn = document.getElementById('library-view-project-btn');
         if (viewProjBtn) viewProjBtn.addEventListener('click', () => {
             const proj = document.getElementById('library-note-project')?.value;
@@ -1225,6 +1233,28 @@ const LibraryUI = (() => {
             if (sendBtn) { sendBtn.textContent = 'Send to Incubator'; sendBtn.disabled = false; }
             alert('Failed to send to Incubator. Check connection.');
         }
+    }
+
+    function openScriptOverlay(scriptEl, saveFn) {
+        const overlay = document.createElement('div');
+        overlay.className = 'library-script-overlay';
+        overlay.innerHTML = `
+            <div class="library-script-overlay-header">
+                <span class="script-overlay-label">Script</span>
+                <button class="script-overlay-done">Done</button>
+            </div>
+            <textarea class="library-script-overlay-textarea"></textarea>
+        `;
+        const ta = overlay.querySelector('textarea');
+        ta.value = scriptEl.value;
+        document.body.appendChild(overlay);
+        ta.focus();
+        overlay.querySelector('.script-overlay-done').addEventListener('click', () => {
+            scriptEl.value = ta.value;
+            scriptEl.dispatchEvent(new Event('input', { bubbles: true }));
+            overlay.remove();
+            if (saveFn) saveFn();
+        });
     }
 
     function scheduleNoteSave() {
@@ -1324,9 +1354,10 @@ const LibraryUI = (() => {
         } catch (e) {}
 
         // Script field — inline textarea
+        const videoExpandIcon = `<button class="library-script-expand-btn" data-expand-script="library-video-script" title="Expand"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>`;
         const scriptSection = `
             <div class="library-idea-field">
-                <label class="library-idea-label">Script</label>
+                <label class="library-idea-label">Script ${videoExpandIcon}</label>
                 <textarea class="library-idea-script" id="library-video-script" placeholder="Write your script here...">${escHtml(v.script || '')}</textarea>
             </div>`;
 
@@ -1376,6 +1407,13 @@ const LibraryUI = (() => {
         document.getElementById('library-video-context').addEventListener('input', scheduleVideoSave);
         document.getElementById('library-video-script').addEventListener('input', scheduleVideoSave);
         document.getElementById('library-video-project').addEventListener('change', scheduleVideoSave);
+        document.getElementById('library-video-script').addEventListener('click', () => {
+            openScriptOverlay(document.getElementById('library-video-script'), scheduleVideoSave);
+        });
+        const vidExpandBtn = document.querySelector('[data-expand-script="library-video-script"]');
+        if (vidExpandBtn) vidExpandBtn.addEventListener('click', () => {
+            openScriptOverlay(document.getElementById('library-video-script'), scheduleVideoSave);
+        });
     }
 
     function scheduleVideoSave() {
