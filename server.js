@@ -254,6 +254,141 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
+    // API: Ideas — semantic search index + query
+    // =========================================
+    if (pathname === '/api/ideas/index-embeddings' && req.method === 'POST') {
+        try {
+            const ideas = await dataStore.getAll('ideas');
+            if (!ideas || ideas.length === 0) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ indexed: 0 }));
+                return;
+            }
+
+            // Build texts for embedding
+            const texts = ideas.map(idea =>
+                `${idea.name}. ${idea.hook || ''} ${idea.context || ''} ${idea.tags || ''}`.trim()
+            );
+
+            // Batch embed 50 at a time
+            const batchSize = 50;
+            const allVectors = [];
+            for (let i = 0; i < texts.length; i += batchSize) {
+                const batchTexts = texts.slice(i, i + batchSize);
+                const batchIdeas = ideas.slice(i, i + batchSize);
+
+                const embeddingRes = await fetch('https://api.openai.com/v1/embeddings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+                    body: JSON.stringify({ input: batchTexts, model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small', dimensions: parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS) || 512 })
+                });
+                if (!embeddingRes.ok) {
+                    const errText = await embeddingRes.text();
+                    throw new Error(`OpenAI embeddings error: ${embeddingRes.status} ${errText}`);
+                }
+                const embeddingData = await embeddingRes.json();
+
+                for (let j = 0; j < batchIdeas.length; j++) {
+                    const idea = batchIdeas[j];
+                    allVectors.push({
+                        id: idea.id,
+                        values: embeddingData.data[j].embedding,
+                        metadata: {
+                            name: idea.name,
+                            status: idea.status || idea.type,
+                            tags: idea.tags || ''
+                        }
+                    });
+                }
+            }
+
+            // Upsert to Pinecone in batches of 100
+            for (let i = 0; i < allVectors.length; i += 100) {
+                const batch = allVectors.slice(i, i + 100);
+                const upsertRes = await fetch(`${process.env.PINECONE_HOST}/vectors/upsert`, {
+                    method: 'POST',
+                    headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ vectors: batch, namespace: 'ideas' })
+                });
+                if (!upsertRes.ok) {
+                    const errText = await upsertRes.text();
+                    throw new Error(`Pinecone upsert error: ${upsertRes.status} ${errText}`);
+                }
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ indexed: allVectors.length }));
+        } catch (e) {
+            console.error('index-embeddings error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/ideas/search' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { query, topK = 10, statusFilter } = body;
+            if (!query) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'query is required' }));
+                return;
+            }
+
+            // Embed query
+            const embeddingRes = await fetch('https://api.openai.com/v1/embeddings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+                body: JSON.stringify({ input: [query], model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small', dimensions: parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS) || 512 })
+            });
+            if (!embeddingRes.ok) {
+                const errText = await embeddingRes.text();
+                throw new Error(`OpenAI embeddings error: ${embeddingRes.status} ${errText}`);
+            }
+            const embeddingData = await embeddingRes.json();
+            const queryEmbedding = embeddingData.data[0].embedding;
+
+            // Query Pinecone
+            const pcBody = {
+                vector: queryEmbedding,
+                topK: topK,
+                namespace: 'ideas',
+                includeMetadata: true
+            };
+            if (statusFilter && statusFilter !== 'all') {
+                pcBody.filter = { status: { '$eq': statusFilter } };
+            }
+            const pcRes = await fetch(`${process.env.PINECONE_HOST}/query`, {
+                method: 'POST',
+                headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify(pcBody)
+            });
+            if (!pcRes.ok) {
+                const errText = await pcRes.text();
+                throw new Error(`Pinecone query error: ${pcRes.status} ${errText}`);
+            }
+            const pcData = await pcRes.json();
+
+            const results = (pcData.matches || []).map(m => ({
+                id: m.id,
+                name: m.metadata?.name || '',
+                score: m.score,
+                status: m.metadata?.status || '',
+                tags: m.metadata?.tags || ''
+            }));
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ results }));
+        } catch (e) {
+            console.error('ideas/search error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Pinecone proxy  /api/pinecone/:action
     // =========================================
     const pineconeMatch = pathname.match(/^\/api\/pinecone\/(upsert|delete|query)$/);

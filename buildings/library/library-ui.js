@@ -2275,8 +2275,12 @@ const LibraryUI = (() => {
         showCategoryPanel: false,
         editingCategoryId: null,
         addingCategory: false,
-        loaded: false
+        loaded: false,
+        searchQuery: '',
+        searchResults: null, // null = no search, array = search active
+        searchLoading: false
     };
+    let ideaMapSearchTimer = null;
 
     // --- Category data layer (localStorage) ---
     function ideaMapGetCategories() {
@@ -2429,6 +2433,14 @@ const LibraryUI = (() => {
             // Init categories & seed
             ideaMapInitCategories();
             ideaMapSeedIdeaCategories();
+            // Auto-index embeddings in background if idea count changed
+            const prevIndexed = parseInt(localStorage.getItem('ideamap-indexed-count') || '0', 10);
+            if (prevIndexed !== ideaMapState.ideas.length) {
+                fetch('/api/ideas/index-embeddings', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(d => { if (d.indexed) localStorage.setItem('ideamap-indexed-count', String(d.indexed)); })
+                    .catch(() => {});
+            }
         }
 
         if (!ideaMapState.projects) {
@@ -2515,6 +2527,54 @@ const LibraryUI = (() => {
         }
         html += `<button class="ideamap-filter-pill${cf === 'uncategorized' ? ' active' : ''}" data-filter-cat="uncategorized">Uncategorized</button>`;
         html += `</div>`;
+
+        // --- Search bar ---
+        html += `<div class="ideamap-search-bar">
+            <input type="text" class="ideamap-search-input" id="ideamap-search-input" placeholder="Search ideas by meaning..." value="${escAttr(ideaMapState.searchQuery)}" />
+            ${ideaMapState.searchQuery ? `<button class="ideamap-search-clear" id="ideamap-search-clear" title="Clear search">&times;</button>` : ''}
+            <button class="ideamap-search-btn" id="ideamap-search-btn" title="Search">
+                ${ideaMapState.searchLoading ? '<span class="ideamap-search-spinner"></span>' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a3e1b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'}
+            </button>
+        </div>`;
+
+        // --- Search results mode ---
+        if (ideaMapState.searchResults !== null) {
+            const results = ideaMapState.searchResults;
+            html += `<div class="ideamap-search-results-header">
+                <span>Search results for '${escHtml(ideaMapState.searchQuery)}' (${results.length})</span>
+                <button class="ideamap-search-clear" id="ideamap-search-results-clear">&times;</button>
+            </div>`;
+            if (results.length === 0) {
+                html += `<div class="library-empty">No ideas found for '${escHtml(ideaMapState.searchQuery)}'</div>`;
+            } else {
+                html += `<div class="ideamap-kanban-scroll"><div class="ideamap-card-row ideamap-search-card-row">`;
+                for (const r of results) {
+                    const idea = ideaMapState.ideas.find(i => i.id === r.id);
+                    const status = idea ? ideaMapGetStatus(idea) : r.status;
+                    const color = ideaMapStatusColor(status);
+                    const tags = idea ? ideaMapGetTags(idea) : (r.tags ? r.tags.split(',').map(t => t.trim()).filter(Boolean) : []);
+                    const name = idea ? idea.name : r.name;
+                    const pct = Math.round((r.score || 0) * 100);
+                    html += `<div class="ideamap-card" data-id="${r.id}">
+                        <div class="ideamap-card-border" style="background:${color}"></div>
+                        <div class="ideamap-card-body">
+                            <div class="ideamap-card-name">${escHtml(name)}</div>
+                            <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>
+                            ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
+                            <div class="ideamap-score-bar"><div class="ideamap-score-fill" style="width:${pct}%"></div></div>
+                        </div>
+                    </div>`;
+                }
+                html += `</div></div>`;
+            }
+
+            // Popover
+            html += `<div class="ideamap-popover" id="ideamap-popover" style="display:none;"></div>`;
+            el.innerHTML = html;
+            ideaMapBindSearchEvents(el);
+            ideaMapBindKanbanEvents(el);
+            return;
+        }
 
         // --- Build cluster groups based on groupBy ---
         let clusterOrder = [];
@@ -2684,7 +2744,77 @@ const LibraryUI = (() => {
         </div>`;
     }
 
+    function ideaMapBindSearchEvents(el) {
+        const searchInput = el.querySelector('#ideamap-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                ideaMapState.searchQuery = searchInput.value;
+                if (ideaMapSearchTimer) clearTimeout(ideaMapSearchTimer);
+                if (!searchInput.value.trim()) {
+                    ideaMapState.searchResults = null;
+                    ideaMapState.searchLoading = false;
+                    ideaMapRenderKanban(el);
+                    return;
+                }
+                ideaMapSearchTimer = setTimeout(() => ideaMapDoSearch(el), 400);
+            });
+            // Focus the input and put cursor at end
+            searchInput.focus();
+            searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+        }
+        const searchBtn = el.querySelector('#ideamap-search-btn');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => {
+                if (ideaMapState.searchQuery.trim()) ideaMapDoSearch(el);
+            });
+        }
+        const clearBtn = el.querySelector('#ideamap-search-clear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                ideaMapState.searchQuery = '';
+                ideaMapState.searchResults = null;
+                ideaMapState.searchLoading = false;
+                ideaMapRenderKanban(el);
+            });
+        }
+        const resultsClear = el.querySelector('#ideamap-search-results-clear');
+        if (resultsClear) {
+            resultsClear.addEventListener('click', () => {
+                ideaMapState.searchQuery = '';
+                ideaMapState.searchResults = null;
+                ideaMapState.searchLoading = false;
+                ideaMapRenderKanban(el);
+            });
+        }
+    }
+
+    async function ideaMapDoSearch(el) {
+        ideaMapState.searchLoading = true;
+        ideaMapRenderKanban(el);
+        try {
+            const resp = await fetch('/api/ideas/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: ideaMapState.searchQuery,
+                    topK: 15,
+                    statusFilter: ideaMapState.filterStatus
+                })
+            });
+            if (!resp.ok) throw new Error('Search failed');
+            const data = await resp.json();
+            ideaMapState.searchResults = data.results || [];
+        } catch (e) {
+            console.error('Idea search error:', e);
+            ideaMapState.searchResults = [];
+        }
+        ideaMapState.searchLoading = false;
+        ideaMapRenderKanban(el);
+    }
+
     function ideaMapBindKanbanEvents(el) {
+        // Bind search events
+        ideaMapBindSearchEvents(el);
         // Group-by buttons
         el.querySelectorAll('.ideamap-group-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2976,6 +3106,9 @@ const LibraryUI = (() => {
             ideaMapState.showCategoryPanel = false;
             ideaMapState.editingCategoryId = null;
             ideaMapState.addingCategory = false;
+            ideaMapState.searchQuery = '';
+            ideaMapState.searchResults = null;
+            ideaMapState.searchLoading = false;
             currentPage = 'list'; activeTab = 'notes';
         },
         // Public: preload to-do count for badge (called on page load)

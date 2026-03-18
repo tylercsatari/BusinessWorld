@@ -2506,6 +2506,87 @@
 }
 .ideamap-cat-cancel-btn:hover { background: #f5f5f5; }
 
+/* --- Semantic Search --- */
+.ideamap-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #f0ebe4;
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.ideamap-search-input {
+    flex: 1;
+    border: 1px solid #e8ddd0;
+    border-radius: 20px;
+    padding: 8px 14px;
+    font-size: 14px;
+    outline: none;
+    font-family: inherit;
+    background: #fff;
+    transition: border-color 0.15s;
+}
+.ideamap-search-input:focus { border-color: #5a3e1b; }
+.ideamap-search-btn {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: #5a3e1b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ideamap-search-clear {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: #999;
+    font-size: 18px;
+    line-height: 1;
+}
+.ideamap-search-clear:hover { color: #333; }
+.ideamap-search-results-header {
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f0ebe4;
+}
+.ideamap-search-card-row {
+    flex-wrap: wrap;
+}
+.ideamap-score-bar {
+    max-width: 60px;
+    height: 3px;
+    border-radius: 2px;
+    background: #e8ddd0;
+    margin-top: 6px;
+}
+.ideamap-score-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: #5a3e1b;
+}
+.ideamap-search-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #e8ddd0;
+    border-top-color: #5a3e1b;
+    border-radius: 50%;
+    animation: ideamap-spin 0.6s linear infinite;
+}
+@keyframes ideamap-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* --- Mobile --- */
 @media (max-width: 768px) {
     .ideamap-toolbar {
