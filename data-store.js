@@ -8,11 +8,16 @@ const { uploadToR2, downloadFromR2, isR2Ready } = require('./cloud-storage');
 
 const COLLECTIONS = ['videos', 'ideas', 'todos', 'calendar', 'invoices', 'notes', 'sponsors', 'sponsorvideos'];
 const cache = {};  // { collectionName: { lastModified, records } }
+const cacheTime = {};  // { collectionName: timestamp }
+const TTL_MS = 60 * 1000; // 60 seconds
 
 function r2Key(name) { return `data/${name}.json`; }
 
 async function load(name) {
-    if (cache[name]) return cache[name];
+    const now = Date.now();
+    if (cache[name] && cacheTime[name] && (now - cacheTime[name]) < TTL_MS) {
+        return cache[name];
+    }
     if (!isR2Ready()) {
         // Don't cache when R2 isn't ready — return empty but allow retry once R2 initializes
         return { lastModified: new Date().toISOString(), records: [] };
@@ -23,6 +28,7 @@ async function load(name) {
     } else {
         cache[name] = { lastModified: new Date().toISOString(), records: [] };
     }
+    cacheTime[name] = now;
     return cache[name];
 }
 
@@ -32,6 +38,7 @@ async function flush(name) {
     if (!data) return;
     data.lastModified = new Date().toISOString();
     await uploadToR2(r2Key(name), Buffer.from(JSON.stringify(data, null, 2)), 'application/json');
+    cacheTime[name] = Date.now();
 }
 
 async function getAll(name) {
