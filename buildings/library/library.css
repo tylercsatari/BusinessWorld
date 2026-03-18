@@ -343,6 +343,49 @@
     max-width: 200px;
 }
 
+/* --- View Project button --- */
+.library-view-project-btn {
+    background: #6c5ce7;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+}
+.library-view-project-btn:active { transform: scale(0.95); }
+
+/* --- Related-to textarea --- */
+.library-idea-related {
+    width: 100%;
+    min-height: 50px;
+    border: 1px solid #e0dcd6;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #faf8f5;
+    color: #333;
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+}
+.library-idea-related:focus { border-color: #6c5ce7; }
+
+/* --- Clickable project badge in ideas list --- */
+.library-project-badge-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+.library-project-badge-btn:active { opacity: 0.7; }
+
 /* --- Send to Incubator button --- */
 .library-incubator-section {
     flex-shrink: 0;

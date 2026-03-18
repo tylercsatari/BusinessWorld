@@ -1057,7 +1057,7 @@ const LibraryUI = (() => {
             <div class="library-list-item ${isConverted ? 'converted' : ''}" data-note-id="${n.id}">
                 <div class="library-list-item-content">
                     <div class="library-list-title">${escHtml(n.name)}${statusHtml}</div>
-                    <div class="library-list-date">${badge}${!badge ? escHtml(preview ? preview.substring(0, 60) : 'idea') : ''}</div>
+                    <div class="library-list-date">${badge ? `<button class="library-project-badge-btn" data-project="${escAttr(n.project)}">${badge}</button>` : escHtml(preview ? preview.substring(0, 60) : 'idea')}</div>
                 </div>
                 <button class="library-delete-btn" data-note-id="${n.id}" title="Delete">&times;</button>
             </div>`;
@@ -1066,11 +1066,19 @@ const LibraryUI = (() => {
         el.querySelectorAll('.library-list-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (e.target.classList.contains('library-delete-btn')) return;
+                if (e.target.closest('.library-project-badge-btn')) return;
                 selectNote(item.dataset.noteId);
             });
         });
         el.querySelectorAll('.library-delete-btn').forEach(btn => {
             btn.addEventListener('click', (e) => { e.stopPropagation(); handleDeleteNote(btn.dataset.noteId); });
+        });
+        el.querySelectorAll('.library-project-badge-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const proj = btn.dataset.project;
+                if (proj) { switchTab('projects'); selectedProject = proj; renderProjectsList(); }
+            });
         });
     }
 
@@ -1086,11 +1094,13 @@ const LibraryUI = (() => {
         if (!editorEl) return;
 
         let projectOptions = '';
+        let projs = [];
         try {
-            const projs = await VideoService.getProjects();
+            projs = await VideoService.getProjects();
             const isRealProject = note.project && projs.includes(note.project);
             projectOptions = projs.map(p => `<option value="${escAttr(p)}" ${isRealProject && p === note.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
         } catch (e) {}
+        const isLinkedProject = note.project && projs.includes(note.project);
 
         const isConverted = note.type === 'converted';
         let linkedVideo = null;
@@ -1126,11 +1136,18 @@ const LibraryUI = (() => {
                     <input type="text" class="library-editor-title" id="library-editor-title" value="${escAttr(note.name)}" placeholder="Idea title..." />
                 </div>
                 <div class="library-meta-row">
-                    <label class="library-meta-label">Project</label>
-                    <select class="library-project-select" id="library-note-project">
-                        <option value="">None (optional)</option>
-                        ${projectOptions}
-                    </select>
+                    <label class="library-meta-label">Link to Dropbox Project</label>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <select class="library-project-select" id="library-note-project" style="flex:1;">
+                            <option value="">None</option>
+                            ${projectOptions}
+                        </select>
+                        ${isLinkedProject ? `<button class="library-view-project-btn" id="library-view-project-btn" title="View Project">View Project</button>` : ''}
+                    </div>
+                </div>
+                <div class="library-idea-field">
+                    <label class="library-idea-label">Related to</label>
+                    <textarea class="library-idea-related" id="library-idea-related" placeholder="Describe relationships to other ideas or projects...">${escHtml(note.relatedTo || '')}</textarea>
                 </div>
                 <div class="library-idea-field">
                     <label class="library-idea-label">Hook</label>
@@ -1150,6 +1167,12 @@ const LibraryUI = (() => {
         document.getElementById('library-idea-script').addEventListener('input', scheduleNoteSave);
         document.getElementById('library-editor-title').addEventListener('input', scheduleNoteSave);
         document.getElementById('library-note-project').addEventListener('change', scheduleNoteSave);
+        document.getElementById('library-idea-related').addEventListener('input', scheduleNoteSave);
+        const viewProjBtn = document.getElementById('library-view-project-btn');
+        if (viewProjBtn) viewProjBtn.addEventListener('click', () => {
+            const proj = document.getElementById('library-note-project')?.value;
+            if (proj) { switchTab('projects'); selectedProject = proj; renderProjectsList(); }
+        });
         const sendBtn = document.getElementById('library-send-incubator');
         if (sendBtn) sendBtn.addEventListener('click', () => sendToIncubator());
     }
@@ -1225,12 +1248,15 @@ const LibraryUI = (() => {
             const newProject = projectEl?.value || '';
             const scriptEl = document.getElementById('library-idea-script');
             const newScript = scriptEl?.value || '';
+            const relatedEl = document.getElementById('library-idea-related');
+            const newRelatedTo = relatedEl?.value || '';
             await NotesService.update(selectedNote.id, {
                 name: newName,
                 hook: newHook,
                 context: newContext,
                 script: newScript,
-                project: newProject
+                project: newProject,
+                relatedTo: newRelatedTo
             });
             selectedNote = NotesService.getById(selectedNote.id);
             // Bidirectional sync: if this idea has a linked video, update it too
