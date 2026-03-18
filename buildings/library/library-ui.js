@@ -2203,9 +2203,11 @@ const LibraryUI = (() => {
     const IDEAMAP_STATUS_COLORS = {
         idea: '#4a9eff',
         incubator: '#e8a020',
+        workshop: '#e67e22',
+        edit: '#9b59b6',
+        posted: '#2ecc71',
         'in-progress': '#e67e22',
-        converted: '#2ecc71',
-        posted: '#2ecc71'
+        converted: '#2ecc71'
     };
 
     const IDEAMAP_CLUSTERS = {
@@ -2347,7 +2349,12 @@ const LibraryUI = (() => {
     }
 
     function ideaMapGetStatus(idea) {
-        return idea.status || idea.type || 'idea';
+        if (idea.status) return idea.status;
+        if (idea.type === 'converted') {
+            const video = VideoService.getByIdeaId(idea.id);
+            return video ? video.status : 'incubator';
+        }
+        return idea.type || 'idea';
     }
 
     function ideaMapStatusColor(status) {
@@ -2355,7 +2362,7 @@ const LibraryUI = (() => {
     }
 
     function ideaMapStatusLabel(status) {
-        const labels = { idea: 'Idea', incubator: 'Incubator', 'in-progress': 'In Progress', converted: 'Posted', posted: 'Posted' };
+        const labels = { idea: 'Idea', incubator: 'Incubator', workshop: 'Workshop', edit: 'Edit', posted: 'Posted', 'in-progress': 'In Progress', converted: 'Converted' };
         return labels[status] || status;
     }
 
@@ -2379,6 +2386,8 @@ const LibraryUI = (() => {
                 ideaMapState.ideas = NotesService.getAll().filter(n => n.type !== 'todo');
             }
             ideaMapState.loaded = true;
+            // Ensure videos are cached so ideaMapGetStatus can resolve converted ideas
+            await VideoService.sync().catch(() => {});
             // Init categories & seed
             ideaMapInitCategories();
             ideaMapSeedIdeaCategories();
@@ -2400,7 +2409,7 @@ const LibraryUI = (() => {
         if (sf !== 'all') {
             filtered = filtered.filter(i => {
                 const s = ideaMapGetStatus(i);
-                return s === sf || (sf === 'posted' && s === 'converted');
+                return s === sf;
             });
         }
         if (cf !== 'all') {
@@ -2436,7 +2445,7 @@ const LibraryUI = (() => {
             { key: 'all', label: 'All' },
             { key: 'idea', label: 'Ideas' },
             { key: 'incubator', label: 'Incubator' },
-            { key: 'in-progress', label: 'In Progress' },
+            { key: 'workshop', label: 'Workshop' },
             { key: 'posted', label: 'Posted' }
         ];
         html += `<div class="ideamap-filter-bar">`;
@@ -2493,7 +2502,7 @@ const LibraryUI = (() => {
         } else if (groupBy === 'project') {
             const projectGroups = {};
             for (const idea of ideas) {
-                const proj = idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) ? idea.project : null;
+                const proj = idea.project || null;
                 const key = proj || '__no_project__';
                 if (!projectGroups[key]) projectGroups[key] = [];
                 projectGroups[key].push(idea);
