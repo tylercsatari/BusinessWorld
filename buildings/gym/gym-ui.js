@@ -1,193 +1,408 @@
-/* ── Gym UI ── full-featured workout tracker ── */
+/* ── Gym UI ── Game Aesthetic Redesign ── */
 const GymUI = (() => {
     let container = null;
     let activeTab = 'dashboard';
     let activePlayer = 'tyler';
     let selectedRoutineId = null;
-    let logState = { feeling: 3, notes: '', calories: '', sets: {} };
+    let logState = { feeling: 3, notes: '', sets: {} };
     let progressMetric = 'weight';
     let editingRoutineId = null;
+    let workoutStartTime = null;
+    let timerInterval = null;
+    let characterRenderer = null;
+    let characterAnimFrame = null;
+    let showChallengeForm = false;
 
-    const TABS = [
-        { id: 'dashboard', icon: '\u{1F3E0}', label: 'Dashboard' },
-        { id: 'log',       icon: '\u{1F4AA}', label: 'Log Workout' },
-        { id: 'progress',  icon: '\u{1F4C8}', label: 'Progress' },
-        { id: 'routines',  icon: '\u{1F4CB}', label: 'Routines' },
-        { id: 'body',      icon: '\u2696\uFE0F', label: 'Body' }
+    const ROUTINE_COLORS = { upper1: 'gold', lower1: 'blue', upper2: 'green', lower2: 'red' };
+    const ROUTINE_COLOR_HEX = { upper1: '#e8a020', lower1: '#4a9eff', upper2: '#2ecc71', lower2: '#e74c3c' };
+    const PLAYER_GRADIENTS = [
+        ['#e8a020', '#e67e22'], ['#4a9eff', '#2196f3'], ['#2ecc71', '#27ae60'],
+        ['#e74c3c', '#c0392b'], ['#9b59b6', '#8e44ad'], ['#1abc9c', '#16a085']
     ];
 
-    const FEELING_EMOJIS = ['\u{1F629}', '\u{1F615}', '\u{1F610}', '\u{1F60A}', '\u{1F525}'];
-    const CATEGORY_ICONS = { push: '\u2B06', pull: '\u2B07', legs: '\u{1F9B5}', core: '\u{1F3AF}' };
+    /* ── SVG Tab Icons ── */
+    const TAB_ICONS = {
+        dashboard: '<svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>',
+        train:     '<svg viewBox="0 0 24 24"><path d="M6.5 6.5h11M6.5 17.5h11M4 6.5a2.5 2.5 0 110 5M4 12.5a2.5 2.5 0 100 5M20 6.5a2.5 2.5 0 100 5M20 12.5a2.5 2.5 0 110 5M12 4v16"/></svg>',
+        progress:  '<svg viewBox="0 0 24 24"><path d="M3 20l5-8 4 4 5-10 4 6"/></svg>',
+        routines:  '<svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>',
+        body:      '<svg viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>'
+    };
+
+    const TABS = [
+        { id: 'dashboard', label: 'Dashboard' },
+        { id: 'train',     label: 'Train' },
+        { id: 'progress',  label: 'Progress' },
+        { id: 'routines',  label: 'Routines' },
+        { id: 'body',      label: 'Body' }
+    ];
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
     function today() { return new Date().toISOString().slice(0, 10); }
-
     function fmtDate(d) {
         const dt = new Date(d);
         return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
-
-    function fmtNumber(n) {
-        return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+    function relativeDate(d) {
+        const now = new Date(); now.setHours(0,0,0,0);
+        const dt = new Date(d); dt.setHours(0,0,0,0);
+        const diff = Math.round((now - dt) / 86400000);
+        if (diff === 0) return 'Today';
+        if (diff === 1) return 'Yesterday';
+        if (diff < 7) return diff + ' days ago';
+        return fmtDate(d);
     }
-
+    function fmtVolume(n) {
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+        return String(n);
+    }
+    function fmtTimer(ms) {
+        const s = Math.floor(ms / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+    }
+    function hashCode(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
+        }
+        return Math.abs(hash);
+    }
     function showToast(msg) {
         const t = document.createElement('div');
         t.className = 'gym-toast';
         t.textContent = msg;
         document.body.appendChild(t);
-        setTimeout(() => t.remove(), 2000);
+        setTimeout(() => t.remove(), 2200);
     }
 
-    /* ── SVG Charts ── */
-    function renderSparkline(values, w, h) {
-        w = w || 200; h = h || 40;
-        if (values.length < 2) return '<div class="gym-empty">Not enough data</div>';
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-        const range = max - min || 1;
-        const pad = 2;
-        const pts = values.map((v, i) => {
-            const x = pad + (i / (values.length - 1)) * (w - pad * 2);
-            const y = h - pad - ((v - min) / range) * (h - pad * 2);
-            return `${x.toFixed(1)},${y.toFixed(1)}`;
-        });
-        const lastX = pad + ((values.length - 1) / (values.length - 1)) * (w - pad * 2);
-        const lastY = h - pad - ((values[values.length - 1] - min) / range) * (h - pad * 2);
-        return `<svg width="${w}" height="${h}" class="gym-sparkline" viewBox="0 0 ${w} ${h}">
-            <polyline points="${pts.join(' ')}" fill="none" stroke="#0984e3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="3" fill="#0984e3"/>
-        </svg>`;
+    /* ── Streak calculation ── */
+    function getStreak(playerId) {
+        const workouts = GymService.getWorkouts(playerId);
+        if (workouts.length === 0) return 0;
+        const dates = [...new Set(workouts.map(w => w.date))].sort().reverse();
+        let streak = 0;
+        const todayStr = today();
+        const d = new Date(todayStr);
+        for (let i = 0; i < 365; i++) {
+            const check = d.toISOString().slice(0, 10);
+            if (dates.includes(check)) {
+                streak++;
+            } else if (i > 0) {
+                break;
+            }
+            d.setDate(d.getDate() - 1);
+        }
+        return streak;
     }
 
+    /* ── Total volume ever ── */
+    function getTotalVolume(playerId) {
+        const workouts = GymService.getWorkouts(playerId);
+        let total = 0;
+        workouts.forEach(w => { total += GymService.getWorkoutVolume(w); });
+        return total;
+    }
+
+    /* ── 3D Character ── */
+    function initCharacterCanvas(wrap, playerName) {
+        if (!window.THREE) {
+            wrap.innerHTML = '<div style="color:var(--gym-text-3);text-align:center;padding:40px">3D not available</div>';
+            return;
+        }
+        const size = wrap.clientWidth || 280;
+        const canvas = document.createElement('canvas');
+        canvas.width = size * 2;
+        canvas.height = size * 2;
+        canvas.style.width = size + 'px';
+        canvas.style.height = size + 'px';
+        wrap.appendChild(canvas);
+
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        renderer.setSize(size, size);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setClearColor(0x000000, 0);
+        characterRenderer = renderer;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+        camera.position.set(0, 1.5, 5);
+        camera.lookAt(0, 1, 0);
+
+        // Lights
+        const ambient = new THREE.AmbientLight(0xfff0e0, 1.2);
+        scene.add(ambient);
+        const dir = new THREE.DirectionalLight(0xfff8f0, 1.5);
+        dir.position.set(3, 8, 5);
+        scene.add(dir);
+
+        // Colors from player name
+        const h = hashCode(playerName);
+        const bodyColor = 0x6688aa;
+        const torsoColor = 0x556688;
+        const headColor = new THREE.Color().setHSL((h % 360) / 360, 0.5, 0.55);
+
+        const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.1 });
+        const charGroup = new THREE.Group();
+
+        // Head
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), mat(headColor));
+        head.position.y = 2.8;
+        charGroup.add(head);
+
+        // Neck
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.2, 8), mat(bodyColor));
+        neck.position.y = 2.2;
+        charGroup.add(neck);
+
+        // Torso
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.4, 0.6), mat(torsoColor));
+        torso.position.y = 1.4;
+        charGroup.add(torso);
+
+        // Upper arms
+        const armMat = mat(bodyColor);
+        const upperArmGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.8, 8);
+        const leftUpper = new THREE.Mesh(upperArmGeo, armMat);
+        leftUpper.position.set(-0.72, 1.7, 0);
+        leftUpper.rotation.z = 0.2;
+        charGroup.add(leftUpper);
+        const rightUpper = new THREE.Mesh(upperArmGeo, armMat);
+        rightUpper.position.set(0.72, 1.7, 0);
+        rightUpper.rotation.z = -0.2;
+        charGroup.add(rightUpper);
+
+        // Forearms
+        const forearmGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.6, 8);
+        const leftFore = new THREE.Mesh(forearmGeo, armMat);
+        leftFore.position.set(-0.82, 1.1, 0);
+        leftFore.rotation.z = 0.1;
+        charGroup.add(leftFore);
+        const rightFore = new THREE.Mesh(forearmGeo, armMat);
+        rightFore.position.set(0.82, 1.1, 0);
+        rightFore.rotation.z = -0.1;
+        charGroup.add(rightFore);
+
+        // Legs
+        const legMat = mat(0x445566);
+        const legGeo = new THREE.CylinderGeometry(0.22, 0.22, 1, 8);
+        const leftLeg = new THREE.Mesh(legGeo, legMat);
+        leftLeg.position.set(-0.25, 0.2, 0);
+        charGroup.add(leftLeg);
+        const rightLeg = new THREE.Mesh(legGeo, legMat);
+        rightLeg.position.set(0.25, 0.2, 0);
+        charGroup.add(rightLeg);
+
+        // Feet
+        const footMat = mat(0x334455);
+        const footGeo = new THREE.BoxGeometry(0.35, 0.2, 0.5);
+        const leftFoot = new THREE.Mesh(footGeo, footMat);
+        leftFoot.position.set(-0.25, -0.4, 0.08);
+        charGroup.add(leftFoot);
+        const rightFoot = new THREE.Mesh(footGeo, footMat);
+        rightFoot.position.set(0.25, -0.4, 0.08);
+        charGroup.add(rightFoot);
+
+        // Platform
+        const platGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.1, 32);
+        const platMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.5 });
+        const platform = new THREE.Mesh(platGeo, platMat);
+        platform.position.y = -0.55;
+        charGroup.add(platform);
+
+        // Glow ring
+        const ringGeo = new THREE.TorusGeometry(1.2, 0.03, 8, 64);
+        const ringMat = new THREE.MeshStandardMaterial({ color: 0xe8a020, emissive: 0xe8a020, emissiveIntensity: 0.6 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = -0.5;
+        charGroup.add(ring);
+
+        scene.add(charGroup);
+
+        function animate() {
+            characterAnimFrame = requestAnimationFrame(animate);
+            charGroup.rotation.y += 0.008;
+            renderer.render(scene, camera);
+        }
+        animate();
+    }
+
+    function disposeCharacter() {
+        if (characterAnimFrame) {
+            cancelAnimationFrame(characterAnimFrame);
+            characterAnimFrame = null;
+        }
+        if (characterRenderer) {
+            characterRenderer.dispose();
+            characterRenderer = null;
+        }
+    }
+
+    /* ── SVG Line Chart ── */
     function renderLineChart(dataPoints, w, h, label) {
-        w = w || 600; h = h || 220;
-        if (dataPoints.length < 2) return '<div class="gym-empty">Not enough data for chart</div>';
+        w = w || 600; h = h || 200;
+        if (dataPoints.length < 2) {
+            return '<div class="gym-empty">Not enough data for chart<span class="gym-empty-dash"></span></div>';
+        }
         const values = dataPoints.map(d => d.value);
         const min = Math.min(...values);
         const max = Math.max(...values);
         const range = max - min || 1;
-        const padL = 45, padR = 10, padT = 15, padB = 30;
+        const padL = 45, padR = 15, padT = 20, padB = 35;
         const cw = w - padL - padR, ch = h - padT - padB;
 
-        // Grid lines
         let gridLines = '';
         const steps = 4;
         for (let i = 0; i <= steps; i++) {
             const y = padT + (i / steps) * ch;
             const val = max - (i / steps) * range;
-            gridLines += `<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="#282828" stroke-width="1"/>`;
-            gridLines += `<text x="${padL - 6}" y="${y + 4}" fill="#555" font-size="10" text-anchor="end">${Math.round(val)}</text>`;
+            gridLines += `<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+            gridLines += `<text x="${padL - 8}" y="${y + 4}" fill="#6b7280" font-size="10" text-anchor="end" font-family="var(--gym-font-mono)">${Math.round(val)}</text>`;
         }
 
-        // Data line
         const pts = dataPoints.map((d, i) => {
             const x = padL + (i / (dataPoints.length - 1)) * cw;
             const y = padT + ((max - d.value) / range) * ch;
-            return `${x.toFixed(1)},${y.toFixed(1)}`;
+            return { x, y };
         });
 
-        // X-axis labels (show up to 6)
+        const linePoints = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+        // Estimate line length for animation
+        let lineLen = 0;
+        for (let i = 1; i < pts.length; i++) {
+            const dx = pts[i].x - pts[i-1].x;
+            const dy = pts[i].y - pts[i-1].y;
+            lineLen += Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // X labels
         let xLabels = '';
         const labelStep = Math.max(1, Math.floor(dataPoints.length / 6));
         dataPoints.forEach((d, i) => {
             if (i % labelStep === 0 || i === dataPoints.length - 1) {
                 const x = padL + (i / (dataPoints.length - 1)) * cw;
-                xLabels += `<text x="${x}" y="${h - 5}" fill="#555" font-size="10" text-anchor="middle">${fmtDate(d.date)}</text>`;
+                xLabels += `<text x="${x}" y="${h - 8}" fill="#6b7280" font-size="10" text-anchor="middle">${fmtDate(d.date)}</text>`;
             }
         });
 
         // Dots
         let dots = '';
-        dataPoints.forEach((d, i) => {
-            const x = padL + (i / (dataPoints.length - 1)) * cw;
-            const y = padT + ((max - d.value) / range) * ch;
-            dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="#0984e3"/>`;
+        pts.forEach((p, i) => {
+            const delay = (i / pts.length) * 1.2;
+            dots += `<circle class="gym-chart-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#e8a020" style="animation-delay:${delay.toFixed(2)}s"/>`;
         });
 
         return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
             ${gridLines}
-            <polyline points="${pts.join(' ')}" fill="none" stroke="#0984e3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline class="gym-chart-line" points="${linePoints}" fill="none" stroke="#e8a020" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:${Math.ceil(lineLen)};stroke-dashoffset:${Math.ceil(lineLen)};--line-length:${Math.ceil(lineLen)}"/>
             ${dots}
             ${xLabels}
-            ${label ? `<text x="${w / 2}" y="12" fill="#666" font-size="11" text-anchor="middle">${esc(label)}</text>` : ''}
+            ${label ? `<text x="${w / 2}" y="14" fill="#a0a8b8" font-size="11" text-anchor="middle">${esc(label)}</text>` : ''}
         </svg>`;
     }
 
-    /* ── Render Functions ── */
-    function renderPlayerChips() {
-        return GymService.getPlayers().map(p =>
-            `<div class="gym-player-chip ${p.id === activePlayer ? 'active' : ''}" data-player="${esc(p.id)}">${p.avatar} ${esc(p.name)}</div>`
-        ).join('');
+    /* ── Player Selector ── */
+    function renderPlayerSelector() {
+        return GymService.getPlayers().map((p, idx) => {
+            const grad = PLAYER_GRADIENTS[idx % PLAYER_GRADIENTS.length];
+            const initial = p.name.charAt(0).toUpperCase();
+            return `<div class="gym-player-avatar ${p.id === activePlayer ? 'active' : ''}" data-player="${esc(p.id)}">
+                <div class="gym-player-avatar-circle" style="background:linear-gradient(135deg,${grad[0]},${grad[1]})">${initial}</div>
+                <div class="gym-player-avatar-name">${esc(p.name)}</div>
+            </div>`;
+        }).join('');
     }
 
     function renderTabs() {
         return TABS.map(t =>
-            `<button class="gym-tab ${t.id === activeTab ? 'active' : ''}" data-tab="${t.id}">${t.icon} ${t.label}</button>`
+            `<button class="gym-tab ${t.id === activeTab ? 'active' : ''}" data-tab="${t.id}">${TAB_ICONS[t.id]}<span>${t.label}</span></button>`
         ).join('');
     }
 
-    /* ── Dashboard Tab ── */
+    /* ══════════════════════════════════════════
+       TAB 1: DASHBOARD
+    ══════════════════════════════════════════ */
     function renderDashboard() {
         const pid = activePlayer;
-        const nextRoutineId = GymService.getNextRoutine(pid);
-        const nextRoutine = GymService.getRoutine(nextRoutineId);
-        const weights = GymService.getWeights(pid);
-        const currentWeight = weights.length ? weights[weights.length - 1].value : '—';
-        const thisWeek = GymService.getWorkoutsThisWeek(pid);
-        const total = GymService.getTotalWorkouts(pid);
-        const recent = GymService.getWorkouts(pid, 5);
+        const player = GymService.getPlayer(pid);
+        const playerName = player ? player.name : pid;
+        const totalWorkouts = GymService.getTotalWorkouts(pid);
+        const level = Math.max(1, Math.floor(totalWorkouts / 10));
+        const streak = getStreak(pid);
+        const totalVol = getTotalVolume(pid);
+        const recent = GymService.getWorkouts(pid, 3);
 
-        const bestBench = GymService.getBestLift(pid, 'bench_press');
-        const bestSquat = GymService.getBestLift(pid, 'back_squat');
+        let html = '';
 
-        let html = `
-            <button class="gym-start-btn" data-action="start-workout" data-routine="${nextRoutineId}">
-                Start Workout
-                <div class="gym-start-sub">Next up: ${nextRoutine ? esc(nextRoutine.name) + ' — ' + esc(nextRoutine.description) : 'Select a routine'}</div>
-            </button>
-            <div class="gym-quick-stats">
-                <div class="gym-stat-card"><div class="gym-stat-value">${currentWeight === '—' ? '—' : currentWeight + ' lb'}</div><div class="gym-stat-label">Weight</div></div>
-                <div class="gym-stat-card"><div class="gym-stat-value">${thisWeek}</div><div class="gym-stat-label">This Week</div></div>
-                <div class="gym-stat-card"><div class="gym-stat-value">${total}</div><div class="gym-stat-label">Total Workouts</div></div>
-                <div class="gym-stat-card"><div class="gym-stat-value">${bestBench ? bestBench.weight + ' lb' : '—'}</div><div class="gym-stat-label">Best Bench</div></div>
-                <div class="gym-stat-card"><div class="gym-stat-value">${bestSquat ? bestSquat.weight + ' lb' : '—'}</div><div class="gym-stat-label">Best Squat</div></div>
-            </div>`;
+        // Character section
+        html += `<div class="gym-character-section">
+            <div class="gym-character-canvas-wrap" id="gym-char-canvas"></div>
+            <div class="gym-character-name">${esc(playerName)}</div>
+        </div>`;
 
-        if (weights.length >= 2) {
-            html += `<div class="gym-recent-title">Weight Trend</div>`;
-            html += renderSparkline(weights.slice(-10).map(w => w.value), 320, 50);
-        }
+        // Stat grid
+        html += `<div class="gym-stat-grid">
+            <div class="gym-stat-box"><div class="gym-stat-box-value">${level}</div><div class="gym-stat-box-label">Level</div></div>
+            <div class="gym-stat-box"><div class="gym-stat-box-value">${totalWorkouts}</div><div class="gym-stat-box-label">Workouts</div></div>
+            <div class="gym-stat-box"><div class="gym-stat-box-value">${streak}</div><div class="gym-stat-box-label">Streak</div></div>
+            <div class="gym-stat-box"><div class="gym-stat-box-value">${fmtVolume(totalVol)}</div><div class="gym-stat-box-label">Total Volume</div></div>
+        </div>`;
 
-        html += `<div class="gym-recent-title">Recent Workouts</div>`;
+        // Recent sessions
+        html += `<div class="gym-section-title">Recent Sessions</div>`;
         if (recent.length === 0) {
-            html += '<div class="gym-empty">No workouts yet. Hit that start button!</div>';
+            html += '<div class="gym-empty">No workouts logged yet<span class="gym-empty-dash"></span></div>';
         } else {
             html += '<div class="gym-recent-list">';
             recent.forEach(w => {
                 const r = GymService.getRoutine(w.routineId);
                 const vol = GymService.getWorkoutVolume(w);
-                html += `<div class="gym-recent-item">
-                    <span class="gym-recent-date">${fmtDate(w.date)}</span>
-                    <span class="gym-recent-name">${r ? esc(r.name) : 'Custom'}</span>
-                    <span class="gym-recent-vol">${fmtNumber(vol)} vol</span>
+                const colorHex = ROUTINE_COLOR_HEX[w.routineId] || '#e8a020';
+                html += `<div class="gym-recent-card">
+                    <div class="gym-recent-dot" style="background:${colorHex}"></div>
+                    <div class="gym-recent-info">
+                        <div class="gym-recent-routine">${r ? esc(r.name) : 'Custom'}</div>
+                        <div class="gym-recent-meta">${relativeDate(w.date)}</div>
+                    </div>
+                    <div class="gym-recent-vol">${fmtVolume(vol)} vol</div>
                 </div>`;
             });
             html += '</div>';
         }
+
+        // Quick actions
+        const nextRoutineId = GymService.getNextRoutine(pid);
+        html += `<div class="gym-actions-row">
+            <button class="gym-btn-primary" data-action="start-workout" data-routine="${nextRoutineId}">START WORKOUT</button>
+            <button class="gym-btn-outline" data-action="goto-body">LOG WEIGHT</button>
+        </div>`;
+
         return html;
     }
 
-    /* ── Log Workout Tab ── */
-    function renderLogWorkout() {
+    /* ══════════════════════════════════════════
+       TAB 2: TRAIN
+    ══════════════════════════════════════════ */
+    function renderTrain() {
         const pid = activePlayer;
         const routines = GymService.getRoutines();
-        let html = '<div class="gym-routine-cards">';
+        let html = '';
+
+        // Routine selection
+        html += '<div class="gym-routine-grid">';
         routines.forEach(r => {
-            html += `<div class="gym-routine-card ${selectedRoutineId === r.id ? 'selected' : ''}" data-routine="${esc(r.id)}">
+            const color = ROUTINE_COLORS[r.id] || 'gold';
+            const exCount = r.exercises ? r.exercises.length : 0;
+            html += `<div class="gym-routine-card ${selectedRoutineId === r.id ? 'selected' : ''}" data-routine="${esc(r.id)}" data-color="${color}">
                 <div class="gym-routine-card-name">${esc(r.name)}</div>
                 <div class="gym-routine-card-desc">${esc(r.description)}</div>
+                <div class="gym-routine-card-count">${exCount} exercises</div>
             </div>`;
         });
         html += '</div>';
@@ -195,6 +410,13 @@ const GymUI = (() => {
         if (selectedRoutineId) {
             const routine = GymService.getRoutine(selectedRoutineId);
             if (routine) {
+                // Workout header with timer
+                const elapsed = workoutStartTime ? Date.now() - workoutStartTime : 0;
+                html += `<div class="gym-workout-header">
+                    <div class="gym-workout-title">${esc(routine.name)}</div>
+                    <div class="gym-workout-timer" id="gym-timer">${fmtTimer(elapsed)}</div>
+                </div>`;
+
                 html += '<div class="gym-exercise-list">';
                 routine.exercises.forEach((re, reIdx) => {
                     const exDef = GymService.getExercise(re.exerciseId);
@@ -204,14 +426,15 @@ const GymUI = (() => {
                     const history = GymService.getExerciseHistory(pid, re.exerciseId, 3);
                     const suggestedWeight = prog.suggest ? prog.weight : (lastW || re.defaultWeight || 0);
 
-                    html += `<div class="gym-exercise-row" data-exercise-idx="${reIdx}">
+                    html += `<div class="gym-exercise-card">
                         <div class="gym-exercise-header">
-                            <span class="gym-exercise-name">${esc(exDef.name)}
-                                <span class="gym-category-icon ${exDef.category}">${CATEGORY_ICONS[exDef.category] || ''} ${exDef.category}</span>
-                            </span>
+                            <div>
+                                <div class="gym-exercise-name">${esc(exDef.name)}</div>
+                                <span class="gym-category-pill ${exDef.category}">${exDef.category.toUpperCase()}</span>
+                            </div>
                             ${prog.suggest
-                                ? `<span class="gym-progression-badge up">\u2191 Try ${prog.weight}lb</span>`
-                                : (lastW ? `<span class="gym-progression-badge keep">Keep at ${lastW}lb</span>` : '')}
+                                ? '<span class="gym-overload-badge">INCREASE WEIGHT</span>'
+                                : ''}
                         </div>
                         <div class="gym-set-rows">`;
 
@@ -219,25 +442,22 @@ const GymUI = (() => {
                         const setKey = `${reIdx}-${s}`;
                         const saved = logState.sets[setKey] || {};
                         const w = saved.weight !== undefined ? saved.weight : suggestedWeight;
-                        const r2 = saved.reps !== undefined ? saved.reps : '';
+                        const reps = saved.reps !== undefined ? saved.reps : '';
                         const done = saved.completed || false;
                         html += `<div class="gym-set-row">
-                            <span class="gym-set-label">S${s + 1}</span>
+                            <span class="gym-set-num">S${s + 1}</span>
                             <input type="number" class="gym-set-input gym-set-weight" data-set="${setKey}" value="${w}" placeholder="lb">
-                            <span class="gym-set-x">\u00D7</span>
-                            <input type="number" class="gym-set-input gym-set-reps" data-set="${setKey}" value="${r2}" placeholder="reps">
-                            <button class="gym-set-check ${done ? 'done' : ''}" data-set="${setKey}">\u2713</button>
+                            <span class="gym-set-x">x</span>
+                            <input type="number" class="gym-set-input gym-set-reps" data-set="${setKey}" value="${reps}" placeholder="reps">
+                            <button class="gym-set-check ${done ? 'done' : ''}" data-set="${setKey}">&#10003;</button>
                         </div>`;
                     }
 
                     html += '</div>';
 
                     if (history.length > 0) {
-                        html += '<div class="gym-exercise-history">Last: ';
-                        history.forEach(h => {
-                            html += `<span>${h.weight}lb (${fmtDate(h.date)})</span>`;
-                        });
-                        html += '</div>';
+                        const histStr = history.map(h => h.weight + ' x ' + (h.reps || '?')).join(', ');
+                        html += `<div class="gym-exercise-history">Last session: ${histStr}</div>`;
                     }
 
                     html += '</div>';
@@ -246,46 +466,53 @@ const GymUI = (() => {
 
                 // Bottom bar
                 html += `<div class="gym-log-bottom">
-                    <div class="gym-feeling-picker">`;
-                FEELING_EMOJIS.forEach((em, i) => {
-                    html += `<button class="gym-feeling-btn ${logState.feeling === (i + 1) ? 'active' : ''}" data-feeling="${i + 1}">${em}</button>`;
-                });
+                    <div class="gym-feeling-row">
+                        <span class="gym-feeling-label">Feeling</span>
+                        <div class="gym-feeling-btns">`;
+                for (let i = 1; i <= 5; i++) {
+                    html += `<button class="gym-feeling-btn ${logState.feeling === i ? 'active' : ''}" data-feeling="${i}">${i}</button>`;
+                }
                 html += `</div>
+                    </div>
                     <textarea class="gym-log-notes" placeholder="Notes..." data-field="notes">${esc(logState.notes)}</textarea>
-                    <input type="number" class="gym-log-calories" placeholder="kcal" data-field="calories" value="${esc(logState.calories)}">
-                    <button class="gym-save-btn" data-action="save-workout">Save Workout</button>
+                    <button class="gym-btn-full" data-action="save-workout">FINISH WORKOUT</button>
                 </div>`;
             }
         }
         return html;
     }
 
-    /* ── Progress Tab ── */
+    /* ══════════════════════════════════════════
+       TAB 3: PROGRESS
+    ══════════════════════════════════════════ */
     function renderProgress() {
         const pid = activePlayer;
         const exercises = GymService.getExercises();
-        let html = `<select class="gym-metric-select" data-action="change-metric">
-            <option value="weight" ${progressMetric === 'weight' ? 'selected' : ''}>Bodyweight</option>`;
-        exercises.forEach(e => {
-            html += `<option value="${esc(e.id)}" ${progressMetric === e.id ? 'selected' : ''}>${esc(e.name)}</option>`;
-        });
-        html += '</select>';
 
+        // Metric pills
+        let html = '<div class="gym-metric-pills">';
+        html += `<button class="gym-metric-pill ${progressMetric === 'weight' ? 'active' : ''}" data-metric="weight">Body Weight</button>`;
+        exercises.forEach(e => {
+            html += `<button class="gym-metric-pill ${progressMetric === e.id ? 'active' : ''}" data-metric="${esc(e.id)}">${esc(e.name)}</button>`;
+        });
+        html += '</div>';
+
+        // Chart
         html += '<div class="gym-chart-container">';
         if (progressMetric === 'weight') {
             const weights = GymService.getWeights(pid);
             if (weights.length >= 2) {
-                html += renderLineChart(weights, 600, 220, 'Bodyweight (lb)');
+                html += renderLineChart(weights, 600, 200, 'Bodyweight (lb)');
             } else {
-                html += '<div class="gym-empty">Log at least 2 weight entries to see a chart</div>';
+                html += '<div class="gym-empty">Log at least 2 weight entries to see a chart<span class="gym-empty-dash"></span></div>';
             }
         } else {
             const progression = GymService.getExerciseProgression(pid, progressMetric);
             const exDef = GymService.getExercise(progressMetric);
             if (progression.length >= 2) {
-                html += renderLineChart(progression, 600, 220, (exDef ? exDef.name : '') + ' (lb)');
+                html += renderLineChart(progression, 600, 200, (exDef ? exDef.name : '') + ' (lb)');
             } else {
-                html += '<div class="gym-empty">Log at least 2 sessions to see progression</div>';
+                html += '<div class="gym-empty">Log at least 2 sessions to see progression<span class="gym-empty-dash"></span></div>';
             }
         }
         html += '</div>';
@@ -294,18 +521,33 @@ const GymUI = (() => {
         if (progressMetric !== 'weight') {
             const prs = GymService.getPRs(pid, progressMetric);
             if (prs.length > 0) {
-                html += '<div class="gym-pr-section"><div class="gym-recent-title">Personal Records</div>';
+                html += '<div class="gym-pr-section"><div class="gym-section-title">Personal Records</div><div class="gym-pr-cards">';
                 prs.forEach((pr, i) => {
-                    const medal = i === 0 ? '\u{1F947}' : i === 1 ? '\u{1F948}' : '\u{1F949}';
-                    html += `<span class="gym-pr-badge">${medal} ${pr.weight}lb \u00D7 ${pr.reps} — ${fmtDate(pr.date)}</span>`;
+                    html += `<div class="gym-pr-card">
+                        <div class="gym-pr-card-rank">#${i + 1}</div>
+                        <div class="gym-pr-card-weight">${pr.weight}lb</div>
+                        <div class="gym-pr-card-detail">${pr.reps} reps -- ${fmtDate(pr.date)}</div>
+                        <span class="gym-pr-badge-tag">PR</span>
+                    </div>`;
                 });
-                html += '</div>';
+                html += '</div></div>';
             }
         }
 
         // Challenges
-        html += `<div class="gym-recent-title" style="margin-top:20px">Challenges</div>
-            <button class="gym-add-btn" data-action="add-challenge">+ Add Challenge</button>`;
+        html += `<div class="gym-section-title">Challenges</div>
+            <button class="gym-btn-sm outline" data-action="toggle-challenge-form">ADD CHALLENGE</button>`;
+
+        if (showChallengeForm) {
+            html += `<div class="gym-challenge-form">
+                <input type="text" class="gym-input wide" id="gym-challenge-name" placeholder="Challenge name">
+                <input type="number" class="gym-input num" id="gym-challenge-value" placeholder="Value">
+                <input type="text" class="gym-input" id="gym-challenge-unit" placeholder="Unit" style="width:80px">
+                <input type="date" class="gym-input" id="gym-challenge-date" value="${today()}">
+                <button class="gym-btn-sm" data-action="save-challenge">Save</button>
+            </div>`;
+        }
+
         const challenges = GymService.getChallenges(pid);
         if (challenges.length > 0) {
             html += '<div class="gym-challenge-list">';
@@ -321,31 +563,44 @@ const GymUI = (() => {
         return html;
     }
 
-    /* ── Routines Tab ── */
+    /* ══════════════════════════════════════════
+       TAB 4: ROUTINES
+    ══════════════════════════════════════════ */
     function renderRoutines() {
         const routines = GymService.getRoutines();
         const settings = GymService.getSettings();
-        let html = '<button class="gym-add-btn" data-action="add-routine" style="margin-bottom:12px">+ New Routine</button>';
+
+        let html = `<div class="gym-routines-header">
+            <div class="gym-section-title" style="margin:0">Programs</div>
+            <button class="gym-btn-sm outline" data-action="add-routine">NEW ROUTINE</button>
+        </div>`;
 
         routines.forEach(r => {
             const isEditing = editingRoutineId === r.id;
+            const colorHex = ROUTINE_COLOR_HEX[r.id] || '#e8a020';
             html += `<div class="gym-routine-detail">
                 <div class="gym-routine-detail-header">
                     <div>
-                        <div class="gym-routine-detail-name">${esc(r.name)}</div>
-                        <div class="gym-routine-detail-desc">${esc(r.description)}</div>
+                        <div class="gym-routine-detail-name">
+                            <span class="gym-routine-color-dot" style="background:${colorHex}"></span>${esc(r.name)}
+                        </div>
+                        <div class="gym-routine-detail-desc">${esc(r.description)} <span class="gym-routine-exercise-count">${r.exercises.length} exercises</span></div>
                     </div>
                     <div style="display:flex;gap:4px;">
-                        <button class="gym-icon-btn" data-action="edit-routine" data-routine="${esc(r.id)}" title="Edit">\u270F</button>
-                        <button class="gym-icon-btn" data-action="delete-routine" data-routine="${esc(r.id)}" title="Delete">\u2715</button>
+                        <button class="gym-icon-btn" data-action="edit-routine" data-routine="${esc(r.id)}" title="Edit">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                        <button class="gym-icon-btn danger" data-action="delete-routine" data-routine="${esc(r.id)}" title="Delete">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
                     </div>
                 </div>
                 <div class="gym-routine-exercises">`;
-            r.exercises.forEach((re, i) => {
+            r.exercises.forEach(re => {
                 const exDef = GymService.getExercise(re.exerciseId);
                 html += `<div class="gym-routine-exercise-row">
                     <span class="gym-routine-exercise-name">${exDef ? esc(exDef.name) : esc(re.exerciseId)}</span>
-                    <span class="gym-routine-exercise-detail">${re.sets} sets @ ${re.defaultWeight}lb</span>
+                    <span class="gym-routine-exercise-detail">${re.sets}s @ ${re.defaultWeight}lb</span>
                 </div>`;
             });
             html += '</div>';
@@ -356,7 +611,7 @@ const GymUI = (() => {
         });
 
         html += `<div class="gym-settings-section">
-            <div class="gym-recent-title">Settings</div>
+            <div class="gym-section-title">Settings</div>
             <div class="gym-settings-row">
                 <span class="gym-settings-label">Rep Range Min</span>
                 <input type="number" class="gym-settings-input" data-setting="repRangeMin" value="${settings.repRangeMin}">
@@ -376,15 +631,15 @@ const GymUI = (() => {
 
     function renderRoutineEditor(routine) {
         const allExercises = GymService.getExercises();
-        let html = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #282828">
+        let html = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gym-border)">
             <div class="gym-inline-form">
-                <input type="text" class="gym-diet-input name" placeholder="Routine name" value="${esc(routine.name)}" data-edit="name">
-                <input type="text" class="gym-diet-input name" placeholder="Description" value="${esc(routine.description)}" data-edit="description">
-                <button class="gym-save-btn" data-action="save-routine-edit" data-routine="${esc(routine.id)}">Save</button>
+                <input type="text" class="gym-input wide" placeholder="Routine name" value="${esc(routine.name)}" data-edit="name">
+                <input type="text" class="gym-input wide" placeholder="Description" value="${esc(routine.description)}" data-edit="description">
+                <button class="gym-btn-sm" data-action="save-routine-edit" data-routine="${esc(routine.id)}">Save</button>
             </div>
-            <div style="margin-top:6px">
-                <select class="gym-metric-select" data-action="add-exercise-to-routine" data-routine="${esc(routine.id)}">
-                    <option value="">+ Add exercise...</option>`;
+            <div style="margin-top:8px">
+                <select class="gym-input" data-action="add-exercise-to-routine" data-routine="${esc(routine.id)}" style="width:100%">
+                    <option value="">Add exercise...</option>`;
         allExercises.forEach(e => {
             html += `<option value="${esc(e.id)}">${esc(e.name)}</option>`;
         });
@@ -394,25 +649,43 @@ const GymUI = (() => {
         return html;
     }
 
-    /* ── Body Tab ── */
+    /* ══════════════════════════════════════════
+       TAB 5: BODY
+    ══════════════════════════════════════════ */
     function renderBody() {
         const pid = activePlayer;
         let html = '';
 
         // Weight section
+        const weights = GymService.getWeights(pid);
+        const currentWeight = weights.length ? weights[weights.length - 1].value : null;
+
         html += `<div class="gym-body-section">
-            <div class="gym-body-section-title">Log Weight</div>
-            <div class="gym-weight-form">
-                <input type="number" class="gym-weight-input" id="gym-weight-val" placeholder="lbs" step="0.1">
-                <input type="date" class="gym-date-input" id="gym-weight-date" value="${today()}">
-                <button class="gym-save-btn" data-action="save-weight">Save</button>
+            <div class="gym-body-section-title">Weight Tracker</div>`;
+        if (currentWeight !== null) {
+            html += `<div class="gym-current-weight">
+                <span class="gym-current-weight-val">${currentWeight}</span>
+                <span class="gym-current-weight-unit">lbs</span>
+            </div>`;
+        }
+        html += `<div class="gym-form-row">
+                <input type="number" class="gym-input num" id="gym-weight-val" placeholder="lbs" step="0.1">
+                <input type="date" class="gym-input" id="gym-weight-date" value="${today()}">
+                <button class="gym-btn-sm" data-action="save-weight">Save</button>
             </div>`;
 
-        const weights = GymService.getWeights(pid);
         if (weights.length > 0) {
-            html += '<table class="gym-weight-table"><thead><tr><th>Date</th><th>Weight</th></tr></thead><tbody>';
-            weights.slice(-20).reverse().forEach(w => {
-                html += `<tr><td>${fmtDate(w.date)}</td><td>${w.value} lb</td></tr>`;
+            html += '<table class="gym-weight-table"><thead><tr><th>Date</th><th>Weight</th><th>Delta</th></tr></thead><tbody>';
+            const recent = weights.slice(-10).reverse();
+            recent.forEach((w, i) => {
+                let delta = '';
+                const nextIdx = weights.length - 1 - i;
+                if (nextIdx > 0) {
+                    const diff = (w.value - weights[nextIdx - 1].value).toFixed(1);
+                    const cls = parseFloat(diff) > 0 ? 'up' : parseFloat(diff) < 0 ? 'down' : '';
+                    delta = `<span class="gym-weight-delta ${cls}">${parseFloat(diff) > 0 ? '+' : ''}${diff}</span>`;
+                }
+                html += `<tr><td>${fmtDate(w.date)}</td><td>${w.value} lb</td><td>${delta}</td></tr>`;
             });
             html += '</tbody></table>';
         }
@@ -421,10 +694,10 @@ const GymUI = (() => {
         // Photo section
         html += `<div class="gym-body-section">
             <div class="gym-body-section-title">Progress Photos</div>
-            <div class="gym-photo-upload">
+            <div class="gym-form-row">
                 <input type="file" accept="image/*" id="gym-photo-input" style="display:none">
-                <button class="gym-add-btn" data-action="upload-photo">+ Upload Photo</button>
-                <input type="date" class="gym-date-input" id="gym-photo-date" value="${today()}">
+                <button class="gym-btn-sm outline" data-action="upload-photo">UPLOAD PHOTO</button>
+                <input type="date" class="gym-input" id="gym-photo-date" value="${today()}">
             </div>`;
 
         const photos = GymService.getPhotos(pid);
@@ -443,13 +716,13 @@ const GymUI = (() => {
         // Diet section
         html += `<div class="gym-body-section">
             <div class="gym-body-section-title">Diet Log</div>
-            <div class="gym-diet-form">
-                <input type="text" class="gym-diet-input name" id="gym-diet-name" placeholder="Food item">
-                <input type="number" class="gym-diet-input num" id="gym-diet-cal" placeholder="kcal">
-                <input type="number" class="gym-diet-input num" id="gym-diet-protein" placeholder="prot">
-                <input type="number" class="gym-diet-input num" id="gym-diet-carbs" placeholder="carbs">
-                <input type="number" class="gym-diet-input num" id="gym-diet-fat" placeholder="fat">
-                <button class="gym-save-btn" data-action="save-diet">Add</button>
+            <div class="gym-form-row">
+                <input type="text" class="gym-input wide" id="gym-diet-name" placeholder="Food item">
+                <input type="number" class="gym-input num" id="gym-diet-cal" placeholder="kcal">
+                <input type="number" class="gym-input num" id="gym-diet-protein" placeholder="prot">
+                <input type="number" class="gym-input num" id="gym-diet-carbs" placeholder="carbs">
+                <input type="number" class="gym-input num" id="gym-diet-fat" placeholder="fat">
+                <button class="gym-btn-sm" data-action="save-diet">Add</button>
             </div>`;
 
         const dietEntries = GymService.getDiet(pid);
@@ -464,13 +737,31 @@ const GymUI = (() => {
                     totalF += item.fat || 0;
                 });
             });
+            const maxCal = 2500;
             html += `<div class="gym-diet-summary">
-                <div class="gym-diet-stat"><div class="gym-diet-stat-val">${totalCal}</div><div class="gym-diet-stat-label">Calories</div></div>
-                <div class="gym-diet-stat"><div class="gym-diet-stat-val">${totalP}g</div><div class="gym-diet-stat-label">Protein</div></div>
-                <div class="gym-diet-stat"><div class="gym-diet-stat-val">${totalC}g</div><div class="gym-diet-stat-label">Carbs</div></div>
-                <div class="gym-diet-stat"><div class="gym-diet-stat-val">${totalF}g</div><div class="gym-diet-stat-label">Fat</div></div>
-            </div>
-            <div class="gym-diet-items">`;
+                <div class="gym-diet-bar-card">
+                    <div class="gym-diet-bar-val">${totalCal}</div>
+                    <div class="gym-diet-bar-label">Calories</div>
+                    <div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:${Math.min(100, (totalCal / maxCal) * 100)}%;background:var(--gym-gold)"></div></div>
+                </div>
+                <div class="gym-diet-bar-card">
+                    <div class="gym-diet-bar-val">${totalP}g</div>
+                    <div class="gym-diet-bar-label">Protein</div>
+                    <div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:${Math.min(100, (totalP / 180) * 100)}%;background:var(--gym-blue)"></div></div>
+                </div>
+                <div class="gym-diet-bar-card">
+                    <div class="gym-diet-bar-val">${totalC}g</div>
+                    <div class="gym-diet-bar-label">Carbs</div>
+                    <div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:${Math.min(100, (totalC / 300) * 100)}%;background:var(--gym-green)"></div></div>
+                </div>
+                <div class="gym-diet-bar-card">
+                    <div class="gym-diet-bar-val">${totalF}g</div>
+                    <div class="gym-diet-bar-label">Fat</div>
+                    <div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:${Math.min(100, (totalF / 80) * 100)}%;background:var(--gym-red)"></div></div>
+                </div>
+            </div>`;
+
+            html += '<div class="gym-diet-items">';
             todayDiet.forEach(d => {
                 (d.items || []).forEach(item => {
                     html += `<div class="gym-diet-item">
@@ -485,12 +776,14 @@ const GymUI = (() => {
         return html;
     }
 
-    /* ── Main Render ── */
+    /* ══════════════════════════════════════════
+       MAIN RENDER
+    ══════════════════════════════════════════ */
     function render() {
         return `<div class="gym-panel">
             <div class="gym-header">
-                <h2>\u{1F3CB}\u{FE0F} Gym</h2>
-                <div class="gym-player-chips">${renderPlayerChips()}</div>
+                <div class="gym-header-title">Gym</div>
+                <div class="gym-player-selector">${renderPlayerSelector()}</div>
             </div>
             <div class="gym-tabs">${renderTabs()}</div>
             <div class="gym-tab-content" id="gym-tab-content"></div>
@@ -500,9 +793,10 @@ const GymUI = (() => {
     function renderActiveTab() {
         const el = container && container.querySelector('#gym-tab-content');
         if (!el) return;
+        disposeCharacter();
         switch (activeTab) {
-            case 'dashboard': el.innerHTML = renderDashboard(); break;
-            case 'log':       el.innerHTML = renderLogWorkout(); break;
+            case 'dashboard': el.innerHTML = renderDashboard(); initDashboard(); break;
+            case 'train':     el.innerHTML = renderTrain(); startTimerTick(); break;
             case 'progress':  el.innerHTML = renderProgress(); break;
             case 'routines':  el.innerHTML = renderRoutines(); break;
             case 'body':      el.innerHTML = renderBody(); break;
@@ -510,11 +804,28 @@ const GymUI = (() => {
         bindTabEvents();
     }
 
+    function initDashboard() {
+        const wrap = container && container.querySelector('#gym-char-canvas');
+        if (wrap) {
+            const player = GymService.getPlayer(activePlayer);
+            const name = player ? player.name : activePlayer;
+            initCharacterCanvas(wrap, name);
+        }
+    }
+
+    function startTimerTick() {
+        clearInterval(timerInterval);
+        if (!workoutStartTime || !selectedRoutineId) return;
+        timerInterval = setInterval(() => {
+            const el = container && container.querySelector('#gym-timer');
+            if (el) el.textContent = fmtTimer(Date.now() - workoutStartTime);
+        }, 1000);
+    }
+
     /* ── Event Binding ── */
     function bindEvents() {
         if (!container) return;
 
-        // Tab switching
         container.querySelectorAll('.gym-tab').forEach(el => {
             el.addEventListener('click', () => {
                 activeTab = el.dataset.tab;
@@ -523,11 +834,10 @@ const GymUI = (() => {
             });
         });
 
-        // Player switching
-        container.querySelectorAll('.gym-player-chip').forEach(el => {
+        container.querySelectorAll('.gym-player-avatar').forEach(el => {
             el.addEventListener('click', () => {
                 activePlayer = el.dataset.player;
-                container.querySelectorAll('.gym-player-chip').forEach(c => c.classList.toggle('active', c.dataset.player === activePlayer));
+                container.querySelectorAll('.gym-player-avatar').forEach(c => c.classList.toggle('active', c.dataset.player === activePlayer));
                 renderActiveTab();
             });
         });
@@ -540,27 +850,38 @@ const GymUI = (() => {
         const content = container.querySelector('#gym-tab-content');
         if (!content) return;
 
-        // Dashboard: start workout button
+        // Dashboard: start workout
         content.querySelectorAll('[data-action="start-workout"]').forEach(el => {
             el.addEventListener('click', () => {
                 selectedRoutineId = el.dataset.routine;
-                activeTab = 'log';
-                container.querySelectorAll('.gym-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'log'));
-                logState = { feeling: 3, notes: '', calories: '', sets: {} };
+                activeTab = 'train';
+                container.querySelectorAll('.gym-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'train'));
+                logState = { feeling: 3, notes: '', sets: {} };
+                workoutStartTime = Date.now();
                 renderActiveTab();
             });
         });
 
-        // Log: routine selection
+        // Dashboard: log weight shortcut
+        content.querySelectorAll('[data-action="goto-body"]').forEach(el => {
+            el.addEventListener('click', () => {
+                activeTab = 'body';
+                container.querySelectorAll('.gym-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'body'));
+                renderActiveTab();
+            });
+        });
+
+        // Train: routine selection
         content.querySelectorAll('.gym-routine-card').forEach(el => {
             el.addEventListener('click', () => {
                 selectedRoutineId = el.dataset.routine;
-                logState = { feeling: 3, notes: '', calories: '', sets: {} };
+                logState = { feeling: 3, notes: '', sets: {} };
+                workoutStartTime = Date.now();
                 renderActiveTab();
             });
         });
 
-        // Log: set inputs
+        // Train: set inputs
         content.querySelectorAll('.gym-set-weight').forEach(el => {
             el.addEventListener('input', () => {
                 const key = el.dataset.set;
@@ -584,7 +905,7 @@ const GymUI = (() => {
             });
         });
 
-        // Log: feeling picker
+        // Train: feeling
         content.querySelectorAll('.gym-feeling-btn').forEach(el => {
             el.addEventListener('click', () => {
                 logState.feeling = parseInt(el.dataset.feeling);
@@ -592,29 +913,49 @@ const GymUI = (() => {
             });
         });
 
-        // Log: notes & calories
+        // Train: notes
         const notesEl = content.querySelector('[data-field="notes"]');
         if (notesEl) notesEl.addEventListener('input', () => { logState.notes = notesEl.value; });
-        const calEl = content.querySelector('[data-field="calories"]');
-        if (calEl) calEl.addEventListener('input', () => { logState.calories = calEl.value; });
 
-        // Log: save workout
+        // Train: save workout
         content.querySelectorAll('[data-action="save-workout"]').forEach(el => {
             el.addEventListener('click', saveWorkout);
         });
 
-        // Progress: metric change
-        const metricSel = content.querySelector('[data-action="change-metric"]');
-        if (metricSel) {
-            metricSel.addEventListener('change', () => {
-                progressMetric = metricSel.value;
+        // Progress: metric pills
+        content.querySelectorAll('.gym-metric-pill').forEach(el => {
+            el.addEventListener('click', () => {
+                progressMetric = el.dataset.metric;
                 renderActiveTab();
             });
-        }
+        });
 
-        // Progress: add challenge
-        content.querySelectorAll('[data-action="add-challenge"]').forEach(el => {
-            el.addEventListener('click', promptAddChallenge);
+        // Progress: challenge form toggle
+        content.querySelectorAll('[data-action="toggle-challenge-form"]').forEach(el => {
+            el.addEventListener('click', () => {
+                showChallengeForm = !showChallengeForm;
+                renderActiveTab();
+            });
+        });
+
+        // Progress: save challenge
+        content.querySelectorAll('[data-action="save-challenge"]').forEach(el => {
+            el.addEventListener('click', () => {
+                const name = document.getElementById('gym-challenge-name');
+                const value = document.getElementById('gym-challenge-value');
+                const unit = document.getElementById('gym-challenge-unit');
+                const date = document.getElementById('gym-challenge-date');
+                if (!name || !name.value || !value || !value.value) return;
+                GymService.addChallenge(activePlayer, {
+                    name: name.value,
+                    value: parseFloat(value.value) || 0,
+                    unit: unit ? unit.value : '',
+                    date: date ? date.value : today()
+                });
+                showChallengeForm = false;
+                showToast('Challenge added');
+                renderActiveTab();
+            });
         });
 
         // Routines: edit
@@ -666,7 +1007,7 @@ const GymUI = (() => {
             });
         });
 
-        // Routines: add new routine
+        // Routines: add new
         content.querySelectorAll('[data-action="add-routine"]').forEach(el => {
             el.addEventListener('click', () => {
                 const name = prompt('Routine name:');
@@ -729,7 +1070,6 @@ const GymUI = (() => {
             for (let s = 0; s < re.sets; s++) {
                 const key = `${reIdx}-${s}`;
                 const saved = logState.sets[key] || {};
-                // Read current input values from DOM as fallback
                 const weightInput = container.querySelector(`.gym-set-weight[data-set="${key}"]`);
                 const repsInput = container.querySelector(`.gym-set-reps[data-set="${key}"]`);
                 sets.push({
@@ -746,27 +1086,16 @@ const GymUI = (() => {
             routineId: selectedRoutineId,
             exercises,
             notes: logState.notes,
-            feeling: logState.feeling,
-            calories: parseInt(logState.calories) || 0
+            feeling: logState.feeling
         };
 
         GymService.logWorkout(activePlayer, workout);
-        logState = { feeling: 3, notes: '', calories: '', sets: {} };
+        logState = { feeling: 3, notes: '', sets: {} };
+        workoutStartTime = null;
+        clearInterval(timerInterval);
         showToast('Workout saved!');
         activeTab = 'dashboard';
         container.querySelectorAll('.gym-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'dashboard'));
-        renderActiveTab();
-    }
-
-    function promptAddChallenge() {
-        const name = prompt('Challenge name:');
-        if (!name) return;
-        const value = prompt('Value (number):');
-        if (!value) return;
-        const unit = prompt('Unit (e.g., lb, reps, minutes):') || '';
-        GymService.addChallenge(activePlayer, {
-            name, value: parseFloat(value) || 0, unit, date: today()
-        });
         renderActiveTab();
     }
 
@@ -779,7 +1108,6 @@ const GymUI = (() => {
 
         const reader = new FileReader();
         reader.onload = function (e) {
-            // Resize to max 800px wide
             const img = new Image();
             img.onload = function () {
                 const maxW = 800;
@@ -815,7 +1143,6 @@ const GymUI = (() => {
             fat: parseInt(fat && fat.value) || 0
         };
 
-        // Find today's diet entry or create one
         const pid = activePlayer;
         const dietEntries = GymService.getDiet(pid);
         const todayEntry = dietEntries.find(d => d.date === today());
@@ -839,11 +1166,15 @@ const GymUI = (() => {
             bindEvents();
         },
         close() {
+            disposeCharacter();
+            clearInterval(timerInterval);
             container = null;
             activeTab = 'dashboard';
             selectedRoutineId = null;
-            logState = { feeling: 3, notes: '', calories: '', sets: {} };
+            logState = { feeling: 3, notes: '', sets: {} };
             editingRoutineId = null;
+            workoutStartTime = null;
+            showChallengeForm = false;
         }
     };
 })();
