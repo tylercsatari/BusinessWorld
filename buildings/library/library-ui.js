@@ -2575,17 +2575,26 @@ const LibraryUI = (() => {
         ideaMapSaveCategories(cats);
     }
 
-    // Seed idea-to-category mapping based on tags (only if mapping is empty)
+    // Seed idea-to-category mapping based on tags (runs when empty or new ideas added)
     function ideaMapSeedIdeaCategories() {
         const mapping = ideaMapGetIdeaCategories();
-        if (Object.keys(mapping).length > 0) return;
         const cats = ideaMapGetCategories();
         if (cats.length === 0) return;
         const findCat = (name) => cats.find(c => c.name === name);
-        const tagRules = [
-            { tags: ['bulletproof', 'helmet'], cat: 'Bulletproof & Armor' },
-            { tags: ['flight'], cat: 'Flight & Propulsion' },
+
+        // Subcategory rules checked FIRST (more specific)
+        const subRules = [
+            { tags: ['helmet', 'waterproof'], cat: 'Helmet Series' },
+            { tags: ['suit', 'fireproof', 'taser', 'netherite'], cat: 'Suit Series' },
             { tags: ['jet-engine'], cat: 'Jet Engine Series' },
+            { tags: ['drones', 'drone'], cat: 'Drone Series' },
+            { tags: ['exoskeleton'], cat: 'Strength Arm Series' },
+            { tags: ['strength'], cat: 'Legs & Movement', exclude: ['exoskeleton'] }
+        ];
+        // Top-level fallback rules
+        const tagRules = [
+            { tags: ['bulletproof', 'helmet', 'waterproof'], cat: 'Bulletproof & Armor' },
+            { tags: ['flight', 'jet-engine', 'drones', 'drone'], cat: 'Flight & Propulsion' },
             { tags: ['magnetism'], cat: 'Magnetism' },
             { tags: ['exoskeleton', 'strength'], cat: 'Exoskeleton & Strength' },
             { tags: ['jarvis', 'ai'], cat: 'Jarvis & AI' },
@@ -2593,18 +2602,31 @@ const LibraryUI = (() => {
             { tags: ['3d-printing'], cat: '3D Printing' },
             { tags: ['stunt', 'science', 'chemistry'], cat: 'Stunts & Science' }
         ];
-        const newMapping = {};
+        const newMapping = { ...mapping };
+        let changed = false;
         for (const idea of ideaMapState.ideas) {
+            if (newMapping[idea.id]) continue; // already mapped
             const ideaTags = ideaMapGetTags(idea);
             if (ideaTags.length === 0) continue;
+            // Try subcategory first
+            let assigned = false;
+            for (const rule of subRules) {
+                if (rule.exclude && rule.exclude.some(t => ideaTags.includes(t))) continue;
+                if (rule.tags.some(t => ideaTags.includes(t))) {
+                    const cat = findCat(rule.cat);
+                    if (cat) { newMapping[idea.id] = cat.id; assigned = true; changed = true; break; }
+                }
+            }
+            if (assigned) continue;
+            // Fall back to top-level
             for (const rule of tagRules) {
                 if (rule.tags.some(t => ideaTags.includes(t))) {
                     const cat = findCat(rule.cat);
-                    if (cat) { newMapping[idea.id] = cat.id; break; }
+                    if (cat) { newMapping[idea.id] = cat.id; changed = true; break; }
                 }
             }
         }
-        if (Object.keys(newMapping).length > 0) ideaMapSaveIdeaCategories(newMapping);
+        if (changed) ideaMapSaveIdeaCategories(newMapping);
     }
 
     // Get category object for an idea
@@ -2680,9 +2702,10 @@ const LibraryUI = (() => {
         const catColor = topCat ? topCat.color : null;
         const topBorderStyle = catColor ? `border-top: 3px solid ${catColor};` : '';
 
-        // Category badge (shown in tag view)
+        // Category badge (shown in tag view) — show subcategory name if applicable, top-level color always
+        const catBadgeLabel = (cat && cat.parentId) ? cat.name : (topCat ? topCat.name : '');
         const catBadge = (groupBy === 'tag' && topCat)
-            ? `<span class="ideamap-cat-badge" style="background:${topCat.color}20;color:${topCat.color};border:1px solid ${topCat.color}40">${escHtml(topCat.name)}</span>`
+            ? `<span class="ideamap-cat-badge" style="background:${topCat.color}20;color:${topCat.color};border:1px solid ${topCat.color}40">${escHtml(catBadgeLabel)}</span>`
             : '';
 
         return `<div class="ideamap-card" data-id="${idea.id}" style="${topBorderStyle}">

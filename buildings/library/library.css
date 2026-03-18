@@ -81,6 +81,10 @@
 .library-notes-filter-wrap {
     flex-shrink: 0;
     border-bottom: 1px solid #f0ece4;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #fff;
 }
 
 .library-notes-list {
@@ -2054,6 +2058,7 @@
 /* --- Filter Bar --- */
 .ideamap-filter-bar {
     position: sticky;
+    top: 0;
     z-index: 10;
     background: #fff;
     padding: 8px 16px;
