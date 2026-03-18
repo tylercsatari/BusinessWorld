@@ -126,8 +126,10 @@ const LibraryUI = (() => {
                 else { editingSponsorVideo = 'new'; renderSponsorsTab(); }
             }
         });
-        container.querySelectorAll('.library-tab').forEach(tab => {
-            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+        // Event delegation: handles tabs added after initial render (e.g. Idea Map)
+        container.querySelector('.library-tabs').addEventListener('click', (e) => {
+            const tab = e.target.closest('.library-tab');
+            if (tab && tab.dataset.tab) switchTab(tab.dataset.tab);
         });
     }
 
@@ -2161,7 +2163,7 @@ const LibraryUI = (() => {
     }
 
     // =====================
-    // --- IDEA MAP ---
+    // --- IDEA MAP (Kanban Grid) ---
     // =====================
     const IDEAMAP_STATUS_COLORS = {
         idea: '#4a9eff',
@@ -2177,39 +2179,25 @@ const LibraryUI = (() => {
         'Flight': ['flight', 'drones'],
         'Bulletproof / Armor': ['bulletproof', 'helmet'],
         'Exoskeleton / Strength': ['exoskeleton', 'strength'],
+        'Jet Engine': ['jet-engine'],
         'Jarvis / AI': ['jarvis', 'ai'],
         'Superhero Gadgets': ['superhero', 'gadget'],
         'Stunts / Survival': ['stunt', 'survival'],
         'Chemistry / Science': ['chemistry', 'science', 'materials', 'food'],
         '3D Printing': ['3d-printing'],
-        'Jet Engine': ['jet-engine'],
         'Hook Ideas': ['hook'],
-        'Engineering / Fun': ['engineering', 'fun', 'gaming'],
-        'Wearables': ['wearable', 'fireproof', 'protection', 'waterproof'],
         'Other': []
     };
 
     let ideaMapState = {
         ideas: [],
-        positions: {},  // id → {x, y}
-        edges: [],      // [{from, to}]
-        colors: {},     // id → color override
-        zoom: 1,
-        panX: 0, panY: 0,
-        connectMode: false,
-        connectFrom: null,
         filterStatus: 'all',
-        filterTag: 'all',
-        dragging: null,
-        dragOffsetX: 0, dragOffsetY: 0,
+        collapsedClusters: {},
         loaded: false
     };
 
     function ideaMapGetCluster(idea) {
-        let tags = [];
-        if (idea.tags) {
-            try { tags = JSON.parse(idea.tags); } catch(e) { tags = []; }
-        }
+        const tags = ideaMapGetTags(idea);
         for (const [cluster, keywords] of Object.entries(IDEAMAP_CLUSTERS)) {
             if (cluster === 'Other') continue;
             if (keywords.some(k => tags.includes(k))) return cluster;
@@ -2219,101 +2207,21 @@ const LibraryUI = (() => {
 
     function ideaMapGetTags(idea) {
         if (!idea.tags) return [];
+        if (Array.isArray(idea.tags)) return idea.tags;
         try { return JSON.parse(idea.tags); } catch(e) { return []; }
     }
 
-    function ideaMapInitPositions(ideas) {
-        const saved = localStorage.getItem('gym-idea-map-positions');
-        let savedPos = {};
-        if (saved) { try { savedPos = JSON.parse(saved); } catch(e) {} }
-
-        // Group ideas by cluster
-        const clusters = {};
-        for (const idea of ideas) {
-            const c = ideaMapGetCluster(idea);
-            if (!clusters[c]) clusters[c] = [];
-            clusters[c].push(idea);
-        }
-
-        const clusterNames = Object.keys(clusters);
-        const cols = Math.ceil(Math.sqrt(clusterNames.length));
-        const clusterW = 400;
-        const clusterH = 280;
-        const nodeW = 180;
-        const nodeH = 36;
-        const padX = 40;
-        const padY = 50;
-
-        const positions = {};
-        clusterNames.forEach((cName, ci) => {
-            const col = ci % cols;
-            const row = Math.floor(ci / cols);
-            const cx = col * (clusterW + padX) + 60;
-            const cy = row * (clusterH + padY) + 60;
-
-            const nodesInCluster = clusters[cName];
-            const nodeCols = Math.min(nodesInCluster.length, 2);
-            nodesInCluster.forEach((idea, ni) => {
-                if (savedPos[idea.id]) {
-                    positions[idea.id] = savedPos[idea.id];
-                } else {
-                    const ncol = ni % nodeCols;
-                    const nrow = Math.floor(ni / nodeCols);
-                    positions[idea.id] = {
-                        x: cx + ncol * (nodeW + 12),
-                        y: cy + 30 + nrow * (nodeH + 8)
-                    };
-                }
-            });
-        });
-        return positions;
+    function ideaMapGetStatus(idea) {
+        return idea.status || idea.type || 'idea';
     }
 
-    function ideaMapSavePositions() {
-        localStorage.setItem('gym-idea-map-positions', JSON.stringify(ideaMapState.positions));
-    }
-
-    function ideaMapSaveEdges() {
-        localStorage.setItem('gym-idea-map-edges', JSON.stringify(ideaMapState.edges));
-    }
-
-    function ideaMapSaveColors() {
-        localStorage.setItem('gym-idea-map-colors', JSON.stringify(ideaMapState.colors));
-    }
-
-    function ideaMapLoadEdges() {
-        const saved = localStorage.getItem('gym-idea-map-edges');
-        if (saved) { try { return JSON.parse(saved); } catch(e) {} }
-        return [];
-    }
-
-    function ideaMapLoadColors() {
-        const saved = localStorage.getItem('gym-idea-map-colors');
-        if (saved) { try { return JSON.parse(saved); } catch(e) {} }
-        return {};
-    }
-
-    function ideaMapGetColor(idea) {
-        if (ideaMapState.colors[idea.id]) return ideaMapState.colors[idea.id];
-        const status = idea.status || idea.type || 'idea';
+    function ideaMapStatusColor(status) {
         return IDEAMAP_STATUS_COLORS[status] || IDEAMAP_STATUS_COLORS.idea;
     }
 
-    function ideaMapFilteredIdeas() {
-        let ideas = ideaMapState.ideas;
-        if (ideaMapState.filterStatus !== 'all') {
-            ideas = ideas.filter(i => (i.status || i.type || 'idea') === ideaMapState.filterStatus);
-        }
-        if (ideaMapState.filterTag !== 'all') {
-            ideas = ideas.filter(i => ideaMapGetTags(i).includes(ideaMapState.filterTag));
-        }
-        return ideas;
-    }
-
-    function ideaMapAllTags() {
-        const tagSet = new Set();
-        ideaMapState.ideas.forEach(i => ideaMapGetTags(i).forEach(t => tagSet.add(t)));
-        return Array.from(tagSet).sort();
+    function ideaMapStatusLabel(status) {
+        const labels = { idea: 'Idea', incubator: 'Incubator', 'in-progress': 'In Progress', converted: 'Posted', posted: 'Posted', hook: 'Hook' };
+        return labels[status] || status;
     }
 
     async function renderIdeaMap() {
@@ -2322,397 +2230,166 @@ const LibraryUI = (() => {
 
         if (!ideaMapState.loaded) {
             el.innerHTML = '<div class="library-empty">Loading ideas...</div>';
-            await NotesService.sync(true).catch(() => {});
-            ideaMapState.ideas = NotesService.getAll().filter(n => n.type !== 'todo');
-            ideaMapState.positions = ideaMapInitPositions(ideaMapState.ideas);
-            ideaMapState.edges = ideaMapLoadEdges();
-            ideaMapState.colors = ideaMapLoadColors();
+            try {
+                const resp = await fetch('/api/v1/ideas?key=c1224bb7d79e553506243f5aea9b13e0ed66b72e3135b67a');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    ideaMapState.ideas = Array.isArray(data) ? data : (data.ideas || data.records || []);
+                } else {
+                    // Fallback to NotesService
+                    await NotesService.sync(true).catch(() => {});
+                    ideaMapState.ideas = NotesService.getAll().filter(n => n.type !== 'todo');
+                }
+            } catch (e) {
+                await NotesService.sync(true).catch(() => {});
+                ideaMapState.ideas = NotesService.getAll().filter(n => n.type !== 'todo');
+            }
             ideaMapState.loaded = true;
         }
 
-        ideaMapRender(el);
+        ideaMapRenderKanban(el);
     }
 
-    function ideaMapRender(el) {
-        const ideas = ideaMapFilteredIdeas();
-        const allTags = ideaMapAllTags();
-        const nodeW = 180;
-        const nodeH = 36;
+    function ideaMapRenderKanban(el) {
+        const filter = ideaMapState.filterStatus;
+        let ideas = ideaMapState.ideas;
+        if (filter !== 'all') {
+            ideas = ideas.filter(i => ideaMapGetStatus(i) === filter);
+        }
 
-        // Build cluster labels
+        // Group by cluster
+        const clusterOrder = Object.keys(IDEAMAP_CLUSTERS);
         const clusters = {};
+        for (const cName of clusterOrder) clusters[cName] = [];
         for (const idea of ideas) {
             const c = ideaMapGetCluster(idea);
             if (!clusters[c]) clusters[c] = [];
             clusters[c].push(idea);
         }
 
-        // Compute SVG canvas bounds
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const idea of ideas) {
-            const pos = ideaMapState.positions[idea.id];
-            if (!pos) continue;
-            if (pos.x < minX) minX = pos.x;
-            if (pos.y < minY) minY = pos.y;
-            if (pos.x + nodeW > maxX) maxX = pos.x + nodeW;
-            if (pos.y + nodeH > maxY) maxY = pos.y + nodeH;
+        // Filter bar
+        const filters = [
+            { key: 'all', label: 'All' },
+            { key: 'idea', label: 'Ideas' },
+            { key: 'incubator', label: 'Incubator' },
+            { key: 'in-progress', label: 'In Progress' },
+            { key: 'posted', label: 'Posted' },
+            { key: 'converted', label: 'Posted' },
+            { key: 'hook', label: 'Hooks' }
+        ];
+        // Deduplicate posted/converted — show one "Posted" button that matches both
+        const uniqueFilters = [
+            { key: 'all', label: 'All' },
+            { key: 'idea', label: 'Ideas' },
+            { key: 'incubator', label: 'Incubator' },
+            { key: 'in-progress', label: 'In Progress' },
+            { key: 'posted', label: 'Posted' },
+            { key: 'hook', label: 'Hooks' }
+        ];
+
+        let html = `<div class="ideamap-filter-bar">`;
+        for (const f of uniqueFilters) {
+            const active = filter === f.key || (f.key === 'posted' && filter === 'converted');
+            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-filter="${f.key}">${f.label}</button>`;
         }
-        const svgW = Math.max(maxX + 200, 1400);
-        const svgH = Math.max(maxY + 100, 800);
+        html += `<span class="ideamap-count">${ideas.length} idea${ideas.length !== 1 ? 's' : ''}</span>`;
+        html += `</div>`;
 
-        // Toolbar
-        let html = `<div class="ideamap-toolbar">
-            <select class="ideamap-filter" id="ideamap-filter-status">
-                <option value="all"${ideaMapState.filterStatus === 'all' ? ' selected' : ''}>All Status</option>
-                <option value="idea"${ideaMapState.filterStatus === 'idea' ? ' selected' : ''}>Ideas</option>
-                <option value="incubator"${ideaMapState.filterStatus === 'incubator' ? ' selected' : ''}>Incubator</option>
-                <option value="converted"${ideaMapState.filterStatus === 'converted' ? ' selected' : ''}>Converted</option>
-                <option value="hook"${ideaMapState.filterStatus === 'hook' ? ' selected' : ''}>Hook</option>
-            </select>
-            <select class="ideamap-filter" id="ideamap-filter-tag">
-                <option value="all">All Tags</option>
-                ${allTags.map(t => `<option value="${escAttr(t)}"${ideaMapState.filterTag === t ? ' selected' : ''}>${escHtml(t)}</option>`).join('')}
-            </select>
-            <button class="ideamap-btn ${ideaMapState.connectMode ? 'active' : ''}" id="ideamap-connect-btn">Connect</button>
-            <button class="ideamap-btn" id="ideamap-reset-btn">Reset Layout</button>
-            <button class="ideamap-btn" id="ideamap-zoom-in">+</button>
-            <button class="ideamap-btn" id="ideamap-zoom-out">-</button>
-            <span class="ideamap-zoom-label">${Math.round(ideaMapState.zoom * 100)}%</span>
-        </div>`;
-
-        // SVG container
-        html += `<div class="ideamap-svg-wrap" id="ideamap-svg-wrap">
-            <svg id="ideamap-svg" width="${svgW}" height="${svgH}"
-                 style="transform: scale(${ideaMapState.zoom}) translate(${ideaMapState.panX}px, ${ideaMapState.panY}px); transform-origin: 0 0;">`;
-
-        // Cluster labels (background)
-        for (const [cName, cIdeas] of Object.entries(clusters)) {
+        // Cluster sections
+        html += `<div class="ideamap-kanban-scroll">`;
+        for (const cName of clusterOrder) {
+            const cIdeas = clusters[cName];
             if (cIdeas.length === 0) continue;
-            let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
-            for (const idea of cIdeas) {
-                const pos = ideaMapState.positions[idea.id];
-                if (!pos) continue;
-                if (pos.x < cMinX) cMinX = pos.x;
-                if (pos.y < cMinY) cMinY = pos.y;
-                if (pos.x + nodeW > cMaxX) cMaxX = pos.x + nodeW;
-                if (pos.y + nodeH > cMaxY) cMaxY = pos.y + nodeH;
+            const collapsed = ideaMapState.collapsedClusters[cName];
+            html += `<div class="ideamap-cluster">
+                <div class="ideamap-cluster-header" data-cluster="${escAttr(cName)}">
+                    <span class="ideamap-cluster-arrow">${collapsed ? '\u25B6' : '\u25BC'}</span>
+                    <span class="ideamap-cluster-name">${escHtml(cName)}</span>
+                    <span class="ideamap-cluster-count">${cIdeas.length}</span>
+                </div>`;
+            if (!collapsed) {
+                html += `<div class="ideamap-card-row">`;
+                for (const idea of cIdeas) {
+                    const status = ideaMapGetStatus(idea);
+                    const color = ideaMapStatusColor(status);
+                    const tags = ideaMapGetTags(idea);
+                    html += `<div class="ideamap-card" data-id="${idea.id}">
+                        <div class="ideamap-card-border" style="background:${color}"></div>
+                        <div class="ideamap-card-body">
+                            <div class="ideamap-card-name">${escHtml(idea.name)}</div>
+                            <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>
+                            ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
+                        </div>
+                    </div>`;
+                }
+                html += `</div>`;
             }
-            const pad = 16;
-            html += `<rect x="${cMinX - pad}" y="${cMinY - 28}" width="${cMaxX - cMinX + pad * 2}" height="${cMaxY - cMinY + 28 + pad}"
-                     rx="12" fill="rgba(0,0,0,0.03)" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>`;
-            html += `<text x="${cMinX - pad + 8}" y="${cMinY - 10}" font-size="12" font-weight="700" fill="rgba(0,0,0,0.35)"
-                     font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">${escHtml(cName)}</text>`;
+            html += `</div>`;
         }
+        html += `</div>`;
 
-        // Edges
-        for (const edge of ideaMapState.edges) {
-            const fromPos = ideaMapState.positions[edge.from];
-            const toPos = ideaMapState.positions[edge.to];
-            if (!fromPos || !toPos) continue;
-            // Check if both nodes are in the filtered set
-            const fromVisible = ideas.find(i => i.id === edge.from);
-            const toVisible = ideas.find(i => i.id === edge.to);
-            if (!fromVisible || !toVisible) continue;
-            const x1 = fromPos.x + nodeW / 2, y1 = fromPos.y + nodeH / 2;
-            const x2 = toPos.x + nodeW / 2, y2 = toPos.y + nodeH / 2;
-            html += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(0,0,0,0.2)" stroke-width="2" stroke-dasharray="6 3"/>`;
-        }
-
-        // Nodes
-        for (const idea of ideas) {
-            const pos = ideaMapState.positions[idea.id];
-            if (!pos) continue;
-            const color = ideaMapGetColor(idea);
-            const isConnectFrom = ideaMapState.connectFrom === idea.id;
-            const label = idea.name.length > 24 ? idea.name.slice(0, 22) + '...' : idea.name;
-            html += `<g class="ideamap-node" data-id="${idea.id}" style="cursor:${ideaMapState.connectMode ? 'crosshair' : 'grab'}">
-                <rect x="${pos.x}" y="${pos.y}" width="${nodeW}" height="${nodeH}" rx="8"
-                      fill="${color}" stroke="${isConnectFrom ? '#fff' : 'rgba(0,0,0,0.15)'}" stroke-width="${isConnectFrom ? 3 : 1}"
-                      filter="url(#ideamap-shadow)"/>
-                <text x="${pos.x + nodeW / 2}" y="${pos.y + nodeH / 2 + 5}" text-anchor="middle"
-                      font-size="12" font-weight="600" fill="#fff"
-                      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
-                      pointer-events="none">${escHtml(label)}</text>
-            </g>`;
-        }
-
-        // Shadow filter
-        html += `<defs><filter id="ideamap-shadow" x="-4" y="-2" width="${nodeW + 8}" height="${nodeH + 8}">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.15)"/>
-        </filter></defs>`;
-
-        html += `</svg></div>`;
-
-        // Popover (hidden by default)
+        // Detail popover (hidden)
         html += `<div class="ideamap-popover" id="ideamap-popover" style="display:none;"></div>`;
 
         el.innerHTML = html;
 
-        // Event listeners
-        ideaMapBindEvents(el, ideas);
+        // Bind events
+        ideaMapBindKanbanEvents(el);
     }
 
-    function ideaMapBindEvents(el, ideas) {
-        const svg = el.querySelector('#ideamap-svg');
-        const wrap = el.querySelector('#ideamap-svg-wrap');
-        if (!svg || !wrap) return;
-
-        // Filter dropdowns
-        const statusFilter = el.querySelector('#ideamap-filter-status');
-        const tagFilter = el.querySelector('#ideamap-filter-tag');
-        if (statusFilter) statusFilter.addEventListener('change', () => {
-            ideaMapState.filterStatus = statusFilter.value;
-            ideaMapRender(el);
-        });
-        if (tagFilter) tagFilter.addEventListener('change', () => {
-            ideaMapState.filterTag = tagFilter.value;
-            ideaMapRender(el);
-        });
-
-        // Buttons
-        el.querySelector('#ideamap-connect-btn')?.addEventListener('click', () => {
-            ideaMapState.connectMode = !ideaMapState.connectMode;
-            ideaMapState.connectFrom = null;
-            ideaMapRender(el);
-        });
-        el.querySelector('#ideamap-reset-btn')?.addEventListener('click', () => {
-            localStorage.removeItem('gym-idea-map-positions');
-            ideaMapState.positions = ideaMapInitPositions(ideaMapState.ideas);
-            ideaMapState.zoom = 1;
-            ideaMapState.panX = 0;
-            ideaMapState.panY = 0;
-            ideaMapRender(el);
-        });
-        el.querySelector('#ideamap-zoom-in')?.addEventListener('click', () => {
-            ideaMapState.zoom = Math.min(ideaMapState.zoom + 0.15, 3);
-            ideaMapRender(el);
-        });
-        el.querySelector('#ideamap-zoom-out')?.addEventListener('click', () => {
-            ideaMapState.zoom = Math.max(ideaMapState.zoom - 0.15, 0.3);
-            ideaMapRender(el);
-        });
-
-        // Node interactions (event delegation on SVG)
-        let dragNode = null;
-        let dragStartX = 0, dragStartY = 0, dragNodeStartX = 0, dragNodeStartY = 0;
-        let didDrag = false;
-        let lastTap = 0;
-
-        function getNodeFromEvent(e) {
-            let target = e.target;
-            while (target && target !== svg) {
-                if (target.classList && target.classList.contains('ideamap-node')) return target;
-                target = target.parentElement;
-            }
-            return null;
-        }
-
-        function svgCoords(e) {
-            const pt = e.touches ? e.touches[0] : e;
-            return { x: pt.clientX, y: pt.clientY };
-        }
-
-        function onPointerDown(e) {
-            const node = getNodeFromEvent(e);
-            if (!node) return;
-            const id = node.dataset.id;
-            const coords = svgCoords(e);
-
-            // Connect mode
-            if (ideaMapState.connectMode) {
-                if (!ideaMapState.connectFrom) {
-                    ideaMapState.connectFrom = id;
-                    ideaMapRender(el);
-                } else if (ideaMapState.connectFrom !== id) {
-                    // Check for duplicate
-                    const exists = ideaMapState.edges.some(ed =>
-                        (ed.from === ideaMapState.connectFrom && ed.to === id) ||
-                        (ed.from === id && ed.to === ideaMapState.connectFrom));
-                    if (!exists) {
-                        ideaMapState.edges.push({ from: ideaMapState.connectFrom, to: id });
-                        ideaMapSaveEdges();
-                    }
-                    ideaMapState.connectFrom = null;
-                    ideaMapRender(el);
-                }
-                e.preventDefault();
-                return;
-            }
-
-            // Double-tap detection (mobile)
-            const now = Date.now();
-            if (now - lastTap < 350 && dragNode === null) {
-                ideaMapShowPopover(el, id);
-                lastTap = 0;
-                e.preventDefault();
-                return;
-            }
-            lastTap = now;
-
-            // Start drag
-            const pos = ideaMapState.positions[id];
-            if (!pos) return;
-            dragNode = id;
-            didDrag = false;
-            dragStartX = coords.x;
-            dragStartY = coords.y;
-            dragNodeStartX = pos.x;
-            dragNodeStartY = pos.y;
-            e.preventDefault();
-        }
-
-        function onPointerMove(e) {
-            if (!dragNode) return;
-            const coords = svgCoords(e);
-            const dx = (coords.x - dragStartX) / ideaMapState.zoom;
-            const dy = (coords.y - dragStartY) / ideaMapState.zoom;
-            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true;
-            ideaMapState.positions[dragNode] = {
-                x: dragNodeStartX + dx,
-                y: dragNodeStartY + dy
-            };
-            // Move the node group directly for smooth dragging
-            const nodeEl = svg.querySelector(`g[data-id="${dragNode}"]`);
-            if (nodeEl) {
-                const rect = nodeEl.querySelector('rect');
-                const text = nodeEl.querySelector('text');
-                const pos = ideaMapState.positions[dragNode];
-                if (rect) { rect.setAttribute('x', pos.x); rect.setAttribute('y', pos.y); }
-                if (text) { text.setAttribute('x', pos.x + 90); text.setAttribute('y', pos.y + 23); }
-            }
-            // Update connected edges
-            svg.querySelectorAll('line').forEach(line => {
-                // We need to find edges involving this node
-                // Since lines don't have IDs, we'll just re-render on pointerup
+    function ideaMapBindKanbanEvents(el) {
+        // Filter pills
+        el.querySelectorAll('.ideamap-filter-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                ideaMapState.filterStatus = btn.dataset.filter;
+                ideaMapRenderKanban(el);
             });
-            e.preventDefault();
-        }
-
-        function onPointerUp(e) {
-            if (dragNode) {
-                ideaMapSavePositions();
-                if (didDrag) {
-                    // Full re-render to fix edge positions
-                    ideaMapRender(el);
-                }
-                dragNode = null;
-            }
-        }
-
-        // Double-click for desktop
-        svg.addEventListener('dblclick', (e) => {
-            const node = getNodeFromEvent(e);
-            if (node) {
-                ideaMapShowPopover(el, node.dataset.id);
-                e.preventDefault();
-            }
         });
 
-        // Context menu
-        svg.addEventListener('contextmenu', (e) => {
-            const node = getNodeFromEvent(e);
-            if (node) {
-                e.preventDefault();
-                ideaMapShowContextMenu(el, node.dataset.id, e.clientX, e.clientY);
-            }
+        // Cluster collapse/expand
+        el.querySelectorAll('.ideamap-cluster-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const cName = header.dataset.cluster;
+                ideaMapState.collapsedClusters[cName] = !ideaMapState.collapsedClusters[cName];
+                ideaMapRenderKanban(el);
+            });
         });
 
-        // Mouse events
-        svg.addEventListener('mousedown', onPointerDown);
-        document.addEventListener('mousemove', onPointerMove);
-        document.addEventListener('mouseup', onPointerUp);
-
-        // Touch events
-        svg.addEventListener('touchstart', onPointerDown, { passive: false });
-        document.addEventListener('touchmove', onPointerMove, { passive: false });
-        document.addEventListener('touchend', onPointerUp);
-
-        // Wheel zoom
-        wrap.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? -0.08 : 0.08;
-            ideaMapState.zoom = Math.max(0.3, Math.min(3, ideaMapState.zoom + delta));
-            svg.style.transform = `scale(${ideaMapState.zoom}) translate(${ideaMapState.panX}px, ${ideaMapState.panY}px)`;
-            const label = el.querySelector('.ideamap-zoom-label');
-            if (label) label.textContent = Math.round(ideaMapState.zoom * 100) + '%';
-        }, { passive: false });
-
-        // Pan with middle mouse or two-finger touch
-        let isPanning = false;
-        let panStartX = 0, panStartY = 0, panStartPanX = 0, panStartPanY = 0;
-
-        wrap.addEventListener('mousedown', (e) => {
-            if (e.button === 1 || (e.button === 0 && !getNodeFromEvent(e) && !ideaMapState.connectMode)) {
-                isPanning = true;
-                panStartX = e.clientX;
-                panStartY = e.clientY;
-                panStartPanX = ideaMapState.panX;
-                panStartPanY = ideaMapState.panY;
-                e.preventDefault();
-            }
+        // Card tap → popover
+        el.querySelectorAll('.ideamap-card').forEach(card => {
+            card.addEventListener('click', () => {
+                ideaMapShowCardPopover(el, card.dataset.id);
+            });
         });
-        document.addEventListener('mousemove', (e) => {
-            if (!isPanning) return;
-            ideaMapState.panX = panStartPanX + (e.clientX - panStartX) / ideaMapState.zoom;
-            ideaMapState.panY = panStartPanY + (e.clientY - panStartY) / ideaMapState.zoom;
-            svg.style.transform = `scale(${ideaMapState.zoom}) translate(${ideaMapState.panX}px, ${ideaMapState.panY}px)`;
-        });
-        document.addEventListener('mouseup', () => { isPanning = false; });
-
-        // Pinch-to-zoom (mobile)
-        let lastPinchDist = 0;
-        wrap.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 2) {
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                lastPinchDist = Math.sqrt(dx * dx + dy * dy);
-            }
-        }, { passive: true });
-        wrap.addEventListener('touchmove', (e) => {
-            if (e.touches.length === 2) {
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const delta = (dist - lastPinchDist) * 0.005;
-                ideaMapState.zoom = Math.max(0.3, Math.min(3, ideaMapState.zoom + delta));
-                lastPinchDist = dist;
-                svg.style.transform = `scale(${ideaMapState.zoom}) translate(${ideaMapState.panX}px, ${ideaMapState.panY}px)`;
-                const label = el.querySelector('.ideamap-zoom-label');
-                if (label) label.textContent = Math.round(ideaMapState.zoom * 100) + '%';
-                e.preventDefault();
-            }
-        }, { passive: false });
     }
 
-    function ideaMapShowPopover(el, ideaId) {
+    function ideaMapShowCardPopover(el, ideaId) {
         const idea = ideaMapState.ideas.find(i => i.id === ideaId);
         if (!idea) return;
         const popover = el.querySelector('#ideamap-popover');
         if (!popover) return;
 
         const tags = ideaMapGetTags(idea);
-        const status = idea.status || idea.type || 'idea';
+        const status = ideaMapGetStatus(idea);
 
         popover.innerHTML = `
             <div class="ideamap-popover-header">
-                <span class="ideamap-popover-title">Edit Idea</span>
+                <span class="ideamap-popover-title">${escHtml(idea.name)}</span>
                 <button class="ideamap-popover-close" id="ideamap-popover-close">&times;</button>
             </div>
-            <label class="ideamap-popover-label">Name</label>
-            <input class="ideamap-popover-input" id="ideamap-pop-name" value="${escAttr(idea.name)}" />
             <label class="ideamap-popover-label">Status</label>
             <select class="ideamap-popover-select" id="ideamap-pop-status">
                 <option value="idea" ${status === 'idea' ? 'selected' : ''}>Idea</option>
                 <option value="incubator" ${status === 'incubator' ? 'selected' : ''}>Incubator</option>
                 <option value="in-progress" ${status === 'in-progress' ? 'selected' : ''}>In Progress</option>
-                <option value="converted" ${status === 'converted' ? 'selected' : ''}>Converted / Posted</option>
+                <option value="converted" ${status === 'converted' || status === 'posted' ? 'selected' : ''}>Posted</option>
                 <option value="hook" ${status === 'hook' ? 'selected' : ''}>Hook</option>
             </select>
-            <label class="ideamap-popover-label">Tags (comma-separated)</label>
-            <input class="ideamap-popover-input" id="ideamap-pop-tags" value="${escAttr(tags.join(', '))}" />
-            <label class="ideamap-popover-label">Project</label>
-            <input class="ideamap-popover-input" id="ideamap-pop-project" value="${escAttr(idea.project || '')}" />
-            <button class="ideamap-popover-save" id="ideamap-pop-save">Save</button>
+            <label class="ideamap-popover-label">Tags</label>
+            <div class="ideamap-popover-tags">${tags.length ? tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('') : '<span style="color:#999">No tags</span>'}</div>
+            ${idea.project ? `<label class="ideamap-popover-label">Project</label><div style="color:#5a3e1b;font-weight:600;margin-bottom:8px">${escHtml(idea.project)}</div>` : ''}
+            ${idea.script ? `<label class="ideamap-popover-label">Notes</label><div class="ideamap-popover-notes">${escHtml(idea.script.substring(0, 300))}${idea.script.length > 300 ? '...' : ''}</div>` : ''}
+            <button class="ideamap-popover-save" id="ideamap-pop-save">Save Status</button>
         `;
         popover.style.display = '';
 
@@ -2721,90 +2398,20 @@ const LibraryUI = (() => {
         });
 
         popover.querySelector('#ideamap-pop-save').addEventListener('click', async () => {
-            const name = popover.querySelector('#ideamap-pop-name').value.trim();
             const newStatus = popover.querySelector('#ideamap-pop-status').value;
-            const tagsStr = popover.querySelector('#ideamap-pop-tags').value;
-            const project = popover.querySelector('#ideamap-pop-project').value.trim();
-            const newTags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
-
-            await NotesService.update(ideaId, {
-                name: name || idea.name,
-                status: newStatus,
-                tags: JSON.stringify(newTags),
-                project: project,
-                type: newStatus === 'converted' ? 'converted' : 'idea'
-            });
-            // Update local state
+            try {
+                await NotesService.update(ideaId, {
+                    status: newStatus,
+                    type: newStatus === 'converted' ? 'converted' : 'idea'
+                });
+            } catch (e) { /* ignore */ }
             const idx = ideaMapState.ideas.findIndex(i => i.id === ideaId);
             if (idx >= 0) {
-                Object.assign(ideaMapState.ideas[idx], {
-                    name: name || idea.name,
-                    status: newStatus,
-                    tags: JSON.stringify(newTags),
-                    project: project
-                });
+                ideaMapState.ideas[idx].status = newStatus;
             }
             popover.style.display = 'none';
-            ideaMapRender(el);
+            ideaMapRenderKanban(el);
         });
-    }
-
-    function ideaMapShowContextMenu(el, ideaId, clientX, clientY) {
-        // Remove existing context menu
-        el.querySelectorAll('.ideamap-ctx').forEach(m => m.remove());
-
-        const menu = document.createElement('div');
-        menu.className = 'ideamap-ctx';
-        menu.style.left = clientX + 'px';
-        menu.style.top = clientY + 'px';
-
-        const colors = [
-            { label: 'Blue (Idea)', color: '#4a9eff' },
-            { label: 'Gold (Incubator)', color: '#e8a020' },
-            { label: 'Orange (In Progress)', color: '#e67e22' },
-            { label: 'Green (Posted)', color: '#2ecc71' },
-            { label: 'Purple (Hook)', color: '#9b59b6' }
-        ];
-
-        menu.innerHTML = `
-            <div class="ideamap-ctx-title">Change Color</div>
-            ${colors.map(c => `<div class="ideamap-ctx-item" data-color="${c.color}">
-                <span class="ideamap-ctx-swatch" style="background:${c.color}"></span>${c.label}
-            </div>`).join('')}
-            <div class="ideamap-ctx-divider"></div>
-            <div class="ideamap-ctx-item" data-action="delete-edges">Remove All Connections</div>
-            <div class="ideamap-ctx-item" data-action="connect">Add Connection</div>
-        `;
-
-        el.appendChild(menu);
-
-        menu.addEventListener('click', (e) => {
-            const item = e.target.closest('.ideamap-ctx-item');
-            if (!item) return;
-            const color = item.dataset.color;
-            const action = item.dataset.action;
-
-            if (color) {
-                ideaMapState.colors[ideaId] = color;
-                ideaMapSaveColors();
-            } else if (action === 'delete-edges') {
-                ideaMapState.edges = ideaMapState.edges.filter(ed => ed.from !== ideaId && ed.to !== ideaId);
-                ideaMapSaveEdges();
-            } else if (action === 'connect') {
-                ideaMapState.connectMode = true;
-                ideaMapState.connectFrom = ideaId;
-            }
-            menu.remove();
-            ideaMapRender(el);
-        });
-
-        // Close on outside click
-        setTimeout(() => {
-            document.addEventListener('click', function closeCtx() {
-                menu.remove();
-                document.removeEventListener('click', closeCtx);
-            }, { once: true });
-        }, 10);
     }
 
     return {
