@@ -1,10 +1,15 @@
-/* ── Gym UI ── BusinessWorld Warm Aesthetic ── */
+/* ── Gym UI ── BusinessWorld Warm Aesthetic ── Research-Backed Fitness Tracker ── */
 const GymUI = (() => {
     let container = null;
     let activeTab = 'dashboard';
     let activePlayer = 'tyler';
     let selectedRoutineId = null;
-    let logState = { feeling: 3, notes: '', sets: {} };
+    let trainStep = 'choose'; // 'choose' | 'workout'
+    let logState = {
+        sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3,
+        stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes',
+        notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {}
+    };
     let progressMetric = 'weight';
     let editingRoutineId = null;
     let workoutStartTime = null;
@@ -12,13 +17,16 @@ const GymUI = (() => {
     let gymCharacterRenderer = null;
     let characterAnimFrame = null;
     let showChallengeForm = false;
+    let showGoalForm = false;
+    let showMeasurementForm = false;
 
     const ROUTINE_COLORS = { upper1: 'gold', lower1: 'blue', upper2: 'green', lower2: 'red' };
     const ROUTINE_COLOR_HEX = { upper1: '#e8a020', lower1: '#0984e3', upper2: '#2ecc71', lower2: '#e74c3c' };
-    const PLAYER_GRADIENTS = [
-        ['#e8a020', '#e67e22'], ['#0984e3', '#2196f3'], ['#2ecc71', '#27ae60'],
-        ['#e74c3c', '#c0392b'], ['#9b59b6', '#8e44ad'], ['#1abc9c', '#16a085']
-    ];
+
+    const GOAL_LABELS = {
+        general: 'General Fitness', muscle: 'Muscle Mass', strength: 'Strength',
+        fatloss: 'Fat Loss', recomp: 'Recomposition'
+    };
 
     /* ── SVG Tab Icons ── */
     const TAB_ICONS = {
@@ -71,6 +79,10 @@ const GymUI = (() => {
         document.body.appendChild(t);
         setTimeout(() => t.remove(), 2200);
     }
+    function playerColorHex(id) {
+        const c = GymService.getPlayerColor(id);
+        return '#' + c.toString(16).padStart(6, '0');
+    }
 
     /* ── Streak calculation ── */
     function getStreak(playerId) {
@@ -82,17 +94,13 @@ const GymUI = (() => {
         const d = new Date(todayStr);
         for (let i = 0; i < 365; i++) {
             const check = d.toISOString().slice(0, 10);
-            if (dates.includes(check)) {
-                streak++;
-            } else if (i > 0) {
-                break;
-            }
+            if (dates.includes(check)) { streak++; }
+            else if (i > 0) { break; }
             d.setDate(d.getDate() - 1);
         }
         return streak;
     }
 
-    /* ── Total volume ever ── */
     function getTotalVolume(playerId) {
         const workouts = GymService.getWorkouts(playerId);
         let total = 0;
@@ -110,30 +118,24 @@ const GymUI = (() => {
             vertexShader: 'varying vec3 vN,vV;void main(){vN=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1.0);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}',
             fragmentShader: 'uniform vec3 uColor,uRim;uniform float uRimPow;varying vec3 vN,vV;void main(){float rim=1.0-max(0.0,dot(normalize(vN),normalize(vV)));rim=pow(rim,uRimPow)*0.6;vec3 col=uColor+uRim*rim;float NdotL=max(0.0,dot(normalize(vN),normalize(vec3(1,2,1))));col*=0.5+0.5*NdotL;gl_FragColor=vec4(col,1.0);}'
         });
-        // Body
         var body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1, 16), cMat);
         body.position.y = 0.5; g.add(body);
         var top = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16, 0, Math.PI*2, 0, Math.PI/2), cMat);
         top.position.y = 1; g.add(top);
-        // Neck
         var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.2, 12), cMat);
         neck.position.y = 1.2; g.add(neck);
-        // Head
         var head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 20, 20), cMat);
         head.position.y = 1.65; g.add(head);
-        // Eyes
         var eyeM = new THREE.MeshBasicMaterial({ color: 0x1a1a2e });
         var eyeW = new THREE.MeshBasicMaterial({ color: 0xffffff });
         [[-0.15, 1.72, 0.3],[0.15, 1.72, 0.3]].forEach(function(pos) {
-            var x = pos[0], y = pos[1], z = pos[2];
             var ew = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 10), eyeW);
-            ew.position.set(x,y,z); g.add(ew);
+            ew.position.set(pos[0],pos[1],pos[2]); g.add(ew);
             var ep = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), eyeM);
-            ep.position.set(x,y,z+0.04); g.add(ep);
+            ep.position.set(pos[0],pos[1],pos[2]+0.04); g.add(ep);
             var eh = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), eyeW);
-            eh.position.set(x+0.03,y+0.03,z+0.08); g.add(eh);
+            eh.position.set(pos[0]+0.03,pos[1]+0.03,pos[2]+0.08); g.add(eh);
         });
-        // Base
         var baseMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.7), roughness: 0.7 });
         var base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 0.12, 16), baseMat);
         base.position.set(0, 0.06, 0); g.add(base);
@@ -147,33 +149,23 @@ const GymUI = (() => {
         }
         const size = wrap.clientWidth || 280;
         const canvas = document.createElement('canvas');
-        canvas.width = size * 2;
-        canvas.height = size * 2;
-        canvas.style.width = size + 'px';
-        canvas.style.height = size + 'px';
+        canvas.width = size * 2; canvas.height = size * 2;
+        canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
         wrap.appendChild(canvas);
-
         const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
         renderer.setSize(size, size);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setClearColor(0x000000, 0);
         gymCharacterRenderer = renderer;
-
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-        camera.position.set(0, 1.8, 4.5);
-        camera.lookAt(0, 1, 0);
-
-        // Lights
-        const ambient = new THREE.AmbientLight(0xfff0e0, 1.2);
-        scene.add(ambient);
+        camera.position.set(0, 1.8, 4.5); camera.lookAt(0, 1, 0);
+        scene.add(new THREE.AmbientLight(0xfff0e0, 1.2));
         const dir = new THREE.DirectionalLight(0xfff8f0, 1.5);
-        dir.position.set(3, 8, 5);
-        scene.add(dir);
-
-        const charGroup = createGymCharacter(0x3498db);
+        dir.position.set(3, 8, 5); scene.add(dir);
+        const charColor = GymService.getPlayerColor(activePlayer);
+        const charGroup = createGymCharacter(charColor);
         scene.add(charGroup);
-
         function animate() {
             characterAnimFrame = requestAnimationFrame(animate);
             charGroup.rotation.y += 0.008;
@@ -183,25 +175,23 @@ const GymUI = (() => {
     }
 
     function disposeCharacter() {
-        if (characterAnimFrame) {
-            cancelAnimationFrame(characterAnimFrame);
-            characterAnimFrame = null;
-        }
-        if (gymCharacterRenderer) {
-            gymCharacterRenderer.dispose();
-            gymCharacterRenderer = null;
-        }
+        if (characterAnimFrame) { cancelAnimationFrame(characterAnimFrame); characterAnimFrame = null; }
+        if (gymCharacterRenderer) { gymCharacterRenderer.dispose(); gymCharacterRenderer = null; }
     }
 
     /* ── SVG Line Chart ── */
-    function renderLineChart(dataPoints, w, h, label) {
+    function renderLineChart(dataPoints, w, h, label, goalValue) {
         w = w || 600; h = h || 200;
         if (dataPoints.length < 2) {
             return '<div class="gym-empty">Not enough data for chart<span class="gym-empty-dash"></span></div>';
         }
         const values = dataPoints.map(d => d.value);
-        const min = Math.min(...values);
-        const max = Math.max(...values);
+        let min = Math.min(...values);
+        let max = Math.max(...values);
+        if (goalValue != null) {
+            min = Math.min(min, goalValue);
+            max = Math.max(max, goalValue);
+        }
         const range = max - min || 1;
         const padL = 45, padR = 15, padT = 20, padB = 35;
         const cw = w - padL - padR, ch = h - padT - padB;
@@ -215,19 +205,37 @@ const GymUI = (() => {
             gridLines += '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" fill="#999" font-size="10" text-anchor="end" font-family="var(--gym-font-mono)">' + Math.round(val) + '</text>';
         }
 
+        // Goal line
+        let goalLine = '';
+        if (goalValue != null) {
+            const gy = padT + ((max - goalValue) / range) * ch;
+            goalLine = '<line x1="' + padL + '" y1="' + gy + '" x2="' + (w - padR) + '" y2="' + gy + '" stroke="#e8a020" stroke-width="1.5" stroke-dasharray="6,4"/>' +
+                '<text x="' + (w - padR) + '" y="' + (gy - 4) + '" fill="#e8a020" font-size="10" text-anchor="end">Goal</text>';
+        }
+
         const pts = dataPoints.map((d, i) => {
             const x = padL + (i / (dataPoints.length - 1)) * cw;
             const y = padT + ((max - d.value) / range) * ch;
             return { x, y };
         });
-
         const linePoints = pts.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
-
         let lineLen = 0;
         for (let i = 1; i < pts.length; i++) {
-            const dx = pts[i].x - pts[i-1].x;
-            const dy = pts[i].y - pts[i-1].y;
+            const dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
             lineLen += Math.sqrt(dx * dx + dy * dy);
+        }
+
+        // Trend line (linear regression)
+        let trendLine = '';
+        if (pts.length >= 3) {
+            const n = dataPoints.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+            dataPoints.forEach((d, i) => { sumX += i; sumY += d.value; sumXY += i * d.value; sumX2 += i * i; });
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+            const ty1 = padT + ((max - intercept) / range) * ch;
+            const ty2 = padT + ((max - (intercept + slope * (n - 1))) / range) * ch;
+            trendLine = '<line x1="' + padL + '" y1="' + ty1.toFixed(1) + '" x2="' + (padL + cw) + '" y2="' + ty2.toFixed(1) + '" stroke="rgba(232,192,122,0.4)" stroke-width="1.5" stroke-dasharray="4,3"/>';
         }
 
         let xLabels = '';
@@ -246,21 +254,20 @@ const GymUI = (() => {
         });
 
         return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid meet">' +
-            gridLines +
+            gridLines + goalLine + trendLine +
             '<polyline class="gym-chart-line" points="' + linePoints + '" fill="none" stroke="#5a3e1b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:' + Math.ceil(lineLen) + ';stroke-dashoffset:' + Math.ceil(lineLen) + ';--line-length:' + Math.ceil(lineLen) + '"/>' +
-            dots +
-            xLabels +
+            dots + xLabels +
             (label ? '<text x="' + (w / 2) + '" y="14" fill="#999" font-size="11" text-anchor="middle">' + esc(label) + '</text>' : '') +
         '</svg>';
     }
 
-    /* ── Player Selector ── */
+    /* ── Player Selector (chips with character colors) ── */
     function renderPlayerSelector() {
-        return GymService.getPlayers().map((p, idx) => {
-            const grad = PLAYER_GRADIENTS[idx % PLAYER_GRADIENTS.length];
+        return GymService.getPlayers().map(p => {
+            const hex = playerColorHex(p.id);
             const initial = p.name.charAt(0).toUpperCase();
             return '<div class="gym-player-avatar ' + (p.id === activePlayer ? 'active' : '') + '" data-player="' + esc(p.id) + '">' +
-                '<div class="gym-player-avatar-circle" style="background:linear-gradient(135deg,' + grad[0] + ',' + grad[1] + ')">' + initial + '</div>' +
+                '<div class="gym-player-avatar-circle" style="background:' + hex + '">' + initial + '</div>' +
                 '<div class="gym-player-avatar-name">' + esc(p.name) + '</div>' +
             '</div>';
         }).join('');
@@ -279,11 +286,17 @@ const GymUI = (() => {
         const pid = activePlayer;
         const player = GymService.getPlayer(pid);
         const playerName = player ? player.name : pid;
+        const levelInfo = GymService.getPlayerLevel(pid);
         const totalWorkouts = GymService.getTotalWorkouts(pid);
-        const level = Math.max(1, Math.floor(totalWorkouts / 10));
+        const weekWorkouts = GymService.getWorkoutsThisWeek(pid);
         const streak = getStreak(pid);
         const totalVol = getTotalVolume(pid);
         const recent = GymService.getWorkouts(pid, 3);
+        const bestBench = GymService.getBestLift(pid, 'bench_press');
+        const weights = GymService.getWeights(pid);
+        const currentWeight = weights.length ? weights[weights.length - 1].value : '--';
+        const goalType = player && player.goals ? player.goals.type : 'general';
+        const goalLabel = GOAL_LABELS[goalType] || 'General Fitness';
 
         let html = '';
 
@@ -291,14 +304,33 @@ const GymUI = (() => {
         html += '<div class="gym-character-section">' +
             '<div class="gym-character-canvas-wrap" id="gym-char-canvas"></div>' +
             '<div class="gym-character-name">' + esc(playerName) + '</div>' +
+            '<span class="gym-goal-badge">' + esc(goalLabel.toUpperCase()) + '</span>' +
         '</div>';
 
-        // Stat grid
+        // Level bar
+        const xpPct = levelInfo.xpToNext > 0 ? Math.min(100, (levelInfo.xp / levelInfo.xpToNext) * 100) : 0;
+        html += '<div class="gym-level-bar-wrap">' +
+            '<div class="gym-level-label">LEVEL ' + levelInfo.level + '</div>' +
+            '<div class="gym-level-bar"><div class="gym-level-bar-fill" style="width:' + xpPct.toFixed(1) + '%"></div></div>' +
+            '<div class="gym-level-xp">' + fmtVolume(levelInfo.xp) + ' / ' + fmtVolume(levelInfo.xpToNext) + ' XP</div>' +
+        '</div>';
+
+        // Stat grid (2x3)
         html += '<div class="gym-stat-grid">' +
-            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + level + '</div><div class="gym-stat-box-label">Level</div></div>' +
-            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + totalWorkouts + '</div><div class="gym-stat-box-label">Workouts</div></div>' +
+            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + levelInfo.level + '</div><div class="gym-stat-box-label">Level</div></div>' +
+            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + weekWorkouts + '</div><div class="gym-stat-box-label">This Week</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + streak + '</div><div class="gym-stat-box-label">Streak</div></div>' +
+            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + (bestBench ? bestBench.weight : '--') + '</div><div class="gym-stat-box-label">Best Bench</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + fmtVolume(totalVol) + '</div><div class="gym-stat-box-label">Total Volume</div></div>' +
+            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + currentWeight + '</div><div class="gym-stat-box-label">Body Weight</div></div>' +
+        '</div>';
+
+        // Quick Start
+        const nextRoutineId = GymService.getNextRoutine(pid);
+        const nextRoutine = GymService.getRoutine(nextRoutineId);
+        html += '<div class="gym-actions-row">' +
+            '<button class="gym-btn-primary" data-action="start-workout" data-routine="' + nextRoutineId + '">START ' + (nextRoutine ? esc(nextRoutine.name.toUpperCase()) : 'WORKOUT') + '</button>' +
+            '<button class="gym-btn-outline" data-action="goto-body">LOG WEIGHT</button>' +
         '</div>';
 
         // Recent sessions
@@ -311,24 +343,18 @@ const GymUI = (() => {
                 const r = GymService.getRoutine(w.routineId);
                 const vol = GymService.getWorkoutVolume(w);
                 const colorHex = ROUTINE_COLOR_HEX[w.routineId] || '#e8a020';
+                const rpeBadge = w.sessionRPE ? '<span class="gym-rpe-badge">RPE ' + w.sessionRPE + '</span>' : '';
                 html += '<div class="gym-recent-card">' +
                     '<div class="gym-recent-dot" style="background:' + colorHex + '"></div>' +
                     '<div class="gym-recent-info">' +
                         '<div class="gym-recent-routine">' + (r ? esc(r.name) : 'Custom') + '</div>' +
-                        '<div class="gym-recent-meta">' + relativeDate(w.date) + '</div>' +
+                        '<div class="gym-recent-meta">' + relativeDate(w.date) + ' ' + rpeBadge + '</div>' +
                     '</div>' +
                     '<div class="gym-recent-vol">' + fmtVolume(vol) + ' vol</div>' +
                 '</div>';
             });
             html += '</div>';
         }
-
-        // Quick actions
-        const nextRoutineId = GymService.getNextRoutine(pid);
-        html += '<div class="gym-actions-row">' +
-            '<button class="gym-btn-primary" data-action="start-workout" data-routine="' + nextRoutineId + '">START WORKOUT</button>' +
-            '<button class="gym-btn-outline" data-action="goto-body">LOG WEIGHT</button>' +
-        '</div>';
 
         return html;
     }
@@ -341,89 +367,175 @@ const GymUI = (() => {
         const routines = GymService.getRoutines();
         let html = '';
 
-        // Routine selection
-        html += '<div class="gym-routine-grid">';
-        routines.forEach(r => {
-            const color = ROUTINE_COLORS[r.id] || 'gold';
-            const exCount = r.exercises ? r.exercises.length : 0;
-            html += '<div class="gym-routine-card ' + (selectedRoutineId === r.id ? 'selected' : '') + '" data-routine="' + esc(r.id) + '" data-color="' + color + '">' +
-                '<div class="gym-routine-card-name">' + esc(r.name) + '</div>' +
-                '<div class="gym-routine-card-desc">' + esc(r.description) + '</div>' +
-                '<div class="gym-routine-card-count">' + exCount + ' exercises</div>' +
+        if (trainStep === 'choose' || !selectedRoutineId) {
+            // Step 1: Choose Routine (full-screen card picker)
+            html += '<div class="gym-section-title">Choose Routine</div>';
+            html += '<div class="gym-routine-picker">';
+            routines.forEach(r => {
+                const color = ROUTINE_COLORS[r.id] || 'gold';
+                const colorHex = ROUTINE_COLOR_HEX[r.id] || '#e8a020';
+                const exCount = r.exercises ? r.exercises.length : 0;
+                const nextId = GymService.getNextRoutine(pid);
+                const isNext = r.id === nextId;
+                html += '<div class="gym-routine-pick-card ' + (isNext ? 'suggested' : '') + '" data-routine="' + esc(r.id) + '" data-color="' + color + '">' +
+                    '<div class="gym-routine-pick-accent" style="background:' + colorHex + '"></div>' +
+                    '<div class="gym-routine-pick-body">' +
+                        '<div class="gym-routine-pick-name">' + esc(r.name) + '</div>' +
+                        '<div class="gym-routine-pick-desc">' + esc(r.description) + '</div>' +
+                        '<div class="gym-routine-pick-count">' + exCount + ' exercises</div>' +
+                        (isNext ? '<span class="gym-routine-pick-next">UP NEXT</span>' : '') +
+                    '</div>' +
+                '</div>';
+            });
+            html += '</div>';
+            return html;
+        }
+
+        // Step 2: Active Workout View
+        const routine = GymService.getRoutine(selectedRoutineId);
+        if (!routine) return '<div class="gym-empty">Routine not found</div>';
+
+        const elapsed = workoutStartTime ? Date.now() - workoutStartTime : 0;
+        html += '<div class="gym-workout-header">' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+                '<button class="gym-icon-btn" data-action="back-to-choose" title="Back">' +
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' +
+                '</button>' +
+                '<div class="gym-workout-title">' + esc(routine.name) + '</div>' +
+            '</div>' +
+            '<div class="gym-workout-timer" id="gym-timer">' + fmtTimer(elapsed) + '</div>' +
+        '</div>';
+
+        // Scrollable exercise list
+        html += '<div class="gym-exercise-list">';
+        routine.exercises.forEach((re, reIdx) => {
+            const exDef = GymService.getExercise(re.exerciseId);
+            if (!exDef) return;
+            const prog = GymService.getProgressionSuggestion(pid, re.exerciseId);
+            const lastW = GymService.getLastWeight(pid, re.exerciseId);
+            const lastSummary = GymService.getLastSessionSummary(pid, re.exerciseId);
+            const suggestedWeight = prog.suggest ? prog.weight : (lastW || re.defaultWeight || 0);
+            const lastReps = GymService.getLastReps(pid, re.exerciseId);
+
+            html += '<div class="gym-exercise-card">' +
+                '<div class="gym-exercise-header">' +
+                    '<div>' +
+                        '<div class="gym-exercise-name">' + esc(exDef.name) + '</div>' +
+                        '<span class="gym-category-pill ' + exDef.category + '">' + exDef.category.toUpperCase() + '</span>' +
+                    '</div>' +
+                    (prog.suggest ? '<span class="gym-overload-badge">ADD WEIGHT: try ' + prog.weight + 'lbs</span>' : '') +
+                '</div>';
+
+            if (lastSummary) {
+                html += '<div class="gym-exercise-last-session">Last: ' + lastSummary + '</div>';
+            }
+
+            // Set rows header
+            html += '<div class="gym-set-header-row">' +
+                '<span class="gym-set-hdr" style="width:28px">Set</span>' +
+                '<span class="gym-set-hdr" style="width:70px">Weight</span>' +
+                '<span class="gym-set-hdr" style="width:50px">Reps</span>' +
+                '<span class="gym-set-hdr" style="width:56px">RIR</span>' +
+                '<span class="gym-set-hdr" style="width:44px"></span>' +
             '</div>';
+            html += '<div class="gym-set-rows">';
+
+            const numSets = logState.sets['_count_' + reIdx] || re.sets;
+            for (let s = 0; s < numSets; s++) {
+                const setKey = reIdx + '-' + s;
+                const saved = logState.sets[setKey] || {};
+                const w = saved.weight !== undefined ? saved.weight : suggestedWeight;
+                const reps = saved.reps !== undefined ? saved.reps : (lastReps || '');
+                const rir = saved.rir !== undefined ? saved.rir : 2;
+                const done = saved.completed || false;
+                const setType = saved.setType || 'working';
+
+                html += '<div class="gym-set-row">' +
+                    '<span class="gym-set-num">' + (s + 1) + '</span>' +
+                    '<input type="number" class="gym-set-input gym-set-weight" data-set="' + setKey + '" value="' + w + '" placeholder="lb" style="width:70px">' +
+                    '<input type="number" class="gym-set-input gym-set-reps" data-set="' + setKey + '" value="' + reps + '" placeholder="reps" style="width:50px">' +
+                    '<select class="gym-set-rir-select" data-set="' + setKey + '">' +
+                        '<option value="0"' + (rir === 0 ? ' selected' : '') + '>0</option>' +
+                        '<option value="1"' + (rir === 1 ? ' selected' : '') + '>1</option>' +
+                        '<option value="2"' + (rir === 2 ? ' selected' : '') + '>2</option>' +
+                        '<option value="3"' + (rir === 3 ? ' selected' : '') + '>3</option>' +
+                        '<option value="4"' + (rir >= 4 ? ' selected' : '') + '>4+</option>' +
+                    '</select>' +
+                    '<button class="gym-set-check ' + (done ? 'done' : '') + '" data-set="' + setKey + '">&#10003;</button>' +
+                '</div>';
+            }
+            html += '</div>';
+
+            // Add set button
+            html += '<button class="gym-add-set-btn" data-exercise-idx="' + reIdx + '" data-default-sets="' + re.sets + '">+ Add Set</button>';
+
+            // Mind-muscle connection (per exercise)
+            const mmc = logState.exerciseMMC[reIdx] || 0;
+            html += '<div class="gym-mmc-row">' +
+                '<span class="gym-mmc-label">Mind-Muscle</span>' +
+                '<div class="gym-dot-selector">';
+            for (let d = 1; d <= 5; d++) {
+                html += '<button class="gym-dot-btn ' + (mmc === d ? 'active' : '') + '" data-mmc-idx="' + reIdx + '" data-val="' + d + '">' + d + '</button>';
+            }
+            html += '</div></div>';
+
+            html += '</div>'; // end exercise card
         });
         html += '</div>';
 
-        if (selectedRoutineId) {
-            const routine = GymService.getRoutine(selectedRoutineId);
-            if (routine) {
-                // Workout header with timer
-                const elapsed = workoutStartTime ? Date.now() - workoutStartTime : 0;
-                html += '<div class="gym-workout-header">' +
-                    '<div class="gym-workout-title">' + esc(routine.name) + '</div>' +
-                    '<div class="gym-workout-timer" id="gym-timer">' + fmtTimer(elapsed) + '</div>' +
-                '</div>';
+        // End of Workout bottom sheet
+        html += '<div class="gym-log-bottom">' +
+            '<div class="gym-endworkout-title">End of Workout</div>';
 
-                html += '<div class="gym-exercise-list">';
-                routine.exercises.forEach((re, reIdx) => {
-                    const exDef = GymService.getExercise(re.exerciseId);
-                    if (!exDef) return;
-                    const prog = GymService.getProgressionSuggestion(pid, re.exerciseId);
-                    const lastW = GymService.getLastWeight(pid, re.exerciseId);
-                    const history = GymService.getExerciseHistory(pid, re.exerciseId, 3);
-                    const suggestedWeight = prog.suggest ? prog.weight : (lastW || re.defaultWeight || 0);
-
-                    html += '<div class="gym-exercise-card">' +
-                        '<div class="gym-exercise-header">' +
-                            '<div>' +
-                                '<div class="gym-exercise-name">' + esc(exDef.name) + '</div>' +
-                                '<span class="gym-category-pill ' + exDef.category + '">' + exDef.category.toUpperCase() + '</span>' +
-                            '</div>' +
-                            (prog.suggest ? '<span class="gym-overload-badge">INCREASE WEIGHT</span>' : '') +
-                        '</div>' +
-                        '<div class="gym-set-rows">';
-
-                    for (let s = 0; s < re.sets; s++) {
-                        const setKey = reIdx + '-' + s;
-                        const saved = logState.sets[setKey] || {};
-                        const w = saved.weight !== undefined ? saved.weight : suggestedWeight;
-                        const reps = saved.reps !== undefined ? saved.reps : '';
-                        const done = saved.completed || false;
-                        html += '<div class="gym-set-row">' +
-                            '<span class="gym-set-num">S' + (s + 1) + '</span>' +
-                            '<input type="number" class="gym-set-input gym-set-weight" data-set="' + setKey + '" value="' + w + '" placeholder="lb">' +
-                            '<span class="gym-set-x">x</span>' +
-                            '<input type="number" class="gym-set-input gym-set-reps" data-set="' + setKey + '" value="' + reps + '" placeholder="reps">' +
-                            '<button class="gym-set-check ' + (done ? 'done' : '') + '" data-set="' + setKey + '">&#10003;</button>' +
-                        '</div>';
-                    }
-
-                    html += '</div>';
-
-                    if (history.length > 0) {
-                        const histStr = history.map(h => h.weight + ' x ' + (h.reps || '?')).join(', ');
-                        html += '<div class="gym-exercise-history">Last session: ' + histStr + '</div>';
-                    }
-
-                    html += '</div>';
-                });
-                html += '</div>';
-
-                // Bottom bar
-                html += '<div class="gym-log-bottom">' +
-                    '<div class="gym-feeling-row">' +
-                        '<span class="gym-feeling-label">Feeling</span>' +
-                        '<div class="gym-feeling-btns">';
-                for (let i = 1; i <= 5; i++) {
-                    html += '<button class="gym-feeling-btn ' + (logState.feeling === i ? 'active' : '') + '" data-feeling="' + i + '">' + i + '</button>';
-                }
-                html += '</div>' +
-                    '</div>' +
-                    '<textarea class="gym-log-notes" placeholder="Notes..." data-field="notes">' + esc(logState.notes) + '</textarea>' +
-                    '<button class="gym-btn-full" data-action="save-workout">FINISH WORKOUT</button>' +
-                '</div>';
-            }
+        // Session RPE (1-10)
+        html += '<div class="gym-metric-row">' +
+            '<span class="gym-metric-label">Session RPE</span>' +
+            '<div class="gym-rpe-selector">';
+        for (let i = 1; i <= 10; i++) {
+            html += '<button class="gym-rpe-btn ' + (logState.sessionRPE === i ? 'active' : '') + '" data-rpe="' + i + '">' + i + '</button>';
         }
+        html += '</div></div>';
+
+        // Energy (1-5 dots)
+        html += '<div class="gym-metric-row">' +
+            '<span class="gym-metric-label">Energy</span>' +
+            '<div class="gym-dot-selector">';
+        for (let i = 1; i <= 5; i++) {
+            html += '<button class="gym-dot-btn ' + (logState.energyLevel === i ? 'active' : '') + '" data-energy="' + i + '">' + i + '</button>';
+        }
+        html += '</div></div>';
+
+        // Sleep last night
+        html += '<div class="gym-metric-row">' +
+            '<span class="gym-metric-label">Sleep (hrs)</span>' +
+            '<input type="number" class="gym-set-input" data-field="sleepHours" value="' + logState.sleepHours + '" step="0.5" min="0" max="14" style="width:70px">' +
+        '</div>';
+
+        // Stress (1-5 dots)
+        html += '<div class="gym-metric-row">' +
+            '<span class="gym-metric-label">Stress</span>' +
+            '<div class="gym-dot-selector">';
+        for (let i = 1; i <= 5; i++) {
+            html += '<button class="gym-dot-btn ' + (logState.stressLevel === i ? 'active' : '') + '" data-stress="' + i + '">' + i + '</button>';
+        }
+        html += '</div></div>';
+
+        // Hydration (3 buttons)
+        html += '<div class="gym-metric-row">' +
+            '<span class="gym-metric-label">Hydration</span>' +
+            '<div class="gym-hydration-btns">' +
+                '<button class="gym-hydration-btn ' + (logState.hydration === 'good' ? 'active' : '') + '" data-hydration="good">Good</button>' +
+                '<button class="gym-hydration-btn ' + (logState.hydration === 'ok' ? 'active' : '') + '" data-hydration="ok">OK</button>' +
+                '<button class="gym-hydration-btn ' + (logState.hydration === 'poor' ? 'active' : '') + '" data-hydration="poor">Poor</button>' +
+            '</div></div>';
+
+        // Notes
+        html += '<textarea class="gym-log-notes" placeholder="Session notes..." data-field="notes">' + esc(logState.notes) + '</textarea>';
+
+        // FINISH button
+        html += '<button class="gym-btn-finish" data-action="save-workout">FINISH</button>';
+        html += '</div>';
+
         return html;
     }
 
@@ -432,11 +544,24 @@ const GymUI = (() => {
     ══════════════════════════════════════════ */
     function renderProgress() {
         const pid = activePlayer;
+        const player = GymService.getPlayer(pid);
         const exercises = GymService.getExercises();
+        const settings = GymService.getSettings();
+        const unit = settings.weightUnit || 'lbs';
 
         // Metric pills
         let html = '<div class="gym-metric-pills">';
-        html += '<button class="gym-metric-pill ' + (progressMetric === 'weight' ? 'active' : '') + '" data-metric="weight">Body Weight</button>';
+        const metrics = [
+            { id: 'weight', label: 'Body Weight' },
+            { id: 'bodyfat', label: 'Body Fat %' },
+            { id: 'bench_e1rm', label: 'Bench e1RM' },
+            { id: 'squat_e1rm', label: 'Squat e1RM' },
+            { id: 'weekly_volume', label: 'Weekly Volume' },
+            { id: 'frequency', label: 'Workout Frequency' }
+        ];
+        metrics.forEach(m => {
+            html += '<button class="gym-metric-pill ' + (progressMetric === m.id ? 'active' : '') + '" data-metric="' + m.id + '">' + m.label + '</button>';
+        });
         exercises.forEach(e => {
             html += '<button class="gym-metric-pill ' + (progressMetric === e.id ? 'active' : '') + '" data-metric="' + esc(e.id) + '">' + esc(e.name) + '</button>';
         });
@@ -444,34 +569,95 @@ const GymUI = (() => {
 
         // Chart
         html += '<div class="gym-chart-container">';
+        const goalWeight = player && player.goals && player.goals.targetWeight ? player.goals.targetWeight : null;
+
         if (progressMetric === 'weight') {
             const weights = GymService.getWeights(pid);
             if (weights.length >= 2) {
-                html += renderLineChart(weights, 600, 200, 'Bodyweight (lb)');
+                html += renderLineChart(weights, 600, 200, 'Bodyweight (' + unit + ')', goalWeight);
             } else {
-                html += '<div class="gym-empty">Log at least 2 weight entries to see a chart<span class="gym-empty-dash"></span></div>';
+                html += '<div class="gym-empty">Log at least 2 weight entries<span class="gym-empty-dash"></span></div>';
+            }
+        } else if (progressMetric === 'bodyfat') {
+            const bfData = GymService.getBodyFatProgression(pid);
+            const goalBF = player && player.goals && player.goals.targetBodyFat ? player.goals.targetBodyFat : null;
+            if (bfData.length >= 2) {
+                html += renderLineChart(bfData, 600, 200, 'Body Fat %', goalBF);
+            } else {
+                html += '<div class="gym-empty">Log at least 2 body fat entries<span class="gym-empty-dash"></span></div>';
+            }
+        } else if (progressMetric === 'bench_e1rm') {
+            const data = GymService.getE1RMProgression(pid, 'bench_press');
+            const liftGoal = player && player.goals && player.goals.liftGoals ? player.goals.liftGoals.find(g => g.exerciseId === 'bench_press') : null;
+            if (data.length >= 2) {
+                html += renderLineChart(data, 600, 200, 'Bench Press e1RM (' + unit + ')', liftGoal ? liftGoal.targetWeight : null);
+            } else {
+                html += '<div class="gym-empty">Log at least 2 bench sessions<span class="gym-empty-dash"></span></div>';
+            }
+        } else if (progressMetric === 'squat_e1rm') {
+            const data = GymService.getE1RMProgression(pid, 'back_squat');
+            const liftGoal = player && player.goals && player.goals.liftGoals ? player.goals.liftGoals.find(g => g.exerciseId === 'back_squat') : null;
+            if (data.length >= 2) {
+                html += renderLineChart(data, 600, 200, 'Back Squat e1RM (' + unit + ')', liftGoal ? liftGoal.targetWeight : null);
+            } else {
+                html += '<div class="gym-empty">Log at least 2 squat sessions<span class="gym-empty-dash"></span></div>';
+            }
+        } else if (progressMetric === 'weekly_volume') {
+            const freqData = GymService.getWorkoutFrequency(pid);
+            // Convert to volume per week
+            const p = GymService.getPlayer(pid);
+            if (p && p.workoutLog.length >= 2) {
+                const sorted = p.workoutLog.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+                const weeks = {};
+                sorted.forEach(w => {
+                    const d = new Date(w.date);
+                    const ws = new Date(d); ws.setDate(d.getDate() - d.getDay());
+                    const key = ws.toISOString().slice(0, 10);
+                    if (!weeks[key]) weeks[key] = 0;
+                    weeks[key] += GymService.getWorkoutVolume(w);
+                });
+                const volData = Object.entries(weeks).map(([date, value]) => ({ date, value }));
+                if (volData.length >= 2) {
+                    html += renderLineChart(volData, 600, 200, 'Weekly Volume');
+                } else {
+                    html += '<div class="gym-empty">Need more data<span class="gym-empty-dash"></span></div>';
+                }
+            } else {
+                html += '<div class="gym-empty">Need more workout data<span class="gym-empty-dash"></span></div>';
+            }
+        } else if (progressMetric === 'frequency') {
+            const freqData = GymService.getWorkoutFrequency(pid);
+            if (freqData.length >= 2) {
+                html += renderLineChart(freqData, 600, 200, 'Workouts per Week');
+            } else {
+                html += '<div class="gym-empty">Need more workout data<span class="gym-empty-dash"></span></div>';
             }
         } else {
-            const progression = GymService.getExerciseProgression(pid, progressMetric);
+            // Specific exercise e1RM
+            const data = GymService.getE1RMProgression(pid, progressMetric);
             const exDef = GymService.getExercise(progressMetric);
-            if (progression.length >= 2) {
-                html += renderLineChart(progression, 600, 200, (exDef ? exDef.name : '') + ' (lb)');
+            const liftGoal = player && player.goals && player.goals.liftGoals ? player.goals.liftGoals.find(g => g.exerciseId === progressMetric) : null;
+            if (data.length >= 2) {
+                html += renderLineChart(data, 600, 200, (exDef ? exDef.name : '') + ' e1RM (' + unit + ')', liftGoal ? liftGoal.targetWeight : null);
             } else {
                 html += '<div class="gym-empty">Log at least 2 sessions to see progression<span class="gym-empty-dash"></span></div>';
             }
         }
         html += '</div>';
 
-        // PRs
-        if (progressMetric !== 'weight') {
-            const prs = GymService.getPRs(pid, progressMetric);
+        // PRs for exercise metrics
+        if (progressMetric !== 'weight' && progressMetric !== 'bodyfat' && progressMetric !== 'weekly_volume' && progressMetric !== 'frequency') {
+            const exId = progressMetric.replace('_e1rm', '');
+            const mappedId = progressMetric === 'bench_e1rm' ? 'bench_press' : progressMetric === 'squat_e1rm' ? 'back_squat' : progressMetric;
+            const prs = GymService.getPRs(pid, mappedId);
             if (prs.length > 0) {
                 html += '<div class="gym-pr-section"><div class="gym-section-title">Personal Records</div><div class="gym-pr-cards">';
                 prs.forEach((pr, i) => {
+                    const e1rm = GymService.calcE1RM(pr.weight, pr.reps);
                     html += '<div class="gym-pr-card">' +
                         '<div class="gym-pr-card-rank">#' + (i + 1) + '</div>' +
-                        '<div class="gym-pr-card-weight">' + pr.weight + 'lb</div>' +
-                        '<div class="gym-pr-card-detail">' + pr.reps + ' reps -- ' + fmtDate(pr.date) + '</div>' +
+                        '<div class="gym-pr-card-weight">' + pr.weight + unit + '</div>' +
+                        '<div class="gym-pr-card-detail">' + pr.reps + ' reps -- e1RM: ' + e1rm + ' -- ' + fmtDate(pr.date) + '</div>' +
                         '<span class="gym-pr-badge-tag">PR</span>' +
                     '</div>';
                 });
@@ -482,7 +668,6 @@ const GymUI = (() => {
         // Challenges
         html += '<div class="gym-section-title">Challenges</div>' +
             '<button class="gym-btn-sm outline" data-action="toggle-challenge-form">ADD CHALLENGE</button>';
-
         if (showChallengeForm) {
             html += '<div class="gym-challenge-form">' +
                 '<input type="text" class="gym-input wide" id="gym-challenge-name" placeholder="Challenge name">' +
@@ -492,7 +677,6 @@ const GymUI = (() => {
                 '<button class="gym-btn-sm" data-action="save-challenge">Save</button>' +
             '</div>';
         }
-
         const challenges = GymService.getChallenges(pid);
         if (challenges.length > 0) {
             html += '<div class="gym-challenge-list">';
@@ -509,11 +693,13 @@ const GymUI = (() => {
     }
 
     /* ══════════════════════════════════════════
-       TAB 4: ROUTINES
+       TAB 4: ROUTINES + SETTINGS
     ══════════════════════════════════════════ */
     function renderRoutines() {
         const routines = GymService.getRoutines();
         const settings = GymService.getSettings();
+        const player = GymService.getPlayer(activePlayer);
+        const goals = player ? player.goals : { type: 'general' };
 
         let html = '<div class="gym-routines-header">' +
             '<div class="gym-section-title" style="margin:0">Programs</div>' +
@@ -545,16 +731,15 @@ const GymUI = (() => {
                 const exDef = GymService.getExercise(re.exerciseId);
                 html += '<div class="gym-routine-exercise-row">' +
                     '<span class="gym-routine-exercise-name">' + (exDef ? esc(exDef.name) : esc(re.exerciseId)) + '</span>' +
-                    '<span class="gym-routine-exercise-detail">' + re.sets + 's @ ' + re.defaultWeight + 'lb</span>' +
+                    '<span class="gym-routine-exercise-detail">' + re.sets + 's @ ' + re.defaultWeight + (settings.weightUnit || 'lbs') + '</span>' +
                 '</div>';
             });
             html += '</div>';
-            if (isEditing) {
-                html += renderRoutineEditor(r);
-            }
+            if (isEditing) html += renderRoutineEditor(r);
             html += '</div>';
         });
 
+        // Settings section
         html += '<div class="gym-settings-section">' +
             '<div class="gym-section-title">Settings</div>' +
             '<div class="gym-settings-row">' +
@@ -569,6 +754,42 @@ const GymUI = (() => {
                 '<span class="gym-settings-label">Default Sets</span>' +
                 '<input type="number" class="gym-settings-input" data-setting="defaultSets" value="' + settings.defaultSets + '">' +
             '</div>' +
+            '<div class="gym-settings-row">' +
+                '<span class="gym-settings-label">Weight Unit</span>' +
+                '<select class="gym-settings-input" data-setting="weightUnit" style="width:80px">' +
+                    '<option value="lbs"' + (settings.weightUnit === 'lbs' ? ' selected' : '') + '>lbs</option>' +
+                    '<option value="kg"' + (settings.weightUnit === 'kg' ? ' selected' : '') + '>kg</option>' +
+                '</select>' +
+            '</div>' +
+        '</div>';
+
+        // Goal Setup
+        html += '<div class="gym-settings-section">' +
+            '<div class="gym-section-title">Goal Setup</div>' +
+            '<div class="gym-settings-row">' +
+                '<span class="gym-settings-label">Goal Type</span>' +
+                '<select class="gym-settings-input" data-goal="type" style="width:140px">' +
+                    '<option value="general"' + (goals.type === 'general' ? ' selected' : '') + '>General Fitness</option>' +
+                    '<option value="muscle"' + (goals.type === 'muscle' ? ' selected' : '') + '>Muscle Mass</option>' +
+                    '<option value="strength"' + (goals.type === 'strength' ? ' selected' : '') + '>Strength</option>' +
+                    '<option value="fatloss"' + (goals.type === 'fatloss' ? ' selected' : '') + '>Fat Loss</option>' +
+                    '<option value="recomp"' + (goals.type === 'recomp' ? ' selected' : '') + '>Recomposition</option>' +
+                '</select>' +
+            '</div>' +
+            '<div class="gym-settings-row">' +
+                '<span class="gym-settings-label">Target Weight (' + (settings.weightUnit || 'lbs') + ')</span>' +
+                '<input type="number" class="gym-settings-input" data-goal="targetWeight" value="' + (goals.targetWeight || '') + '" style="width:80px">' +
+            '</div>' +
+            '<div class="gym-settings-row">' +
+                '<span class="gym-settings-label">Target Body Fat %</span>' +
+                '<input type="number" class="gym-settings-input" data-goal="targetBodyFat" value="' + (goals.targetBodyFat || '') + '" style="width:80px">' +
+            '</div>' +
+            '<button class="gym-btn-sm" data-action="save-goals" style="margin-top:8px">Save Goals</button>' +
+        '</div>';
+
+        // Clear Data
+        html += '<div class="gym-settings-section">' +
+            '<button class="gym-btn-sm outline" data-action="clear-data" style="border-color:var(--gym-red);color:var(--gym-red)">Clear All Data</button>' +
         '</div>';
 
         return html;
@@ -588,9 +809,7 @@ const GymUI = (() => {
         allExercises.forEach(e => {
             html += '<option value="' + esc(e.id) + '">' + esc(e.name) + '</option>';
         });
-        html += '</select>' +
-            '</div>' +
-        '</div>';
+        html += '</select></div></div>';
         return html;
     }
 
@@ -599,26 +818,26 @@ const GymUI = (() => {
     ══════════════════════════════════════════ */
     function renderBody() {
         const pid = activePlayer;
+        const settings = GymService.getSettings();
+        const unit = settings.weightUnit || 'lbs';
         let html = '';
 
         // Weight section
         const weights = GymService.getWeights(pid);
         const currentWeight = weights.length ? weights[weights.length - 1].value : null;
-
         html += '<div class="gym-body-section">' +
             '<div class="gym-body-section-title">Weight Tracker</div>';
         if (currentWeight !== null) {
             html += '<div class="gym-current-weight">' +
                 '<span class="gym-current-weight-val">' + currentWeight + '</span>' +
-                '<span class="gym-current-weight-unit">lbs</span>' +
+                '<span class="gym-current-weight-unit">' + unit + '</span>' +
             '</div>';
         }
         html += '<div class="gym-form-row">' +
-                '<input type="number" class="gym-input num" id="gym-weight-val" placeholder="lbs" step="0.1">' +
+                '<input type="number" class="gym-input num" id="gym-weight-val" placeholder="' + unit + '" step="0.1">' +
                 '<input type="date" class="gym-input" id="gym-weight-date" value="' + today() + '">' +
                 '<button class="gym-btn-sm" data-action="save-weight">Save</button>' +
             '</div>';
-
         if (weights.length > 0) {
             html += '<table class="gym-weight-table"><thead><tr><th>Date</th><th>Weight</th><th>Delta</th></tr></thead><tbody>';
             const recent = weights.slice(-10).reverse();
@@ -630,7 +849,33 @@ const GymUI = (() => {
                     const cls = parseFloat(diff) > 0 ? 'up' : parseFloat(diff) < 0 ? 'down' : '';
                     delta = '<span class="gym-weight-delta ' + cls + '">' + (parseFloat(diff) > 0 ? '+' : '') + diff + '</span>';
                 }
-                html += '<tr><td>' + fmtDate(w.date) + '</td><td>' + w.value + ' lb</td><td>' + delta + '</td></tr>';
+                html += '<tr><td>' + fmtDate(w.date) + '</td><td>' + w.value + ' ' + unit + '</td><td>' + delta + '</td></tr>';
+            });
+            html += '</tbody></table>';
+        }
+        html += '</div>';
+
+        // Body Fat & Measurements
+        html += '<div class="gym-body-section">' +
+            '<div class="gym-body-section-title">Measurements</div>' +
+            '<button class="gym-btn-sm outline" data-action="toggle-measurement-form" style="margin-bottom:10px">ADD MEASUREMENT</button>';
+        if (showMeasurementForm) {
+            html += '<div class="gym-measurement-form">' +
+                '<div class="gym-form-row"><label class="gym-meas-label">Date</label><input type="date" class="gym-input" id="gym-meas-date" value="' + today() + '"></div>' +
+                '<div class="gym-form-row"><label class="gym-meas-label">Body Fat %</label><input type="number" class="gym-input num" id="gym-meas-bf" step="0.1" placeholder="%"></div>' +
+                '<div class="gym-form-row"><label class="gym-meas-label">Chest</label><input type="number" class="gym-input num" id="gym-meas-chest" step="0.1" placeholder="in"></div>' +
+                '<div class="gym-form-row"><label class="gym-meas-label">Waist</label><input type="number" class="gym-input num" id="gym-meas-waist" step="0.1" placeholder="in"></div>' +
+                '<div class="gym-form-row"><label class="gym-meas-label">Hip</label><input type="number" class="gym-input num" id="gym-meas-hip" step="0.1" placeholder="in"></div>' +
+                '<div class="gym-form-row"><label class="gym-meas-label">Bicep</label><input type="number" class="gym-input num" id="gym-meas-bicep" step="0.1" placeholder="in"></div>' +
+                '<div class="gym-form-row"><label class="gym-meas-label">Thigh</label><input type="number" class="gym-input num" id="gym-meas-thigh" step="0.1" placeholder="in"></div>' +
+                '<button class="gym-btn-sm" data-action="save-measurement">Save Measurement</button>' +
+            '</div>';
+        }
+        const measurements = GymService.getMeasurements(pid);
+        if (measurements.length > 0) {
+            html += '<table class="gym-weight-table"><thead><tr><th>Date</th><th>BF%</th><th>Chest</th><th>Waist</th><th>Bicep</th><th>Thigh</th></tr></thead><tbody>';
+            measurements.slice(-5).reverse().forEach(m => {
+                html += '<tr><td>' + fmtDate(m.date) + '</td><td>' + (m.bodyFat || '--') + '</td><td>' + (m.chest || '--') + '</td><td>' + (m.waist || '--') + '</td><td>' + (m.bicep || '--') + '</td><td>' + (m.thigh || '--') + '</td></tr>';
             });
             html += '</tbody></table>';
         }
@@ -644,7 +889,6 @@ const GymUI = (() => {
                 '<button class="gym-btn-sm outline" data-action="upload-photo">UPLOAD PHOTO</button>' +
                 '<input type="date" class="gym-input" id="gym-photo-date" value="' + today() + '">' +
             '</div>';
-
         const photos = GymService.getPhotos(pid);
         if (photos.length > 0) {
             html += '<div class="gym-photo-gallery">';
@@ -669,50 +913,26 @@ const GymUI = (() => {
                 '<input type="number" class="gym-input num" id="gym-diet-fat" placeholder="fat">' +
                 '<button class="gym-btn-sm" data-action="save-diet">Add</button>' +
             '</div>';
-
         const dietEntries = GymService.getDiet(pid);
         const todayDiet = dietEntries.filter(d => d.date === today());
         if (todayDiet.length > 0) {
             let totalCal = 0, totalP = 0, totalC = 0, totalF = 0;
             todayDiet.forEach(d => {
                 (d.items || []).forEach(item => {
-                    totalCal += item.calories || 0;
-                    totalP += item.protein || 0;
-                    totalC += item.carbs || 0;
-                    totalF += item.fat || 0;
+                    totalCal += item.calories || 0; totalP += item.protein || 0;
+                    totalC += item.carbs || 0; totalF += item.fat || 0;
                 });
             });
-            const maxCal = 2500;
             html += '<div class="gym-diet-summary">' +
-                '<div class="gym-diet-bar-card">' +
-                    '<div class="gym-diet-bar-val">' + totalCal + '</div>' +
-                    '<div class="gym-diet-bar-label">Calories</div>' +
-                    '<div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalCal / maxCal) * 100) + '%;background:#e8a020"></div></div>' +
-                '</div>' +
-                '<div class="gym-diet-bar-card">' +
-                    '<div class="gym-diet-bar-val">' + totalP + 'g</div>' +
-                    '<div class="gym-diet-bar-label">Protein</div>' +
-                    '<div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalP / 180) * 100) + '%;background:#0984e3"></div></div>' +
-                '</div>' +
-                '<div class="gym-diet-bar-card">' +
-                    '<div class="gym-diet-bar-val">' + totalC + 'g</div>' +
-                    '<div class="gym-diet-bar-label">Carbs</div>' +
-                    '<div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalC / 300) * 100) + '%;background:#2ecc71"></div></div>' +
-                '</div>' +
-                '<div class="gym-diet-bar-card">' +
-                    '<div class="gym-diet-bar-val">' + totalF + 'g</div>' +
-                    '<div class="gym-diet-bar-label">Fat</div>' +
-                    '<div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalF / 80) * 100) + '%;background:#e74c3c"></div></div>' +
-                '</div>' +
+                '<div class="gym-diet-bar-card"><div class="gym-diet-bar-val">' + totalCal + '</div><div class="gym-diet-bar-label">Calories</div><div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalCal / 2500) * 100) + '%;background:#e8a020"></div></div></div>' +
+                '<div class="gym-diet-bar-card"><div class="gym-diet-bar-val">' + totalP + 'g</div><div class="gym-diet-bar-label">Protein</div><div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalP / 180) * 100) + '%;background:#0984e3"></div></div></div>' +
+                '<div class="gym-diet-bar-card"><div class="gym-diet-bar-val">' + totalC + 'g</div><div class="gym-diet-bar-label">Carbs</div><div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalC / 300) * 100) + '%;background:#2ecc71"></div></div></div>' +
+                '<div class="gym-diet-bar-card"><div class="gym-diet-bar-val">' + totalF + 'g</div><div class="gym-diet-bar-label">Fat</div><div class="gym-diet-bar-fill"><div class="gym-diet-bar-fill-inner" style="width:' + Math.min(100, (totalF / 80) * 100) + '%;background:#e74c3c"></div></div></div>' +
             '</div>';
-
             html += '<div class="gym-diet-items">';
             todayDiet.forEach(d => {
                 (d.items || []).forEach(item => {
-                    html += '<div class="gym-diet-item">' +
-                        '<span class="gym-diet-item-name">' + esc(item.name) + '</span>' +
-                        '<span class="gym-diet-item-macros">' + item.calories + 'cal ' + item.protein + 'p ' + item.carbs + 'c ' + item.fat + 'f</span>' +
-                    '</div>';
+                    html += '<div class="gym-diet-item"><span class="gym-diet-item-name">' + esc(item.name) + '</span><span class="gym-diet-item-macros">' + item.calories + 'cal ' + item.protein + 'p ' + item.carbs + 'c ' + item.fat + 'f</span></div>';
                 });
             });
             html += '</div>';
@@ -751,9 +971,7 @@ const GymUI = (() => {
 
     function initDashboard() {
         const wrap = container && container.querySelector('#gym-char-canvas');
-        if (wrap) {
-            initCharacterCanvas(wrap);
-        }
+        if (wrap) initCharacterCanvas(wrap);
     }
 
     function startTimerTick() {
@@ -768,7 +986,6 @@ const GymUI = (() => {
     /* ── Event Binding ── */
     function bindEvents() {
         if (!container) return;
-
         container.querySelectorAll('.gym-tab').forEach(el => {
             el.addEventListener('click', () => {
                 activeTab = el.dataset.tab;
@@ -776,15 +993,14 @@ const GymUI = (() => {
                 renderActiveTab();
             });
         });
-
         container.querySelectorAll('.gym-player-avatar').forEach(el => {
             el.addEventListener('click', () => {
                 activePlayer = el.dataset.player;
-                container.querySelectorAll('.gym-player-avatar').forEach(c => c.classList.toggle('active', c.dataset.player === activePlayer));
-                renderActiveTab();
+                // Re-render full panel to update player selector and character
+                container.innerHTML = render();
+                bindEvents();
             });
         });
-
         renderActiveTab();
     }
 
@@ -793,19 +1009,18 @@ const GymUI = (() => {
         const content = container.querySelector('#gym-tab-content');
         if (!content) return;
 
-        // Dashboard: start workout
+        /* ── Dashboard ── */
         content.querySelectorAll('[data-action="start-workout"]').forEach(el => {
             el.addEventListener('click', () => {
                 selectedRoutineId = el.dataset.routine;
+                trainStep = 'workout';
                 activeTab = 'train';
                 container.querySelectorAll('.gym-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'train'));
-                logState = { feeling: 3, notes: '', sets: {} };
+                logState = { sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3, stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes', notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {} };
                 workoutStartTime = Date.now();
                 renderActiveTab();
             });
         });
-
-        // Dashboard: log weight shortcut
         content.querySelectorAll('[data-action="goto-body"]').forEach(el => {
             el.addEventListener('click', () => {
                 activeTab = 'body';
@@ -814,17 +1029,29 @@ const GymUI = (() => {
             });
         });
 
-        // Train: routine selection
-        content.querySelectorAll('.gym-routine-card').forEach(el => {
+        /* ── Train: Routine selection (Step 1) ── */
+        content.querySelectorAll('.gym-routine-pick-card').forEach(el => {
             el.addEventListener('click', () => {
                 selectedRoutineId = el.dataset.routine;
-                logState = { feeling: 3, notes: '', sets: {} };
+                trainStep = 'workout';
+                logState = { sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3, stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes', notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {} };
                 workoutStartTime = Date.now();
                 renderActiveTab();
             });
         });
 
-        // Train: set inputs
+        /* ── Train: Back button ── */
+        content.querySelectorAll('[data-action="back-to-choose"]').forEach(el => {
+            el.addEventListener('click', () => {
+                trainStep = 'choose';
+                selectedRoutineId = null;
+                workoutStartTime = null;
+                clearInterval(timerInterval);
+                renderActiveTab();
+            });
+        });
+
+        /* ── Train: Set inputs ── */
         content.querySelectorAll('.gym-set-weight').forEach(el => {
             el.addEventListener('input', () => {
                 const key = el.dataset.set;
@@ -839,6 +1066,13 @@ const GymUI = (() => {
                 logState.sets[key].reps = parseInt(el.value) || 0;
             });
         });
+        content.querySelectorAll('.gym-set-rir-select').forEach(el => {
+            el.addEventListener('change', () => {
+                const key = el.dataset.set;
+                if (!logState.sets[key]) logState.sets[key] = {};
+                logState.sets[key].rir = parseInt(el.value);
+            });
+        });
         content.querySelectorAll('.gym-set-check').forEach(el => {
             el.addEventListener('click', () => {
                 const key = el.dataset.set;
@@ -848,40 +1082,82 @@ const GymUI = (() => {
             });
         });
 
-        // Train: feeling
-        content.querySelectorAll('.gym-feeling-btn').forEach(el => {
+        /* ── Train: Add Set ── */
+        content.querySelectorAll('.gym-add-set-btn').forEach(el => {
             el.addEventListener('click', () => {
-                logState.feeling = parseInt(el.dataset.feeling);
-                content.querySelectorAll('.gym-feeling-btn').forEach(b => b.classList.toggle('active', b.dataset.feeling === el.dataset.feeling));
+                const idx = parseInt(el.dataset.exerciseIdx);
+                const defaultSets = parseInt(el.dataset.defaultSets);
+                const countKey = '_count_' + idx;
+                logState.sets[countKey] = (logState.sets[countKey] || defaultSets) + 1;
+                renderActiveTab();
             });
         });
 
-        // Train: notes
+        /* ── Train: Mind-Muscle Connection ── */
+        content.querySelectorAll('.gym-dot-btn[data-mmc-idx]').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.dataset.mmcIdx);
+                logState.exerciseMMC[idx] = parseInt(el.dataset.val);
+                content.querySelectorAll('.gym-dot-btn[data-mmc-idx="' + idx + '"]').forEach(b => {
+                    b.classList.toggle('active', parseInt(b.dataset.val) === logState.exerciseMMC[idx]);
+                });
+            });
+        });
+
+        /* ── Train: Session RPE ── */
+        content.querySelectorAll('.gym-rpe-btn').forEach(el => {
+            el.addEventListener('click', () => {
+                logState.sessionRPE = parseInt(el.dataset.rpe);
+                content.querySelectorAll('.gym-rpe-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.rpe) === logState.sessionRPE));
+            });
+        });
+
+        /* ── Train: Energy ── */
+        content.querySelectorAll('.gym-dot-btn[data-energy]').forEach(el => {
+            el.addEventListener('click', () => {
+                logState.energyLevel = parseInt(el.dataset.energy);
+                content.querySelectorAll('.gym-dot-btn[data-energy]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.energy) === logState.energyLevel));
+            });
+        });
+
+        /* ── Train: Stress ── */
+        content.querySelectorAll('.gym-dot-btn[data-stress]').forEach(el => {
+            el.addEventListener('click', () => {
+                logState.stressLevel = parseInt(el.dataset.stress);
+                content.querySelectorAll('.gym-dot-btn[data-stress]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.stress) === logState.stressLevel));
+            });
+        });
+
+        /* ── Train: Hydration ── */
+        content.querySelectorAll('.gym-hydration-btn').forEach(el => {
+            el.addEventListener('click', () => {
+                logState.hydration = el.dataset.hydration;
+                content.querySelectorAll('.gym-hydration-btn').forEach(b => b.classList.toggle('active', b.dataset.hydration === logState.hydration));
+            });
+        });
+
+        /* ── Train: Sleep ── */
+        const sleepInput = content.querySelector('[data-field="sleepHours"]');
+        if (sleepInput) sleepInput.addEventListener('change', () => { logState.sleepHours = parseFloat(sleepInput.value) || 0; });
+
+        /* ── Train: Notes ── */
         const notesEl = content.querySelector('[data-field="notes"]');
         if (notesEl) notesEl.addEventListener('input', () => { logState.notes = notesEl.value; });
 
-        // Train: save workout
+        /* ── Train: Save Workout ── */
         content.querySelectorAll('[data-action="save-workout"]').forEach(el => {
             el.addEventListener('click', saveWorkout);
         });
 
-        // Progress: metric pills
+        /* ── Progress: metric pills ── */
         content.querySelectorAll('.gym-metric-pill').forEach(el => {
-            el.addEventListener('click', () => {
-                progressMetric = el.dataset.metric;
-                renderActiveTab();
-            });
+            el.addEventListener('click', () => { progressMetric = el.dataset.metric; renderActiveTab(); });
         });
 
-        // Progress: challenge form toggle
+        /* ── Progress: challenge ── */
         content.querySelectorAll('[data-action="toggle-challenge-form"]').forEach(el => {
-            el.addEventListener('click', () => {
-                showChallengeForm = !showChallengeForm;
-                renderActiveTab();
-            });
+            el.addEventListener('click', () => { showChallengeForm = !showChallengeForm; renderActiveTab(); });
         });
-
-        // Progress: save challenge
         content.querySelectorAll('[data-action="save-challenge"]').forEach(el => {
             el.addEventListener('click', () => {
                 const name = document.getElementById('gym-challenge-name');
@@ -889,37 +1165,20 @@ const GymUI = (() => {
                 const unit = document.getElementById('gym-challenge-unit');
                 const date = document.getElementById('gym-challenge-date');
                 if (!name || !name.value || !value || !value.value) return;
-                GymService.addChallenge(activePlayer, {
-                    name: name.value,
-                    value: parseFloat(value.value) || 0,
-                    unit: unit ? unit.value : '',
-                    date: date ? date.value : today()
-                });
+                GymService.addChallenge(activePlayer, { name: name.value, value: parseFloat(value.value) || 0, unit: unit ? unit.value : '', date: date ? date.value : today() });
                 showChallengeForm = false;
                 showToast('Challenge added');
                 renderActiveTab();
             });
         });
 
-        // Routines: edit
+        /* ── Routines: edit/delete/save ── */
         content.querySelectorAll('[data-action="edit-routine"]').forEach(el => {
-            el.addEventListener('click', () => {
-                editingRoutineId = editingRoutineId === el.dataset.routine ? null : el.dataset.routine;
-                renderActiveTab();
-            });
+            el.addEventListener('click', () => { editingRoutineId = editingRoutineId === el.dataset.routine ? null : el.dataset.routine; renderActiveTab(); });
         });
-
-        // Routines: delete
         content.querySelectorAll('[data-action="delete-routine"]').forEach(el => {
-            el.addEventListener('click', () => {
-                if (confirm('Delete this routine?')) {
-                    GymService.deleteRoutine(el.dataset.routine);
-                    renderActiveTab();
-                }
-            });
+            el.addEventListener('click', () => { if (confirm('Delete this routine?')) { GymService.deleteRoutine(el.dataset.routine); renderActiveTab(); } });
         });
-
-        // Routines: save edit
         content.querySelectorAll('[data-action="save-routine-edit"]').forEach(el => {
             el.addEventListener('click', () => {
                 const rid = el.dataset.routine;
@@ -935,8 +1194,6 @@ const GymUI = (() => {
                 showToast('Routine saved');
             });
         });
-
-        // Routines: add exercise to routine
         content.querySelectorAll('[data-action="add-exercise-to-routine"]').forEach(sel => {
             sel.addEventListener('change', () => {
                 if (!sel.value) return;
@@ -949,8 +1206,6 @@ const GymUI = (() => {
                 renderActiveTab();
             });
         });
-
-        // Routines: add new
         content.querySelectorAll('[data-action="add-routine"]').forEach(el => {
             el.addEventListener('click', () => {
                 const name = prompt('Routine name:');
@@ -963,16 +1218,45 @@ const GymUI = (() => {
             });
         });
 
-        // Routines: settings
+        /* ── Routines: settings ── */
         content.querySelectorAll('.gym-settings-input[data-setting]').forEach(el => {
             el.addEventListener('change', () => {
                 const obj = {};
-                obj[el.dataset.setting] = parseInt(el.value) || 0;
+                if (el.tagName === 'SELECT') obj[el.dataset.setting] = el.value;
+                else obj[el.dataset.setting] = parseInt(el.value) || 0;
                 GymService.updateSettings(obj);
             });
         });
 
-        // Body: save weight
+        /* ── Routines: goals ── */
+        content.querySelectorAll('[data-action="save-goals"]').forEach(el => {
+            el.addEventListener('click', () => {
+                const goalType = content.querySelector('[data-goal="type"]');
+                const targetWeight = content.querySelector('[data-goal="targetWeight"]');
+                const targetBF = content.querySelector('[data-goal="targetBodyFat"]');
+                GymService.updateGoals(activePlayer, {
+                    type: goalType ? goalType.value : 'general',
+                    targetWeight: targetWeight && targetWeight.value ? parseFloat(targetWeight.value) : null,
+                    targetBodyFat: targetBF && targetBF.value ? parseFloat(targetBF.value) : null
+                });
+                showToast('Goals saved');
+                renderActiveTab();
+            });
+        });
+
+        /* ── Routines: clear data ── */
+        content.querySelectorAll('[data-action="clear-data"]').forEach(el => {
+            el.addEventListener('click', () => {
+                if (confirm('Clear ALL gym data? This cannot be undone.')) {
+                    GymService.clearData();
+                    showToast('Data cleared');
+                    container.innerHTML = render();
+                    bindEvents();
+                }
+            });
+        });
+
+        /* ── Body: weight ── */
         content.querySelectorAll('[data-action="save-weight"]').forEach(el => {
             el.addEventListener('click', () => {
                 const val = document.getElementById('gym-weight-val');
@@ -984,19 +1268,43 @@ const GymUI = (() => {
             });
         });
 
-        // Body: upload photo
-        content.querySelectorAll('[data-action="upload-photo"]').forEach(el => {
+        /* ── Body: measurements ── */
+        content.querySelectorAll('[data-action="toggle-measurement-form"]').forEach(el => {
+            el.addEventListener('click', () => { showMeasurementForm = !showMeasurementForm; renderActiveTab(); });
+        });
+        content.querySelectorAll('[data-action="save-measurement"]').forEach(el => {
             el.addEventListener('click', () => {
-                const input = document.getElementById('gym-photo-input');
-                if (input) input.click();
+                const date = document.getElementById('gym-meas-date');
+                const bf = document.getElementById('gym-meas-bf');
+                const chest = document.getElementById('gym-meas-chest');
+                const waist = document.getElementById('gym-meas-waist');
+                const hip = document.getElementById('gym-meas-hip');
+                const bicep = document.getElementById('gym-meas-bicep');
+                const thigh = document.getElementById('gym-meas-thigh');
+                const m = {
+                    date: date ? date.value : today(),
+                    bodyFat: bf && bf.value ? parseFloat(bf.value) : null,
+                    chest: chest && chest.value ? parseFloat(chest.value) : null,
+                    waist: waist && waist.value ? parseFloat(waist.value) : null,
+                    hip: hip && hip.value ? parseFloat(hip.value) : null,
+                    bicep: bicep && bicep.value ? parseFloat(bicep.value) : null,
+                    thigh: thigh && thigh.value ? parseFloat(thigh.value) : null
+                };
+                GymService.addMeasurement(activePlayer, m);
+                showMeasurementForm = false;
+                showToast('Measurement saved');
+                renderActiveTab();
             });
         });
-        const photoInput = document.getElementById('gym-photo-input');
-        if (photoInput) {
-            photoInput.addEventListener('change', handlePhotoUpload);
-        }
 
-        // Body: save diet
+        /* ── Body: photos ── */
+        content.querySelectorAll('[data-action="upload-photo"]').forEach(el => {
+            el.addEventListener('click', () => { const input = document.getElementById('gym-photo-input'); if (input) input.click(); });
+        });
+        const photoInput = document.getElementById('gym-photo-input');
+        if (photoInput) photoInput.addEventListener('change', handlePhotoUpload);
+
+        /* ── Body: diet ── */
         content.querySelectorAll('[data-action="save-diet"]').forEach(el => {
             el.addEventListener('click', saveDietItem);
         });
@@ -1010,31 +1318,52 @@ const GymUI = (() => {
 
         const exercises = routine.exercises.map((re, reIdx) => {
             const sets = [];
-            for (let s = 0; s < re.sets; s++) {
+            const numSets = logState.sets['_count_' + reIdx] || re.sets;
+            for (let s = 0; s < numSets; s++) {
                 const key = reIdx + '-' + s;
                 const saved = logState.sets[key] || {};
                 const weightInput = container.querySelector('.gym-set-weight[data-set="' + key + '"]');
                 const repsInput = container.querySelector('.gym-set-reps[data-set="' + key + '"]');
+                const rirSelect = container.querySelector('.gym-set-rir-select[data-set="' + key + '"]');
                 sets.push({
+                    setType: saved.setType || 'working',
                     weight: saved.weight !== undefined ? saved.weight : (weightInput ? parseFloat(weightInput.value) || 0 : re.defaultWeight || 0),
                     reps: saved.reps !== undefined ? saved.reps : (repsInput ? parseInt(repsInput.value) || 0 : 0),
+                    rir: saved.rir !== undefined ? saved.rir : (rirSelect ? parseInt(rirSelect.value) : 2),
+                    restSeconds: null,
+                    tempo: null,
                     completed: saved.completed || false
                 });
             }
-            return { exerciseId: re.exerciseId, sets };
+            return {
+                exerciseId: re.exerciseId,
+                mmcQuality: logState.exerciseMMC[reIdx] || null,
+                notes: logState.exerciseNotes[reIdx] || '',
+                sets
+            };
         });
 
         const workout = {
             date: today(),
             routineId: selectedRoutineId,
-            exercises,
+            startTime: workoutStartTime ? new Date(workoutStartTime).toISOString() : null,
+            endTime: new Date().toISOString(),
+            sessionRPE: logState.sessionRPE,
+            energyLevel: logState.energyLevel,
+            sleepHours: logState.sleepHours,
+            sleepQuality: logState.sleepQuality,
+            stressLevel: logState.stressLevel,
+            hydration: logState.hydration,
+            preWorkoutFed: logState.preWorkoutFed,
             notes: logState.notes,
-            feeling: logState.feeling
+            exercises
         };
 
         GymService.logWorkout(activePlayer, workout);
-        logState = { feeling: 3, notes: '', sets: {} };
+        logState = { sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3, stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes', notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {} };
         workoutStartTime = null;
+        selectedRoutineId = null;
+        trainStep = 'choose';
         clearInterval(timerInterval);
         showToast('Workout saved!');
         activeTab = 'dashboard';
@@ -1048,7 +1377,6 @@ const GymUI = (() => {
         const file = input.files[0];
         const dateInput = document.getElementById('gym-photo-date');
         const date = dateInput ? dateInput.value : today();
-
         const reader = new FileReader();
         reader.onload = function (e) {
             const img = new Image();
@@ -1058,10 +1386,8 @@ const GymUI = (() => {
                 if (w > maxW) { h = (h * maxW) / w; w = maxW; }
                 const canvas = document.createElement('canvas');
                 canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                GymService.addPhoto(activePlayer, { date, url: dataUrl });
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                GymService.addPhoto(activePlayer, { date, url: canvas.toDataURL('image/jpeg', 0.8) });
                 showToast('Photo added');
                 renderActiveTab();
             };
@@ -1077,7 +1403,6 @@ const GymUI = (() => {
         const carbs = document.getElementById('gym-diet-carbs');
         const fat = document.getElementById('gym-diet-fat');
         if (!name || !name.value) return;
-
         const item = {
             name: name.value,
             calories: parseInt(cal && cal.value) || 0,
@@ -1085,17 +1410,10 @@ const GymUI = (() => {
             carbs: parseInt(carbs && carbs.value) || 0,
             fat: parseInt(fat && fat.value) || 0
         };
-
-        const pid = activePlayer;
-        const dietEntries = GymService.getDiet(pid);
+        const dietEntries = GymService.getDiet(activePlayer);
         const todayEntry = dietEntries.find(d => d.date === today());
-        if (todayEntry) {
-            todayEntry.items.push(item);
-            GymService.save();
-        } else {
-            GymService.logDiet(pid, { date: today(), items: [item] });
-        }
-
+        if (todayEntry) { todayEntry.items.push(item); GymService.save(); }
+        else { GymService.logDiet(activePlayer, { date: today(), items: [item] }); }
         showToast('Food logged');
         renderActiveTab();
     }
@@ -1114,10 +1432,13 @@ const GymUI = (() => {
             container = null;
             activeTab = 'dashboard';
             selectedRoutineId = null;
-            logState = { feeling: 3, notes: '', sets: {} };
+            trainStep = 'choose';
+            logState = { sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3, stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes', notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {} };
             editingRoutineId = null;
             workoutStartTime = null;
             showChallengeForm = false;
+            showGoalForm = false;
+            showMeasurementForm = false;
         }
     };
 })();

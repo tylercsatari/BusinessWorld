@@ -2,6 +2,13 @@
 const GymService = (() => {
     const STORAGE_KEY = 'gym-data';
 
+    const PLAYER_COLORS = {
+        tyler:   0x3498db,
+        robin:   0xe74c3c,
+        jordan:  0x9b59b6,
+        tennille: 0xff69b4
+    };
+
     const DEFAULT_EXERCISES = [
         { id: 'bench_press', name: 'Bench Press', category: 'push', defaultSets: 2, defaultReps: [4, 6], equipment: 'barbell' },
         { id: 'lat_pulldown', name: 'Lat Pulldown', category: 'pull', defaultSets: 3, defaultReps: [4, 6], equipment: 'cable' },
@@ -24,7 +31,8 @@ const GymService = (() => {
         { id: 'front_squat', name: 'Front Squat', category: 'legs', defaultSets: 2, defaultReps: [4, 6], equipment: 'barbell' },
         { id: 'leg_curl', name: 'Leg Curl', category: 'legs', defaultSets: 2, defaultReps: [4, 6], equipment: 'machine' },
         { id: 'seated_calf_raise', name: 'Seated Calf Raise', category: 'legs', defaultSets: 2, defaultReps: [4, 6], equipment: 'machine' },
-        { id: 'hanging_leg_raise', name: 'Hanging Leg Raise', category: 'core', defaultSets: 1, defaultReps: [4, 6], equipment: 'bodyweight' }
+        { id: 'hanging_leg_raise', name: 'Hanging Leg Raise', category: 'core', defaultSets: 1, defaultReps: [4, 6], equipment: 'bodyweight' },
+        { id: 'deadlift', name: 'Deadlift', category: 'legs', defaultSets: 2, defaultReps: [4, 6], equipment: 'barbell' }
     ];
 
     const DEFAULT_ROUTINES = [
@@ -76,18 +84,35 @@ const GymService = (() => {
         }
     ];
 
+    function makePlayer(id, name) {
+        return {
+            id, name, color: PLAYER_COLORS[id] || 0x3498db,
+            weight: [], photos: [], workoutLog: [],
+            cardioLog: [], challenges: [], dietLog: [],
+            measurements: [],
+            goals: {
+                type: 'general',
+                targetWeight: null,
+                targetBodyFat: null,
+                liftGoals: []
+            }
+        };
+    }
+
     function seedData() {
         return {
             players: [
-                {
-                    id: 'tyler', name: 'Tyler', avatar: '\u{1F3CB}\u{FE0F}',
-                    weight: [], photos: [], workoutLog: [],
-                    cardioLog: [], challenges: [], dietLog: []
-                }
+                makePlayer('tyler', 'Tyler'),
+                makePlayer('robin', 'Robin'),
+                makePlayer('jordan', 'Jordan'),
+                makePlayer('tennille', 'Tennille')
             ],
             routines: JSON.parse(JSON.stringify(DEFAULT_ROUTINES)),
             exercises: JSON.parse(JSON.stringify(DEFAULT_EXERCISES)),
-            settings: { repRangeMin: 4, repRangeMax: 6, defaultSets: 2 }
+            settings: {
+                repRangeMin: 4, repRangeMax: 6, defaultSets: 2,
+                weightUnit: 'lbs'
+            }
         };
     }
 
@@ -101,11 +126,34 @@ const GymService = (() => {
             console.warn('[Gym] Failed to load data, seeding fresh', e);
             data = seedData();
         }
-        // Ensure structure
         if (!data.players) data.players = seedData().players;
         if (!data.routines || data.routines.length === 0) data.routines = seedData().routines;
         if (!data.exercises || data.exercises.length === 0) data.exercises = seedData().exercises;
         if (!data.settings) data.settings = seedData().settings;
+        // Ensure all 4 players exist
+        const seed = seedData();
+        seed.players.forEach(sp => {
+            if (!data.players.find(p => p.id === sp.id)) {
+                data.players.push(sp);
+            }
+        });
+        // Ensure player fields
+        data.players.forEach(p => {
+            if (!p.color) p.color = PLAYER_COLORS[p.id] || 0x3498db;
+            if (!p.goals) p.goals = { type: 'general', targetWeight: null, targetBodyFat: null, liftGoals: [] };
+            if (!p.measurements) p.measurements = [];
+            if (!p.workoutLog) p.workoutLog = [];
+            if (!p.weight) p.weight = [];
+            if (!p.photos) p.photos = [];
+            if (!p.cardioLog) p.cardioLog = [];
+            if (!p.challenges) p.challenges = [];
+            if (!p.dietLog) p.dietLog = [];
+        });
+        if (!data.settings.weightUnit) data.settings.weightUnit = 'lbs';
+        // Ensure deadlift exercise exists
+        if (!data.exercises.find(e => e.id === 'deadlift')) {
+            data.exercises.push({ id: 'deadlift', name: 'Deadlift', category: 'legs', defaultSets: 2, defaultReps: [4, 6], equipment: 'barbell' });
+        }
         return data;
     }
 
@@ -122,18 +170,38 @@ const GymService = (() => {
         return data;
     }
 
+    function clearData() {
+        data = seedData();
+        save();
+    }
+
     /* ── Players ── */
     function getPlayer(id) {
         return getData().players.find(p => p.id === id) || null;
     }
+    function getPlayers() { return getData().players; }
+    function addPlayer(player) { getData().players.push(player); save(); }
+    function getPlayerColor(id) { return PLAYER_COLORS[id] || 0x3498db; }
 
-    function getPlayers() {
-        return getData().players;
+    /* ── Goals ── */
+    function updateGoals(playerId, goals) {
+        const p = getPlayer(playerId);
+        if (!p) return;
+        Object.assign(p.goals, goals);
+        save();
     }
 
-    function addPlayer(player) {
-        getData().players.push(player);
+    /* ── Measurements ── */
+    function addMeasurement(playerId, m) {
+        const p = getPlayer(playerId);
+        if (!p) return;
+        p.measurements.push(m);
+        p.measurements.sort((a, b) => new Date(a.date) - new Date(b.date));
         save();
+    }
+    function getMeasurements(playerId) {
+        const p = getPlayer(playerId);
+        return p ? p.measurements.slice() : [];
     }
 
     /* ── Workouts ── */
@@ -143,7 +211,6 @@ const GymService = (() => {
         p.workoutLog.push(workout);
         save();
     }
-
     function getWorkouts(playerId, limit) {
         const p = getPlayer(playerId);
         if (!p) return [];
@@ -159,7 +226,6 @@ const GymService = (() => {
         p.weight.sort((a, b) => new Date(a.date) - new Date(b.date));
         save();
     }
-
     function getWeights(playerId) {
         const p = getPlayer(playerId);
         return p ? p.weight.slice() : [];
@@ -172,7 +238,6 @@ const GymService = (() => {
         p.cardioLog.push(entry);
         save();
     }
-
     function getCardio(playerId) {
         const p = getPlayer(playerId);
         return p ? p.cardioLog.slice() : [];
@@ -185,7 +250,6 @@ const GymService = (() => {
         p.dietLog.push(entry);
         save();
     }
-
     function getDiet(playerId) {
         const p = getPlayer(playerId);
         return p ? p.dietLog.slice().sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
@@ -198,7 +262,6 @@ const GymService = (() => {
         p.photos.push(photo);
         save();
     }
-
     function getPhotos(playerId) {
         const p = getPlayer(playerId);
         return p ? p.photos.slice() : [];
@@ -211,32 +274,20 @@ const GymService = (() => {
         p.challenges.push(challenge);
         save();
     }
-
     function getChallenges(playerId) {
         const p = getPlayer(playerId);
         return p ? p.challenges.slice() : [];
     }
 
     /* ── Routines ── */
-    function getRoutines() {
-        return getData().routines;
-    }
-
-    function getRoutine(id) {
-        return getData().routines.find(r => r.id === id) || null;
-    }
-
-    function addRoutine(routine) {
-        getData().routines.push(routine);
-        save();
-    }
-
+    function getRoutines() { return getData().routines; }
+    function getRoutine(id) { return getData().routines.find(r => r.id === id) || null; }
+    function addRoutine(routine) { getData().routines.push(routine); save(); }
     function updateRoutine(id, updated) {
         const d = getData();
         const idx = d.routines.findIndex(r => r.id === id);
         if (idx >= 0) { d.routines[idx] = updated; save(); }
     }
-
     function deleteRoutine(id) {
         const d = getData();
         d.routines = d.routines.filter(r => r.id !== id);
@@ -244,27 +295,36 @@ const GymService = (() => {
     }
 
     /* ── Exercises ── */
-    function getExercises() {
-        return getData().exercises;
-    }
-
-    function getExercise(id) {
-        return getData().exercises.find(e => e.id === id) || null;
-    }
-
-    function addExercise(exercise) {
-        getData().exercises.push(exercise);
-        save();
-    }
+    function getExercises() { return getData().exercises; }
+    function getExercise(id) { return getData().exercises.find(e => e.id === id) || null; }
+    function addExercise(exercise) { getData().exercises.push(exercise); save(); }
 
     /* ── Settings ── */
-    function getSettings() {
-        return getData().settings;
+    function getSettings() { return getData().settings; }
+    function updateSettings(s) { Object.assign(getData().settings, s); save(); }
+
+    /* ── e1RM (Epley formula) ── */
+    function calcE1RM(weight, reps) {
+        if (reps <= 0 || weight <= 0) return 0;
+        if (reps === 1) return weight;
+        return Math.round(weight * (1 + reps / 30));
     }
 
-    function updateSettings(s) {
-        Object.assign(getData().settings, s);
-        save();
+    /* ── Get best e1RM for an exercise ── */
+    function getExerciseE1RM(playerId, exerciseId) {
+        const p = getPlayer(playerId);
+        if (!p) return 0;
+        let best = 0;
+        p.workoutLog.forEach(w => {
+            if (!w.exercises) return;
+            const ex = w.exercises.find(e => e.exerciseId === exerciseId);
+            if (!ex || !ex.sets) return;
+            ex.sets.filter(s => s.completed).forEach(s => {
+                const e1rm = calcE1RM(s.weight || 0, s.reps || 0);
+                if (e1rm > best) best = e1rm;
+            });
+        });
+        return best;
     }
 
     /* ── Progressive Overload ── */
@@ -272,31 +332,37 @@ const GymService = (() => {
         const p = getPlayer(playerId);
         if (!p) return { suggest: false };
         const settings = getData().settings;
-
         const relevantLogs = p.workoutLog
             .filter(w => w.exercises && w.exercises.some(e => e.exerciseId === exerciseId))
             .sort((a, b) => new Date(b.date) - new Date(a.date))
             .slice(0, 2);
-
         if (relevantLogs.length === 0) return { suggest: false };
-
         const lastLog = relevantLogs[0];
         const exercise = lastLog.exercises.find(e => e.exerciseId === exerciseId);
         if (!exercise || !exercise.sets || exercise.sets.length === 0) return { suggest: false };
-
         const completedSets = exercise.sets.filter(s => s.completed);
         if (completedSets.length === 0) return { suggest: false };
-
         const lastWeight = Math.max(...completedSets.map(s => s.weight || 0));
         const allHitMax = completedSets.every(s => s.reps >= settings.repRangeMax);
-
-        if (allHitMax) {
-            return { suggest: true, weight: lastWeight + 5 };
-        }
+        if (allHitMax) return { suggest: true, weight: lastWeight + 5 };
         return { suggest: false, currentWeight: lastWeight };
     }
 
-    /* ── Last weight used for an exercise ── */
+    /* ── Last session summary for an exercise ── */
+    function getLastSessionSummary(playerId, exerciseId) {
+        const p = getPlayer(playerId);
+        if (!p) return null;
+        const logs = p.workoutLog
+            .filter(w => w.exercises && w.exercises.some(e => e.exerciseId === exerciseId))
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (logs.length === 0) return null;
+        const ex = logs[0].exercises.find(e => e.exerciseId === exerciseId);
+        if (!ex || !ex.sets) return null;
+        const completed = ex.sets.filter(s => s.completed);
+        if (completed.length === 0) return null;
+        return completed.map(s => (s.weight || 0) + ' x ' + (s.reps || 0)).join(', ');
+    }
+
     function getLastWeight(playerId, exerciseId) {
         const p = getPlayer(playerId);
         if (!p) return null;
@@ -310,7 +376,19 @@ const GymService = (() => {
         return completed.length > 0 ? Math.max(...completed.map(s => s.weight || 0)) : null;
     }
 
-    /* ── Exercise history (last N sessions) ── */
+    function getLastReps(playerId, exerciseId) {
+        const p = getPlayer(playerId);
+        if (!p) return null;
+        const logs = p.workoutLog
+            .filter(w => w.exercises && w.exercises.some(e => e.exerciseId === exerciseId))
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (logs.length === 0) return null;
+        const ex = logs[0].exercises.find(e => e.exerciseId === exerciseId);
+        if (!ex || !ex.sets) return null;
+        const completed = ex.sets.filter(s => s.completed);
+        return completed.length > 0 ? completed[0].reps || 0 : null;
+    }
+
     function getExerciseHistory(playerId, exerciseId, count) {
         count = count || 3;
         const p = getPlayer(playerId);
@@ -353,7 +431,6 @@ const GymService = (() => {
         return prs.slice(0, 3);
     }
 
-    /* ── Best lift for an exercise ── */
     function getBestLift(playerId, exerciseId) {
         const prs = getPRs(playerId, exerciseId);
         return prs.length > 0 ? prs[0] : null;
@@ -376,7 +453,6 @@ const GymService = (() => {
         return p ? p.workoutLog.length : 0;
     }
 
-    /* ── Volume calculation ── */
     function getWorkoutVolume(workout) {
         let vol = 0;
         if (!workout.exercises) return vol;
@@ -385,6 +461,19 @@ const GymService = (() => {
             ex.sets.filter(s => s.completed).forEach(s => {
                 vol += (s.weight || 0) * (s.reps || 0);
             });
+        });
+        return vol;
+    }
+
+    /* ── Weekly volume (last 7 days) ── */
+    function getWeeklyVolume(playerId) {
+        const p = getPlayer(playerId);
+        if (!p) return 0;
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 7);
+        let vol = 0;
+        p.workoutLog.filter(w => new Date(w.date) >= cutoff).forEach(w => {
+            vol += getWorkoutVolume(w);
         });
         return vol;
     }
@@ -408,9 +497,95 @@ const GymService = (() => {
         return points;
     }
 
+    /* ── e1RM progression for charts ── */
+    function getE1RMProgression(playerId, exerciseId) {
+        const p = getPlayer(playerId);
+        if (!p) return [];
+        const points = [];
+        p.workoutLog
+            .filter(w => w.exercises && w.exercises.some(e => e.exerciseId === exerciseId))
+            .sort((a, b) => new Date(a.date) - new Date(b.date))
+            .forEach(w => {
+                const ex = w.exercises.find(e => e.exerciseId === exerciseId);
+                if (!ex || !ex.sets) return;
+                const completed = ex.sets.filter(s => s.completed);
+                if (completed.length === 0) return;
+                let best = 0;
+                completed.forEach(s => {
+                    const e1rm = calcE1RM(s.weight || 0, s.reps || 0);
+                    if (e1rm > best) best = e1rm;
+                });
+                if (best > 0) points.push({ date: w.date, value: best });
+            });
+        return points;
+    }
+
+    /* ── Goal-based level system ── */
+    function getPlayerLevel(playerId) {
+        const p = getPlayer(playerId);
+        if (!p) return { level: 1, xp: 0, xpToNext: 100 };
+        const total = p.workoutLog.length;
+        const goalType = p.goals ? p.goals.type : 'general';
+
+        if (goalType === 'muscle') {
+            // Level based on weekly volume trending up
+            const weeklyVol = getWeeklyVolume(playerId);
+            const level = Math.max(1, Math.floor(weeklyVol / 50000) + 1);
+            const xpInLevel = weeklyVol % 50000;
+            return { level, xp: xpInLevel, xpToNext: 50000 };
+        }
+        if (goalType === 'strength') {
+            // Level based on combined e1RM of big 3 (bench, squat, deadlift)
+            const benchE1RM = getExerciseE1RM(playerId, 'bench_press');
+            const squatE1RM = getExerciseE1RM(playerId, 'back_squat');
+            const deadliftE1RM = getExerciseE1RM(playerId, 'deadlift');
+            const combined = benchE1RM + squatE1RM + deadliftE1RM;
+            const level = Math.max(1, Math.floor(combined / 100) + 1);
+            const xpInLevel = combined % 100;
+            return { level, xp: xpInLevel, xpToNext: 100 };
+        }
+        if (goalType === 'fatloss') {
+            // Level based on workout consistency (total workouts)
+            const level = Math.max(1, Math.floor(total / 4) + 1);
+            const xpInLevel = total % 4;
+            return { level, xp: xpInLevel, xpToNext: 4 };
+        }
+        // Default: simple level
+        const level = Math.max(1, Math.floor(total / 5) + 1);
+        const xpInLevel = total % 5;
+        return { level, xp: xpInLevel, xpToNext: 5 };
+    }
+
+    /* ── Body fat progression ── */
+    function getBodyFatProgression(playerId) {
+        const m = getMeasurements(playerId);
+        return m.filter(entry => entry.bodyFat != null).map(entry => ({
+            date: entry.date,
+            value: entry.bodyFat
+        }));
+    }
+
+    /* ── Workout frequency (workouts per week over time) ── */
+    function getWorkoutFrequency(playerId) {
+        const p = getPlayer(playerId);
+        if (!p || p.workoutLog.length === 0) return [];
+        const sorted = p.workoutLog.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+        const weeks = {};
+        sorted.forEach(w => {
+            const d = new Date(w.date);
+            const weekStart = new Date(d);
+            weekStart.setDate(d.getDate() - d.getDay());
+            const key = weekStart.toISOString().slice(0, 10);
+            weeks[key] = (weeks[key] || 0) + 1;
+        });
+        return Object.entries(weeks).map(([date, value]) => ({ date, value }));
+    }
+
     return {
-        load, save, getData,
-        getPlayer, getPlayers, addPlayer,
+        load, save, getData, clearData,
+        getPlayer, getPlayers, addPlayer, getPlayerColor,
+        updateGoals,
+        addMeasurement, getMeasurements,
         logWorkout, getWorkouts,
         logWeight, getWeights,
         logCardio, getCardio,
@@ -420,9 +595,12 @@ const GymService = (() => {
         getRoutines, getRoutine, addRoutine, updateRoutine, deleteRoutine,
         getExercises, getExercise, addExercise,
         getSettings, updateSettings,
-        getProgressionSuggestion, getLastWeight, getExerciseHistory,
-        getNextRoutine, getPRs, getBestLift,
-        getWorkoutsThisWeek, getTotalWorkouts, getWorkoutVolume,
-        getExerciseProgression
+        calcE1RM, getExerciseE1RM,
+        getProgressionSuggestion, getLastWeight, getLastReps, getLastSessionSummary,
+        getExerciseHistory, getNextRoutine, getPRs, getBestLift,
+        getWorkoutsThisWeek, getTotalWorkouts, getWorkoutVolume, getWeeklyVolume,
+        getExerciseProgression, getE1RMProgression,
+        getPlayerLevel, getBodyFatProgression, getWorkoutFrequency,
+        PLAYER_COLORS
     };
 })();
