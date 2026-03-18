@@ -183,15 +183,15 @@
     padding: 12px 20px 0;
 }
 .gym-active-workout .gym-workout-header { flex-shrink: 0; }
-.gym-exercise-scroll {
+.gym-active-workout-list {
     flex: 1; overflow-y: auto; min-height: 0;
     padding-bottom: 16px;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin; scrollbar-color: #4a3e2e transparent;
 }
-.gym-exercise-scroll::-webkit-scrollbar { width: 4px; }
-.gym-exercise-scroll::-webkit-scrollbar-track { background: transparent; }
-.gym-exercise-scroll::-webkit-scrollbar-thumb { background: #4a3e2e; border-radius: 4px; }
+.gym-active-workout-list::-webkit-scrollbar { width: 4px; }
+.gym-active-workout-list::-webkit-scrollbar-track { background: transparent; }
+.gym-active-workout-list::-webkit-scrollbar-thumb { background: #4a3e2e; border-radius: 4px; }
 
 /* ── RPE Badge (on recent sessions) ── */
 .gym-rpe-badge {
@@ -513,7 +513,7 @@
 }
 
 /* ── Train: Bottom Bar (End of Workout) ── */
-.gym-log-bottom {
+.gym-active-workout-footer {
     flex-shrink: 0;
     background: #2e2418; border-top: 2px solid var(--gym-border);
     padding: 16px 20px; margin: 0 -20px;
@@ -930,7 +930,7 @@ select.gym-settings-input {
     .gym-rpe-btn { width: 28px; height: 28px; font-size: 11px; }
     .gym-actions-row { grid-template-columns: 1fr 1fr; }
     .gym-active-workout { padding: 8px 14px 0; }
-    .gym-log-bottom { padding: 12px 14px; margin: 0 -14px; }
+    .gym-active-workout-footer { padding: 12px 14px; margin: 0 -14px; }
     .gym-photo-gallery { grid-template-columns: repeat(3, 1fr); }
     .gym-pr-cards { grid-template-columns: 1fr 1fr; }
     .gym-routine-pick-card { flex-direction: column; }

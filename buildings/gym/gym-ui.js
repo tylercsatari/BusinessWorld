@@ -20,6 +20,7 @@ const GymUI = (() => {
     let showGoalForm = false;
     let showGoalSelector = false;
     let showMeasurementForm = false;
+    let showLevelTooltip = false;
 
     const ROUTINE_COLORS = { upper1: 'gold', lower1: 'blue', upper2: 'green', lower2: 'red' };
     const ROUTINE_COLOR_HEX = { upper1: '#e8a020', lower1: '#0984e3', upper2: '#2ecc71', lower2: '#e74c3c' };
@@ -330,13 +331,30 @@ const GymUI = (() => {
 
         // Stat grid (2x3 mobile, 3x2 desktop)
         html += '<div class="gym-stat-grid">' +
-            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + levelInfo.level + '</div><div class="gym-stat-box-label">Level</div></div>' +
+            '<div class="gym-stat-box" data-action="toggle-level-info" style="cursor:pointer"><div class="gym-stat-box-value">' + levelInfo.level + '</div><div class="gym-stat-box-label">Level</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + weekWorkouts + '</div><div class="gym-stat-box-label">This Week</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + streak + '</div><div class="gym-stat-box-label">Streak</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + fmtVolume(totalVol) + '</div><div class="gym-stat-box-label">Total Volume</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + currentWeight + '</div><div class="gym-stat-box-label">Body Weight</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + totalWorkouts + '</div><div class="gym-stat-box-label">Workouts</div></div>' +
         '</div>';
+
+        // Level tooltip (tap Level stat to toggle)
+        if (showLevelTooltip) {
+            const goalHints = {
+                general: 'Stay consistent and track your workouts.',
+                muscle: 'Aim for higher volume to maximize growth.',
+                strength: 'Focus on progressive overload with heavier weights.',
+                fatloss: 'Keep intensity up while maintaining a calorie deficit.',
+                recomp: 'Balance strength training with moderate volume.'
+            };
+            html += '<div style="background:#2e2418;border:1px solid var(--gym-border);border-radius:var(--gym-radius-sm);padding:12px 14px;margin:0 0 8px;font-size:13px;color:var(--gym-text-body)">' +
+                '<strong style="color:var(--gym-brown)">Level ' + levelInfo.level + '</strong> &mdash; ' +
+                'Every 5 workouts = 1 level. You\'ve done ' + levelInfo.totalWorkouts + ' total. ' +
+                levelInfo.workoutsToNext + ' more to reach Level ' + (levelInfo.level + 1) + '.' +
+                '<br><em style="color:var(--gym-text-muted)">' + (goalHints[goalType] || goalHints.general) + '</em>' +
+            '</div>';
+        }
 
         // Quick Start
         const nextRoutineId = GymService.getNextRoutine(pid);
@@ -423,7 +441,7 @@ const GymUI = (() => {
         '</div>';
 
         // Scrollable exercise list
-        html += '<div class="gym-exercise-scroll">';
+        html += '<div class="gym-active-workout-list">';
         html += '<div class="gym-exercise-list">';
         routine.exercises.forEach((re, reIdx) => {
             const exDef = GymService.getExercise(re.exerciseId);
@@ -502,7 +520,7 @@ const GymUI = (() => {
         html += '</div>'; // end exercise-scroll
 
         // End of Workout bottom sheet
-        html += '<div class="gym-log-bottom">' +
+        html += '<div class="gym-active-workout-footer">' +
             '<div class="gym-endworkout-title">End of Workout</div>';
 
         // Session RPE (1-10)
@@ -552,7 +570,7 @@ const GymUI = (() => {
 
         // FINISH button
         html += '<button class="gym-btn-finish" data-action="save-workout">FINISH</button>';
-        html += '</div>'; // end gym-log-bottom
+        html += '</div>'; // end gym-active-workout-footer
         html += '</div>'; // end gym-active-workout
 
         return html;
@@ -1032,6 +1050,7 @@ const GymUI = (() => {
             var actionEl = e.target.closest('[data-action]');
             if (actionEl) {
                 var action = actionEl.dataset.action;
+                if (action === 'toggle-level-info') { showLevelTooltip = !showLevelTooltip; renderActiveTab(); return; }
                 if (action === 'toggle-goal-selector') { showGoalSelector = !showGoalSelector; renderActiveTab(); return; }
                 if (action === 'start-workout') {
                     selectedRoutineId = actionEl.dataset.routine;
@@ -1386,6 +1405,7 @@ const GymUI = (() => {
             showChallengeForm = false;
             showGoalForm = false;
             showMeasurementForm = false;
+            showLevelTooltip = false;
         }
     };
 })();
