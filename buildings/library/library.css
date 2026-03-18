@@ -1937,3 +1937,222 @@
         gap: 0;
     }
 }
+
+/* ===================== */
+/* --- IDEA MAP ---      */
+/* ===================== */
+.library-ideamap-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+.ideamap-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #fafafa;
+    flex-wrap: wrap;
+}
+
+.ideamap-filter {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+    color: #333;
+    outline: none;
+    cursor: pointer;
+}
+.ideamap-filter:focus { border-color: #0984e3; }
+
+.ideamap-btn {
+    padding: 6px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #fff;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ideamap-btn:hover { background: #f0f0f0; }
+.ideamap-btn.active {
+    background: #0984e3;
+    color: #fff;
+    border-color: #0984e3;
+}
+
+.ideamap-zoom-label {
+    font-size: 12px;
+    color: #999;
+    margin-left: 4px;
+}
+
+.ideamap-svg-wrap {
+    flex: 1;
+    overflow: auto;
+    background: #f8f9fa;
+    cursor: grab;
+    -webkit-overflow-scrolling: touch;
+}
+.ideamap-svg-wrap:active { cursor: grabbing; }
+
+#ideamap-svg {
+    display: block;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.ideamap-node rect {
+    transition: filter 0.15s;
+}
+.ideamap-node:hover rect {
+    filter: brightness(1.1) url(#ideamap-shadow);
+}
+
+/* --- Popover --- */
+.ideamap-popover {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px;
+    max-width: 90vw;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    padding: 20px;
+    z-index: 100;
+}
+
+.ideamap-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.ideamap-popover-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+}
+
+.ideamap-popover-close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: #999;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+}
+.ideamap-popover-close:hover { color: #333; }
+
+.ideamap-popover-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    display: block;
+    margin-bottom: 4px;
+    margin-top: 10px;
+}
+
+.ideamap-popover-input,
+.ideamap-popover-select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #333;
+    background: #fafafa;
+    outline: none;
+    box-sizing: border-box;
+}
+.ideamap-popover-input:focus,
+.ideamap-popover-select:focus { border-color: #0984e3; }
+
+.ideamap-popover-save {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    padding: 10px;
+    border: none;
+    border-radius: 10px;
+    background: #0984e3;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.ideamap-popover-save:hover { background: #0770c4; }
+
+/* --- Context Menu --- */
+.ideamap-ctx {
+    position: fixed;
+    z-index: 200;
+    min-width: 200px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    padding: 6px 0;
+    font-size: 13px;
+}
+
+.ideamap-ctx-title {
+    padding: 8px 14px 4px;
+    font-weight: 700;
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.ideamap-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    cursor: pointer;
+    color: #333;
+    transition: background 0.1s;
+}
+.ideamap-ctx-item:hover { background: #f0f0f0; }
+
+.ideamap-ctx-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.ideamap-ctx-divider {
+    height: 1px;
+    background: #eee;
+    margin: 4px 0;
+}
+
+/* --- Mobile --- */
+@media (max-width: 768px) {
+    .ideamap-toolbar {
+        padding: 8px 10px;
+        gap: 6px;
+    }
+    .ideamap-filter, .ideamap-btn {
+        font-size: 12px;
+        padding: 5px 8px;
+    }
+    .ideamap-popover {
+        width: 90vw;
+        padding: 16px;
+    }
+}
