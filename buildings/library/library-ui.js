@@ -38,6 +38,10 @@ const LibraryUI = (() => {
     let freeNoteSaveTimer = null;
     let freeNoteDirty = false;
 
+    // Cache of real project names (Dropbox folders) — used to filter fake project badges
+    let realProjectsCache = null;
+    VideoService.getProjects().then(p => { realProjectsCache = p; renderNotesList(); }).catch(() => { realProjectsCache = []; });
+
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
 
@@ -1037,7 +1041,8 @@ const LibraryUI = (() => {
         el.innerHTML = ideas.map(n => {
             const isConverted = n.type === 'converted';
             const preview = n.hook || n.context || '';
-            const badge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.project) : '';
+            const isRealProject = realProjectsCache && n.project && realProjectsCache.includes(n.project);
+            const badge = isRealProject && window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.project) : '';
             // Show actual pipeline status if converted
             let statusHtml = '';
             if (isConverted) {
@@ -1083,7 +1088,8 @@ const LibraryUI = (() => {
         let projectOptions = '';
         try {
             const projs = await VideoService.getProjects();
-            projectOptions = projs.map(p => `<option value="${escAttr(p)}" ${p === note.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
+            const isRealProject = note.project && projs.includes(note.project);
+            projectOptions = projs.map(p => `<option value="${escAttr(p)}" ${isRealProject && p === note.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
         } catch (e) {}
 
         const isConverted = note.type === 'converted';
