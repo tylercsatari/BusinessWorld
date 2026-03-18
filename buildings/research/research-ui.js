@@ -88,21 +88,24 @@ const ResearchUI = (() => {
 
     /* ───── Vault tab render ───── */
 
-    function renderVaultTab() {
-        const statsHtml = vaultStats
-            ? `<div class="vault-stats-bar">🗄️ ${vaultStats.totalVideos.toLocaleString()} Shorts archived &nbsp;·&nbsp; ✓ ${vaultStats.framesReady.toLocaleString()} frames ready &nbsp;·&nbsp; ⏳ ${vaultStats.framesPending.toLocaleString()} processing</div>`
-            : '<div class="vault-stats-bar">Loading stats…</div>';
+    function vaultSubtitleText() {
+        if (!vaultStats) return 'Loading…';
+        let s = `${vaultStats.totalVideos.toLocaleString()} archived`;
+        if (vaultStats.framesReady > 0) s += ` · ${vaultStats.framesReady.toLocaleString()} frames ready`;
+        s += ` · last crawled ${timeAgo(vaultStats.lastCrawled)}`;
+        return s;
+    }
 
+    function renderVaultTab() {
         return `
             <div class="vault-header">
                 <div class="vault-header-top">
                     <div>
                         <h3 class="vault-title">100M+ Shorts Vault</h3>
-                        <div class="vault-subtitle" id="vault-subtitle">${vaultStats ? `${vaultStats.totalVideos.toLocaleString()} archived · ${vaultStats.framesReady.toLocaleString()} frames ready · last crawled ${timeAgo(vaultStats.lastCrawled)}` : 'Loading…'}</div>
+                        <div class="vault-subtitle" id="vault-subtitle">${vaultSubtitleText()}</div>
                     </div>
                     <button class="vault-refresh-btn" id="vault-refresh-btn">🔄</button>
                 </div>
-                ${statsHtml}
                 <div class="vault-filters">
                     <div class="vault-filter-group">
                         <label>Sort:</label>
@@ -289,10 +292,7 @@ const ResearchUI = (() => {
             content.innerHTML = renderVaultTab();
             bindVaultEvents();
             // Fetch fresh data on tab open
-            fetchVaultStats().then(() => {
-                updateVaultSubtitle();
-                updateVaultStatsBar();
-            });
+            fetchVaultStats().then(() => updateVaultSubtitle());
             fetchVaultVideos(1);
         }
     }
@@ -300,14 +300,7 @@ const ResearchUI = (() => {
     function updateVaultSubtitle() {
         const el = document.getElementById('vault-subtitle');
         if (el && vaultStats) {
-            el.textContent = `${vaultStats.totalVideos.toLocaleString()} archived · ${vaultStats.framesReady.toLocaleString()} frames ready · last crawled ${timeAgo(vaultStats.lastCrawled)}`;
-        }
-    }
-
-    function updateVaultStatsBar() {
-        const bar = container?.querySelector('.vault-stats-bar');
-        if (bar && vaultStats) {
-            bar.innerHTML = `🗄️ ${vaultStats.totalVideos.toLocaleString()} Shorts archived &nbsp;·&nbsp; ✓ ${vaultStats.framesReady.toLocaleString()} frames ready &nbsp;·&nbsp; ⏳ ${vaultStats.framesPending.toLocaleString()} processing`;
+            el.textContent = vaultSubtitleText();
         }
     }
 
@@ -358,7 +351,7 @@ const ResearchUI = (() => {
         document.getElementById('vault-refresh-btn')?.addEventListener('click', () => {
             vaultVideos = [];
             vaultPage = 1;
-            fetchVaultStats().then(() => { updateVaultSubtitle(); updateVaultStatsBar(); });
+            fetchVaultStats().then(() => updateVaultSubtitle());
             fetchVaultVideos(1);
         });
         // Sort buttons
@@ -520,10 +513,7 @@ const ResearchUI = (() => {
             container.innerHTML = render();
             bindEvents();
             // Fetch vault data on open
-            fetchVaultStats().then(() => {
-                updateVaultSubtitle();
-                updateVaultStatsBar();
-            });
+            fetchVaultStats().then(() => updateVaultSubtitle());
             fetchVaultVideos(1);
         },
         _retry() { doSearch(); },
