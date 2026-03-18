@@ -40,7 +40,7 @@ const LibraryUI = (() => {
 
     // Cache of real project names (Dropbox folders) — used to filter fake project badges
     let realProjectsCache = null;
-    VideoService.getProjects().then(p => { realProjectsCache = p; renderNotesList(); }).catch(() => { realProjectsCache = []; });
+    VideoService.getProjects().then(p => { realProjectsCache = p; renderNotesList().catch(() => {}); }).catch(() => { realProjectsCache = []; });
 
     // --- Notes filter state ---
     let notesFilterStatus = localStorage.getItem('notes-filter-status') || 'all';
@@ -81,7 +81,7 @@ const LibraryUI = (() => {
         panel.classList.remove('show-editor');
         panel.classList.add('show-list');
         if (activeTab === 'freenotes') renderFreeNotesList();
-        else if (activeTab === 'notes') renderNotesList();
+        else if (activeTab === 'notes') renderNotesList().catch(() => {});
         else if (activeTab === 'calendar') renderCalendarList();
         else if (activeTab === 'projects') renderProjectsList();
     }
@@ -187,7 +187,7 @@ const LibraryUI = (() => {
             if (notesFilterBar) notesFilterBar.style.display = '';
             if (notesList) notesList.style.display = '';
             if (newBtn) newBtn.style.display = '';
-            renderNotesList();
+            renderNotesList().catch(() => {});
         } else if (tab === 'todo') {
             if (heading) heading.textContent = 'To-Do';
             if (todoContainer) todoContainer.style.display = '';
@@ -1139,7 +1139,7 @@ const LibraryUI = (() => {
                 notesFilterStatus = btn.dataset.notesFilterStatus;
                 localStorage.setItem('notes-filter-status', notesFilterStatus);
                 renderNotesFilterBar();
-                renderNotesList();
+                renderNotesList().catch(() => {});
             });
         });
         barEl.querySelectorAll('[data-notes-filter-cat]').forEach(btn => {
@@ -1147,7 +1147,7 @@ const LibraryUI = (() => {
                 notesFilterCategory = btn.dataset.notesFilterCat;
                 localStorage.setItem('notes-filter-category', notesFilterCategory);
                 renderNotesFilterBar();
-                renderNotesList();
+                renderNotesList().catch(() => {});
             });
         });
 
@@ -1160,7 +1160,7 @@ const LibraryUI = (() => {
                 if (!searchInput.value.trim()) {
                     notesSearchResults = null;
                     notesSearchLoading = false;
-                    renderNotesList();
+                    renderNotesList().catch(() => {});
                     return;
                 }
                 notesSearchTimer = setTimeout(() => notesDoSearch(), 400);
@@ -1181,7 +1181,7 @@ const LibraryUI = (() => {
                 notesSearchResults = null;
                 notesSearchLoading = false;
                 renderNotesFilterBar();
-                renderNotesList();
+                renderNotesList().catch(() => {});
             });
         }
     }
@@ -1208,12 +1208,17 @@ const LibraryUI = (() => {
         }
         notesSearchLoading = false;
         renderNotesFilterBar();
-        renderNotesList();
+        renderNotesList().catch(() => {});
     }
 
-    function renderNotesList() {
+    async function renderNotesList() {
         const el = document.getElementById('library-notes-list');
         if (!el) return;
+
+        // Ensure videos are loaded for status lookups
+        if (VideoService.getAll().length === 0) {
+            await VideoService.sync().catch(() => {});
+        }
 
         // Render filter bar
         renderNotesFilterBar();
@@ -1310,7 +1315,7 @@ const LibraryUI = (() => {
                 notesSearchResults = null;
                 notesSearchLoading = false;
                 renderNotesFilterBar();
-                renderNotesList();
+                renderNotesList().catch(() => {});
             });
         }
     }
@@ -1337,7 +1342,10 @@ const LibraryUI = (() => {
 
         const isConverted = note.type === 'converted';
         let linkedVideo = null;
-        // Check for linked video regardless of converted status
+        // Ensure videos are loaded before checking for linked video
+        if (VideoService.getAll().length === 0) {
+            await VideoService.sync().catch(() => {});
+        }
         linkedVideo = VideoService.getByIdeaId(note.id);
 
         let incubatorSection = '';
@@ -1454,8 +1462,10 @@ const LibraryUI = (() => {
             const scriptEl = document.getElementById('library-idea-script');
             const script = scriptEl?.value || selectedNote.script || '';
             const video = await VideoService.create({ name, hook, context, script, project, sourceIdeaId: selectedNote.id, status: 'incubator' });
+            console.log("sendToIncubator: video created:", JSON.stringify(video));
             await VideoService.sync(true); // force refresh so Incubator building sees the new video
             await NotesService.update(selectedNote.id, { type: 'converted' });
+            console.log("sendToIncubator: note type updated to converted");
 
             // Success animation
             overlay.querySelector('.library-sending-text').textContent = 'Sent!';
@@ -1467,12 +1477,12 @@ const LibraryUI = (() => {
 
             selectedNote = NotesService.getById(selectedNote.id);
             renderNoteEditor(selectedNote);
-            renderNotesList(); // update status badge in the list immediately
+            renderNotesList().catch(() => {}); // update status badge in the list immediately
         } catch (e) {
             console.error('Library: send to incubator failed', e);
             overlay.remove();
             if (sendBtn) { sendBtn.textContent = 'Send to Incubator'; sendBtn.disabled = false; }
-            alert('Failed to send to Incubator. Check connection.');
+            alert('Failed to send to Incubator:\n' + (e && e.message ? e.message : String(e)));
         }
     }
 
@@ -1543,7 +1553,7 @@ const LibraryUI = (() => {
         if (noteDirty && selectedNote) await saveNote();
         selectedNote = null;
         showListPage();
-        renderNotesList();
+        renderNotesList().catch(() => {});
     }
 
     async function handleNewNote() {
@@ -1566,7 +1576,7 @@ const LibraryUI = (() => {
         try {
             await NotesService.remove(id);
             if (selectedNote && selectedNote.id === id) { selectedNote = null; if (currentPage === 'editor') showListPage(); }
-            renderNotesList();
+            renderNotesList().catch(() => {});
         } catch (e) { console.warn('Library: delete note failed', e); }
     }
 
@@ -3447,7 +3457,7 @@ const LibraryUI = (() => {
             await loadConfig();
             render(bodyEl);
             await NotesService.sync().catch(() => {});
-            renderNotesList();
+            await renderNotesList().catch(() => {});
             if (opts && opts.tab) switchTab(opts.tab);
         },
         close() {
