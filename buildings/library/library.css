@@ -1945,7 +1945,8 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: auto;
+    min-width: 0;
     position: relative;
 }
 

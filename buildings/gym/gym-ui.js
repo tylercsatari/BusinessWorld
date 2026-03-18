@@ -309,6 +309,7 @@ const GymUI = (() => {
         }
 
         // Default: Choose Workout
+        const settings = GymService.getSettings();
         let html = '<div class="gym-tab-content">';
         html += '<div class="gym-section-title">Choose Workout</div>';
         html += '<div class="gym-workout-grid">';
@@ -327,7 +328,33 @@ const GymUI = (() => {
             '</div>';
         });
         html += '</div>';
-        html += '<button class="gym-btn-sm outline" data-action="goto-program" style="width:100%;margin-top:16px">VIEW MY PROGRAM</button>';
+        html += '<button class="gym-btn-sm outline" data-action="goto-program" style="width:100%;margin-top:16px">EDIT MY PROGRAM</button>';
+
+        // Inline My Program section
+        const allExercises = GymService.getExercises();
+        html += '<div class="gym-section-title">My Program</div>';
+        routines.forEach(r => {
+            const colorHex = ROUTINE_COLOR_HEX[r.id] || '#e8a020';
+            html += '<div class="gym-routine-detail">' +
+                '<div class="gym-routine-detail-header"><div>' +
+                    '<div class="gym-routine-detail-name">' +
+                        '<span class="gym-routine-color-dot" style="background:' + colorHex + '"></span>' +
+                        esc(r.name) +
+                    '</div>' +
+                    '<div class="gym-routine-detail-desc">' + esc(r.description) + '</div>' +
+                '</div></div>' +
+                '<div class="gym-routine-exercises">';
+            (r.exercises || []).forEach(re => {
+                const exDef = allExercises.find(e => e.id === re.exerciseId);
+                const name = exDef ? exDef.name : re.exerciseId;
+                html += '<div class="gym-routine-exercise-row">' +
+                    '<span class="gym-routine-exercise-name">' + esc(name) + '</span>' +
+                    '<span class="gym-routine-exercise-detail">' + re.sets + ' sets × ' + (re.defaultWeight || 0) + ' ' + (settings.weightUnit || 'lbs') + '</span>' +
+                '</div>';
+            });
+            html += '</div></div>';
+        });
+
         html += '</div>';
         return html;
     }
@@ -443,7 +470,7 @@ const GymUI = (() => {
                 html += '<div class="gym-set-row">' +
                     '<span class="gym-set-num">' + (s + 1) + '</span>' +
                     '<input type="number" class="gym-set-input gym-set-weight" data-set="' + setKey + '" value="' + w + '" placeholder="lb" style="width:70px">' +
-                    '<input type="number" class="gym-set-input gym-set-reps" data-set="' + setKey + '" value="' + reps + '" placeholder="reps" style="width:50px">' +
+                    '<input type="number" min="0" max="100" class="gym-set-input gym-set-reps" data-set="' + setKey + '" value="' + (reps || 0) + '" placeholder="0" style="width:50px">' +
                     '<select class="gym-set-rir-select" data-set="' + setKey + '">' +
                         '<option value="0"' + (rir === 0 ? ' selected' : '') + '>0</option>' +
                         '<option value="1"' + (rir === 1 ? ' selected' : '') + '>1</option>' +
@@ -451,7 +478,7 @@ const GymUI = (() => {
                         '<option value="3"' + (rir === 3 ? ' selected' : '') + '>3</option>' +
                         '<option value="4"' + (rir >= 4 ? ' selected' : '') + '>4+</option>' +
                     '</select>' +
-                    '<button class="gym-set-check ' + (done ? 'done' : '') + '" data-set="' + setKey + '">&#10003;</button>' +
+                    '<button class="gym-set-check ' + (done ? 'done' : '') + '" data-action="complete-set" data-ex-idx="' + reIdx + '" data-set-idx="' + s + '" data-set="' + setKey + '">&#10003;</button>' +
                 '</div>';
 
                 // Rest timer display below completed set
@@ -903,6 +930,25 @@ const GymUI = (() => {
                     stopRestTimer();
                     editingRoutineId = null;
                     renderActiveTab(); return;
+                }
+
+                if (action === 'complete-set') {
+                    var csKey = actionEl.dataset.exIdx + '-' + actionEl.dataset.setIdx;
+                    captureSetInputs(csKey);
+                    if (!logState.sets[csKey]) logState.sets[csKey] = {};
+                    var wasDone = logState.sets[csKey].completed;
+                    logState.sets[csKey].completed = !wasDone;
+                    if (!wasDone) {
+                        if (restTimerStart && restTimerKey) {
+                            recordedRests[restTimerKey] = Math.round((Date.now() - restTimerStart) / 1000);
+                        }
+                        restTimerStart = Date.now();
+                        restTimerKey = csKey;
+                        renderActiveTab();
+                    } else {
+                        actionEl.classList.toggle('done', false);
+                    }
+                    return;
                 }
 
                 if (action === 'save-workout') { saveWorkout(); return; }

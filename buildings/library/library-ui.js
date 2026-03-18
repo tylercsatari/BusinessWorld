@@ -2237,7 +2237,7 @@ const LibraryUI = (() => {
 
         const clusterNames = Object.keys(clusters);
         const cols = Math.ceil(Math.sqrt(clusterNames.length));
-        const clusterW = 320;
+        const clusterW = 400;
         const clusterH = 280;
         const nodeW = 180;
         const nodeH = 36;
@@ -2357,7 +2357,7 @@ const LibraryUI = (() => {
             if (pos.x + nodeW > maxX) maxX = pos.x + nodeW;
             if (pos.y + nodeH > maxY) maxY = pos.y + nodeH;
         }
-        const svgW = Math.max(maxX + 100, 1200);
+        const svgW = Math.max(maxX + 200, 1400);
         const svgH = Math.max(maxY + 100, 800);
 
         // Toolbar
