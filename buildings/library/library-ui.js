@@ -195,6 +195,9 @@ const LibraryUI = (() => {
             const header = document.getElementById('library-list-header');
             if (header) header.style.display = 'none';
             renderIdeaMap();
+            // Scroll list page to top so ideamap is visible
+            const listPage = document.getElementById('library-list-page');
+            if (listPage) listPage.scrollTop = 0;
         }
         // Re-show header for non-ideamap tabs
         if (tab !== 'ideamap') {
