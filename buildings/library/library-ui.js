@@ -165,7 +165,7 @@ const LibraryUI = (() => {
             if (newBtn) newBtn.style.display = '';
             renderFreeNotesList();
         } else if (tab === 'notes') {
-            if (heading) heading.textContent = 'Ideas';
+            if (heading) heading.innerHTML = 'Ideas <span class="library-ideas-legend"><span class="library-legend-dot has-context"></span> Context &nbsp;<span class="library-legend-dot dot-script has-script"></span> Script</span>';
             if (notesList) notesList.style.display = '';
             if (newBtn) newBtn.style.display = '';
             renderNotesList();
@@ -1056,7 +1056,7 @@ const LibraryUI = (() => {
             return `
             <div class="library-list-item ${isConverted ? 'converted' : ''}" data-note-id="${n.id}">
                 <div class="library-list-item-content">
-                    <div class="library-list-title">${escHtml(n.name)}${statusHtml}</div>
+                    <div class="library-list-title">${escHtml(n.name)}${statusHtml}<span class="library-idea-dots"><span class="library-idea-dot${n.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${n.script ? ' has-script' : ''}"></span></span></div>
                     <div class="library-list-date">${badge ? `<button class="library-project-badge-btn" data-project="${escAttr(n.project)}">${badge}</button>` : escHtml(preview ? preview.substring(0, 60) : 'idea')}</div>
                 </div>
                 <button class="library-delete-btn" data-note-id="${n.id}" title="Delete">&times;</button>
@@ -2669,11 +2669,14 @@ const LibraryUI = (() => {
                     // Series badge: show sub-category name if idea belongs to a sub-category
                     const ideaCat = ideaMapGetIdeaCategory(idea.id);
                     const seriesBadge = ideaCat && ideaCat.parentId ? `<span class="ideamap-card-series" style="border-color:${ideaCat.color}">${escHtml(ideaCat.name)}</span>` : '';
+                    const projColor = (idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) && window.EggRenderer) ? window.EggRenderer.getProjectColor(idea.project) : null;
                     html += `<div class="ideamap-card" data-id="${idea.id}">
                         <div class="ideamap-card-border" style="background:${color}"></div>
                         <div class="ideamap-card-body">
+                            ${projColor ? `<span class="ideamap-project-dot" style="background:${projColor}"></span>` : ''}
                             <div class="ideamap-card-name">${escHtml(idea.name)}</div>
                             <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>
+                            <span class="library-idea-dots"><span class="library-idea-dot${idea.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${idea.script ? ' has-script' : ''}"></span></span>
                             ${seriesBadge}
                             ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
                         </div>

@@ -2697,3 +2697,63 @@
 .library-script-expand-btn:hover {
     color: #5a3e1b;
 }
+
+/* --- Context / Script indicator dots --- */
+.library-idea-dots {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    margin-left: 6px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+.library-idea-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1.5px solid #ccc;
+    background: #fff;
+    display: inline-block;
+}
+.library-idea-dot.has-context {
+    background: #0984e3;
+    border-color: #0984e3;
+}
+.library-idea-dot.dot-script.has-script {
+    background: #e8a020;
+    border-color: #e8a020;
+}
+
+/* --- Ideas heading legend --- */
+.library-ideas-legend {
+    font-size: 11px;
+    color: #999;
+    font-weight: 400;
+    margin-left: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.library-legend-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.library-legend-dot.has-context {
+    background: #0984e3;
+}
+.library-legend-dot.dot-script.has-script {
+    background: #e8a020;
+}
+
+/* --- Project color dot on Idea Map cards --- */
+.ideamap-project-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.6);
+}
