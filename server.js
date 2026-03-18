@@ -109,7 +109,7 @@ const server = http.createServer(async (req, res) => {
                 boxesTable: 'Box', itemsTable: 'Items', itemsLinkField: 'Link To Box',
                 boxesNameField: 'Name', itemsNameField: 'Name', itemsQuantityField: 'Quantity'
             },
-            search: { semanticMatchThreshold: parseFloat(process.env.SEMANTIC_MATCH_THRESHOLD) || 0.75 },
+            search: { semanticMatchThreshold: parseFloat(process.env.SEMANTIC_MATCH_THRESHOLD) || 0.85 },
             dropbox: { rootPath: process.env.DROPBOX_ROOT_PATH || '' }
         }));
         return;
