@@ -144,6 +144,12 @@ const LibraryUI = (() => {
             const tab = e.target.closest('.library-tab');
             if (tab && tab.dataset.tab) switchTab(tab.dataset.tab);
         });
+        // Event delegation for Send to Incubator (button is rendered dynamically in editor)
+        container.addEventListener('click', (e) => {
+            if (e.target.id === 'library-send-incubator' || e.target.closest('#library-send-incubator')) {
+                sendToIncubator();
+            }
+        });
     }
 
     function switchTab(tab) {
@@ -1443,7 +1449,8 @@ const LibraryUI = (() => {
         try {
             const scriptEl = document.getElementById('library-idea-script');
             const script = scriptEl?.value || selectedNote.script || '';
-            const video = await VideoService.create({ name, hook, context, script, project, sourceIdeaId: selectedNote.id });
+            const video = await VideoService.create({ name, hook, context, script, project, sourceIdeaId: selectedNote.id, status: 'incubator' });
+            await VideoService.sync(true); // force refresh so Incubator building sees the new video
             await NotesService.update(selectedNote.id, { type: 'converted' });
 
             // Success animation
@@ -1456,8 +1463,9 @@ const LibraryUI = (() => {
 
             selectedNote = NotesService.getById(selectedNote.id);
             renderNoteEditor(selectedNote);
+            renderNotesList(); // update status badge in the list immediately
         } catch (e) {
-            console.warn('Library: send to incubator failed', e);
+            console.error('Library: send to incubator failed', e);
             overlay.remove();
             if (sendBtn) { sendBtn.textContent = 'Send to Incubator'; sendBtn.disabled = false; }
             alert('Failed to send to Incubator. Check connection.');
