@@ -10,6 +10,16 @@ const cloud = require('./cloud-storage');
 
 const VIDEO_DATA_DIR = path.join(__dirname, 'video_data');
 
+// Resolve yt-dlp binary path (handles Render, Homebrew, and PATH installs)
+function getYtDlpPath() {
+  const { execSync } = require('child_process');
+  try { execSync('which yt-dlp', { stdio: 'ignore' }); return 'yt-dlp'; } catch (e) {}
+  if (fs.existsSync('/usr/local/bin/yt-dlp')) return '/usr/local/bin/yt-dlp';
+  if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) return '/opt/homebrew/bin/yt-dlp';
+  return 'yt-dlp'; // fallback, will fail with clear error
+}
+const YTDLP_BIN = getYtDlpPath();
+
 // Base yt-dlp args: use node JS runtime + EJS challenge solver
 const YTDLP_BASE = ['--js-runtimes', 'node', '--remote-components', 'ejs:github'];
 
@@ -221,7 +231,7 @@ async function startAnalysis(url, openaiKey, chatModel) {
 
             // Step 2: Download metadata
             updateJob(videoId, { status: 'downloading', progress: 5 });
-            const metaJson = await run('yt-dlp', [...YTDLP_BASE, '--dump-json', '--no-download', `https://www.youtube.com/watch?v=${videoId}`]);
+            const metaJson = await run(YTDLP_BIN, [...YTDLP_BASE, '--dump-json', '--no-download', `https://www.youtube.com/watch?v=${videoId}`]);
             const meta = JSON.parse(metaJson);
             const isVertical = (meta.height || 0) > (meta.width || 1);
             const metadata = {
@@ -247,7 +257,7 @@ async function startAnalysis(url, openaiKey, chatModel) {
             try {
                 const subDir = path.join(dir, 'subs');
                 fs.mkdirSync(subDir, { recursive: true });
-                await run('yt-dlp', [
+                await run(YTDLP_BIN, [
                     ...YTDLP_BASE,
                     '--write-auto-sub', '--sub-lang', 'en', '--sub-format', 'json3',
                     '--skip-download', '-o', path.join(subDir, '%(id)s'),
@@ -265,7 +275,7 @@ async function startAnalysis(url, openaiKey, chatModel) {
 
             // Step 5: Download video
             updateJob(videoId, { status: 'downloading', progress: 30 });
-            await run('yt-dlp', [
+            await run(YTDLP_BIN, [
                 ...YTDLP_BASE,
                 '-f', 'best[height<=720]/best',
                 '-o', videoPath,
@@ -523,7 +533,7 @@ async function refetchTranscript(videoId, openaiKey) {
     const subDir = path.join(dir, 'subs');
     fs.mkdirSync(subDir, { recursive: true });
     try {
-        await run('yt-dlp', [
+        await run(YTDLP_BIN, [
             ...YTDLP_BASE,
             '--write-auto-sub', '--sub-lang', 'en', '--sub-format', 'json3',
             '--skip-download', '-o', path.join(subDir, '%(id)s'),
@@ -551,7 +561,7 @@ async function refetchTranscript(videoId, openaiKey) {
             for (const fmt of fmtAttempts) {
                 if (downloaded) break;
                 try {
-                    await run('yt-dlp', [
+                    await run(YTDLP_BIN, [
                         ...YTDLP_BASE,
                         '-f', fmt,
                         '--no-playlist',
@@ -812,7 +822,7 @@ function parseChannelUrl(text) {
 
 // Discover all Shorts video IDs from a channel using yt-dlp flat playlist
 async function discoverChannelShorts(channelUrl) {
-    const stdout = await run('yt-dlp', [
+    const stdout = await run(YTDLP_BIN, [
         ...YTDLP_BASE,
         '--flat-playlist', '--print', '%(id)s',
         channelUrl + '/shorts'
@@ -840,7 +850,7 @@ async function reuploadToDropbox(videoId) {
 
     try {
         console.log(`Reupload: Downloading ${videoId} at 720p...`);
-        await run('yt-dlp', [
+        await run(YTDLP_BIN, [
             ...YTDLP_BASE,
             '-f', 'best[height<=720]/best',
             '-o', videoPath,
@@ -886,7 +896,7 @@ async function downloadHD(videoId) {
 
     try {
         console.log(`HD Download: Downloading ${videoId} at best quality...`);
-        await run('yt-dlp', [
+        await run(YTDLP_BIN, [
             ...YTDLP_BASE,
             '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             '-o', videoPath,
