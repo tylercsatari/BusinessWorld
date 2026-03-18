@@ -1943,23 +1943,23 @@
 /* ===================== */
 .library-ideamap-container {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: auto;
-    min-width: 0;
-    position: relative;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;
+    padding: 0;
 }
 
 /* --- Filter Bar --- */
 .ideamap-filter-bar {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 16px;
-    border-bottom: 1px solid #e8ddd0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
     background: #fff;
+    padding: 10px 16px;
+    display: flex;
+    gap: 8px;
     flex-wrap: wrap;
+    border-bottom: 1px solid #e8ddd0;
 }
 
 .ideamap-filter-pill {
@@ -1989,17 +1989,18 @@
 
 /* --- Kanban Scroll --- */
 .ideamap-kanban-scroll {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 12px 16px 24px;
-    background: #fff;
-    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: visible;
 }
 
 /* --- Cluster Section --- */
 .ideamap-cluster {
-    margin-bottom: 16px;
+    border-bottom: 1px solid #e8ddd0;
+    background: #fff;
+    position: relative;
+    overflow: visible;
 }
 
 .ideamap-cluster-header {
@@ -2041,27 +2042,27 @@
     display: flex;
     gap: 10px;
     overflow-x: auto;
-    overflow-y: hidden;
-    padding: 4px 0 8px;
-    scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
+    padding: 10px 16px 14px;
+    scroll-snap-type: x mandatory;
 }
 .ideamap-card-row::-webkit-scrollbar { height: 4px; }
 .ideamap-card-row::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
 
 /* --- Idea Card --- */
 .ideamap-card {
-    display: flex;
+    min-width: 160px;
+    max-width: 180px;
     flex-shrink: 0;
-    width: 180px;
-    min-height: 80px;
+    scroll-snap-align: start;
     background: #fff;
     border: 1px solid #e8ddd0;
-    border-radius: 10px;
+    border-radius: 8px;
     overflow: hidden;
+    display: flex;
+    position: relative;
     cursor: pointer;
     transition: box-shadow 0.15s, transform 0.15s;
-    scroll-snap-align: start;
 }
 .ideamap-card:hover {
     box-shadow: 0 4px 16px rgba(90,62,27,0.12);
@@ -2126,7 +2127,7 @@
 
 /* --- Popover --- */
 .ideamap-popover {
-    position: absolute;
+    position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -2237,14 +2238,14 @@
         padding: 5px 10px;
     }
     .ideamap-card {
-        width: 160px;
-        min-height: 72px;
+        min-width: 140px;
+        max-width: 160px;
     }
     .ideamap-popover {
         width: 90vw;
         padding: 16px;
     }
-    .ideamap-kanban-scroll {
-        padding: 8px 10px 20px;
+    .ideamap-card-row {
+        padding: 8px 10px 12px;
     }
 }

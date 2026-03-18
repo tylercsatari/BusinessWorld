@@ -2194,6 +2194,7 @@ const LibraryUI = (() => {
 
     let ideaMapState = {
         ideas: [],
+        projects: null,
         filterStatus: 'all',
         collapsedClusters: {},
         loaded: false
@@ -2248,6 +2249,15 @@ const LibraryUI = (() => {
                 ideaMapState.ideas = NotesService.getAll().filter(n => n.type !== 'todo');
             }
             ideaMapState.loaded = true;
+        }
+
+        // Cache real projects (Dropbox folders) for popover validation
+        if (!ideaMapState.projects) {
+            try {
+                ideaMapState.projects = await VideoService.getProjects();
+            } catch (e) {
+                ideaMapState.projects = [];
+            }
         }
 
         ideaMapRenderKanban(el);
@@ -2390,7 +2400,7 @@ const LibraryUI = (() => {
             </select>
             <label class="ideamap-popover-label">Tags</label>
             <div class="ideamap-popover-tags">${tags.length ? tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('') : '<span style="color:#999">No tags</span>'}</div>
-            ${idea.project ? `<label class="ideamap-popover-label">Project</label><div style="color:#5a3e1b;font-weight:600;margin-bottom:8px">${escHtml(idea.project)}</div>` : ''}
+            ${idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) ? `<label class="ideamap-popover-label">Project</label><div style="color:#5a3e1b;font-weight:600;margin-bottom:8px">${escHtml(idea.project)}</div>` : ''}
             ${idea.script ? `<label class="ideamap-popover-label">Notes</label><div class="ideamap-popover-notes">${escHtml(idea.script.substring(0, 300))}${idea.script.length > 300 ? '...' : ''}</div>` : ''}
             <button class="ideamap-popover-save" id="ideamap-pop-save">Save Status</button>
         `;
@@ -2440,6 +2450,7 @@ const LibraryUI = (() => {
             editingSponsor = null; editingSponsorVideo = null; sponsorsSubTab = 'companies';
             projectsLoaded = false; selectedProject = null;
             ideaMapState.loaded = false;
+            ideaMapState.projects = null;
             currentPage = 'list'; activeTab = 'notes';
         },
         // Public: preload to-do count for badge (called on page load)
