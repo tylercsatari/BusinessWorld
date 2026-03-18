@@ -2781,10 +2781,6 @@
 }
 
 /* --- Subcluster (subcategory within category view) --- */
-.ideamap-subcluster {
-    margin-left: 18px;
-    border-left: 2px solid #e8ddd0;
-}
 .ideamap-subcluster-header {
     display: flex;
     align-items: center;
@@ -2794,10 +2790,17 @@
     user-select: none;
     -webkit-user-select: none;
 }
+.ideamap-subcluster-header.ideamap-subcluster-inline {
+    cursor: default;
+    padding: 6px 16px 4px;
+    border-left: 2px solid currentColor;
+    margin-left: 8px;
+    opacity: 0.8;
+}
 .ideamap-subcluster-name {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    color: #5a3e1b;
+    color: inherit;
 }
 .ideamap-subcluster-count {
     font-size: 11px;

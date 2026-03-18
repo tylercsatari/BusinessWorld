@@ -1266,15 +1266,13 @@ const LibraryUI = (() => {
             const preview = n.hook || n.context || '';
             const isRealProject = realProjectsCache && n.project && realProjectsCache.includes(n.project);
             const badge = isRealProject && window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.project) : '';
-            // Show actual pipeline status if converted
+            // Show actual pipeline status - check video link regardless of converted status
             let statusHtml = '';
-            if (isConverted) {
-                const linkedVideo = VideoService.getByIdeaId(n.id);
-                if (linkedVideo && window.EggRenderer) {
-                    statusHtml = ' ' + window.EggRenderer.statusBadgeHtml(linkedVideo.status);
-                } else {
-                    statusHtml = ' <span class="library-converted-badge-inline">Sent</span>';
-                }
+            const linkedVideo = VideoService.getByIdeaId(n.id);
+            if (linkedVideo && window.EggRenderer) {
+                statusHtml = ' ' + window.EggRenderer.statusBadgeHtml(linkedVideo.status);
+            } else if (isConverted) {
+                statusHtml = ' <span class="library-converted-badge-inline">Sent</span>';
             }
             return `
             <div class="library-list-item ${isConverted ? 'converted' : ''}" data-note-id="${n.id}">
@@ -1339,12 +1337,18 @@ const LibraryUI = (() => {
 
         const isConverted = note.type === 'converted';
         let linkedVideo = null;
-        if (isConverted) linkedVideo = VideoService.getByIdeaId(note.id);
+        // Check for linked video regardless of converted status
+        linkedVideo = VideoService.getByIdeaId(note.id);
 
         let incubatorSection = '';
-        if (isConverted && linkedVideo) {
+        if (linkedVideo) {
+            // Has a linked video - show its status regardless of idea.type
             const stBadge = window.EggRenderer ? window.EggRenderer.statusBadgeHtml(linkedVideo.status) : linkedVideo.status;
             incubatorSection = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">${stBadge}</div><div class="library-linked-video">Video: ${escHtml(linkedVideo.name)}</div>`;
+            // Also fix the idea type if it's wrong
+            if (!isConverted) {
+                NotesService.update(note.id, { type: 'converted' }).catch(() => {});
+            }
         } else if (isConverted) {
             incubatorSection = `<div class="library-converted-badge">Sent to Incubator</div>`;
         } else {
@@ -2976,43 +2980,29 @@ const LibraryUI = (() => {
                             }
                         }
                     }
-                    // Render subcategory groups
-                    for (const sc of subCats) {
-                        const sg = subGroups[sc.id];
-                        if (!sg || sg.ideas.length === 0) continue;
-                        const subKey = cName + '/' + sc.name;
-                        const subCollapsed = ideaMapState.collapsedClusters[subKey];
-                        html += `<div class="ideamap-subcluster">
-                            <div class="ideamap-subcluster-header" data-cluster="${escAttr(subKey)}">
-                                <span class="ideamap-cluster-arrow">${subCollapsed ? '\u25B6' : '\u25BC'}</span>
-                                <span class="ideamap-subcluster-name" style="color:${sc.color}">${escHtml(sc.name)}</span>
-                                <span class="ideamap-subcluster-count">${sg.ideas.length}</span>
-                            </div>`;
-                        if (!subCollapsed) {
-                            html += `<div class="ideamap-card-row">`;
-                            for (const idea of sg.ideas) {
-                                html += ideaMapRenderCardHtml(idea, mapping, allCats, groupBy);
-                            }
-                            html += `</div>`;
+                    // General (not in subcategory) — render first
+                    if (generalIdeas.length > 0) {
+                        html += `<div class="ideamap-subcluster-header ideamap-subcluster-inline" style="color:${clusterColor}">
+                            <span class="ideamap-subcluster-name">General</span>
+                            <span class="ideamap-subcluster-count">${generalIdeas.length}</span>
+                        </div>`;
+                        html += `<div class="ideamap-card-row">`;
+                        for (const idea of generalIdeas) {
+                            html += ideaMapRenderCardHtml(idea, mapping, allCats, groupBy);
                         }
                         html += `</div>`;
                     }
-                    // General (not in subcategory)
-                    if (generalIdeas.length > 0) {
-                        const genKey = cName + '/General';
-                        const genCollapsed = ideaMapState.collapsedClusters[genKey];
-                        html += `<div class="ideamap-subcluster">
-                            <div class="ideamap-subcluster-header" data-cluster="${escAttr(genKey)}">
-                                <span class="ideamap-cluster-arrow">${genCollapsed ? '\u25B6' : '\u25BC'}</span>
-                                <span class="ideamap-subcluster-name">General</span>
-                                <span class="ideamap-subcluster-count">${generalIdeas.length}</span>
-                            </div>`;
-                        if (!genCollapsed) {
-                            html += `<div class="ideamap-card-row">`;
-                            for (const idea of generalIdeas) {
-                                html += ideaMapRenderCardHtml(idea, mapping, allCats, groupBy);
-                            }
-                            html += `</div>`;
+                    // Render subcategory groups inline
+                    for (const sc of subCats) {
+                        const sg = subGroups[sc.id];
+                        if (!sg || sg.ideas.length === 0) continue;
+                        html += `<div class="ideamap-subcluster-header ideamap-subcluster-inline" style="color:${sc.color}">
+                            <span class="ideamap-subcluster-name">${escHtml(sc.name)}</span>
+                            <span class="ideamap-subcluster-count">${sg.ideas.length}</span>
+                        </div>`;
+                        html += `<div class="ideamap-card-row">`;
+                        for (const idea of sg.ideas) {
+                            html += ideaMapRenderCardHtml(idea, mapping, allCats, groupBy);
                         }
                         html += `</div>`;
                     }
