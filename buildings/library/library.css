@@ -2086,6 +2086,24 @@
     color: #fff;
     border-color: #5a3e1b;
 }
+.ideamap-pill-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.12);
+    color: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 3px;
+    vertical-align: middle;
+}
+.ideamap-filter-pill.active .ideamap-pill-count {
+    background: rgba(255,255,255,0.25);
+}
 .ideamap-filter-subpill {
     font-size: 11px;
     padding: 4px 10px;

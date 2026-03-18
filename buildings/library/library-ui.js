@@ -2498,34 +2498,67 @@ const LibraryUI = (() => {
             { key: 'workshop', label: 'Workshop' },
             { key: 'posted', label: 'Posted' }
         ];
+        // Pre-count per status across ALL ideas (unfiltered)
+        const allIdeas = ideaMapState.ideas;
+        const statusCounts = {};
+        for (const idea of allIdeas) {
+            const s = ideaMapGetStatus(idea);
+            const key = (s === 'converted' || s === 'posted') ? 'posted' : s;
+            statusCounts[key] = (statusCounts[key] || 0) + 1;
+        }
+        statusCounts.all = allIdeas.length;
+
         html += `<div class="ideamap-filter-bar">`;
         html += `<span class="ideamap-filter-row-label">Status:</span>`;
         for (const f of statusFilters) {
             const active = sf === f.key || (f.key === 'posted' && sf === 'converted');
-            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-filter-status="${f.key}">${f.label}</button>`;
+            const cnt = statusCounts[f.key] || 0;
+            const cntHtml = cnt > 0 ? ` <span class="ideamap-pill-count">${cnt}</span>` : '';
+            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-filter-status="${f.key}">${f.label}${cntHtml}</button>`;
         }
-        html += `<span class="ideamap-count">${ideas.length} idea${ideas.length !== 1 ? 's' : ''}</span>`;
         html += `</div>`;
 
         // --- Category filter row ---
         const cf = ideaMapState.filterCategory;
         const cats = ideaMapGetCategories();
         const topCats = cats.filter(c => !c.parentId);
+        const ideaCatMap = ideaMapState.ideaCategories || {};
+
+        // Count ideas per category
+        const catCounts = {};
+        let uncategorizedCount = 0;
+        for (const idea of allIdeas) {
+            const catId = ideaCatMap[idea.id];
+            if (catId) {
+                catCounts[catId] = (catCounts[catId] || 0) + 1;
+                // Also count toward parent
+                const cat = cats.find(c => c.id === catId);
+                if (cat && cat.parentId) catCounts[cat.parentId] = (catCounts[cat.parentId] || 0) + 1;
+            } else {
+                uncategorizedCount++;
+            }
+        }
+
         html += `<div class="ideamap-filter-bar ideamap-filter-bar-cat">`;
         html += `<span class="ideamap-filter-row-label">Category:</span>`;
-        html += `<button class="ideamap-filter-pill${cf === 'all' ? ' active' : ''}" data-filter-cat="all">All</button>`;
+        html += `<button class="ideamap-filter-pill${cf === 'all' ? ' active' : ''}" data-filter-cat="all">All <span class="ideamap-pill-count">${allIdeas.length}</span></button>`;
         for (const tc of topCats) {
             const isActive = cf === tc.id;
             const isExpanded = ideaMapState.expandedCategoryFilter === tc.id;
-            html += `<button class="ideamap-filter-pill${isActive ? ' active' : ''}" data-filter-cat="${tc.id}" style="border-left: 3px solid ${tc.color}">${escHtml(tc.name)}</button>`;
+            const cnt = catCounts[tc.id] || 0;
+            const cntHtml = cnt > 0 ? ` <span class="ideamap-pill-count">${cnt}</span>` : '';
+            html += `<button class="ideamap-filter-pill${isActive ? ' active' : ''}" data-filter-cat="${tc.id}" style="border-left: 3px solid ${tc.color}">${escHtml(tc.name)}${cntHtml}</button>`;
             if (isExpanded) {
                 const subCats = cats.filter(c => c.parentId === tc.id);
                 for (const sc of subCats) {
-                    html += `<button class="ideamap-filter-pill ideamap-filter-subpill${cf === sc.id ? ' active' : ''}" data-filter-cat="${sc.id}">${escHtml(sc.name)}</button>`;
+                    const scCnt = catCounts[sc.id] || 0;
+                    const scCntHtml = scCnt > 0 ? ` <span class="ideamap-pill-count">${scCnt}</span>` : '';
+                    html += `<button class="ideamap-filter-pill ideamap-filter-subpill${cf === sc.id ? ' active' : ''}" data-filter-cat="${sc.id}">${escHtml(sc.name)}${scCntHtml}</button>`;
                 }
             }
         }
-        html += `<button class="ideamap-filter-pill${cf === 'uncategorized' ? ' active' : ''}" data-filter-cat="uncategorized">Uncategorized</button>`;
+        const uncatCntHtml = uncategorizedCount > 0 ? ` <span class="ideamap-pill-count">${uncategorizedCount}</span>` : '';
+        html += `<button class="ideamap-filter-pill${cf === 'uncategorized' ? ' active' : ''}" data-filter-cat="uncategorized">Uncategorized${uncatCntHtml}</button>`;
         html += `</div>`;
 
         // --- Search bar ---
