@@ -1,19 +1,19 @@
 /* ── Gym Building ── BusinessWorld Warm Aesthetic ── */
 :root {
-    --gym-bg: linear-gradient(135deg, #fff, #fff8f0);
-    --gym-surface: #ffffff;
-    --gym-cream: #fff8f0;
-    --gym-brown: #5a3e1b;
-    --gym-brown-light: #8B5E3C;
-    --gym-border: #e8ddd0;
-    --gym-border-light: #f0ece4;
+    --gym-bg: linear-gradient(135deg, #1e1a16, #2a2218);
+    --gym-surface: #2a2218;
+    --gym-cream: #3a2e20;
+    --gym-brown: #e8c07a;
+    --gym-brown-light: #c9a55a;
+    --gym-border: rgba(232, 192, 122, 0.2);
+    --gym-border-light: rgba(232, 192, 122, 0.1);
     --gym-blue: #0984e3;
     --gym-green: #2ecc71;
     --gym-red: #e74c3c;
     --gym-gold: #e8a020;
-    --gym-text: #5a3e1b;
-    --gym-text-body: #666;
-    --gym-text-muted: #999;
+    --gym-text: #f0e8d8;
+    --gym-text-body: #c8bca8;
+    --gym-text-muted: #8a7e6e;
     --gym-radius: 12px;
     --gym-radius-sm: 8px;
     --gym-font-heading: 'Fredoka One', cursive;
@@ -57,11 +57,12 @@
     display: flex; align-items: center; justify-content: center;
     font-family: var(--gym-font-heading); font-size: 20px;
     color: #fff; border: 3px solid transparent;
+    background: #3a2e20;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 .gym-player-avatar.active .gym-player-avatar-circle {
     border-color: var(--gym-brown);
-    box-shadow: 0 0 12px rgba(90, 62, 27, 0.3);
+    box-shadow: 0 0 12px rgba(232, 192, 122, 0.3);
 }
 .gym-player-avatar-name {
     font-size: 11px; color: var(--gym-text-muted);
@@ -74,7 +75,7 @@
 /* ── Tab Bar ── */
 .gym-tabs {
     display: flex; gap: 4px; padding: 12px 16px 0; flex-shrink: 0;
-    background: var(--gym-cream);
+    background: rgba(0,0,0,0.3);
     border-bottom: 1px solid var(--gym-border);
 }
 .gym-tab {
@@ -109,12 +110,12 @@
 .gym-tab-content {
     flex: 1; overflow-y: auto; padding: 16px 20px 20px; min-height: 0;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin; scrollbar-color: #d4c5a9 transparent;
+    scrollbar-width: thin; scrollbar-color: #4a3e2e transparent;
 }
 .gym-tab-content::-webkit-scrollbar { width: 4px; }
 .gym-tab-content::-webkit-scrollbar-track { background: transparent; }
 .gym-tab-content::-webkit-scrollbar-thumb {
-    background: #d4c5a9; border-radius: 4px;
+    background: #4a3e2e; border-radius: 4px;
 }
 
 /* ── Dashboard: Character Canvas ── */
@@ -139,9 +140,9 @@
     gap: 10px; margin: 16px 0;
 }
 .gym-stat-box {
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius); padding: 16px 12px; text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .gym-stat-box-value {
     font-family: var(--gym-font-heading); font-size: 32px;
@@ -164,10 +165,10 @@
 .gym-recent-list { display: flex; flex-direction: column; gap: 8px; }
 .gym-recent-card {
     display: flex; align-items: center; gap: 12px;
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius-sm); padding: 12px 14px;
     transition: border-color 0.15s;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
 .gym-recent-card:hover { border-color: var(--gym-brown-light); }
 .gym-recent-dot {
@@ -196,12 +197,12 @@
     padding: 14px 20px; border: none; border-radius: var(--gym-radius);
     font-family: var(--gym-font-heading); font-size: 15px;
     cursor: pointer; transition: all 0.2s; text-align: center;
-    background: var(--gym-brown); color: #fff;
-    box-shadow: 0 4px 16px rgba(90, 62, 27, 0.2);
+    background: var(--gym-brown); color: #1e1a16;
+    box-shadow: 0 4px 16px rgba(232, 192, 122, 0.2);
 }
 .gym-btn-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 24px rgba(90, 62, 27, 0.3);
+    box-shadow: 0 6px 24px rgba(232, 192, 122, 0.3);
 }
 .gym-btn-primary:active { transform: translateY(0); }
 .gym-btn-outline {
@@ -219,12 +220,12 @@
     border: none; border-radius: var(--gym-radius);
     font-family: var(--gym-font-heading); font-size: 16px;
     cursor: pointer; transition: all 0.2s; text-align: center;
-    background: var(--gym-brown); color: #fff;
-    box-shadow: 0 4px 16px rgba(90, 62, 27, 0.2);
+    background: var(--gym-brown); color: #1e1a16;
+    box-shadow: 0 4px 16px rgba(232, 192, 122, 0.2);
 }
 .gym-btn-full:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 24px rgba(90, 62, 27, 0.3);
+    box-shadow: 0 6px 24px rgba(232, 192, 122, 0.3);
 }
 
 /* ── Train Tab: Routine Cards ── */
@@ -233,11 +234,11 @@
     gap: 10px; margin-bottom: 20px;
 }
 .gym-routine-card {
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius); padding: 16px 14px;
     cursor: pointer; transition: all 0.2s; position: relative;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .gym-routine-card::before {
     content: ''; position: absolute; left: 0; top: 0; bottom: 0;
@@ -250,7 +251,7 @@
 .gym-routine-card:hover { border-color: var(--gym-brown-light); }
 .gym-routine-card.selected {
     border-color: var(--gym-brown);
-    box-shadow: 0 0 16px rgba(90, 62, 27, 0.12);
+    box-shadow: 0 0 16px rgba(232, 192, 122, 0.15);
 }
 .gym-routine-card-name {
     font-family: var(--gym-font-heading); font-size: 16px;
@@ -266,7 +267,7 @@
 /* ── Train: Active Workout ── */
 .gym-workout-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 16px; background: var(--gym-cream);
+    padding: 12px 16px; background: #2e2418;
     border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius); margin-bottom: 16px;
 }
@@ -282,9 +283,9 @@
 .gym-exercise-list { display: flex; flex-direction: column; gap: 14px; }
 
 .gym-exercise-card {
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius); padding: 14px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .gym-exercise-header {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -321,8 +322,8 @@
 }
 .gym-set-input {
     width: 68px; height: 44px; padding: 0 8px;
-    background: var(--gym-cream); border: 2px solid #d4c5a9;
-    border-radius: var(--gym-radius-sm); color: var(--gym-brown);
+    background: #1e1a16; border: 2px solid var(--gym-border);
+    border-radius: var(--gym-radius-sm); color: var(--gym-text);
     font-size: 16px; text-align: center;
     font-family: var(--gym-font-mono); font-variant-numeric: tabular-nums;
     -moz-appearance: textfield; transition: border-color 0.15s;
@@ -341,7 +342,7 @@
 .gym-set-check:hover { border-color: var(--gym-brown); }
 .gym-set-check.done {
     background: var(--gym-brown); border-color: var(--gym-brown);
-    color: #fff;
+    color: #1e1a16;
 }
 
 .gym-exercise-history {
@@ -352,7 +353,7 @@
 /* ── Train: Bottom Bar ── */
 .gym-log-bottom {
     position: sticky; bottom: 0; left: 0; right: 0;
-    background: var(--gym-cream); border-top: 1px solid var(--gym-border);
+    background: #2e2418; border-top: 1px solid var(--gym-border);
     padding: 14px; margin: 16px -20px -20px;
     display: flex; flex-direction: column; gap: 10px;
 }
@@ -368,7 +369,7 @@
 }
 .gym-feeling-btn {
     width: 40px; height: 40px; border-radius: 50%;
-    border: 2px solid var(--gym-border); background: var(--gym-surface);
+    border: 2px solid var(--gym-border); background: #1e1a16;
     color: var(--gym-text-muted); cursor: pointer;
     font-size: 14px; font-weight: 700; transition: all 0.15s;
     font-family: var(--gym-font-mono);
@@ -381,8 +382,8 @@
 .gym-feeling-btn.active[data-feeling="5"] { border-color: var(--gym-green); color: var(--gym-green); background: rgba(46,204,113,0.08); }
 .gym-log-notes {
     width: 100%; padding: 10px 12px;
-    background: var(--gym-surface); border: 2px solid #d4c5a9;
-    border-radius: var(--gym-radius-sm); color: var(--gym-brown);
+    background: #1e1a16; border: 2px solid var(--gym-border);
+    border-radius: var(--gym-radius-sm); color: var(--gym-text);
     font-size: 14px; font-family: var(--gym-font-body);
     resize: none; height: 40px;
 }
@@ -396,18 +397,18 @@
 .gym-metric-pills::-webkit-scrollbar { display: none; }
 .gym-metric-pill {
     padding: 8px 16px; border-radius: 20px; font-size: 13px;
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     color: var(--gym-text-muted); cursor: pointer; white-space: nowrap;
     transition: all 0.15s; font-weight: 500;
 }
 .gym-metric-pill:hover { border-color: var(--gym-brown-light); }
 .gym-metric-pill.active {
-    background: var(--gym-brown); color: #fff;
+    background: var(--gym-brown); color: #1e1a16;
     border-color: var(--gym-brown); font-weight: 700;
 }
 
 .gym-chart-container {
-    background: var(--gym-cream); border: 1px solid var(--gym-border);
+    background: #1e1a16; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius); padding: 20px;
     margin: 12px 0 20px; overflow: hidden;
 }
@@ -437,10 +438,10 @@
     gap: 10px;
 }
 .gym-pr-card {
-    background: var(--gym-cream); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius-sm); padding: 14px;
     position: relative;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .gym-pr-card-rank {
     position: absolute; top: 8px; right: 10px;
@@ -466,9 +467,9 @@
 .gym-challenge-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .gym-challenge-item {
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius-sm); padding: 12px 14px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
 .gym-challenge-name { font-size: 14px; font-weight: 600; color: var(--gym-brown); font-family: var(--gym-font-heading); }
 .gym-challenge-val { font-family: var(--gym-font-mono); color: var(--gym-blue); font-size: 14px; }
@@ -477,7 +478,7 @@
 .gym-challenge-form {
     display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
     margin-top: 10px; padding: 12px;
-    background: var(--gym-cream); border-radius: var(--gym-radius-sm);
+    background: #2e2418; border-radius: var(--gym-radius-sm);
     border: 1px solid var(--gym-border);
 }
 .gym-challenge-form .gym-input {
@@ -490,9 +491,9 @@
     margin-bottom: 14px;
 }
 .gym-routine-detail {
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
     border-radius: var(--gym-radius); padding: 16px; margin-bottom: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .gym-routine-detail-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -514,7 +515,7 @@
 .gym-routine-exercises { display: flex; flex-direction: column; gap: 4px; }
 .gym-routine-exercise-row {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 12px; background: var(--gym-cream); border-radius: var(--gym-radius-sm);
+    padding: 8px 12px; background: #1e1a16; border-radius: var(--gym-radius-sm);
     font-size: 13px;
 }
 .gym-routine-exercise-name { color: var(--gym-brown); }
@@ -544,8 +545,8 @@
 .gym-settings-label { color: var(--gym-text-body); }
 .gym-settings-input {
     width: 64px; height: 36px; padding: 0 8px;
-    background: var(--gym-cream); border: 2px solid #d4c5a9;
-    border-radius: var(--gym-radius-sm); color: var(--gym-brown);
+    background: #1e1a16; border: 2px solid var(--gym-border);
+    border-radius: var(--gym-radius-sm); color: var(--gym-text);
     font-size: 14px; text-align: center;
     font-family: var(--gym-font-mono);
 }
@@ -571,8 +572,8 @@
 /* ── Generic Form Elements ── */
 .gym-input {
     height: 44px; padding: 0 12px;
-    background: var(--gym-cream); border: 2px solid #d4c5a9;
-    border-radius: var(--gym-radius-sm); color: var(--gym-brown);
+    background: #1e1a16; border: 2px solid var(--gym-border);
+    border-radius: var(--gym-radius-sm); color: var(--gym-text);
     font-size: 14px; font-family: var(--gym-font-body);
     transition: border-color 0.15s;
 }
@@ -597,7 +598,7 @@
     border-radius: var(--gym-radius-sm);
     font-size: 14px; font-weight: 600; cursor: pointer;
     transition: all 0.15s; white-space: nowrap;
-    background: var(--gym-brown); color: #fff;
+    background: var(--gym-brown); color: #1e1a16;
     font-family: var(--gym-font-heading);
 }
 .gym-btn-sm:hover { opacity: 0.9; }
@@ -629,7 +630,7 @@
 }
 .gym-photo-card {
     border-radius: var(--gym-radius-sm); overflow: hidden;
-    background: var(--gym-surface); border: 1px solid var(--gym-border);
+    background: #2e2418; border: 1px solid var(--gym-border);
 }
 .gym-photo-card img {
     width: 100%; height: 120px; object-fit: cover; display: block;
@@ -644,10 +645,10 @@
     display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap;
 }
 .gym-diet-bar-card {
-    flex: 1; min-width: 70px; background: var(--gym-surface);
+    flex: 1; min-width: 70px; background: #2e2418;
     border: 1px solid var(--gym-border); border-radius: var(--gym-radius-sm);
     padding: 10px 12px; text-align: center;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
 .gym-diet-bar-val {
     font-family: var(--gym-font-heading); font-size: 20px; color: var(--gym-brown);
@@ -667,7 +668,7 @@
 .gym-diet-items { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 .gym-diet-item {
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--gym-cream); border-radius: var(--gym-radius-sm);
+    background: #1e1a16; border-radius: var(--gym-radius-sm);
     padding: 8px 12px; font-size: 13px;
 }
 .gym-diet-item-name { color: var(--gym-brown); }
@@ -694,12 +695,12 @@
 /* ── Toast ── */
 .gym-toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--gym-brown); color: #fff;
+    background: var(--gym-brown); color: #1e1a16;
     padding: 12px 28px; border-radius: 12px;
     font-family: var(--gym-font-heading); font-size: 14px;
     z-index: 9999; animation: gymToastIn 0.3s ease;
     pointer-events: none;
-    box-shadow: 0 4px 20px rgba(90, 62, 27, 0.3);
+    box-shadow: 0 4px 20px rgba(232, 192, 122, 0.3);
 }
 @keyframes gymToastIn {
     from { opacity: 0; transform: translateX(-50%) translateY(10px); }
