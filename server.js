@@ -23,6 +23,7 @@ const PORT = process.env.PORT || 8002;
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
+const BUILD_TS = Date.now();
 
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -2588,10 +2589,19 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             res.end('Not found');
             return;
         }
-        // Prevent browser caching of HTML/JS so code changes take effect immediately
+        // Prevent browser caching of HTML/JS/CSS so code changes take effect immediately
         const headers = { 'Content-Type': contentType };
-        if (ext === '.html' || ext === '.js') {
+        if (ext === '.html' || ext === '.js' || ext === '.css') {
             headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        }
+        // Inject cache-busting version stamps into HTML files
+        if (ext === '.html') {
+            let html = data.toString('utf8');
+            html = html.replace(/\.js(\?v=\d+)?"/g, `.js?v=${BUILD_TS}"`);
+            html = html.replace(/\.css(\?v=\d+)?"/g, `.css?v=${BUILD_TS}"`);
+            res.writeHead(200, headers);
+            res.end(html);
+            return;
         }
         res.writeHead(200, headers);
         res.end(data);
