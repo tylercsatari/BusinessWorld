@@ -876,8 +876,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 
     // GET /api/shorts-db/stats — shorts crawler database statistics
     if (pathname === '/api/shorts-db/stats' && req.method === 'GET') {
+        const stats = await shortsCrawler.getStats();
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(shortsCrawler.getStats()));
+        res.end(JSON.stringify(stats));
         return;
     }
 
@@ -887,8 +888,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         const limit = parseInt(url.searchParams.get('limit')) || 50;
         const minViews = parseInt(url.searchParams.get('minViews')) || 100000000;
         const sort = url.searchParams.get('sort') || 'views';
+        const result = await shortsCrawler.getVideos({ page, limit, minViews, sort });
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(shortsCrawler.getVideos({ page, limit, minViews, sort })));
+        res.end(JSON.stringify(result));
         return;
     }
 

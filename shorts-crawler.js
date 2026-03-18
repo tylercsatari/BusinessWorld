@@ -41,13 +41,28 @@ const SHORTS_QUERIES = [
 
 // ── Database ──
 
-function loadDb() {
-    try {
-        if (fs.existsSync(DB_PATH)) {
-            return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+async function loadDb() {
+    // On Render or when local file missing, try R2
+    if (process.env.RENDER || !fs.existsSync(DB_PATH)) {
+        try {
+            const buf = await cloud.downloadFromR2("shorts/db.json");
+            if (buf) {
+                const db = JSON.parse(buf.toString("utf8"));
+                // Also write to local for caching
+                try { fs.writeFileSync(DB_PATH, JSON.stringify(db)); } catch(e) {}
+                return db;
+            }
+        } catch(e) {
+            console.warn("shorts-crawler: R2 DB load failed:", e.message);
         }
-    } catch (e) {
-        console.warn('shorts-crawler: failed to load DB, starting fresh:', e.message);
+    }
+    // Fall back to local file
+    if (fs.existsSync(DB_PATH)) {
+        try {
+            return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+        } catch (e) {
+            console.warn('shorts-crawler: failed to load DB, starting fresh:', e.message);
+        }
     }
     return { lastUpdated: null, totalVideos: 0, videos: {} };
 }
@@ -55,7 +70,14 @@ function loadDb() {
 function saveDb(db) {
     db.totalVideos = Object.keys(db.videos).length;
     db.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+    try { fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2)); } catch(e) {}
+    // Async R2 sync - do not block
+    if (cloud.isR2Ready()) {
+        const buf = Buffer.from(JSON.stringify(db));
+        cloud.uploadToR2("shorts/db.json", buf, "application/json")
+            .then(() => console.log("shorts-crawler: DB synced to R2"))
+            .catch(e => console.warn("shorts-crawler: R2 DB sync failed:", e.message));
+    }
 }
 
 // ── InnerTube helpers ──
@@ -207,7 +229,7 @@ async function crawl() {
     console.log('shorts-crawler: starting crawl cycle...');
 
     try {
-        const db = loadDb();
+        const db = await loadDb();
 
         // --- Source 1: InnerTube search for shorts sorted by view count ---
         const sp = buildSP(3, null, 6, null); // sort=viewcount, type=shorts, all time
@@ -339,7 +361,7 @@ async function processFrames() {
         return;
     }
 
-    const db = loadDb();
+    const db = await loadDb();
     const pending = Object.values(db.videos)
         .filter(v => (v.framesStatus === 'pending' || v.framesStatus === 'failed') && (v.retryCount || 0) < MAX_RETRIES)
         .slice(0, MAX_FRAMES_PER_CYCLE);
@@ -425,8 +447,8 @@ async function processFrames() {
 
 // ── Exports ──
 
-function getStats() {
-    const db = loadDb();
+async function getStats() {
+    const db = await loadDb();
     const videos = Object.values(db.videos);
     return {
         totalVideos: videos.length,
@@ -438,8 +460,8 @@ function getStats() {
     };
 }
 
-function getVideos({ page = 1, limit = 50, minViews = MIN_VIEWS, sort = 'views' } = {}) {
-    const db = loadDb();
+async function getVideos({ page = 1, limit = 50, minViews = MIN_VIEWS, sort = 'views' } = {}) {
+    const db = await loadDb();
     let videos = Object.values(db.videos).filter(v => v.views >= minViews);
 
     if (sort === 'discoveredAt') {
@@ -468,8 +490,8 @@ async function getFrameR2Url(videoId, filename) {
     return cloud.getR2SignedUrl(key, 3600);
 }
 
-function getVideoFromDb(videoId) {
-    const db = loadDb();
+async function getVideoFromDb(videoId) {
+    const db = await loadDb();
     return db.videos[videoId] || null;
 }
 
