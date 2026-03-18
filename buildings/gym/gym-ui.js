@@ -298,14 +298,6 @@ const GymUI = (() => {
         const goalType = player && player.goals ? player.goals.type : 'general';
         const goalLabel = GOAL_LABELS[goalType] || 'General Fitness';
 
-        const XP_EXPLANATIONS = {
-            general: 'XP = workouts completed (5 per level)',
-            muscle: 'XP = total weekly volume in lbs (higher weight \u00d7 reps = more XP)',
-            strength: 'XP = e1RM progress on key lifts (Bench, Squat)',
-            fatloss: 'XP = workout consistency + logged nutrition',
-            recomp: 'XP = workout consistency + body composition changes'
-        };
-
         let html = '';
 
         // Character section
@@ -315,11 +307,15 @@ const GymUI = (() => {
             '<span class="gym-goal-badge" data-action="toggle-goal-selector">' + esc(goalLabel.toUpperCase()) + '</span>' +
         '</div>';
 
-        // Compact XP bar (below character/goal badge, before stats)
-        const xpPct = levelInfo.xpToNext > 0 ? Math.min(100, (levelInfo.xp / levelInfo.xpToNext) * 100) : 0;
-        html += '<div class="gym-xp-compact">' +
-            '<div class="gym-xp-compact-bar"><div class="gym-xp-compact-fill" style="width:' + xpPct.toFixed(1) + '%"></div></div>' +
-            '<div class="gym-xp-compact-text">' + fmtVolume(levelInfo.xp) + ' / ' + fmtVolume(levelInfo.xpToNext) + ' XP</div>' +
+        // Level progress (simple dots)
+        let dotsHtml = '<span class="gym-level-progress-dots">';
+        for (let i = 0; i < 5; i++) {
+            dotsHtml += '<span class="gym-level-dot' + (i < levelInfo.workoutsInLevel ? ' filled' : '') + '"></span>';
+        }
+        dotsHtml += '</span>';
+        html += '<div class="gym-level-progress">' +
+            levelInfo.workoutsToNext + ' workout' + (levelInfo.workoutsToNext !== 1 ? 's' : '') +
+            ' to Level ' + (levelInfo.level + 1) + dotsHtml +
         '</div>';
 
         // Inline goal selector (expands/collapses)
@@ -334,14 +330,13 @@ const GymUI = (() => {
 
         // Stat grid (2x3 mobile, 3x2 desktop)
         html += '<div class="gym-stat-grid">' +
-            '<div class="gym-stat-box gym-stat-level" data-action="toggle-level-info"><div class="gym-stat-box-value">' + levelInfo.level + '</div><div class="gym-stat-box-label">Level</div></div>' +
+            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + levelInfo.level + '</div><div class="gym-stat-box-label">Level</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + weekWorkouts + '</div><div class="gym-stat-box-label">This Week</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + streak + '</div><div class="gym-stat-box-label">Streak</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + fmtVolume(totalVol) + '</div><div class="gym-stat-box-label">Total Volume</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + currentWeight + '</div><div class="gym-stat-box-label">Body Weight</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + totalWorkouts + '</div><div class="gym-stat-box-label">Workouts</div></div>' +
-        '</div>' +
-        '<div class="gym-level-tooltip" id="gym-level-tooltip" style="display:none">' + esc(XP_EXPLANATIONS[goalType] || XP_EXPLANATIONS.general) + '</div>';
+        '</div>';
 
         // Quick Start
         const nextRoutineId = GymService.getNextRoutine(pid);
@@ -387,6 +382,7 @@ const GymUI = (() => {
 
         if (trainStep === 'choose' || !selectedRoutineId) {
             // Step 1: Choose Routine (full-screen card picker)
+            html += '<div class="gym-tab-content">';
             html += '<div class="gym-section-title">Choose Routine</div>';
             html += '<div class="gym-routine-picker">';
             routines.forEach(r => {
@@ -406,14 +402,16 @@ const GymUI = (() => {
                 '</div>';
             });
             html += '</div>';
+            html += '</div>';
             return html;
         }
 
         // Step 2: Active Workout View
         const routine = GymService.getRoutine(selectedRoutineId);
-        if (!routine) return '<div class="gym-empty">Routine not found</div>';
+        if (!routine) return '<div class="gym-tab-content"><div class="gym-empty">Routine not found</div></div>';
 
         const elapsed = workoutStartTime ? Date.now() - workoutStartTime : 0;
+        html += '<div class="gym-active-workout">';
         html += '<div class="gym-workout-header">' +
             '<div style="display:flex;align-items:center;gap:8px">' +
                 '<button class="gym-icon-btn" data-action="back-to-choose" title="Back">' +
@@ -425,6 +423,7 @@ const GymUI = (() => {
         '</div>';
 
         // Scrollable exercise list
+        html += '<div class="gym-exercise-scroll">';
         html += '<div class="gym-exercise-list">';
         routine.exercises.forEach((re, reIdx) => {
             const exDef = GymService.getExercise(re.exerciseId);
@@ -499,7 +498,8 @@ const GymUI = (() => {
 
             html += '</div>'; // end exercise card
         });
-        html += '</div>';
+        html += '</div>'; // end exercise-list
+        html += '</div>'; // end exercise-scroll
 
         // End of Workout bottom sheet
         html += '<div class="gym-log-bottom">' +
@@ -552,7 +552,8 @@ const GymUI = (() => {
 
         // FINISH button
         html += '<button class="gym-btn-finish" data-action="save-workout">FINISH</button>';
-        html += '</div>';
+        html += '</div>'; // end gym-log-bottom
+        html += '</div>'; // end gym-active-workout
 
         return html;
     }
@@ -969,7 +970,7 @@ const GymUI = (() => {
                 '<div class="gym-player-selector">' + renderPlayerSelector() + '</div>' +
             '</div>' +
             '<div class="gym-tabs">' + renderTabs() + '</div>' +
-            '<div class="gym-tab-content" id="gym-tab-content"></div>' +
+            '<div id="gym-tab-content"></div>' +
         '</div>';
     }
 
@@ -978,13 +979,12 @@ const GymUI = (() => {
         if (!el) return;
         disposeCharacter();
         switch (activeTab) {
-            case 'dashboard': el.innerHTML = renderDashboard(); initDashboard(); break;
+            case 'dashboard': el.innerHTML = '<div class="gym-tab-content">' + renderDashboard() + '</div>'; initDashboard(); break;
             case 'train':     el.innerHTML = renderTrain(); startTimerTick(); break;
-            case 'progress':  el.innerHTML = renderProgress(); break;
-            case 'routines':  el.innerHTML = renderRoutines(); break;
-            case 'body':      el.innerHTML = renderBody(); break;
+            case 'progress':  el.innerHTML = '<div class="gym-tab-content">' + renderProgress() + '</div>'; break;
+            case 'routines':  el.innerHTML = '<div class="gym-tab-content">' + renderRoutines() + '</div>'; break;
+            case 'body':      el.innerHTML = '<div class="gym-tab-content">' + renderBody() + '</div>'; break;
         }
-        bindTabEvents();
     }
 
     function initDashboard() {
@@ -1001,7 +1001,7 @@ const GymUI = (() => {
         }, 1000);
     }
 
-    /* ── Event Binding ── */
+    /* ── Event Binding (delegation-based) ── */
     function bindEvents() {
         if (!container) return;
         container.querySelectorAll('.gym-tab').forEach(el => {
@@ -1014,342 +1014,246 @@ const GymUI = (() => {
         container.querySelectorAll('.gym-player-avatar').forEach(el => {
             el.addEventListener('click', () => {
                 activePlayer = el.dataset.player;
-                // Re-render full panel to update player selector and character
                 container.innerHTML = render();
                 bindEvents();
             });
         });
+        setupDelegation();
         renderActiveTab();
     }
 
-    function bindTabEvents() {
-        if (!container) return;
+    function setupDelegation() {
         const content = container.querySelector('#gym-tab-content');
         if (!content) return;
 
-        /* ── Dashboard: Level tooltip ── */
-        content.querySelectorAll('[data-action="toggle-level-info"]').forEach(el => {
-            el.addEventListener('click', () => {
-                const tip = content.querySelector('#gym-level-tooltip');
-                if (!tip) return;
-                const open = tip.style.display !== 'none';
-                tip.style.display = open ? 'none' : 'block';
-                el.toggleAttribute('data-level-info-open', !open);
-            });
-        });
+        /* ── Click delegation ── */
+        content.addEventListener('click', function(e) {
+            /* Actions via data-action */
+            var actionEl = e.target.closest('[data-action]');
+            if (actionEl) {
+                var action = actionEl.dataset.action;
+                if (action === 'toggle-goal-selector') { showGoalSelector = !showGoalSelector; renderActiveTab(); return; }
+                if (action === 'start-workout') {
+                    selectedRoutineId = actionEl.dataset.routine;
+                    trainStep = 'workout'; activeTab = 'train';
+                    container.querySelectorAll('.gym-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === 'train'); });
+                    logState = { sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3, stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes', notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {} };
+                    workoutStartTime = Date.now(); renderActiveTab(); return;
+                }
+                if (action === 'goto-body') {
+                    activeTab = 'body';
+                    container.querySelectorAll('.gym-tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === 'body'); });
+                    renderActiveTab(); return;
+                }
+                if (action === 'back-to-choose') { trainStep = 'choose'; selectedRoutineId = null; workoutStartTime = null; clearInterval(timerInterval); renderActiveTab(); return; }
+                if (action === 'save-workout') { saveWorkout(); return; }
+                if (action === 'toggle-challenge-form') { showChallengeForm = !showChallengeForm; renderActiveTab(); return; }
+                if (action === 'save-challenge') {
+                    var cName = document.getElementById('gym-challenge-name');
+                    var cValue = document.getElementById('gym-challenge-value');
+                    var cUnit = document.getElementById('gym-challenge-unit');
+                    var cDate = document.getElementById('gym-challenge-date');
+                    if (!cName || !cName.value || !cValue || !cValue.value) return;
+                    GymService.addChallenge(activePlayer, { name: cName.value, value: parseFloat(cValue.value) || 0, unit: cUnit ? cUnit.value : '', date: cDate ? cDate.value : today() });
+                    showChallengeForm = false; showToast('Challenge added'); renderActiveTab(); return;
+                }
+                if (action === 'edit-routine') { editingRoutineId = editingRoutineId === actionEl.dataset.routine ? null : actionEl.dataset.routine; renderActiveTab(); return; }
+                if (action === 'delete-routine') { if (confirm('Delete this routine?')) { GymService.deleteRoutine(actionEl.dataset.routine); renderActiveTab(); } return; }
+                if (action === 'save-routine-edit') {
+                    var rid = actionEl.dataset.routine;
+                    var routine = GymService.getRoutine(rid);
+                    if (!routine) return;
+                    var nameInput = content.querySelector('[data-edit="name"]');
+                    var descInput = content.querySelector('[data-edit="description"]');
+                    if (nameInput) routine.name = nameInput.value;
+                    if (descInput) routine.description = descInput.value;
+                    GymService.updateRoutine(rid, routine);
+                    editingRoutineId = null; renderActiveTab(); showToast('Routine saved'); return;
+                }
+                if (action === 'add-routine') {
+                    var rName = prompt('Routine name:');
+                    if (!rName) return;
+                    var rDesc = prompt('Description:') || '';
+                    var rId = rName.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + Date.now();
+                    GymService.addRoutine({ id: rId, name: rName, description: rDesc, exercises: [] });
+                    editingRoutineId = rId; renderActiveTab(); return;
+                }
+                if (action === 'save-goals') {
+                    var goalType = content.querySelector('[data-goal="type"]');
+                    var targetWeight = content.querySelector('[data-goal="targetWeight"]');
+                    var targetBF = content.querySelector('[data-goal="targetBodyFat"]');
+                    GymService.updateGoals(activePlayer, {
+                        type: goalType ? goalType.value : 'general',
+                        targetWeight: targetWeight && targetWeight.value ? parseFloat(targetWeight.value) : null,
+                        targetBodyFat: targetBF && targetBF.value ? parseFloat(targetBF.value) : null
+                    });
+                    showToast('Goals saved'); renderActiveTab(); return;
+                }
+                if (action === 'clear-data') {
+                    if (confirm('Clear ALL gym data? This cannot be undone.')) {
+                        GymService.clearData(); showToast('Data cleared');
+                        container.innerHTML = render(); bindEvents();
+                    }
+                    return;
+                }
+                if (action === 'save-weight') {
+                    var wVal = document.getElementById('gym-weight-val');
+                    var wDate = document.getElementById('gym-weight-date');
+                    if (!wVal || !wVal.value) return;
+                    GymService.logWeight(activePlayer, wDate ? wDate.value : today(), wVal.value);
+                    showToast('Weight logged'); renderActiveTab(); return;
+                }
+                if (action === 'toggle-measurement-form') { showMeasurementForm = !showMeasurementForm; renderActiveTab(); return; }
+                if (action === 'save-measurement') {
+                    var mDate = document.getElementById('gym-meas-date');
+                    var mBf = document.getElementById('gym-meas-bf');
+                    var mChest = document.getElementById('gym-meas-chest');
+                    var mWaist = document.getElementById('gym-meas-waist');
+                    var mHip = document.getElementById('gym-meas-hip');
+                    var mBicep = document.getElementById('gym-meas-bicep');
+                    var mThigh = document.getElementById('gym-meas-thigh');
+                    GymService.addMeasurement(activePlayer, {
+                        date: mDate ? mDate.value : today(),
+                        bodyFat: mBf && mBf.value ? parseFloat(mBf.value) : null,
+                        chest: mChest && mChest.value ? parseFloat(mChest.value) : null,
+                        waist: mWaist && mWaist.value ? parseFloat(mWaist.value) : null,
+                        hip: mHip && mHip.value ? parseFloat(mHip.value) : null,
+                        bicep: mBicep && mBicep.value ? parseFloat(mBicep.value) : null,
+                        thigh: mThigh && mThigh.value ? parseFloat(mThigh.value) : null
+                    });
+                    showMeasurementForm = false; showToast('Measurement saved'); renderActiveTab(); return;
+                }
+                if (action === 'upload-photo') { var inp = document.getElementById('gym-photo-input'); if (inp) inp.click(); return; }
+                if (action === 'save-diet') { saveDietItem(); return; }
+            }
 
-        /* ── Dashboard: Goal selector toggle ── */
-        content.querySelectorAll('[data-action="toggle-goal-selector"]').forEach(el => {
-            el.addEventListener('click', () => { showGoalSelector = !showGoalSelector; renderActiveTab(); });
-        });
-
-        /* ── Dashboard: Goal chip selection ── */
-        content.querySelectorAll('.gym-goal-chip').forEach(el => {
-            el.addEventListener('click', () => {
-                GymService.updatePlayerGoal(activePlayer, el.dataset.goalType);
-                showGoalSelector = false;
-                renderActiveTab();
-            });
-        });
-
-        /* ── Dashboard ── */
-        content.querySelectorAll('[data-action="start-workout"]').forEach(el => {
-            el.addEventListener('click', () => {
-                selectedRoutineId = el.dataset.routine;
+            /* Routine picker cards (Train tab) */
+            var pickCard = e.target.closest('.gym-routine-pick-card[data-routine]');
+            if (pickCard) {
+                selectedRoutineId = pickCard.dataset.routine;
                 trainStep = 'workout';
-                activeTab = 'train';
-                container.querySelectorAll('.gym-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'train'));
                 logState = { sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3, stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes', notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {} };
-                workoutStartTime = Date.now();
-                renderActiveTab();
-            });
-        });
-        content.querySelectorAll('[data-action="goto-body"]').forEach(el => {
-            el.addEventListener('click', () => {
-                activeTab = 'body';
-                container.querySelectorAll('.gym-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'body'));
-                renderActiveTab();
-            });
-        });
+                workoutStartTime = Date.now(); renderActiveTab(); return;
+            }
 
-        /* ── Train: Routine selection (Step 1) ── */
-        content.querySelectorAll('.gym-routine-pick-card').forEach(el => {
-            el.addEventListener('click', () => {
-                selectedRoutineId = el.dataset.routine;
-                trainStep = 'workout';
-                logState = { sessionRPE: 5, energyLevel: 3, sleepHours: 7, sleepQuality: 3, stressLevel: 2, hydration: 'good', preWorkoutFed: 'yes', notes: '', sets: {}, exerciseNotes: {}, exerciseMMC: {} };
-                workoutStartTime = Date.now();
-                renderActiveTab();
-            });
-        });
+            /* Goal chip */
+            var goalChip = e.target.closest('[data-goal-type]');
+            if (goalChip) { GymService.updatePlayerGoal(activePlayer, goalChip.dataset.goalType); showGoalSelector = false; renderActiveTab(); return; }
 
-        /* ── Train: Back button ── */
-        content.querySelectorAll('[data-action="back-to-choose"]').forEach(el => {
-            el.addEventListener('click', () => {
-                trainStep = 'choose';
-                selectedRoutineId = null;
-                workoutStartTime = null;
-                clearInterval(timerInterval);
-                renderActiveTab();
-            });
-        });
+            /* Metric pill */
+            var metricPill = e.target.closest('[data-metric]');
+            if (metricPill) { progressMetric = metricPill.dataset.metric; renderActiveTab(); return; }
 
-        /* ── Train: Set inputs ── */
-        content.querySelectorAll('.gym-set-weight').forEach(el => {
-            el.addEventListener('input', () => {
-                const key = el.dataset.set;
-                if (!logState.sets[key]) logState.sets[key] = {};
-                logState.sets[key].weight = parseFloat(el.value) || 0;
-            });
-        });
-        content.querySelectorAll('.gym-set-reps').forEach(el => {
-            el.addEventListener('input', () => {
-                const key = el.dataset.set;
-                if (!logState.sets[key]) logState.sets[key] = {};
-                logState.sets[key].reps = parseInt(el.value) || 0;
-            });
-        });
-        content.querySelectorAll('.gym-set-rir-select').forEach(el => {
-            el.addEventListener('change', () => {
-                const key = el.dataset.set;
-                if (!logState.sets[key]) logState.sets[key] = {};
-                logState.sets[key].rir = parseInt(el.value);
-            });
-        });
-        content.querySelectorAll('.gym-set-check').forEach(el => {
-            el.addEventListener('click', () => {
-                const key = el.dataset.set;
-                if (!logState.sets[key]) logState.sets[key] = {};
-                logState.sets[key].completed = !logState.sets[key].completed;
-                el.classList.toggle('done', logState.sets[key].completed);
-            });
-        });
+            /* RPE button */
+            var rpeBtn = e.target.closest('[data-rpe]');
+            if (rpeBtn) {
+                logState.sessionRPE = parseInt(rpeBtn.dataset.rpe);
+                content.querySelectorAll('.gym-rpe-btn').forEach(function(b) { b.classList.toggle('active', parseInt(b.dataset.rpe) === logState.sessionRPE); });
+                return;
+            }
 
-        /* ── Train: Add Set ── */
-        content.querySelectorAll('.gym-add-set-btn').forEach(el => {
-            el.addEventListener('click', () => {
-                const idx = parseInt(el.dataset.exerciseIdx);
-                const defaultSets = parseInt(el.dataset.defaultSets);
-                const countKey = '_count_' + idx;
-                logState.sets[countKey] = (logState.sets[countKey] || defaultSets) + 1;
-                renderActiveTab();
-            });
-        });
+            /* Energy dot */
+            var energyBtn = e.target.closest('[data-energy]');
+            if (energyBtn) {
+                logState.energyLevel = parseInt(energyBtn.dataset.energy);
+                content.querySelectorAll('.gym-dot-btn[data-energy]').forEach(function(b) { b.classList.toggle('active', parseInt(b.dataset.energy) === logState.energyLevel); });
+                return;
+            }
 
-        /* ── Train: Mind-Muscle Connection ── */
-        content.querySelectorAll('.gym-dot-btn[data-mmc-idx]').forEach(el => {
-            el.addEventListener('click', () => {
-                const idx = parseInt(el.dataset.mmcIdx);
-                logState.exerciseMMC[idx] = parseInt(el.dataset.val);
-                content.querySelectorAll('.gym-dot-btn[data-mmc-idx="' + idx + '"]').forEach(b => {
+            /* Stress dot */
+            var stressBtn = e.target.closest('[data-stress]');
+            if (stressBtn) {
+                logState.stressLevel = parseInt(stressBtn.dataset.stress);
+                content.querySelectorAll('.gym-dot-btn[data-stress]').forEach(function(b) { b.classList.toggle('active', parseInt(b.dataset.stress) === logState.stressLevel); });
+                return;
+            }
+
+            /* Hydration button */
+            var hydrationBtn = e.target.closest('[data-hydration]');
+            if (hydrationBtn) {
+                logState.hydration = hydrationBtn.dataset.hydration;
+                content.querySelectorAll('.gym-hydration-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.hydration === logState.hydration); });
+                return;
+            }
+
+            /* Mind-Muscle Connection dot */
+            var mmcBtn = e.target.closest('[data-mmc-idx]');
+            if (mmcBtn) {
+                var idx = parseInt(mmcBtn.dataset.mmcIdx);
+                logState.exerciseMMC[idx] = parseInt(mmcBtn.dataset.val);
+                content.querySelectorAll('.gym-dot-btn[data-mmc-idx="' + idx + '"]').forEach(function(b) {
                     b.classList.toggle('active', parseInt(b.dataset.val) === logState.exerciseMMC[idx]);
                 });
-            });
+                return;
+            }
+
+            /* Set check button */
+            var setCheck = e.target.closest('.gym-set-check');
+            if (setCheck) {
+                var key = setCheck.dataset.set;
+                if (!logState.sets[key]) logState.sets[key] = {};
+                logState.sets[key].completed = !logState.sets[key].completed;
+                setCheck.classList.toggle('done', logState.sets[key].completed);
+                return;
+            }
+
+            /* Add set button */
+            var addSetBtn = e.target.closest('.gym-add-set-btn');
+            if (addSetBtn) {
+                var exIdx = parseInt(addSetBtn.dataset.exerciseIdx);
+                var defSets = parseInt(addSetBtn.dataset.defaultSets);
+                var countKey = '_count_' + exIdx;
+                logState.sets[countKey] = (logState.sets[countKey] || defSets) + 1;
+                renderActiveTab(); return;
+            }
         });
 
-        /* ── Train: Session RPE ── */
-        content.querySelectorAll('.gym-rpe-btn').forEach(el => {
-            el.addEventListener('click', () => {
-                logState.sessionRPE = parseInt(el.dataset.rpe);
-                content.querySelectorAll('.gym-rpe-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.rpe) === logState.sessionRPE));
-            });
+        /* ── Input delegation ── */
+        content.addEventListener('input', function(e) {
+            if (e.target.matches('.gym-set-weight')) {
+                var key = e.target.dataset.set;
+                if (!logState.sets[key]) logState.sets[key] = {};
+                logState.sets[key].weight = parseFloat(e.target.value) || 0;
+            }
+            if (e.target.matches('.gym-set-reps')) {
+                var key = e.target.dataset.set;
+                if (!logState.sets[key]) logState.sets[key] = {};
+                logState.sets[key].reps = parseInt(e.target.value) || 0;
+            }
+            if (e.target.matches('[data-field="notes"]')) {
+                logState.notes = e.target.value;
+            }
         });
 
-        /* ── Train: Energy ── */
-        content.querySelectorAll('.gym-dot-btn[data-energy]').forEach(el => {
-            el.addEventListener('click', () => {
-                logState.energyLevel = parseInt(el.dataset.energy);
-                content.querySelectorAll('.gym-dot-btn[data-energy]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.energy) === logState.energyLevel));
-            });
-        });
-
-        /* ── Train: Stress ── */
-        content.querySelectorAll('.gym-dot-btn[data-stress]').forEach(el => {
-            el.addEventListener('click', () => {
-                logState.stressLevel = parseInt(el.dataset.stress);
-                content.querySelectorAll('.gym-dot-btn[data-stress]').forEach(b => b.classList.toggle('active', parseInt(b.dataset.stress) === logState.stressLevel));
-            });
-        });
-
-        /* ── Train: Hydration ── */
-        content.querySelectorAll('.gym-hydration-btn').forEach(el => {
-            el.addEventListener('click', () => {
-                logState.hydration = el.dataset.hydration;
-                content.querySelectorAll('.gym-hydration-btn').forEach(b => b.classList.toggle('active', b.dataset.hydration === logState.hydration));
-            });
-        });
-
-        /* ── Train: Sleep ── */
-        const sleepInput = content.querySelector('[data-field="sleepHours"]');
-        if (sleepInput) sleepInput.addEventListener('change', () => { logState.sleepHours = parseFloat(sleepInput.value) || 0; });
-
-        /* ── Train: Notes ── */
-        const notesEl = content.querySelector('[data-field="notes"]');
-        if (notesEl) notesEl.addEventListener('input', () => { logState.notes = notesEl.value; });
-
-        /* ── Train: Save Workout ── */
-        content.querySelectorAll('[data-action="save-workout"]').forEach(el => {
-            el.addEventListener('click', saveWorkout);
-        });
-
-        /* ── Progress: metric pills ── */
-        content.querySelectorAll('.gym-metric-pill').forEach(el => {
-            el.addEventListener('click', () => { progressMetric = el.dataset.metric; renderActiveTab(); });
-        });
-
-        /* ── Progress: challenge ── */
-        content.querySelectorAll('[data-action="toggle-challenge-form"]').forEach(el => {
-            el.addEventListener('click', () => { showChallengeForm = !showChallengeForm; renderActiveTab(); });
-        });
-        content.querySelectorAll('[data-action="save-challenge"]').forEach(el => {
-            el.addEventListener('click', () => {
-                const name = document.getElementById('gym-challenge-name');
-                const value = document.getElementById('gym-challenge-value');
-                const unit = document.getElementById('gym-challenge-unit');
-                const date = document.getElementById('gym-challenge-date');
-                if (!name || !name.value || !value || !value.value) return;
-                GymService.addChallenge(activePlayer, { name: name.value, value: parseFloat(value.value) || 0, unit: unit ? unit.value : '', date: date ? date.value : today() });
-                showChallengeForm = false;
-                showToast('Challenge added');
-                renderActiveTab();
-            });
-        });
-
-        /* ── Routines: edit/delete/save ── */
-        content.querySelectorAll('[data-action="edit-routine"]').forEach(el => {
-            el.addEventListener('click', () => { editingRoutineId = editingRoutineId === el.dataset.routine ? null : el.dataset.routine; renderActiveTab(); });
-        });
-        content.querySelectorAll('[data-action="delete-routine"]').forEach(el => {
-            el.addEventListener('click', () => { if (confirm('Delete this routine?')) { GymService.deleteRoutine(el.dataset.routine); renderActiveTab(); } });
-        });
-        content.querySelectorAll('[data-action="save-routine-edit"]').forEach(el => {
-            el.addEventListener('click', () => {
-                const rid = el.dataset.routine;
-                const routine = GymService.getRoutine(rid);
-                if (!routine) return;
-                const nameInput = content.querySelector('[data-edit="name"]');
-                const descInput = content.querySelector('[data-edit="description"]');
-                if (nameInput) routine.name = nameInput.value;
-                if (descInput) routine.description = descInput.value;
-                GymService.updateRoutine(rid, routine);
-                editingRoutineId = null;
-                renderActiveTab();
-                showToast('Routine saved');
-            });
-        });
-        content.querySelectorAll('[data-action="add-exercise-to-routine"]').forEach(sel => {
-            sel.addEventListener('change', () => {
-                if (!sel.value) return;
-                const rid = sel.dataset.routine;
-                const routine = GymService.getRoutine(rid);
-                if (!routine) return;
-                const settings = GymService.getSettings();
-                routine.exercises.push({ exerciseId: sel.value, sets: settings.defaultSets, defaultWeight: 0 });
-                GymService.updateRoutine(rid, routine);
-                renderActiveTab();
-            });
-        });
-        content.querySelectorAll('[data-action="add-routine"]').forEach(el => {
-            el.addEventListener('click', () => {
-                const name = prompt('Routine name:');
-                if (!name) return;
-                const desc = prompt('Description:') || '';
-                const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + Date.now();
-                GymService.addRoutine({ id, name, description: desc, exercises: [] });
-                editingRoutineId = id;
-                renderActiveTab();
-            });
-        });
-
-        /* ── Routines: settings ── */
-        content.querySelectorAll('.gym-settings-input[data-setting]').forEach(el => {
-            el.addEventListener('change', () => {
-                const obj = {};
-                if (el.tagName === 'SELECT') obj[el.dataset.setting] = el.value;
-                else obj[el.dataset.setting] = parseInt(el.value) || 0;
+        /* ── Change delegation ── */
+        content.addEventListener('change', function(e) {
+            if (e.target.matches('.gym-set-rir-select')) {
+                var key = e.target.dataset.set;
+                if (!logState.sets[key]) logState.sets[key] = {};
+                logState.sets[key].rir = parseInt(e.target.value);
+            }
+            if (e.target.matches('[data-field="sleepHours"]')) {
+                logState.sleepHours = parseFloat(e.target.value) || 0;
+            }
+            if (e.target.matches('.gym-settings-input[data-setting]')) {
+                var obj = {};
+                if (e.target.tagName === 'SELECT') obj[e.target.dataset.setting] = e.target.value;
+                else obj[e.target.dataset.setting] = parseInt(e.target.value) || 0;
                 GymService.updateSettings(obj);
-            });
-        });
-
-        /* ── Routines: goals ── */
-        content.querySelectorAll('[data-action="save-goals"]').forEach(el => {
-            el.addEventListener('click', () => {
-                const goalType = content.querySelector('[data-goal="type"]');
-                const targetWeight = content.querySelector('[data-goal="targetWeight"]');
-                const targetBF = content.querySelector('[data-goal="targetBodyFat"]');
-                GymService.updateGoals(activePlayer, {
-                    type: goalType ? goalType.value : 'general',
-                    targetWeight: targetWeight && targetWeight.value ? parseFloat(targetWeight.value) : null,
-                    targetBodyFat: targetBF && targetBF.value ? parseFloat(targetBF.value) : null
-                });
-                showToast('Goals saved');
+            }
+            if (e.target.matches('[data-action="add-exercise-to-routine"]')) {
+                if (!e.target.value) return;
+                var rid = e.target.dataset.routine;
+                var routine = GymService.getRoutine(rid);
+                if (!routine) return;
+                var settings = GymService.getSettings();
+                routine.exercises.push({ exerciseId: e.target.value, sets: settings.defaultSets, defaultWeight: 0 });
+                GymService.updateRoutine(rid, routine);
                 renderActiveTab();
-            });
-        });
-
-        /* ── Routines: clear data ── */
-        content.querySelectorAll('[data-action="clear-data"]').forEach(el => {
-            el.addEventListener('click', () => {
-                if (confirm('Clear ALL gym data? This cannot be undone.')) {
-                    GymService.clearData();
-                    showToast('Data cleared');
-                    container.innerHTML = render();
-                    bindEvents();
-                }
-            });
-        });
-
-        /* ── Body: weight ── */
-        content.querySelectorAll('[data-action="save-weight"]').forEach(el => {
-            el.addEventListener('click', () => {
-                const val = document.getElementById('gym-weight-val');
-                const date = document.getElementById('gym-weight-date');
-                if (!val || !val.value) return;
-                GymService.logWeight(activePlayer, date ? date.value : today(), val.value);
-                showToast('Weight logged');
-                renderActiveTab();
-            });
-        });
-
-        /* ── Body: measurements ── */
-        content.querySelectorAll('[data-action="toggle-measurement-form"]').forEach(el => {
-            el.addEventListener('click', () => { showMeasurementForm = !showMeasurementForm; renderActiveTab(); });
-        });
-        content.querySelectorAll('[data-action="save-measurement"]').forEach(el => {
-            el.addEventListener('click', () => {
-                const date = document.getElementById('gym-meas-date');
-                const bf = document.getElementById('gym-meas-bf');
-                const chest = document.getElementById('gym-meas-chest');
-                const waist = document.getElementById('gym-meas-waist');
-                const hip = document.getElementById('gym-meas-hip');
-                const bicep = document.getElementById('gym-meas-bicep');
-                const thigh = document.getElementById('gym-meas-thigh');
-                const m = {
-                    date: date ? date.value : today(),
-                    bodyFat: bf && bf.value ? parseFloat(bf.value) : null,
-                    chest: chest && chest.value ? parseFloat(chest.value) : null,
-                    waist: waist && waist.value ? parseFloat(waist.value) : null,
-                    hip: hip && hip.value ? parseFloat(hip.value) : null,
-                    bicep: bicep && bicep.value ? parseFloat(bicep.value) : null,
-                    thigh: thigh && thigh.value ? parseFloat(thigh.value) : null
-                };
-                GymService.addMeasurement(activePlayer, m);
-                showMeasurementForm = false;
-                showToast('Measurement saved');
-                renderActiveTab();
-            });
-        });
-
-        /* ── Body: photos ── */
-        content.querySelectorAll('[data-action="upload-photo"]').forEach(el => {
-            el.addEventListener('click', () => { const input = document.getElementById('gym-photo-input'); if (input) input.click(); });
-        });
-        const photoInput = document.getElementById('gym-photo-input');
-        if (photoInput) photoInput.addEventListener('change', handlePhotoUpload);
-
-        /* ── Body: diet ── */
-        content.querySelectorAll('[data-action="save-diet"]').forEach(el => {
-            el.addEventListener('click', saveDietItem);
+            }
+            if (e.target.matches('#gym-photo-input')) {
+                handlePhotoUpload();
+            }
         });
     }
 

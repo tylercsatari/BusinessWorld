@@ -140,23 +140,22 @@
 }
 .gym-goal-badge:hover { filter: brightness(1.1); }
 
-/* ── Compact XP Bar ── */
-.gym-xp-compact {
-    margin: 10px auto 4px; max-width: 260px; text-align: center;
+/* ── Level Progress ── */
+.gym-level-progress {
+    text-align: center; margin: 8px auto 2px;
+    font-size: 12px; color: var(--gym-text-muted);
+    font-family: var(--gym-font-mono);
 }
-.gym-xp-compact-bar {
-    width: 100%; height: 6px; background: #1e1a16;
-    border-radius: 3px; overflow: hidden;
-    border: 1px solid var(--gym-border);
+.gym-level-progress-dots {
+    display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle;
 }
-.gym-xp-compact-fill {
-    height: 100%; border-radius: 3px;
-    background: linear-gradient(90deg, #e8a020, #d4900a);
-    transition: width 0.5s ease;
+.gym-level-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #1e1a16; border: 1px solid var(--gym-border);
+    display: inline-block;
 }
-.gym-xp-compact-text {
-    font-size: 11px; color: var(--gym-text-muted);
-    font-family: var(--gym-font-mono); margin-top: 3px;
+.gym-level-dot.filled {
+    background: var(--gym-gold); border-color: var(--gym-gold);
 }
 
 /* ── Goal Selector (inline chips) ── */
@@ -177,19 +176,22 @@
     color: #1e1a16; border-color: transparent; font-weight: 600;
 }
 
-/* ── Level Tooltip ── */
-.gym-level-tooltip {
-    background: #1e1a16; border: 1px solid var(--gym-border);
-    border-radius: var(--gym-radius-sm); padding: 8px 12px;
-    font-size: 12px; color: var(--gym-gold);
-    font-family: var(--gym-font-mono);
-    margin: -8px 0 8px; text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+/* ── Active Workout Layout ── */
+.gym-active-workout {
+    display: flex; flex-direction: column;
+    flex: 1; min-height: 0;
+    padding: 12px 20px 0;
 }
-
-/* ── Clickable Level Stat ── */
-.gym-stat-level { cursor: pointer; user-select: none; transition: border-color 0.15s; }
-.gym-stat-level:hover { border-color: var(--gym-gold); }
+.gym-active-workout .gym-workout-header { flex-shrink: 0; }
+.gym-exercise-scroll {
+    flex: 1; overflow-y: auto; min-height: 0;
+    padding-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin; scrollbar-color: #4a3e2e transparent;
+}
+.gym-exercise-scroll::-webkit-scrollbar { width: 4px; }
+.gym-exercise-scroll::-webkit-scrollbar-track { background: transparent; }
+.gym-exercise-scroll::-webkit-scrollbar-thumb { background: #4a3e2e; border-radius: 4px; }
 
 /* ── RPE Badge (on recent sessions) ── */
 .gym-rpe-badge {
@@ -512,10 +514,12 @@
 
 /* ── Train: Bottom Bar (End of Workout) ── */
 .gym-log-bottom {
-    position: sticky; bottom: 0; left: 0; right: 0;
+    flex-shrink: 0;
     background: #2e2418; border-top: 2px solid var(--gym-border);
-    padding: 16px; margin: 16px -20px -20px;
+    padding: 16px 20px; margin: 0 -20px;
     display: flex; flex-direction: column; gap: 12px;
+    max-height: 45vh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 .gym-endworkout-title {
     font-family: var(--gym-font-heading); font-size: 16px;
@@ -925,7 +929,8 @@ select.gym-settings-input {
     .gym-dot-btn { width: 28px; height: 28px; font-size: 11px; }
     .gym-rpe-btn { width: 28px; height: 28px; font-size: 11px; }
     .gym-actions-row { grid-template-columns: 1fr 1fr; }
-    .gym-log-bottom { margin: 16px -14px -14px; padding: 12px; }
+    .gym-active-workout { padding: 8px 14px 0; }
+    .gym-log-bottom { padding: 12px 14px; margin: 0 -14px; }
     .gym-photo-gallery { grid-template-columns: repeat(3, 1fr); }
     .gym-pr-cards { grid-template-columns: 1fr 1fr; }
     .gym-routine-pick-card { flex-direction: column; }

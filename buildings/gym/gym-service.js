@@ -524,40 +524,15 @@ const GymService = (() => {
         return points;
     }
 
-    /* ── Goal-based level system ── */
+    /* ── Simple level system: every 5 workouts = 1 level ── */
     function getPlayerLevel(playerId) {
         const p = getPlayer(playerId);
-        if (!p) return { level: 1, xp: 0, xpToNext: 100 };
+        if (!p) return { level: 1, workoutsInLevel: 0, workoutsToNext: 5, totalWorkouts: 0 };
         const total = p.workoutLog.length;
-        const goalType = p.goals ? p.goals.type : 'general';
-
-        if (goalType === 'muscle') {
-            // Level based on weekly volume trending up
-            const weeklyVol = getWeeklyVolume(playerId);
-            const level = Math.max(1, Math.floor(weeklyVol / 50000) + 1);
-            const xpInLevel = weeklyVol % 50000;
-            return { level, xp: xpInLevel, xpToNext: 50000 };
-        }
-        if (goalType === 'strength') {
-            // Level based on combined e1RM of big 3 (bench, squat, deadlift)
-            const benchE1RM = getExerciseE1RM(playerId, 'bench_press');
-            const squatE1RM = getExerciseE1RM(playerId, 'back_squat');
-            const deadliftE1RM = getExerciseE1RM(playerId, 'deadlift');
-            const combined = benchE1RM + squatE1RM + deadliftE1RM;
-            const level = Math.max(1, Math.floor(combined / 100) + 1);
-            const xpInLevel = combined % 100;
-            return { level, xp: xpInLevel, xpToNext: 100 };
-        }
-        if (goalType === 'fatloss') {
-            // Level based on workout consistency (total workouts)
-            const level = Math.max(1, Math.floor(total / 4) + 1);
-            const xpInLevel = total % 4;
-            return { level, xp: xpInLevel, xpToNext: 4 };
-        }
-        // Default: simple level
-        const level = Math.max(1, Math.floor(total / 5) + 1);
-        const xpInLevel = total % 5;
-        return { level, xp: xpInLevel, xpToNext: 5 };
+        const level = Math.floor(total / 5) + 1;
+        const workoutsInLevel = total % 5;
+        const workoutsToNext = 5 - workoutsInLevel;
+        return { level, workoutsInLevel, workoutsToNext, totalWorkouts: total };
     }
 
     /* ── Body fat progression ── */
