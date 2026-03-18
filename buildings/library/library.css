@@ -2752,13 +2752,60 @@
     background: #e8a020;
 }
 
-/* --- Project color dot on Idea Map cards --- */
-.ideamap-project-dot {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    border: 1.5px solid rgba(255, 255, 255, 0.6);
+/* --- Project badge on Idea Map cards --- */
+.ideamap-project-badge {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* --- Category badge on Idea Map cards (tag view) --- */
+.ideamap-cat-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 4px;
+    white-space: nowrap;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+/* --- Subcluster (subcategory within category view) --- */
+.ideamap-subcluster {
+    margin-left: 18px;
+    border-left: 2px solid #e8ddd0;
+}
+.ideamap-subcluster-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 4px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.ideamap-subcluster-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #5a3e1b;
+}
+.ideamap-subcluster-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    background: #d5c9b4;
+    border-radius: 8px;
+    padding: 0px 6px;
+    min-width: 16px;
+    text-align: center;
 }

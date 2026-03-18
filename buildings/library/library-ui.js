@@ -2637,6 +2637,45 @@ const LibraryUI = (() => {
         return labels[status] || status;
     }
 
+    // --- Render a single idea card HTML (shared by all views) ---
+    function ideaMapRenderCardHtml(idea, mapping, allCats, groupBy) {
+        const status = ideaMapGetStatus(idea);
+        const color = ideaMapStatusColor(status);
+        const tags = ideaMapGetTags(idea);
+        const ideaCat = ideaMapGetIdeaCategory(idea.id);
+        const seriesBadge = ideaCat && ideaCat.parentId ? `<span class="ideamap-card-series" style="border-color:${ideaCat.color}">${escHtml(ideaCat.name)}</span>` : '';
+
+        // Project badge
+        const projColor = (idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) && window.EggRenderer) ? window.EggRenderer.getProjectColor(idea.project) : null;
+        const projectBadge = projColor
+            ? `<span class="ideamap-project-badge" style="background:${projColor}20;border-left:3px solid ${projColor};color:${projColor}">${escHtml(idea.project)}</span>`
+            : '';
+
+        // Category color (top border)
+        const catId = mapping[idea.id];
+        const cat = catId ? allCats.find(c => c.id === catId) : null;
+        const topCat = cat ? (cat.parentId ? allCats.find(c => c.id === cat.parentId) : cat) : null;
+        const catColor = topCat ? topCat.color : null;
+        const topBorderStyle = catColor ? `border-top: 3px solid ${catColor};` : '';
+
+        // Category badge (shown in tag view)
+        const catBadge = (groupBy === 'tag' && topCat)
+            ? `<span class="ideamap-cat-badge" style="background:${topCat.color}20;color:${topCat.color};border:1px solid ${topCat.color}40">${escHtml(topCat.name)}</span>`
+            : '';
+
+        return `<div class="ideamap-card" data-id="${idea.id}" style="${topBorderStyle}">
+            <div class="ideamap-card-border" style="background:${color}"></div>
+            <div class="ideamap-card-body">
+                <div class="ideamap-card-name">${escHtml(idea.name)}</div>
+                <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>${catBadge}
+                <span class="library-idea-dots"><span class="library-idea-dot${idea.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${idea.script ? ' has-script' : ''}"></span></span>
+                ${seriesBadge}
+                ${projectBadge}
+                ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
+            </div>
+        </div>`;
+    }
+
     async function renderIdeaMap() {
         const el = document.getElementById('library-ideamap-container');
         if (!el) return;
@@ -2810,6 +2849,8 @@ const LibraryUI = (() => {
                 html += `<div class="library-empty">No ideas found for '${escHtml(ideaMapState.searchQuery)}'</div>`;
             } else {
                 html += `<div class="ideamap-kanban-scroll"><div class="ideamap-card-row ideamap-search-card-row">`;
+                const searchCatMap = ideaMapState.ideaCategories || {};
+                const searchAllCats = ideaMapGetCategories();
                 for (const r of results) {
                     const idea = ideaMapState.ideas.find(i => i.id === r.id);
                     const status = idea ? ideaMapGetStatus(idea) : r.status;
@@ -2817,11 +2858,23 @@ const LibraryUI = (() => {
                     const tags = idea ? ideaMapGetTags(idea) : (r.tags ? r.tags.split(',').map(t => t.trim()).filter(Boolean) : []);
                     const name = idea ? idea.name : r.name;
                     const pct = Math.round((r.score || 0) * 100);
-                    html += `<div class="ideamap-card" data-id="${r.id}">
+                    // Category top border
+                    const sCatId = searchCatMap[r.id];
+                    const sCat = sCatId ? searchAllCats.find(c => c.id === sCatId) : null;
+                    const sTopCat = sCat ? (sCat.parentId ? searchAllCats.find(c => c.id === sCat.parentId) : sCat) : null;
+                    const sCatColor = sTopCat ? sTopCat.color : null;
+                    const sTopBorder = sCatColor ? `border-top: 3px solid ${sCatColor};` : '';
+                    // Project badge
+                    const sProjColor = (idea && idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) && window.EggRenderer) ? window.EggRenderer.getProjectColor(idea.project) : null;
+                    const sProjectBadge = sProjColor ? `<span class="ideamap-project-badge" style="background:${sProjColor}20;border-left:3px solid ${sProjColor};color:${sProjColor}">${escHtml(idea.project)}</span>` : '';
+                    // Category badge
+                    const sCatBadge = sTopCat ? `<span class="ideamap-cat-badge" style="background:${sTopCat.color}20;color:${sTopCat.color};border:1px solid ${sTopCat.color}40">${escHtml(sTopCat.name)}</span>` : '';
+                    html += `<div class="ideamap-card" data-id="${r.id}" style="${sTopBorder}">
                         <div class="ideamap-card-border" style="background:${color}"></div>
                         <div class="ideamap-card-body">
                             <div class="ideamap-card-name">${escHtml(name)}</div>
-                            <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>
+                            <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>${sCatBadge}
+                            ${sProjectBadge}
                             ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
                             <div class="ideamap-score-bar"><div class="ideamap-score-fill" style="width:${pct}%"></div></div>
                         </div>
@@ -2879,39 +2932,89 @@ const LibraryUI = (() => {
         // --- Cluster sections ---
         html += `<div class="ideamap-kanban-scroll">`;
         const mapping = ideaMapGetIdeaCategories();
+        const allCats = ideaMapGetCategories();
         for (const cName of clusterOrder) {
             const cIdeas = clusters[cName];
             if (!cIdeas || cIdeas.length === 0) continue;
             const collapsed = ideaMapState.collapsedClusters[cName];
+
+            // For category view, color the header with category color
+            const clusterCat = (groupBy === 'category') ? topCats.find(tc => tc.name === cName) : null;
+            const clusterColor = clusterCat ? clusterCat.color : null;
+
             html += `<div class="ideamap-cluster">
                 <div class="ideamap-cluster-header" data-cluster="${escAttr(cName)}">
                     <span class="ideamap-cluster-arrow">${collapsed ? '\u25B6' : '\u25BC'}</span>
-                    <span class="ideamap-cluster-name">${escHtml(cName)}</span>
-                    <span class="ideamap-cluster-count">${cIdeas.length}</span>
+                    <span class="ideamap-cluster-name"${clusterColor ? ` style="color:${clusterColor}"` : ''}>${escHtml(cName)}</span>
+                    <span class="ideamap-cluster-count"${clusterColor ? ` style="background:${clusterColor}"` : ''}>${cIdeas.length}</span>
                 </div>`;
             if (!collapsed) {
-                html += `<div class="ideamap-card-row">`;
-                for (const idea of cIdeas) {
-                    const status = ideaMapGetStatus(idea);
-                    const color = ideaMapStatusColor(status);
-                    const tags = ideaMapGetTags(idea);
-                    // Series badge: show sub-category name if idea belongs to a sub-category
-                    const ideaCat = ideaMapGetIdeaCategory(idea.id);
-                    const seriesBadge = ideaCat && ideaCat.parentId ? `<span class="ideamap-card-series" style="border-color:${ideaCat.color}">${escHtml(ideaCat.name)}</span>` : '';
-                    const projColor = (idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) && window.EggRenderer) ? window.EggRenderer.getProjectColor(idea.project) : null;
-                    html += `<div class="ideamap-card" data-id="${idea.id}">
-                        <div class="ideamap-card-border" style="background:${color}"></div>
-                        <div class="ideamap-card-body">
-                            ${projColor ? `<span class="ideamap-project-dot" style="background:${projColor}"></span>` : ''}
-                            <div class="ideamap-card-name">${escHtml(idea.name)}</div>
-                            <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>
-                            <span class="library-idea-dots"><span class="library-idea-dot${idea.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${idea.script ? ' has-script' : ''}"></span></span>
-                            ${seriesBadge}
-                            ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
-                        </div>
-                    </div>`;
+                if (groupBy === 'category' && clusterCat) {
+                    // Hierarchical: group by subcategory within this top-level category
+                    const subCats = allCats.filter(c => c.parentId === clusterCat.id);
+                    const subGroups = {};
+                    const generalIdeas = [];
+                    for (const idea of cIdeas) {
+                        const ideaCatId = mapping[idea.id];
+                        if (!ideaCatId || ideaCatId === clusterCat.id) {
+                            generalIdeas.push(idea);
+                        } else {
+                            const sc = subCats.find(s => s.id === ideaCatId);
+                            if (sc) {
+                                if (!subGroups[sc.id]) subGroups[sc.id] = { cat: sc, ideas: [] };
+                                subGroups[sc.id].ideas.push(idea);
+                            } else {
+                                generalIdeas.push(idea);
+                            }
+                        }
+                    }
+                    // Render subcategory groups
+                    for (const sc of subCats) {
+                        const sg = subGroups[sc.id];
+                        if (!sg || sg.ideas.length === 0) continue;
+                        const subKey = cName + '/' + sc.name;
+                        const subCollapsed = ideaMapState.collapsedClusters[subKey];
+                        html += `<div class="ideamap-subcluster">
+                            <div class="ideamap-subcluster-header" data-cluster="${escAttr(subKey)}">
+                                <span class="ideamap-cluster-arrow">${subCollapsed ? '\u25B6' : '\u25BC'}</span>
+                                <span class="ideamap-subcluster-name" style="color:${sc.color}">${escHtml(sc.name)}</span>
+                                <span class="ideamap-subcluster-count">${sg.ideas.length}</span>
+                            </div>`;
+                        if (!subCollapsed) {
+                            html += `<div class="ideamap-card-row">`;
+                            for (const idea of sg.ideas) {
+                                html += ideaMapRenderCardHtml(idea, mapping, allCats, groupBy);
+                            }
+                            html += `</div>`;
+                        }
+                        html += `</div>`;
+                    }
+                    // General (not in subcategory)
+                    if (generalIdeas.length > 0) {
+                        const genKey = cName + '/General';
+                        const genCollapsed = ideaMapState.collapsedClusters[genKey];
+                        html += `<div class="ideamap-subcluster">
+                            <div class="ideamap-subcluster-header" data-cluster="${escAttr(genKey)}">
+                                <span class="ideamap-cluster-arrow">${genCollapsed ? '\u25B6' : '\u25BC'}</span>
+                                <span class="ideamap-subcluster-name">General</span>
+                                <span class="ideamap-subcluster-count">${generalIdeas.length}</span>
+                            </div>`;
+                        if (!genCollapsed) {
+                            html += `<div class="ideamap-card-row">`;
+                            for (const idea of generalIdeas) {
+                                html += ideaMapRenderCardHtml(idea, mapping, allCats, groupBy);
+                            }
+                            html += `</div>`;
+                        }
+                        html += `</div>`;
+                    }
+                } else {
+                    html += `<div class="ideamap-card-row">`;
+                    for (const idea of cIdeas) {
+                        html += ideaMapRenderCardHtml(idea, mapping, allCats, groupBy);
+                    }
+                    html += `</div>`;
                 }
-                html += `</div>`;
             }
             html += `</div>`;
         }
@@ -3136,7 +3239,7 @@ const LibraryUI = (() => {
         });
 
         // Cluster collapse/expand
-        el.querySelectorAll('.ideamap-cluster-header').forEach(header => {
+        el.querySelectorAll('.ideamap-cluster-header, .ideamap-subcluster-header').forEach(header => {
             header.addEventListener('click', () => {
                 const cName = header.dataset.cluster;
                 ideaMapState.collapsedClusters[cName] = !ideaMapState.collapsedClusters[cName];
