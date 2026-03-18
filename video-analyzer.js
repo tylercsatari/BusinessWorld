@@ -14,6 +14,9 @@ const VIDEO_DATA_DIR = path.join(__dirname, 'video_data');
 function getYtDlpPath() {
   const { execSync } = require('child_process');
   try { execSync('which yt-dlp', { stdio: 'ignore' }); return 'yt-dlp'; } catch (e) {}
+  // Render installs to ~/.local/bin
+  const homeBin = (process.env.HOME || '/root') + '/.local/bin/yt-dlp';
+  if (fs.existsSync(homeBin)) return homeBin;
   if (fs.existsSync('/usr/local/bin/yt-dlp')) return '/usr/local/bin/yt-dlp';
   if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) return '/opt/homebrew/bin/yt-dlp';
   return 'yt-dlp'; // fallback, will fail with clear error
