@@ -24,6 +24,7 @@ function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
 const BUILD_TS = Date.now();
+let _layoutCache = null; // in-memory cache for Render (avoids R2 read on every load)
 
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -2217,21 +2218,26 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     }
 
     // =========================================
-    // Save layout (local dev only — Render's ephemeral disk would cause drift)
+    // Save layout
     // =========================================
     if (req.method === 'POST' && pathname === '/save-layout') {
-        if (process.env.RENDER) {
-            // On Render, layout.json from git is the source of truth — don't overwrite
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end('{"ok":true,"readonly":true}');
-            return;
-        }
         let body = '';
         req.on('data', chunk => body += chunk);
-        req.on('end', () => {
+        req.on('end', async () => {
             try {
-                JSON.parse(body);
-                fs.writeFileSync(LAYOUT_FILE, body, 'utf8');
+                JSON.parse(body); // validate
+                if (process.env.RENDER) {
+                    // Persist to R2 so layout survives deploys
+                    _layoutCache = body;
+                    if (cloud.isR2Ready()) {
+                        await cloud.uploadToR2('layout/layout.json', Buffer.from(body), 'application/json');
+                        console.log('Layout saved to R2');
+                    } else {
+                        console.log('Layout saved to in-memory cache (R2 not configured)');
+                    }
+                } else {
+                    fs.writeFileSync(LAYOUT_FILE, body, 'utf8');
+                }
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end('{"ok":true}');
             } catch (e) {
@@ -2559,6 +2565,29 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     // Load layout
     // =========================================
     if (req.method === 'GET' && pathname === '/load-layout') {
+        if (process.env.RENDER) {
+            // 1. In-memory cache (fastest)
+            if (_layoutCache) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(_layoutCache);
+                return;
+            }
+            // 2. Try R2
+            if (cloud.isR2Ready()) {
+                try {
+                    const buf = await cloud.downloadFromR2('layout/layout.json');
+                    if (buf) {
+                        _layoutCache = buf.toString('utf8');
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(_layoutCache);
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('R2 layout load failed, falling back to file:', e.message);
+                }
+            }
+        }
+        // Fall back to local file (always works for local dev; fallback for Render)
         if (fs.existsSync(LAYOUT_FILE)) {
             const data = fs.readFileSync(LAYOUT_FILE, 'utf8');
             res.writeHead(200, { 'Content-Type': 'application/json' });
