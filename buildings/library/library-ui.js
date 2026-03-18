@@ -2205,8 +2205,7 @@ const LibraryUI = (() => {
         incubator: '#e8a020',
         'in-progress': '#e67e22',
         converted: '#2ecc71',
-        posted: '#2ecc71',
-        hook: '#9b59b6'
+        posted: '#2ecc71'
     };
 
     const IDEAMAP_CLUSTERS = {
@@ -2220,17 +2219,117 @@ const LibraryUI = (() => {
         'Stunts / Survival': ['stunt', 'survival'],
         'Chemistry / Science': ['chemistry', 'science', 'materials', 'food'],
         '3D Printing': ['3d-printing'],
-        'Hook Ideas': ['hook'],
         'Other': []
     };
+
+    const IDEAMAP_PRESET_COLORS = ['#4a9eff', '#e8a020', '#2ecc71', '#e74c3c', '#9b59b6', '#1abc9c'];
 
     let ideaMapState = {
         ideas: [],
         projects: null,
         filterStatus: 'all',
+        filterCategory: 'all', // 'all' | categoryId | 'uncategorized'
+        expandedCategoryFilter: null, // top-level category id expanded to show sub-cats
+        groupBy: 'tag', // 'tag' | 'category' | 'project'
         collapsedClusters: {},
+        showCategoryPanel: false,
+        editingCategoryId: null,
+        addingCategory: false,
         loaded: false
     };
+
+    // --- Category data layer (localStorage) ---
+    function ideaMapGetCategories() {
+        try { return JSON.parse(localStorage.getItem('ideamap-categories') || '[]'); } catch(e) { return []; }
+    }
+    function ideaMapSaveCategories(cats) {
+        localStorage.setItem('ideamap-categories', JSON.stringify(cats));
+    }
+    function ideaMapGetIdeaCategories() {
+        try { return JSON.parse(localStorage.getItem('ideamap-idea-categories') || '{}'); } catch(e) { return {}; }
+    }
+    function ideaMapSaveIdeaCategories(mapping) {
+        localStorage.setItem('ideamap-idea-categories', JSON.stringify(mapping));
+    }
+    function ideaMapGenId() {
+        return 'cat_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 6);
+    }
+
+    // Seed default categories if none exist
+    function ideaMapInitCategories() {
+        let cats = ideaMapGetCategories();
+        if (cats.length > 0) return;
+        const defaults = [
+            { name: 'Bulletproof & Armor', color: '#e74c3c', children: ['Helmet Series', 'Suit Series'] },
+            { name: 'Flight & Propulsion', color: '#4a9eff', children: ['Jet Engine Series', 'Drone Series'] },
+            { name: 'Magnetism', color: '#9b59b6', children: [] },
+            { name: 'Exoskeleton & Strength', color: '#e8a020', children: ['Strength Arm Series', 'Legs & Movement'] },
+            { name: 'Jarvis & AI', color: '#2ecc71', children: [] },
+            { name: 'Superhero Gadgets', color: '#e67e22', children: [] },
+            { name: 'Stunts & Science', color: '#1abc9c', children: [] },
+            { name: '3D Printing', color: '#95a5a6', children: [] }
+        ];
+        cats = [];
+        for (const d of defaults) {
+            const parentId = ideaMapGenId();
+            cats.push({ id: parentId, name: d.name, parentId: null, color: d.color });
+            for (const childName of d.children) {
+                cats.push({ id: ideaMapGenId(), name: childName, parentId, color: d.color });
+            }
+        }
+        ideaMapSaveCategories(cats);
+    }
+
+    // Seed idea-to-category mapping based on tags (only if mapping is empty)
+    function ideaMapSeedIdeaCategories() {
+        const mapping = ideaMapGetIdeaCategories();
+        if (Object.keys(mapping).length > 0) return;
+        const cats = ideaMapGetCategories();
+        if (cats.length === 0) return;
+        const findCat = (name) => cats.find(c => c.name === name);
+        const tagRules = [
+            { tags: ['bulletproof', 'helmet'], cat: 'Bulletproof & Armor' },
+            { tags: ['flight'], cat: 'Flight & Propulsion' },
+            { tags: ['jet-engine'], cat: 'Jet Engine Series' },
+            { tags: ['magnetism'], cat: 'Magnetism' },
+            { tags: ['exoskeleton', 'strength'], cat: 'Exoskeleton & Strength' },
+            { tags: ['jarvis', 'ai'], cat: 'Jarvis & AI' },
+            { tags: ['superhero'], cat: 'Superhero Gadgets' },
+            { tags: ['3d-printing'], cat: '3D Printing' },
+            { tags: ['stunt', 'science', 'chemistry'], cat: 'Stunts & Science' }
+        ];
+        const newMapping = {};
+        for (const idea of ideaMapState.ideas) {
+            const ideaTags = ideaMapGetTags(idea);
+            if (ideaTags.length === 0) continue;
+            for (const rule of tagRules) {
+                if (rule.tags.some(t => ideaTags.includes(t))) {
+                    const cat = findCat(rule.cat);
+                    if (cat) { newMapping[idea.id] = cat.id; break; }
+                }
+            }
+        }
+        if (Object.keys(newMapping).length > 0) ideaMapSaveIdeaCategories(newMapping);
+    }
+
+    // Get category object for an idea
+    function ideaMapGetIdeaCategory(ideaId) {
+        const mapping = ideaMapGetIdeaCategories();
+        const catId = mapping[ideaId];
+        if (!catId) return null;
+        const cats = ideaMapGetCategories();
+        return cats.find(c => c.id === catId) || null;
+    }
+
+    // Get all descendant category IDs for a parent (including self)
+    function ideaMapGetCategoryDescendants(catId) {
+        const cats = ideaMapGetCategories();
+        const ids = [catId];
+        for (const c of cats) {
+            if (c.parentId === catId) ids.push(c.id);
+        }
+        return ids;
+    }
 
     function ideaMapGetCluster(idea) {
         const tags = ideaMapGetTags(idea);
@@ -2256,7 +2355,7 @@ const LibraryUI = (() => {
     }
 
     function ideaMapStatusLabel(status) {
-        const labels = { idea: 'Idea', incubator: 'Incubator', 'in-progress': 'In Progress', converted: 'Posted', posted: 'Posted', hook: 'Hook' };
+        const labels = { idea: 'Idea', incubator: 'Incubator', 'in-progress': 'In Progress', converted: 'Posted', posted: 'Posted' };
         return labels[status] || status;
     }
 
@@ -2272,7 +2371,6 @@ const LibraryUI = (() => {
                     const data = await resp.json();
                     ideaMapState.ideas = Array.isArray(data) ? data : (data.ideas || data.records || []);
                 } else {
-                    // Fallback to NotesService
                     await NotesService.sync(true).catch(() => {});
                     ideaMapState.ideas = NotesService.getAll().filter(n => n.type !== 'todo');
                 }
@@ -2281,70 +2379,140 @@ const LibraryUI = (() => {
                 ideaMapState.ideas = NotesService.getAll().filter(n => n.type !== 'todo');
             }
             ideaMapState.loaded = true;
+            // Init categories & seed
+            ideaMapInitCategories();
+            ideaMapSeedIdeaCategories();
         }
 
-        // Cache real projects (Dropbox folders) for popover validation
         if (!ideaMapState.projects) {
-            try {
-                ideaMapState.projects = await VideoService.getProjects();
-            } catch (e) {
-                ideaMapState.projects = [];
-            }
+            try { ideaMapState.projects = await VideoService.getProjects(); }
+            catch (e) { ideaMapState.projects = []; }
         }
 
         ideaMapRenderKanban(el);
     }
 
+    // --- Apply both status and category filters ---
+    function ideaMapFilterIdeas(ideas) {
+        const sf = ideaMapState.filterStatus;
+        const cf = ideaMapState.filterCategory;
+        let filtered = ideas;
+        if (sf !== 'all') {
+            filtered = filtered.filter(i => {
+                const s = ideaMapGetStatus(i);
+                return s === sf || (sf === 'posted' && s === 'converted');
+            });
+        }
+        if (cf !== 'all') {
+            const mapping = ideaMapGetIdeaCategories();
+            if (cf === 'uncategorized') {
+                filtered = filtered.filter(i => !mapping[i.id]);
+            } else {
+                const validIds = ideaMapGetCategoryDescendants(cf);
+                filtered = filtered.filter(i => validIds.includes(mapping[i.id]));
+            }
+        }
+        return filtered;
+    }
+
     function ideaMapRenderKanban(el) {
-        const filter = ideaMapState.filterStatus;
-        let ideas = ideaMapState.ideas;
-        if (filter !== 'all') {
-            ideas = ideas.filter(i => ideaMapGetStatus(i) === filter);
-        }
+        let ideas = ideaMapFilterIdeas(ideaMapState.ideas);
+        const groupBy = ideaMapState.groupBy;
 
-        // Group by cluster
-        const clusterOrder = Object.keys(IDEAMAP_CLUSTERS);
-        const clusters = {};
-        for (const cName of clusterOrder) clusters[cName] = [];
-        for (const idea of ideas) {
-            const c = ideaMapGetCluster(idea);
-            if (!clusters[c]) clusters[c] = [];
-            clusters[c].push(idea);
-        }
+        // --- Toolbar ---
+        let html = `<div class="ideamap-toolbar">
+            <div class="ideamap-toolbar-left">
+                <span class="ideamap-toolbar-label">Group by:</span>
+                <button class="ideamap-group-btn${groupBy === 'tag' ? ' active' : ''}" data-group="tag">By Tag</button>
+                <button class="ideamap-group-btn${groupBy === 'category' ? ' active' : ''}" data-group="category">By Category</button>
+                <button class="ideamap-group-btn${groupBy === 'project' ? ' active' : ''}" data-group="project">By Project</button>
+            </div>
+            <button class="ideamap-manage-cats-btn" id="ideamap-manage-cats-btn">Manage Categories</button>
+        </div>`;
 
-        // Filter bar
-        const filters = [
+        // --- Status filter row ---
+        const sf = ideaMapState.filterStatus;
+        const statusFilters = [
             { key: 'all', label: 'All' },
             { key: 'idea', label: 'Ideas' },
             { key: 'incubator', label: 'Incubator' },
             { key: 'in-progress', label: 'In Progress' },
-            { key: 'posted', label: 'Posted' },
-            { key: 'converted', label: 'Posted' },
-            { key: 'hook', label: 'Hooks' }
+            { key: 'posted', label: 'Posted' }
         ];
-        // Deduplicate posted/converted — show one "Posted" button that matches both
-        const uniqueFilters = [
-            { key: 'all', label: 'All' },
-            { key: 'idea', label: 'Ideas' },
-            { key: 'incubator', label: 'Incubator' },
-            { key: 'in-progress', label: 'In Progress' },
-            { key: 'posted', label: 'Posted' },
-            { key: 'hook', label: 'Hooks' }
-        ];
-
-        let html = `<div class="ideamap-filter-bar">`;
-        for (const f of uniqueFilters) {
-            const active = filter === f.key || (f.key === 'posted' && filter === 'converted');
-            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-filter="${f.key}">${f.label}</button>`;
+        html += `<div class="ideamap-filter-bar">`;
+        html += `<span class="ideamap-filter-row-label">Status:</span>`;
+        for (const f of statusFilters) {
+            const active = sf === f.key || (f.key === 'posted' && sf === 'converted');
+            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-filter-status="${f.key}">${f.label}</button>`;
         }
         html += `<span class="ideamap-count">${ideas.length} idea${ideas.length !== 1 ? 's' : ''}</span>`;
         html += `</div>`;
 
-        // Cluster sections
+        // --- Category filter row ---
+        const cf = ideaMapState.filterCategory;
+        const cats = ideaMapGetCategories();
+        const topCats = cats.filter(c => !c.parentId);
+        html += `<div class="ideamap-filter-bar ideamap-filter-bar-cat">`;
+        html += `<span class="ideamap-filter-row-label">Category:</span>`;
+        html += `<button class="ideamap-filter-pill${cf === 'all' ? ' active' : ''}" data-filter-cat="all">All</button>`;
+        for (const tc of topCats) {
+            const isActive = cf === tc.id;
+            const isExpanded = ideaMapState.expandedCategoryFilter === tc.id;
+            html += `<button class="ideamap-filter-pill${isActive ? ' active' : ''}" data-filter-cat="${tc.id}" style="border-left: 3px solid ${tc.color}">${escHtml(tc.name)}</button>`;
+            if (isExpanded) {
+                const subCats = cats.filter(c => c.parentId === tc.id);
+                for (const sc of subCats) {
+                    html += `<button class="ideamap-filter-pill ideamap-filter-subpill${cf === sc.id ? ' active' : ''}" data-filter-cat="${sc.id}">${escHtml(sc.name)}</button>`;
+                }
+            }
+        }
+        html += `<button class="ideamap-filter-pill${cf === 'uncategorized' ? ' active' : ''}" data-filter-cat="uncategorized">Uncategorized</button>`;
+        html += `</div>`;
+
+        // --- Build cluster groups based on groupBy ---
+        let clusterOrder = [];
+        let clusters = {};
+
+        if (groupBy === 'tag') {
+            clusterOrder = Object.keys(IDEAMAP_CLUSTERS);
+            for (const cName of clusterOrder) clusters[cName] = [];
+            for (const idea of ideas) {
+                const c = ideaMapGetCluster(idea);
+                if (!clusters[c]) clusters[c] = [];
+                clusters[c].push(idea);
+            }
+        } else if (groupBy === 'category') {
+            const mapping = ideaMapGetIdeaCategories();
+            for (const tc of topCats) {
+                clusterOrder.push(tc.name);
+                const descIds = ideaMapGetCategoryDescendants(tc.id);
+                clusters[tc.name] = ideas.filter(i => descIds.includes(mapping[i.id]));
+            }
+            clusterOrder.push('Uncategorized');
+            clusters['Uncategorized'] = ideas.filter(i => !mapping[i.id]);
+        } else if (groupBy === 'project') {
+            const projectGroups = {};
+            for (const idea of ideas) {
+                const proj = idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) ? idea.project : null;
+                const key = proj || '__no_project__';
+                if (!projectGroups[key]) projectGroups[key] = [];
+                projectGroups[key].push(idea);
+            }
+            // Real projects first, then No Project
+            const projNames = Object.keys(projectGroups).filter(k => k !== '__no_project__').sort();
+            for (const p of projNames) { clusterOrder.push(p); clusters[p] = projectGroups[p]; }
+            if (projectGroups['__no_project__'] && projectGroups['__no_project__'].length > 0) {
+                clusterOrder.push('No Project');
+                clusters['No Project'] = projectGroups['__no_project__'];
+            }
+        }
+
+        // --- Cluster sections ---
         html += `<div class="ideamap-kanban-scroll">`;
+        const mapping = ideaMapGetIdeaCategories();
         for (const cName of clusterOrder) {
             const cIdeas = clusters[cName];
-            if (cIdeas.length === 0) continue;
+            if (!cIdeas || cIdeas.length === 0) continue;
             const collapsed = ideaMapState.collapsedClusters[cName];
             html += `<div class="ideamap-cluster">
                 <div class="ideamap-cluster-header" data-cluster="${escAttr(cName)}">
@@ -2358,11 +2526,15 @@ const LibraryUI = (() => {
                     const status = ideaMapGetStatus(idea);
                     const color = ideaMapStatusColor(status);
                     const tags = ideaMapGetTags(idea);
+                    // Series badge: show sub-category name if idea belongs to a sub-category
+                    const ideaCat = ideaMapGetIdeaCategory(idea.id);
+                    const seriesBadge = ideaCat && ideaCat.parentId ? `<span class="ideamap-card-series" style="border-color:${ideaCat.color}">${escHtml(ideaCat.name)}</span>` : '';
                     html += `<div class="ideamap-card" data-id="${idea.id}">
                         <div class="ideamap-card-border" style="background:${color}"></div>
                         <div class="ideamap-card-body">
                             <div class="ideamap-card-name">${escHtml(idea.name)}</div>
                             <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>
+                            ${seriesBadge}
                             ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
                         </div>
                     </div>`;
@@ -2373,20 +2545,150 @@ const LibraryUI = (() => {
         }
         html += `</div>`;
 
+        // Manage categories panel (slides in from right)
+        if (ideaMapState.showCategoryPanel) {
+            html += ideaMapRenderCategoryPanel();
+        }
+
         // Detail popover (hidden)
         html += `<div class="ideamap-popover" id="ideamap-popover" style="display:none;"></div>`;
 
         el.innerHTML = html;
-
-        // Bind events
         ideaMapBindKanbanEvents(el);
     }
 
+    // --- Manage Categories Panel ---
+    function ideaMapRenderCategoryPanel() {
+        const cats = ideaMapGetCategories();
+        const topCats = cats.filter(c => !c.parentId);
+        let html = `<div class="ideamap-cat-panel" id="ideamap-cat-panel">
+            <div class="ideamap-cat-panel-header">
+                <span class="ideamap-cat-panel-title">Manage Categories</span>
+                <button class="ideamap-popover-close" id="ideamap-cat-panel-close">&times;</button>
+            </div>`;
+
+        // Add category button / form
+        if (ideaMapState.addingCategory) {
+            html += `<div class="ideamap-cat-add-form" id="ideamap-cat-add-form">
+                <input type="text" class="ideamap-cat-input" id="ideamap-cat-add-name" placeholder="Category name..." />
+                <div class="ideamap-cat-color-row">
+                    ${IDEAMAP_PRESET_COLORS.map((c, i) => `<button class="ideamap-cat-color-btn${i === 0 ? ' selected' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+                </div>
+                <select class="ideamap-popover-select ideamap-cat-parent-select" id="ideamap-cat-add-parent">
+                    <option value="">No parent (top-level)</option>
+                    ${topCats.map(tc => `<option value="${tc.id}">${escHtml(tc.name)}</option>`).join('')}
+                </select>
+                <div class="ideamap-cat-form-actions">
+                    <button class="ideamap-cat-save-btn" id="ideamap-cat-add-save">Save</button>
+                    <button class="ideamap-cat-cancel-btn" id="ideamap-cat-add-cancel">Cancel</button>
+                </div>
+            </div>`;
+        } else {
+            html += `<button class="ideamap-cat-add-btn" id="ideamap-cat-add-btn">+ Add Category</button>`;
+        }
+
+        // Tree view
+        html += `<div class="ideamap-cat-tree">`;
+        for (const tc of topCats) {
+            const children = cats.filter(c => c.parentId === tc.id);
+            const isEditing = ideaMapState.editingCategoryId === tc.id;
+            if (isEditing) {
+                html += ideaMapRenderCatEditRow(tc, topCats);
+            } else {
+                html += `<div class="ideamap-cat-row">
+                    <span class="ideamap-cat-dot" style="background:${tc.color}"></span>
+                    <span class="ideamap-cat-name">${escHtml(tc.name)}</span>
+                    <button class="ideamap-cat-edit-btn" data-cat-id="${tc.id}" title="Edit">&#9998;</button>
+                    <button class="ideamap-cat-delete-btn" data-cat-id="${tc.id}" title="Delete">&times;</button>
+                </div>`;
+            }
+            for (const ch of children) {
+                const isEditingChild = ideaMapState.editingCategoryId === ch.id;
+                if (isEditingChild) {
+                    html += `<div class="ideamap-cat-child-indent">${ideaMapRenderCatEditRow(ch, topCats)}</div>`;
+                } else {
+                    html += `<div class="ideamap-cat-row ideamap-cat-child-indent">
+                        <span class="ideamap-cat-dot" style="background:${ch.color}"></span>
+                        <span class="ideamap-cat-name">${escHtml(ch.name)}</span>
+                        <button class="ideamap-cat-edit-btn" data-cat-id="${ch.id}" title="Edit">&#9998;</button>
+                        <button class="ideamap-cat-delete-btn" data-cat-id="${ch.id}" title="Delete">&times;</button>
+                    </div>`;
+                }
+            }
+        }
+        html += `</div></div>`;
+        return html;
+    }
+
+    function ideaMapRenderCatEditRow(cat, topCats) {
+        return `<div class="ideamap-cat-add-form ideamap-cat-edit-form" data-edit-id="${cat.id}">
+            <input type="text" class="ideamap-cat-input" id="ideamap-cat-edit-name-${cat.id}" value="${escAttr(cat.name)}" />
+            <div class="ideamap-cat-color-row">
+                ${IDEAMAP_PRESET_COLORS.map(c => `<button class="ideamap-cat-color-btn${c === cat.color ? ' selected' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+            </div>
+            <select class="ideamap-popover-select ideamap-cat-parent-select" id="ideamap-cat-edit-parent-${cat.id}">
+                <option value="">No parent (top-level)</option>
+                ${topCats.filter(tc => tc.id !== cat.id).map(tc => `<option value="${tc.id}" ${cat.parentId === tc.id ? 'selected' : ''}>${escHtml(tc.name)}</option>`).join('')}
+            </select>
+            <div class="ideamap-cat-form-actions">
+                <button class="ideamap-cat-save-btn ideamap-cat-edit-save" data-cat-id="${cat.id}">Save</button>
+                <button class="ideamap-cat-cancel-btn ideamap-cat-edit-cancel">Cancel</button>
+            </div>
+        </div>`;
+    }
+
     function ideaMapBindKanbanEvents(el) {
-        // Filter pills
-        el.querySelectorAll('.ideamap-filter-pill').forEach(btn => {
+        // Group-by buttons
+        el.querySelectorAll('.ideamap-group-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                ideaMapState.filterStatus = btn.dataset.filter;
+                ideaMapState.groupBy = btn.dataset.group;
+                ideaMapRenderKanban(el);
+            });
+        });
+
+        // Manage Categories button
+        const manageCatsBtn = el.querySelector('#ideamap-manage-cats-btn');
+        if (manageCatsBtn) {
+            manageCatsBtn.addEventListener('click', () => {
+                ideaMapState.showCategoryPanel = !ideaMapState.showCategoryPanel;
+                ideaMapState.editingCategoryId = null;
+                ideaMapState.addingCategory = false;
+                ideaMapRenderKanban(el);
+            });
+        }
+
+        // Status filter pills
+        el.querySelectorAll('[data-filter-status]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                ideaMapState.filterStatus = btn.dataset.filterStatus;
+                ideaMapRenderKanban(el);
+            });
+        });
+
+        // Category filter pills
+        el.querySelectorAll('[data-filter-cat]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const catId = btn.dataset.filterCat;
+                if (catId === 'all' || catId === 'uncategorized') {
+                    ideaMapState.filterCategory = catId;
+                    ideaMapState.expandedCategoryFilter = null;
+                } else {
+                    const cats = ideaMapGetCategories();
+                    const cat = cats.find(c => c.id === catId);
+                    if (cat && !cat.parentId) {
+                        // Top-level: toggle expand or select
+                        if (ideaMapState.filterCategory === catId) {
+                            // Already selected, toggle expand
+                            ideaMapState.expandedCategoryFilter = ideaMapState.expandedCategoryFilter === catId ? null : catId;
+                        } else {
+                            ideaMapState.filterCategory = catId;
+                            ideaMapState.expandedCategoryFilter = catId;
+                        }
+                    } else {
+                        // Sub-category
+                        ideaMapState.filterCategory = catId;
+                    }
+                }
                 ideaMapRenderKanban(el);
             });
         });
@@ -2406,6 +2708,117 @@ const LibraryUI = (() => {
                 ideaMapShowCardPopover(el, card.dataset.id);
             });
         });
+
+        // --- Category panel events ---
+        const catPanelClose = el.querySelector('#ideamap-cat-panel-close');
+        if (catPanelClose) {
+            catPanelClose.addEventListener('click', () => {
+                ideaMapState.showCategoryPanel = false;
+                ideaMapRenderKanban(el);
+            });
+        }
+
+        const addCatBtn = el.querySelector('#ideamap-cat-add-btn');
+        if (addCatBtn) {
+            addCatBtn.addEventListener('click', () => {
+                ideaMapState.addingCategory = true;
+                ideaMapRenderKanban(el);
+            });
+        }
+
+        // Add form events
+        const addForm = el.querySelector('#ideamap-cat-add-form');
+        if (addForm) {
+            // Color picker
+            addForm.querySelectorAll('.ideamap-cat-color-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    addForm.querySelectorAll('.ideamap-cat-color-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                });
+            });
+            const addSave = addForm.querySelector('#ideamap-cat-add-save');
+            if (addSave) addSave.addEventListener('click', () => {
+                const name = addForm.querySelector('#ideamap-cat-add-name').value.trim();
+                if (!name) return;
+                const color = addForm.querySelector('.ideamap-cat-color-btn.selected')?.dataset.color || IDEAMAP_PRESET_COLORS[0];
+                const parentId = addForm.querySelector('#ideamap-cat-add-parent').value || null;
+                const cats = ideaMapGetCategories();
+                cats.push({ id: ideaMapGenId(), name, parentId, color });
+                ideaMapSaveCategories(cats);
+                ideaMapState.addingCategory = false;
+                ideaMapRenderKanban(el);
+            });
+            const addCancel = addForm.querySelector('#ideamap-cat-add-cancel');
+            if (addCancel) addCancel.addEventListener('click', () => {
+                ideaMapState.addingCategory = false;
+                ideaMapRenderKanban(el);
+            });
+        }
+
+        // Edit buttons
+        el.querySelectorAll('.ideamap-cat-edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                ideaMapState.editingCategoryId = btn.dataset.catId;
+                ideaMapRenderKanban(el);
+            });
+        });
+
+        // Delete buttons
+        el.querySelectorAll('.ideamap-cat-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const catId = btn.dataset.catId;
+                let cats = ideaMapGetCategories();
+                // Remove this cat and its children
+                const toRemove = [catId, ...cats.filter(c => c.parentId === catId).map(c => c.id)];
+                cats = cats.filter(c => !toRemove.includes(c.id));
+                ideaMapSaveCategories(cats);
+                // Remove idea mappings
+                const mapping = ideaMapGetIdeaCategories();
+                for (const key of Object.keys(mapping)) {
+                    if (toRemove.includes(mapping[key])) delete mapping[key];
+                }
+                ideaMapSaveIdeaCategories(mapping);
+                ideaMapState.editingCategoryId = null;
+                ideaMapRenderKanban(el);
+            });
+        });
+
+        // Edit form save/cancel
+        el.querySelectorAll('.ideamap-cat-edit-save').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const catId = btn.dataset.catId;
+                const form = el.querySelector(`.ideamap-cat-edit-form[data-edit-id="${catId}"]`);
+                if (!form) return;
+                const name = form.querySelector(`#ideamap-cat-edit-name-${catId}`).value.trim();
+                if (!name) return;
+                const color = form.querySelector('.ideamap-cat-color-btn.selected')?.dataset.color || IDEAMAP_PRESET_COLORS[0];
+                const parentId = form.querySelector(`#ideamap-cat-edit-parent-${catId}`).value || null;
+                const cats = ideaMapGetCategories();
+                const cat = cats.find(c => c.id === catId);
+                if (cat) { cat.name = name; cat.color = color; cat.parentId = parentId; }
+                ideaMapSaveCategories(cats);
+                ideaMapState.editingCategoryId = null;
+                ideaMapRenderKanban(el);
+            });
+        });
+        el.querySelectorAll('.ideamap-cat-edit-cancel').forEach(btn => {
+            btn.addEventListener('click', () => {
+                ideaMapState.editingCategoryId = null;
+                ideaMapRenderKanban(el);
+            });
+        });
+
+        // Edit form color pickers
+        el.querySelectorAll('.ideamap-cat-edit-form').forEach(form => {
+            form.querySelectorAll('.ideamap-cat-color-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    form.querySelectorAll('.ideamap-cat-color-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                });
+            });
+        });
     }
 
     function ideaMapShowCardPopover(el, ideaId) {
@@ -2416,6 +2829,23 @@ const LibraryUI = (() => {
 
         const tags = ideaMapGetTags(idea);
         const status = ideaMapGetStatus(idea);
+        const cats = ideaMapGetCategories();
+        const mapping = ideaMapGetIdeaCategories();
+        const currentCatId = mapping[ideaId] || '';
+        const topCats = cats.filter(c => !c.parentId);
+
+        // Build category dropdown options with indentation
+        let catOptions = `<option value="">Uncategorized</option>`;
+        for (const tc of topCats) {
+            catOptions += `<option value="${tc.id}" ${currentCatId === tc.id ? 'selected' : ''}>${escHtml(tc.name)}</option>`;
+            const children = cats.filter(c => c.parentId === tc.id);
+            for (const ch of children) {
+                catOptions += `<option value="${ch.id}" ${currentCatId === ch.id ? 'selected' : ''}>&nbsp;&nbsp;&nbsp;${escHtml(ch.name)}</option>`;
+            }
+        }
+
+        const currentCat = cats.find(c => c.id === currentCatId);
+        const catDisplay = currentCat ? escHtml(currentCat.name) : 'Uncategorized';
 
         popover.innerHTML = `
             <div class="ideamap-popover-header">
@@ -2428,13 +2858,16 @@ const LibraryUI = (() => {
                 <option value="incubator" ${status === 'incubator' ? 'selected' : ''}>Incubator</option>
                 <option value="in-progress" ${status === 'in-progress' ? 'selected' : ''}>In Progress</option>
                 <option value="converted" ${status === 'converted' || status === 'posted' ? 'selected' : ''}>Posted</option>
-                <option value="hook" ${status === 'hook' ? 'selected' : ''}>Hook</option>
+            </select>
+            <label class="ideamap-popover-label">Category</label>
+            <select class="ideamap-popover-select" id="ideamap-pop-category">
+                ${catOptions}
             </select>
             <label class="ideamap-popover-label">Tags</label>
             <div class="ideamap-popover-tags">${tags.length ? tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('') : '<span style="color:#999">No tags</span>'}</div>
             ${idea.project && ideaMapState.projects && ideaMapState.projects.includes(idea.project) ? `<label class="ideamap-popover-label">Project</label><div style="color:#5a3e1b;font-weight:600;margin-bottom:8px">${escHtml(idea.project)}</div>` : ''}
             ${idea.script ? `<label class="ideamap-popover-label">Notes</label><div class="ideamap-popover-notes">${escHtml(idea.script.substring(0, 300))}${idea.script.length > 300 ? '...' : ''}</div>` : ''}
-            <button class="ideamap-popover-save" id="ideamap-pop-save">Save Status</button>
+            <button class="ideamap-popover-save" id="ideamap-pop-save">Save</button>
         `;
         popover.style.display = '';
 
@@ -2444,6 +2877,7 @@ const LibraryUI = (() => {
 
         popover.querySelector('#ideamap-pop-save').addEventListener('click', async () => {
             const newStatus = popover.querySelector('#ideamap-pop-status').value;
+            const newCatId = popover.querySelector('#ideamap-pop-category').value;
             try {
                 await NotesService.update(ideaId, {
                     status: newStatus,
@@ -2454,6 +2888,12 @@ const LibraryUI = (() => {
             if (idx >= 0) {
                 ideaMapState.ideas[idx].status = newStatus;
             }
+            // Save category
+            const catMapping = ideaMapGetIdeaCategories();
+            if (newCatId) { catMapping[ideaId] = newCatId; }
+            else { delete catMapping[ideaId]; }
+            ideaMapSaveIdeaCategories(catMapping);
+
             popover.style.display = 'none';
             ideaMapRenderKanban(el);
         });
@@ -2483,6 +2923,12 @@ const LibraryUI = (() => {
             projectsLoaded = false; selectedProject = null;
             ideaMapState.loaded = false;
             ideaMapState.projects = null;
+            ideaMapState.filterCategory = 'all';
+            ideaMapState.expandedCategoryFilter = null;
+            ideaMapState.groupBy = 'tag';
+            ideaMapState.showCategoryPanel = false;
+            ideaMapState.editingCategoryId = null;
+            ideaMapState.addingCategory = false;
             currentPage = 'list'; activeTab = 'notes';
         },
         // Public: preload to-do count for badge (called on page load)
