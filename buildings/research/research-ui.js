@@ -16,7 +16,7 @@ const ResearchUI = (() => {
     let currentMinViews = 0;
 
     // Vault state
-    let activeTab = 'search'; // 'search' | 'vault'
+    let activeTab = 'vault'; // 'search' | 'vault'
     let vaultVideos = [];
     let vaultStats = null;
     let vaultPage = 1;
@@ -516,11 +516,15 @@ const ResearchUI = (() => {
     return {
         open(bodyEl) {
             container = bodyEl;
-            activeTab = 'search'; // always open to Search
+            activeTab = 'vault'; // open to Vault by default
             container.innerHTML = render();
             bindEvents();
-            // Fetch shorts DB stats on open
-            fetchShortsDbStats();
+            // Fetch vault data on open
+            fetchVaultStats().then(() => {
+                updateVaultSubtitle();
+                updateVaultStatsBar();
+            });
+            fetchVaultVideos(1);
         },
         _retry() { doSearch(); },
         close() {

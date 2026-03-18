@@ -7,12 +7,15 @@ const StorageUI = (() => {
     let chatLog = null;
     let initialized = false;
     let micState = 'idle'; // idle | recording | processing
-    let recognition = null; // Web Speech API instance
+    let persistentStream = null; // getUserMedia stream — kept alive across recordings
+    let audioSessionCtx = null; // AudioContext anchoring iOS audio session in record mode
+    let mediaRecorder = null; // MediaRecorder instance
+    let audioChunks = []; // recorded audio chunks
+    let recordingTimer = null; // interval for elapsed-time display
+    let recordingStart = 0; // Date.now() when recording began
     let ttsAudio = null; // current TTS audio element
     let audioUnlocked = false; // whether mobile audio has been unlocked
-    let voiceTranscript = ''; // accumulated final transcript from push-to-talk
-    let interimText = ''; // current interim (unfinished) words
-    let voiceSessionId = 0; // incremented each session so stale callbacks are ignored
+    let ttsNeedsRelease = false; // whether TTS audio element has content needing release
     let history = []; // activity history log
     let historyVisible = false;
 
@@ -164,7 +167,7 @@ const StorageUI = (() => {
         addChatMsg(`Did you mean:\n${sugText}`, 'system');
     }
 
-    // --- Voice I/O ---
+    // --- Voice I/O (MediaRecorder + Whisper) ---
     function setMicState(state) {
         micState = state;
         const btn = document.getElementById('storage-mic-btn');
@@ -174,17 +177,9 @@ const StorageUI = (() => {
         if (state === 'processing') btn.classList.add('processing');
     }
 
-    function updateVoicePreview() {
+    function showVoicePreview(text) {
         const preview = document.getElementById('storage-voice-preview');
-        if (!preview) return;
-        const full = (voiceTranscript + (interimText ? ' ' + interimText : '')).trim();
-        if (full) {
-            preview.textContent = full + (interimText ? '...' : '');
-            preview.style.display = 'block';
-        } else {
-            preview.textContent = 'Listening...';
-            preview.style.display = 'block';
-        }
+        if (preview) { preview.textContent = text; preview.style.display = 'block'; }
     }
 
     function hideVoicePreview() {
@@ -192,108 +187,180 @@ const StorageUI = (() => {
         if (preview) preview.style.display = 'none';
     }
 
-    // Check if SpeechRecognition is available (set once, used to gate mic button)
-    function hasSpeechRecognition() {
-        return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    function updateRecordingTimer() {
+        const secs = Math.floor((Date.now() - recordingStart) / 1000);
+        showVoicePreview(`Recording... ${secs}s`);
     }
 
-    // Create a fresh SpeechRecognition instance each time — mobile browsers
-    // often can't reuse an instance after stop(), so we recreate every session.
-    function startNewRecognition() {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return null;
+    // Acquire the mic stream once and keep it alive for the entire session.
+    // On mobile, after TTS playback a fresh getUserMedia call can return a
+    // stream that looks active but silently captures no audio.  Keeping one
+    // stream alive (plus an AudioContext anchor) prevents the OS from
+    // switching the audio session out of recording mode when TTS plays.
+    async function ensureMicStream() {
+        if (persistentStream && persistentStream.active) {
+            const track = persistentStream.getAudioTracks()[0];
+            if (track && track.readyState === 'live') return persistentStream;
+        }
+        persistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Anchor the audio session in "play-and-record" mode on iOS by
+        // connecting the mic stream to a live AudioContext.  Without this,
+        // playing TTS switches the session to playback-only, muting the mic.
+        try {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) {
+                if (audioSessionCtx) try { audioSessionCtx.close(); } catch (e) {}
+                audioSessionCtx = new AC();
+                audioSessionCtx.createMediaStreamSource(persistentStream);
+                // Don't connect to destination — just keeping the source alive
+                // is enough to hold the audio session in recording mode.
+            }
+        } catch (e) { /* AudioContext not available — recording still works */ }
+        return persistentStream;
+    }
 
-        // Kill any old instance — null out handlers first to prevent stale onend firing
-        if (recognition) {
-            recognition.onresult = null;
-            recognition.onerror = null;
-            recognition.onend = null;
-            try { recognition.abort(); } catch (e) {}
-            recognition = null;
+    function releaseAllAudio() {
+        if (audioSessionCtx) { try { audioSessionCtx.close(); } catch (e) {} audioSessionCtx = null; }
+        if (persistentStream) { persistentStream.getTracks().forEach(t => t.stop()); persistentStream = null; }
+    }
+
+    async function startRecording() {
+        // Stop old MediaRecorder if still active, then null it out to
+        // prevent its async onstop from interfering with the new recording.
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.onstop = null;
+            try { mediaRecorder.stop(); } catch (e) {}
+        }
+        mediaRecorder = null;
+
+        // Track if this is a subsequent recording (stream was previously active)
+        const isSubsequent = !!persistentStream;
+
+        // Force a fresh mic stream every time — on mobile, reused streams
+        // silently stop capturing audio after TTS playback even though the
+        // track still reports readyState === 'live'.
+        if (persistentStream) {
+            persistentStream.getTracks().forEach(t => t.stop());
+            persistentStream = null;
+        }
+        if (audioSessionCtx) {
+            try { audioSessionCtx.close(); } catch (e) {}
+            audioSessionCtx = null;
         }
 
-        // New session — any callbacks from previous sessions will be ignored
-        const sessionId = ++voiceSessionId;
+        // On subsequent recordings, let the OS fully release the previous
+        // audio stream before requesting a new one — some mobile browsers
+        // return a frozen track if getUserMedia is called too quickly.
+        if (isSubsequent) {
+            await new Promise(r => setTimeout(r, 150));
+        }
 
-        const rec = new SpeechRecognition();
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.lang = 'en-US';
-
-        rec.onresult = (event) => {
-            if (sessionId !== voiceSessionId) return; // stale session
-            let finalChunk = '';
-            interimText = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const result = event.results[i];
-                if (result.isFinal) {
-                    finalChunk += result[0].transcript;
-                } else {
-                    interimText += result[0].transcript;
-                }
-            }
-            if (finalChunk) {
-                voiceTranscript = (voiceTranscript + ' ' + finalChunk).trim();
-            }
-            updateVoicePreview();
-        };
-
-        rec.onerror = (event) => {
-            if (sessionId !== voiceSessionId) return; // stale session
-            if (event.error === 'not-allowed') {
-                addChatMsg('Microphone access denied. Check browser permissions.', 'error');
-                setMicState('idle');
-                hideVoicePreview();
-            } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
-                addChatMsg(`Voice error: ${event.error}`, 'error');
-            }
-        };
-
-        rec.onend = () => {
-            if (sessionId !== voiceSessionId) return; // stale session
-            // On mobile, recognition can auto-stop mid-sentence. Restart if still recording.
-            if (micState === 'recording') {
-                // Brief delay lets mobile browsers fully release the mic before restarting
-                setTimeout(() => {
-                    if (micState !== 'recording' || sessionId !== voiceSessionId) return;
-                    try {
-                        rec.start();
-                    } catch (e) {
-                        // If restart fails, create a brand new instance
-                        setTimeout(() => {
-                            if (micState === 'recording' && sessionId === voiceSessionId) {
-                                startNewRecognition();
-                            }
-                        }, 200);
-                    }
-                }, 50);
-            }
-        };
-
-        recognition = rec;
-        rec.start();
-        return rec;
-    }
-
-    async function finishVoiceInput() {
-        hideVoicePreview();
-        const text = (voiceTranscript + (interimText ? ' ' + interimText : '')).trim();
-        voiceTranscript = '';
-        interimText = '';
-        if (!text) {
+        let stream;
+        try {
+            stream = await ensureMicStream();
+        } catch (e) {
+            addChatMsg('Microphone access denied. Check browser permissions.', 'error');
             setMicState('idle');
             return;
         }
+
+        // Resume AudioContext if iOS suspended it (e.g. after backgrounding)
+        if (audioSessionCtx && audioSessionCtx.state === 'suspended') {
+            try { await audioSessionCtx.resume(); } catch (e) {}
+        }
+
+        audioChunks = [];
+        // Pick a supported MIME type — iOS Safari uses mp4, Chrome uses webm
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                       : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                       : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                       : '';
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType })
+                                 : new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        // Capture mimeType in closure so async onstop uses the correct recorder's type
+        const recorderMimeType = mediaRecorder.mimeType;
+        mediaRecorder.onstop = async () => {
+            // Stream stays alive — don't stop it.  Only the MediaRecorder ends.
+            if (audioChunks.length === 0) { setMicState('idle'); hideVoicePreview(); return; }
+            const blob = new Blob(audioChunks, { type: recorderMimeType });
+            audioChunks = [];
+            await transcribeAndProcess(blob);
+        };
+
+        mediaRecorder.onerror = (e) => {
+            console.error('MediaRecorder error:', e);
+            setMicState('idle');
+            addChatMsg('Recording error. Try again.', 'error');
+        };
+
+        // Use timeslice to fire ondataavailable every 250ms — guarantees
+        // chunks accumulate on mobile browsers that don't fire it on stop.
+        mediaRecorder.start(250);
+        recordingStart = Date.now();
+        updateRecordingTimer();
+        recordingTimer = setInterval(updateRecordingTimer, 1000);
+    }
+
+    function stopRecording() {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop(); // triggers onstop → transcribeAndProcess
+        } else {
+            setMicState('idle');
+            hideVoicePreview();
+        }
+    }
+
+    async function transcribeAndProcess(blob) {
+        showVoicePreview('Transcribing...');
         setMicState('processing');
-        addChatMsg(text, 'user');
         try {
+            // Encode audio as base64 and send to server for Whisper transcription
+            const base64 = await blobToBase64(blob);
+            const res = await fetch('/api/openai/transcribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audio: base64, mimeType: blob.type })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Transcription failed' }));
+                throw new Error(err.error || `HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            const text = (data.text || '').trim();
+            hideVoicePreview();
+            if (!text) {
+                addChatMsg('No speech detected. Try again.', 'system');
+                setMicState('idle');
+                return;
+            }
+            addChatMsg(text, 'user');
             await processUserInput(text);
         } catch (e) {
-            addChatMsg(`Error: ${e.message}`, 'error');
+            hideVoicePreview();
+            addChatMsg(`Voice error: ${e.message}`, 'error');
         } finally {
-            // Only reset to idle if still processing (user may have started a new recording)
             if (micState === 'processing') setMicState('idle');
+            mediaRecorder = null; // clean state for next recording
         }
+    }
+
+    function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const dataUrl = reader.result;
+                resolve(dataUrl.split(',')[1]); // strip "data:...;base64,"
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
     }
 
     // Release TTS audio session so microphone can capture on iOS.
@@ -302,11 +369,20 @@ const StorageUI = (() => {
     // replay TTS. Clearing src + load() fully releases the session.
     function releaseTTSAudio() {
         if (ttsAudio) {
+            ttsAudio.onended = null;
+            ttsAudio.onerror = null;
             ttsAudio.pause();
-            const oldSrc = ttsAudio.src;
-            ttsAudio.src = '';
-            ttsAudio.load();
-            if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+            // Only run the expensive src-clear + load() when there is real
+            // content to release.  A redundant load() on an already-empty
+            // Audio element can briefly reclaim audio resources on mobile,
+            // which silently blocks SpeechRecognition mic input.
+            if (ttsNeedsRelease) {
+                const oldSrc = ttsAudio.src;
+                ttsAudio.src = '';
+                ttsAudio.load();
+                if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+                ttsNeedsRelease = false;
+            }
         }
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     }
@@ -333,17 +409,39 @@ const StorageUI = (() => {
                 body: JSON.stringify({ input: text })
             });
             if (res.ok) {
-                const blob = await res.blob();
+                const arrayBuffer = await res.arrayBuffer();
+
+                // ---- Preferred path: play through AudioContext ----
+                // When the mic stream is active, an AudioContext anchors the
+                // iOS audio session in play-and-record mode.  Playing TTS
+                // through that SAME context keeps the session there.  Using
+                // an <audio> element instead would switch the session to
+                // playback-only, silently killing the mic stream.
+                if (audioSessionCtx && audioSessionCtx.state !== 'closed') {
+                    try {
+                        if (audioSessionCtx.state === 'suspended') await audioSessionCtx.resume();
+                        // .slice(0) — decodeAudioData detaches the buffer
+                        const decoded = await audioSessionCtx.decodeAudioData(arrayBuffer.slice(0));
+                        const source = audioSessionCtx.createBufferSource();
+                        source.buffer = decoded;
+                        source.connect(audioSessionCtx.destination);
+                        source.start(0);
+                        return; // plays in background, no audio-session switch
+                    } catch (e) {
+                        console.warn('AudioContext TTS failed, falling back:', e.message);
+                    }
+                }
+
+                // ---- Fallback: <audio> element (used when no mic session) ----
+                const contentType = res.headers.get('content-type') || 'audio/mpeg';
+                const blob = new Blob([arrayBuffer], { type: contentType });
                 const url = URL.createObjectURL(blob);
                 if (ttsAudio) {
-                    // Reuse the pre-unlocked Audio element (critical for mobile)
                     ttsAudio.pause();
                     const oldSrc = ttsAudio.src;
                     ttsAudio.src = url;
-                    ttsAudio.onended = () => {
-                        // Release audio session so mic and headphone controls work on iOS
-                        releaseTTSAudio();
-                    };
+                    ttsNeedsRelease = true;
+                    ttsAudio.onended = () => { releaseTTSAudio(); };
                     ttsAudio.play().catch(e => {
                         console.warn('Audio play failed:', e.message);
                         fallbackBrowserTTS(text);
@@ -351,9 +449,8 @@ const StorageUI = (() => {
                     if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
                 } else {
                     ttsAudio = new Audio(url);
-                    ttsAudio.onended = () => {
-                        releaseTTSAudio();
-                    };
+                    ttsNeedsRelease = true;
+                    ttsAudio.onended = () => { releaseTTSAudio(); };
                     ttsAudio.play().catch(e => {
                         console.warn('Audio play failed:', e.message);
                         fallbackBrowserTTS(text);
@@ -546,17 +643,19 @@ const StorageUI = (() => {
         },
 
         close() {
-            if (recognition) {
-                recognition.onresult = null;
-                recognition.onerror = null;
-                recognition.onend = null;
-                try { recognition.abort(); } catch (e) {}
-                recognition = null;
+            clearInterval(recordingTimer);
+            recordingTimer = null;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.onstop = null; // prevent transcription on close
+                try { mediaRecorder.stop(); } catch (e) {}
             }
+            mediaRecorder = null;
+            releaseAllAudio();
+            audioChunks = [];
             if (ttsAudio) { ttsAudio.pause(); ttsAudio = null; }
+            audioUnlocked = false;
+            ttsNeedsRelease = false;
             if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-            voiceTranscript = '';
-            interimText = '';
             micState = 'idle';
             container = null;
             initialized = false;
@@ -564,35 +663,22 @@ const StorageUI = (() => {
         },
 
         onMicToggle() {
-            if (!hasSpeechRecognition()) {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 addChatMsg('Voice input not supported in this browser.', 'error');
                 return;
             }
             // Unlock audio on user gesture so TTS can play after async processing
             unlockAudio();
             if (micState === 'recording') {
-                // Stop recording and send accumulated transcript
-                micState = 'processing'; // prevent auto-restart in onend
-                if (recognition) {
-                    recognition.onresult = null;
-                    recognition.onerror = null;
-                    recognition.onend = null;
-                    try { recognition.stop(); } catch (e) {}
-                    recognition = null; // release immediately so next session starts clean
-                }
-                finishVoiceInput();
-            } else {
-                // idle or processing — start new recording
-                // (processing: previous result still being handled, but user wants to speak again)
+                // Stop recording — onstop handler will transcribe and process
+                stopRecording();
+            } else if (micState !== 'processing') {
+                // idle — start new recording
                 // Release TTS audio session first — iOS holds it after playback,
                 // blocking mic input and hijacking headphone controls
                 releaseTTSAudio();
-                voiceTranscript = '';
-                interimText = '';
                 setMicState('recording');
-                updateVoicePreview();
-                // Fresh instance every time — mobile can't reliably reuse after stop()
-                startNewRecognition();
+                startRecording();
             }
         },
 
