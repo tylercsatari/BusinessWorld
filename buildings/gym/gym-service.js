@@ -158,7 +158,8 @@ const GymService = (() => {
         if (!data.exercises.find(e => e.id === 'deadlift')) {
             data.exercises.push({ id: 'deadlift', name: 'Deadlift', category: 'legs', defaultSets: 2, defaultReps: [4, 6], equipment: 'barbell' });
         }
-        clearAutoSavedWorkouts();
+        ['tyler', 'robin', 'jordan', 'tennille'].forEach(id => clearJunkWorkouts(id));
+        save();
         return data;
     }
 
@@ -180,47 +181,19 @@ const GymService = (() => {
         save();
     }
 
-    /* ── Clear auto-saved incomplete workouts ── */
-    function clearAutoSavedWorkouts() {
-        if (!data || !data.players) return;
-        let cleared = 0;
-        data.players.forEach(p => {
-            if (!p.workoutLog) return;
-            const before = p.workoutLog.length;
-            p.workoutLog = p.workoutLog.filter(w => {
-                // Remove workouts with 0 volume
-                let vol = 0;
-                if (w.exercises) {
-                    w.exercises.forEach(ex => {
-                        if (ex.sets) ex.sets.filter(s => s.completed).forEach(s => {
-                            vol += (s.weight || 0) * (s.reps || 0);
-                        });
-                    });
-                }
-                if (vol === 0) return false;
-                // Remove if all sets have 0 reps
-                let allZero = true;
-                if (w.exercises) {
-                    w.exercises.forEach(ex => {
-                        if (ex.sets) ex.sets.forEach(s => {
-                            if (s.reps > 0) allZero = false;
-                        });
-                    });
-                }
-                if (allZero) return false;
-                // Remove if duration < 30 seconds
-                if (w.startTime && w.endTime) {
-                    const dur = new Date(w.endTime) - new Date(w.startTime);
-                    if (dur < 30000) return false;
-                }
-                return true;
-            });
-            cleared += before - p.workoutLog.length;
+    /* ── Clear junk/incomplete workouts ── */
+    function clearJunkWorkouts(playerId) {
+        const player = getPlayer(playerId);
+        if (!player) return;
+        const before = player.workoutLog ? player.workoutLog.length : 0;
+        player.workoutLog = (player.workoutLog || []).filter(w => {
+            const totalReps = (w.exercises || []).reduce((a, ex) =>
+                a + (ex.sets || []).reduce((b, s) => b + (s.reps || 0), 0), 0);
+            const duration = w.endTime ? (new Date(w.endTime) - new Date(w.startTime)) / 1000 : 0;
+            return totalReps > 0 && duration > 30;
         });
-        if (cleared > 0) {
-            console.log('[Gym] Cleared', cleared, 'auto-saved workouts');
-            save();
-        }
+        const cleared = before - player.workoutLog.length;
+        if (cleared > 0) console.log('[Gym] Cleared', cleared, 'junk workouts for', playerId);
     }
 
     /* ── Players ── */
@@ -354,6 +327,13 @@ const GymService = (() => {
     function getSavedMeals(playerId) {
         const p = getPlayer(playerId);
         return p && p.savedMeals ? p.savedMeals.slice() : [];
+    }
+
+    function deleteSavedMeal(playerId, mealId) {
+        const p = getPlayer(playerId);
+        if (!p || !p.savedMeals) return;
+        p.savedMeals = p.savedMeals.filter(m => m.id !== mealId);
+        save();
     }
 
     /* ── Photos ── */
@@ -627,10 +607,15 @@ const GymService = (() => {
         if (!p) return 0;
         let xp = 0;
 
-        // +10 per completed workout
-        xp += p.workoutLog.length * 10;
+        // +10 per completed workout (totalReps > 0)
+        p.workoutLog.forEach(w => {
+            const totalReps = (w.exercises || []).reduce((a, ex) =>
+                a + (ex.sets || []).reduce((b, s) => b + (s.reps || 0), 0), 0);
+            if (totalReps > 0) xp += 10;
+        });
 
-        // +5 for each week with >= 4 workouts (full program consistency)
+        // +5 per week where workouts >= (number of routines / 2)
+        const threshold = Math.max(1, Math.floor(getData().routines.length / 2));
         const weeks = {};
         p.workoutLog.forEach(w => {
             const d = new Date(w.date);
@@ -641,10 +626,10 @@ const GymService = (() => {
             weeks[key] = (weeks[key] || 0) + 1;
         });
         Object.values(weeks).forEach(count => {
-            if (count >= 4) xp += 5;
+            if (count >= threshold) xp += 5;
         });
 
-        // +2 per exercise where weight or reps improved vs last session
+        // +2 per exercise instance where weight improved vs last same exercise session
         const exerciseLast = {};
         const sorted = p.workoutLog.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
         sorted.forEach(w => {
@@ -654,16 +639,15 @@ const GymService = (() => {
                 const completed = ex.sets.filter(s => s.completed);
                 if (completed.length === 0) return;
                 const maxW = Math.max(...completed.map(s => s.weight || 0));
-                const maxR = Math.max(...completed.map(s => s.reps || 0));
                 const prev = exerciseLast[ex.exerciseId];
-                if (prev && (maxW > prev.weight || maxR > prev.reps)) {
+                if (prev && maxW > prev.weight) {
                     xp += 2;
                 }
-                exerciseLast[ex.exerciseId] = { weight: maxW, reps: maxR };
+                exerciseLast[ex.exerciseId] = { weight: maxW };
             });
         });
 
-        // +1 per day with at least one nutrition log entry
+        // +1 per day with at least one logged meal in nutritionLog
         if (p.nutritionLog) {
             xp += p.nutritionLog.filter(day => day.meals && day.meals.length > 0).length;
         }
@@ -705,7 +689,7 @@ const GymService = (() => {
     }
 
     return {
-        load, save, getData, clearData, clearAutoSavedWorkouts,
+        load, save, getData, clearData,
         getPlayer, getPlayers, addPlayer, getPlayerColor,
         updateGoals, updatePlayerGoal,
         addMeasurement, getMeasurements,
@@ -713,7 +697,7 @@ const GymService = (() => {
         logWeight, getWeights,
         logCardio, getCardio,
         logDiet, getDiet,
-        getNutritionLog, logNutritionMeal, deleteNutritionMeal, getSavedMeals,
+        getNutritionLog, logNutritionMeal, deleteNutritionMeal, getSavedMeals, deleteSavedMeal,
         addPhoto, getPhotos,
         addChallenge, getChallenges,
         getRoutines, getRoutine, addRoutine, updateRoutine, deleteRoutine,

@@ -14,6 +14,7 @@ const GymUI = (() => {
     let showLevelTooltip = false;
     let showPlayerSwitcher = false;
     let showMealForm = false;
+    let mealFormPrefill = null;
     let nutritionDate = null; // set to today() on init
     let showExNotes = {}; // exerciseIdx -> bool
 
@@ -240,7 +241,7 @@ const GymUI = (() => {
         // Level tooltip
         if (showLevelTooltip) {
             html += '<div style="background:#2e2418;border:1px solid var(--gym-border);border-radius:var(--gym-radius-sm);padding:12px 14px;margin:0 0 8px;font-size:13px;color:var(--gym-text-body)">' +
-                'Level up by completing workouts (+10 XP), improving lifts (+2 XP per PR), staying consistent (+5 XP/week), and tracking nutrition (+1 XP/day).' +
+                'Complete workouts (+10 XP), improve your lifts (+2 XP each), train consistently (+5 XP/week), and log nutrition (+1 XP/day) to level up.' +
             '</div>';
         }
 
@@ -714,28 +715,29 @@ const GymUI = (() => {
 
         // Add Meal button / form
         if (showMealForm) {
+            const pf = mealFormPrefill || {};
             html += '<div class="gym-nutrition-form">' +
                 '<div class="gym-section-title" style="margin:8px 0">Add Meal</div>' +
-                '<input type="text" class="gym-input wide" id="gym-meal-name" placeholder="Meal name" list="gym-meal-suggestions" style="width:100%;margin-bottom:8px">' +
+                '<input type="text" class="gym-input wide" id="gym-meal-name" placeholder="Meal name" list="gym-meal-suggestions" value="' + esc(pf.name || '') + '" style="width:100%;margin-bottom:8px">' +
                 '<datalist id="gym-meal-suggestions">';
             savedMeals.forEach(sm => {
                 html += '<option value="' + esc(sm.name) + '">';
             });
             html += '</datalist>' +
                 '<div class="gym-form-row" style="margin-bottom:8px">' +
-                    '<input type="number" class="gym-input num" id="gym-meal-cal" placeholder="kcal">' +
-                    '<input type="number" class="gym-input num" id="gym-meal-protein" placeholder="prot">' +
-                    '<input type="number" class="gym-input num" id="gym-meal-carbs" placeholder="carbs">' +
-                    '<input type="number" class="gym-input num" id="gym-meal-fat" placeholder="fat">' +
+                    '<input type="number" class="gym-input num" id="gym-meal-cal" placeholder="kcal"' + (pf.calories ? ' value="' + pf.calories + '"' : '') + '>' +
+                    '<input type="number" class="gym-input num" id="gym-meal-protein" placeholder="prot"' + (pf.protein ? ' value="' + pf.protein + '"' : '') + '>' +
+                    '<input type="number" class="gym-input num" id="gym-meal-carbs" placeholder="carbs"' + (pf.carbs ? ' value="' + pf.carbs + '"' : '') + '>' +
+                    '<input type="number" class="gym-input num" id="gym-meal-fat" placeholder="fat"' + (pf.fat ? ' value="' + pf.fat + '"' : '') + '>' +
                 '</div>' +
                 '<input type="text" class="gym-input wide" id="gym-meal-notes" placeholder="Notes (optional)" style="width:100%;margin-bottom:8px">' +
                 '<div style="display:flex;gap:8px">' +
-                    '<button class="gym-btn-sm" data-action="save-meal">Save Meal</button>' +
-                    '<button class="gym-btn-sm outline" data-action="cancel-meal">Cancel</button>' +
+                    '<button class="gym-btn-sm" data-action="save-meal">SAVE MEAL</button>' +
+                    '<button class="gym-btn-sm outline" data-action="cancel-meal">CANCEL</button>' +
                 '</div>' +
             '</div>';
         } else {
-            html += '<button class="gym-btn-full" data-action="show-meal-form" style="margin-top:16px">+ Add Meal</button>';
+            html += '<button class="gym-btn-full" data-action="add-meal" style="margin-top:16px">+ Add Meal</button>';
         }
 
         // Saved Meals library
@@ -744,6 +746,7 @@ const GymUI = (() => {
                 '<div class="gym-saved-meals-grid">';
             savedMeals.forEach(sm => {
                 html += '<div class="gym-saved-meal-chip" data-action="quick-log-meal" data-meal-id="' + esc(sm.id) + '">' +
+                    '<span class="gym-saved-meal-delete" data-action="delete-saved-meal" data-meal-id="' + esc(sm.id) + '">&times;</span>' +
                     '<div class="gym-saved-meal-name">' + esc(sm.name) + '</div>' +
                     '<div class="gym-saved-meal-macros">' + sm.calories + 'cal &middot; ' + sm.protein + 'p</div>' +
                 '</div>';
@@ -974,19 +977,22 @@ const GymUI = (() => {
                     nutritionDate = d2.toISOString().slice(0, 10);
                     renderActiveTab(); return;
                 }
-                if (action === 'show-meal-form') { showMealForm = true; renderActiveTab(); return; }
-                if (action === 'cancel-meal') { showMealForm = false; renderActiveTab(); return; }
+                if (action === 'add-meal') { showMealForm = true; mealFormPrefill = null; renderActiveTab(); return; }
+                if (action === 'cancel-meal') { showMealForm = false; mealFormPrefill = null; renderActiveTab(); return; }
                 if (action === 'save-meal') { saveMeal(); return; }
+                if (action === 'delete-saved-meal') {
+                    GymService.deleteSavedMeal(activePlayer, actionEl.dataset.mealId);
+                    showToast('Saved meal removed');
+                    renderActiveTab();
+                    return;
+                }
                 if (action === 'quick-log-meal') {
                     var mealId = actionEl.dataset.mealId;
                     var saved = GymService.getSavedMeals(activePlayer);
                     var sm = saved.find(function(m) { return m.id === mealId; });
                     if (sm) {
-                        GymService.logNutritionMeal(activePlayer, nutritionDate || today(), {
-                            name: sm.name, calories: sm.calories, protein: sm.protein,
-                            carbs: sm.carbs, fat: sm.fat, notes: sm.notes || ''
-                        });
-                        showToast(sm.name + ' logged');
+                        mealFormPrefill = { name: sm.name, calories: sm.calories, protein: sm.protein, carbs: sm.carbs, fat: sm.fat };
+                        showMealForm = true;
                         renderActiveTab();
                     }
                     return;
@@ -1247,6 +1253,7 @@ const GymUI = (() => {
             notes: notesEl ? notesEl.value : ''
         });
         showMealForm = false;
+        mealFormPrefill = null;
         showToast('Meal logged');
         renderActiveTab();
     }
@@ -1274,6 +1281,7 @@ const GymUI = (() => {
             showLevelTooltip = false;
             showPlayerSwitcher = false;
             showMealForm = false;
+            mealFormPrefill = null;
             showExNotes = {};
             restTimerStart = null;
             restTimerKey = null;

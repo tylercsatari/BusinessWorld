@@ -684,6 +684,19 @@ select.gym-settings-input {
     font-size: 11px; color: var(--gym-text-muted);
     font-family: var(--gym-font-mono); margin-top: 2px;
 }
+.gym-saved-meal-chip { position: relative; padding-right: 28px; }
+.gym-saved-meal-delete {
+    position: absolute; top: 4px; right: 4px;
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: var(--gym-text-muted);
+    cursor: pointer; border-radius: 50%;
+    transition: all 0.15s; line-height: 1;
+}
+.gym-saved-meal-delete:hover {
+    color: var(--gym-red);
+    background: rgba(231,76,60,0.1);
+}
 
 /* ── Diet Summary (shared with Nutrition) ── */
 .gym-diet-summary {
