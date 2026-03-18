@@ -18,6 +18,7 @@ const GymUI = (() => {
     let characterAnimFrame = null;
     let showChallengeForm = false;
     let showGoalForm = false;
+    let showGoalSelector = false;
     let showMeasurementForm = false;
 
     const ROUTINE_COLORS = { upper1: 'gold', lower1: 'blue', upper2: 'green', lower2: 'red' };
@@ -292,11 +293,18 @@ const GymUI = (() => {
         const streak = getStreak(pid);
         const totalVol = getTotalVolume(pid);
         const recent = GymService.getWorkouts(pid, 3);
-        const bestBench = GymService.getBestLift(pid, 'bench_press');
         const weights = GymService.getWeights(pid);
         const currentWeight = weights.length ? weights[weights.length - 1].value : '--';
         const goalType = player && player.goals ? player.goals.type : 'general';
         const goalLabel = GOAL_LABELS[goalType] || 'General Fitness';
+
+        const XP_EXPLANATIONS = {
+            general: 'XP = workouts completed (5 per level)',
+            muscle: 'XP = total weekly volume in lbs (higher weight \u00d7 reps = more XP)',
+            strength: 'XP = e1RM progress on key lifts (Bench, Squat)',
+            fatloss: 'XP = workout consistency + logged nutrition',
+            recomp: 'XP = workout consistency + body composition changes'
+        };
 
         let html = '';
 
@@ -304,26 +312,36 @@ const GymUI = (() => {
         html += '<div class="gym-character-section">' +
             '<div class="gym-character-canvas-wrap" id="gym-char-canvas"></div>' +
             '<div class="gym-character-name">' + esc(playerName) + '</div>' +
-            '<span class="gym-goal-badge">' + esc(goalLabel.toUpperCase()) + '</span>' +
+            '<span class="gym-goal-badge" data-action="toggle-goal-selector">' + esc(goalLabel.toUpperCase()) + '</span>' +
         '</div>';
 
-        // Level bar
+        // Compact XP bar (below character/goal badge, before stats)
         const xpPct = levelInfo.xpToNext > 0 ? Math.min(100, (levelInfo.xp / levelInfo.xpToNext) * 100) : 0;
-        html += '<div class="gym-level-bar-wrap">' +
-            '<div class="gym-level-label">LEVEL ' + levelInfo.level + '</div>' +
-            '<div class="gym-level-bar"><div class="gym-level-bar-fill" style="width:' + xpPct.toFixed(1) + '%"></div></div>' +
-            '<div class="gym-level-xp">' + fmtVolume(levelInfo.xp) + ' / ' + fmtVolume(levelInfo.xpToNext) + ' XP</div>' +
+        html += '<div class="gym-xp-compact">' +
+            '<div class="gym-xp-compact-bar"><div class="gym-xp-compact-fill" style="width:' + xpPct.toFixed(1) + '%"></div></div>' +
+            '<div class="gym-xp-compact-text">' + fmtVolume(levelInfo.xp) + ' / ' + fmtVolume(levelInfo.xpToNext) + ' XP</div>' +
         '</div>';
 
-        // Stat grid (2x3)
+        // Inline goal selector (expands/collapses)
+        if (showGoalSelector) {
+            html += '<div class="gym-goal-selector">';
+            ['general', 'muscle', 'strength', 'fatloss', 'recomp'].forEach(g => {
+                const active = g === goalType ? ' active' : '';
+                html += '<button class="gym-goal-chip' + active + '" data-goal-type="' + g + '">' + esc(GOAL_LABELS[g]) + '</button>';
+            });
+            html += '</div>';
+        }
+
+        // Stat grid (2x3 mobile, 3x2 desktop)
         html += '<div class="gym-stat-grid">' +
-            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + levelInfo.level + '</div><div class="gym-stat-box-label">Level</div></div>' +
+            '<div class="gym-stat-box gym-stat-level" data-action="toggle-level-info"><div class="gym-stat-box-value">' + levelInfo.level + '</div><div class="gym-stat-box-label">Level</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + weekWorkouts + '</div><div class="gym-stat-box-label">This Week</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + streak + '</div><div class="gym-stat-box-label">Streak</div></div>' +
-            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + (bestBench ? bestBench.weight : '--') + '</div><div class="gym-stat-box-label">Best Bench</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + fmtVolume(totalVol) + '</div><div class="gym-stat-box-label">Total Volume</div></div>' +
             '<div class="gym-stat-box"><div class="gym-stat-box-value">' + currentWeight + '</div><div class="gym-stat-box-label">Body Weight</div></div>' +
-        '</div>';
+            '<div class="gym-stat-box"><div class="gym-stat-box-value">' + totalWorkouts + '</div><div class="gym-stat-box-label">Workouts</div></div>' +
+        '</div>' +
+        '<div class="gym-level-tooltip" id="gym-level-tooltip" style="display:none">' + esc(XP_EXPLANATIONS[goalType] || XP_EXPLANATIONS.general) + '</div>';
 
         // Quick Start
         const nextRoutineId = GymService.getNextRoutine(pid);
@@ -1008,6 +1026,31 @@ const GymUI = (() => {
         if (!container) return;
         const content = container.querySelector('#gym-tab-content');
         if (!content) return;
+
+        /* ── Dashboard: Level tooltip ── */
+        content.querySelectorAll('[data-action="toggle-level-info"]').forEach(el => {
+            el.addEventListener('click', () => {
+                const tip = content.querySelector('#gym-level-tooltip');
+                if (!tip) return;
+                const open = tip.style.display !== 'none';
+                tip.style.display = open ? 'none' : 'block';
+                el.toggleAttribute('data-level-info-open', !open);
+            });
+        });
+
+        /* ── Dashboard: Goal selector toggle ── */
+        content.querySelectorAll('[data-action="toggle-goal-selector"]').forEach(el => {
+            el.addEventListener('click', () => { showGoalSelector = !showGoalSelector; renderActiveTab(); });
+        });
+
+        /* ── Dashboard: Goal chip selection ── */
+        content.querySelectorAll('.gym-goal-chip').forEach(el => {
+            el.addEventListener('click', () => {
+                GymService.updatePlayerGoal(activePlayer, el.dataset.goalType);
+                showGoalSelector = false;
+                renderActiveTab();
+            });
+        });
 
         /* ── Dashboard ── */
         content.querySelectorAll('[data-action="start-workout"]').forEach(el => {

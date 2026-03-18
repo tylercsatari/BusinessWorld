@@ -135,31 +135,61 @@
     letter-spacing: 1px; color: #1e1a16;
     background: linear-gradient(135deg, #e8a020, #d4900a);
     box-shadow: 0 2px 8px rgba(232, 160, 32, 0.3);
+    cursor: pointer; user-select: none;
+    transition: filter 0.15s;
 }
+.gym-goal-badge:hover { filter: brightness(1.1); }
 
-/* ── Level Bar ── */
-.gym-level-bar-wrap {
-    margin: 12px 0 8px; text-align: center;
+/* ── Compact XP Bar ── */
+.gym-xp-compact {
+    margin: 10px auto 4px; max-width: 260px; text-align: center;
 }
-.gym-level-label {
-    font-family: var(--gym-font-heading); font-size: 16px;
-    color: var(--gym-brown); letter-spacing: 1px;
-}
-.gym-level-bar {
-    width: 100%; height: 10px; background: #1e1a16;
-    border-radius: 5px; margin: 6px 0 4px;
+.gym-xp-compact-bar {
+    width: 100%; height: 6px; background: #1e1a16;
+    border-radius: 3px; overflow: hidden;
     border: 1px solid var(--gym-border);
-    overflow: hidden;
 }
-.gym-level-bar-fill {
-    height: 100%; border-radius: 5px;
+.gym-xp-compact-fill {
+    height: 100%; border-radius: 3px;
     background: linear-gradient(90deg, #e8a020, #d4900a);
     transition: width 0.5s ease;
 }
-.gym-level-xp {
+.gym-xp-compact-text {
     font-size: 11px; color: var(--gym-text-muted);
-    font-family: var(--gym-font-mono);
+    font-family: var(--gym-font-mono); margin-top: 3px;
 }
+
+/* ── Goal Selector (inline chips) ── */
+.gym-goal-selector {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center; margin: 10px 0 4px;
+}
+.gym-goal-chip {
+    padding: 5px 12px; border-radius: 14px;
+    font-family: var(--gym-font-heading); font-size: 11px;
+    letter-spacing: 0.5px; border: 1px solid var(--gym-border);
+    background: #2e2418; color: var(--gym-text-muted);
+    cursor: pointer; transition: all 0.15s;
+}
+.gym-goal-chip:hover { border-color: var(--gym-gold); color: var(--gym-gold); }
+.gym-goal-chip.active {
+    background: linear-gradient(135deg, #e8a020, #d4900a);
+    color: #1e1a16; border-color: transparent; font-weight: 600;
+}
+
+/* ── Level Tooltip ── */
+.gym-level-tooltip {
+    background: #1e1a16; border: 1px solid var(--gym-border);
+    border-radius: var(--gym-radius-sm); padding: 8px 12px;
+    font-size: 12px; color: var(--gym-gold);
+    font-family: var(--gym-font-mono);
+    margin: -8px 0 8px; text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* ── Clickable Level Stat ── */
+.gym-stat-level { cursor: pointer; user-select: none; transition: border-color 0.15s; }
+.gym-stat-level:hover { border-color: var(--gym-gold); }
 
 /* ── RPE Badge (on recent sessions) ── */
 .gym-rpe-badge {

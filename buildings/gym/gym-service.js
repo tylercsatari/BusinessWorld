@@ -191,6 +191,10 @@ const GymService = (() => {
         save();
     }
 
+    function updatePlayerGoal(playerId, goalType) {
+        updateGoals(playerId, { type: goalType });
+    }
+
     /* ── Measurements ── */
     function addMeasurement(playerId, m) {
         const p = getPlayer(playerId);
@@ -584,7 +588,7 @@ const GymService = (() => {
     return {
         load, save, getData, clearData,
         getPlayer, getPlayers, addPlayer, getPlayerColor,
-        updateGoals,
+        updateGoals, updatePlayerGoal,
         addMeasurement, getMeasurements,
         logWorkout, getWorkouts,
         logWeight, getWeights,
