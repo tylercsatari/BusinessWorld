@@ -1110,9 +1110,9 @@ const LibraryUI = (() => {
             const cnt = catCounts[tc.id] || 0;
             const cntHtml = cnt > 0 ? ` <span class="ideamap-pill-count">${cnt}</span>` : '';
             html += `<button class="ideamap-filter-pill${isActive ? ' active' : ''}" data-notes-filter-cat="${tc.id}" style="border-left: 3px solid ${tc.color}">${escHtml(tc.name)}${cntHtml}</button>`;
-            // Show subcategories if this parent is active or a subcategory of it is active
+            // Show subcategories only when this parent is the active filter
             const subCats = cats.filter(c => c.parentId === tc.id);
-            const showSubs = isActive || subCats.some(sc => cf === sc.id);
+            const showSubs = isActive;
             if (showSubs) {
                 for (const sc of subCats) {
                     const scCnt = catCounts[sc.id] || 0;
