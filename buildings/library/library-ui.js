@@ -1272,12 +1272,11 @@ const LibraryUI = (() => {
             listHtml += `<div class="ideamap-search-results-header"><span>Search results for '${escHtml(notesSearchQuery)}' (${notesSearchResults.length})</span><button class="ideamap-search-clear" id="notes-search-results-clear">&times;</button></div>`;
         }
 
-        listHtml += ideas.map(n => {
+        const renderNoteItem = (n) => {
             const isConverted = n.type === 'converted';
             const preview = n.hook || n.context || '';
             const isRealProject = Array.isArray(realProjectsCache) && realProjectsCache.length > 0 && n.project && realProjectsCache.includes(n.project);
             const badge = isRealProject && window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.project) : '';
-            // Show actual pipeline status - check video link regardless of converted status
             let statusHtml = '';
             const linkedVideo = VideoService.getByIdeaId(n.id);
             if (linkedVideo && window.EggRenderer) {
@@ -1293,7 +1292,48 @@ const LibraryUI = (() => {
                 </div>
                 <button class="library-delete-btn" data-note-id="${n.id}" title="Delete">&times;</button>
             </div>`;
-        }).join('');
+        };
+
+        // Subcategory grouping when filtering by a top-level category
+        const nlActiveCatId = notesFilterCategory;
+        const nlAllCats = ideaMapGetCategories();
+        const nlActiveCat = nlActiveCatId && nlActiveCatId !== 'all' && nlActiveCatId !== 'uncategorized'
+            ? nlAllCats.find(c => c.id === nlActiveCatId)
+            : null;
+        const nlIsTopLevel = nlActiveCat && !nlActiveCat.parentId;
+        const nlSubcats = nlIsTopLevel ? nlAllCats.filter(c => c.parentId === nlActiveCat.id) : [];
+
+        if (nlIsTopLevel && nlSubcats.length > 0 && notesSearchResults === null) {
+            const nlMapping = ideaMapGetIdeaCategories();
+            const nlSubGroups = {};
+            const nlGeneralIdeas = [];
+            for (const idea of ideas) {
+                const ideaCatId = nlMapping[idea.id];
+                if (!ideaCatId || ideaCatId === nlActiveCat.id) {
+                    nlGeneralIdeas.push(idea);
+                } else {
+                    const sc = nlSubcats.find(s => s.id === ideaCatId);
+                    if (sc) {
+                        if (!nlSubGroups[sc.id]) nlSubGroups[sc.id] = { cat: sc, ideas: [] };
+                        nlSubGroups[sc.id].ideas.push(idea);
+                    } else {
+                        nlGeneralIdeas.push(idea);
+                    }
+                }
+            }
+            if (nlGeneralIdeas.length > 0) {
+                listHtml += `<div class="ideamap-subcluster-header ideamap-subcluster-inline" style="color:${nlActiveCat.color}"><span class="ideamap-subcluster-name">General</span><span class="ideamap-subcluster-count">${nlGeneralIdeas.length}</span></div>`;
+                listHtml += nlGeneralIdeas.map(renderNoteItem).join('');
+            }
+            for (const sc of nlSubcats) {
+                const sg = nlSubGroups[sc.id];
+                if (!sg || sg.ideas.length === 0) continue;
+                listHtml += `<div class="ideamap-subcluster-header ideamap-subcluster-inline" style="color:${sc.color}"><span class="ideamap-subcluster-name">${escHtml(sc.name)}</span><span class="ideamap-subcluster-count">${sg.ideas.length}</span></div>`;
+                listHtml += sg.ideas.map(renderNoteItem).join('');
+            }
+        } else {
+            listHtml += ideas.map(renderNoteItem).join('');
+        }
         const filterHtml = buildNotesFilterBarHtml();
         el.innerHTML = '<div class="library-notes-filter-inline">' + filterHtml + '</div>' + listHtml;
         bindNotesFilterBar(el.querySelector('.library-notes-filter-inline'));
@@ -2940,6 +2980,72 @@ const LibraryUI = (() => {
             html += `<div class="ideamap-popover" id="ideamap-popover" style="display:none;"></div>`;
             el.innerHTML = html;
             ideaMapBindSearchEvents(el);
+            ideaMapBindKanbanEvents(el);
+            return;
+        }
+
+        // --- Subcategory auto-group override when filtering by top-level category ---
+        const activeCatId = ideaMapState.filterCategory;
+        const activeCat = activeCatId && activeCatId !== 'all' && activeCatId !== 'uncategorized'
+            ? ideaMapGetCategories().find(c => c.id === activeCatId)
+            : null;
+        const activeCatIsTopLevel = activeCat && !activeCat.parentId;
+        const activeCatSubcats = activeCatIsTopLevel ? ideaMapGetCategories().filter(c => c.parentId === activeCat.id) : [];
+
+        if (activeCatIsTopLevel && activeCatSubcats.length > 0) {
+            const scMapping = ideaMapGetIdeaCategories();
+            const scAllCats = ideaMapGetCategories();
+            const scSubGroups = {};
+            const scGeneralIdeas = [];
+            for (const idea of ideas) {
+                const ideaCatId = scMapping[idea.id];
+                if (!ideaCatId || ideaCatId === activeCat.id) {
+                    scGeneralIdeas.push(idea);
+                } else {
+                    const sc = activeCatSubcats.find(s => s.id === ideaCatId);
+                    if (sc) {
+                        if (!scSubGroups[sc.id]) scSubGroups[sc.id] = { cat: sc, ideas: [] };
+                        scSubGroups[sc.id].ideas.push(idea);
+                    } else {
+                        scGeneralIdeas.push(idea);
+                    }
+                }
+            }
+            html += `<div class="ideamap-kanban-scroll">`;
+            html += `<div class="ideamap-subcluster-header ideamap-subcluster-inline" style="color:${activeCat.color};opacity:0.7;font-size:0.85em;">
+                <span class="ideamap-subcluster-name">${escHtml(activeCat.name)}</span>
+            </div>`;
+            if (scGeneralIdeas.length > 0) {
+                html += `<div class="ideamap-subcluster-header ideamap-subcluster-inline" style="color:${activeCat.color}">
+                    <span class="ideamap-subcluster-name">General</span>
+                    <span class="ideamap-subcluster-count">${scGeneralIdeas.length}</span>
+                </div>`;
+                html += `<div class="ideamap-card-row">`;
+                for (const idea of scGeneralIdeas) {
+                    html += ideaMapRenderCardHtml(idea, scMapping, scAllCats, groupBy);
+                }
+                html += `</div>`;
+            }
+            for (const sc of activeCatSubcats) {
+                const sg = scSubGroups[sc.id];
+                if (!sg || sg.ideas.length === 0) continue;
+                html += `<div class="ideamap-subcluster-header ideamap-subcluster-inline" style="color:${sc.color}">
+                    <span class="ideamap-subcluster-name">${escHtml(sc.name)}</span>
+                    <span class="ideamap-subcluster-count">${sg.ideas.length}</span>
+                </div>`;
+                html += `<div class="ideamap-card-row">`;
+                for (const idea of sg.ideas) {
+                    html += ideaMapRenderCardHtml(idea, scMapping, scAllCats, groupBy);
+                }
+                html += `</div>`;
+            }
+            html += `</div>`;
+
+            if (ideaMapState.showCategoryPanel) {
+                html += ideaMapRenderCategoryPanel();
+            }
+            html += `<div class="ideamap-popover" id="ideamap-popover" style="display:none;"></div>`;
+            el.innerHTML = html;
             ideaMapBindKanbanEvents(el);
             return;
         }
