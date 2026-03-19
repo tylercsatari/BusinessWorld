@@ -548,6 +548,56 @@
 }
 
 /* Box inline actions */
-.storage-box-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e8ddd0; }
-.storage-box-action-btn { flex: 1; padding: 8px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: #5a3e1b; color: #fff; }
-.storage-box-action-btn.danger { background: #e74c3c; }
+.storage-box-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #e8ddd0;
+}
+.storage-box-action-btn {
+    padding: 8px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #5a3e1b;
+    color: #fff;
+    transition: opacity 0.15s;
+}
+.storage-box-action-btn.add { background: #5a3e1b; }
+.storage-box-action-btn.remove-item { background: #e67e22; }
+.storage-box-action-btn.remove-item.disabled { background: #ccc; color: #999; cursor: default; }
+.storage-box-action-btn.rename { background: transparent; border-color: #2980b9; color: #2980b9; }
+.storage-box-action-btn.clear { background: transparent; border-color: #e74c3c; color: #e74c3c; }
+.storage-box-action-btn.danger { background: #e74c3c; grid-column: span 2; }
+
+/* Remove item sub-panel */
+.storage-box-item-list {
+    background: #f9f6f2;
+    border-radius: 8px;
+    padding: 8px;
+    margin-top: 8px;
+}
+.storage-box-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid #f0ece4;
+    font-size: 13px;
+}
+.storage-box-item-row:last-child { border-bottom: none; }
+.storage-box-item-remove-btn {
+    padding: 4px 10px;
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+}

@@ -339,6 +339,15 @@ const StorageService = (() => {
             return { box };
         },
 
+        async renameBox(boxId, newName) {
+            const box = boxes.find(b => b.id === boxId);
+            if (!box) return { error: 'Box not found.' };
+            const upper = newName.toUpperCase();
+            await StorageAirtable.renameBox(boxId, upper);
+            box.name = upper;
+            return { box };
+        },
+
         async removeBox(name) {
             const box = findBoxByName(name);
             if (!box) return { error: `Box "${name}" not found.` };

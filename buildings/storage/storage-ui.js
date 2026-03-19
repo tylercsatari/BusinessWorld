@@ -142,8 +142,17 @@ const StorageUI = (() => {
                 <h3>${escHtml(box.name)}</h3>
                 <div class="storage-box-items">${itemRows}</div>
                 ${isSelected ? `<div class="storage-box-actions">
-                    <button class="storage-box-action-btn" data-action="add-to-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">+ Add Item</button>
+                    <button class="storage-box-action-btn add" data-action="add-to-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">+ Add Item</button>
+                    <button class="storage-box-action-btn remove-item${items.length === 0 ? ' disabled' : ''}" data-action="remove-from-box" data-box-id="${escAttr(box.id)}"${items.length === 0 ? ' disabled' : ''}>- Remove Item</button>
+                    <button class="storage-box-action-btn rename" data-action="rename-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Rename</button>
+                    <button class="storage-box-action-btn clear" data-action="clear-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Clear Box</button>
                     <button class="storage-box-action-btn danger" data-action="remove-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Remove Box</button>
+                </div>
+                <div class="storage-box-item-list" data-box-id="${escAttr(box.id)}" style="display:none;">
+                    ${items.length > 0 ? items.map(i => `<div class="storage-box-item-row">
+                        <span>${escHtml(i.name)} <span style="color:#999">(Qty: ${i.quantity})</span></span>
+                        <button class="storage-box-item-remove-btn" data-action="remove-single-item" data-item-name="${escAttr(i.name)}" data-item-qty="${i.quantity}" data-box-name="${escAttr(box.name)}">Remove</button>
+                    </div>`).join('') : '<div style="padding:8px;color:#999;font-style:italic;">Box is empty</div>'}
                 </div>` : ''}
             </div>`;
         }).join('');
@@ -151,7 +160,7 @@ const StorageUI = (() => {
         // Box tap → toggle selection
         grid.querySelectorAll('.storage-box-card').forEach(card => {
             card.addEventListener('click', (e) => {
-                if (e.target.closest('.storage-box-action-btn')) return;
+                if (e.target.closest('.storage-box-action-btn') || e.target.closest('.storage-box-item-list')) return;
                 const id = card.dataset.boxId;
                 selectedBoxId = selectedBoxId === id ? null : id;
                 renderBoxes();
@@ -183,13 +192,73 @@ const StorageUI = (() => {
                 updateStats();
             });
         });
+        grid.querySelectorAll('[data-action=remove-from-box]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const panel = btn.closest('.storage-box-card').querySelector('.storage-box-item-list');
+                if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            });
+        });
+        grid.querySelectorAll('[data-action=remove-single-item]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const itemName = btn.dataset.itemName;
+                const itemQty = parseInt(btn.dataset.itemQty) || 1;
+                let qty = itemQty;
+                if (itemQty > 1) {
+                    const qtyStr = prompt(`How many to remove? (max ${itemQty})`, String(itemQty));
+                    if (qtyStr === null) return;
+                    qty = Math.min(Math.max(1, parseInt(qtyStr) || itemQty), itemQty);
+                }
+                try {
+                    const r = await StorageService.removeItem(itemName, qty);
+                    if (r.error) { addChatMsg(r.error, 'error'); return; }
+                    const msg = r.deleted ? `Removed all ${itemName}.` : `Removed ${qty}x ${itemName}. ${r.item.quantity} remaining.`;
+                    addChatMsg(msg, 'system');
+                } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
+                renderBoxes();
+                updateStats();
+            });
+        });
+        grid.querySelectorAll('[data-action=rename-box]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const boxId = btn.dataset.boxId;
+                const oldName = btn.dataset.boxName;
+                const newName = prompt(`Rename Box ${oldName} to:`, oldName);
+                if (!newName || !newName.trim() || newName.trim().toUpperCase() === oldName.toUpperCase()) return;
+                try {
+                    const r = await StorageService.renameBox(boxId, newName.trim());
+                    if (r.error) { addChatMsg(r.error, 'error'); return; }
+                    addChatMsg(`Renamed Box ${oldName} to ${r.box.name}.`, 'system');
+                } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
+                renderBoxes();
+            });
+        });
+        grid.querySelectorAll('[data-action=clear-box]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const boxName = btn.dataset.boxName;
+                const boxId = btn.dataset.boxId;
+                const boxItems = StorageService.getItemsByBox(boxId);
+                if (boxItems.length === 0) { addChatMsg(`Box ${boxName} is already empty.`, 'system'); return; }
+                if (!confirm(`Clear all ${boxItems.length} item(s) from Box ${boxName}? The box will remain.`)) return;
+                try {
+                    const r = await StorageService.clearBox(boxName);
+                    if (r.error) { addChatMsg(r.error, 'error'); return; }
+                    addChatMsg(`Cleared ${r.count} item(s) from Box ${boxName}.`, 'system');
+                } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
+                renderBoxes();
+                updateStats();
+            });
+        });
         grid.querySelectorAll('[data-action=remove-box]').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const boxName = btn.dataset.boxName;
                 const box = StorageService.getBoxes().find(b => b.id === btn.dataset.boxId);
-                const items = box ? StorageService.getItemsByBox(btn.dataset.boxId) : [];
-                const msg = items.length > 0 ? `Remove Box ${boxName} and its ${items.length} item(s)?` : `Remove empty Box ${boxName}?`;
+                const boxItems = box ? StorageService.getItemsByBox(btn.dataset.boxId) : [];
+                const msg = boxItems.length > 0 ? `Remove Box ${boxName} and its ${boxItems.length} item(s)?` : `Remove empty Box ${boxName}?`;
                 if (!confirm(msg)) return;
                 try {
                     await StorageService.clearBox(boxName);

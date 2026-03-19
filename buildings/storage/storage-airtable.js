@@ -72,6 +72,12 @@ const StorageAirtable = (() => {
             return request('DELETE', CONFIG.airtable.boxesTable, `/${boxId}`);
         },
 
+        async renameBox(boxId, newName) {
+            return request('PATCH', CONFIG.airtable.boxesTable, `/${boxId}`, {
+                fields: { [CONFIG.airtable.boxesNameField]: newName }
+            });
+        },
+
         async moveItem(itemId, newBoxId) {
             return request('PATCH', CONFIG.airtable.itemsTable, `/${itemId}`, {
                 fields: { [CONFIG.airtable.itemsLinkField]: [newBoxId] }
