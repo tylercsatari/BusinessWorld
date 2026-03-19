@@ -98,6 +98,51 @@ const StorageService = (() => {
         },
 
         /**
+         * Pre-check whether adding this item would trigger a semantic merge.
+         * Returns { wouldMerge, existingName, existingQty, existingBox, score, existingId }
+         */
+        async checkMerge(name) {
+            const canonical = StorageCanonicalize.normalizeToSingular(name);
+            try {
+                const { bestMatch, bestScore } = await StorageEmbeddings.findBestMatch(canonical);
+                if (bestMatch && bestScore >= CONFIG.search.semanticMatchThreshold) {
+                    const existing = resolveSemanticToStoreItem(bestMatch);
+                    if (existing) {
+                        const existingBox = getBoxName(existing);
+                        return {
+                            wouldMerge: true,
+                            existingName: bestMatch.name,
+                            existingQty: existing.quantity,
+                            existingBox: existingBox,
+                            score: bestScore,
+                            existingId: existing.id
+                        };
+                    }
+                }
+            } catch (e) {}
+            return { wouldMerge: false };
+        },
+
+        /**
+         * ADD item forcing creation (skips semantic merge check).
+         */
+        async addItemForce(name, qty, boxName) {
+            const canonical = StorageCanonicalize.normalizeToSingular(name);
+            let box = findBoxByName(boxName);
+            if (!box) {
+                const upper = (boxName || 'A').toUpperCase();
+                const res = await StorageAirtable.createBox(upper);
+                box = { id: res.id, name: upper };
+                boxes.push(box);
+            }
+            const res = await StorageAirtable.addItem(canonical, qty, box.id);
+            const newItem = { id: res.id, name: canonical, quantity: qty, boxIds: [box.id] };
+            items.push(newItem);
+            try { await StorageEmbeddings.indexItem(newItem, box.name); } catch(e) {}
+            return { item: newItem, merged: false, boxName: box.name };
+        },
+
+        /**
          * ADD item with semantic merge detection.
          * If an item with similar name already exists (above threshold), increments its quantity.
          * Otherwise creates a new item.

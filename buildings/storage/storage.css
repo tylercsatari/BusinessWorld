@@ -401,6 +401,49 @@
     flex-shrink: 0;
 }
 
+/* Merge confirmation */
+.storage-merge-confirm {
+    padding: 10px 14px;
+    background: #f0f8ff;
+    border-radius: 10px;
+    margin: 8px 0;
+}
+
+.storage-merge-msg {
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.storage-merge-btns {
+    display: flex;
+    gap: 8px;
+}
+
+.storage-merge-yes {
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.storage-merge-no {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .storage-panel {

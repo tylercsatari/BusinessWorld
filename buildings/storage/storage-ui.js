@@ -159,6 +159,22 @@ const StorageUI = (() => {
         chatLog.scrollTop = chatLog.scrollHeight;
     }
 
+    function showMergeConfirmation(msg) {
+        return new Promise(resolve => {
+            const el = document.createElement('div');
+            el.className = 'storage-merge-confirm';
+            el.innerHTML = `<div class="storage-merge-msg">${msg}</div>
+                <div class="storage-merge-btns">
+                    <button class="storage-merge-yes">Yes, merge</button>
+                    <button class="storage-merge-no">No, keep separate</button>
+                </div>`;
+            const chat = document.getElementById('storage-chat-log');
+            if (chat) { chat.appendChild(el); chat.scrollTop = chat.scrollHeight; }
+            el.querySelector('.storage-merge-yes').addEventListener('click', () => { el.remove(); resolve(true); });
+            el.querySelector('.storage-merge-no').addEventListener('click', () => { el.remove(); resolve(false); });
+        });
+    }
+
     function showSuggestions(suggestions) {
         if (!suggestions || suggestions.length === 0) return;
         const sugText = suggestions.map((s, i) =>
@@ -482,12 +498,24 @@ const StorageUI = (() => {
                         if (!parsed.boxName) { addChatMsg('Cancelled.', 'system'); return; }
                         parsed.boxName = parsed.boxName.toUpperCase();
                     }
-                    const r = await StorageService.addItem(parsed.itemName, parsed.quantity || 1, parsed.boxName);
+                    const qty = parsed.quantity || 1;
+                    const mergeCheck = await StorageService.checkMerge(parsed.itemName);
+                    let r;
+                    if (mergeCheck.wouldMerge) {
+                        const pct = (mergeCheck.score * 100).toFixed(0);
+                        const confirmMsg = `This looks like <strong>${escHtml(mergeCheck.existingName)}</strong> (Box ${escHtml(mergeCheck.existingBox)}, ${mergeCheck.existingQty}x, ${pct}% match). Merge with it?`;
+                        const doMerge = await showMergeConfirmation(confirmMsg);
+                        r = doMerge
+                            ? await StorageService.addItem(parsed.itemName, qty, parsed.boxName)
+                            : await StorageService.addItemForce(parsed.itemName, qty, parsed.boxName);
+                    } else {
+                        r = await StorageService.addItem(parsed.itemName, qty, parsed.boxName);
+                    }
                     const msg = r.merged
                         ? `Merged with existing "${r.mergedWith}" in box ${r.boxName} (${(r.score * 100).toFixed(0)}% match). Now ${r.item.quantity}x total.`
-                        : `Added ${parsed.quantity || 1}x ${r.item.name} to box ${r.boxName}.`;
+                        : `Added ${qty}x ${r.item.name} to box ${r.boxName}.`;
                     addChatMsg(msg, 'system');
-                    addHistory('ADD', `${parsed.quantity || 1}x ${r.item.name} → Box ${r.boxName}`);
+                    addHistory('ADD', `${qty}x ${r.item.name} → Box ${r.boxName}`);
                     await speakTTS(msg);
                     break;
                 }
