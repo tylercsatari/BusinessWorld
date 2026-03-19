@@ -136,12 +136,95 @@ const StorageUI = (() => {
             const itemRows = items.length > 0
                 ? `<table>${items.map(i => `<tr><td>${escHtml(i.name)}</td><td>${i.quantity}</td></tr>`).join('')}</table>`
                 : '<div class="storage-box-empty">Empty</div>';
-            return `<div class="storage-box-card">
+            return `<div class="storage-box-card" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}" style="cursor:pointer;">
                 <h3>${escHtml(box.name)}</h3>
                 <div class="storage-box-items">${itemRows}</div>
             </div>`;
         }).join('');
+
+        // Box tap → action sheet
+        grid.querySelectorAll('.storage-box-card').forEach(card => {
+            card.addEventListener('click', () => showBoxActions(card.dataset.boxId, card.dataset.boxName));
+        });
     }
+
+    function showBoxActions(boxId, boxName) {
+        // Remove any existing action sheet
+        document.querySelector('.storage-box-sheet')?.remove();
+
+        const sheet = document.createElement('div');
+        sheet.className = 'storage-box-sheet';
+        sheet.innerHTML = `
+            <div class="storage-box-sheet-backdrop"></div>
+            <div class="storage-box-sheet-panel">
+                <div class="storage-box-sheet-title">Box ${escHtml(boxName)}</div>
+                <button class="storage-box-sheet-btn" id="sbs-add">Add Item</button>
+                <button class="storage-box-sheet-btn danger" id="sbs-remove">Remove Box</button>
+                <button class="storage-box-sheet-btn secondary" id="sbs-cancel">Cancel</button>
+            </div>`;
+        document.body.appendChild(sheet);
+
+        sheet.querySelector('.storage-box-sheet-backdrop').addEventListener('click', () => sheet.remove());
+        sheet.querySelector('#sbs-cancel').addEventListener('click', () => sheet.remove());
+
+        sheet.querySelector('#sbs-add').addEventListener('click', async () => {
+            sheet.remove();
+            const itemName = prompt(`Add item to Box ${boxName}:`);
+            if (!itemName || !itemName.trim()) return;
+            const qtyStr = prompt('Quantity? (default: 1)') || '1';
+            const qty = Math.max(1, parseInt(qtyStr) || 1);
+            try {
+                const mergeCheck = await StorageService.checkMerge(itemName.trim());
+                if (mergeCheck.wouldMerge) {
+                    const yes = await showMergeConfirmation(`This looks like <strong>${escHtml(mergeCheck.existingName)}</strong> (Box ${escHtml(mergeCheck.existingBox)}, ${mergeCheck.existingQty}x, ${(mergeCheck.score * 100).toFixed(0)}% match). Merge with it?`);
+                    if (yes) {
+                        const r = await StorageService.addItem(itemName.trim(), qty, boxName);
+                        addChatMsg(`Merged with "${r.mergedWith}" in Box ${r.boxName}. Now ${r.item.quantity}x total.`, 'system');
+                    } else {
+                        const r = await StorageService.addItemForce(itemName.trim(), qty, boxName);
+                        addChatMsg(`Added ${qty}x ${r.item.name} to Box ${boxName}.`, 'system');
+                    }
+                } else {
+                    const r = await StorageService.addItem(itemName.trim(), qty, boxName);
+                    addChatMsg(`Added ${qty}x ${r.item.name} to Box ${r.boxName}.`, 'system');
+                }
+                renderBoxes();
+                updateStats();
+            } catch (e) {
+                addChatMsg('Error adding item: ' + e.message, 'error');
+            }
+        });
+
+        sheet.querySelector('#sbs-remove').addEventListener('click', async () => {
+            sheet.remove();
+            const box = StorageService.getBoxes().find(b => b.id === boxId);
+            const items = box ? StorageService.getItemsByBox(boxId) : [];
+            const confirmMsg = items.length > 0
+                ? `Remove Box ${boxName} and its ${items.length} item(s)?`
+                : `Remove empty Box ${boxName}?`;
+            if (!confirm(confirmMsg)) return;
+            try {
+                // Clear items first if needed, then remove box
+                const clearResult = await StorageService.clearBox(boxName);
+                if (clearResult && clearResult.error) {
+                    addChatMsg('Error clearing box: ' + clearResult.error, 'error');
+                    return;
+                }
+                const result = await StorageService.removeBox(boxName);
+                if (result && result.error) {
+                    addChatMsg(result.error, 'error');
+                    return;
+                }
+                addChatMsg(`Removed Box ${boxName}.`, 'system');
+                renderBoxes();
+                updateStats();
+            } catch (e) {
+                addChatMsg('Error removing box: ' + e.message, 'error');
+            }
+        });
+    }
+
+    function escAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
     function escHtml(s) {
         const d = document.createElement('div');
