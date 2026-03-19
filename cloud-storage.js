@@ -18,7 +18,8 @@ function initR2() {
     bucket = process.env.R2_BUCKET_NAME || 'business-world-videos';
 
     if (!accountId || !accessKeyId || !secretAccessKey) {
-        throw new Error('R2: Missing env vars (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY). Cannot start without cloud storage.');
+        console.warn('R2: Missing env vars. Cloud storage disabled — all R2 operations will fail.');
+        return false;
     }
 
     s3 = new S3Client({
