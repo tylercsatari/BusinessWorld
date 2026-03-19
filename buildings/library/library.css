@@ -2915,6 +2915,81 @@
     border-color: #aaa;
 }
 
+/* --- Logistics Angle Sections --- */
+.logistics-angle-section {
+    border: 1px solid #e0dcd6;
+    border-radius: 8px;
+    margin: 10px 0;
+    padding: 0;
+    overflow: hidden;
+}
+.logistics-angle-section.collapsed .logistics-angle-body {
+    display: none;
+}
+.logistics-angle-section.collapsed .logistics-toggle-icon {
+    transform: rotate(-90deg);
+}
+.logistics-angle-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #faf8f5;
+    cursor: pointer;
+    user-select: none;
+}
+.logistics-angle-header:hover {
+    background: #f4f1ec;
+}
+.logistics-angle-body {
+    padding: 8px 14px 14px;
+}
+.logistics-angle-total {
+    font-weight: 700;
+    font-size: 14px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 2px solid #d5d0c8;
+    color: #2d7a3a;
+    text-align: right;
+}
+.logistics-summary-bar {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 8px 0 12px;
+    -webkit-overflow-scrolling: touch;
+}
+.logistics-summary-card {
+    flex: 0 0 auto;
+    min-width: 140px;
+    max-width: 200px;
+    background: #f8f6f2;
+    border: 1px solid #e0dcd6;
+    border-radius: 8px;
+    padding: 10px 14px;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.logistics-summary-card:hover {
+    border-color: #b0a898;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.logistics-cost-cell {
+    text-align: right;
+    font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+    font-size: 12px;
+}
+.logistics-subtotal-row {
+    font-weight: 600;
+    border-top: 2px solid #d5d0c8;
+    background: #faf8f5;
+}
+
 /* Idea voice input buttons */
 .idea-voice-btn {
     background: none;

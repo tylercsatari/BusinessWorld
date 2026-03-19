@@ -1394,76 +1394,207 @@ const LibraryUI = (() => {
         }
 
         const complexityColors = { easy: '#27ae60', medium: '#e67e22', hard: '#e74c3c', extreme: '#8b0000' };
-        const badgeColor = complexityColors[log.build_complexity] || '#999';
 
         const renderLinks = (links) => {
             if (!links || !links.length) return '';
             return links.map(l => `<a class="logistics-link" href="${escAttr(l)}" target="_blank" rel="noopener">${escHtml(l)}</a>`).join(' ');
         };
 
-        // Header card
-        let html = `<div class="logistics-panel">
-            <div class="logistics-header-card">
-                <div style="margin-bottom:8px;font-size:13px;">${escHtml(log.summary || '')}</div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-                    ${log.estimated_cost_range ? `<span style="font-weight:600;font-size:12px;">${escHtml(log.estimated_cost_range)}</span>` : ''}
-                    ${log.build_complexity ? `<span class="logistics-complexity-badge" style="background:${badgeColor};color:#fff;">${escHtml(log.build_complexity)}</span>` : ''}
-                    ${log.timeline_estimate ? `<span style="font-size:12px;color:#666;">Timeline: ${escHtml(log.timeline_estimate)}</span>` : ''}
-                    ${log.last_researched ? `<span style="font-size:11px;color:#999;">Researched: ${escHtml(log.last_researched)}</span>` : ''}
+        const fmtCost = (v) => {
+            if (v == null || isNaN(v)) return '$0.00';
+            return '$' + Number(v).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+
+        const computeLineTotal = (item) => {
+            if (item.computed_total != null && !isNaN(item.computed_total)) return Number(item.computed_total);
+            const qty = Number(item.quantity || item.qty || 1);
+            const price = Number(item.unit_price_cad || item.estimated_cost_cad || 0);
+            return qty * price;
+        };
+
+        const sumItems = (items) => {
+            if (!items || !items.length) return 0;
+            return items.reduce((acc, item) => acc + computeLineTotal(item), 0);
+        };
+
+        // --- Normalize angles (backwards compat) ---
+        let angles;
+        if (log.angles && Array.isArray(log.angles) && log.angles.length) {
+            angles = log.angles;
+        } else {
+            angles = [{
+                name: 'Primary Approach',
+                description: log.summary || '',
+                complexity: log.build_complexity || '',
+                timeline: log.timeline_estimate || '',
+                materials: log.materials || [],
+                services: log.services || [],
+                equipment: log.equipment || []
+            }];
+        }
+
+        // Compute totals per angle
+        const angleTotals = angles.map(a => {
+            const matTotal = sumItems(a.materials);
+            const svcTotal = sumItems(a.services);
+            const eqTotal = sumItems(a.equipment);
+            return { materials: matTotal, services: svcTotal, equipment: eqTotal, grand: matTotal + svcTotal + eqTotal };
+        });
+
+        // --- Build HTML ---
+        let html = `<div class="logistics-panel">`;
+
+        // Summary header (original cost range is secondary)
+        if (log.summary || log.estimated_cost_range || log.last_researched) {
+            html += `<div class="logistics-header-card">`;
+            if (log.summary) html += `<div style="margin-bottom:6px;font-size:13px;">${escHtml(log.summary)}</div>`;
+            html += `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:11px;color:#888;">`;
+            if (log.estimated_cost_range) html += `<span>Range: ${escHtml(log.estimated_cost_range)}</span>`;
+            if (log.last_researched) html += `<span>Researched: ${escHtml(log.last_researched)}</span>`;
+            html += `</div></div>`;
+        }
+
+        // --- Cost Summary Bar ---
+        html += `<div class="logistics-summary-bar">`;
+        angles.forEach((a, i) => {
+            const total = angleTotals[i].grand;
+            const complexity = a.complexity || a.build_complexity || '';
+            const badgeColor = complexityColors[complexity] || '#999';
+            html += `<a class="logistics-summary-card" href="#logistics-angle-${i}" onclick="event.preventDefault();document.getElementById('logistics-angle-${i}').scrollIntoView({behavior:'smooth',block:'nearest'});">
+                <div style="font-weight:600;font-size:12px;margin-bottom:4px;">${escHtml(a.name || 'Angle ' + (i + 1))}</div>
+                <div class="logistics-cost-cell" style="font-size:14px;margin-bottom:4px;">${fmtCost(total)}</div>
+                ${complexity ? `<span class="logistics-complexity-badge" style="background:${badgeColor};color:#fff;">${escHtml(complexity)}</span>` : ''}
+            </a>`;
+        });
+        html += `</div>`;
+
+        // --- Per Angle Sections ---
+        angles.forEach((a, i) => {
+            const totals = angleTotals[i];
+            const complexity = a.complexity || a.build_complexity || '';
+            const badgeColor = complexityColors[complexity] || '#999';
+            const angleId = `logistics-angle-${i}`;
+
+            html += `<div class="logistics-angle-section" id="${angleId}">`;
+
+            // Angle header
+            html += `<div class="logistics-angle-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                <div style="flex:1;min-width:0;">
+                    <span style="font-weight:600;font-size:14px;">${escHtml(a.name || 'Angle ' + (i + 1))}</span>
+                    ${complexity ? `<span class="logistics-complexity-badge" style="background:${badgeColor};color:#fff;margin-left:8px;">${escHtml(complexity)}</span>` : ''}
+                    ${a.description ? `<div style="font-size:12px;color:#777;margin-top:2px;">${escHtml(a.description)}</div>` : ''}
                 </div>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div class="logistics-cost-cell" style="font-size:15px;font-weight:700;">${fmtCost(totals.grand)}</div>
+                    ${a.timeline ? `<div style="font-size:11px;color:#888;margin-top:2px;">${escHtml(a.timeline)}</div>` : ''}
+                </div>
+                <span style="margin-left:10px;font-size:16px;color:#aaa;transition:transform 0.2s;" class="logistics-toggle-icon">&#9660;</span>
             </div>`;
 
-        // Materials
-        if (log.materials && log.materials.length) {
-            html += `<div class="logistics-section-title">Materials</div>
-            <table class="logistics-table"><thead><tr><th>Name</th><th>Qty</th><th>Est. Cost</th><th>Where to Buy</th><th>Links</th></tr></thead><tbody>`;
-            for (const m of log.materials) {
-                html += `<tr>
-                    <td>${escHtml(m.name || '')}${m.description ? `<br><span style="font-size:11px;color:#888;">${escHtml(m.description)}</span>` : ''}${m.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(m.notes)}</span>` : ''}</td>
-                    <td>${escHtml(String(m.quantity || ''))}</td>
-                    <td>${m.estimated_cost_cad != null ? '$' + escHtml(String(m.estimated_cost_cad)) : ''}</td>
-                    <td>${escHtml(m.where_to_buy || '')}</td>
-                    <td>${renderLinks(m.links)}</td>
-                </tr>`;
-            }
-            html += `</tbody></table>`;
-        }
+            // Collapsible body
+            html += `<div class="logistics-angle-body">`;
 
-        // Services
-        if (log.services && log.services.length) {
-            html += `<div class="logistics-section-title">Services</div>
-            <table class="logistics-table"><thead><tr><th>Type</th><th>Description</th><th>Where in Calgary</th><th>Est. Cost</th><th>Links</th></tr></thead><tbody>`;
-            for (const s of log.services) {
-                html += `<tr>
-                    <td>${escHtml(s.type || '')}${s.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(s.notes)}</span>` : ''}</td>
-                    <td>${escHtml(s.description || '')}</td>
-                    <td>${escHtml(s.where_in_calgary || '')}</td>
-                    <td>${s.estimated_cost_cad != null ? '$' + escHtml(String(s.estimated_cost_cad)) : ''}</td>
-                    <td>${renderLinks(s.links)}</td>
+            // Materials table
+            if (a.materials && a.materials.length) {
+                let matSubtotal = 0;
+                html += `<div class="logistics-section-title">Materials</div>
+                <table class="logistics-table"><thead><tr>
+                    <th>Item</th><th>Description</th><th>Qty</th><th class="logistics-cost-cell">Unit Price (CAD)</th><th class="logistics-cost-cell">Total (CAD)</th><th>Source/Supplier</th><th>Link</th>
+                </tr></thead><tbody>`;
+                for (const m of a.materials) {
+                    const qty = Number(m.quantity || m.qty || 1);
+                    const unitPrice = Number(m.unit_price_cad || m.estimated_cost_cad || 0);
+                    const lineTotal = computeLineTotal(m);
+                    matSubtotal += lineTotal;
+                    html += `<tr>
+                        <td>${escHtml(m.name || m.item || '')}</td>
+                        <td>${escHtml(m.description || '')}${m.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(m.notes)}</span>` : ''}</td>
+                        <td>${escHtml(String(qty))}</td>
+                        <td class="logistics-cost-cell">${fmtCost(unitPrice)}</td>
+                        <td class="logistics-cost-cell">${fmtCost(lineTotal)}</td>
+                        <td>${escHtml(m.source || m.supplier || m.where_to_buy || '')}</td>
+                        <td>${renderLinks(m.links)}</td>
+                    </tr>`;
+                }
+                html += `<tr class="logistics-subtotal-row">
+                    <td colspan="4" style="text-align:right;font-weight:600;">Materials Subtotal</td>
+                    <td class="logistics-cost-cell">${fmtCost(matSubtotal)}</td>
+                    <td colspan="2"></td>
                 </tr>`;
+                html += `</tbody></table>`;
             }
-            html += `</tbody></table>`;
-        }
 
-        // Equipment
-        if (log.equipment && log.equipment.length) {
-            html += `<div class="logistics-section-title">Equipment</div>
-            <table class="logistics-table"><thead><tr><th>Name</th><th>Qty</th><th>Est. Cost</th><th>Where to Buy</th><th>Links</th></tr></thead><tbody>`;
-            for (const eq of log.equipment) {
-                html += `<tr>
-                    <td>${escHtml(eq.name || '')}${eq.description ? `<br><span style="font-size:11px;color:#888;">${escHtml(eq.description)}</span>` : ''}${eq.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(eq.notes)}</span>` : ''}</td>
-                    <td>${escHtml(String(eq.quantity || ''))}</td>
-                    <td>${eq.estimated_cost_cad != null ? '$' + escHtml(String(eq.estimated_cost_cad)) : ''}</td>
-                    <td>${escHtml(eq.where_to_buy || '')}</td>
-                    <td>${renderLinks(eq.links)}</td>
+            // Services table
+            if (a.services && a.services.length) {
+                let svcSubtotal = 0;
+                html += `<div class="logistics-section-title">Services</div>
+                <table class="logistics-table"><thead><tr>
+                    <th>Service</th><th>Description</th><th>Provider (Calgary)</th><th class="logistics-cost-cell">Est. Cost (CAD)</th><th>Link</th>
+                </tr></thead><tbody>`;
+                for (const s of a.services) {
+                    const cost = computeLineTotal(s);
+                    svcSubtotal += cost;
+                    html += `<tr>
+                        <td>${escHtml(s.type || s.service || s.name || '')}</td>
+                        <td>${escHtml(s.description || '')}${s.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(s.notes)}</span>` : ''}</td>
+                        <td>${escHtml(s.provider || s.where_in_calgary || '')}</td>
+                        <td class="logistics-cost-cell">${fmtCost(cost)}</td>
+                        <td>${renderLinks(s.links)}</td>
+                    </tr>`;
+                }
+                html += `<tr class="logistics-subtotal-row">
+                    <td colspan="3" style="text-align:right;font-weight:600;">Services Subtotal</td>
+                    <td class="logistics-cost-cell">${fmtCost(svcSubtotal)}</td>
+                    <td></td>
                 </tr>`;
+                html += `</tbody></table>`;
             }
-            html += `</tbody></table>`;
-        }
 
-        // Safety
+            // Equipment table
+            if (a.equipment && a.equipment.length) {
+                let eqSubtotal = 0;
+                html += `<div class="logistics-section-title">Equipment</div>
+                <table class="logistics-table"><thead><tr>
+                    <th>Item</th><th>Description</th><th>Qty</th><th class="logistics-cost-cell">Unit Price (CAD)</th><th class="logistics-cost-cell">Total (CAD)</th><th>Source</th><th>Link</th>
+                </tr></thead><tbody>`;
+                for (const eq of a.equipment) {
+                    const qty = Number(eq.quantity || eq.qty || 1);
+                    const unitPrice = Number(eq.unit_price_cad || eq.estimated_cost_cad || 0);
+                    const lineTotal = computeLineTotal(eq);
+                    eqSubtotal += lineTotal;
+                    html += `<tr>
+                        <td>${escHtml(eq.name || eq.item || '')}</td>
+                        <td>${escHtml(eq.description || '')}${eq.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(eq.notes)}</span>` : ''}</td>
+                        <td>${escHtml(String(qty))}</td>
+                        <td class="logistics-cost-cell">${fmtCost(unitPrice)}</td>
+                        <td class="logistics-cost-cell">${fmtCost(lineTotal)}</td>
+                        <td>${escHtml(eq.source || eq.supplier || eq.where_to_buy || '')}</td>
+                        <td>${renderLinks(eq.links)}</td>
+                    </tr>`;
+                }
+                html += `<tr class="logistics-subtotal-row">
+                    <td colspan="4" style="text-align:right;font-weight:600;">Equipment Subtotal</td>
+                    <td class="logistics-cost-cell">${fmtCost(eqSubtotal)}</td>
+                    <td colspan="2"></td>
+                </tr>`;
+                html += `</tbody></table>`;
+            }
+
+            // Angle grand total
+            html += `<div class="logistics-angle-total">
+                Angle Total: <span class="logistics-cost-cell">${fmtCost(totals.grand)}</span>
+            </div>`;
+
+            html += `</div>`; // .logistics-angle-body
+            html += `</div>`; // .logistics-angle-section
+        });
+
+        // --- Shared bottom sections ---
+
+        // Safety checklist
         if (log.safety && log.safety.length) {
-            html += `<div class="logistics-section-title">Safety</div><ul style="margin:0 0 8px 16px;padding:0;font-size:12px;">`;
+            html += `<div class="logistics-section-title">Safety Checklist</div>
+            <ul style="margin:0 0 8px 16px;padding:0;font-size:12px;">`;
             for (const s of log.safety) {
                 html += `<li style="margin-bottom:4px;">${escHtml(s)}</li>`;
             }
@@ -1472,9 +1603,11 @@ const LibraryUI = (() => {
 
         // Sourcing notes
         if (log.sourcing_notes) {
-            html += `<div class="logistics-section-title">Sourcing Notes</div><p style="font-size:12px;color:#555;margin:0 0 12px;">${escHtml(log.sourcing_notes)}</p>`;
+            html += `<div class="logistics-section-title">Sourcing Notes</div>
+            <p style="font-size:12px;color:#555;margin:0 0 12px;">${escHtml(log.sourcing_notes)}</p>`;
         }
 
+        // Edit button
         html += `<div style="text-align:right;margin-top:12px;">
             <button class="logistics-edit-btn" id="logistics-edit-btn">Edit Logistics</button>
         </div>`;
