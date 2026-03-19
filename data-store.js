@@ -19,8 +19,7 @@ async function load(name) {
         return cache[name];
     }
     if (!isR2Ready()) {
-        // Don't cache when R2 isn't ready — return empty but allow retry once R2 initializes
-        return { lastModified: new Date().toISOString(), records: [] };
+        throw new Error('R2 not ready — refusing to serve empty data to prevent data loss');
     }
     const buf = await downloadFromR2(r2Key(name));
     if (buf) {
@@ -33,7 +32,7 @@ async function load(name) {
 }
 
 async function flush(name) {
-    if (!isR2Ready()) return;
+    if (!isR2Ready()) throw new Error('R2 not ready — refusing to flush to prevent data loss');
     const data = cache[name];
     if (!data) return;
     data.lastModified = new Date().toISOString();
