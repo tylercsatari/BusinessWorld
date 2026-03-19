@@ -2601,25 +2601,38 @@ const LibraryUI = (() => {
     // Seed default categories if none exist
     function ideaMapInitCategories() {
         let cats = ideaMapGetCategories();
+        // Remove any subcategories (parentId !== null) — flatten to top-level only
+        const hasSubcats = cats.some(c => c.parentId);
+        if (hasSubcats) {
+            // Migrate: keep only top-level, reassign subcategory-mapped ideas to parent
+            const subcatIds = cats.filter(c => c.parentId).map(c => c.id);
+            const mapping = ideaMapGetIdeaCategories();
+            let changed = false;
+            for (const [ideaId, catId] of Object.entries(mapping)) {
+                if (subcatIds.includes(catId)) {
+                    const subcat = cats.find(c => c.id === catId);
+                    if (subcat && subcat.parentId) {
+                        mapping[ideaId] = subcat.parentId;
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) localStorage.setItem('ideamap-idea-categories', JSON.stringify(mapping));
+            cats = cats.filter(c => !c.parentId);
+            ideaMapSaveCategories(cats);
+        }
         if (cats.length > 0) return;
         const defaults = [
-            { name: 'Bulletproof & Armor', color: '#e74c3c', children: ['Helmet Series', 'Suit Series'] },
-            { name: 'Flight & Propulsion', color: '#4a9eff', children: ['Jet Engine Series', 'Drone Series'] },
-            { name: 'Magnetism', color: '#9b59b6', children: [] },
-            { name: 'Exoskeleton & Strength', color: '#e8a020', children: ['Strength Arm Series', 'Legs & Movement'] },
-            { name: 'Jarvis & AI', color: '#2ecc71', children: [] },
-            { name: 'Superhero Gadgets', color: '#e67e22', children: [] },
-            { name: 'Stunts & Science', color: '#1abc9c', children: [] },
-            { name: '3D Printing', color: '#95a5a6', children: [] }
+            { name: 'Bulletproof & Armor', color: '#e74c3c' },
+            { name: 'Flight & Propulsion', color: '#4a9eff' },
+            { name: 'Magnetism', color: '#9b59b6' },
+            { name: 'Exoskeleton & Strength', color: '#e8a020' },
+            { name: 'Jarvis & AI', color: '#2ecc71' },
+            { name: 'Superhero Gadgets', color: '#e67e22' },
+            { name: 'Stunts & Science', color: '#1abc9c' },
+            { name: '3D Printing', color: '#95a5a6' }
         ];
-        cats = [];
-        for (const d of defaults) {
-            const parentId = ideaMapGenId();
-            cats.push({ id: parentId, name: d.name, parentId: null, color: d.color });
-            for (const childName of d.children) {
-                cats.push({ id: ideaMapGenId(), name: childName, parentId, color: d.color });
-            }
-        }
+        cats = defaults.map(d => ({ id: ideaMapGenId(), name: d.name, parentId: null, color: d.color }));
         ideaMapSaveCategories(cats);
     }
 
@@ -2630,15 +2643,8 @@ const LibraryUI = (() => {
         if (cats.length === 0) return;
         const findCat = (name) => cats.find(c => c.name === name);
 
-        // Subcategory rules checked FIRST (more specific)
-        const subRules = [
-            { tags: ['helmet', 'waterproof'], cat: 'Helmet Series' },
-            { tags: ['suit', 'fireproof', 'taser', 'netherite'], cat: 'Suit Series' },
-            { tags: ['jet-engine'], cat: 'Jet Engine Series' },
-            { tags: ['drones', 'drone'], cat: 'Drone Series' },
-            { tags: ['exoskeleton'], cat: 'Strength Arm Series' },
-            { tags: ['strength'], cat: 'Legs & Movement', exclude: ['exoskeleton'] }
-        ];
+        // No subcategory rules — all top-level only
+        const subRules = [];
         // Top-level fallback rules
         const tagRules = [
             { tags: ['bulletproof', 'helmet', 'waterproof'], cat: 'Bulletproof & Armor' },
