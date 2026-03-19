@@ -1050,7 +1050,10 @@ const LibraryUI = (() => {
     // =====================
     function renderNotesFilterBar() {
         const barEl = document.getElementById('library-notes-filter-bar');
-        if (!barEl) return;
+        if (barEl) { barEl.style.display = 'none'; barEl.innerHTML = ''; } // hide external bar
+        return buildNotesFilterBarHtml();
+    }
+    function buildNotesFilterBarHtml() {
 
         const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
 
@@ -1131,10 +1134,12 @@ const LibraryUI = (() => {
             </button>
         </div>`;
 
-        barEl.innerHTML = html;
-
+        return html;
+    }
+    function bindNotesFilterBar(container) {
+        if (!container) return;
         // Bind filter bar events
-        barEl.querySelectorAll('[data-notes-filter-status]').forEach(btn => {
+        container.querySelectorAll('[data-notes-filter-status]').forEach(btn => {
             btn.addEventListener('click', () => {
                 notesFilterStatus = btn.dataset.notesFilterStatus;
                 localStorage.setItem('notes-filter-status', notesFilterStatus);
@@ -1142,7 +1147,7 @@ const LibraryUI = (() => {
                 renderNotesList().catch(() => {});
             });
         });
-        barEl.querySelectorAll('[data-notes-filter-cat]').forEach(btn => {
+        container.querySelectorAll('[data-notes-filter-cat]').forEach(btn => {
             btn.addEventListener('click', () => {
                 notesFilterCategory = btn.dataset.notesFilterCat;
                 localStorage.setItem('notes-filter-category', notesFilterCategory);
@@ -1152,7 +1157,7 @@ const LibraryUI = (() => {
         });
 
         // Search events
-        const searchInput = barEl.querySelector('#notes-search-input');
+        const searchInput = container.querySelector('#notes-search-input');
         if (searchInput) {
             searchInput.addEventListener('input', () => {
                 notesSearchQuery = searchInput.value;
@@ -1168,13 +1173,13 @@ const LibraryUI = (() => {
             searchInput.focus();
             searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
         }
-        const searchBtn = barEl.querySelector('#notes-search-btn');
+        const searchBtn = container.querySelector('#notes-search-btn');
         if (searchBtn) {
             searchBtn.addEventListener('click', () => {
                 if (notesSearchQuery.trim()) notesDoSearch();
             });
         }
-        const clearBtn = barEl.querySelector('#notes-search-clear');
+        const clearBtn = container.querySelector('#notes-search-clear');
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
                 notesSearchQuery = '';
@@ -1220,8 +1225,7 @@ const LibraryUI = (() => {
             await VideoService.sync().catch(() => {});
         }
 
-        // Render filter bar
-        renderNotesFilterBar();
+        // Filter bar HTML will be prepended to list below
 
         const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
         let ideas;
@@ -1257,7 +1261,9 @@ const LibraryUI = (() => {
 
         if (ideas.length === 0) {
             const msg = notesSearchResults !== null ? 'No ideas found.' : (notesFilterStatus !== 'all' || notesFilterCategory !== 'all' ? 'No ideas match filters.' : 'No ideas yet. Tap + to add one.');
-            el.innerHTML = `<div class="library-empty">${msg}</div>`;
+            const fh = buildNotesFilterBarHtml();
+            el.innerHTML = '<div class="library-notes-filter-inline">' + fh + '</div><div class="library-empty">' + msg + '</div>';
+            bindNotesFilterBar(el.querySelector('.library-notes-filter-inline'));
             return;
         }
 
@@ -1269,7 +1275,7 @@ const LibraryUI = (() => {
         listHtml += ideas.map(n => {
             const isConverted = n.type === 'converted';
             const preview = n.hook || n.context || '';
-            const isRealProject = realProjectsCache && n.project && realProjectsCache.includes(n.project);
+            const isRealProject = Array.isArray(realProjectsCache) && realProjectsCache.length > 0 && n.project && realProjectsCache.includes(n.project);
             const badge = isRealProject && window.EggRenderer ? window.EggRenderer.projectBadgeHtml(n.project) : '';
             // Show actual pipeline status - check video link regardless of converted status
             let statusHtml = '';
@@ -1288,7 +1294,9 @@ const LibraryUI = (() => {
                 <button class="library-delete-btn" data-note-id="${n.id}" title="Delete">&times;</button>
             </div>`;
         }).join('');
-        el.innerHTML = listHtml;
+        const filterHtml = buildNotesFilterBarHtml();
+        el.innerHTML = '<div class="library-notes-filter-inline">' + filterHtml + '</div>' + listHtml;
+        bindNotesFilterBar(el.querySelector('.library-notes-filter-inline'));
 
         el.querySelectorAll('.library-list-item').forEach(item => {
             item.addEventListener('click', (e) => {
