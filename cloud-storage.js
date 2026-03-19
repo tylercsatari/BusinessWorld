@@ -18,8 +18,7 @@ function initR2() {
     bucket = process.env.R2_BUCKET_NAME || 'business-world-videos';
 
     if (!accountId || !accessKeyId || !secretAccessKey) {
-        console.warn('R2: Missing env vars (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY). Cloud storage disabled.');
-        return false;
+        throw new Error('R2: Missing env vars (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY). Cannot start without cloud storage.');
     }
 
     s3 = new S3Client({
@@ -34,14 +33,14 @@ function initR2() {
 function isR2Ready() { return !!s3; }
 
 async function uploadToR2(key, buffer, contentType) {
-    if (!s3) return;
+    if (!s3) throw new Error('R2 not ready');
     await s3.send(new PutObjectCommand({
         Bucket: bucket, Key: key, Body: buffer, ContentType: contentType
     }));
 }
 
 async function downloadFromR2(key) {
-    if (!s3) return null;
+    if (!s3) throw new Error('R2 not ready');
     try {
         const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
         const chunks = [];
@@ -54,12 +53,12 @@ async function downloadFromR2(key) {
 }
 
 async function getR2SignedUrl(key, expiresIn = 3600) {
-    if (!s3) return null;
+    if (!s3) throw new Error('R2 not ready');
     return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn });
 }
 
 async function existsInR2(key) {
-    if (!s3) return false;
+    if (!s3) throw new Error("R2 not ready");
     try {
         await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
         return true;
@@ -69,12 +68,12 @@ async function existsInR2(key) {
 }
 
 async function deleteFromR2(key) {
-    if (!s3) return;
+    if (!s3) throw new Error('R2 not ready');
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
 async function listR2Keys(prefix) {
-    if (!s3) return [];
+    if (!s3) throw new Error('R2 not ready');
     const keys = [];
     let continuationToken;
     do {
@@ -280,7 +279,7 @@ async function loadJobState(videoId) {
 }
 
 async function loadAllActiveJobs() {
-    if (!s3) return [];
+    if (!s3) throw new Error("R2 not ready");
     // List all video directories
     const keys = await listR2Keys('videos/');
     // Filter for job.json files
@@ -308,7 +307,7 @@ async function deleteJobState(videoId) {
 // ── Analytics Snapshots ─────────────────────────────────────
 
 async function saveAnalyticsSnapshot(videoId, analyticsData) {
-    if (!s3) return;
+    if (!s3) throw new Error("R2 not ready");
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const key = `videos/${videoId}/analytics/${timestamp}.json`;
     const payload = { ...analyticsData, snapshotAt: new Date().toISOString() };
@@ -317,7 +316,7 @@ async function saveAnalyticsSnapshot(videoId, analyticsData) {
 }
 
 async function listAnalyticsSnapshots(videoId) {
-    if (!s3) return [];
+    if (!s3) throw new Error("R2 not ready");
     const keys = await listR2Keys(`videos/${videoId}/analytics/`);
     // Sort chronologically (filenames are ISO timestamps)
     return keys.sort();
