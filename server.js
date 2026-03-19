@@ -2355,6 +2355,48 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     }
 
     // =========================================
+    // Admin: List & Restore Backups
+    // =========================================
+    const backupListMatch = pathname.match(/^\/api\/admin\/backups\/([a-z]+)$/);
+    if (backupListMatch && req.method === 'GET') {
+        const collection = backupListMatch[1];
+        if (!dataStore.COLLECTIONS.includes(collection)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Unknown collection: ${collection}` }));
+            return;
+        }
+        try {
+            const backups = await dataStore.listBackups(collection);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ collection, backups }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    const restoreMatch = pathname.match(/^\/api\/admin\/restore\/([a-z]+)$/);
+    if (restoreMatch && req.method === 'POST') {
+        const collection = restoreMatch[1];
+        if (!dataStore.COLLECTIONS.includes(collection)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Unknown collection: ${collection}` }));
+            return;
+        }
+        try {
+            const body = await readBody(req);
+            const restored = await dataStore.restoreBackup(collection, body.timestamp || null);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, collection, recordCount: restored.records?.length ?? 0 }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // Save layout
     // =========================================
     if (req.method === 'POST' && pathname === '/save-layout') {
