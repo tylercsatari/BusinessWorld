@@ -2672,11 +2672,11 @@ const LibraryUI = (() => {
     }
 
     function ideaMapGetStatus(idea) {
-        if (idea.status) return idea.status;
-        if (idea.type === 'converted') {
-            const video = VideoService.getByIdeaId(idea.id);
-            return video ? video.status : 'incubator';
-        }
+        // Always check linked video first — it has the true pipeline status
+        const video = VideoService.getByIdeaId(idea.id);
+        if (video) return video.status || 'incubator';
+        // No linked video — use type/status fields
+        if (idea.type === 'converted') return 'incubator';
         return idea.type || 'idea';
     }
 
