@@ -19,6 +19,10 @@ const LibraryUI = (() => {
     let selectedNote = null;
     let noteSaveTimer = null;
     let noteDirty = false;
+    let ideaVoiceState = 'idle'; // idle | recording | processing
+    let ideaMediaRecorder = null;
+    let ideaAudioChunks = [];
+    let ideaPersistentStream = null;
     let todoItems = [];  // [{id, text, done, category}]
     let todoCategory = 'daily'; // current add category toggle
     let calendarItems = []; // [{id, text, date, time, done}]
@@ -1525,6 +1529,90 @@ const LibraryUI = (() => {
         });
     }
 
+    async function startIdeaVoice(targetField) {
+        // targetField: 'context' or 'hook'
+        if (ideaVoiceState !== 'idle') return;
+        ideaVoiceState = 'recording';
+        ideaAudioChunks = [];
+        updateIdeaVoiceBtns();
+        try {
+            if (!ideaPersistentStream || ideaPersistentStream.getTracks().every(t => t.readyState === 'ended')) {
+                ideaPersistentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
+            const stream = ideaPersistentStream;
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+            ideaMediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            ideaMediaRecorder.ondataavailable = e => { if (e.data.size > 0) ideaAudioChunks.push(e.data); };
+            ideaMediaRecorder.onstop = async () => {
+                if (!ideaAudioChunks.length) { ideaVoiceState = 'idle'; updateIdeaVoiceBtns(); return; }
+                const blob = new Blob(ideaAudioChunks, { type: ideaMediaRecorder.mimeType || 'audio/webm' });
+                ideaVoiceState = 'processing';
+                updateIdeaVoiceBtns();
+                try {
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                    const res = await fetch('/api/openai/transcribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ audio: base64, mimeType: blob.type })
+                    });
+                    const data = await res.json();
+                    const text = (data.text || '').trim();
+                    if (text) {
+                        const elId = targetField === 'hook' ? 'library-idea-hook' : 'library-idea-context';
+                        const el = document.getElementById(elId);
+                        if (el) {
+                            el.value = el.value ? el.value + ' ' + text : text;
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    }
+                } catch(e) { console.warn('Idea voice error:', e); }
+                finally { ideaVoiceState = 'idle'; ideaMediaRecorder = null; ideaAudioChunks = []; updateIdeaVoiceBtns(); }
+            };
+            ideaMediaRecorder.start();
+        } catch(e) {
+            console.warn('Idea voice start error:', e);
+            ideaVoiceState = 'idle';
+            updateIdeaVoiceBtns();
+        }
+    }
+
+    function stopIdeaVoice() {
+        if (ideaMediaRecorder && ideaVoiceState === 'recording') {
+            ideaMediaRecorder.stop();
+            ideaVoiceState = 'processing';
+            updateIdeaVoiceBtns();
+        }
+    }
+
+    function updateIdeaVoiceBtns() {
+        ['hook','context'].forEach(field => {
+            const btn = document.getElementById('idea-voice-' + field);
+            if (!btn) return;
+            if (ideaVoiceState === 'idle') {
+                btn.innerHTML = '🎤';
+                btn.title = 'Voice input';
+                btn.classList.remove('recording', 'processing');
+            } else if (ideaVoiceState === 'recording') {
+                btn.innerHTML = '⏹';
+                btn.title = 'Stop recording';
+                btn.classList.add('recording');
+                btn.classList.remove('processing');
+            } else {
+                btn.innerHTML = '⏳';
+                btn.title = 'Processing...';
+                btn.classList.add('processing');
+                btn.classList.remove('recording');
+            }
+        });
+    }
+
     async function renderNoteEditor(note) {
         const editorEl = document.getElementById('library-editor');
         if (!editorEl) return;
@@ -1607,11 +1695,11 @@ const LibraryUI = (() => {
                         <textarea class="library-idea-related" id="library-idea-related" placeholder="Describe relationships to other ideas or projects...">${escHtml(note.relatedTo || '')}</textarea>
                     </div>
                     <div class="library-idea-field">
-                        <label class="library-idea-label">Hook</label>
+                        <label class="library-idea-label">Hook <button class="idea-voice-btn" id="idea-voice-hook" title="Voice input">🎤</button></label>
                         <textarea class="library-idea-hook" id="library-idea-hook" placeholder="What's the hook? (optional)">${escHtml(note.hook || '')}</textarea>
                     </div>
                     <div class="library-idea-field">
-                        <label class="library-idea-label">Context</label>
+                        <label class="library-idea-label">Context <button class="idea-voice-btn" id="idea-voice-context" title="Voice input">🎤</button></label>
                         <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(note.context || '')}</textarea>
                     </div>
                     ${scriptSection}
@@ -1652,6 +1740,18 @@ const LibraryUI = (() => {
         if (scriptEl) scriptEl.addEventListener('input', scheduleNoteSave);
         if (projEl) projEl.addEventListener('change', scheduleNoteSave);
         if (relatedEl) relatedEl.addEventListener('input', scheduleNoteSave);
+
+        // Voice buttons
+        const voiceHookBtn = document.getElementById('idea-voice-hook');
+        const voiceCtxBtn = document.getElementById('idea-voice-context');
+        if (voiceHookBtn) voiceHookBtn.addEventListener('click', () => {
+            if (ideaVoiceState === 'idle') startIdeaVoice('hook');
+            else if (ideaVoiceState === 'recording') stopIdeaVoice();
+        });
+        if (voiceCtxBtn) voiceCtxBtn.addEventListener('click', () => {
+            if (ideaVoiceState === 'idle') startIdeaVoice('context');
+            else if (ideaVoiceState === 'recording') stopIdeaVoice();
+        });
 
         if (scriptEl) {
             scriptEl.addEventListener('click', () => {

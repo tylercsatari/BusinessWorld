@@ -2914,3 +2914,20 @@
     background: #f4f2ef;
     border-color: #aaa;
 }
+
+/* Idea voice input buttons */
+.idea-voice-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+    opacity: 0.6;
+    vertical-align: middle;
+    border-radius: 4px;
+    transition: opacity 0.15s, background 0.15s;
+}
+.idea-voice-btn:hover { opacity: 1; background: rgba(0,0,0,0.06); }
+.idea-voice-btn.recording { opacity: 1; animation: pulse-mic 0.8s ease-in-out infinite; background: rgba(231,76,60,0.12); }
+.idea-voice-btn.processing { opacity: 0.5; cursor: default; }
+@keyframes pulse-mic { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
