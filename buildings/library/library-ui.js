@@ -1533,8 +1533,12 @@ const LibraryUI = (() => {
         let projs = [];
         try {
             projs = await VideoService.getProjects();
-            const isRealProject = note.project && projs.includes(note.project);
-            projectOptions = projs.map(p => `<option value="${escAttr(p)}" ${isRealProject && p === note.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
+            // Always include the current project as a selected option, even if not in projs list
+            const currentProject = note.project || '';
+            const projectSet = currentProject && !projs.includes(currentProject)
+                ? [currentProject, ...projs]
+                : projs;
+            projectOptions = projectSet.map(p => `<option value="${escAttr(p)}" ${p === currentProject ? 'selected' : ''}>${escHtml(p)}</option>`).join('');
         } catch (e) {}
         const isLinkedProject = note.project && projs.includes(note.project);
 
@@ -1682,7 +1686,7 @@ const LibraryUI = (() => {
         const projectEl = document.getElementById('library-note-project');
         const hook = hookEl?.value || '';
         const context = ctxEl?.value || '';
-        const project = projectEl?.value || '';
+        const project = projectEl?.value || selectedNote.project || '';
 
         // Show sending overlay
         const sendBtn = document.getElementById('library-send-incubator');
@@ -1765,7 +1769,7 @@ const LibraryUI = (() => {
             const newName = titleEl.value.trim() || 'Untitled';
             const newHook = hookEl?.value || '';
             const newContext = ctxEl?.value || '';
-            const newProject = projectEl?.value || '';
+            const newProject = projectEl?.value || selectedNote.project || '';
             const scriptEl = document.getElementById('library-idea-script');
             const newScript = scriptEl?.value || '';
             const relatedEl = document.getElementById('library-idea-related');
@@ -1925,7 +1929,7 @@ const LibraryUI = (() => {
             const name = titleEl.value.trim() || 'Untitled';
             const hook = hookEl?.value || '';
             const context = ctxEl?.value || '';
-            const project = projectEl?.value || '';
+            const project = projectEl?.value || selectedVideo?.project || '';
             const scriptEl = document.getElementById('library-video-script');
             const script = scriptEl?.value || '';
             await VideoService.saveWithIdeaSync(selectedVideo.id, { name, hook, context, script, project });
