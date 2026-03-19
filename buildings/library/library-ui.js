@@ -38,6 +38,8 @@ const LibraryUI = (() => {
     let freeNoteSaveTimer = null;
     let freeNoteDirty = false;
 
+    let ideaEditorTab = 'overview'; // 'overview' | 'logistics'
+
     // Cache of real project names (Dropbox folders) — used to filter fake project badges
     let realProjectsCache = null;
     VideoService.getProjects().then(p => { realProjectsCache = p; renderNotesList().catch(() => {}); }).catch(() => { realProjectsCache = []; });
@@ -183,7 +185,7 @@ const LibraryUI = (() => {
             if (newBtn) newBtn.style.display = '';
             renderFreeNotesList();
         } else if (tab === 'notes') {
-            if (heading) heading.innerHTML = 'Ideas <span class="library-ideas-legend"><span class="library-legend-dot has-context"></span> Context &nbsp;<span class="library-legend-dot dot-script has-script"></span> Script</span>';
+            if (heading) heading.innerHTML = 'Ideas <span class="library-ideas-legend"><span class="library-legend-dot has-context"></span> Context &nbsp;<span class="library-legend-dot dot-script has-script"></span> Script &nbsp;<span class="library-legend-dot dot-logistics has-logistics"></span> Logistics</span>';
             if (notesFilterBar) notesFilterBar.style.display = '';
             if (notesList) notesList.style.display = '';
             if (newBtn) newBtn.style.display = '';
@@ -1061,7 +1063,7 @@ const LibraryUI = (() => {
         const statusCounts = { all: allIdeas.length };
         for (const idea of allIdeas) {
             const s = ideaMapGetStatus(idea);
-            const key = (s === 'workshop' || s === 'edit' || s === 'posted') ? 'posted' : s;
+            const key = (s === 'edit') ? 'workshop' : (s === 'posted') ? 'posted' : s;
             statusCounts[key] = (statusCounts[key] || 0) + 1;
         }
 
@@ -1070,6 +1072,7 @@ const LibraryUI = (() => {
             { key: 'all', label: 'All' },
             { key: 'idea', label: 'Ideas' },
             { key: 'incubator', label: 'Incubator' },
+            { key: 'workshop', label: 'Workshop' },
             { key: 'posted', label: 'Posted' }
         ];
 
@@ -1242,7 +1245,8 @@ const LibraryUI = (() => {
                     const s = ideaMapGetStatus(i);
                     if (notesFilterStatus === 'idea') return s === 'idea';
                     if (notesFilterStatus === 'incubator') return s === 'incubator';
-                    if (notesFilterStatus === 'posted') return s === 'posted' || s === 'workshop' || s === 'edit';
+                    if (notesFilterStatus === 'workshop') return s === 'workshop' || s === 'edit';
+                    if (notesFilterStatus === 'posted') return s === 'posted';
                     return s === notesFilterStatus;
                 });
             }
@@ -1287,7 +1291,7 @@ const LibraryUI = (() => {
             return `
             <div class="library-list-item ${isConverted ? 'converted' : ''}" data-note-id="${n.id}">
                 <div class="library-list-item-content">
-                    <div class="library-list-title">${escHtml(n.name)}${statusHtml}<span class="library-idea-dots"><span class="library-idea-dot${n.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${n.script ? ' has-script' : ''}"></span></span></div>
+                    <div class="library-list-title">${escHtml(n.name)}${statusHtml}<span class="library-idea-dots"><span class="library-idea-dot${n.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${n.script ? ' has-script' : ''}"></span><span class="library-idea-dot dot-logistics${n.logistics ? ' has-logistics' : ''}"></span></span></div>
                     <div class="library-list-date">${badge ? `<button class="library-project-badge-btn" data-project="${escAttr(n.project)}">${badge}</button>` : escHtml(preview ? preview.substring(0, 60) : 'idea')}</div>
                 </div>
                 <button class="library-delete-btn" data-note-id="${n.id}" title="Delete">&times;</button>
@@ -1375,6 +1379,148 @@ const LibraryUI = (() => {
         renderNoteEditor(selectedNote);
     }
 
+    function renderLogisticsPanel(note) {
+        const log = note.logistics;
+        if (!log || Object.keys(log).length === 0) {
+            return `<div class="logistics-panel"><div class="logistics-pending">Logistics research pending...</div></div>`;
+        }
+
+        const complexityColors = { easy: '#27ae60', medium: '#e67e22', hard: '#e74c3c', extreme: '#8b0000' };
+        const badgeColor = complexityColors[log.build_complexity] || '#999';
+
+        const renderLinks = (links) => {
+            if (!links || !links.length) return '';
+            return links.map(l => `<a class="logistics-link" href="${escAttr(l)}" target="_blank" rel="noopener">${escHtml(l)}</a>`).join(' ');
+        };
+
+        // Header card
+        let html = `<div class="logistics-panel">
+            <div class="logistics-header-card">
+                <div style="margin-bottom:8px;font-size:13px;">${escHtml(log.summary || '')}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                    ${log.estimated_cost_range ? `<span style="font-weight:600;font-size:12px;">${escHtml(log.estimated_cost_range)}</span>` : ''}
+                    ${log.build_complexity ? `<span class="logistics-complexity-badge" style="background:${badgeColor};color:#fff;">${escHtml(log.build_complexity)}</span>` : ''}
+                    ${log.timeline_estimate ? `<span style="font-size:12px;color:#666;">Timeline: ${escHtml(log.timeline_estimate)}</span>` : ''}
+                    ${log.last_researched ? `<span style="font-size:11px;color:#999;">Researched: ${escHtml(log.last_researched)}</span>` : ''}
+                </div>
+            </div>`;
+
+        // Materials
+        if (log.materials && log.materials.length) {
+            html += `<div class="logistics-section-title">Materials</div>
+            <table class="logistics-table"><thead><tr><th>Name</th><th>Qty</th><th>Est. Cost</th><th>Where to Buy</th><th>Links</th></tr></thead><tbody>`;
+            for (const m of log.materials) {
+                html += `<tr>
+                    <td>${escHtml(m.name || '')}${m.description ? `<br><span style="font-size:11px;color:#888;">${escHtml(m.description)}</span>` : ''}${m.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(m.notes)}</span>` : ''}</td>
+                    <td>${escHtml(String(m.quantity || ''))}</td>
+                    <td>${m.estimated_cost_cad != null ? '$' + escHtml(String(m.estimated_cost_cad)) : ''}</td>
+                    <td>${escHtml(m.where_to_buy || '')}</td>
+                    <td>${renderLinks(m.links)}</td>
+                </tr>`;
+            }
+            html += `</tbody></table>`;
+        }
+
+        // Services
+        if (log.services && log.services.length) {
+            html += `<div class="logistics-section-title">Services</div>
+            <table class="logistics-table"><thead><tr><th>Type</th><th>Description</th><th>Where in Calgary</th><th>Est. Cost</th><th>Links</th></tr></thead><tbody>`;
+            for (const s of log.services) {
+                html += `<tr>
+                    <td>${escHtml(s.type || '')}${s.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(s.notes)}</span>` : ''}</td>
+                    <td>${escHtml(s.description || '')}</td>
+                    <td>${escHtml(s.where_in_calgary || '')}</td>
+                    <td>${s.estimated_cost_cad != null ? '$' + escHtml(String(s.estimated_cost_cad)) : ''}</td>
+                    <td>${renderLinks(s.links)}</td>
+                </tr>`;
+            }
+            html += `</tbody></table>`;
+        }
+
+        // Equipment
+        if (log.equipment && log.equipment.length) {
+            html += `<div class="logistics-section-title">Equipment</div>
+            <table class="logistics-table"><thead><tr><th>Name</th><th>Qty</th><th>Est. Cost</th><th>Where to Buy</th><th>Links</th></tr></thead><tbody>`;
+            for (const eq of log.equipment) {
+                html += `<tr>
+                    <td>${escHtml(eq.name || '')}${eq.description ? `<br><span style="font-size:11px;color:#888;">${escHtml(eq.description)}</span>` : ''}${eq.notes ? `<br><span style="font-size:11px;color:#aaa;">${escHtml(eq.notes)}</span>` : ''}</td>
+                    <td>${escHtml(String(eq.quantity || ''))}</td>
+                    <td>${eq.estimated_cost_cad != null ? '$' + escHtml(String(eq.estimated_cost_cad)) : ''}</td>
+                    <td>${escHtml(eq.where_to_buy || '')}</td>
+                    <td>${renderLinks(eq.links)}</td>
+                </tr>`;
+            }
+            html += `</tbody></table>`;
+        }
+
+        // Safety
+        if (log.safety && log.safety.length) {
+            html += `<div class="logistics-section-title">Safety</div><ul style="margin:0 0 8px 16px;padding:0;font-size:12px;">`;
+            for (const s of log.safety) {
+                html += `<li style="margin-bottom:4px;">${escHtml(s)}</li>`;
+            }
+            html += `</ul>`;
+        }
+
+        // Sourcing notes
+        if (log.sourcing_notes) {
+            html += `<div class="logistics-section-title">Sourcing Notes</div><p style="font-size:12px;color:#555;margin:0 0 12px;">${escHtml(log.sourcing_notes)}</p>`;
+        }
+
+        html += `<div style="text-align:right;margin-top:12px;">
+            <button class="logistics-edit-btn" id="logistics-edit-btn">Edit Logistics</button>
+        </div>`;
+
+        html += `</div>`;
+        return html;
+    }
+
+    function openLogisticsEditModal(note) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:#fff;border-radius:10px;padding:20px;width:90%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;';
+        modal.innerHTML = `
+            <div style="font-weight:600;font-size:14px;margin-bottom:10px;">Edit Logistics JSON</div>
+            <textarea id="logistics-json-textarea" style="flex:1;min-height:300px;font-family:monospace;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:10px;resize:vertical;"></textarea>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+                <button id="logistics-modal-cancel" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancel</button>
+                <button id="logistics-modal-save" style="padding:6px 14px;border:none;border-radius:6px;background:#6c5ce7;color:#fff;cursor:pointer;font-weight:600;">Save</button>
+            </div>
+        `;
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        const ta = document.getElementById('logistics-json-textarea');
+        ta.value = JSON.stringify(note.logistics || {}, null, 2);
+
+        document.getElementById('logistics-modal-cancel').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+        document.getElementById('logistics-modal-save').addEventListener('click', async () => {
+            let parsed;
+            try {
+                parsed = JSON.parse(ta.value);
+            } catch (e) {
+                alert('Invalid JSON: ' + e.message);
+                return;
+            }
+            const saveBtn = document.getElementById('logistics-modal-save');
+            saveBtn.textContent = 'Saving...';
+            saveBtn.disabled = true;
+            try {
+                await NotesService.update(note.id, { logistics: parsed });
+                selectedNote = NotesService.getById(note.id);
+                overlay.remove();
+                renderNoteEditor(selectedNote);
+            } catch (e) {
+                alert('Save failed: ' + (e.message || e));
+                saveBtn.textContent = 'Save';
+                saveBtn.disabled = false;
+            }
+        });
+    }
+
     async function renderNoteEditor(note) {
         const editorEl = document.getElementById('library-editor');
         if (!editorEl) return;
@@ -1419,6 +1565,8 @@ const LibraryUI = (() => {
                 <textarea class="library-idea-script" id="library-idea-script" placeholder="Write your script here...">${escHtml(note.script || '')}</textarea>
             </div>`;
 
+        const logisticsHtml = renderLogisticsPanel(note);
+
         editorEl.innerHTML = `
             <div class="library-editor-toolbar">
                 <button class="library-back-btn" id="library-back-btn">
@@ -1431,42 +1579,77 @@ const LibraryUI = (() => {
                 <div class="library-editor-title-row">
                     <input type="text" class="library-editor-title" id="library-editor-title" value="${escAttr(note.name)}" placeholder="Idea title..." />
                 </div>
-                <div class="library-meta-row">
-                    <label class="library-meta-label">Project</label>
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <select class="library-project-select" id="library-note-project" style="flex:1;">
-                            <option value="">None</option>
-                            ${projectOptions}
-                        </select>
-                        ${isLinkedProject ? `<button class="library-view-project-btn" id="library-view-project-btn" title="View Project">View Project</button>` : ''}
+                <div class="library-idea-tabs">
+                    <button class="library-idea-tab ${ideaEditorTab === 'overview' ? 'active' : ''}" data-idea-tab="overview">Overview</button>
+                    <button class="library-idea-tab ${ideaEditorTab === 'logistics' ? 'active' : ''}" data-idea-tab="logistics">Logistics</button>
+                </div>
+                <div class="library-idea-tab-content" style="display:${ideaEditorTab === 'overview' ? '' : 'none'};" data-idea-panel="overview">
+                    <div class="library-meta-row">
+                        <label class="library-meta-label">Project</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <select class="library-project-select" id="library-note-project" style="flex:1;">
+                                <option value="">None</option>
+                                ${projectOptions}
+                            </select>
+                            ${isLinkedProject ? `<button class="library-view-project-btn" id="library-view-project-btn" title="View Project">View Project</button>` : ''}
+                        </div>
                     </div>
+                    <div class="library-idea-field">
+                        <label class="library-idea-label">Related to</label>
+                        <textarea class="library-idea-related" id="library-idea-related" placeholder="Describe relationships to other ideas or projects...">${escHtml(note.relatedTo || '')}</textarea>
+                    </div>
+                    <div class="library-idea-field">
+                        <label class="library-idea-label">Hook</label>
+                        <textarea class="library-idea-hook" id="library-idea-hook" placeholder="What's the hook? (optional)">${escHtml(note.hook || '')}</textarea>
+                    </div>
+                    <div class="library-idea-field">
+                        <label class="library-idea-label">Context</label>
+                        <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(note.context || '')}</textarea>
+                    </div>
+                    ${scriptSection}
+                    <div class="library-incubator-section">${incubatorSection}</div>
                 </div>
-                <div class="library-idea-field">
-                    <label class="library-idea-label">Related to</label>
-                    <textarea class="library-idea-related" id="library-idea-related" placeholder="Describe relationships to other ideas or projects...">${escHtml(note.relatedTo || '')}</textarea>
+                <div class="library-idea-tab-content" style="display:${ideaEditorTab === 'logistics' ? '' : 'none'};" data-idea-panel="logistics">
+                    ${logisticsHtml}
                 </div>
-                <div class="library-idea-field">
-                    <label class="library-idea-label">Hook</label>
-                    <textarea class="library-idea-hook" id="library-idea-hook" placeholder="What's the hook? (optional)">${escHtml(note.hook || '')}</textarea>
-                </div>
-                <div class="library-idea-field">
-                    <label class="library-idea-label">Context</label>
-                    <textarea class="library-idea-context" id="library-idea-context" placeholder="More details, angles, notes... (optional)">${escHtml(note.context || '')}</textarea>
-                </div>
-                ${scriptSection}
-                <div class="library-incubator-section">${incubatorSection}</div>
             </div>
         `;
         document.getElementById('library-back-btn').addEventListener('click', () => saveNoteAndBack());
-        document.getElementById('library-idea-hook').addEventListener('input', scheduleNoteSave);
-        document.getElementById('library-idea-context').addEventListener('input', scheduleNoteSave);
-        document.getElementById('library-idea-script').addEventListener('input', scheduleNoteSave);
-        document.getElementById('library-editor-title').addEventListener('input', scheduleNoteSave);
-        document.getElementById('library-note-project').addEventListener('change', scheduleNoteSave);
-        document.getElementById('library-idea-related').addEventListener('input', scheduleNoteSave);
-        document.getElementById('library-idea-script').addEventListener('click', () => {
-            openScriptOverlay(document.getElementById('library-idea-script'), scheduleNoteSave);
+
+        // Tab switching
+        editorEl.querySelectorAll('.library-idea-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.dataset.ideaTab;
+                if (tab === ideaEditorTab) return;
+                // Save current form state before switching
+                if (ideaEditorTab === 'overview' && noteDirty) {
+                    saveNote();
+                }
+                ideaEditorTab = tab;
+                renderNoteEditor(selectedNote);
+            });
         });
+
+        // Overview tab event listeners (only bind if elements exist)
+        const hookEl = document.getElementById('library-idea-hook');
+        const ctxEl = document.getElementById('library-idea-context');
+        const scriptEl = document.getElementById('library-idea-script');
+        const titleEl = document.getElementById('library-editor-title');
+        const projEl = document.getElementById('library-note-project');
+        const relatedEl = document.getElementById('library-idea-related');
+
+        if (titleEl) titleEl.addEventListener('input', scheduleNoteSave);
+        if (hookEl) hookEl.addEventListener('input', scheduleNoteSave);
+        if (ctxEl) ctxEl.addEventListener('input', scheduleNoteSave);
+        if (scriptEl) scriptEl.addEventListener('input', scheduleNoteSave);
+        if (projEl) projEl.addEventListener('change', scheduleNoteSave);
+        if (relatedEl) relatedEl.addEventListener('input', scheduleNoteSave);
+
+        if (scriptEl) {
+            scriptEl.addEventListener('click', () => {
+                openScriptOverlay(document.getElementById('library-idea-script'), scheduleNoteSave);
+            });
+        }
         const ideaExpandBtn = document.querySelector('[data-expand-script="library-idea-script"]');
         if (ideaExpandBtn) ideaExpandBtn.addEventListener('click', () => {
             openScriptOverlay(document.getElementById('library-idea-script'), scheduleNoteSave);
@@ -1478,6 +1661,10 @@ const LibraryUI = (() => {
         });
         const sendBtn = document.getElementById('library-send-incubator');
         if (sendBtn) sendBtn.addEventListener('click', () => sendToIncubator());
+
+        // Logistics tab event listeners
+        const logisticsEditBtn = document.getElementById('logistics-edit-btn');
+        if (logisticsEditBtn) logisticsEditBtn.addEventListener('click', () => openLogisticsEditModal(note));
     }
 
     async function sendToIncubator() {
@@ -1600,6 +1787,7 @@ const LibraryUI = (() => {
     async function saveNoteAndBack() {
         if (noteDirty && selectedNote) await saveNote();
         selectedNote = null;
+        ideaEditorTab = 'overview';
         showListPage();
         renderNotesList().catch(() => {});
     }
@@ -2767,7 +2955,7 @@ const LibraryUI = (() => {
             <div class="ideamap-card-body">
                 <div class="ideamap-card-name">${escHtml(idea.name)}</div>
                 <span class="ideamap-card-badge" style="background:${color}">${escHtml(ideaMapStatusLabel(status))}</span>${catBadge}
-                <span class="library-idea-dots"><span class="library-idea-dot${idea.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${idea.script ? ' has-script' : ''}"></span></span>
+                <span class="library-idea-dots"><span class="library-idea-dot${idea.context ? ' has-context' : ''}"></span><span class="library-idea-dot dot-script${idea.script ? ' has-script' : ''}"></span><span class="library-idea-dot dot-logistics${idea.logistics ? ' has-logistics' : ''}"></span></span>
                 ${seriesBadge}
                 ${projectBadge}
                 ${tags.length ? `<div class="ideamap-card-tags">${tags.map(t => `<span class="ideamap-card-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
@@ -3611,6 +3799,7 @@ const LibraryUI = (() => {
             selectedVideo = null; videoDirty = false;
             selectedFreeNote = null; freeNoteDirty = false;
             noteDirty = false;
+            ideaEditorTab = 'overview';
             // Keep todoLoaded/todoItems, calendarLoaded/calendarItems, sponsorsLoaded cached across close/open
             freeNotesLoaded = false;
             calendarViewMode = 'week'; calendarSelectedDate = null;
