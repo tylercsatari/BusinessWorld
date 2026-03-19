@@ -1392,7 +1392,7 @@ const LibraryUI = (() => {
                     <input type="text" class="library-editor-title" id="library-editor-title" value="${escAttr(note.name)}" placeholder="Idea title..." />
                 </div>
                 <div class="library-meta-row">
-                    <label class="library-meta-label">Link to Dropbox Project</label>
+                    <label class="library-meta-label">Project</label>
                     <div style="display:flex;align-items:center;gap:6px;">
                         <select class="library-project-select" id="library-note-project" style="flex:1;">
                             <option value="">None</option>
