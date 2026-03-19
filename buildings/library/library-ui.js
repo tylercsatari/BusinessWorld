@@ -155,6 +155,10 @@ const LibraryUI = (() => {
     }
 
     function switchTab(tab) {
+        if (noteDirty && selectedNote) {
+            if (noteSaveTimer) { clearTimeout(noteSaveTimer); noteSaveTimer = null; }
+            saveNote();
+        }
         activeTab = tab;
         container.querySelectorAll('.library-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
         const heading = document.getElementById('library-list-heading');
@@ -967,7 +971,7 @@ const LibraryUI = (() => {
     function scheduleFreeNoteSave() {
         freeNoteDirty = true; setSaveStatus('Editing...');
         if (freeNoteSaveTimer) clearTimeout(freeNoteSaveTimer);
-        freeNoteSaveTimer = setTimeout(() => saveFreeNote(), 1500);
+        freeNoteSaveTimer = setTimeout(() => saveFreeNote(), 800);
     }
 
     async function saveFreeNote() {
@@ -1746,7 +1750,7 @@ const LibraryUI = (() => {
     function scheduleNoteSave() {
         noteDirty = true; setSaveStatus('Editing...');
         if (noteSaveTimer) clearTimeout(noteSaveTimer);
-        noteSaveTimer = setTimeout(() => saveNote(), 1500);
+        noteSaveTimer = setTimeout(() => saveNote(), 800);
     }
 
     async function saveNote() {
@@ -1906,7 +1910,7 @@ const LibraryUI = (() => {
     function scheduleVideoSave() {
         videoDirty = true; setSaveStatus('Editing...');
         if (videoSaveTimer) clearTimeout(videoSaveTimer);
-        videoSaveTimer = setTimeout(() => saveVideo(), 1500);
+        videoSaveTimer = setTimeout(() => saveVideo(), 800);
     }
 
     async function saveVideo() {
@@ -3790,8 +3794,18 @@ const LibraryUI = (() => {
             await NotesService.sync().catch(() => {});
             await renderNotesList().catch(() => {});
             if (opts && opts.tab) switchTab(opts.tab);
+            window._libraryBeforeUnload = () => {
+                if (noteDirty && selectedNote) saveNote();
+                if (freeNoteDirty) saveFreeNote();
+                if (videoDirty) saveVideo();
+            };
+            window.addEventListener('beforeunload', window._libraryBeforeUnload);
         },
         close() {
+            if (window._libraryBeforeUnload) {
+                window.removeEventListener('beforeunload', window._libraryBeforeUnload);
+                window._libraryBeforeUnload = null;
+            }
             if (freeNoteSaveTimer) { clearTimeout(freeNoteSaveTimer); saveFreeNote(); }
             if (noteSaveTimer) { clearTimeout(noteSaveTimer); saveNote(); }
             if (videoSaveTimer) { clearTimeout(videoSaveTimer); saveVideo(); }
