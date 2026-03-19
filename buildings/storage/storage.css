@@ -104,7 +104,13 @@
     border: 2px solid #d4c5a0;
     border-radius: 14px;
     padding: 12px;
-    transition: border-color 0.2s;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.storage-box-card.selected {
+    border: 2px solid #5a3e1b;
+    box-shadow: 0 2px 12px rgba(90,62,27,0.2);
 }
 
 .storage-box-card:hover {
@@ -541,12 +547,7 @@
     }
 }
 
-/* Box action sheet */
-.storage-box-sheet { position: fixed; inset: 0; z-index: 500; display: flex; align-items: flex-end; justify-content: center; }
-.storage-box-sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); }
-.storage-box-sheet-panel { position: relative; background: #fff; border-radius: 20px 20px 0 0; padding: 20px 20px 32px; width: 100%; max-width: 480px; box-shadow: 0 -4px 24px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 10px; }
-.storage-box-sheet-title { font-family: 'Fredoka One', cursive; font-size: 18px; color: #5a3e1b; text-align: center; margin-bottom: 4px; }
-.storage-box-sheet-btn { padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; background: #5a3e1b; color: #fff; }
-.storage-box-sheet-btn.danger { background: #e74c3c; }
-.storage-box-sheet-btn.secondary { background: #f0ece4; color: #5a3e1b; }
-.storage-box-sheet-btn:hover { opacity: 0.9; }
+/* Box inline actions */
+.storage-box-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e8ddd0; }
+.storage-box-action-btn { flex: 1; padding: 8px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: #5a3e1b; color: #fff; }
+.storage-box-action-btn.danger { background: #e74c3c; }
