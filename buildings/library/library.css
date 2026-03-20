@@ -2846,149 +2846,48 @@
     font-weight: 600;
 }
 
-/* --- Logistics Panel --- */
-.logistics-panel {
-    padding: 4px 0;
-    font-size: 13px;
-}
-.logistics-header-card {
-    background: #f8f6f2;
-    border: 1px solid #e8e4df;
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 12px;
-}
-.logistics-section-title {
-    font-weight: 600;
-    font-size: 13px;
-    margin: 12px 0 6px;
-    color: #555;
-}
-.logistics-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-}
-.logistics-table th,
-.logistics-table td {
-    padding: 6px 8px;
-    border-bottom: 1px solid #e8e4df;
-    text-align: left;
-}
-.logistics-table th {
-    background: #f0ece6;
-    font-weight: 600;
-}
-.logistics-complexity-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-}
-.logistics-link {
-    color: #4a90d9;
-    text-decoration: none;
-    font-size: 11px;
-}
-.logistics-link:hover {
-    text-decoration: underline;
-}
-.logistics-pending {
-    color: #999;
-    text-align: center;
-    padding: 40px 0;
-    font-style: italic;
-}
-.logistics-edit-btn {
-    padding: 5px 14px;
-    font-size: 12px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #fff;
-    color: #555;
-    cursor: pointer;
-    font-weight: 500;
-}
-.logistics-edit-btn:hover {
-    background: #f4f2ef;
-    border-color: #aaa;
-}
-
-/* --- Logistics Angle Sections --- */
-.logistics-angle-section {
-    border: 1px solid #e0dcd6;
-    border-radius: 8px;
-    margin: 10px 0;
-    padding: 0;
-    overflow: hidden;
-}
-.logistics-angle-section.collapsed .logistics-angle-body {
-    display: none;
-}
-.logistics-angle-section.collapsed .logistics-toggle-icon {
-    transform: rotate(-90deg);
-}
-.logistics-angle-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 14px;
-    background: #faf8f5;
-    cursor: pointer;
-    user-select: none;
-}
-.logistics-angle-header:hover {
-    background: #f4f1ec;
-}
-.logistics-angle-body {
-    padding: 8px 14px 14px;
-}
-.logistics-angle-total {
-    font-weight: 700;
-    font-size: 14px;
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 2px solid #d5d0c8;
-    color: #2d7a3a;
-    text-align: right;
-}
-.logistics-summary-bar {
-    display: flex;
-    flex-direction: row;
-    gap: 10px;
-    overflow-x: auto;
-    padding: 8px 0 12px;
-    -webkit-overflow-scrolling: touch;
-}
-.logistics-summary-card {
-    flex: 0 0 auto;
-    min-width: 140px;
-    max-width: 200px;
-    background: #f8f6f2;
-    border: 1px solid #e0dcd6;
-    border-radius: 8px;
-    padding: 10px 14px;
-    text-decoration: none;
-    color: inherit;
-    cursor: pointer;
-    text-align: center;
-    transition: border-color 0.15s, box-shadow 0.15s;
-}
-.logistics-summary-card:hover {
-    border-color: #b0a898;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-.logistics-cost-cell {
-    text-align: right;
-    font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-    font-size: 12px;
-}
-.logistics-subtotal-row {
-    font-weight: 600;
-    border-top: 2px solid #d5d0c8;
-    background: #faf8f5;
-}
+/* --- Logistics Panel (mobile-first card layout) --- */
+.logistics-panel { padding: 4px 0; font-size: 13px; }
+.logistics-header-card { background: #f8f6f2; border: 1px solid #e8e4df; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.logistics-header-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.logistics-cost-badge { font-size: 16px; font-weight: 700; color: #2d7a3a; }
+.logistics-complexity-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.logistics-timeline-badge { font-size: 12px; color: #777; }
+.logistics-section-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 6px; color: #aaa; }
+.logistics-line-item { display: flex; flex-direction: column; padding: 10px 0; border-bottom: 1px solid #ede9e3; gap: 4px; }
+.logistics-line-item:last-child { border-bottom: none; }
+.logistics-line-name { font-weight: 600; font-size: 13px; color: #333; }
+.logistics-line-desc { font-size: 12px; color: #888; line-height: 1.4; }
+.logistics-line-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
+.logistics-line-cost { font-size: 13px; font-weight: 700; color: #2d7a3a; }
+.logistics-line-qty { font-size: 11px; color: #999; background: #f0ece6; padding: 1px 6px; border-radius: 4px; }
+.logistics-line-source { font-size: 11px; color: #888; }
+.logistics-link { color: #4a90d9; text-decoration: none; font-size: 12px; font-weight: 500; }
+.logistics-subtotal { display: flex; justify-content: space-between; padding: 10px 0 4px; font-weight: 600; font-size: 13px; color: #555; border-top: 1px solid #ddd; margin-top: 4px; }
+.logistics-summary-bar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.logistics-summary-card { display: flex; flex-direction: row; align-items: center; justify-content: space-between; background: #f8f6f2; border: 1px solid #e0dcd6; border-radius: 10px; padding: 12px 14px; cursor: pointer; text-decoration: none; color: inherit; transition: background 0.15s; gap: 8px; }
+.logistics-summary-card:hover { background: #f2efe9; border-color: #b0a898; }
+.logistics-summary-card-name { font-weight: 600; font-size: 13px; flex: 1; color: #333; }
+.logistics-summary-card-cost { font-size: 14px; font-weight: 700; color: #2d7a3a; white-space: nowrap; }
+.logistics-angle-section { border: 1px solid #e0dcd6; border-radius: 10px; margin: 10px 0; overflow: hidden; }
+.logistics-angle-section.collapsed .logistics-angle-body { display: none; }
+.logistics-angle-section.collapsed .logistics-toggle-icon { transform: rotate(-90deg); }
+.logistics-angle-header { display: flex; align-items: center; gap: 10px; padding: 14px; background: #faf8f5; cursor: pointer; user-select: none; }
+.logistics-angle-header:hover { background: #f4f1ec; }
+.logistics-angle-header-info { flex: 1; min-width: 0; }
+.logistics-angle-header-name { font-weight: 700; font-size: 14px; color: #333; }
+.logistics-angle-header-desc { font-size: 12px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logistics-angle-header-cost { font-size: 16px; font-weight: 800; color: #2d7a3a; white-space: nowrap; }
+.logistics-angle-body { padding: 4px 14px 14px; }
+.logistics-angle-total { font-weight: 700; font-size: 15px; padding: 12px 0 4px; color: #2d7a3a; text-align: right; border-top: 2px solid #d5d0c8; margin-top: 10px; }
+.logistics-pending { color: #bbb; text-align: center; padding: 40px 20px; font-style: italic; font-size: 13px; }
+.logistics-edit-btn { padding: 10px 16px; font-size: 13px; border: 1px solid #ccc; border-radius: 8px; background: #fff; color: #555; cursor: pointer; font-weight: 500; width: 100%; margin-top: 14px; display: block; box-sizing: border-box; }
+.logistics-edit-btn:hover { background: #f4f2ef; border-color: #aaa; }
+.logistics-safety-list { list-style: none; padding: 0; margin: 0; }
+.logistics-safety-list li { padding: 8px 0 8px 24px; position: relative; border-bottom: 1px solid #ede9e3; font-size: 13px; color: #555; }
+.logistics-safety-list li:last-child { border-bottom: none; }
+.logistics-safety-list li:before { content: '\26A0'; position: absolute; left: 0; font-size: 13px; }
+.logistics-sourcing-notes { font-size: 12px; color: #666; line-height: 1.6; padding: 10px 12px; background: #f8f6f2; border-radius: 8px; border-left: 3px solid #d4a060; margin-top: 6px; }
 
 /* Idea voice input buttons */
 .idea-voice-btn {
