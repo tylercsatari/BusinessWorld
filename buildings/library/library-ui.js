@@ -176,6 +176,10 @@ const LibraryUI = (() => {
             }
         });
         document.getElementById('library-fill-logistics-btn').addEventListener('click', () => openFillLogisticsModal());
+        if (activeTab === 'notes') {
+            const flBtn = document.getElementById('library-fill-logistics-btn');
+            if (flBtn) flBtn.style.display = '';
+        }
         // AI Chat widget
         document.getElementById('library-ai-chat-btn').addEventListener('click', () => toggleAiChat());
         document.getElementById('library-ai-chat-close').addEventListener('click', () => toggleAiChat(false));

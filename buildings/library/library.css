@@ -2930,8 +2930,8 @@
 
 /* ── AI Chat Widget ────────────────────────────────── */
 .library-ai-chat-btn {
-    position: absolute;
-    bottom: 16px;
+    position: fixed;
+    bottom: 80px;
     right: 16px;
     width: 48px;
     height: 48px;
@@ -2942,7 +2942,7 @@
     font-size: 22px;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    z-index: 100;
+    z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2953,17 +2953,15 @@
 @keyframes chat-pulse { 0%,100% { box-shadow: 0 2px 8px rgba(0,0,0,0.25); } 50% { box-shadow: 0 2px 16px rgba(90,62,27,0.6); } }
 
 .library-ai-chat-panel {
-    position: absolute;
-    bottom: 72px;
-    right: 16px;
-    width: 360px;
-    max-width: calc(100% - 32px);
-    height: 460px;
-    max-height: calc(100% - 100px);
+    position: fixed;
+    bottom: 140px;
+    right: 12px;
+    width: min(340px, calc(100vw - 24px));
+    max-height: 60vh;
     background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
-    z-index: 101;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    z-index: 9998;
     display: flex;
     flex-direction: column;
     overflow: hidden;
