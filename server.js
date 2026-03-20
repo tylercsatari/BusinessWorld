@@ -545,6 +545,137 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
 
     // =========================================
+    // API: AI Chat — chat with Optimusk Prime via OpenClaw cron
+    // =========================================
+    const AI_CHAT_R2_KEY = 'data/ai-chat.json';
+
+    if (pathname === '/api/ai/chat' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { message } = body;
+            if (!message || !message.trim()) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'message required' }));
+                return;
+            }
+
+            const crypto = require('crypto');
+            const messageId = crypto.randomUUID();
+            const timestamp = new Date().toISOString();
+
+            // Load existing chat history from R2
+            let history = [];
+            try {
+                const buf = await cloud.downloadFromR2(AI_CHAT_R2_KEY);
+                if (buf) history = JSON.parse(buf.toString('utf8'));
+            } catch (e) { console.warn('Failed to load chat history:', e.message); }
+
+            history.push({ id: messageId, role: 'user', content: message.trim(), timestamp });
+            await cloud.uploadToR2(AI_CHAT_R2_KEY, Buffer.from(JSON.stringify(history)), 'application/json');
+
+            // Send message to Telegram via bot API
+            const botToken = process.env.TELEGRAM_BOT_TOKEN;
+            const chatId = process.env.TELEGRAM_TYLER_CHAT_ID;
+            const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+
+            const telegramText = `[Message from BusinessWorld app] ${message.trim()}\n\nNote: After responding on Telegram normally, also POST to ${appUrl}/api/ai/reply with body: {"text": "<your full reply>", "secret": "bw-ai-secret-2026"}`;
+
+            try {
+                const tgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: chatId, text: telegramText })
+                });
+                const tgData = await tgResp.json();
+                if (!tgData.ok) console.warn('Telegram sendMessage error:', tgData.description);
+                else console.log('Telegram message sent, message_id:', tgData.result.message_id);
+            } catch (tgErr) {
+                console.warn('Failed to send Telegram message:', tgErr.message);
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, messageId, timestamp }));
+        } catch (e) {
+            console.error('AI chat error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/ai/chat' && req.method === 'GET') {
+        try {
+            const since = url.searchParams.get('since');
+            let history = [];
+            try {
+                const buf = await cloud.downloadFromR2(AI_CHAT_R2_KEY);
+                if (buf) history = JSON.parse(buf.toString('utf8'));
+            } catch (e) { console.warn('Failed to load chat history:', e.message); }
+
+            const messages = since
+                ? history.filter(m => m.timestamp > since)
+                : history.slice(-50);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ messages }));
+        } catch (e) {
+            console.error('AI chat history error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/ai/reply' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            // Support both formats:
+            // New Telegram callback: { text, secret }
+            // Legacy openclaw: { reply, messageId }
+            const replyText = body.text || body.reply;
+            const secret = body.secret;
+            const messageId = body.messageId;
+
+            // If secret is provided, validate it
+            if (secret && secret !== 'bw-ai-secret-2026') {
+                res.writeHead(403, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'invalid secret' }));
+                return;
+            }
+
+            if (!replyText) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'text or reply required' }));
+                return;
+            }
+
+            const crypto = require('crypto');
+            const timestamp = new Date().toISOString();
+
+            let history = [];
+            try {
+                const buf = await cloud.downloadFromR2(AI_CHAT_R2_KEY);
+                if (buf) history = JSON.parse(buf.toString('utf8'));
+            } catch (e) { console.warn('Failed to load chat history:', e.message); }
+
+            // Find the last unanswered user message to link this reply to
+            const repliedIds = new Set(history.filter(m => m.role === 'assistant' && m.replyTo).map(m => m.replyTo));
+            const replyToId = messageId || (history.filter(m => m.role === 'user' && !repliedIds.has(m.id)).pop() || {}).id || null;
+
+            history.push({ id: crypto.randomUUID(), role: 'assistant', content: replyText, replyTo: replyToId, timestamp });
+            await cloud.uploadToR2(AI_CHAT_R2_KEY, Buffer.from(JSON.stringify(history)), 'application/json');
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            console.error('AI reply error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Invoice generation — creates HTML invoice, stores in R2
     // =========================================
     if (pathname === '/api/invoices/generate' && req.method === 'POST') {

@@ -44,6 +44,13 @@ const LibraryUI = (() => {
 
     let ideaEditorTab = 'overview'; // 'overview' | 'logistics'
 
+    // --- AI Chat state ---
+    let aiChatOpen = false;
+    let aiChatMessages = [];
+    let aiChatLastSeen = null; // ISO timestamp of last seen message
+    let aiChatPollTimer = null;
+    let aiChatPendingIds = new Set(); // messageIds awaiting reply
+
     // Cache of real project names (Dropbox folders) — used to filter fake project badges
     let realProjectsCache = null;
     VideoService.getProjects().then(p => { realProjectsCache = p; renderNotesList().catch(() => {}); }).catch(() => { realProjectsCache = []; });
@@ -143,6 +150,19 @@ const LibraryUI = (() => {
                         <div class="library-editor-empty"><div class="library-editor-empty-icon">📝</div><div>Select a script or create a new one</div></div>
                     </div>
                 </div>
+                <button class="library-ai-chat-btn" id="library-ai-chat-btn" title="Chat with Optimusk Prime">🤖</button>
+                <div class="library-ai-chat-panel" id="library-ai-chat-panel" style="display:none;">
+                    <div class="library-ai-chat-header">
+                        <div class="library-ai-chat-header-title">🤖 Optimusk Prime</div>
+                        <button class="library-ai-chat-close" id="library-ai-chat-close">&times;</button>
+                    </div>
+                    <div class="library-ai-chat-messages" id="library-ai-chat-messages"></div>
+                    <div class="library-ai-chat-input-wrap">
+                        <textarea class="library-ai-chat-input" id="library-ai-chat-input" placeholder="Send a message..." rows="1"></textarea>
+                        <button class="library-ai-chat-voice" id="library-ai-chat-voice" title="Voice input">🎤</button>
+                        <button class="library-ai-chat-send" id="library-ai-chat-send">Send</button>
+                    </div>
+                </div>
             </div>
         `;
         document.getElementById('library-new-btn').addEventListener('click', () => {
@@ -156,6 +176,15 @@ const LibraryUI = (() => {
             }
         });
         document.getElementById('library-fill-logistics-btn').addEventListener('click', () => openFillLogisticsModal());
+        // AI Chat widget
+        document.getElementById('library-ai-chat-btn').addEventListener('click', () => toggleAiChat());
+        document.getElementById('library-ai-chat-close').addEventListener('click', () => toggleAiChat(false));
+        document.getElementById('library-ai-chat-send').addEventListener('click', () => sendAiChatMessage());
+        document.getElementById('library-ai-chat-voice').addEventListener('click', () => toggleAiChatVoice());
+        document.getElementById('library-ai-chat-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAiChatMessage(); }
+        });
+        loadAiChatHistory();
         // Event delegation: handles tabs added after initial render (e.g. Idea Map)
         container.querySelector('.library-tabs').addEventListener('click', (e) => {
             const tab = e.target.closest('.library-tab');
@@ -2167,6 +2196,235 @@ const LibraryUI = (() => {
     }
 
     // =====================
+    // =====================
+    // --- AI CHAT ---
+    // =====================
+    function toggleAiChat(forceState) {
+        aiChatOpen = typeof forceState === 'boolean' ? forceState : !aiChatOpen;
+        const panel = document.getElementById('library-ai-chat-panel');
+        const btn = document.getElementById('library-ai-chat-btn');
+        if (panel) panel.style.display = aiChatOpen ? '' : 'none';
+        if (btn) btn.classList.remove('has-unread');
+        if (aiChatOpen) {
+            renderAiChatMessages();
+            startAiChatPolling();
+            const input = document.getElementById('library-ai-chat-input');
+            if (input) setTimeout(() => input.focus(), 100);
+        } else {
+            stopAiChatPolling();
+        }
+    }
+
+    async function loadAiChatHistory() {
+        try {
+            const resp = await fetch('/api/ai/chat');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            aiChatMessages = data.messages || [];
+            if (aiChatMessages.length > 0) {
+                aiChatLastSeen = aiChatMessages[aiChatMessages.length - 1].timestamp;
+            }
+        } catch (e) { console.warn('Failed to load AI chat history:', e); }
+    }
+
+    function formatRelativeTime(isoStr) {
+        const now = Date.now();
+        const ts = new Date(isoStr).getTime();
+        const diff = Math.max(0, now - ts);
+        const secs = Math.floor(diff / 1000);
+        if (secs < 60) return 'just now';
+        const mins = Math.floor(secs / 60);
+        if (mins < 60) return `${mins} min ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        if (days < 7) return `${days}d ago`;
+        return new Date(isoStr).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    function renderAiChatMessages() {
+        const el = document.getElementById('library-ai-chat-messages');
+        if (!el) return;
+        if (aiChatMessages.length === 0) {
+            el.innerHTML = '<div style="text-align:center;color:#bbb;padding:40px 20px;font-size:13px;">Send a message to chat with Optimusk Prime</div>';
+            return;
+        }
+        el.innerHTML = aiChatMessages.map(m => {
+            const cls = m.role === 'user' ? 'library-ai-msg-user' : 'library-ai-msg-assistant';
+            const time = formatRelativeTime(m.timestamp);
+            return `<div class="${cls}">${escHtml(m.content)}<div class="library-ai-msg-time">${time}</div></div>`;
+        }).join('');
+        // Show thinking indicator for pending messages
+        if (aiChatPendingIds.size > 0) {
+            el.innerHTML += '<div class="library-ai-thinking"><div class="library-ai-thinking-dots"><span></span><span></span><span></span></div>&nbsp;Thinking...</div>';
+        }
+        el.scrollTop = el.scrollHeight;
+    }
+
+    async function sendAiChatMessage() {
+        const input = document.getElementById('library-ai-chat-input');
+        if (!input) return;
+        const message = input.value.trim();
+        if (!message) return;
+        input.value = '';
+
+        // Optimistically add to local state
+        const tempId = 'temp-' + Date.now();
+        const timestamp = new Date().toISOString();
+        aiChatMessages.push({ id: tempId, role: 'user', content: message, timestamp });
+        aiChatPendingIds.add(tempId);
+        renderAiChatMessages();
+
+        try {
+            const resp = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+            if (!resp.ok) throw new Error('Server error ' + resp.status);
+            const data = await resp.json();
+            // Replace temp ID with real one
+            const tempMsg = aiChatMessages.find(m => m.id === tempId);
+            if (tempMsg) tempMsg.id = data.messageId;
+            aiChatPendingIds.delete(tempId);
+            aiChatPendingIds.add(data.messageId);
+            aiChatLastSeen = timestamp;
+            renderAiChatMessages();
+            startAiChatPolling();
+        } catch (e) {
+            console.error('AI chat send error:', e);
+            aiChatPendingIds.delete(tempId);
+            renderAiChatMessages();
+        }
+    }
+
+    function startAiChatPolling() {
+        stopAiChatPolling();
+        if (!aiChatOpen && aiChatPendingIds.size === 0) return;
+        aiChatPollTimer = setInterval(async () => {
+            try {
+                const since = aiChatLastSeen || '';
+                const resp = await fetch('/api/ai/chat?since=' + encodeURIComponent(since));
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (data.messages && data.messages.length > 0) {
+                    // Merge new messages (avoid duplicates)
+                    const existingIds = new Set(aiChatMessages.map(m => m.id));
+                    for (const m of data.messages) {
+                        if (!existingIds.has(m.id)) {
+                            aiChatMessages.push(m);
+                            // If this is a reply to a pending message, remove from pending
+                            if (m.role === 'assistant' && m.replyTo) {
+                                aiChatPendingIds.delete(m.replyTo);
+                            }
+                        }
+                    }
+                    aiChatLastSeen = data.messages[data.messages.length - 1].timestamp;
+                    if (aiChatOpen) {
+                        renderAiChatMessages();
+                    } else {
+                        // Show unread indicator
+                        const btn = document.getElementById('library-ai-chat-btn');
+                        if (btn) btn.classList.add('has-unread');
+                    }
+                }
+                // Stop polling if no pending messages and chat is closed
+                if (aiChatPendingIds.size === 0 && !aiChatOpen) {
+                    stopAiChatPolling();
+                }
+            } catch (e) { console.warn('AI chat poll error:', e); }
+        }, 5000);
+    }
+
+    function stopAiChatPolling() {
+        if (aiChatPollTimer) { clearInterval(aiChatPollTimer); aiChatPollTimer = null; }
+    }
+
+    // --- AI Chat Voice ---
+    let aiChatVoiceState = 'idle'; // idle | recording | processing
+    let aiChatMediaRecorder = null;
+    let aiChatAudioChunks = [];
+
+    function toggleAiChatVoice() {
+        if (aiChatVoiceState === 'idle') startAiChatVoice();
+        else if (aiChatVoiceState === 'recording') stopAiChatVoice();
+    }
+
+    async function startAiChatVoice() {
+        if (aiChatVoiceState !== 'idle') return;
+        aiChatVoiceState = 'recording';
+        aiChatAudioChunks = [];
+        updateAiChatVoiceBtn();
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+                : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+            aiChatMediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            aiChatMediaRecorder.ondataavailable = e => { if (e.data.size > 0) aiChatAudioChunks.push(e.data); };
+            aiChatMediaRecorder.onstop = async () => {
+                stream.getTracks().forEach(t => t.stop());
+                if (!aiChatAudioChunks.length) { aiChatVoiceState = 'idle'; updateAiChatVoiceBtn(); return; }
+                const blob = new Blob(aiChatAudioChunks, { type: aiChatMediaRecorder.mimeType || 'audio/webm' });
+                aiChatVoiceState = 'processing';
+                updateAiChatVoiceBtn();
+                try {
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                    const res = await fetch('/api/openai/transcribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ audio: base64, mimeType: blob.type })
+                    });
+                    const data = await res.json();
+                    const text = (data.text || '').trim();
+                    if (text) {
+                        const input = document.getElementById('library-ai-chat-input');
+                        if (input) {
+                            input.value = input.value ? input.value + ' ' + text : text;
+                            input.focus();
+                        }
+                    }
+                } catch (e) { console.warn('AI chat voice error:', e); }
+                finally { aiChatVoiceState = 'idle'; aiChatMediaRecorder = null; aiChatAudioChunks = []; updateAiChatVoiceBtn(); }
+            };
+            aiChatMediaRecorder.start();
+        } catch (e) {
+            console.warn('AI chat voice start error:', e);
+            aiChatVoiceState = 'idle';
+            updateAiChatVoiceBtn();
+        }
+    }
+
+    function stopAiChatVoice() {
+        if (aiChatMediaRecorder && aiChatVoiceState === 'recording') {
+            aiChatMediaRecorder.stop();
+            aiChatVoiceState = 'processing';
+            updateAiChatVoiceBtn();
+        }
+    }
+
+    function updateAiChatVoiceBtn() {
+        const btn = document.getElementById('library-ai-chat-voice');
+        if (!btn) return;
+        btn.classList.remove('recording', 'processing');
+        if (aiChatVoiceState === 'recording') { btn.classList.add('recording'); btn.textContent = '⏹'; }
+        else if (aiChatVoiceState === 'processing') { btn.classList.add('processing'); btn.textContent = '...'; }
+        else { btn.textContent = '🎤'; }
+    }
+
+    /** Send a message to AI chat programmatically (used by Fill Logistics) */
+    async function sendAiChatProgrammatic(message) {
+        toggleAiChat(true);
+        const input = document.getElementById('library-ai-chat-input');
+        if (input) input.value = message;
+        await sendAiChatMessage();
+    }
+
     // --- FILL LOGISTICS ---
     // =====================
     function openFillLogisticsModal() {
@@ -2191,7 +2449,7 @@ const LibraryUI = (() => {
                 <p style="color:#666;margin-bottom:16px;"><strong>${count}</strong> idea${count !== 1 ? 's' : ''} need${count === 1 ? 's' : ''} logistics research.</p>
                 <div id="fill-logistics-status"></div>
                 <div style="display:flex;gap:8px;margin-top:16px;">
-                    <button id="fill-logistics-schedule" style="padding:8px 16px;border-radius:6px;background:#5a3e1b;color:#fff;border:none;cursor:pointer;font-weight:600;">Schedule</button>
+                    <button id="fill-logistics-schedule" style="padding:8px 16px;border-radius:6px;background:#5a3e1b;color:#fff;border:none;cursor:pointer;font-weight:600;">Send to Optimusk</button>
                     <button id="fill-logistics-close" style="padding:8px 16px;border-radius:6px;border:1px solid #ccc;cursor:pointer;">Close</button>
                 </div>
             `;
@@ -2206,51 +2464,35 @@ const LibraryUI = (() => {
         if (scheduleBtn) {
             scheduleBtn.addEventListener('click', async () => {
                 scheduleBtn.disabled = true;
-                scheduleBtn.textContent = 'Scheduling...';
+                scheduleBtn.textContent = 'Sending...';
+                const statusEl = modal.querySelector('#fill-logistics-status');
+                statusEl.innerHTML = `
+                    <div style="background:#f4f0e8;border-radius:8px;padding:16px;text-align:center;">
+                        <div style="font-size:24px;margin-bottom:8px;">🤖</div>
+                        <div style="font-weight:600;color:#5a3e1b;">Sending request to Optimusk Prime...</div>
+                    </div>
+                `;
                 try {
-                    const resp = await fetch('/api/admin/fill-logistics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                    const logisticsMessage = `Fill out logistics for all remaining ideas that have context but no logistics. Check GET https://businessworld.onrender.com/api/data/ideas for ideas where logistics is null/missing but context is not empty. Schedule cron jobs 15 minutes apart (starting 2 minutes from now) using 'openclaw cron add' for each idea, using our standard logistics research prompt with these CRITICAL requirements: (1) Find SPECIFIC direct product URLs not search pages, (2) 3 build angles per idea, (3) itemized costs with unit_price_cad × quantity. PATCH results to https://businessworld.onrender.com/api/data/ideas/{id}. After scheduling, POST to https://businessworld.onrender.com/api/ai/reply {"text": "Scheduled N logistics jobs. First fires at [time], all done by [time]. I'll send Telegram updates after each one.", "secret": "bw-ai-secret-2026"}`;
+                    const resp = await fetch('/api/ai/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: logisticsMessage })
+                    });
                     if (!resp.ok) throw new Error('Server error ' + resp.status);
-                    const data = await resp.json();
-                    const statusEl = modal.querySelector('#fill-logistics-status');
-                    const startTime = new Date().toLocaleTimeString();
-                    const finishTime = data.finishesAt ? new Date(data.finishesAt).toLocaleTimeString() : '?';
                     statusEl.innerHTML = `
-                        <div style="background:#f4f0e8;border-radius:8px;padding:12px;margin-bottom:8px;">
-                            <div style="font-weight:600;color:#27ae60;">✅ Scheduled ${data.scheduled} job${data.scheduled !== 1 ? 's' : ''}</div>
-                            <div style="font-size:12px;color:#666;margin-top:4px;">Starting at ${startTime}, finishing ~${finishTime}</div>
-                            <div id="fill-logistics-progress" style="margin-top:10px;">
-                                <div style="background:#ddd;border-radius:4px;height:8px;overflow:hidden;">
-                                    <div id="fill-logistics-progress-bar" style="background:#27ae60;height:100%;width:0%;transition:width 0.3s;"></div>
-                                </div>
-                                <div id="fill-logistics-progress-text" style="font-size:11px;color:#888;margin-top:4px;">Checking progress...</div>
-                            </div>
+                        <div style="background:#f4f0e8;border-radius:8px;padding:16px;text-align:center;">
+                            <div style="font-size:24px;margin-bottom:8px;">✅</div>
+                            <div style="font-weight:600;color:#27ae60;">Request sent!</div>
+                            <div style="font-size:12px;color:#666;margin-top:6px;">Check the AI chat for status updates.</div>
                         </div>
                     `;
                     scheduleBtn.style.display = 'none';
-                    // Poll progress every 30s
-                    const totalToFill = data.scheduled;
-                    const pollProgress = async () => {
-                        try {
-                            await NotesService.sync(true);
-                            const allNow = NotesService.getAll().filter(n => n.type !== 'todo');
-                            const stillNeed = allNow.filter(i => (i.context || '').trim().length > 0 && !i.logistics).length;
-                            const done = totalToFill - stillNeed;
-                            const pct = Math.min(100, Math.round((done / totalToFill) * 100));
-                            const bar = document.getElementById('fill-logistics-progress-bar');
-                            const txt = document.getElementById('fill-logistics-progress-text');
-                            if (bar) bar.style.width = pct + '%';
-                            if (txt) txt.textContent = `${done}/${totalToFill} completed (${pct}%)`;
-                            if (done < totalToFill && document.body.contains(overlay)) {
-                                setTimeout(pollProgress, 30000);
-                            } else if (txt) {
-                                txt.textContent = `All ${totalToFill} completed!`;
-                                renderNotesList().catch(() => {});
-                            }
-                        } catch (e) { console.warn('Fill logistics poll error:', e); }
-                    };
-                    setTimeout(pollProgress, 30000);
+                    // Auto-close after 3 seconds
+                    setTimeout(() => { if (document.body.contains(overlay)) overlay.remove(); }, 3000);
                 } catch (e) {
                     console.error('Fill logistics error:', e);
+                    statusEl.innerHTML = '';
                     scheduleBtn.textContent = 'Failed — try again';
                     scheduleBtn.disabled = false;
                 }
