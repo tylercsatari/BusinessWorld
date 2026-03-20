@@ -2435,73 +2435,157 @@ const LibraryUI = (() => {
         const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
         const needLogistics = allIdeas.filter(i => (i.context || '').trim().length > 0 && !i.logistics);
         const count = needLogistics.length;
+        const selected = new Set(needLogistics.map(i => i.id));
 
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
         const modal = document.createElement('div');
-        modal.style.cssText = 'background:#fff;border-radius:10px;padding:24px;width:90%;max-width:480px;max-height:80vh;overflow-y:auto;';
+        modal.style.cssText = 'background:#f8f6f2;border-radius:10px;padding:24px;width:90%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;';
 
         if (count === 0) {
             modal.innerHTML = `
-                <div style="font-weight:600;font-size:15px;margin-bottom:12px;">🤖 Fill Logistics</div>
+                <div style="font-weight:600;font-size:15px;margin-bottom:12px;color:#5a3e1b;">🤖 Fill Logistics</div>
                 <p style="color:#666;margin-bottom:16px;">All ideas with context already have logistics. Nothing to do!</p>
                 <button id="fill-logistics-close" style="padding:8px 16px;border-radius:6px;border:1px solid #ccc;cursor:pointer;">Close</button>
             `;
-        } else {
-            modal.innerHTML = `
-                <div style="font-weight:600;font-size:15px;margin-bottom:12px;">🤖 Fill Logistics</div>
-                <p style="color:#666;margin-bottom:16px;"><strong>${count}</strong> idea${count !== 1 ? 's' : ''} need${count === 1 ? 's' : ''} logistics research.</p>
-                <div id="fill-logistics-status"></div>
-                <div style="display:flex;gap:8px;margin-top:16px;">
-                    <button id="fill-logistics-schedule" style="padding:8px 16px;border-radius:6px;background:#5a3e1b;color:#fff;border:none;cursor:pointer;font-weight:600;">Send to Optimusk</button>
-                    <button id="fill-logistics-close" style="padding:8px 16px;border-radius:6px;border:1px solid #ccc;cursor:pointer;">Close</button>
-                </div>
-            `;
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+            modal.querySelector('#fill-logistics-close').addEventListener('click', () => overlay.remove());
+            return;
         }
 
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-        modal.querySelector('#fill-logistics-close').addEventListener('click', () => overlay.remove());
+        function truncCtx(str, max) {
+            const s = (str || '').replace(/\s+/g, ' ').trim();
+            return s.length > max ? s.slice(0, max) + '...' : s;
+        }
 
-        const scheduleBtn = modal.querySelector('#fill-logistics-schedule');
-        if (scheduleBtn) {
-            scheduleBtn.addEventListener('click', async () => {
-                scheduleBtn.disabled = true;
-                scheduleBtn.textContent = 'Sending...';
-                const statusEl = modal.querySelector('#fill-logistics-status');
-                statusEl.innerHTML = `
-                    <div style="background:#f4f0e8;border-radius:8px;padding:16px;text-align:center;">
-                        <div style="font-size:24px;margin-bottom:8px;">🤖</div>
-                        <div style="font-weight:600;color:#5a3e1b;">Sending request to Optimusk Prime...</div>
-                    </div>
-                `;
-                try {
-                    const logisticsMessage = `Fill out logistics for all remaining ideas that have context but no logistics. Check GET https://businessworld.onrender.com/api/data/ideas for ideas where logistics is null/missing but context is not empty. Schedule cron jobs 15 minutes apart (starting 2 minutes from now) using 'openclaw cron add' for each idea, using our standard logistics research prompt with these CRITICAL requirements: (1) Find SPECIFIC direct product URLs not search pages, (2) 3 build angles per idea, (3) itemized costs with unit_price_cad × quantity. PATCH results to https://businessworld.onrender.com/api/data/ideas/{id}. After scheduling, POST to https://businessworld.onrender.com/api/ai/reply {"text": "Scheduled N logistics jobs. First fires at [time], all done by [time]. I'll send Telegram updates after each one.", "secret": "bw-ai-secret-2026"}`;
-                    const resp = await fetch('/api/ai/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: logisticsMessage })
-                    });
-                    if (!resp.ok) throw new Error('Server error ' + resp.status);
-                    statusEl.innerHTML = `
-                        <div style="background:#f4f0e8;border-radius:8px;padding:16px;text-align:center;">
-                            <div style="font-size:24px;margin-bottom:8px;">✅</div>
-                            <div style="font-weight:600;color:#27ae60;">Request sent!</div>
-                            <div style="font-size:12px;color:#666;margin-top:6px;">Check the AI chat for status updates.</div>
-                        </div>
-                    `;
-                    scheduleBtn.style.display = 'none';
-                    // Auto-close after 3 seconds
-                    setTimeout(() => { if (document.body.contains(overlay)) overlay.remove(); }, 3000);
-                } catch (e) {
-                    console.error('Fill logistics error:', e);
-                    statusEl.innerHTML = '';
-                    scheduleBtn.textContent = 'Failed — try again';
-                    scheduleBtn.disabled = false;
-                }
+        function updateUI() {
+            const sc = selected.size;
+            countEl.textContent = `${count} idea${count !== 1 ? 's' : ''} need logistics — ${sc} selected`;
+            scheduleBtn.textContent = `Schedule ${sc} selected`;
+            scheduleBtn.disabled = sc === 0;
+            scheduleBtn.style.opacity = sc === 0 ? '0.5' : '1';
+            listEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+                cb.checked = selected.has(cb.dataset.id);
             });
         }
+
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = 'flex-shrink:0;margin-bottom:12px;';
+        header.innerHTML = `
+            <div style="font-weight:600;font-size:15px;margin-bottom:8px;color:#5a3e1b;">🤖 Fill Logistics</div>
+            <div id="fill-logistics-count" style="font-size:13px;color:#666;margin-bottom:10px;"></div>
+            <div style="display:flex;gap:8px;">
+                <button id="fill-logistics-selall" style="padding:4px 10px;border-radius:4px;border:1px solid #5a3e1b;background:transparent;color:#5a3e1b;cursor:pointer;font-size:12px;font-weight:600;">Select All</button>
+                <button id="fill-logistics-deselall" style="padding:4px 10px;border-radius:4px;border:1px solid #ccc;background:transparent;color:#666;cursor:pointer;font-size:12px;font-weight:600;">Deselect All</button>
+            </div>
+        `;
+
+        // Scrollable idea list
+        const listEl = document.createElement('div');
+        listEl.style.cssText = 'flex:1;overflow-y:auto;margin:12px 0;border:1px solid #e0dbd3;border-radius:8px;background:#fff;';
+        needLogistics.forEach((idea, idx) => {
+            const row = document.createElement('label');
+            row.style.cssText = `display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;${idx < needLogistics.length - 1 ? 'border-bottom:1px solid #eee;' : ''}`;
+            row.innerHTML = `
+                <input type="checkbox" data-id="${idea.id}" checked style="width:16px;height:16px;accent-color:#5a3e1b;flex-shrink:0;" />
+                <div style="min-width:0;flex:1;">
+                    <div style="font-size:13px;font-weight:600;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(idea.name)}</div>
+                    <div style="font-size:11px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(truncCtx(idea.context, 60))}</div>
+                </div>
+            `;
+            listEl.appendChild(row);
+        });
+
+        // Status area
+        const statusEl = document.createElement('div');
+        statusEl.id = 'fill-logistics-status';
+        statusEl.style.cssText = 'flex-shrink:0;';
+
+        // Footer buttons
+        const footer = document.createElement('div');
+        footer.style.cssText = 'flex-shrink:0;display:flex;gap:8px;margin-top:8px;';
+        footer.innerHTML = `
+            <button id="fill-logistics-schedule" style="flex:1;padding:10px 16px;border-radius:6px;background:#5a3e1b;color:#fff;border:none;cursor:pointer;font-weight:600;font-size:14px;">Schedule ${selected.size} selected</button>
+            <button id="fill-logistics-close" style="padding:10px 16px;border-radius:6px;border:1px solid #ccc;cursor:pointer;font-size:14px;background:#fff;">Close</button>
+        `;
+
+        modal.appendChild(header);
+        modal.appendChild(listEl);
+        modal.appendChild(statusEl);
+        modal.appendChild(footer);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        const countEl = header.querySelector('#fill-logistics-count');
+        const scheduleBtn = footer.querySelector('#fill-logistics-schedule');
+
+        // Event: click outside
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        footer.querySelector('#fill-logistics-close').addEventListener('click', () => overlay.remove());
+
+        // Event: select all / deselect all
+        header.querySelector('#fill-logistics-selall').addEventListener('click', () => {
+            needLogistics.forEach(i => selected.add(i.id));
+            updateUI();
+        });
+        header.querySelector('#fill-logistics-deselall').addEventListener('click', () => {
+            selected.clear();
+            updateUI();
+        });
+
+        // Event: individual checkboxes
+        listEl.addEventListener('change', (e) => {
+            const cb = e.target;
+            if (cb.type !== 'checkbox') return;
+            if (cb.checked) selected.add(cb.dataset.id);
+            else selected.delete(cb.dataset.id);
+            updateUI();
+        });
+
+        // Event: schedule
+        scheduleBtn.addEventListener('click', async () => {
+            const chosen = needLogistics.filter(i => selected.has(i.id));
+            if (chosen.length === 0) return;
+            scheduleBtn.disabled = true;
+            scheduleBtn.textContent = 'Sending...';
+            scheduleBtn.style.opacity = '0.5';
+            statusEl.innerHTML = `
+                <div style="background:#f4f0e8;border-radius:8px;padding:16px;text-align:center;">
+                    <div style="font-size:24px;margin-bottom:8px;">🤖</div>
+                    <div style="font-weight:600;color:#5a3e1b;">Sending request to Optimusk Prime...</div>
+                </div>
+            `;
+            try {
+                const ideaList = chosen.map(i => `${i.name}: ${i.id}`).join('\n');
+                const logisticsMessage = `Fill logistics for these specific ideas (they have context but no logistics):\n${ideaList}\n\nFor each: schedule a cron job 15 min apart starting 2 min from now using openclaw cron add. Use our standard logistics prompt: 3 build angles, real product URLs (direct links not search), itemized costs with unit_price_cad × quantity, PATCH to https://businessworld.onrender.com/api/data/ideas/{id}. After all scheduled, POST to https://businessworld.onrender.com/api/ai/reply {"text":"Scheduled N jobs. First at [time], done by [time].","secret":"bw-ai-secret-2026"}`;
+                const resp = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: logisticsMessage })
+                });
+                if (!resp.ok) throw new Error('Server error ' + resp.status);
+                statusEl.innerHTML = `
+                    <div style="background:#f4f0e8;border-radius:8px;padding:16px;text-align:center;">
+                        <div style="font-size:24px;margin-bottom:8px;">✅</div>
+                        <div style="font-weight:600;color:#27ae60;">Request sent!</div>
+                        <div style="font-size:12px;color:#666;margin-top:6px;">Scheduled ${chosen.length} idea${chosen.length !== 1 ? 's' : ''} for logistics. Check AI chat for updates.</div>
+                    </div>
+                `;
+                scheduleBtn.style.display = 'none';
+                setTimeout(() => { if (document.body.contains(overlay)) overlay.remove(); }, 3000);
+            } catch (e) {
+                console.error('Fill logistics error:', e);
+                statusEl.innerHTML = '';
+                scheduleBtn.textContent = 'Failed — try again';
+                scheduleBtn.disabled = false;
+                scheduleBtn.style.opacity = '1';
+            }
+        });
+
+        updateUI();
     }
 
     // =====================
