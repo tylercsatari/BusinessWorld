@@ -3786,7 +3786,13 @@ const LibraryUI = (() => {
         // Card tap → popover
         el.querySelectorAll('.ideamap-card').forEach(card => {
             card.addEventListener('click', () => {
-                ideaMapShowCardPopover(el, card.dataset.id);
+                const id = card.dataset.id;
+                const note = NotesService.getById(id);
+                if (note) {
+                    selectNote(id);
+                } else {
+                    ideaMapShowCardPopover(el, id);
+                }
             });
         });
 
