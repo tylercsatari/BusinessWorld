@@ -451,6 +451,100 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
+    // API: Fill logistics — schedule cron jobs for ideas with context but no logistics
+    // =========================================
+    if (pathname === '/api/admin/fill-logistics' && req.method === 'POST') {
+        try {
+            const { exec } = require('child_process');
+            const allIdeas = await dataStore.getAll('ideas');
+            const needLogistics = allIdeas.filter(i => (i.context || '').trim().length > 0 && !i.logistics && i.type !== 'todo');
+
+            if (needLogistics.length === 0) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ scheduled: 0, ideas: [], finishesAt: null }));
+                return;
+            }
+
+            const now = Date.now();
+            const results = [];
+            for (let idx = 0; idx < needLogistics.length; idx++) {
+                const idea = needLogistics[idx];
+                const scheduledAt = new Date(now + (2 * 60 * 1000) + (idx * 15 * 60 * 1000)).toISOString();
+                const safeName = (idea.name || 'Untitled').replace(/[^a-zA-Z0-9 _-]/g, '').substring(0, 40);
+
+                // Logistics research prompt — emphasizes SPECIFIC product URLs (see Feature 4 notes)
+                const prompt = `You are a logistics researcher for a YouTube video idea. Research the logistics needed for this idea and update the idea's logistics field.
+
+Idea name: ${idea.name}
+Idea context: ${idea.context}
+
+Research the materials, services, and equipment needed. For each item find specific products with prices in CAD, sourcing info for Calgary AB Canada, and direct product links.
+
+CRITICAL: Find SPECIFIC products with DIRECT product page URLs. Do NOT link to search results, category pages, or generic listings. Each link must go directly to a specific product listing. Example of BAD link: https://www.amazon.ca/s?k=solenoid+valve. Example of GOOD link: https://www.amazon.ca/dp/B08XYZ1234. If you cannot find a specific product URL, leave the links array empty rather than adding a search URL.
+
+For AliExpress: find the specific item URL (e.g. https://www.aliexpress.com/item/1234567890.html), not a search or store page.
+
+Provide multiple approach angles if applicable (e.g. DIY vs professional, budget vs premium). Include safety considerations.
+
+Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body containing a "logistics" field with this structure:
+{
+  "summary": "Brief overview",
+  "estimated_cost_range": "$X - $Y CAD",
+  "last_researched": "${new Date().toISOString().split('T')[0]}",
+  "angles": [
+    {
+      "name": "Approach name",
+      "description": "Brief description",
+      "complexity": "easy|medium|hard|extreme",
+      "timeline": "Estimated time",
+      "materials": [{"name": "Item", "quantity": 1, "unit_price_cad": 0, "estimated_cost_cad": 0, "where_to_buy": "Store", "links": ["https://direct-product-url"], "notes": ""}],
+      "services": [],
+      "equipment": []
+    }
+  ],
+  "safety": ["Safety consideration 1"],
+  "sourcing_notes": "General sourcing notes for Calgary"
+}`;
+
+                const cronArgs = [
+                    'cron', 'add',
+                    '--name', `Logistics #${idx + 1}: ${safeName}`,
+                    '--at', scheduledAt,
+                    '--session', 'isolated',
+                    '--message', prompt,
+                    '--timeout-seconds', '840',
+                    '--announce',
+                    '--channel', 'telegram'
+                ];
+
+                await new Promise((resolve, reject) => {
+                    exec('openclaw ' + cronArgs.map(a => {
+                        // Shell-escape each argument
+                        if (typeof a === 'string' && (a.includes(' ') || a.includes('"') || a.includes("'") || a.includes('\n') || a.includes('$') || a.includes('`') || a.includes('\\'))) {
+                            return "'" + a.replace(/'/g, "'\\''") + "'";
+                        }
+                        return a;
+                    }).join(' '), { maxBuffer: 10 * 1024 * 1024, timeout: 30000 }, (err, stdout, stderr) => {
+                        if (err) { console.warn(`Failed to schedule logistics for ${idea.name}:`, err.message); reject(err); }
+                        else resolve(stdout);
+                    });
+                });
+
+                results.push({ id: idea.id, name: idea.name, scheduledAt });
+            }
+
+            const finishesAt = results.length > 0 ? results[results.length - 1].scheduledAt : null;
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ scheduled: results.length, ideas: results, finishesAt }));
+        } catch (e) {
+            console.error('Fill logistics error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Invoice generation — creates HTML invoice, stores in R2
     // =========================================
     if (pathname === '/api/invoices/generate' && req.method === 'POST') {

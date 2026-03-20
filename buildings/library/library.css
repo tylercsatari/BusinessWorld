@@ -125,6 +125,23 @@
     transform: scale(1.08);
 }
 
+.library-fill-logistics-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #5a3e1b;
+    background: transparent;
+    color: #5a3e1b;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.library-fill-logistics-btn:hover {
+    background: #5a3e1b;
+    color: #fff;
+}
+
 .library-list {
     flex: 1;
     overflow-y: auto;
@@ -2883,6 +2900,11 @@
 .logistics-pending { color: #bbb; text-align: center; padding: 40px 20px; font-style: italic; font-size: 13px; }
 .logistics-edit-btn { padding: 10px 16px; font-size: 13px; border: 1px solid #ccc; border-radius: 8px; background: #fff; color: #555; cursor: pointer; font-weight: 500; width: 100%; margin-top: 14px; display: block; box-sizing: border-box; }
 .logistics-edit-btn:hover { background: #f4f2ef; border-color: #aaa; }
+.logistics-add-file-btn { padding: 6px 12px; font-size: 12px; border: 1px dashed #bbb; border-radius: 6px; background: transparent; color: #888; cursor: pointer; margin-top: 6px; display: inline-block; }
+.logistics-add-file-btn:hover { background: #f4f2ef; color: #5a3e1b; border-color: #5a3e1b; }
+.logistics-files-list { padding: 4px 0; }
+.logistics-file-item { border-bottom: 1px solid #f0ede8; }
+.logistics-file-item:last-child { border-bottom: none; }
 .logistics-safety-list { list-style: none; padding: 0; margin: 0; }
 .logistics-safety-list li { padding: 8px 0 8px 24px; position: relative; border-bottom: 1px solid #ede9e3; font-size: 13px; color: #555; }
 .logistics-safety-list li:last-child { border-bottom: none; }

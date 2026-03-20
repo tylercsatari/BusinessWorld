@@ -55,6 +55,7 @@ const LibraryUI = (() => {
     let notesSearchResults = null; // null = no search, array = search active
     let notesSearchLoading = false;
     let notesSearchTimer = null;
+    let notesFilterContent = JSON.parse(localStorage.getItem('notes-filter-content') || '[]'); // active content filters: 'context', 'script', 'logistics'
 
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
@@ -125,6 +126,7 @@ const LibraryUI = (() => {
                     </div>
                     <div class="library-list-header" id="library-list-header">
                         <h2 class="library-list-heading" id="library-list-heading">Ideas</h2>
+                        <button class="library-fill-logistics-btn" id="library-fill-logistics-btn" title="Fill out logistics for ideas with context" style="display:none;">🤖 Fill Logistics</button>
                         <button class="library-new-btn" id="library-new-btn" title="New">+</button>
                     </div>
                     <div class="library-freenotes-list" id="library-freenotes-list" style="display:none;"></div>
@@ -153,6 +155,7 @@ const LibraryUI = (() => {
                 else { editingSponsorVideo = 'new'; renderSponsorsTab(); }
             }
         });
+        document.getElementById('library-fill-logistics-btn').addEventListener('click', () => openFillLogisticsModal());
         // Event delegation: handles tabs added after initial render (e.g. Idea Map)
         container.querySelector('.library-tabs').addEventListener('click', (e) => {
             const tab = e.target.closest('.library-tab');
@@ -194,6 +197,8 @@ const LibraryUI = (() => {
         if (ideamapContainer) ideamapContainer.style.display = 'none';
 
         const newBtn = document.getElementById('library-new-btn');
+        const fillLogisticsBtn = document.getElementById('library-fill-logistics-btn');
+        if (fillLogisticsBtn) fillLogisticsBtn.style.display = 'none';
 
         if (tab === 'freenotes') {
             if (heading) heading.textContent = 'Notes';
@@ -205,6 +210,7 @@ const LibraryUI = (() => {
             if (notesFilterBar) notesFilterBar.style.display = '';
             if (notesList) notesList.style.display = '';
             if (newBtn) newBtn.style.display = '';
+            if (fillLogisticsBtn) fillLogisticsBtn.style.display = '';
             renderNotesList().catch(() => {});
         } else if (tab === 'todo') {
             if (heading) heading.textContent = 'To-Do';
@@ -1144,6 +1150,20 @@ const LibraryUI = (() => {
         html += `<button class="ideamap-filter-pill${cf === 'uncategorized' ? ' active' : ''}" data-notes-filter-cat="uncategorized">Uncategorized${uncatCntHtml}</button>`;
         html += `</div>`;
 
+        // Content filter row (multi-select toggle pills)
+        const contentFilters = [
+            { key: 'context', label: '📝 Has Context' },
+            { key: 'script', label: '📄 Has Script' },
+            { key: 'logistics', label: '🟢 Has Logistics' }
+        ];
+        html += `<div class="ideamap-filter-bar ideamap-filter-bar-content">`;
+        html += `<span class="ideamap-filter-row-label">Content:</span>`;
+        for (const f of contentFilters) {
+            const active = notesFilterContent.includes(f.key);
+            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-notes-filter-content="${f.key}">${f.label}</button>`;
+        }
+        html += `</div>`;
+
         // Search bar
         html += `<div class="ideamap-search-bar">
             <input type="text" class="ideamap-search-input" id="notes-search-input" placeholder="Search ideas by meaning..." value="${escAttr(notesSearchQuery)}" />
@@ -1170,6 +1190,17 @@ const LibraryUI = (() => {
             btn.addEventListener('click', () => {
                 notesFilterCategory = btn.dataset.notesFilterCat;
                 localStorage.setItem('notes-filter-category', notesFilterCategory);
+                renderNotesFilterBar();
+                renderNotesList().catch(() => {});
+            });
+        });
+        container.querySelectorAll('[data-notes-filter-content]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.notesFilterContent;
+                const idx = notesFilterContent.indexOf(key);
+                if (idx >= 0) notesFilterContent.splice(idx, 1);
+                else notesFilterContent.push(key);
+                localStorage.setItem('notes-filter-content', JSON.stringify(notesFilterContent));
                 renderNotesFilterBar();
                 renderNotesList().catch(() => {});
             });
@@ -1276,6 +1307,18 @@ const LibraryUI = (() => {
                     const validIds = ideaMapGetCategoryDescendants(notesFilterCategory);
                     ideas = ideas.filter(i => validIds.includes(mapping[i.id]));
                 }
+            }
+
+            // Apply content filter (AND logic: must have ALL selected content types)
+            if (notesFilterContent.length > 0) {
+                ideas = ideas.filter(i => {
+                    return notesFilterContent.every(f => {
+                        if (f === 'context') return (i.context || '').trim().length > 0;
+                        if (f === 'script') return (i.script || '').trim().length > 0;
+                        if (f === 'logistics') return !!i.logistics;
+                        return true;
+                    });
+                });
             }
         }
 
@@ -1393,6 +1436,84 @@ const LibraryUI = (() => {
         if (!selectedNote) return;
         showEditorPage();
         renderNoteEditor(selectedNote);
+    }
+
+    function renderFilesListHtml(files) {
+        if (!files || !files.length) return '<div class="logistics-files-empty" style="color:#aaa;font-size:12px;padding:4px 0;">No files yet.</div>';
+        const typeIcons = { stl: '🧊', pdf: '📕', image: '🖼️', link: '🔗', other: '📎' };
+        let html = '<div class="logistics-files-list">';
+        for (const f of files) {
+            const icon = typeIcons[f.type] || '📎';
+            html += `<div class="logistics-file-item" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;">`;
+            html += `<span>${icon}</span>`;
+            if (f.url) {
+                html += `<a href="${escAttr(f.url)}" target="_blank" rel="noopener" style="color:#5a3e1b;text-decoration:underline;">${escHtml(f.name || f.url)}</a>`;
+            } else {
+                html += `<span>${escHtml(f.name || 'Unnamed')}</span>`;
+            }
+            if (f.notes) html += `<span style="color:#888;font-size:11px;"> — ${escHtml(f.notes)}</span>`;
+            html += `</div>`;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function openAddFileModal(note, angleIdx) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:#fff;border-radius:10px;padding:20px;width:90%;max-width:420px;';
+        modal.innerHTML = `
+            <div style="font-weight:600;font-size:14px;margin-bottom:12px;">Add File</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <input type="text" id="file-modal-url" placeholder="URL (link to file online)" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;" />
+                <input type="text" id="file-modal-name" placeholder="Name" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;" />
+                <select id="file-modal-type" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                    <option value="stl">3D Model (.stl)</option>
+                    <option value="pdf">PDF</option>
+                    <option value="image">Image</option>
+                    <option value="link" selected>Link</option>
+                    <option value="other">Other</option>
+                </select>
+                <input type="text" id="file-modal-notes" placeholder="Notes (optional)" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:13px;" />
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+                <button id="file-modal-cancel" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancel</button>
+                <button id="file-modal-save" style="padding:6px 14px;border:none;border-radius:6px;background:#5a3e1b;color:#fff;cursor:pointer;font-weight:600;">Save</button>
+            </div>
+        `;
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        modal.querySelector('#file-modal-cancel').addEventListener('click', () => overlay.remove());
+        modal.querySelector('#file-modal-save').addEventListener('click', async () => {
+            const url = modal.querySelector('#file-modal-url').value.trim();
+            const name = modal.querySelector('#file-modal-name').value.trim();
+            const type = modal.querySelector('#file-modal-type').value;
+            const notes = modal.querySelector('#file-modal-notes').value.trim();
+            if (!name && !url) { alert('Please enter a name or URL.'); return; }
+            const fileEntry = { name: name || url, url, type, notes, uploadedAt: new Date().toISOString() };
+            const logistics = JSON.parse(JSON.stringify(note.logistics || {}));
+            if (angleIdx === 'shared') {
+                if (!logistics.files) logistics.files = [];
+                logistics.files.push(fileEntry);
+            } else {
+                const idx = parseInt(angleIdx);
+                if (logistics.angles && logistics.angles[idx]) {
+                    if (!logistics.angles[idx].files) logistics.angles[idx].files = [];
+                    logistics.angles[idx].files.push(fileEntry);
+                }
+            }
+            try {
+                await NotesService.update(note.id, { logistics });
+                note.logistics = logistics;
+                overlay.remove();
+                renderNoteEditor(note);
+            } catch (e) {
+                console.error('Failed to save file:', e);
+                alert('Failed to save file.');
+            }
+        });
     }
 
     function renderLogisticsPanel(note) {
@@ -1546,6 +1667,12 @@ const LibraryUI = (() => {
                 html += renderLineItems(a.equipment);
             }
 
+            // Angle files
+            const angleFiles = a.files || [];
+            html += `<div class="logistics-section-title">Files</div>`;
+            html += renderFilesListHtml(angleFiles);
+            html += `<button class="logistics-add-file-btn" data-angle-idx="${i}">+ Add File</button>`;
+
             // Angle grand total
             html += `<div class="logistics-angle-total">
                 Angle Total: ${fmtCost(totals.grand)}
@@ -1572,6 +1699,12 @@ const LibraryUI = (() => {
             html += `<div class="logistics-section-title">Sourcing Notes</div>
             <div class="logistics-sourcing-notes">${escHtml(log.sourcing_notes)}</div>`;
         }
+
+        // Shared files section
+        const sharedFiles = log.files || [];
+        html += `<div class="logistics-section-title">Files</div>`;
+        html += renderFilesListHtml(sharedFiles);
+        html += `<button class="logistics-add-file-btn" data-angle-idx="shared">+ Add File</button>`;
 
         // Edit button
         html += `<button class="logistics-edit-btn" id="logistics-edit-btn">Edit Logistics</button>`;
@@ -1878,6 +2011,10 @@ const LibraryUI = (() => {
         // Logistics tab event listeners
         const logisticsEditBtn = document.getElementById('logistics-edit-btn');
         if (logisticsEditBtn) logisticsEditBtn.addEventListener('click', () => openLogisticsEditModal(note));
+        // Bind "Add File" buttons in logistics panel
+        container.querySelectorAll('.logistics-add-file-btn').forEach(btn => {
+            btn.addEventListener('click', () => openAddFileModal(note, btn.dataset.angleIdx));
+        });
     }
 
     async function sendToIncubator() {
@@ -2027,6 +2164,98 @@ const LibraryUI = (() => {
             if (selectedNote && selectedNote.id === id) { selectedNote = null; if (currentPage === 'editor') showListPage(); }
             renderNotesList().catch(() => {});
         } catch (e) { console.warn('Library: delete note failed', e); }
+    }
+
+    // =====================
+    // --- FILL LOGISTICS ---
+    // =====================
+    function openFillLogisticsModal() {
+        const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
+        const needLogistics = allIdeas.filter(i => (i.context || '').trim().length > 0 && !i.logistics);
+        const count = needLogistics.length;
+
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:#fff;border-radius:10px;padding:24px;width:90%;max-width:480px;max-height:80vh;overflow-y:auto;';
+
+        if (count === 0) {
+            modal.innerHTML = `
+                <div style="font-weight:600;font-size:15px;margin-bottom:12px;">🤖 Fill Logistics</div>
+                <p style="color:#666;margin-bottom:16px;">All ideas with context already have logistics. Nothing to do!</p>
+                <button id="fill-logistics-close" style="padding:8px 16px;border-radius:6px;border:1px solid #ccc;cursor:pointer;">Close</button>
+            `;
+        } else {
+            modal.innerHTML = `
+                <div style="font-weight:600;font-size:15px;margin-bottom:12px;">🤖 Fill Logistics</div>
+                <p style="color:#666;margin-bottom:16px;"><strong>${count}</strong> idea${count !== 1 ? 's' : ''} need${count === 1 ? 's' : ''} logistics research.</p>
+                <div id="fill-logistics-status"></div>
+                <div style="display:flex;gap:8px;margin-top:16px;">
+                    <button id="fill-logistics-schedule" style="padding:8px 16px;border-radius:6px;background:#5a3e1b;color:#fff;border:none;cursor:pointer;font-weight:600;">Schedule</button>
+                    <button id="fill-logistics-close" style="padding:8px 16px;border-radius:6px;border:1px solid #ccc;cursor:pointer;">Close</button>
+                </div>
+            `;
+        }
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        modal.querySelector('#fill-logistics-close').addEventListener('click', () => overlay.remove());
+
+        const scheduleBtn = modal.querySelector('#fill-logistics-schedule');
+        if (scheduleBtn) {
+            scheduleBtn.addEventListener('click', async () => {
+                scheduleBtn.disabled = true;
+                scheduleBtn.textContent = 'Scheduling...';
+                try {
+                    const resp = await fetch('/api/admin/fill-logistics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                    if (!resp.ok) throw new Error('Server error ' + resp.status);
+                    const data = await resp.json();
+                    const statusEl = modal.querySelector('#fill-logistics-status');
+                    const startTime = new Date().toLocaleTimeString();
+                    const finishTime = data.finishesAt ? new Date(data.finishesAt).toLocaleTimeString() : '?';
+                    statusEl.innerHTML = `
+                        <div style="background:#f4f0e8;border-radius:8px;padding:12px;margin-bottom:8px;">
+                            <div style="font-weight:600;color:#27ae60;">✅ Scheduled ${data.scheduled} job${data.scheduled !== 1 ? 's' : ''}</div>
+                            <div style="font-size:12px;color:#666;margin-top:4px;">Starting at ${startTime}, finishing ~${finishTime}</div>
+                            <div id="fill-logistics-progress" style="margin-top:10px;">
+                                <div style="background:#ddd;border-radius:4px;height:8px;overflow:hidden;">
+                                    <div id="fill-logistics-progress-bar" style="background:#27ae60;height:100%;width:0%;transition:width 0.3s;"></div>
+                                </div>
+                                <div id="fill-logistics-progress-text" style="font-size:11px;color:#888;margin-top:4px;">Checking progress...</div>
+                            </div>
+                        </div>
+                    `;
+                    scheduleBtn.style.display = 'none';
+                    // Poll progress every 30s
+                    const totalToFill = data.scheduled;
+                    const pollProgress = async () => {
+                        try {
+                            await NotesService.sync(true);
+                            const allNow = NotesService.getAll().filter(n => n.type !== 'todo');
+                            const stillNeed = allNow.filter(i => (i.context || '').trim().length > 0 && !i.logistics).length;
+                            const done = totalToFill - stillNeed;
+                            const pct = Math.min(100, Math.round((done / totalToFill) * 100));
+                            const bar = document.getElementById('fill-logistics-progress-bar');
+                            const txt = document.getElementById('fill-logistics-progress-text');
+                            if (bar) bar.style.width = pct + '%';
+                            if (txt) txt.textContent = `${done}/${totalToFill} completed (${pct}%)`;
+                            if (done < totalToFill && document.body.contains(overlay)) {
+                                setTimeout(pollProgress, 30000);
+                            } else if (txt) {
+                                txt.textContent = `All ${totalToFill} completed!`;
+                                renderNotesList().catch(() => {});
+                            }
+                        } catch (e) { console.warn('Fill logistics poll error:', e); }
+                    };
+                    setTimeout(pollProgress, 30000);
+                } catch (e) {
+                    console.error('Fill logistics error:', e);
+                    scheduleBtn.textContent = 'Failed — try again';
+                    scheduleBtn.disabled = false;
+                }
+            });
+        }
     }
 
     // =====================
