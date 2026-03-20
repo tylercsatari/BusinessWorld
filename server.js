@@ -2779,6 +2779,65 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     }
 
     // =========================================
+    // Public share pages (read-only, no auth)
+    // =========================================
+
+    // --- Share single idea ---
+    const shareIdeaMatch = pathname.match(/^\/share\/idea\/([^/]+)$/);
+    if (shareIdeaMatch && req.method === 'GET') {
+        try {
+            const idea = await dataStore.getById('ideas', shareIdeaMatch[1]);
+            if (!idea) {
+                res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(renderSharePage('Not Found', '<div style="text-align:center;padding:60px 20px;"><h1 style="font-size:28px;color:#333;">Idea not found</h1><p style="color:#888;margin-top:12px;">This idea may have been removed or the link is invalid.</p></div>'));
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(renderShareIdeaPage(idea));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(renderSharePage('Error', '<div style="text-align:center;padding:60px 20px;"><h1 style="color:#e74c3c;">Something went wrong</h1></div>'));
+        }
+        return;
+    }
+
+    // --- Share ideas list ---
+    if (pathname === '/share/ideas' && req.method === 'GET') {
+        try {
+            const statusParam = url.searchParams.get('status') || 'all';
+            const catParam = url.searchParams.get('cat') || 'all';
+            let ideas = await dataStore.getAll('ideas');
+            const videos = await dataStore.getAll('videos');
+
+            // Resolve pipeline status per idea (same logic as app)
+            const getIdeaStatus = (idea) => {
+                const video = videos.find(v => v.sourceIdeaId === idea.id);
+                if (video) return video.status || 'incubator';
+                if (idea.type === 'converted') return 'incubator';
+                return idea.type || 'idea';
+            };
+
+            // Filter by status
+            if (statusParam !== 'all') {
+                ideas = ideas.filter(i => {
+                    const s = getIdeaStatus(i);
+                    if (statusParam === 'posted') return s === 'posted' || s === 'converted';
+                    return s === statusParam;
+                });
+            }
+
+            // Filter by category (categories stored client-side in localStorage, so we skip server-side cat filtering — show all if cat specified)
+
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(renderShareIdeasPage(ideas, statusParam, catParam, getIdeaStatus));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(renderSharePage('Error', '<div style="text-align:center;padding:60px 20px;"><h1 style="color:#e74c3c;">Something went wrong</h1></div>'));
+        }
+        return;
+    }
+
+    // =========================================
     // Static file serving
     // =========================================
     let filePath = path.join(DIR, pathname === '/' ? 'index.html' : pathname);
@@ -2869,6 +2928,280 @@ async function _rebuildMetrics() {
     if (cloud.isR2Ready()) {
         cloud.uploadToR2('cache/metrics-summary.json', Buffer.from(global._metricsCache), 'application/json').catch(() => {});
     }
+}
+
+// =========================================
+// Share page rendering helpers
+// =========================================
+
+const SHARE_CSS = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f6f2; color: #333; line-height: 1.5; }
+    .share-container { max-width: 720px; margin: 0 auto; padding: 20px 16px 80px; }
+    .share-header { text-align: center; padding: 24px 0 16px; }
+    .share-header h1 { font-size: 24px; font-weight: 700; color: #333; margin-bottom: 4px; }
+    .share-hook { font-size: 15px; color: #5a3e1b; font-style: italic; margin: 8px 0 16px; padding: 10px 14px; background: #fff; border-left: 3px solid #d4a060; border-radius: 6px; }
+    .share-section { margin-bottom: 20px; }
+    .share-section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #8B5E3C; margin-bottom: 8px; }
+    .share-context { font-size: 14px; color: #444; white-space: pre-wrap; word-wrap: break-word; background: #fff; border: 1px solid #e8e4df; border-radius: 10px; padding: 14px; }
+    .share-script { font-size: 14px; color: #444; white-space: pre-wrap; word-wrap: break-word; background: #fff; border: 1px solid #e8e4df; border-radius: 10px; padding: 14px; }
+    .share-logistics-pending { text-align: center; color: #999; font-size: 14px; padding: 30px 0; }
+    .share-header-card { background: #fff; border: 1px solid #e8e4df; border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+    .share-header-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+    .share-cost-badge { color: #2d7a3a; font-size: 16px; font-weight: 700; }
+    .share-complexity-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #fff; display: inline-block; }
+    .share-timeline-badge { font-size: 12px; color: #888; }
+    .share-summary-bar { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
+    .share-summary-card { background: #fff; border: 1px solid #e0dcd6; border-radius: 10px; padding: 10px 14px; flex: 1; min-width: 140px; text-decoration: none; color: inherit; }
+    .share-summary-card-name { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
+    .share-summary-card-cost { display: block; font-size: 15px; font-weight: 700; color: #2d7a3a; }
+    .share-angle-section { border: 1px solid #e0dcd6; border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+    .share-angle-header { background: #faf8f5; padding: 12px 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .share-angle-header-info { flex: 1; }
+    .share-angle-header-name { font-weight: 600; font-size: 14px; }
+    .share-angle-header-desc { font-size: 12px; color: #888; margin-top: 2px; }
+    .share-angle-header-cost { font-size: 15px; font-weight: 700; color: #2d7a3a; white-space: nowrap; }
+    .share-angle-body { padding: 0 14px 14px; }
+    .share-angle-section.collapsed .share-angle-body { display: none; }
+    .share-angle-section.collapsed .share-toggle-icon { transform: rotate(-90deg); }
+    .share-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #8B5E3C; margin: 14px 0 6px; }
+    .share-line-item { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid #ede9e3; }
+    .share-line-name { font-weight: 600; font-size: 13px; color: #333; }
+    .share-line-desc { font-size: 12px; color: #888; margin-top: 2px; }
+    .share-line-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+    .share-line-cost { color: #2d7a3a; font-weight: 700; font-size: 13px; }
+    .share-line-qty { font-size: 11px; color: #999; background: #f0ece6; padding: 1px 6px; border-radius: 4px; }
+    .share-line-source { font-size: 11px; color: #888; }
+    .share-link { font-size: 11px; color: #4a90d9; text-decoration: none; }
+    .share-link:hover { text-decoration: underline; }
+    .share-subtotal { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12px; color: #888; border-top: 1px dashed #e0dcd6; margin-top: 4px; }
+    .share-angle-total { color: #2d7a3a; text-align: right; font-weight: 700; font-size: 14px; border-top: 2px solid #d5d0c8; padding: 10px 0 4px; margin-top: 8px; }
+    .share-safety-list { list-style: none; padding: 0; }
+    .share-safety-list li { font-size: 13px; padding: 4px 0; color: #555; }
+    .share-safety-list li::before { content: '\\26A0\\FE0F '; }
+    .share-sourcing-notes { background: #fff; border-left: 3px solid #d4a060; padding: 10px 14px; font-size: 13px; color: #555; border-radius: 0 6px 6px 0; }
+    .share-footer { text-align: center; padding: 30px 0 20px; color: #bbb; font-size: 12px; }
+    /* Ideas list page */
+    .share-filter-badges { display: flex; gap: 6px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .share-badge { padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; background: #e8e4df; color: #5a3e1b; }
+    .share-ideas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .share-idea-card { background: #fff; border: 1px solid #e8e4df; border-radius: 10px; padding: 16px; text-decoration: none; color: inherit; display: block; transition: box-shadow 0.15s; }
+    .share-idea-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .share-idea-card-name { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .share-idea-card-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .share-idea-card-preview { font-size: 13px; color: #888; line-height: 1.4; }
+    .share-green-dot { width: 8px; height: 8px; border-radius: 50%; background: #2d7a3a; display: inline-block; flex-shrink: 0; }
+    .share-empty { text-align: center; color: #999; padding: 60px 20px; font-size: 15px; }
+`;
+
+const COMPLEXITY_COLORS = { easy: '#27ae60', medium: '#e67e22', hard: '#e74c3c', extreme: '#8b0000' };
+
+function renderSharePage(title, bodyHtml) {
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${esc(title)} — BusinessWorld</title><style>${SHARE_CSS}</style></head><body>${bodyHtml}</body></html>`;
+}
+
+function shareFmtCost(v) {
+    if (v == null || isNaN(v)) return '$0.00';
+    return '$' + Number(v).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function shareComputeLineTotal(item) {
+    if (item.computed_total != null && !isNaN(item.computed_total)) return Number(item.computed_total);
+    const qty = Number(item.quantity || item.qty || 1);
+    const price = Number(item.unit_price_cad || item.estimated_cost_cad || 0);
+    return qty * price;
+}
+
+function shareSumItems(items) {
+    if (!items || !items.length) return 0;
+    return items.reduce((acc, item) => acc + shareComputeLineTotal(item), 0);
+}
+
+function shareRenderLineItems(items) {
+    if (!items || !items.length) return '';
+    let html = '';
+    let subtotal = 0;
+    for (const item of items) {
+        const unitPrice = parseFloat(item.unit_price_cad) || 0;
+        const qty = parseInt(item.quantity) || 1;
+        const cost = parseFloat(item.estimated_cost_cad) || (unitPrice * qty) || 0;
+        subtotal += cost;
+        const source = esc(item.where_to_buy || item.where_in_calgary || item.source || item.supplier || item.provider || '');
+        const nameStr = esc(item.name || item.type || item.item || item.service || '');
+        const descStr = item.description ? esc(item.description) : '';
+        const notesStr = item.notes ? esc(item.notes) : '';
+        const links = (item.links || []).filter(Boolean);
+        html += '<div class="share-line-item">';
+        html += '<div class="share-line-name">' + nameStr + '</div>';
+        if (descStr) html += '<div class="share-line-desc">' + descStr + '</div>';
+        html += '<div class="share-line-meta">';
+        if (cost) html += '<span class="share-line-cost">CAD ' + shareFmtCost(cost) + '</span>';
+        if (qty > 1) html += '<span class="share-line-qty">x' + qty + '</span>';
+        if (source) html += '<span class="share-line-source">' + source + '</span>';
+        links.forEach(l => { html += '<a class="share-link" href="' + esc(l) + '" target="_blank" rel="noopener">Link</a>'; });
+        html += '</div>';
+        if (notesStr) html += '<div class="share-line-desc" style="color:#aaa;">' + notesStr + '</div>';
+        html += '</div>';
+    }
+    if (subtotal > 0) {
+        html += '<div class="share-subtotal"><span>Subtotal</span><span>CAD ' + shareFmtCost(subtotal) + '</span></div>';
+    }
+    return html;
+}
+
+function renderShareIdeaPage(idea) {
+    const log = idea.logistics;
+    let logisticsHtml = '';
+
+    if (!log || Object.keys(log).length === 0) {
+        logisticsHtml = '<div class="share-logistics-pending">Logistics research pending...</div>';
+    } else {
+        // Normalize angles
+        let angles;
+        if (log.angles && Array.isArray(log.angles) && log.angles.length) {
+            angles = log.angles;
+        } else {
+            angles = [{ name: 'Primary Approach', description: log.summary || '', complexity: log.build_complexity || '', timeline: log.timeline_estimate || '', materials: log.materials || [], services: log.services || [], equipment: log.equipment || [] }];
+        }
+
+        const angleTotals = angles.map(a => {
+            const m = shareSumItems(a.materials), s = shareSumItems(a.services), e = shareSumItems(a.equipment);
+            return { materials: m, services: s, equipment: e, grand: m + s + e };
+        });
+
+        // Summary header card
+        if (log.summary || log.estimated_cost_range || log.last_researched) {
+            logisticsHtml += '<div class="share-header-card">';
+            if (log.summary) logisticsHtml += '<div style="font-size:13px;margin-bottom:6px;">' + esc(log.summary) + '</div>';
+            logisticsHtml += '<div class="share-header-meta">';
+            if (log.estimated_cost_range) logisticsHtml += '<span class="share-cost-badge">' + esc(log.estimated_cost_range) + '</span>';
+            if (log.build_complexity) {
+                const bc = log.build_complexity;
+                logisticsHtml += '<span class="share-complexity-badge" style="background:' + (COMPLEXITY_COLORS[bc] || '#999') + ';">' + esc(bc) + '</span>';
+            }
+            if (log.timeline_estimate) logisticsHtml += '<span class="share-timeline-badge">' + esc(log.timeline_estimate) + '</span>';
+            if (log.last_researched) logisticsHtml += '<span class="share-timeline-badge">Researched: ' + esc(log.last_researched) + '</span>';
+            logisticsHtml += '</div></div>';
+        }
+
+        // Cost summary bar
+        if (angles.length > 0) {
+            logisticsHtml += '<div class="share-summary-bar">';
+            angles.forEach((a, i) => {
+                const total = angleTotals[i].grand;
+                const complexity = a.complexity || a.build_complexity || '';
+                const badgeColor = COMPLEXITY_COLORS[complexity] || '#999';
+                logisticsHtml += '<div class="share-summary-card">';
+                logisticsHtml += '<span class="share-summary-card-name">' + esc(a.name || 'Angle ' + (i + 1)) + '</span>';
+                if (complexity) logisticsHtml += '<span class="share-complexity-badge" style="background:' + badgeColor + ';margin-bottom:4px;">' + esc(complexity) + '</span> ';
+                logisticsHtml += '<span class="share-summary-card-cost">' + shareFmtCost(total) + '</span>';
+                logisticsHtml += '</div>';
+            });
+            logisticsHtml += '</div>';
+        }
+
+        // Per-angle sections
+        angles.forEach((a, i) => {
+            const totals = angleTotals[i];
+            const complexity = a.complexity || a.build_complexity || '';
+            const badgeColor = COMPLEXITY_COLORS[complexity] || '#999';
+            logisticsHtml += '<div class="share-angle-section">';
+            logisticsHtml += '<div class="share-angle-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">';
+            logisticsHtml += '<div class="share-angle-header-info">';
+            logisticsHtml += '<div class="share-angle-header-name">' + esc(a.name || 'Angle ' + (i + 1));
+            if (complexity) logisticsHtml += ' <span class="share-complexity-badge" style="background:' + badgeColor + ';">' + esc(complexity) + '</span>';
+            logisticsHtml += '</div>';
+            if (a.description) logisticsHtml += '<div class="share-angle-header-desc">' + esc(a.description) + '</div>';
+            if (a.timeline) logisticsHtml += '<div class="share-timeline-badge">' + esc(a.timeline) + '</div>';
+            logisticsHtml += '</div>';
+            logisticsHtml += '<span class="share-angle-header-cost">' + shareFmtCost(totals.grand) + '</span>';
+            logisticsHtml += '<span class="share-toggle-icon" style="font-size:16px;color:#aaa;transition:transform 0.2s;">&#9660;</span>';
+            logisticsHtml += '</div>';
+
+            logisticsHtml += '<div class="share-angle-body">';
+            if (a.materials && a.materials.length) {
+                logisticsHtml += '<div class="share-section-label">Materials</div>' + shareRenderLineItems(a.materials);
+            }
+            if (a.services && a.services.length) {
+                logisticsHtml += '<div class="share-section-label">Services</div>' + shareRenderLineItems(a.services);
+            }
+            if (a.equipment && a.equipment.length) {
+                logisticsHtml += '<div class="share-section-label">Equipment</div>' + shareRenderLineItems(a.equipment);
+            }
+            logisticsHtml += '<div class="share-angle-total">Angle Total: ' + shareFmtCost(totals.grand) + '</div>';
+            logisticsHtml += '</div></div>';
+        });
+
+        // Safety
+        if (log.safety && log.safety.length) {
+            logisticsHtml += '<div class="share-section"><div class="share-section-title">Safety Checklist</div><ul class="share-safety-list">';
+            for (const s of log.safety) logisticsHtml += '<li>' + esc(s) + '</li>';
+            logisticsHtml += '</ul></div>';
+        }
+
+        // Sourcing notes
+        if (log.sourcing_notes) {
+            logisticsHtml += '<div class="share-section"><div class="share-section-title">Sourcing Notes</div><div class="share-sourcing-notes">' + esc(log.sourcing_notes) + '</div></div>';
+        }
+    }
+
+    let bodyHtml = '<div class="share-container">';
+    bodyHtml += '<div class="share-header"><h1>' + esc(idea.name || 'Untitled Idea') + '</h1></div>';
+    if (idea.hook) bodyHtml += '<div class="share-hook">' + esc(idea.hook) + '</div>';
+    if (idea.context) {
+        bodyHtml += '<div class="share-section"><div class="share-section-title">Context</div><div class="share-context">' + esc(idea.context) + '</div></div>';
+    }
+    if (idea.script) {
+        bodyHtml += '<div class="share-section"><div class="share-section-title">Script</div><div class="share-script">' + esc(idea.script) + '</div></div>';
+    }
+    if (logisticsHtml) {
+        bodyHtml += '<div class="share-section"><div class="share-section-title">Logistics</div>' + logisticsHtml + '</div>';
+    }
+    bodyHtml += '<div class="share-footer">Powered by BusinessWorld</div></div>';
+
+    return renderSharePage(idea.name || 'Shared Idea', bodyHtml);
+}
+
+function renderShareIdeasPage(ideas, statusFilter, catFilter, getStatus) {
+    const statusLabels = { all: 'All', idea: 'Ideas', incubator: 'Incubator', workshop: 'Workshop', posted: 'Posted' };
+
+    let bodyHtml = '<div class="share-container">';
+    bodyHtml += '<div class="share-header"><h1>Ideas</h1></div>';
+
+    // Filter badges
+    bodyHtml += '<div class="share-filter-badges">';
+    if (statusFilter !== 'all') bodyHtml += '<span class="share-badge">Status: ' + esc(statusLabels[statusFilter] || statusFilter) + '</span>';
+    if (catFilter !== 'all') bodyHtml += '<span class="share-badge">Category: ' + esc(catFilter) + '</span>';
+    if (statusFilter === 'all' && catFilter === 'all') bodyHtml += '<span class="share-badge">Showing all ideas</span>';
+    bodyHtml += '</div>';
+
+    if (ideas.length === 0) {
+        bodyHtml += '<div class="share-empty">No ideas match this filter.</div>';
+    } else {
+        bodyHtml += '<div class="share-ideas-grid">';
+        for (const idea of ideas) {
+            const log = idea.logistics;
+            const hasCost = log && log.estimated_cost_range;
+            const complexity = log && (log.build_complexity || (log.angles && log.angles[0] && log.angles[0].complexity));
+            const hasLogistics = log && Object.keys(log).length > 0;
+            const preview = (idea.context || '').substring(0, 120) + ((idea.context || '').length > 120 ? '...' : '');
+
+            bodyHtml += '<a class="share-idea-card" href="/share/idea/' + esc(idea.id) + '">';
+            bodyHtml += '<div class="share-idea-card-name">';
+            if (hasLogistics) bodyHtml += '<span class="share-green-dot"></span>';
+            bodyHtml += esc(idea.name || 'Untitled') + '</div>';
+            bodyHtml += '<div class="share-idea-card-meta">';
+            if (hasCost) bodyHtml += '<span class="share-cost-badge" style="font-size:13px;">' + esc(log.estimated_cost_range) + '</span>';
+            if (complexity) bodyHtml += '<span class="share-complexity-badge" style="background:' + (COMPLEXITY_COLORS[complexity] || '#999') + ';font-size:10px;">' + esc(complexity) + '</span>';
+            bodyHtml += '</div>';
+            if (preview) bodyHtml += '<div class="share-idea-card-preview">' + esc(preview) + '</div>';
+            bodyHtml += '</a>';
+        }
+        bodyHtml += '</div>';
+    }
+
+    bodyHtml += '<div class="share-footer">Powered by BusinessWorld</div></div>';
+    return renderSharePage('Ideas — BusinessWorld', bodyHtml);
 }
 
 // Initialize R2 cloud storage before accepting requests

@@ -59,6 +59,14 @@ const LibraryUI = (() => {
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
 
+    function showToast(msg, duration = 2000) {
+        const t = document.createElement('div');
+        t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:99999;pointer-events:none;transition:opacity 0.3s;';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, duration);
+    }
+
     // Config no longer needed for page IDs — data comes from /api/data/* routes
     async function loadConfig() { /* no-op — kept for call-site compat */ }
 
@@ -1759,6 +1767,7 @@ const LibraryUI = (() => {
                     Ideas
                 </button>
                 <span class="library-save-status saved" id="library-save-status">Saved</span>
+                <button class="library-share-btn" id="library-share-btn" title="Copy share link" style="margin-left:auto;padding:4px 12px;border:1px solid #d4a060;border-radius:6px;background:#fff;color:#5a3e1b;font-size:12px;font-weight:600;cursor:pointer;">Share</button>
             </div>
             <div class="library-editor-body">
                 <div class="library-editor-title-row">
@@ -1800,6 +1809,13 @@ const LibraryUI = (() => {
             </div>
         `;
         document.getElementById('library-back-btn').addEventListener('click', () => saveNoteAndBack());
+
+        // Share button
+        const shareBtn = document.getElementById('library-share-btn');
+        if (shareBtn) shareBtn.addEventListener('click', () => {
+            const shareUrl = window.location.origin + '/share/idea/' + note.id;
+            navigator.clipboard.writeText(shareUrl).then(() => showToast('Link copied!')).catch(() => showToast('Could not copy link'));
+        });
 
         // Tab switching
         editorEl.querySelectorAll('.library-idea-tab').forEach(btn => {
@@ -3239,6 +3255,7 @@ const LibraryUI = (() => {
                 <button class="ideamap-group-btn${groupBy === 'project' ? ' active' : ''}" data-group="project">By Project</button>
             </div>
             <button class="ideamap-manage-cats-btn" id="ideamap-manage-cats-btn">Manage Categories</button>
+            <button class="ideamap-share-btn" id="ideamap-share-btn" style="padding:4px 12px;border:1px solid #d4a060;border-radius:6px;background:#fff;color:#5a3e1b;font-size:12px;font-weight:600;cursor:pointer;margin-left:4px;">Share View</button>
         </div>`;
 
         // --- Status filter row ---
@@ -3735,6 +3752,18 @@ const LibraryUI = (() => {
                 ideaMapState.editingCategoryId = null;
                 ideaMapState.addingCategory = false;
                 ideaMapRenderKanban(el);
+            });
+        }
+
+        // Share View button
+        const shareViewBtn = el.querySelector('#ideamap-share-btn');
+        if (shareViewBtn) {
+            shareViewBtn.addEventListener('click', () => {
+                const params = new URLSearchParams();
+                params.set('status', ideaMapState.filterStatus);
+                params.set('cat', ideaMapState.filterCategory);
+                const shareUrl = window.location.origin + '/share/ideas?' + params.toString();
+                navigator.clipboard.writeText(shareUrl).then(() => showToast('Link copied!')).catch(() => showToast('Could not copy link'));
             });
         }
 
