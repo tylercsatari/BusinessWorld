@@ -573,24 +573,37 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             history.push({ id: messageId, role: 'user', content: message.trim(), timestamp });
             await cloud.uploadToR2(AI_CHAT_R2_KEY, Buffer.from(JSON.stringify(history)), 'application/json');
 
-            // Send message to Telegram via bot API
-            const botToken = process.env.TELEGRAM_BOT_TOKEN;
-            const chatId = process.env.TELEGRAM_TYLER_CHAT_ID;
+            // Schedule openclaw cron job to process message via isolated agent
             const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
-
-            const telegramText = `[Message from BusinessWorld app] ${message.trim()}\n\nNote: After responding on Telegram normally, also POST to ${appUrl}/api/ai/reply with body: {"text": "<your full reply>", "secret": "bw-ai-secret-2026"}`;
+            const cronMessage = `[BusinessWorld Chat] User message: ${message.trim()}\n\nAfter responding, POST to ${appUrl}/api/ai/reply with: {"text": "your reply", "secret": "bw-ai-secret-2026"}\n\nAlso respond normally on Telegram to Tyler (chat_id 7906038704) so he gets a Telegram notification too.`;
+            const { exec } = require('child_process');
+            const cronCmd = `openclaw cron add --name "BW Chat" --at "+5s" --session isolated --message ${JSON.stringify(cronMessage)} --timeout-seconds 120 --announce --channel telegram`;
 
             try {
-                const tgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: chatId, text: telegramText })
+                await new Promise((resolve, reject) => {
+                    exec(cronCmd, { timeout: 10000 }, (err, stdout, stderr) => {
+                        if (err) reject(err);
+                        else { console.log('OpenClaw cron scheduled:', stdout.trim()); resolve(stdout); }
+                    });
                 });
-                const tgData = await tgResp.json();
-                if (!tgData.ok) console.warn('Telegram sendMessage error:', tgData.description);
-                else console.log('Telegram message sent, message_id:', tgData.result.message_id);
-            } catch (tgErr) {
-                console.warn('Failed to send Telegram message:', tgErr.message);
+            } catch (cronErr) {
+                console.warn('OpenClaw cron failed, falling back to Telegram:', cronErr.message);
+                // Fallback: send via Telegram bot directly
+                const botToken = process.env.TELEGRAM_BOT_TOKEN;
+                const chatId = process.env.TELEGRAM_TYLER_CHAT_ID;
+                const telegramText = `[Message from BusinessWorld app] ${message.trim()}\n\nNote: After responding on Telegram normally, also POST to ${appUrl}/api/ai/reply with body: {"text": "<your full reply>", "secret": "bw-ai-secret-2026"}`;
+                try {
+                    const tgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: chatId, text: telegramText })
+                    });
+                    const tgData = await tgResp.json();
+                    if (!tgData.ok) console.warn('Telegram sendMessage error:', tgData.description);
+                    else console.log('Telegram fallback message sent, message_id:', tgData.result.message_id);
+                } catch (tgErr) {
+                    console.warn('Telegram fallback also failed:', tgErr.message);
+                }
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });

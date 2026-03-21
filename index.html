@@ -75,6 +75,7 @@
         #menu-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 250; display: none; }
         #menu-overlay.visible { display: block; }
         #tooltip { position: fixed; background: linear-gradient(135deg, rgba(90,62,27,0.95), rgba(60,40,15,0.95)); color: white; padding: 7px 16px; border-radius: 10px; font-family: 'Fredoka One', cursive; font-size: 14px; pointer-events: none; z-index: 150; display: none; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .building-count-badge { position: fixed; pointer-events: none; z-index: 140; font-family: 'Courier New', monospace; font-size: 14px; font-weight: 700; color: #00ffcc; background: rgba(0,0,80,0.6); border: 1px solid rgba(0,255,204,0.4); padding: 3px 10px; border-radius: 12px; text-shadow: 0 0 8px #00ffcc; white-space: nowrap; transform: translate(-50%, -100%); display: none; }
         /* Joystick - mobile only */
         #joystick-zone { display: none; position: fixed; bottom: 30px; left: 30px; width: 130px; height: 130px; z-index: 150; pointer-events: auto; }
         #joystick-base { width: 130px; height: 130px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.15), rgba(255,255,255,0.06)); border: 3px solid rgba(255,255,255,0.25); position: absolute; top: 0; left: 0; }
@@ -162,6 +163,9 @@
 <button id="path-btn" onclick="togglePathMode()">Place Paths</button>
 <div id="edit-indicator">EDIT MODE - Drag to rearrange</div>
 <div id="tooltip"></div>
+<div id="bw-badge-library" class="building-count-badge"></div>
+<div id="bw-badge-incubator" class="building-count-badge"></div>
+<div id="bw-badge-workshop" class="building-count-badge"></div>
 <div id="joystick-zone"><div id="joystick-base"><div id="joystick-stick"></div></div></div>
 <div id="modal-overlay" onclick="closeModal()">
     <div id="modal" onclick="event.stopPropagation()">
@@ -3294,6 +3298,44 @@ if (isTouchDevice && joystickZone) {
     });
 }
 
+// --- Building Count Badges ---
+const bwBadgeCounts = { library: null, incubator: null, workshop: null };
+let bwBadgeLastFetch = 0;
+function fetchBuildingCounts() {
+    const now = Date.now();
+    if (now - bwBadgeLastFetch < 60000) return; // refresh every 60s
+    bwBadgeLastFetch = now;
+    fetch('/api/v1/ideas').then(r => r.json()).then(ideas => {
+        bwBadgeCounts.library = Array.isArray(ideas) ? ideas.filter(i => i.type === 'idea' || (!i.type && !i.done)).length : 0;
+    }).catch(() => {});
+    fetch('/api/v1/videos').then(r => r.json()).then(videos => {
+        if (!Array.isArray(videos)) return;
+        bwBadgeCounts.incubator = videos.filter(v => v.status === 'incubator').length;
+        bwBadgeCounts.workshop = videos.filter(v => v.status === 'workshop' || v.status === 'edit').length;
+    }).catch(() => {});
+}
+function updateBuildingBadges() {
+    const badges = [
+        { id: 'bw-badge-library', building: library, count: bwBadgeCounts.library, heightOffset: 15 },
+        { id: 'bw-badge-incubator', building: incubator, count: bwBadgeCounts.incubator, heightOffset: 10 },
+        { id: 'bw-badge-workshop', building: workshop, count: bwBadgeCounts.workshop, heightOffset: 9 }
+    ];
+    for (const b of badges) {
+        const el = document.getElementById(b.id);
+        if (!el || !b.building || b.count === null) { if (el) el.style.display = 'none'; continue; }
+        if (b.count === 0) { el.style.display = 'none'; continue; }
+        const pos = new THREE.Vector3(b.building.position.x, b.heightOffset, b.building.position.z);
+        pos.project(camera);
+        if (pos.z > 1) { el.style.display = 'none'; continue; }
+        const hw = window.innerWidth / 2, hh = window.innerHeight / 2;
+        const sx = pos.x * hw + hw, sy = -pos.y * hh + hh;
+        el.style.left = sx + 'px';
+        el.style.top = sy + 'px';
+        el.style.display = 'block';
+        el.textContent = b.count;
+    }
+}
+
 // --- Animation ---
 const clock = new THREE.Clock();
 function animate() {
@@ -3436,6 +3478,9 @@ function animate() {
     });
     // Grid pulse in edit mode
     if (gridHelper) gridHelper.children.forEach(ch => { if (ch.isMesh) ch.material.opacity = 0.08 + Math.sin(time * 2) * 0.04; });
+    // Building count badges
+    fetchBuildingCounts();
+    updateBuildingBadges();
     composer.render();
 }
 Object.defineProperty(window, 'cameraDistance', { get() { return cameraDistance; }, set(v) { cameraDistance = v; } });

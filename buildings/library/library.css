@@ -2068,6 +2068,41 @@
 }
 .ideamap-manage-cats-btn:hover { background: #f0e8d8; }
 
+/* --- Filter Toggle --- */
+.ideamap-filter-toggle-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e8ddd0;
+}
+.ideamap-filter-toggle-btn {
+    padding: 4px 12px;
+    border: 1px solid #ddd;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #f9f6f1;
+    color: #5a3e1b;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.ideamap-filter-toggle-btn:hover { background: #f0e8d8; }
+.ideamap-filter-summary {
+    font-size: 11px;
+    color: #888;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+.ideamap-filter-rows.collapsed {
+    display: none;
+}
+
 /* --- Filter Bar --- */
 .ideamap-filter-bar {
     position: sticky;

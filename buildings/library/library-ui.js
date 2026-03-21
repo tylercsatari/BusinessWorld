@@ -1110,6 +1110,33 @@ const LibraryUI = (() => {
         if (barEl) { barEl.style.display = 'none'; barEl.innerHTML = ''; } // hide external bar
         return buildNotesFilterBarHtml();
     }
+    function getNotesFilterSummary() {
+        const parts = [];
+        if (notesFilterStatus !== 'all') {
+            const labels = { idea: 'Ideas', incubator: 'Incubator', workshop: 'Workshop', posted: 'Posted' };
+            parts.push(labels[notesFilterStatus] || notesFilterStatus);
+        }
+        if (notesFilterCategory !== 'all') {
+            if (notesFilterCategory === 'uncategorized') {
+                parts.push('Uncategorized');
+            } else {
+                const cats = ideaMapGetCategories();
+                const cat = cats.find(c => c.id === notesFilterCategory);
+                if (cat) parts.push(cat.name);
+            }
+        }
+        if (notesFilterContent.length > 0) {
+            const labels = { context: 'Context', script: 'Script', logistics: 'Logistics' };
+            parts.push(notesFilterContent.map(f => labels[f]).join(' & '));
+        }
+        return parts.length > 0 ? parts.join(' \u2022 ') : '';
+    }
+    let notesFiltersExpanded = (() => {
+        const stored = localStorage.getItem('notes-filters-expanded');
+        if (stored !== null) return stored === 'true';
+        return window.innerWidth > 768;
+    })();
+
     function buildNotesFilterBarHtml() {
 
         const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
@@ -1131,7 +1158,19 @@ const LibraryUI = (() => {
             { key: 'posted', label: 'Posted' }
         ];
 
-        let html = `<div class="ideamap-filter-bar">`;
+        // Toggle button + summary
+        const filterSummary = getNotesFilterSummary();
+        const toggleArrow = notesFiltersExpanded ? '\u25B2' : '\u25BC';
+        html += `<div class="ideamap-filter-toggle-bar">`;
+        html += `<button class="ideamap-filter-toggle-btn" id="notes-filter-toggle">${toggleArrow} Filters</button>`;
+        if (!notesFiltersExpanded && filterSummary) {
+            html += `<span class="ideamap-filter-summary">${escHtml(filterSummary)}</span>`;
+        }
+        html += `</div>`;
+
+        html += `<div class="ideamap-filter-rows${notesFiltersExpanded ? '' : ' collapsed'}">`;
+
+        html += `<div class="ideamap-filter-bar">`;
         html += `<span class="ideamap-filter-row-label">Status:</span>`;
         for (const f of statusFilters) {
             const active = sf === f.key;
@@ -1185,17 +1224,19 @@ const LibraryUI = (() => {
 
         // Content filter row (multi-select toggle pills)
         const contentFilters = [
-            { key: 'context', label: '📝 Has Context' },
-            { key: 'script', label: '📄 Has Script' },
-            { key: 'logistics', label: '🟢 Has Logistics' }
+            { key: 'context', label: 'Has Context', dotColor: '#0984e3' },
+            { key: 'script', label: 'Has Script', dotColor: '#e8a020' },
+            { key: 'logistics', label: 'Has Logistics', dotColor: '#27ae60' }
         ];
         html += `<div class="ideamap-filter-bar ideamap-filter-bar-content">`;
         html += `<span class="ideamap-filter-row-label">Content:</span>`;
         for (const f of contentFilters) {
             const active = notesFilterContent.includes(f.key);
-            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-notes-filter-content="${f.key}">${f.label}</button>`;
+            html += `<button class="ideamap-filter-pill${active ? ' active' : ''}" data-notes-filter-content="${f.key}"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${f.dotColor};margin-right:5px;vertical-align:middle;"></span>${f.label}</button>`;
         }
         html += `</div>`;
+
+        html += `</div>`; // close .ideamap-filter-rows
 
         // Search bar
         html += `<div class="ideamap-search-bar">
@@ -1210,6 +1251,15 @@ const LibraryUI = (() => {
     }
     function bindNotesFilterBar(container) {
         if (!container) return;
+        // Bind filter toggle
+        const toggleBtn = container.querySelector('#notes-filter-toggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                notesFiltersExpanded = !notesFiltersExpanded;
+                localStorage.setItem('notes-filters-expanded', String(notesFiltersExpanded));
+                renderNotesList().catch(() => {});
+            });
+        }
         // Bind filter bar events
         container.querySelectorAll('[data-notes-filter-status]').forEach(btn => {
             btn.addEventListener('click', () => {
