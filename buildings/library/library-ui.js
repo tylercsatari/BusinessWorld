@@ -1138,6 +1138,7 @@ const LibraryUI = (() => {
     })();
 
     function buildNotesFilterBarHtml() {
+        let html = '';
 
         const allIdeas = NotesService.getAll().filter(n => n.type !== 'todo');
 
