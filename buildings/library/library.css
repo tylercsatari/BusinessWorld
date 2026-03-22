@@ -2899,7 +2899,7 @@
 }
 
 /* --- Logistics Panel (mobile-first card layout) --- */
-.logistics-panel { padding: 4px 0; font-size: 13px; }
+.logistics-panel { padding: 4px 0; font-size: 13px; overflow: visible; }
 .logistics-header-card { background: #f8f6f2; border: 1px solid #e8e4df; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
 .logistics-header-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .logistics-cost-badge { font-size: 16px; font-weight: 700; color: #2d7a3a; }
@@ -2909,12 +2909,12 @@
 .logistics-line-item { display: flex; flex-direction: column; padding: 10px 0; border-bottom: 1px solid #ede9e3; gap: 4px; }
 .logistics-line-item:last-child { border-bottom: none; }
 .logistics-line-name { font-weight: 600; font-size: 13px; color: #333; }
-.logistics-line-desc { font-size: 12px; color: #888; line-height: 1.4; }
+.logistics-line-desc { font-size: 12px; color: #888; line-height: 1.4; white-space: normal; word-break: break-word; }
 .logistics-line-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
 .logistics-line-cost { font-size: 13px; font-weight: 700; color: #2d7a3a; }
 .logistics-line-qty { font-size: 11px; color: #999; background: #f0ece6; padding: 1px 6px; border-radius: 4px; }
 .logistics-line-source { font-size: 11px; color: #888; }
-.logistics-link { color: #4a90d9; text-decoration: none; font-size: 12px; font-weight: 500; }
+.logistics-link { color: #4a90d9; text-decoration: none; font-size: 12px; font-weight: 500; word-break: break-all; }
 .logistics-subtotal { display: flex; justify-content: space-between; padding: 10px 0 4px; font-weight: 600; font-size: 13px; color: #555; border-top: 1px solid #ddd; margin-top: 4px; }
 .logistics-summary-bar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .logistics-summary-card { display: flex; flex-direction: row; align-items: center; justify-content: space-between; background: #f8f6f2; border: 1px solid #e0dcd6; border-radius: 10px; padding: 12px 14px; cursor: pointer; text-decoration: none; color: inherit; transition: background 0.15s; gap: 8px; }
@@ -2928,9 +2928,9 @@
 .logistics-angle-header:hover { background: #f4f1ec; }
 .logistics-angle-header-info { flex: 1; min-width: 0; }
 .logistics-angle-header-name { font-weight: 700; font-size: 14px; color: #333; }
-.logistics-angle-header-desc { font-size: 12px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logistics-angle-header-desc { font-size: 12px; color: #888; margin-top: 2px; white-space: normal; overflow: visible; word-break: break-word; }
 .logistics-angle-header-cost { font-size: 16px; font-weight: 800; color: #2d7a3a; white-space: nowrap; }
-.logistics-angle-body { padding: 4px 14px 14px; }
+.logistics-angle-body { padding: 4px 14px 14px; word-break: break-word; overflow-wrap: break-word; }
 .logistics-angle-total { font-weight: 700; font-size: 15px; padding: 12px 0 4px; color: #2d7a3a; text-align: right; border-top: 2px solid #d5d0c8; margin-top: 10px; }
 .logistics-pending { color: #bbb; text-align: center; padding: 40px 20px; font-style: italic; font-size: 13px; }
 .logistics-edit-btn { padding: 10px 16px; font-size: 13px; border: 1px solid #ccc; border-radius: 8px; background: #fff; color: #555; cursor: pointer; font-weight: 500; width: 100%; margin-top: 14px; display: block; box-sizing: border-box; }

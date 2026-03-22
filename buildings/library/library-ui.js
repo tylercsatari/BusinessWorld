@@ -1259,8 +1259,7 @@ const LibraryUI = (() => {
                 notesFiltersExpanded = !notesFiltersExpanded;
                 localStorage.setItem('notes-filters-expanded', String(notesFiltersExpanded));
                 // Just toggle CSS class and update button text — no full re-render
-                const filterBarEl = document.getElementById('library-notes-filter-bar');
-                const rows = filterBarEl ? filterBarEl.querySelector('.ideamap-filter-rows') : null;
+                const rows = container.querySelector('.ideamap-filter-rows');
                 if (rows) rows.classList.toggle('collapsed', !notesFiltersExpanded);
                 toggleBtn.textContent = (notesFiltersExpanded ? '▲' : '▼') + ' Filters';
                 // Update summary line
