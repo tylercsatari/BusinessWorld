@@ -1258,7 +1258,8 @@ const LibraryUI = (() => {
                 notesFiltersExpanded = !notesFiltersExpanded;
                 localStorage.setItem('notes-filters-expanded', String(notesFiltersExpanded));
                 // Just toggle CSS class and update button text — no full re-render
-                const rows = container.querySelector('.ideamap-filter-rows');
+                const filterBarEl = document.getElementById('library-notes-filter-bar');
+                const rows = filterBarEl ? filterBarEl.querySelector('.ideamap-filter-rows') : null;
                 if (rows) rows.classList.toggle('collapsed', !notesFiltersExpanded);
                 toggleBtn.textContent = (notesFiltersExpanded ? '▲' : '▼') + ' Filters';
                 // Update summary line
@@ -1360,11 +1361,8 @@ const LibraryUI = (() => {
     }
 
     async function renderNotesList() {
-        if (renderNotesList._running) return;
-        renderNotesList._running = true;
         const el = document.getElementById('library-notes-list');
-        if (!el) { renderNotesList._running = false; return; }
-        try {
+        if (!el) return;
 
         // Ensure videos are loaded for status lookups
         if (VideoService.getAll().length === 0) {
@@ -1524,9 +1522,6 @@ const LibraryUI = (() => {
                 renderNotesFilterBar();
                 renderNotesList().catch(() => {});
             });
-        }
-        } finally {
-            renderNotesList._running = false;
         }
     }
 
