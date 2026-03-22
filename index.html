@@ -3305,10 +3305,11 @@ function fetchBuildingCounts() {
     const now = Date.now();
     if (now - bwBadgeLastFetch < 60000) return; // refresh every 60s
     bwBadgeLastFetch = now;
-    fetch('/api/v1/ideas').then(r => r.json()).then(ideas => {
+    const readKey = 'c1224bb7d79e553506243f5aea9b13e0ed66b72e3135b67a';
+    fetch('/api/v1/ideas?key=' + readKey).then(r => r.json()).then(ideas => {
         bwBadgeCounts.library = Array.isArray(ideas) ? ideas.filter(i => i.type === 'idea' || (!i.type && !i.done)).length : 0;
     }).catch(() => {});
-    fetch('/api/v1/videos').then(r => r.json()).then(videos => {
+    fetch('/api/v1/videos?key=' + readKey).then(r => r.json()).then(videos => {
         if (!Array.isArray(videos)) return;
         bwBadgeCounts.incubator = videos.filter(v => v.status === 'incubator').length;
         bwBadgeCounts.workshop = videos.filter(v => v.status === 'workshop' || v.status === 'edit').length;
