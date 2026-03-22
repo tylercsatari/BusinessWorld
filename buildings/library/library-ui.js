@@ -1257,7 +1257,17 @@ const LibraryUI = (() => {
             toggleBtn.addEventListener('click', () => {
                 notesFiltersExpanded = !notesFiltersExpanded;
                 localStorage.setItem('notes-filters-expanded', String(notesFiltersExpanded));
-                renderNotesList().catch(() => {});
+                // Just toggle CSS class and update button text — no full re-render
+                const rows = container.querySelector('.ideamap-filter-rows');
+                if (rows) rows.classList.toggle('collapsed', !notesFiltersExpanded);
+                toggleBtn.textContent = (notesFiltersExpanded ? '▲' : '▼') + ' Filters';
+                // Update summary line
+                const summaryEl = container.querySelector('.notes-filter-summary');
+                if (summaryEl) {
+                    const summary = getNotesFilterSummary();
+                    summaryEl.textContent = summary || '';
+                    summaryEl.style.display = (!notesFiltersExpanded && summary) ? '' : 'none';
+                }
             });
         }
         // Bind filter bar events
@@ -1350,8 +1360,11 @@ const LibraryUI = (() => {
     }
 
     async function renderNotesList() {
+        if (renderNotesList._running) return;
+        renderNotesList._running = true;
         const el = document.getElementById('library-notes-list');
-        if (!el) return;
+        if (!el) { renderNotesList._running = false; return; }
+        try {
 
         // Ensure videos are loaded for status lookups
         if (VideoService.getAll().length === 0) {
@@ -1511,6 +1524,9 @@ const LibraryUI = (() => {
                 renderNotesFilterBar();
                 renderNotesList().catch(() => {});
             });
+        }
+        } finally {
+            renderNotesList._running = false;
         }
     }
 
