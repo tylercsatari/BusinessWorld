@@ -368,6 +368,18 @@
 .gym-category-pill.legs { background: rgba(232,160,32,0.1); color: var(--gym-gold); }
 .gym-category-pill.core { background: rgba(46,204,113,0.1); color: var(--gym-green); }
 
+.gym-swap-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    color: #aaa;
+    font-size: 14px;
+    padding: 2px 7px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.gym-swap-btn:hover { background: rgba(232,160,32,0.2); color: #e8a020; }
+
 .gym-overload-badge {
     display: inline-block; font-size: 11px; font-weight: 700;
     padding: 3px 10px; border-radius: 8px;

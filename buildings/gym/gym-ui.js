@@ -437,8 +437,11 @@ const GymUI = (() => {
 
             html += '<div class="gym-exercise-card">' +
                 '<div class="gym-exercise-header">' +
-                    '<div>' +
-                        '<div class="gym-exercise-name">' + esc(exDef.name) + '</div>' +
+                    '<div style="flex:1">' +
+                        '<div style="display:flex;align-items:center;gap:8px">' +
+                            '<div class="gym-exercise-name">' + esc(exDef.name) + '</div>' +
+                            '<button class="gym-swap-btn" data-action="swap-exercise" data-ex-idx="' + reIdx + '" title="Swap exercise">⇄</button>' +
+                        '</div>' +
                         '<span class="gym-category-pill ' + exDef.category + '">' + exDef.category.toUpperCase() + '</span>' +
                     '</div>' +
                     (prog.suggest ? '<span class="gym-overload-badge">INCREASE WEIGHT &rarr; ' + prog.weight + 'lbs</span>' : '') +
@@ -953,6 +956,12 @@ const GymUI = (() => {
 
                 if (action === 'save-workout') { saveWorkout(); return; }
 
+                if (action === 'swap-exercise') {
+                    var exIdx = parseInt(actionEl.dataset.exIdx);
+                    showExerciseSwapModal(exIdx);
+                    return;
+                }
+
                 if (action === 'toggle-ex-note') {
                     var exIdx = parseInt(actionEl.dataset.exIdx);
                     showExNotes[exIdx] = !showExNotes[exIdx];
@@ -1200,6 +1209,127 @@ const GymUI = (() => {
         if (notesEl) logState.notes = notesEl.value;
         container.querySelectorAll('[data-ex-note]').forEach(function(el) {
             logState.exerciseNotes[parseInt(el.dataset.exNote)] = el.value;
+        });
+    }
+
+    /* ── Exercise Swap Modal ── */
+    function showExerciseSwapModal(exerciseIdx) {
+        const routine = GymService.getRoutine(selectedRoutineId);
+        if (!routine) return;
+        const currentEx = routine.exercises[exerciseIdx];
+        const currentExDef = GymService.getExercise(currentEx.exerciseId);
+        const allExercises = GymService.getExercises();
+
+        // Group by category
+        const categories = {};
+        allExercises.forEach(ex => {
+            if (!categories[ex.category]) categories[ex.category] = [];
+            categories[ex.category].push(ex);
+        });
+
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:#1a1a2e;border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;';
+
+        // Header
+        var html = '<div style="padding:16px 16px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+        html += '<div style="font-weight:700;color:#fff;font-size:15px;">Swap Exercise</div>';
+        html += '<button id="swap-modal-close" style="background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;padding:4px">✕</button>';
+        html += '</div>';
+        html += '<div style="font-size:12px;color:#888;">Replacing: <span style="color:#e8a020;">' + (currentExDef ? esc(currentExDef.name) : 'Unknown') + '</span></div>';
+        // Search input
+        html += '<input type="text" id="swap-search" placeholder="Search exercises..." style="width:100%;margin-top:10px;padding:8px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">';
+        html += '</div>';
+
+        // Exercise list
+        html += '<div id="swap-exercise-list" style="overflow-y:auto;flex:1;padding:8px 0;">';
+        Object.entries(categories).sort().forEach(function(entry) {
+            var cat = entry[0], exes = entry[1];
+            html += '<div class="swap-cat-group">';
+            html += '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:0.5px;">' + esc(cat) + '</div>';
+            exes.forEach(function(ex) {
+                var isCurrent = ex.id === currentEx.exerciseId;
+                html += '<button class="swap-exercise-btn" data-ex-id="' + ex.id + '" style="width:100%;text-align:left;padding:12px 16px;background:' + (isCurrent ? 'rgba(232,160,32,0.15)' : 'none') + ';border:none;cursor:pointer;color:' + (isCurrent ? '#e8a020' : '#fff') + ';font-size:14px;display:flex;align-items:center;gap:10px;">';
+                html += '<span style="flex:1">' + esc(ex.name) + '</span>';
+                if (isCurrent) html += '<span style="font-size:11px;color:#e8a020;">current</span>';
+                html += '</button>';
+            });
+            html += '</div>';
+        });
+        html += '</div>';
+
+        // Add new exercise section
+        html += '<div id="swap-add-new-wrap" style="border-top:1px solid rgba(255,255,255,0.1);padding:12px 16px;">';
+        html += '<button id="swap-show-add" style="background:none;border:none;color:#7c6aff;font-size:13px;cursor:pointer;padding:0;font-weight:600;">+ Add new exercise</button>';
+        html += '<div id="swap-add-form" style="display:none;margin-top:10px;">';
+        html += '<input type="text" id="swap-new-name" placeholder="Exercise name" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;margin-bottom:8px;">';
+        html += '<select id="swap-new-cat" style="width:100%;padding:8px 12px;background:#1a1a2e;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;margin-bottom:8px;">';
+        ['chest','back','shoulders','arms','legs','core','cardio','other'].forEach(function(c) {
+            html += '<option value="' + c + '">' + c.charAt(0).toUpperCase() + c.slice(1) + '</option>';
+        });
+        html += '</select>';
+        html += '<button id="swap-save-new" style="width:100%;padding:10px;background:#7c6aff;border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Add & Use This Exercise</button>';
+        html += '</div>';
+        html += '</div>';
+
+        modal.innerHTML = html;
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Close handlers
+        overlay.querySelector('#swap-modal-close').addEventListener('click', function() { overlay.remove(); });
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+        // Search filter
+        var searchInput = overlay.querySelector('#swap-search');
+        searchInput.addEventListener('input', function() {
+            var q = searchInput.value.toLowerCase();
+            overlay.querySelectorAll('.swap-exercise-btn').forEach(function(btn) {
+                var name = btn.textContent.toLowerCase();
+                btn.style.display = name.includes(q) ? '' : 'none';
+            });
+            overlay.querySelectorAll('.swap-cat-group').forEach(function(g) {
+                var visible = [].slice.call(g.querySelectorAll('.swap-exercise-btn')).some(function(b) { return b.style.display !== 'none'; });
+                g.style.display = visible ? '' : 'none';
+            });
+        });
+        searchInput.focus();
+
+        // Select exercise
+        overlay.querySelectorAll('.swap-exercise-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var newExId = btn.dataset.exId;
+                if (newExId === currentEx.exerciseId) { overlay.remove(); return; }
+                // Apply swap to logState (in-session swap, not permanent)
+                if (!logState.swaps) logState.swaps = {};
+                logState.swaps[exerciseIdx] = newExId;
+                // Also swap in the runtime routine (clone to avoid mutating original)
+                routine.exercises[exerciseIdx] = Object.assign({}, currentEx, { exerciseId: newExId });
+                overlay.remove();
+                renderActiveTab();
+            });
+        });
+
+        // Add new exercise
+        overlay.querySelector('#swap-show-add').addEventListener('click', function() {
+            overlay.querySelector('#swap-add-form').style.display = '';
+            overlay.querySelector('#swap-show-add').style.display = 'none';
+        });
+        overlay.querySelector('#swap-save-new').addEventListener('click', function() {
+            var name = overlay.querySelector('#swap-new-name').value.trim();
+            if (!name) return;
+            var cat = overlay.querySelector('#swap-new-cat').value;
+            var newId = 'custom_' + Date.now();
+            GymService.addExercise({ id: newId, name: name, category: cat, equipment: 'any' });
+            // Apply swap
+            if (!logState.swaps) logState.swaps = {};
+            logState.swaps[exerciseIdx] = newId;
+            routine.exercises[exerciseIdx] = Object.assign({}, currentEx, { exerciseId: newId });
+            overlay.remove();
+            renderActiveTab();
         });
     }
 
