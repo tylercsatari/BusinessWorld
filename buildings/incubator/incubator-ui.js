@@ -634,18 +634,27 @@ const IncubatorUI = (() => {
         container.innerHTML = `
             <div class="incubator-panel show-list">
                 <div class="incubator-page incubator-list-page">
-                    <div class="incubator-header">
+                    <div class='incubator-header'>
                         <h2>Incubator</h2>
-                        <div class="incubator-header-actions">
-                            <button class="incubator-from-library-btn" id="incubator-from-library">From Library</button>
-                            <button class="incubator-add-btn" id="incubator-add-btn">+ New Video</button>
+                        <div class='incubator-header-actions'>
+                            <button class='incubator-from-library-btn' id='incubator-from-library'>From Library</button>
+                            <button class='incubator-add-btn' id='incubator-add-btn'>+ New Video</button>
                         </div>
                     </div>
-                    <div class="incubator-filters" id="incubator-filters"></div>
-                    <div class="incubator-3d-container" id="incubator-3d-container">
-                        <div class="incubator-3d-empty" style="display:none;">No eggs yet. Tap + New Video to start!</div>
+                    <div class='incubator-tab-bar'>
+                        <button class='incubator-tab active' data-tab='videos'>Videos</button>
+                        <button class='incubator-tab' data-tab='eggs'>🥚 Eggs</button>
                     </div>
-                    <div class="incubator-3d-tooltip" id="incubator-3d-tooltip"></div>
+                    <div id='incubator-tab-videos' class='incubator-tab-content'>
+                        <div class='incubator-filters' id='incubator-filters'></div>
+                        <div class='incubator-video-list' id='incubator-video-list'></div>
+                    </div>
+                    <div id='incubator-tab-eggs' class='incubator-tab-content' style='display:none'>
+                        <div class='incubator-3d-container' id='incubator-3d-container'>
+                            <div class='incubator-3d-empty' style='display:none;'>No eggs yet. Tap + New Video to start!</div>
+                        </div>
+                        <div class='incubator-3d-tooltip' id='incubator-3d-tooltip'></div>
+                    </div>
                 </div>
                 <div class="incubator-page incubator-detail-page">
                     <div class="incubator-detail" id="incubator-detail"></div>
@@ -667,6 +676,19 @@ const IncubatorUI = (() => {
         document.getElementById('incubator-picker-overlay').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) hideLibraryPicker();
         });
+
+        let activeIncubatorTab = 'videos';
+        container.querySelectorAll('.incubator-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                activeIncubatorTab = btn.dataset.tab;
+                container.querySelectorAll('.incubator-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === activeIncubatorTab));
+                container.querySelectorAll('.incubator-tab-content').forEach(el => el.style.display = 'none');
+                const tabEl = document.getElementById('incubator-tab-' + activeIncubatorTab);
+                if (tabEl) tabEl.style.display = '';
+                if (activeIncubatorTab === 'eggs') render3DEggs();
+                if (activeIncubatorTab === 'videos') renderVideoList();
+            });
+        });
     }
 
     function renderFilters() {
@@ -687,6 +709,44 @@ const IncubatorUI = (() => {
                 filterProject = btn.dataset.project;
                 renderFilters();
                 render3DEggs();
+                renderVideoList();
+            });
+        });
+    }
+
+    function renderVideoList() {
+        const el = document.getElementById('incubator-video-list');
+        if (!el) return;
+        const videos = VideoService.getByStatus('incubator');
+        const filtered = filterProject ? videos.filter(v => v.project === filterProject) : videos;
+
+        if (filtered.length === 0) {
+            el.innerHTML = '<div class="incubator-empty">No videos in incubator yet. Tap + New Video to start!</div>';
+            return;
+        }
+
+        el.innerHTML = filtered.map(v => {
+            const preview = v.hook || v.context || '';
+            const projectBadge = v.project ? '<span class="incubator-list-project">' + escHtml(v.project) + '</span>' : '';
+            const hasScript = v.script && v.script.trim().length > 0;
+            const hasContext = v.context && v.context.trim().length > 0;
+            const dots = '<span class="incubator-list-dots">' +
+                '<span class="incubator-list-dot' + (hasContext ? ' has-context' : '') + '"></span>' +
+                '<span class="incubator-list-dot dot-script' + (hasScript ? ' has-script' : '') + '"></span>' +
+                '</span>';
+            return '<div class="incubator-list-item" data-video-id="' + v.id + '">' +
+                '<div class="incubator-list-item-content">' +
+                    '<div class="incubator-list-title">' + escHtml(v.name) + dots + '</div>' +
+                    '<div class="incubator-list-subtitle">' + projectBadge + (preview ? escHtml(preview.substring(0, 80)) : '') + '</div>' +
+                '</div>' +
+                '<svg class="incubator-list-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>' +
+            '</div>';
+        }).join('');
+
+        el.querySelectorAll('.incubator-list-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const vid = VideoService.getById(item.dataset.videoId);
+                if (vid) openDetail(vid.id);
             });
         });
     }
@@ -713,6 +773,7 @@ const IncubatorUI = (() => {
         panel.classList.remove('show-detail');
         panel.classList.add('show-list');
         renderFilters();
+        renderVideoList();
         render3DEggs();
     }
 
@@ -1439,6 +1500,7 @@ const IncubatorUI = (() => {
             ]);
             projects = p;
             renderFilters();
+            renderVideoList();
             if (!scene3d) await new Promise(r => requestAnimationFrame(() => { if (!scene3d) init3DScene(); r(); }));
             render3DEggs();
             hideNestLoader();
