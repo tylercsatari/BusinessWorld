@@ -31,20 +31,39 @@ const ChocolateBarUI = (() => {
     ];
 
     const DEFAULT_TASKS = [
-        { id: 't1', title: 'Research 3PL fulfillment centers', description: 'Target $6 USD cost per order', category: 'fulfillment', priority: 'high', status: 'todo' },
-        { id: 't2', title: 'Get quotes from ShipBob, Ware2Go, ShipMonk', description: 'For Canadian chocolate shipping to US/CA', category: 'fulfillment', priority: 'high', status: 'todo' },
-        { id: 't3', title: 'Test poly mailer vs box', description: 'Reduce dimensional weight billing', category: 'fulfillment', priority: 'high', status: 'todo' },
-        { id: 't4', title: 'Contact ShipBob Canada for quote', description: 'Target ~$6/order. shipbob.com - request Canada fulfillment center quote for 200-500 orders/month', category: 'fulfillment', priority: 'high', status: 'todo' },
-        { id: 't5', title: 'Contact ShipMonk for quote', description: 'shipmonk.com - compare with ShipBob. Ask about poly mailer discounts for chocolate bars', category: 'fulfillment', priority: 'high', status: 'todo' },
-        { id: 't6', title: 'Switch from box to poly mailer', description: 'Poly mailers reduce dimensional weight billing. Could cut ~$5/order. Test with bubble mailer for protection', category: 'fulfillment', priority: 'high', status: 'todo' },
+        // ── FULFILLMENT: Research Complete ──
+        { id: 't1', title: 'Research 3PL fulfillment centers', description: 'DONE: Researched ShipBob, ShipMonk, Pirate Ship, Amazon FBA. See chocolate_research_results.md', category: 'fulfillment', priority: 'high', status: 'done' },
+        { id: 't2', title: 'Get quotes from ShipBob, Ware2Go, ShipMonk', description: 'DONE: ShipBob $7.40-$12.40/order (400+ min), ShipMonk $6.15-$7.15/order ($250/mo min)', category: 'fulfillment', priority: 'high', status: 'done' },
+        { id: 't3', title: 'Test poly mailer vs box', description: 'Reduce dimensional weight billing. Poly bubble mailers $0.10-$0.15/ea vs box. Saves ~$5/order', category: 'fulfillment', priority: 'high', status: 'todo' },
+
+        // ── FULFILLMENT: Pirate Ship Self-Fulfill (BEST OPTION - $3.70-$5.35/order) ──
+        { id: 't18', title: 'Sign up for Pirate Ship (FREE)', description: 'pirateship.com - Free shipping platform. USPS Ground Advantage 8oz: ~$3.50-$4.50 (commercial rate). No monthly fees, no markup. Best path to $6 target.', category: 'fulfillment', priority: 'high', status: 'todo' },
+        { id: 't19', title: 'Order poly bubble mailers in bulk', description: 'Buy 6x9 or 6x10 poly bubble mailers. ~$0.10-$0.15/ea in bulk (500+ qty). Amazon or Uline. Fits 6x4x1 chocolate bar perfectly.', category: 'fulfillment', priority: 'high', status: 'todo' },
+        { id: 't20', title: 'Test Pirate Ship USPS Ground Advantage from TX 75001', description: 'Ship test orders via USPS Ground Advantage. Expected: $3.50-$4.25/label (zones 1-4), $4.50-$6.00 (zones 5-8). 2-5 day delivery.', category: 'fulfillment', priority: 'high', status: 'todo' },
+        { id: 't21', title: 'Compare Pirate Ship UPS rates', description: 'Pirate Ship also offers up to 85% off UPS Daily Rates. For 0.5 lb: est ~$5.50-$8.00. USPS likely cheaper for this weight.', category: 'fulfillment', priority: 'medium', status: 'todo' },
+
+        // ── FULFILLMENT: ShipBob (Backup - higher volume) ──
+        { id: 't4', title: 'Contact ShipBob for quote (backup option)', description: 'shipbob.com - $975 setup, $275/mo min, 400 orders/mo min. Pick: $0.30/unit. Shipping markup 15-30%. Est $7.40-$12.40/order at low volume. Only viable at 400+/mo.', category: 'fulfillment', priority: 'low', status: 'todo' },
+
+        // ── FULFILLMENT: ShipMonk (Scale option) ──
+        { id: 't5', title: 'Contact ShipMonk when ready to scale', description: 'shipmonk.com - $2.50/order pick + $0.50/additional item. $250/mo min. Packaging $0.15-$2/order. Storage $1-$4/bin/mo. Est $6.15-$7.15/order. Volume discounts to $1.80/pick at 500+/mo.', category: 'fulfillment', priority: 'medium', status: 'todo' },
+
+        // ── FULFILLMENT: Packaging ──
+        { id: 't6', title: 'Switch from box to poly bubble mailer', description: 'KEY SAVINGS: Poly mailers $0.10-$0.15 vs boxes $0.50-$1.00+. Reduces dim weight. Combined with Pirate Ship = $3.70-$5.35/order total (down from $17).', category: 'fulfillment', priority: 'high', status: 'todo' },
         { id: 't7', title: 'Research Shopify Fulfillment Network', description: 'Free if on Shopify. Integrated. Good for <500 orders/month', category: 'fulfillment', priority: 'medium', status: 'todo' },
+
+        // ── DISTRIBUTION: Amazon FBA ──
         { id: 't8', title: 'Apply to Amazon FBA Canada', description: 'amazon.ca seller central. FBA fulfillment ~$6 CAD/unit. Huge discovery traffic. Apply at sellercentral.amazon.ca', category: 'distribution', priority: 'high', status: 'todo' },
-        { id: 't9', title: 'Apply to Amazon FBA US', description: 'Amazon.com FBA. Need FDA food facility registration. ~$5 USD/unit fulfillment', category: 'distribution', priority: 'high', status: 'todo' },
+        { id: 't9', title: 'Apply to Amazon FBA US', description: 'Amazon.com FBA 2026 fees: $3.06 (up to 6oz), $3.15 (6-12oz). Total ~$3.47/unit w/ inbound. BUT 15% referral fee on sale price. Need FDA food facility registration.', category: 'distribution', priority: 'high', status: 'todo' },
         { id: 't10', title: 'Email 20 specialty grocery/health food retailers', description: 'Pitch wholesale partnerships', category: 'distribution', priority: 'medium', status: 'todo' },
         { id: 't11', title: 'Research Faire wholesale marketplace', description: 'faire.com - apply as maker. 15% commission but access to 500k+ retailers. Good for specialty food', category: 'distribution', priority: 'medium', status: 'todo' },
         { id: 't12', title: 'Setup subscription box partnerships', description: 'Candy Club, Cocoa Runners, Universal Yums, Love With Food. Email for wholesale inquiry', category: 'distribution', priority: 'medium', status: 'todo' },
+
+        // ── MARKETING ──
         { id: 't13', title: 'Set up email marketing', description: 'Repeat customer retention campaigns', category: 'marketing', priority: 'medium', status: 'todo' },
         { id: 't14', title: 'Create sell sheet PDF for retail pitches', description: 'One-page: product photos, price points, margins, certifications, contact info', category: 'marketing', priority: 'high', status: 'todo' },
+
+        // ── RETAIL ──
         { id: 't15', title: 'Email pitch to Whole Foods Market Canada', description: 'Local Producer Program. Email: wholefoods.ca/supplier. Attach sell sheet + ingredient list', category: 'retail', priority: 'medium', status: 'todo' },
         { id: 't16', title: 'Contact Organic Garage, local stores', description: 'In-store retail placement', category: 'retail', priority: 'medium', status: 'todo' },
         { id: 't17', title: 'Research specialty candy/chocolate subscription boxes', description: 'Candy Club, Cocoa Runners, etc.', category: 'retail', priority: 'low', status: 'todo' }
