@@ -2642,7 +2642,14 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
-                JSON.parse(body); // validate
+                const parsed = JSON.parse(body); // validate
+                const buildings = parsed.buildings;
+                if (buildings && Object.keys(buildings).length >= 3 &&
+                    Object.values(buildings).every(b => b.x === 0 && b.z === 0)) {
+                    res.writeHead(409, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Rejected: all buildings at origin, layout not yet restored' }));
+                    return;
+                }
                 if (!cloud.isR2Ready()) {
                     res.writeHead(503, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'R2 not available' }));
