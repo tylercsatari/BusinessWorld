@@ -70,13 +70,37 @@ const ChocolateBarUI = (() => {
     ];
 
     const DEFAULT_CHANNELS = [
-        { id: 'ch1', name: 'Shopify Store', icon: '\u{1F6D2}', status: 'active', note: 'Primary DTC channel' },
+        { id: 'ch1', name: 'Shopify Store (endurenutra.com)', icon: '\u{1F6D2}', status: 'active', note: '192 orders last 90d | $10.7K rev | AOV $55.88' },
         { id: 'ch2', name: 'Amazon.ca', icon: '\u{1F4E6}', status: 'planned', note: 'FBA enrollment pending' },
-        { id: 'ch3', name: 'Amazon.com', icon: '\u{1F4E6}', status: 'planned', note: 'FBA enrollment pending' },
+        { id: 'ch3', name: 'Amazon.com', icon: '\u{1F4E6}', status: 'planned', note: 'FBA fee $3.15/unit (6-12oz) + 15% referral' },
         { id: 'ch4', name: 'Faire Wholesale', icon: '\u{1F3EA}', status: 'research', note: 'Marketplace for indie retailers' },
         { id: 'ch5', name: 'Retail / Grocery', icon: '\u{1F3EC}', status: 'research', note: 'Whole Foods, health food stores' },
         { id: 'ch6', name: 'Wholesale Direct', icon: '\u{1F4CB}', status: 'planned', note: 'Direct wholesale to specialty shops' }
     ];
+
+    // Real product data from Shopify API (pulled 2026-03-31)
+    const PRODUCTS = [
+        { name: 'Protein Chocolate Bar - 4 Pack', price: 44.99, sku: '4pack', inventory: -133, orders90d: 139, revenue90d: 5203.34, pctRevenue: 48.5 },
+        { name: 'Protein Chocolate Bar - 12 Pack', price: 93.75, sku: '0012', inventory: 956, orders90d: 41, revenue90d: 3257.53, pctRevenue: 30.4 },
+        { name: 'Protein Chocolate Bar - 36 Pack', price: 249.00, sku: '0014', inventory: -485, orders90d: 13, revenue90d: 2354.81, pctRevenue: 22.0 },
+        { name: 'Protein Chocolate Bar - Subscription', price: 70.00, sku: 'sub', inventory: null, orders90d: 2, revenue90d: 139.98, pctRevenue: 1.3 }
+    ];
+
+    // Real stats from Shopify API (last 90 days)
+    const SHOPIFY_STATS = {
+        totalOrders: 192,
+        totalRevenue: 10728.86,
+        avgOrderValue: 55.88,
+        shippingCharged: 1167.55,
+        uniqueCustomers: 151,
+        repeatCustomers: 24,
+        repeatRate: 15.9,
+        fulfilled: 179,
+        unfulfilled: 13,
+        topStates: ['TX (19)', 'FL (14)', 'CA (13)', 'NJ (12)', 'NY (11)', 'UK (10)'],
+        fulfillmentProvider: 'ShipBob',
+        currentCostPerOrder: 17
+    };
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
     function genId() { return 't' + Date.now() + Math.random().toString(36).slice(2, 6); }
@@ -100,7 +124,11 @@ const ChocolateBarUI = (() => {
                 tasks: DEFAULT_TASKS,
                 channels: DEFAULT_CHANNELS,
                 notes: '',
-                stats: { monthlyRevenue: '--', avgOrderValue: '--', fulfillmentCost: '$17' }
+                stats: {
+                    monthlyRevenue: '$' + Math.round(SHOPIFY_STATS.totalRevenue / 3).toLocaleString(),
+                    avgOrderValue: '$' + SHOPIFY_STATS.avgOrderValue.toFixed(2),
+                    fulfillmentCost: '$17'
+                }
             };
             saveData(data);
         }
@@ -203,6 +231,32 @@ const ChocolateBarUI = (() => {
                     <div><span class="choc-badge choc-badge-high">${high} high</span></div>
                     <div><span class="choc-badge choc-badge-medium">${medium} medium</span></div>
                     <div><span class="choc-badge choc-badge-low">${low} low</span></div>
+                </div>
+            </div>
+
+            <div class="choc-card">
+                <div class="choc-card-title">\u{1F4CA} Shopify Sales (Last 90 Days)</div>
+                <div style="margin-top:8px;font-size:13px;">
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);font-weight:600;color:var(--choc-accent);">
+                        <span style="flex:2">Product</span><span style="flex:1;text-align:right">Orders</span><span style="flex:1;text-align:right">Revenue</span><span style="flex:1;text-align:right">%</span>
+                    </div>
+                    ${PRODUCTS.map(p => \`
+                        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                            <span style="flex:2;color:var(--choc-text)">\${esc(p.name)}</span>
+                            <span style="flex:1;text-align:right;color:var(--choc-muted)">\${p.orders90d}</span>
+                            <span style="flex:1;text-align:right;color:var(--choc-text)">$\${p.revenue90d.toLocaleString()}</span>
+                            <span style="flex:1;text-align:right;color:var(--choc-muted)">\${p.pctRevenue}%</span>
+                        </div>
+                    \`).join('')}
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:600;color:var(--choc-accent);">
+                        <span style="flex:2">Total</span>
+                        <span style="flex:1;text-align:right">${SHOPIFY_STATS.totalOrders}</span>
+                        <span style="flex:1;text-align:right">$${SHOPIFY_STATS.totalRevenue.toLocaleString()}</span>
+                        <span style="flex:1;text-align:right">100%</span>
+                    </div>
+                    <div style="margin-top:8px;color:var(--choc-muted);font-size:12px;">
+                        ${SHOPIFY_STATS.uniqueCustomers} customers | ${SHOPIFY_STATS.repeatRate}% repeat rate | Top: ${SHOPIFY_STATS.topStates.slice(0,3).join(', ')}
+                    </div>
                 </div>
             </div>
 
