@@ -2261,7 +2261,9 @@ const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pe
 function getBuildingByName(n) {
     return { 'Workshop': workshop, 'Storage': storage, 'Incubator': incubator, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar }[n];
 }
+let _layoutReady = false;
 function saveLayout() {
+    if (!_layoutReady) return;
     const data = {
         buildings: {},
         paths: Array.from(pathTiles),
@@ -2343,6 +2345,7 @@ async function init() {
     } else {
         initDefaultPaths();
     }
+    _layoutReady = true;
     scene.add(pathTileGroup);
 
     // Restore pen size
@@ -2385,7 +2388,6 @@ async function init() {
         typeof LibraryUI !== 'undefined' ? LibraryUI.preloadCalendarCount().catch(() => {}) : Promise.resolve(),
         typeof LibraryUI !== 'undefined' ? LibraryUI.preloadSponsorsCount().catch(() => {}) : Promise.resolve(),
     ]);
-    saveLayout();
     // Create ambient particles
     initAmbientParticles();
     // Set initial gold fill level
