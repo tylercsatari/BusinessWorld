@@ -24,7 +24,7 @@ function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
 const BUILD_TS = Date.now();
-let _layoutCache = null; // in-memory cache (avoids R2 read on every load)
+
 
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -2655,7 +2655,6 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                     res.end(JSON.stringify({ error: 'R2 not available' }));
                     return;
                 }
-                _layoutCache = body;
                 await cloud.uploadToR2('layout/layout.json', Buffer.from(body), 'application/json');
                 console.log('Layout saved to R2');
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2985,27 +2984,21 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
     // Load layout
     // =========================================
     if (req.method === 'GET' && pathname === '/load-layout') {
-        // 1. In-memory cache (fastest)
-        if (_layoutCache) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(_layoutCache);
+        if (!cloud.isR2Ready()) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'R2 not available' }));
             return;
         }
-        // 2. Try R2
-        if (cloud.isR2Ready()) {
-            try {
-                const buf = await cloud.downloadFromR2('layout/layout.json');
-                if (buf) {
-                    _layoutCache = buf.toString('utf8');
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(_layoutCache);
-                    return;
-                }
-            } catch (e) {
-                console.warn('R2 layout load failed:', e.message);
+        try {
+            const buf = await cloud.downloadFromR2('layout/layout.json');
+            if (buf) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(buf.toString('utf8'));
+                return;
             }
+        } catch (e) {
+            console.warn('R2 layout load failed:', e.message);
         }
-        // 3. R2 not ready or failed
         res.writeHead(503, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'R2 not available' }));
         return;
@@ -3440,24 +3433,8 @@ function renderShareIdeasPage(ideas, statusFilter, catFilter, getStatus) {
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();
 
-async function warmLayoutCache() {
-    if (!cloud.isR2Ready()) { console.log('R2 not ready — skipping layout cache warm'); return; }
-    try {
-        const buf = await cloud.downloadFromR2('layout/layout.json');
-        if (buf) {
-            _layoutCache = buf.toString('utf8');
-            console.log('Layout cache warmed from R2');
-        } else {
-            console.log('No layout found in R2 yet');
-        }
-    } catch (e) {
-        console.warn('Layout cache warm failed:', e.message);
-    }
-}
-
 server.listen(PORT, () => {
     console.log(`Business World running at http://localhost:${PORT}`);
-    warmLayoutCache();
     videoAnalyzer.resumeJobs(process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
     // Pre-warm metrics cache in background (ready before user opens Pen)
     _loadOrBuildMetrics().catch(e => console.warn('Metrics pre-warm failed:', e.message));
