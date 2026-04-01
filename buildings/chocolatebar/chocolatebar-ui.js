@@ -38,14 +38,14 @@ const ChocolateBarUI = (() => {
        Protein cost: $9,250/200kg = $46/kg = $0.71506/bar
        Shipping + duties: $27,000 total = $2.08720/bar
        Packaging cases (2500): $3,420 = $0.46266/bar
-       Total per bar: $6.08693 CAD
-       Working COGS (from spreadsheet profit column): $3.95/bar USD */
-    const COGS_PER_BAR = 3.95; // USD, derived from spreadsheet profit calculations
+       Total per bar: $6.08693 CAD = ~$6.09 CAD/bar
+       COGS per pack = $6.09 x number of bars */
+    const COGS_PER_BAR_CAD = 6.09; // CAD, from spreadsheet total
     const PRODUCTS = [
-        { name: '4 Pack',  price: 44.99, subPrice: 35.99, sku: '4pack', cogs: 15.81, weight: 280, inventory: -133, orders90d: 139, revenue90d: 5203.34, pctRevenue: 48.5, pctOrders: 72 },
-        { name: '12 Pack', price: 93.75, subPrice: 75.00, sku: '0012',  cogs: 47.43, weight: 750, inventory: 956,  orders90d: 41,  revenue90d: 3257.53, pctRevenue: 30.4, pctOrders: 21 },
-        { name: '36 Pack', price: 249.00, subPrice: 198.20, sku: '0014', cogs: 142.29, weight: 2100, inventory: -485, orders90d: 13,  revenue90d: 2354.81, pctRevenue: 22.0, pctOrders: 7 },
-        { name: 'Subscription', price: 70.00, subPrice: 70.00, sku: 'sub', cogs: 47.43, weight: 750, inventory: null, orders90d: 2, revenue90d: 139.98, pctRevenue: 1.3, pctOrders: 1 }
+        { name: '4 Pack',  price: 44.99, subPrice: 35.99, sku: '4pack', cogs: 24.35, weight: 280, inventory: -133, orders90d: 139, revenue90d: 5203.34, pctRevenue: 48.5, pctOrders: 72 },
+        { name: '12 Pack', price: 93.75, subPrice: 75.00, sku: '0012',  cogs: 73.04, weight: 750, inventory: 956,  orders90d: 41,  revenue90d: 3257.53, pctRevenue: 30.4, pctOrders: 21 },
+        { name: '36 Pack', price: 249.00, subPrice: 198.20, sku: '0014', cogs: 219.13, weight: 2100, inventory: -485, orders90d: 13,  revenue90d: 2354.81, pctRevenue: 22.0, pctOrders: 7 },
+        { name: 'Subscription', price: 70.00, subPrice: 70.00, sku: 'sub', cogs: 73.04, weight: 750, inventory: null, orders90d: 2, revenue90d: 139.98, pctRevenue: 1.3, pctOrders: 1 }
     ];
 
     /* ── Shopify Stats (API pull, last 90 days: Jan 1 - Mar 31 2026) ── */
