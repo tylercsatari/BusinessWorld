@@ -1,4 +1,12 @@
 /* ── Chocolate Bar UI ── BusinessWorld Dark Aesthetic ── */
+/* ════════════════════════════════════════════════════════════════
+   SINGLE SOURCE OF TRUTH for all Endure Nutrition chocolate bar
+   business data. Update constants here — NOT in spreadsheets,
+   Notion, or elsewhere. All metrics, COGS, shipping, and analytics
+   flow from this file.
+
+   Last updated: 2026-04-01
+   ════════════════════════════════════════════════════════════════ */
 const ChocolateBarUI = (() => {
     let container = null;
     let activeTab = 'dashboard';
@@ -20,6 +28,7 @@ const ChocolateBarUI = (() => {
         dashboard: '<svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>',
         fulfillment: '<svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>',
         tasks:    '<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>',
+        analytics: '<svg viewBox="0 0 24 24"><path d="M21 21H4.6c-.3 0-.6-.3-.6-.6V3"/><path d="M7 14l4-4 4 4 6-6"/></svg>',
         distribution: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
         notes:    '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'
     };
@@ -28,6 +37,7 @@ const ChocolateBarUI = (() => {
         { id: 'dashboard', label: 'Dashboard' },
         { id: 'fulfillment', label: 'Fulfillment' },
         { id: 'tasks', label: 'Tasks' },
+        { id: 'analytics', label: 'Analytics' },
         { id: 'distribution', label: 'Channels' },
         { id: 'notes', label: 'Notes' }
     ];
@@ -97,6 +107,18 @@ const ChocolateBarUI = (() => {
             { name: 'Fluffle Fulfill (Austin TX)', costPerOrder: '~$5.12', note: '$1/order pick, no min' },
             { name: 'ShipMonk', costPerOrder: '~$6.85', note: '$2.50 pick, $250/mo min' },
             { name: 'Simpl Fulfillment (Austin TX)', costPerOrder: '$6.00 flat', note: 'All-in, $750/mo min' }
+        ],
+        shippingPhase1: [
+            { action: 'Force USPS Ground Advantage', savings: '~$4-5/order', effort: 'low', status: 'todo', note: 'Contact ShipBob merchant care. Request USPS GA as default for 4-Pack. FedEx (39%) → USPS saves most.' },
+            { action: 'Remove free shipping under $75', savings: '~$8/order on affected', effort: 'low', status: 'todo', note: 'Currently 67% ship free. Set $75 minimum. 4-Pack pays ~$5.99 shipping.' },
+            { action: 'Downgrade Express 2-Day to Standard default', savings: '~$3-5/order', effort: 'low', status: 'todo', note: '44% use Express 2-Day. Switch to Standard (5-7 day) as default, offer Express as paid upgrade ($12+).' },
+            { action: 'Negotiate volume pricing with ShipBob', savings: 'unknown', effort: 'medium', status: 'todo', note: 'At ~64 orders/mo, may qualify for mid-tier pricing. Ask for pick & pack reduction.' }
+        ],
+        shippingPhase2: [
+            { name: 'Fluffle Fulfillment (Austin TX)', estCost: 5.12, note: '$1/order pick, no minimums, FDA compliant. Likely USPS GA from Austin.', status: 'research' },
+            { name: 'Simpl Fulfillment (Austin TX)', estCost: 6.00, note: '$6 flat all-in. $750/mo min. Great if volume grows.', status: 'research' },
+            { name: 'ShipMonk', estCost: 6.85, note: '$2.50 pick + carrier. $250/mo min. Established.', status: 'research' },
+            { name: 'Pirate Ship (self-fulfill)', estCost: 4.12, note: 'USPS GA avg ~$4.12 for 4-Pack. You pack. Free service.', status: 'backup' }
         ]
     };
 
@@ -216,6 +238,7 @@ const ChocolateBarUI = (() => {
             case 'dashboard': return renderDashboard(data);
             case 'fulfillment': return renderFulfillment(data);
             case 'tasks': return renderTasks(data);
+            case 'analytics': return renderAnalytics(data);
             case 'distribution': return renderDistribution(data);
             case 'notes': return renderNotes(data);
             default: return '';
@@ -421,10 +444,158 @@ const ChocolateBarUI = (() => {
             '</div>' +
         '</div></div>';
 
+        // Phase 1 Quick Wins
+        html += '<div class="choc-card">' +
+            '<div class="choc-card-title">\u{1F680} Phase 1 Quick Wins (Do Now)</div>' +
+            '<div style="margin-top:8px;font-size:13px;">';
+
+        SHIPBOB.shippingPhase1.forEach(function(item) {
+            html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">' +
+                '<span style="font-size:16px;line-height:1;margin-top:2px;opacity:0.4;">\u2610</span>' +
+                '<div style="flex:1;">' +
+                    '<div style="color:var(--choc-text);font-weight:600;">' + esc(item.action) + '</div>' +
+                    '<div style="display:flex;gap:6px;margin-top:4px;">' +
+                        '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(74,222,128,0.15);color:#4ade80;">' + esc(item.savings) + '</span>' +
+                        '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(96,165,250,0.15);color:#60a5fa;">' + esc(item.effort) + ' effort</span>' +
+                    '</div>' +
+                    '<div style="color:var(--choc-muted);font-size:12px;margin-top:4px;">' + esc(item.note) + '</div>' +
+                '</div>' +
+            '</div>';
+        });
+
+        html += '</div></div>';
+
+        // Phase 2 3PL Migration
+        html += '<div class="choc-card">' +
+            '<div class="choc-card-title">\u{1F504} Phase 2: 3PL Migration</div>' +
+            '<div style="margin-top:8px;font-size:13px;">' +
+                '<div style="display:flex;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.1);font-weight:600;color:var(--choc-accent);">' +
+                    '<span style="flex:2">Provider</span>' +
+                    '<span style="flex:1;text-align:right">Est. Cost/Order</span>' +
+                    '<span style="flex:2;text-align:right">Notes</span>' +
+                    '<span style="flex:0.8;text-align:right">Status</span>' +
+                '</div>';
+
+        SHIPBOB.shippingPhase2.forEach(function(p) {
+            var statusColor = p.status === 'research' ? '#6366f1' : '#facc15';
+            html += '<div style="display:flex;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">' +
+                '<span style="flex:2;color:var(--choc-text)">' + esc(p.name) + '</span>' +
+                '<span style="flex:1;text-align:right;color:#4ade80;font-weight:600;">' + fmt$(p.estCost) + '</span>' +
+                '<span style="flex:2;text-align:right;color:var(--choc-muted);font-size:12px">' + esc(p.note) + '</span>' +
+                '<span style="flex:0.8;text-align:right;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:' + statusColor + '22;color:' + statusColor + ';">' + esc(p.status) + '</span></span>' +
+            '</div>';
+        });
+
+        html += '</div></div>';
+
         return html;
     }
 
     /* ── Overview (removed - replaced by Dashboard) ── */
+
+    /* ── Analytics Tab ── */
+    function renderAnalytics(data) {
+        var html = '';
+
+        // A. Funnel Overview
+        var funnel = [
+            { stage: 'Sessions', value: 2847, rate: null },
+            { stage: 'Product Page Views', value: 1423, rate: 50.0 },
+            { stage: 'Add to Cart', value: 341, rate: 23.9 },
+            { stage: 'Reached Checkout', value: 218, rate: 63.9 },
+            { stage: 'Purchased', value: 192, rate: 88.1 },
+            { stage: 'Repeat Purchase', value: 24, rate: 12.5 }
+        ];
+        var maxVal = funnel[0].value;
+
+        html += '<div class="choc-card">' +
+            '<div class="choc-card-title">\u{1F4CA} Conversion Funnel</div>' +
+            '<div style="margin-top:10px;font-size:13px;">';
+
+        funnel.forEach(function(f, i) {
+            var widthPct = (f.value / maxVal) * 100;
+            var rateColor = '#6366f1';
+            if (f.rate !== null) {
+                rateColor = f.rate > 50 ? '#4ade80' : f.rate >= 20 ? '#facc15' : '#f87171';
+            }
+            var dropOff = i > 0 ? (100 - f.rate).toFixed(1) + '% drop-off' : '';
+
+            html += '<div style="margin-bottom:8px;">' +
+                '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">' +
+                    '<span style="color:var(--choc-text);font-weight:500;">' + f.stage + '</span>' +
+                    '<span style="color:var(--choc-muted);">' +
+                        f.value.toLocaleString() +
+                        (f.rate !== null ? ' <span style="color:' + rateColor + ';font-weight:600;">(' + fmtPct(f.rate) + ')</span>' : '') +
+                    '</span>' +
+                '</div>' +
+                '<div style="height:20px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;position:relative;">' +
+                    '<div style="height:100%;width:' + widthPct + '%;background:linear-gradient(90deg,' + rateColor + ',' + rateColor + 'aa);border-radius:4px;transition:width 0.3s;"></div>' +
+                '</div>' +
+                (dropOff ? '<div style="text-align:right;font-size:11px;color:var(--choc-muted);margin-top:2px;">' + dropOff + '</div>' : '') +
+            '</div>';
+        });
+
+        html += '</div></div>';
+
+        // B. Split Test Tracker
+        var splitTests = [
+            { name: '4-Pack Price: $44.99 vs $49.99', status: 'planned', hypothesis: 'Higher price, same conversion = +$5/order', winner: null, lift: null },
+            { name: 'Free Shipping vs $5 threshold', status: 'planned', hypothesis: 'Removing free shipping saves $8/order, may hurt CVR', winner: null, lift: null },
+            { name: 'Bundle offer: 4-Pack + sub upsell', status: 'planned', hypothesis: 'Subscription attach rate from 1% to 5%', winner: null, lift: null }
+        ];
+
+        var statusColors = { planned: '#6366f1', running: '#facc15', completed: '#4ade80' };
+
+        html += '<div class="choc-card">' +
+            '<div class="choc-card-title">\u{1F9EA} Split Test Tracker</div>' +
+            '<div style="margin-top:8px;font-size:13px;">';
+
+        splitTests.forEach(function(t) {
+            var sc = statusColors[t.status] || '#6366f1';
+            html += '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                    '<span style="color:var(--choc-text);font-weight:600;">' + esc(t.name) + '</span>' +
+                    '<span style="display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;background:' + sc + '22;color:' + sc + ';font-weight:600;">' + t.status + '</span>' +
+                '</div>' +
+                '<div style="color:var(--choc-muted);font-size:12px;margin-top:4px;">\u{1F4A1} ' + esc(t.hypothesis) + '</div>' +
+                (t.status === 'completed' && t.winner ? '<div style="margin-top:4px;font-size:12px;color:#4ade80;">\u{1F3C6} Winner: ' + esc(t.winner) + (t.lift ? ' \u2022 Lift: ' + t.lift + '%' : '') + '</div>' : '') +
+            '</div>';
+        });
+
+        html += '</div></div>';
+
+        // C. Key Metrics to Watch
+        var metrics = [
+            { label: 'CVR (purchase/session)', value: 6.7, target: 8, unit: '%' },
+            { label: 'ATC Rate', value: 12.0, target: 15, unit: '%' },
+            { label: 'Checkout Rate (of ATC)', value: 63.9, target: 70, unit: '%' },
+            { label: 'Avg Order Value', value: 55.88, target: 65, unit: '$' },
+            { label: 'Repeat Rate', value: 15.9, target: 25, unit: '%' },
+            { label: 'Subscription Rate', value: 1.0, target: 5, unit: '%' }
+        ];
+
+        html += '<div class="choc-card">' +
+            '<div class="choc-card-title">\u{1F3AF} Key Metrics to Watch</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;">';
+
+        metrics.forEach(function(m) {
+            var pctOfTarget = m.value / m.target;
+            var color = pctOfTarget >= 1.0 ? '#4ade80' : pctOfTarget >= 0.8 ? '#facc15' : '#f87171';
+            var displayVal = m.unit === '$' ? fmt$(m.value) : fmtPct(m.value);
+            var displayTarget = m.unit === '$' ? fmt$(m.target) : fmtPct(m.target);
+
+            html += '<div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;text-align:center;">' +
+                '<div style="font-size:20px;font-weight:700;color:' + color + ';">' + displayVal + '</div>' +
+                '<div style="font-size:11px;color:var(--choc-muted);margin-top:2px;">' + esc(m.label) + '</div>' +
+                '<div style="font-size:11px;margin-top:6px;color:var(--choc-muted);">Target: <span style="color:' + color + ';">' + displayTarget + '</span></div>' +
+                '<div style="width:8px;height:8px;border-radius:50%;background:' + color + ';margin:6px auto 0;"></div>' +
+            '</div>';
+        });
+
+        html += '</div></div>';
+
+        return html;
+    }
 
     /* ── Tasks Tab ── */
     function renderTasks(data) {
