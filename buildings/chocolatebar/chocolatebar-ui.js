@@ -34,13 +34,20 @@ const ChocolateBarUI = (() => {
         { id: 't1', title: 'Research 3PL fulfillment centers', description: 'Target $6 USD cost per order', category: 'fulfillment', priority: 'high', status: 'todo' },
         { id: 't2', title: 'Get quotes from ShipBob, Ware2Go, ShipMonk', description: 'For Canadian chocolate shipping to US/CA', category: 'fulfillment', priority: 'high', status: 'todo' },
         { id: 't3', title: 'Test poly mailer vs box', description: 'Reduce dimensional weight billing', category: 'fulfillment', priority: 'high', status: 'todo' },
-        { id: 't4', title: 'List product on Amazon.ca and Amazon.com', description: 'FBA enrollment for both marketplaces', category: 'distribution', priority: 'high', status: 'todo' },
-        { id: 't5', title: 'Email 20 specialty grocery/health food retailers', description: 'Pitch wholesale partnerships', category: 'distribution', priority: 'medium', status: 'todo' },
-        { id: 't6', title: 'Research Faire.com wholesale marketplace', description: 'Evaluate listing requirements and fees', category: 'distribution', priority: 'medium', status: 'todo' },
-        { id: 't7', title: 'Set up email marketing', description: 'Repeat customer retention campaigns', category: 'marketing', priority: 'medium', status: 'todo' },
-        { id: 't8', title: 'Explore subscription box partnerships', description: 'Monthly chocolate box collaborations', category: 'marketing', priority: 'low', status: 'todo' },
-        { id: 't9', title: 'Contact Whole Foods, Organic Garage, local stores', description: 'In-store retail placement', category: 'retail', priority: 'medium', status: 'todo' },
-        { id: 't10', title: 'Research specialty candy/chocolate subscription boxes', description: 'Candy Club, Cocoa Runners, etc.', category: 'retail', priority: 'low', status: 'todo' }
+        { id: 't4', title: 'Contact ShipBob Canada for quote', description: 'Target ~$6/order. shipbob.com - request Canada fulfillment center quote for 200-500 orders/month', category: 'fulfillment', priority: 'high', status: 'todo' },
+        { id: 't5', title: 'Contact ShipMonk for quote', description: 'shipmonk.com - compare with ShipBob. Ask about poly mailer discounts for chocolate bars', category: 'fulfillment', priority: 'high', status: 'todo' },
+        { id: 't6', title: 'Switch from box to poly mailer', description: 'Poly mailers reduce dimensional weight billing. Could cut ~$5/order. Test with bubble mailer for protection', category: 'fulfillment', priority: 'high', status: 'todo' },
+        { id: 't7', title: 'Research Shopify Fulfillment Network', description: 'Free if on Shopify. Integrated. Good for <500 orders/month', category: 'fulfillment', priority: 'medium', status: 'todo' },
+        { id: 't8', title: 'Apply to Amazon FBA Canada', description: 'amazon.ca seller central. FBA fulfillment ~$6 CAD/unit. Huge discovery traffic. Apply at sellercentral.amazon.ca', category: 'distribution', priority: 'high', status: 'todo' },
+        { id: 't9', title: 'Apply to Amazon FBA US', description: 'Amazon.com FBA. Need FDA food facility registration. ~$5 USD/unit fulfillment', category: 'distribution', priority: 'high', status: 'todo' },
+        { id: 't10', title: 'Email 20 specialty grocery/health food retailers', description: 'Pitch wholesale partnerships', category: 'distribution', priority: 'medium', status: 'todo' },
+        { id: 't11', title: 'Research Faire wholesale marketplace', description: 'faire.com - apply as maker. 15% commission but access to 500k+ retailers. Good for specialty food', category: 'distribution', priority: 'medium', status: 'todo' },
+        { id: 't12', title: 'Setup subscription box partnerships', description: 'Candy Club, Cocoa Runners, Universal Yums, Love With Food. Email for wholesale inquiry', category: 'distribution', priority: 'medium', status: 'todo' },
+        { id: 't13', title: 'Set up email marketing', description: 'Repeat customer retention campaigns', category: 'marketing', priority: 'medium', status: 'todo' },
+        { id: 't14', title: 'Create sell sheet PDF for retail pitches', description: 'One-page: product photos, price points, margins, certifications, contact info', category: 'marketing', priority: 'high', status: 'todo' },
+        { id: 't15', title: 'Email pitch to Whole Foods Market Canada', description: 'Local Producer Program. Email: wholefoods.ca/supplier. Attach sell sheet + ingredient list', category: 'retail', priority: 'medium', status: 'todo' },
+        { id: 't16', title: 'Contact Organic Garage, local stores', description: 'In-store retail placement', category: 'retail', priority: 'medium', status: 'todo' },
+        { id: 't17', title: 'Research specialty candy/chocolate subscription boxes', description: 'Candy Club, Cocoa Runners, etc.', category: 'retail', priority: 'low', status: 'todo' }
     ];
 
     const DEFAULT_CHANNELS = [
@@ -441,7 +448,7 @@ const ChocolateBarUI = (() => {
 
 window.ChocolateBarUI = { open: (c, o) => ChocolateBarUI.open(c, o), close: () => ChocolateBarUI.close() };
 
-BuildingRegistry.register('ChocolateBar', {
+BuildingRegistry.register('Chocolate Bar', {
     open: (bodyEl, opts) => ChocolateBarUI.open(bodyEl, opts),
     close: () => ChocolateBarUI.close()
 });
