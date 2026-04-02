@@ -174,6 +174,35 @@ const FinanceUI = (() => {
     }
 
     async function startPlaidLink() {
+        var plaidObserver = null;
+
+        function forceZIndex() {
+            document.querySelectorAll('iframe[id*="plaid"], div[id*="plaid"], div[class*="plaid"]').forEach(function(el) {
+                el.style.setProperty('z-index', '99999', 'important');
+            });
+        }
+
+        function startPlaidObserver() {
+            plaidObserver = new MutationObserver(function() {
+                forceZIndex();
+            });
+            plaidObserver.observe(document.body, { childList: true, subtree: true });
+            // Also force immediately in case elements already exist
+            forceZIndex();
+            // Disable backdrop-filter on modal overlay so Plaid iframe is visible
+            var overlay = document.getElementById('modal-overlay');
+            if (overlay) overlay.style.backdropFilter = 'none';
+        }
+
+        function cleanupPlaidObserver() {
+            if (plaidObserver) {
+                plaidObserver.disconnect();
+                plaidObserver = null;
+            }
+            var overlay = document.getElementById('modal-overlay');
+            if (overlay) overlay.style.backdropFilter = 'blur(6px)';
+        }
+
         try {
             var resp = await fetch('/api/finance/link-token', { method: 'POST' });
             var data = await resp.json();
@@ -182,6 +211,7 @@ const FinanceUI = (() => {
                 var handler = Plaid.create({
                     token: data.link_token,
                     onSuccess: async function(publicToken, metadata) {
+                        cleanupPlaidObserver();
                         showToast('Connecting...');
                         try {
                             await fetch('/api/finance/exchange-token', {
@@ -197,10 +227,14 @@ const FinanceUI = (() => {
                         }
                     },
                     onExit: function(err) {
+                        cleanupPlaidObserver();
                         if (err) console.warn('Plaid Link exited with error', err);
                     }
                 });
-                handler.open();
+                setTimeout(function() {
+                    handler.open();
+                    startPlaidObserver();
+                }, 100);
             });
         } catch (e) {
             showToast('Failed to start Plaid Link');

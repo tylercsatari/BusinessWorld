@@ -650,6 +650,9 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* Plaid Link z-index override */
+iframe[id*="plaid"], div[id*="plaid"], div[class*="plaid"] { z-index: 99999 !important; }
+
 /* Responsive */
 @media (max-width: 600px) {
     .fin-header { padding: 14px 16px 0; }
