@@ -12,6 +12,7 @@ const FinanceUI = (() => {
     let loading = false;
     let dragTxId = null;
     let projectLastUsed = {}; // projectName → timestamp, updated on assign
+    let expandedTxIds = new Set();
 
     const DATE_RANGES = [
         { label: 'Last Day', days: 1 },
@@ -405,6 +406,81 @@ const FinanceUI = (() => {
         return sorted;
     }
 
+    function renderTxDetail(t) {
+        var fields = [];
+
+        if (t.merchant_name) fields.push(['Merchant', esc(t.merchant_name)]);
+        if (t.name && t.name !== t.merchant_name) fields.push(['Description', esc(t.name)]);
+
+        var dateStr = esc(t.date);
+        if (t.authorized_date && t.authorized_date !== t.date) dateStr += ' (auth: ' + esc(t.authorized_date) + ')';
+        fields.push(['Date', dateStr]);
+
+        var isDebit = t.amount > 0;
+        fields.push(['Amount', '<span class="fin-tx-amount ' + (isDebit ? 'debit' : 'credit') + '">' + (isDebit ? '-' : '+') + fmt$(Math.abs(t.amount)) + '</span>']);
+
+        fields.push(['Account', esc(getAccountName(t.account_id))]);
+
+        if (t.payment_channel) fields.push(['Payment Channel', esc(t.payment_channel)]);
+        fields.push(['Pending', t.pending ? 'Yes' : 'No']);
+
+        // Location
+        if (t.location) {
+            var locParts = [];
+            if (t.location.address) locParts.push(t.location.address);
+            if (t.location.city) locParts.push(t.location.city);
+            if (t.location.region) locParts.push(t.location.region);
+            if (t.location.country) locParts.push(t.location.country);
+            if (locParts.length > 0) fields.push(['Location', esc(locParts.join(', '))]);
+        }
+
+        // Counterparties
+        if (t.counterparties && t.counterparties.length > 0) {
+            var cpHtml = t.counterparties.map(function(cp) {
+                return esc(cp.name || 'Unknown') + (cp.type ? ' (' + esc(cp.type) + ')' : '');
+            }).join(', ');
+            fields.push(['Counterparties', cpHtml]);
+        }
+
+        // Category
+        if (t.personal_finance_category) {
+            var catStr = esc(t.personal_finance_category.primary || '');
+            if (t.personal_finance_category.detailed) catStr += ' › ' + esc(t.personal_finance_category.detailed);
+            if (catStr) fields.push(['Category', catStr]);
+        }
+
+        fields.push(['Transaction ID', '<span style="font-family:var(--fin-font-mono);font-size:11px">' + esc(t.transaction_id) + '</span>']);
+
+        if (t.website) fields.push(['Website', esc(t.website)]);
+
+        var html = '<div class="fin-expand-detail">';
+        fields.forEach(function(f) {
+            html += '<div class="fin-detail-row">' +
+                '<span class="fin-detail-label">' + f[0] + '</span>' +
+                '<span class="fin-detail-value">' + f[1] + '</span>' +
+            '</div>';
+        });
+
+        // Notes textarea
+        html += '<div class="fin-detail-row" style="flex-direction:column;align-items:stretch;gap:4px">' +
+            '<span class="fin-detail-label">Notes</span>' +
+            '<textarea class="fin-notes-input fin-expand-notes" data-txid="' + esc(t.transaction_id) + '" placeholder="Add notes...">' + esc(t._notes || '') + '</textarea>' +
+        '</div>';
+
+        // Quick-assign project dropdown
+        html += '<div class="fin-detail-row" style="margin-top:6px">' +
+            '<span class="fin-detail-label">Assign Project</span>' +
+            '<select class="fin-expand-project-select fin-select" data-txid="' + esc(t.transaction_id) + '" style="font-size:12px;padding:4px 8px;flex:1">' +
+                '<option value="">— none —</option>';
+        getSortedProjects().forEach(function(p) {
+            html += '<option value="' + esc(p) + '"' + (t._project === p ? ' selected' : '') + '>' + esc(p) + '</option>';
+        });
+        html += '</select></div>';
+
+        html += '</div>';
+        return html;
+    }
+
     function renderTransactions() {
         var uncategorized = transactions.filter(function(t) { return !t._project; });
         var sortedProjects = getSortedProjects();
@@ -420,15 +496,21 @@ const FinanceUI = (() => {
         } else {
             uncategorized.forEach(function(t) {
                 var isDebit = t.amount > 0;
-                html += '<div class="fin-unassigned-row" draggable="true" data-txid="' + esc(t.transaction_id) + '">' +
-                    '<span class="fin-drag-handle">⠿</span>' +
-                    '<div class="fin-unassigned-info">' +
-                        '<div class="fin-unassigned-name">' + esc(t.merchant_name || t.name || 'Unknown') + '</div>' +
-                        '<div style="font-size:11px;color:var(--fin-text-muted)">' + esc(t.date) + '</div>' +
-                    '</div>' +
-                    '<div class="fin-tx-amount ' + (isDebit ? 'debit' : 'credit') + '" style="font-size:12px;white-space:nowrap">' + (isDebit ? '-' : '+') + fmt$(Math.abs(t.amount)) + '</div>' +
-                    '<button class="fin-assign-btn" data-action="assign-click" data-txid="' + esc(t.transaction_id) + '" title="Assign to project">▸</button>' +
-                '</div>';
+                var isExpanded = expandedTxIds.has(t.transaction_id);
+                html += '<div class="fin-unassigned-item' + (isExpanded ? ' expanded' : '') + '" data-txid="' + esc(t.transaction_id) + '">' +
+                    '<div class="fin-unassigned-row" draggable="true" data-txid="' + esc(t.transaction_id) + '" data-action="toggle-expand">' +
+                        '<span class="fin-drag-handle">⠿</span>' +
+                        '<div class="fin-unassigned-info">' +
+                            '<div class="fin-unassigned-name">' + esc(t.merchant_name || t.name || 'Unknown') + '</div>' +
+                            '<div style="font-size:11px;color:var(--fin-text-muted)">' + esc(t.date) + '</div>' +
+                        '</div>' +
+                        '<div class="fin-tx-amount ' + (isDebit ? 'debit' : 'credit') + '" style="font-size:12px;white-space:nowrap">' + (isDebit ? '-' : '+') + fmt$(Math.abs(t.amount)) + '</div>' +
+                        '<button class="fin-assign-btn" data-action="assign-click" data-txid="' + esc(t.transaction_id) + '" title="Assign to project">▸</button>' +
+                    '</div>';
+                if (isExpanded) {
+                    html += renderTxDetail(t);
+                }
+                html += '</div>';
             });
         }
         html += '</div></div>';
@@ -614,6 +696,40 @@ const FinanceUI = (() => {
                 showProjectDropdown(assignBtn, assignBtn.dataset.txid);
                 return;
             }
+
+            // Toggle expand/collapse on row header click
+            var expandRow = e.target.closest('[data-action="toggle-expand"]');
+            if (expandRow && !e.target.closest('.fin-drag-handle') && !e.target.closest('.fin-assign-btn')) {
+                var txid = expandRow.dataset.txid;
+                if (expandedTxIds.has(txid)) {
+                    expandedTxIds.delete(txid);
+                } else {
+                    expandedTxIds.add(txid);
+                }
+                refreshContent();
+                return;
+            }
+        });
+
+        // Notes auto-save on blur
+        container.addEventListener('focusout', function(e) {
+            if (e.target.classList.contains('fin-expand-notes')) {
+                var txid = e.target.dataset.txid;
+                saveMeta(txid, { notes: e.target.value });
+            }
+        });
+
+        // Quick-assign project select in expanded detail
+        container.addEventListener('change', function(e) {
+            if (e.target.classList.contains('fin-expand-project-select')) {
+                var txid = e.target.dataset.txid;
+                var proj = e.target.value;
+                if (proj) {
+                    assignToProject(txid, proj);
+                } else {
+                    unassignFromProject(txid);
+                }
+            }
         });
 
         // Search input (unused now but keep for future)
@@ -625,6 +741,13 @@ const FinanceUI = (() => {
                 e.target._saveTimer = setTimeout(function() {
                     saveMeta(txid, { notes: val });
                 }, 600);
+            }
+        });
+
+        // Prevent drag handle clicks from toggling expand
+        container.addEventListener('mousedown', function(e) {
+            if (e.target.closest('.fin-drag-handle')) {
+                e.target.closest('.fin-drag-handle')._isDrag = true;
             }
         });
 
