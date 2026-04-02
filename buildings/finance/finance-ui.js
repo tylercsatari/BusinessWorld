@@ -8,12 +8,10 @@ const FinanceUI = (() => {
     let projects = []; // Dropbox folder names
     let connectionStatus = { configured: false, connected: false, connectedAt: null };
     let connectedAt = null;
-    let expandedTxId = null;
-    let searchQuery = '';
-    let txFilter = 'all'; // all | uncategorized | credits | debits
     let plaidLinkLoaded = false;
     let loading = false;
     let dragTxId = null;
+    let projectLastUsed = {}; // projectName → timestamp, updated on assign
 
     const DATE_RANGES = [
         { label: 'Last Day', days: 1 },
@@ -28,14 +26,12 @@ const FinanceUI = (() => {
     const TABS = [
         { id: 'overview', label: 'Overview' },
         { id: 'transactions', label: 'Transactions' },
-        { id: 'projects', label: 'Projects' },
         { id: 'connect', label: 'Connect' }
     ];
 
     const TAB_ICONS = {
         overview: '<svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>',
         transactions: '<svg viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>',
-        projects: '<svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>',
         connect: '<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>'
     };
 
@@ -91,12 +87,31 @@ const FinanceUI = (() => {
         }
     }
 
+    async function fetchAllTransactions() {
+        if (!connectionStatus.connected) return;
+        loading = true;
+        refresh();
+        try {
+            var resp = await fetch('/api/finance/transactions?start=2000-01-01&end=' + getEndDate());
+            var data = await resp.json();
+            if (data.transactions) {
+                transactions = data.transactions;
+                connectedAt = data.connectedAt;
+            }
+        } catch (e) {
+            console.error('Finance: fetch transactions failed', e);
+        }
+        loading = false;
+        refresh();
+    }
+
     async function fetchTransactions() {
         if (!connectionStatus.connected) return;
         loading = true;
         refresh();
         try {
-            var resp = await fetch('/api/finance/transactions?start=' + getStartDate() + '&end=' + getEndDate());
+            var start = activeTab === 'transactions' ? '2000-01-01' : getStartDate();
+            var resp = await fetch('/api/finance/transactions?start=' + start + '&end=' + getEndDate());
             var data = await resp.json();
             if (data.transactions) {
                 transactions = data.transactions;
@@ -139,7 +154,6 @@ const FinanceUI = (() => {
     }
 
     async function saveMeta(transactionId, updates) {
-        // Update local transaction object
         var tx = transactions.find(function(t) { return t.transaction_id === transactionId; });
         if (tx) {
             if ('project' in updates) tx._project = updates.project;
@@ -280,27 +294,6 @@ const FinanceUI = (() => {
         setTimeout(function() { el.remove(); }, 3000);
     }
 
-    // ── Filtering ──
-
-    function getFilteredTransactions() {
-        var list = transactions;
-        if (searchQuery) {
-            var q = searchQuery.toLowerCase();
-            list = list.filter(function(t) {
-                return (t.name || '').toLowerCase().includes(q) ||
-                       (t.merchant_name || '').toLowerCase().includes(q);
-            });
-        }
-        if (txFilter === 'uncategorized') {
-            list = list.filter(function(t) { return !t._project; });
-        } else if (txFilter === 'credits') {
-            list = list.filter(function(t) { return t.amount < 0; });
-        } else if (txFilter === 'debits') {
-            list = list.filter(function(t) { return t.amount > 0; });
-        }
-        return list;
-    }
-
     // ── Render helpers ──
 
     function renderTimeFilter() {
@@ -339,7 +332,6 @@ const FinanceUI = (() => {
         switch (activeTab) {
             case 'overview': return renderOverview();
             case 'transactions': return renderTransactions();
-            case 'projects': return renderProjects();
             case 'connect': return renderConnect();
             default: return '';
         }
@@ -358,12 +350,11 @@ const FinanceUI = (() => {
     function renderOverview() {
         var html = renderTimeFilter();
 
-        // Compute metrics
-        var totalIncome = 0, totalSpent = 0, uncategorized = 0;
+        // Compute metrics from transactions (filtered by dateRange)
+        var totalIncome = 0, totalSpent = 0;
         transactions.forEach(function(t) {
             if (t.amount < 0) totalIncome += Math.abs(t.amount);
             else totalSpent += t.amount;
-            if (!t._project) uncategorized++;
         });
         var net = totalIncome - totalSpent;
 
@@ -379,10 +370,6 @@ const FinanceUI = (() => {
             '<div class="fin-metric">' +
                 '<div class="fin-metric-value" style="color:' + (net >= 0 ? 'var(--fin-green)' : 'var(--fin-red)') + '">' + fmt$(net) + '</div>' +
                 '<div class="fin-metric-label">Net</div>' +
-            '</div>' +
-            '<div class="fin-metric">' +
-                '<div class="fin-metric-value" style="color:var(--fin-gold)">' + uncategorized + '</div>' +
-                '<div class="fin-metric-label">Uncategorized</div>' +
             '</div>' +
         '</div>';
 
@@ -406,138 +393,61 @@ const FinanceUI = (() => {
         return html;
     }
 
-    // ── Transactions Tab ──
+    // ── Transactions Tab — split-screen categorizer ──
 
-    function renderTransactions() {
-        var html = renderTimeFilter();
-
-        // Uncategorized banner
-        var uncatCount = transactions.filter(function(t) { return !t._project; }).length;
-        if (uncatCount > 0) {
-            html += '<div class="fin-banner fin-banner-amber">' + uncatCount + ' transaction' + (uncatCount === 1 ? '' : 's') + ' need review</div>';
-        }
-
-        // Search + filter pills
-        html += '<div class="fin-filters">' +
-            '<input type="text" class="fin-search" id="fin-search" placeholder="Search by name or merchant..." value="' + esc(searchQuery) + '">' +
-        '</div>';
-
-        html += '<div class="fin-filter-pills">' +
-            ['all', 'uncategorized', 'credits', 'debits'].map(function(f) {
-                var label = f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1);
-                return '<button class="fin-pill' + (txFilter === f ? ' active' : '') + '" data-txfilter="' + f + '">' + label + '</button>';
-            }).join('') +
-        '</div>';
-
-        var filtered = getFilteredTransactions();
-        if (filtered.length === 0) {
-            html += '<div class="fin-empty">No transactions match your filters</div>';
-            return html;
-        }
-
-        html += '<div class="fin-tx-list">';
-        filtered.forEach(function(t) {
-            var isDebit = t.amount > 0;
-            var displayName = t.merchant_name || t.name || 'Unknown';
-            var catPrimary = getCategoryPrimary(t);
-            var catLabel = catPrimary.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-
-            // Logo or emoji fallback
-            var logoHtml = t.logo_url
-                ? '<img class="fin-tx-logo" src="' + esc(t.logo_url) + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
-                  '<div class="fin-tx-emoji" style="display:none">' + getCategoryEmoji(t) + '</div>'
-                : '<div class="fin-tx-emoji">' + getCategoryEmoji(t) + '</div>';
-
-            html += '<div class="fin-tx-row" data-txid="' + esc(t.transaction_id) + '">' +
-                '<div class="fin-tx-left">' +
-                    '<div class="fin-tx-logo-wrap">' + logoHtml + '</div>' +
-                    '<div>' +
-                        '<div class="fin-tx-merchant">' + esc(displayName) + '</div>' +
-                        '<div class="fin-tx-date">' + esc(t.date) + '</div>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="fin-tx-center">' +
-                    '<div class="fin-tx-desc">' + esc(t.name) + (t.pending ? ' <span class="fin-badge-pending">Pending</span>' : '') + '</div>' +
-                '</div>' +
-                '<div class="fin-tx-right">' +
-                    '<div class="fin-tx-amount ' + (isDebit ? 'debit' : 'credit') + '">' + (isDebit ? '-' : '+') + fmt$(Math.abs(t.amount)) + '</div>' +
-                '</div>' +
-                '<div class="fin-tx-meta">' +
-                    '<span class="fin-cat-badge">' + esc(catLabel) + '</span>' +
-                    '<span class="fin-tag ' + (t._project ? 'fin-tag-assigned' : 'fin-tag-none') + '" data-action="tag" data-txid="' + esc(t.transaction_id) + '">' +
-                        esc(t._project || '+ project') +
-                    '</span>' +
-                    '<button class="fin-check' + (t._accountedFor ? ' checked' : '') + '" data-action="check" data-txid="' + esc(t.transaction_id) + '">&#10003;</button>' +
-                '</div>' +
-            '</div>';
-
-            // Expanded detail
-            if (expandedTxId === t.transaction_id) {
-                var loc = t.location || {};
-                var locStr = [loc.address, loc.city, loc.region, loc.country].filter(Boolean).join(', ') || 'N/A';
-                var counterparties = (t.counterparties || []).map(function(c) { return c.name || c.entity_id || ''; }).filter(Boolean).join(', ') || 'N/A';
-
-                html += '<div class="fin-tx-detail">' +
-                    '<div class="fin-tx-detail-grid">' +
-                        '<div><div class="fin-tx-detail-label">Merchant</div><div class="fin-tx-detail-value">' + esc(t.merchant_name || 'N/A') + '</div></div>' +
-                        '<div><div class="fin-tx-detail-label">Amount</div><div class="fin-tx-detail-value" style="color:' + (isDebit ? 'var(--fin-red)' : 'var(--fin-green)') + '">' + (isDebit ? '-' : '+') + fmt$(Math.abs(t.amount)) + '</div></div>' +
-                        '<div><div class="fin-tx-detail-label">Category</div><div class="fin-tx-detail-value">' + esc(catLabel) + '</div></div>' +
-                        '<div><div class="fin-tx-detail-label">Account</div><div class="fin-tx-detail-value">' + esc(getAccountName(t.account_id)) + '</div></div>' +
-                        '<div><div class="fin-tx-detail-label">Payment Channel</div><div class="fin-tx-detail-value">' + esc(t.payment_channel || 'N/A') + '</div></div>' +
-                        '<div><div class="fin-tx-detail-label">Pending</div><div class="fin-tx-detail-value">' + (t.pending ? 'Yes' : 'No') + '</div></div>' +
-                        '<div><div class="fin-tx-detail-label">Location</div><div class="fin-tx-detail-value">' + esc(locStr) + '</div></div>' +
-                        '<div><div class="fin-tx-detail-label">Counterparties</div><div class="fin-tx-detail-value">' + esc(counterparties) + '</div></div>' +
-                        '<div style="grid-column:1/-1"><div class="fin-tx-detail-label">Transaction ID</div><div class="fin-tx-detail-value" style="font-family:var(--fin-font-mono);font-size:11px">' + esc(t.transaction_id) + '</div></div>' +
-                    '</div>' +
-                    '<div class="fin-tx-detail-label" style="margin-bottom:6px">Notes</div>' +
-                    '<textarea class="fin-notes-input" data-txid="' + esc(t.transaction_id) + '" placeholder="Add notes...">' + esc(t._notes || '') + '</textarea>' +
-                '</div>';
-            }
+    function getSortedProjects() {
+        var sorted = projects.slice();
+        sorted.sort(function(a, b) {
+            var tA = projectLastUsed[a] || 0;
+            var tB = projectLastUsed[b] || 0;
+            return tB - tA;
         });
-        html += '</div>';
-        return html;
+        return sorted;
     }
 
-    // ── Projects Tab ──
-
-    function renderProjects() {
-        var unassigned = transactions.filter(function(t) { return !t._project; });
+    function renderTransactions() {
+        var uncategorized = transactions.filter(function(t) { return !t._project; });
+        var sortedProjects = getSortedProjects();
 
         var html = '<div class="fin-projects-layout">';
 
-        // Left panel — unassigned
+        // LEFT panel — uncategorized transactions
         html += '<div class="fin-projects-left">' +
-            '<div class="fin-card-title">Unassigned <span style="color:var(--fin-text-muted);font-weight:400">(' + unassigned.length + ')</span></div>' +
+            '<div class="fin-card-title">Uncategorized <span style="color:var(--fin-text-muted);font-weight:400;font-size:13px;background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;margin-left:6px">' + uncategorized.length + '</span></div>' +
             '<div class="fin-unassigned-list" id="fin-unassigned-list">';
-        if (unassigned.length === 0) {
-            html += '<div class="fin-empty" style="padding:20px">All transactions assigned!</div>';
+        if (uncategorized.length === 0) {
+            html += '<div class="fin-empty" style="padding:20px">All transactions categorized!</div>';
         } else {
-            unassigned.forEach(function(t) {
+            uncategorized.forEach(function(t) {
                 var isDebit = t.amount > 0;
                 html += '<div class="fin-unassigned-row" draggable="true" data-txid="' + esc(t.transaction_id) + '">' +
                     '<span class="fin-drag-handle">⠿</span>' +
                     '<div class="fin-unassigned-info">' +
                         '<div class="fin-unassigned-name">' + esc(t.merchant_name || t.name || 'Unknown') + '</div>' +
-                        '<div class="fin-tx-amount ' + (isDebit ? 'debit' : 'credit') + '" style="font-size:12px">' + (isDebit ? '-' : '+') + fmt$(Math.abs(t.amount)) + '</div>' +
+                        '<div style="font-size:11px;color:var(--fin-text-muted)">' + esc(t.date) + '</div>' +
                     '</div>' +
+                    '<div class="fin-tx-amount ' + (isDebit ? 'debit' : 'credit') + '" style="font-size:12px;white-space:nowrap">' + (isDebit ? '-' : '+') + fmt$(Math.abs(t.amount)) + '</div>' +
                     '<button class="fin-assign-btn" data-action="assign-click" data-txid="' + esc(t.transaction_id) + '" title="Assign to project">▸</button>' +
                 '</div>';
             });
         }
         html += '</div></div>';
 
-        // Right panel — project columns
+        // RIGHT panel — project columns stacked vertically
         html += '<div class="fin-projects-right">';
-        if (projects.length === 0) {
+        if (sortedProjects.length === 0) {
             html += '<div class="fin-empty" style="padding:20px">No projects found. Connect Dropbox to see project folders.</div>';
         } else {
-            projects.forEach(function(proj) {
+            sortedProjects.forEach(function(proj) {
                 var assigned = transactions.filter(function(t) { return t._project === proj; });
                 var total = assigned.reduce(function(sum, t) { return sum + Math.abs(t.amount); }, 0);
 
                 html += '<div class="fin-project-col" data-project="' + esc(proj) + '">' +
                     '<div class="fin-project-col-header">' +
-                        '<div class="fin-project-name">' + esc(proj) + '</div>' +
+                        '<div>' +
+                            '<div class="fin-project-name">' + esc(proj) + '</div>' +
+                            '<div style="font-size:11px;color:var(--fin-text-muted);margin-top:2px">' + assigned.length + ' transaction' + (assigned.length === 1 ? '' : 's') + '</div>' +
+                        '</div>' +
                         '<div class="fin-project-total">' + fmt$(total) + '</div>' +
                     '</div>' +
                     '<div class="fin-project-drop-zone" data-project="' + esc(proj) + '">';
@@ -625,6 +535,20 @@ const FinanceUI = (() => {
 
     // ── Event binding ──
 
+    function assignToProject(txid, proj) {
+        projectLastUsed[proj] = Date.now();
+        saveMeta(txid, { project: proj }).then(function() {
+            showToast('Assigned to ' + proj);
+            refreshContent();
+        });
+    }
+
+    function unassignFromProject(txid) {
+        saveMeta(txid, { project: null }).then(function() {
+            refreshContent();
+        });
+    }
+
     function bindEvents() {
         if (!container) return;
 
@@ -639,31 +563,25 @@ const FinanceUI = (() => {
             var tab = e.target.closest('.fin-tab');
             if (tab) {
                 activeTab = tab.dataset.tab;
-                if ((activeTab === 'overview' || activeTab === 'transactions') && connectionStatus.connected && transactions.length === 0) {
+                if (activeTab === 'overview' && connectionStatus.connected) {
                     fetchTransactions();
                     return;
                 }
-                if (activeTab === 'projects' && projects.length === 0) {
-                    fetchProjects().then(function() { refresh(); });
+                if (activeTab === 'transactions' && connectionStatus.connected) {
+                    // Always fetch all transactions for categorizer
+                    fetchAllTransactions();
+                    if (projects.length === 0) fetchProjects().then(function() { refresh(); });
                     return;
                 }
                 refresh();
                 return;
             }
 
-            // Time filter pills
+            // Time filter pills (overview only)
             var pill = e.target.closest('.fin-pill[data-days]');
             if (pill) {
                 dateRange = parseInt(pill.dataset.days, 10);
                 fetchTransactions();
-                return;
-            }
-
-            // Transaction filter pills
-            var txPill = e.target.closest('.fin-pill[data-txfilter]');
-            if (txPill) {
-                txFilter = txPill.dataset.txfilter;
-                refreshContent();
                 return;
             }
 
@@ -681,59 +599,25 @@ const FinanceUI = (() => {
                 return;
             }
 
-            // Project tag dropdown
-            var tagEl = e.target.closest('[data-action="tag"]');
-            if (tagEl) {
-                e.stopPropagation();
-                showProjectDropdown(tagEl, tagEl.dataset.txid);
-                return;
-            }
-
-            // Accounted checkbox
-            var checkEl = e.target.closest('[data-action="check"]');
-            if (checkEl) {
-                e.stopPropagation();
-                var txid = checkEl.dataset.txid;
-                var tx = transactions.find(function(t) { return t.transaction_id === txid; });
-                var newVal = tx ? !tx._accountedFor : true;
-                saveMeta(txid, { accountedFor: newVal });
-                if (newVal) checkEl.classList.add('checked');
-                else checkEl.classList.remove('checked');
-                return;
-            }
-
             // Unassign from project
             var unassignBtn = e.target.closest('[data-action="unassign"]');
             if (unassignBtn) {
                 e.stopPropagation();
-                saveMeta(unassignBtn.dataset.txid, { project: null }).then(function() { refresh(); });
+                unassignFromProject(unassignBtn.dataset.txid);
                 return;
             }
 
-            // Click-to-assign in projects tab
+            // Click-to-assign in transactions tab
             var assignBtn = e.target.closest('[data-action="assign-click"]');
             if (assignBtn) {
                 e.stopPropagation();
-                showProjectDropdown(assignBtn, assignBtn.dataset.txid, true);
-                return;
-            }
-
-            // Transaction row expand
-            var row = e.target.closest('.fin-tx-row');
-            if (row && !e.target.closest('[data-action]')) {
-                var txid2 = row.dataset.txid;
-                expandedTxId = expandedTxId === txid2 ? null : txid2;
-                refreshContent();
+                showProjectDropdown(assignBtn, assignBtn.dataset.txid);
                 return;
             }
         });
 
-        // Search input
+        // Search input (unused now but keep for future)
         container.addEventListener('input', function(e) {
-            if (e.target.id === 'fin-search') {
-                searchQuery = e.target.value;
-                refreshContent();
-            }
             if (e.target.classList.contains('fin-notes-input')) {
                 var txid = e.target.dataset.txid;
                 var val = e.target.value;
@@ -744,7 +628,7 @@ const FinanceUI = (() => {
             }
         });
 
-        // Drag and drop for projects tab
+        // Drag and drop for transactions tab
         container.addEventListener('dragstart', function(e) {
             var row = e.target.closest('.fin-unassigned-row');
             if (row) {
@@ -759,7 +643,6 @@ const FinanceUI = (() => {
             var row = e.target.closest('.fin-unassigned-row');
             if (row) row.classList.remove('dragging');
             dragTxId = null;
-            // Remove all drag-over styles
             container.querySelectorAll('.drag-over').forEach(function(el) { el.classList.remove('drag-over'); });
         });
 
@@ -782,16 +665,13 @@ const FinanceUI = (() => {
             if (zone && dragTxId) {
                 e.preventDefault();
                 var proj = zone.dataset.project;
-                saveMeta(dragTxId, { project: proj }).then(function() {
-                    showToast('Assigned to ' + proj);
-                    refresh();
-                });
+                assignToProject(dragTxId, proj);
                 dragTxId = null;
             }
         });
     }
 
-    function showProjectDropdown(anchor, txid, refreshAfter) {
+    function showProjectDropdown(anchor, txid) {
         var existing = document.querySelector('.fin-dropdown');
         if (existing) existing.remove();
 
@@ -801,8 +681,9 @@ const FinanceUI = (() => {
         dd.style.top = (rect.bottom + 4) + 'px';
         dd.style.left = rect.left + 'px';
 
+        var sortedProjects = getSortedProjects();
         var html = '';
-        projects.forEach(function(p) {
+        sortedProjects.forEach(function(p) {
             html += '<div class="fin-dropdown-item" data-project="' + esc(p) + '">' + esc(p) + '</div>';
         });
         html += '<div class="fin-dropdown-item" data-project="" style="color:var(--fin-text-muted);border-top:1px solid var(--fin-border-light);margin-top:4px;padding-top:12px">Clear project</div>';
@@ -812,10 +693,11 @@ const FinanceUI = (() => {
             var item = e.target.closest('.fin-dropdown-item');
             if (!item) return;
             var proj = item.dataset.project;
-            saveMeta(txid, { project: proj || null }).then(function() {
-                if (refreshAfter) refresh();
-                else refreshContent();
-            });
+            if (proj) {
+                assignToProject(txid, proj);
+            } else {
+                unassignFromProject(txid);
+            }
             dd.remove();
         });
 
@@ -854,7 +736,7 @@ const FinanceUI = (() => {
             bindEvents();
             await fetchStatus();
             if (connectionStatus.connected) {
-                await Promise.all([fetchAccounts(), fetchTransactions(), fetchProjects()]);
+                await Promise.all([fetchAccounts(), fetchAllTransactions(), fetchProjects()]);
             } else {
                 refresh();
             }
@@ -867,9 +749,6 @@ const FinanceUI = (() => {
             if (toast) toast.remove();
             container = null;
             activeTab = 'overview';
-            expandedTxId = null;
-            searchQuery = '';
-            txFilter = 'all';
             loading = false;
             dragTxId = null;
         }
