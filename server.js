@@ -2643,21 +2643,53 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
-                const parsed = JSON.parse(body); // validate
-                const buildings = parsed.buildings;
-                if (buildings && Object.keys(buildings).length >= 3 &&
-                    Object.values(buildings).every(b => b.x === 0 && b.z === 0)) {
-                    res.writeHead(409, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'Rejected: all buildings at origin, layout not yet restored' }));
-                    return;
-                }
+                const incoming = JSON.parse(body);
                 if (!cloud.isR2Ready()) {
                     res.writeHead(503, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: 'R2 not available' }));
                     return;
                 }
-                await cloud.uploadToR2('layout/layout.json', Buffer.from(body), 'application/json');
-                console.log('Layout saved to R2');
+
+                // Load existing layout from R2 for merge
+                let existing = {};
+                try {
+                    const r2Data = await cloud.downloadFromR2('layout/layout.json');
+                    if (r2Data) existing = JSON.parse(r2Data.toString());
+                } catch (_) { /* no existing layout, start fresh */ }
+
+                const BUILDING_NAMES = ['Workshop','Storage','Incubator','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar'];
+                const MISSING_DEFAULTS = {
+                    'Chocolate Bar': { x: 42, z: 12 },
+                    'Gym': { x: 15, z: 30 },
+                };
+
+                // Merge buildings: keep R2 position when incoming is 0,0
+                const existingBuildings = existing.buildings || {};
+                const incomingBuildings = incoming.buildings || {};
+                const merged = {};
+
+                for (const name of BUILDING_NAMES) {
+                    const inc = incomingBuildings[name];
+                    const ext = existingBuildings[name];
+
+                    if (inc && !(inc.x === 0 && inc.z === 0)) {
+                        // Incoming has a real (non-origin) position — use it
+                        merged[name] = inc;
+                    } else if (ext) {
+                        // Incoming is missing or at 0,0 — keep existing R2 value
+                        merged[name] = ext;
+                    } else if (MISSING_DEFAULTS[name]) {
+                        // Missing from both — use hardcoded default
+                        merged[name] = { ...MISSING_DEFAULTS[name] };
+                    }
+                    // else: not in either source and no default — omit
+                }
+
+                // Build final layout: non-building fields from incoming, merged buildings
+                const finalLayout = { ...incoming, buildings: merged };
+
+                await cloud.uploadToR2('layout/layout.json', Buffer.from(JSON.stringify(finalLayout)), 'application/json');
+                console.log('Layout saved to R2 (merged)');
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end('{"ok":true}');
             } catch (e) {
