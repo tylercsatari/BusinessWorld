@@ -19,6 +19,7 @@ const StorageUI = (() => {
     let history = []; // activity history log
     let historyVisible = false;
     let selectedBoxId = null;
+    let editingItemId = null;
 
     async function loadHistory() {
         // Airtable is the sole source of truth — no localStorage
@@ -124,6 +125,25 @@ const StorageUI = (() => {
         if (ic) ic.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
     }
 
+    function renderItemRow(i) {
+        if (i.id === editingItemId) {
+            return `<div class='storage-box-item-row editing' data-item-id='${escAttr(i.id)}'>
+                <span class='storage-item-name'>${escHtml(i.name)}</span>
+                <div class='storage-qty-editor'>
+                    <button class='storage-qty-btn' data-action='qty-dec' data-item-id='${escAttr(i.id)}'>−</button>
+                    <input class='storage-qty-input' type='number' id='qty-input-${escAttr(i.id)}' value='${i.quantity}' min='0' data-original-qty='${i.quantity}'>
+                    <button class='storage-qty-btn' data-action='qty-inc' data-item-id='${escAttr(i.id)}'>+</button>
+                    <button class='storage-qty-save' data-action='qty-save' data-item-id='${escAttr(i.id)}' data-item-name='${escAttr(i.name)}'>✓</button>
+                    <button class='storage-qty-cancel' data-action='qty-cancel'>✗</button>
+                </div>
+            </div>`;
+        }
+        return `<div class='storage-box-item-row' data-action='select-item' data-item-id='${escAttr(i.id)}' data-item-name='${escAttr(i.name)}' data-item-qty='${i.quantity}'>
+            <span class='storage-item-name'>${escHtml(i.name)}</span>
+            <span class='storage-item-qty-badge'>${i.quantity}x</span>
+        </div>`;
+    }
+
     function renderBoxes() {
         const grid = document.getElementById('storage-boxes-grid');
         if (!grid) return;
@@ -149,11 +169,7 @@ const StorageUI = (() => {
                     <button class="storage-box-action-btn danger" data-action="remove-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Remove Box</button>
                 </div>
                 <div class="storage-box-item-list" data-box-id="${escAttr(box.id)}" style="display:none;">
-                    ${items.length > 0 ? items.map(i => `<div class="storage-box-item-row">
-                        <span class='storage-item-name'>${escHtml(i.name)}</span>
-                        <span class='storage-item-qty-badge' data-action='edit-qty' data-item-id='${escAttr(i.id)}' data-item-name='${escAttr(i.name)}' data-item-qty='${i.quantity}' title='Click to update quantity'>${i.quantity}x</span>
-                        <button class="storage-box-item-remove-btn" data-action="remove-single-item" data-item-name="${escAttr(i.name)}" data-item-qty="${i.quantity}" data-box-name="${escAttr(box.name)}">Remove</button>
-                    </div>`).join('') : '<div style="padding:8px;color:#999;font-style:italic;">Box is empty</div>'}
+                    ${items.length > 0 ? items.map(i => renderItemRow(i)).join('') : '<div style="padding:8px;color:#999;font-style:italic;">Box is empty</div>'}
                 </div>` : ''}
             </div>`;
         }).join('');
@@ -200,47 +216,79 @@ const StorageUI = (() => {
                 if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             });
         });
-        grid.querySelectorAll('[data-action=remove-single-item]').forEach(btn => {
+        grid.querySelectorAll('[data-action=select-item]').forEach(row => {
+            row.addEventListener('click', (e) => {
+                e.stopPropagation();
+                editingItemId = row.dataset.itemId;
+                renderBoxes();
+                // Re-open all item list panels that are in selected boxes
+                grid.querySelectorAll('.storage-box-card.selected .storage-box-item-list').forEach(p => p.style.display = 'block');
+                // Focus the input
+                const inp = document.getElementById('qty-input-' + editingItemId);
+                if (inp) inp.select();
+            });
+        });
+        grid.querySelectorAll('[data-action=qty-dec]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const inp = document.getElementById('qty-input-' + btn.dataset.itemId);
+                if (inp) inp.value = Math.max(0, (parseInt(inp.value) || 0) - 1);
+            });
+        });
+        grid.querySelectorAll('[data-action=qty-inc]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const inp = document.getElementById('qty-input-' + btn.dataset.itemId);
+                if (inp) inp.value = (parseInt(inp.value) || 0) + 1;
+            });
+        });
+        grid.querySelectorAll('[data-action=qty-save]').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                const itemId = btn.dataset.itemId;
                 const itemName = btn.dataset.itemName;
-                const itemQty = parseInt(btn.dataset.itemQty) || 1;
-                let qty = itemQty;
-                if (itemQty > 1) {
-                    const qtyStr = prompt(`How many to remove? (max ${itemQty})`, String(itemQty));
-                    if (qtyStr === null) return;
-                    qty = Math.min(Math.max(1, parseInt(qtyStr) || itemQty), itemQty);
+                const inp = document.getElementById('qty-input-' + itemId);
+                const newQty = parseInt(inp.value);
+                if (isNaN(newQty) || newQty < 0) { addChatMsg('Invalid quantity', 'error'); return; }
+                if (newQty === 0) {
+                    // Show inline confirmation
+                    const editor = btn.closest('.storage-qty-editor');
+                    if (editor) {
+                        editor.innerHTML = `<span style="color:#f87171;font-size:13px;">Remove item?</span>
+                            <button class="storage-qty-save" data-action="qty-confirm-delete" data-item-id="${escAttr(itemId)}" data-item-name="${escAttr(itemName)}">Yes</button>
+                            <button class="storage-qty-cancel" data-action="qty-cancel">No</button>`;
+                        editor.querySelector('[data-action=qty-confirm-delete]').addEventListener('click', async (e2) => {
+                            e2.stopPropagation();
+                            try {
+                                await StorageService.setItemQuantity(itemId, 0);
+                                addChatMsg(`Removed all ${itemName}.`, 'system');
+                            } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
+                            editingItemId = null;
+                            renderBoxes();
+                            updateStats();
+                        });
+                        editor.querySelector('[data-action=qty-cancel]').addEventListener('click', (e2) => {
+                            e2.stopPropagation();
+                            editingItemId = null;
+                            renderBoxes();
+                        });
+                    }
+                    return;
                 }
                 try {
-                    const r = await StorageService.removeItem(itemName, qty);
-                    if (r.error) { addChatMsg(r.error, 'error'); return; }
-                    const msg = r.deleted ? `Removed all ${itemName}.` : `Removed ${qty}x ${itemName}. ${r.item.quantity} remaining.`;
-                    addChatMsg(msg, 'system');
+                    const r = await StorageService.setItemQuantity(itemId, newQty);
+                    addChatMsg(r.deleted ? `Removed all ${itemName}.` : `Updated ${itemName} to ${newQty}x.`, 'system');
                 } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
+                editingItemId = null;
                 renderBoxes();
                 updateStats();
             });
         });
-        grid.querySelectorAll('[data-action=edit-qty]').forEach(badge => {
-            badge.addEventListener('click', async (e) => {
+        grid.querySelectorAll('[data-action=qty-cancel]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const itemId = badge.dataset.itemId;
-                const itemName = badge.dataset.itemName;
-                const currentQty = parseInt(badge.dataset.itemQty) || 1;
-                const input = prompt(`Update quantity for ${itemName}:`, String(currentQty));
-                if (input === null) return;
-                const newQty = parseInt(input);
-                if (isNaN(newQty) || newQty < 0) { addChatMsg('Invalid quantity', 'error'); return; }
-                try {
-                    if (newQty === 0) {
-                        const confirmed = confirm(`Remove all ${itemName}?`);
-                        if (!confirmed) return;
-                    }
-                    const r = await StorageService.setItemQuantity(itemId, newQty);
-                    addChatMsg(r.deleted ? `Removed all ${itemName}.` : `Updated ${itemName} to ${newQty}x.`, 'system');
-                } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
+                editingItemId = null;
                 renderBoxes();
-                updateStats();
             });
         });
         grid.querySelectorAll('[data-action=rename-box]').forEach(btn => {
@@ -843,6 +891,7 @@ const StorageUI = (() => {
             container = null;
             initialized = false;
             historyVisible = false;
+            editingItemId = null;
         },
 
         onMicToggle() {

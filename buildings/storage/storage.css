@@ -585,40 +585,57 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 0;
+    padding: 4px 6px;
     border-bottom: 1px solid #f0ece4;
     font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
 }
 .storage-box-item-row:last-child { border-bottom: none; }
+.storage-box-item-row:hover { background: rgba(90,62,27,0.06); }
+.storage-box-item-row.editing { background: rgba(90,62,27,0.1); border-radius: 6px; cursor: default; }
 .storage-item-name {
     flex: 1;
 }
 .storage-item-qty-badge {
     display: inline-block;
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.2);
+    background: #f0ebe0;
+    border: 1px solid #d4c5a0;
     border-radius: 4px;
     padding: 1px 7px;
     font-size: 12px;
     font-weight: 600;
-    color: #ccc;
-    cursor: pointer;
+    color: #5a3e1b;
     margin-left: 6px;
     transition: background 0.15s, border-color 0.15s;
 }
-.storage-item-qty-badge:hover {
-    background: rgba(99,102,241,0.25);
-    border-color: #6366f1;
-    color: #fff;
+.storage-box-item-row:hover .storage-item-qty-badge {
+    background: rgba(90,62,27,0.15);
+    border-color: #5a3e1b;
 }
-.storage-box-item-remove-btn {
-    padding: 4px 10px;
-    background: #e74c3c;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    flex-shrink: 0;
+.storage-qty-editor { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.storage-qty-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #f5f0e6; border: 1px solid #d4c5a0; color: #5a3e1b;
+    font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
 }
+.storage-qty-btn:hover { background: #e0d5c0; }
+.storage-qty-input {
+    width: 48px; text-align: center;
+    background: #fff; border: 1px solid #d4c5a0; border-radius: 4px;
+    color: #5a3e1b; font-size: 14px; font-weight: 700; padding: 3px;
+}
+.storage-qty-save {
+    padding: 3px 10px; background: rgba(39,174,96,0.15); border: 1px solid #27ae60;
+    border-radius: 4px; color: #27ae60; cursor: pointer; font-size: 13px;
+    transition: background 0.15s;
+}
+.storage-qty-save:hover { background: rgba(39,174,96,0.3); }
+.storage-qty-cancel {
+    padding: 3px 10px; background: rgba(231,76,60,0.1); border: 1px solid #e74c3c;
+    border-radius: 4px; color: #e74c3c; cursor: pointer; font-size: 13px;
+    transition: background 0.15s;
+}
+.storage-qty-cancel:hover { background: rgba(231,76,60,0.25); }
