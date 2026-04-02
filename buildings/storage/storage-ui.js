@@ -190,23 +190,27 @@ const StorageUI = (() => {
 
         grid.innerHTML = sortedBoxes.map(box => {
             const items = StorageService.getItemsByBox(box.id);
+            const isSelected = box.id === selectedBoxId;
+            if (isSelected) {
+                return `<div class="storage-box-card selected" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">
+                    <h3>${escHtml(box.name)}</h3>
+                    <div class="storage-box-item-list" data-box-id="${escAttr(box.id)}">
+                        ${items.length > 0 ? items.map(i => renderItemRow(i)).join('') : '<div style="padding:8px;color:#999;font-style:italic;">Box is empty</div>'}
+                    </div>
+                    <div class="storage-box-actions">
+                        <button class="storage-box-action-btn add" data-action="add-to-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">+ Add Item</button>
+                        <button class="storage-box-action-btn rename" data-action="rename-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Rename</button>
+                        <button class="storage-box-action-btn clear" data-action="clear-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Clear Box</button>
+                        <button class="storage-box-action-btn danger" data-action="remove-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Remove Box</button>
+                    </div>
+                </div>`;
+            }
             const itemRows = items.length > 0
                 ? `<table>${items.map(i => `<tr><td>${escHtml(i.name)}</td><td>${i.quantity}</td></tr>`).join('')}</table>`
                 : '<div class="storage-box-empty">Empty</div>';
-            const isSelected = box.id === selectedBoxId;
-            return `<div class="storage-box-card${isSelected ? ' selected' : ''}" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">
+            return `<div class="storage-box-card" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">
                 <h3>${escHtml(box.name)}</h3>
                 <div class="storage-box-items">${itemRows}</div>
-                ${isSelected ? `<div class="storage-box-actions">
-                    <button class="storage-box-action-btn add" data-action="add-to-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">+ Add Item</button>
-                    <button class="storage-box-action-btn remove-item${items.length === 0 ? ' disabled' : ''}" data-action="remove-from-box" data-box-id="${escAttr(box.id)}"${items.length === 0 ? ' disabled' : ''}>- Remove Item</button>
-                    <button class="storage-box-action-btn rename" data-action="rename-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Rename</button>
-                    <button class="storage-box-action-btn clear" data-action="clear-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Clear Box</button>
-                    <button class="storage-box-action-btn danger" data-action="remove-box" data-box-id="${escAttr(box.id)}" data-box-name="${escAttr(box.name)}">Remove Box</button>
-                </div>
-                <div class="storage-box-item-list" data-box-id="${escAttr(box.id)}" style="display:none;">
-                    ${items.length > 0 ? items.map(i => renderItemRow(i)).join('') : '<div style="padding:8px;color:#999;font-style:italic;">Box is empty</div>'}
-                </div>` : ''}
             </div>`;
         }).join('');
 
@@ -245,21 +249,11 @@ const StorageUI = (() => {
                 updateStats();
             });
         });
-        grid.querySelectorAll('[data-action=remove-from-box]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const panel = btn.closest('.storage-box-card').querySelector('.storage-box-item-list');
-                if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-            });
-        });
         grid.querySelectorAll('[data-action=select-item]').forEach(row => {
             row.addEventListener('click', (e) => {
                 e.stopPropagation();
                 editingItemId = row.dataset.itemId;
                 renderBoxes();
-                // Re-open all item list panels that are in selected boxes
-                grid.querySelectorAll('.storage-box-card.selected .storage-box-item-list').forEach(p => p.style.display = 'block');
-                // Focus the input
                 const inp = document.getElementById('qty-input-' + editingItemId);
                 if (inp) inp.select();
             });
