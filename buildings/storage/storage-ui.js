@@ -20,6 +20,7 @@ const StorageUI = (() => {
     let historyVisible = false;
     let selectedBoxId = null;
     let editingItemId = null;
+    let sortBy = 'default'; // 'default' | 'alpha' | 'alpha-desc' | 'most-items' | 'least-items' | 'fullest'
 
     async function loadHistory() {
         // Airtable is the sole source of truth — no localStorage
@@ -148,11 +149,46 @@ const StorageUI = (() => {
         const grid = document.getElementById('storage-boxes-grid');
         if (!grid) return;
         const boxes = StorageService.getBoxes();
+
+        // Render sort bar
+        let sortBar = document.getElementById('storage-sort-bar');
+        if (!sortBar) {
+            sortBar = document.createElement('div');
+            sortBar.id = 'storage-sort-bar';
+            grid.parentNode.insertBefore(sortBar, grid);
+        }
+        sortBar.innerHTML = `
+            <span class='storage-sort-label'>Sort:</span>
+            <button class='storage-sort-btn${sortBy==='default'?' active':''}' data-sort='default'>Default</button>
+            <button class='storage-sort-btn${sortBy==='alpha'?' active':''}' data-sort='alpha'>A→Z</button>
+            <button class='storage-sort-btn${sortBy==='alpha-desc'?' active':''}' data-sort='alpha-desc'>Z→A</button>
+            <button class='storage-sort-btn${sortBy==='most-items'?' active':''}' data-sort='most-items'>Most Items</button>
+            <button class='storage-sort-btn${sortBy==='least-items'?' active':''}' data-sort='least-items'>Least Items</button>
+            <button class='storage-sort-btn${sortBy==='fullest'?' active':''}' data-sort='fullest'>Most Qty</button>`;
+        document.querySelectorAll('[data-sort]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sortBy = btn.dataset.sort;
+                renderBoxes();
+            });
+        });
+
         if (boxes.length === 0) {
             grid.innerHTML = '<div style="padding:20px;text-align:center;color:#bbb;font-style:italic;">No boxes yet. Add one to get started!</div>';
             return;
         }
-        grid.innerHTML = boxes.map(box => {
+
+        // Apply sort
+        let sortedBoxes = [...boxes];
+        if (sortBy === 'alpha') sortedBoxes.sort((a, b) => a.name.localeCompare(b.name));
+        else if (sortBy === 'alpha-desc') sortedBoxes.sort((a, b) => b.name.localeCompare(a.name));
+        else if (sortBy === 'most-items') sortedBoxes.sort((a, b) => (StorageService.getItemsByBox(b.id).length) - (StorageService.getItemsByBox(a.id).length));
+        else if (sortBy === 'least-items') sortedBoxes.sort((a, b) => (StorageService.getItemsByBox(a.id).length) - (StorageService.getItemsByBox(b.id).length));
+        else if (sortBy === 'fullest') sortedBoxes.sort((a, b) => {
+            const totalQty = (bid) => StorageService.getItemsByBox(bid).reduce((s, i) => s + (i.quantity||0), 0);
+            return totalQty(b.id) - totalQty(a.id);
+        });
+
+        grid.innerHTML = sortedBoxes.map(box => {
             const items = StorageService.getItemsByBox(box.id);
             const itemRows = items.length > 0
                 ? `<table>${items.map(i => `<tr><td>${escHtml(i.name)}</td><td>${i.quantity}</td></tr>`).join('')}</table>`
