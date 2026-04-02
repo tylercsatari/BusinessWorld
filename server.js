@@ -18,6 +18,7 @@ const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
 const shortsCrawler = require('./shorts-crawler');
+const financeService = require('./buildings/finance/finance-service');
 const PDFDocument = require('pdfkit');
 const PORT = process.env.PORT || 8002;
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -3059,6 +3060,144 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(renderSharePage('Error', '<div style="text-align:center;padding:60px 20px;"><h1 style="color:#e74c3c;">Something went wrong</h1></div>'));
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Finance / Plaid
+    // =========================================
+    if (pathname === '/api/finance/status' && req.method === 'GET') {
+        const configured = financeService.isConfigured();
+        let connected = false;
+        let connectedAt = null;
+        if (configured && cloud.isR2Ready()) {
+            const data = await financeService.loadPlaidData(cloud);
+            if (data) { connected = true; connectedAt = data.connectedAt || null; }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ configured, connected, connectedAt }));
+        return;
+    }
+
+    if (pathname === '/api/finance/link-token' && req.method === 'POST') {
+        if (!financeService.isConfigured()) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Plaid not configured' }));
+            return;
+        }
+        try {
+            const linkToken = await financeService.createLinkToken('tyler');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ link_token: linkToken }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/finance/exchange-token' && req.method === 'POST') {
+        if (!financeService.isConfigured()) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Plaid not configured' }));
+            return;
+        }
+        try {
+            const body = await readBody(req);
+            const result = await financeService.exchangePublicToken(body.public_token);
+            result.connectedAt = new Date().toISOString();
+            await financeService.savePlaidData(cloud, result);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/finance/transactions' && req.method === 'GET') {
+        if (!financeService.isConfigured()) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Plaid not configured' }));
+            return;
+        }
+        try {
+            const conn = await financeService.loadPlaidData(cloud);
+            if (!conn) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No bank connection found' }));
+                return;
+            }
+            const start = url.searchParams.get('start') || new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+            const end = url.searchParams.get('end') || new Date().toISOString().slice(0, 10);
+            const transactions = await financeService.getTransactions(conn.accessToken, start, end);
+            const accounts = await financeService.getAccounts(conn.accessToken);
+            const meta = await financeService.loadTransactionMeta(cloud) || {};
+            // Merge meta onto transactions
+            const merged = transactions.map(t => {
+                const m = meta[t.transaction_id] || {};
+                return { ...t, _project: m.project || null, _category: m.category || null, _accountedFor: !!m.accountedFor, _notes: m.notes || '' };
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ transactions: merged, accounts, connectedAt: conn.connectedAt }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/finance/accounts' && req.method === 'GET') {
+        if (!financeService.isConfigured()) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Plaid not configured' }));
+            return;
+        }
+        try {
+            const conn = await financeService.loadPlaidData(cloud);
+            if (!conn) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No bank connection found' }));
+                return;
+            }
+            const accounts = await financeService.getAccounts(conn.accessToken);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ accounts }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/finance/transaction-meta' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { transactionId, project, category, accountedFor, notes } = body;
+            const meta = await financeService.loadTransactionMeta(cloud) || {};
+            meta[transactionId] = { project: project || null, category: category || null, accountedFor: !!accountedFor, notes: notes || '' };
+            await financeService.saveTransactionMeta(cloud, meta);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/finance/connection' && req.method === 'DELETE') {
+        try {
+            if (cloud.isR2Ready()) {
+                await cloud.deleteFromR2('finance/plaid-connection.json');
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
         }
         return;
     }
