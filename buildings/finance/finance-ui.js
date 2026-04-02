@@ -13,6 +13,7 @@ const FinanceUI = (() => {
     let dragTxId = null;
     let projectLastUsed = {}; // projectName → timestamp, updated on assign
     let expandedTxIds = new Set();
+    let projectSearch = '';
 
     const DATE_RANGES = [
         { label: 'Last Day', days: 1 },
@@ -421,17 +422,18 @@ const FinanceUI = (() => {
 
         fields.push(['Account', esc(getAccountName(t.account_id))]);
 
-        if (t.payment_channel) fields.push(['Payment Channel', esc(t.payment_channel)]);
         fields.push(['Pending', t.pending ? 'Yes' : 'No']);
 
-        // Location
+        // Location — only show if at least one meaningful value exists
         if (t.location) {
             var locParts = [];
             if (t.location.address) locParts.push(t.location.address);
             if (t.location.city) locParts.push(t.location.city);
             if (t.location.region) locParts.push(t.location.region);
             if (t.location.country) locParts.push(t.location.country);
+            var hasCoords = (t.location.lat != null && t.location.lon != null);
             if (locParts.length > 0) fields.push(['Location', esc(locParts.join(', '))]);
+            else if (hasCoords) fields.push(['Location', esc(t.location.lat + ', ' + t.location.lon)]);
         }
 
         // Counterparties
@@ -452,6 +454,14 @@ const FinanceUI = (() => {
         fields.push(['Transaction ID', '<span style="font-family:var(--fin-font-mono);font-size:11px">' + esc(t.transaction_id) + '</span>']);
 
         if (t.website) fields.push(['Website', esc(t.website)]);
+
+        // Filter out fields with null, undefined, or empty values
+        fields = fields.filter(function(f) {
+            var val = f[1];
+            if (val == null) return false;
+            var stripped = String(val).replace(/<[^>]*>/g, '').trim();
+            return stripped !== '' && stripped !== 'null' && stripped !== 'undefined';
+        });
 
         var html = '<div class="fin-expand-detail">';
         fields.forEach(function(f) {
@@ -517,10 +527,16 @@ const FinanceUI = (() => {
 
         // RIGHT panel — project columns stacked vertically
         html += '<div class="fin-projects-right">';
-        if (sortedProjects.length === 0) {
-            html += '<div class="fin-empty" style="padding:20px">No projects found. Connect Dropbox to see project folders.</div>';
+        html += '<div class="fin-project-search-wrap">' +
+            '<input class="fin-project-search" id="fin-project-search" type="text" placeholder="Search projects..." value="' + esc(projectSearch) + '">' +
+        '</div>';
+        var filteredProjects = projectSearch.trim()
+            ? sortedProjects.filter(function(p) { return p.toLowerCase().includes(projectSearch.toLowerCase()); })
+            : sortedProjects;
+        if (filteredProjects.length === 0) {
+            html += '<div class="fin-empty" style="padding:20px">' + (sortedProjects.length === 0 ? 'No projects found. Connect Dropbox to see project folders.' : 'No projects match your search.') + '</div>';
         } else {
-            sortedProjects.forEach(function(proj) {
+            filteredProjects.forEach(function(proj) {
                 var assigned = transactions.filter(function(t) { return t._project === proj; });
                 var total = assigned.reduce(function(sum, t) { return sum + Math.abs(t.amount); }, 0);
 
@@ -732,7 +748,7 @@ const FinanceUI = (() => {
             }
         });
 
-        // Search input (unused now but keep for future)
+        // Notes auto-save on input
         container.addEventListener('input', function(e) {
             if (e.target.classList.contains('fin-notes-input')) {
                 var txid = e.target.dataset.txid;
@@ -742,7 +758,21 @@ const FinanceUI = (() => {
                     saveMeta(txid, { notes: val });
                 }, 600);
             }
+            // Project search filter
+            if (e.target.id === 'fin-project-search') {
+                projectSearch = e.target.value;
+                refreshContent();
+                var si = container.querySelector('#fin-project-search');
+                if (si) { si.focus(); si.selectionStart = si.selectionEnd = si.value.length; }
+            }
         });
+
+        // Prevent project search clicks from bubbling
+        container.addEventListener('click', function(e) {
+            if (e.target.id === 'fin-project-search') {
+                e.stopPropagation();
+            }
+        }, true);
 
         // Prevent drag handle clicks from toggling expand
         container.addEventListener('mousedown', function(e) {

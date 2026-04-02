@@ -791,7 +791,7 @@
     grid-template-columns: 40% 60%;
     gap: 16px;
     min-height: 300px;
-    max-height: 70vh;
+    max-height: none;
 }
 
 .fin-projects-left {
@@ -807,6 +807,7 @@
     flex-direction: column;
     gap: 12px;
     overflow-y: auto;
+    max-height: none;
 }
 
 .fin-unassigned-list {
@@ -884,6 +885,7 @@
     border: 1px solid var(--fin-border-light);
     border-radius: var(--fin-radius);
     overflow: hidden;
+    min-height: 120px;
 }
 
 .fin-project-col-header {
@@ -903,7 +905,7 @@
 
 .fin-project-drop-zone {
     padding: 8px;
-    min-height: 40px;
+    min-height: 80px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -1027,6 +1029,26 @@
 
 .fin-expand-project-select {
     max-width: 200px;
+}
+
+/* Project search */
+.fin-project-search-wrap {
+    padding: 0 0 10px 0;
+}
+.fin-project-search {
+    width: 100%;
+    padding: 7px 12px;
+    background: var(--fin-surface);
+    border: 1px solid var(--fin-border-light);
+    border-radius: 6px;
+    color: var(--fin-text);
+    font-size: 13px;
+    outline: none;
+    font-family: var(--fin-font);
+    box-sizing: border-box;
+}
+.fin-project-search:focus {
+    border-color: var(--fin-accent);
 }
 
 /* Plaid Link z-index override */
