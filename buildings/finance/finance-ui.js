@@ -189,9 +189,18 @@ const FinanceUI = (() => {
             plaidObserver.observe(document.body, { childList: true, subtree: true });
             // Also force immediately in case elements already exist
             forceZIndex();
-            // Disable backdrop-filter on modal overlay so Plaid iframe is visible
+            // Disable backdrop-filter and lower z-index on modal overlay so Plaid iframe is visible
             var overlay = document.getElementById('modal-overlay');
-            if (overlay) overlay.style.backdropFilter = 'none';
+            if (overlay) {
+                overlay.style.backdropFilter = 'none';
+                overlay.style.zIndex = '0';
+            }
+            // Inject style overrides to ensure Plaid iframe stays on top
+            var style = document.createElement('style');
+            style.id = 'plaid-override-style';
+            style.textContent = '#modal-overlay { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; z-index: 0 !important; }\n' +
+                'body > iframe, body > div[id*="plaid"], body > div[class*="plaid"] { z-index: 2147483647 !important; position: fixed !important; }';
+            document.head.appendChild(style);
         }
 
         function cleanupPlaidObserver() {
@@ -199,8 +208,14 @@ const FinanceUI = (() => {
                 plaidObserver.disconnect();
                 plaidObserver = null;
             }
+            // Remove injected style overrides
+            var overrideStyle = document.getElementById('plaid-override-style');
+            if (overrideStyle) overrideStyle.remove();
             var overlay = document.getElementById('modal-overlay');
-            if (overlay) overlay.style.backdropFilter = 'blur(6px)';
+            if (overlay) {
+                overlay.style.backdropFilter = 'blur(6px)';
+                overlay.style.zIndex = '200';
+            }
         }
 
         try {
@@ -816,6 +831,8 @@ const FinanceUI = (() => {
             } else {
                 refresh();
             }
+            // Preload Plaid Link script so it's ready when user clicks
+            loadPlaidLink(function() {});
         },
         close: function() {
             var dd = document.querySelector('.fin-dropdown');
