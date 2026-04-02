@@ -20,7 +20,38 @@ const StorageUI = (() => {
     let historyVisible = false;
     let selectedBoxId = null;
     let editingItemId = null;
-    let sortBy = 'default'; // 'default' | 'alpha' | 'alpha-desc' | 'most-items' | 'least-items' | 'fullest'
+    let sortBy = 'alpha'; // 'default' | 'alpha' | 'alpha-desc' | 'most-items' | 'least-items' | 'fullest'
+    let undoStack = []; // array of {description, undoFn}
+    const MAX_UNDO = 20;
+    function pushUndo(description, undoFn) {
+        undoStack.push({ description, undoFn });
+        if (undoStack.length > MAX_UNDO) undoStack.shift();
+        updateUndoBtn();
+    }
+    function updateUndoBtn() {
+        const btn = document.getElementById('storage-undo-btn');
+        if (!btn) return;
+        if (undoStack.length > 0) {
+            btn.style.display = 'inline-flex';
+            btn.title = 'Undo: ' + undoStack[undoStack.length - 1].description;
+            btn.textContent = '↩ Undo';
+        } else {
+            btn.style.display = 'none';
+        }
+    }
+    async function performUndo() {
+        if (undoStack.length === 0) return;
+        const action = undoStack.pop();
+        try {
+            await action.undoFn();
+            addChatMsg('Undid: ' + action.description, 'system');
+        } catch(e) {
+            addChatMsg('Undo failed: ' + e.message, 'error');
+        }
+        updateUndoBtn();
+        renderBoxes();
+        updateStats();
+    }
 
     async function loadHistory() {
         // Airtable is the sole source of truth — no localStorage
@@ -164,13 +195,17 @@ const StorageUI = (() => {
             <button class='storage-sort-btn${sortBy==='alpha-desc'?' active':''}' data-sort='alpha-desc'>Z→A</button>
             <button class='storage-sort-btn${sortBy==='most-items'?' active':''}' data-sort='most-items'>Most Items</button>
             <button class='storage-sort-btn${sortBy==='least-items'?' active':''}' data-sort='least-items'>Least Items</button>
-            <button class='storage-sort-btn${sortBy==='fullest'?' active':''}' data-sort='fullest'>Most Qty</button>`;
+            <button class='storage-sort-btn${sortBy==='fullest'?' active':''}' data-sort='fullest'>Most Qty</button>
+            <button id='storage-undo-btn' style='display:none; margin-left:auto;' title=''>↩ Undo</button>`;
         document.querySelectorAll('[data-sort]').forEach(btn => {
             btn.addEventListener('click', () => {
                 sortBy = btn.dataset.sort;
                 renderBoxes();
             });
         });
+        const undoBtn = document.getElementById('storage-undo-btn');
+        if (undoBtn) undoBtn.addEventListener('click', () => performUndo());
+        updateUndoBtn();
 
         if (boxes.length === 0) {
             grid.innerHTML = '<div style="padding:20px;text-align:center;color:#bbb;font-style:italic;">No boxes yet. Add one to get started!</div>';
@@ -239,9 +274,15 @@ const StorageUI = (() => {
                             ? await StorageService.addItem(itemName.trim(), qty, boxName)
                             : await StorageService.addItemForce(itemName.trim(), qty, boxName);
                         addChatMsg(yes ? `Merged with "${r.mergedWith}" in Box ${r.boxName}. Now ${r.item.quantity}x total.` : `Added ${qty}x ${r.item.name} to Box ${boxName}.`, 'system');
+                        pushUndo(`Add ${qty}x ${r.item.name} to ${r.boxName}`, async () => {
+                            await StorageService.removeItem(r.item.name, qty);
+                        });
                     } else {
                         const r = await StorageService.addItem(itemName.trim(), qty, boxName);
                         addChatMsg(`Added ${qty}x ${r.item.name} to Box ${r.boxName}.`, 'system');
+                        pushUndo(`Add ${qty}x ${r.item.name} to ${r.boxName}`, async () => {
+                            await StorageService.removeItem(r.item.name, qty);
+                        });
                     }
                 } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
                 selectedBoxId = null;
@@ -289,9 +330,15 @@ const StorageUI = (() => {
                             <button class="storage-qty-cancel" data-action="qty-cancel">No</button>`;
                         editor.querySelector('[data-action=qty-confirm-delete]').addEventListener('click', async (e2) => {
                             e2.stopPropagation();
+                            const snapName = itemName;
+                            const snapQty = parseInt(inp.dataset.originalQty);
+                            const snapBox = btn.closest('.storage-box-card')?.dataset.boxName;
                             try {
                                 await StorageService.setItemQuantity(itemId, 0);
                                 addChatMsg(`Removed all ${itemName}.`, 'system');
+                                pushUndo(`Delete ${snapName}`, async () => {
+                                    await StorageService.addItemForce(snapName, snapQty, snapBox);
+                                });
                             } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
                             editingItemId = null;
                             renderBoxes();
@@ -305,9 +352,14 @@ const StorageUI = (() => {
                     }
                     return;
                 }
+                const prevQty = parseInt(inp.dataset.originalQty);
+                const snapId = itemId, snapName2 = itemName;
                 try {
                     const r = await StorageService.setItemQuantity(itemId, newQty);
                     addChatMsg(r.deleted ? `Removed all ${itemName}.` : `Updated ${itemName} to ${newQty}x.`, 'system');
+                    pushUndo(`Change ${snapName2} qty to ${newQty}`, async () => {
+                        await StorageService.setItemQuantity(snapId, prevQty);
+                    });
                 } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
                 editingItemId = null;
                 renderBoxes();
@@ -344,10 +396,14 @@ const StorageUI = (() => {
                 const boxItems = StorageService.getItemsByBox(boxId);
                 if (boxItems.length === 0) { addChatMsg(`Box ${boxName} is already empty.`, 'system'); return; }
                 if (!confirm(`Clear all ${boxItems.length} item(s) from Box ${boxName}? The box will remain.`)) return;
+                const itemsToRestore = StorageService.getItemsByBox(boxId).map(i => ({name: i.name, qty: i.quantity, box: boxName}));
                 try {
                     const r = await StorageService.clearBox(boxName);
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     addChatMsg(`Cleared ${r.count} item(s) from Box ${boxName}.`, 'system');
+                    pushUndo(`Clear box ${boxName}`, async () => {
+                        for (const it of itemsToRestore) await StorageService.addItemForce(it.name, it.qty, it.box);
+                    });
                 } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
                 renderBoxes();
                 updateStats();
@@ -361,11 +417,17 @@ const StorageUI = (() => {
                 const boxItems = box ? StorageService.getItemsByBox(btn.dataset.boxId) : [];
                 const msg = boxItems.length > 0 ? `Remove Box ${boxName} and its ${boxItems.length} item(s)?` : `Remove empty Box ${boxName}?`;
                 if (!confirm(msg)) return;
+                const snapBoxName = boxName;
+                const snapItems = boxItems.map(i => ({name: i.name, qty: i.quantity, box: snapBoxName}));
                 try {
                     await StorageService.clearBox(boxName);
                     const r = await StorageService.removeBox(boxName);
                     if (r && r.error) { addChatMsg(r.error, 'error'); return; }
                     addChatMsg(`Removed Box ${boxName}.`, 'system');
+                    pushUndo(`Remove box ${snapBoxName}`, async () => {
+                        await StorageService.addBox(snapBoxName);
+                        for (const it of snapItems) await StorageService.addItemForce(it.name, it.qty, it.box);
+                    });
                 } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
                 selectedBoxId = null;
                 renderBoxes();

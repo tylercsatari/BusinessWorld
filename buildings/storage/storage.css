@@ -675,3 +675,19 @@
     transition: background 0.15s;
 }
 .storage-qty-cancel:hover { background: rgba(231,76,60,0.25); }
+
+#storage-undo-btn {
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(251,191,36,0.4);
+    background: rgba(251,191,36,0.1);
+    color: #fbbf24;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: auto;
+}
+#storage-undo-btn:hover {
+    background: rgba(251,191,36,0.25);
+    border-color: #fbbf24;
+}
