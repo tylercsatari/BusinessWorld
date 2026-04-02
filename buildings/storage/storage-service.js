@@ -330,6 +330,20 @@ const StorageService = (() => {
             return { item, toBox: destBox.name, suggestions };
         },
 
+        async setItemQuantity(itemId, newQty) {
+            const item = items.find(i => i.id === itemId);
+            if (!item) throw new Error('Item not found.');
+            if (newQty <= 0) {
+                await StorageAirtable.deleteItem(itemId);
+                try { await StorageEmbeddings.deleteItem(itemId); } catch (e) {}
+                items = items.filter(i => i.id !== itemId);
+                return { deleted: true };
+            }
+            await StorageAirtable.updateItemQty(itemId, newQty);
+            item.quantity = newQty;
+            return item;
+        },
+
         async addBox(name) {
             const upper = name.toUpperCase();
             if (findBoxByName(upper)) return { error: `Box "${upper}" already exists.` };

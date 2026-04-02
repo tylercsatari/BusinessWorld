@@ -590,6 +590,27 @@
     font-size: 13px;
 }
 .storage-box-item-row:last-child { border-bottom: none; }
+.storage-item-name {
+    flex: 1;
+}
+.storage-item-qty-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #ccc;
+    cursor: pointer;
+    margin-left: 6px;
+    transition: background 0.15s, border-color 0.15s;
+}
+.storage-item-qty-badge:hover {
+    background: rgba(99,102,241,0.25);
+    border-color: #6366f1;
+    color: #fff;
+}
 .storage-box-item-remove-btn {
     padding: 4px 10px;
     background: #e74c3c;

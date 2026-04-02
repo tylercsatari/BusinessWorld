@@ -150,7 +150,8 @@ const StorageUI = (() => {
                 </div>
                 <div class="storage-box-item-list" data-box-id="${escAttr(box.id)}" style="display:none;">
                     ${items.length > 0 ? items.map(i => `<div class="storage-box-item-row">
-                        <span>${escHtml(i.name)} <span style="color:#999">(Qty: ${i.quantity})</span></span>
+                        <span class='storage-item-name'>${escHtml(i.name)}</span>
+                        <span class='storage-item-qty-badge' data-action='edit-qty' data-item-id='${escAttr(i.id)}' data-item-name='${escAttr(i.name)}' data-item-qty='${i.quantity}' title='Click to update quantity'>${i.quantity}x</span>
                         <button class="storage-box-item-remove-btn" data-action="remove-single-item" data-item-name="${escAttr(i.name)}" data-item-qty="${i.quantity}" data-box-name="${escAttr(box.name)}">Remove</button>
                     </div>`).join('') : '<div style="padding:8px;color:#999;font-style:italic;">Box is empty</div>'}
                 </div>` : ''}
@@ -215,6 +216,28 @@ const StorageUI = (() => {
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     const msg = r.deleted ? `Removed all ${itemName}.` : `Removed ${qty}x ${itemName}. ${r.item.quantity} remaining.`;
                     addChatMsg(msg, 'system');
+                } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
+                renderBoxes();
+                updateStats();
+            });
+        });
+        grid.querySelectorAll('[data-action=edit-qty]').forEach(badge => {
+            badge.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const itemId = badge.dataset.itemId;
+                const itemName = badge.dataset.itemName;
+                const currentQty = parseInt(badge.dataset.itemQty) || 1;
+                const input = prompt(`Update quantity for ${itemName}:`, String(currentQty));
+                if (input === null) return;
+                const newQty = parseInt(input);
+                if (isNaN(newQty) || newQty < 0) { addChatMsg('Invalid quantity', 'error'); return; }
+                try {
+                    if (newQty === 0) {
+                        const confirmed = confirm(`Remove all ${itemName}?`);
+                        if (!confirmed) return;
+                    }
+                    const r = await StorageService.setItemQuantity(itemId, newQty);
+                    addChatMsg(r.deleted ? `Removed all ${itemName}.` : `Updated ${itemName} to ${newQty}x.`, 'system');
                 } catch (err) { addChatMsg('Error: ' + err.message, 'error'); }
                 renderBoxes();
                 updateStats();
