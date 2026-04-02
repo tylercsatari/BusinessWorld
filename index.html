@@ -25,6 +25,8 @@
         #sponsors-hud-btn { position: relative; width: 42px; height: 42px; background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(245,240,230,0.95)); border: 2px solid #5a3e1b; border-radius: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 0 3px 10px rgba(0,0,0,0.2); transition: transform 0.2s; color: #5a3e1b; }
         #sponsors-hud-btn:hover { transform: scale(1.1); }
         #sponsors-badge { position: absolute; top: -5px; right: -5px; background: #27ae60; color: #fff; font-family: 'Fredoka One', cursive; font-size: 11px; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        #hud-balance-pill { display: flex; align-items: center; background: linear-gradient(135deg, rgba(74,222,128,0.15), rgba(74,222,128,0.08)); border: 1.5px solid rgba(74,222,128,0.4); border-radius: 10px; padding: 5px 12px; font-family: 'Fredoka One', cursive; font-size: 15px; color: #4ade80; text-shadow: 0 0 8px rgba(74,222,128,0.4); box-shadow: 0 2px 8px rgba(0,0,0,0.2); white-space: nowrap; transition: all 0.2s; }
+        #hud-balance-pill:hover { background: linear-gradient(135deg, rgba(74,222,128,0.25), rgba(74,222,128,0.15)); border-color: rgba(74,222,128,0.7); }
         #pen-scale-slider-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 2px; }
         #pen-scale-slider { -webkit-appearance: none; appearance: none; width: 42px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #d4c5a9, #5a3e1b); outline: none; cursor: pointer; }
         #pen-scale-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: linear-gradient(135deg, #fff, #f0ece4); border: 2px solid #5a3e1b; box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer; }
@@ -130,6 +132,9 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span id="sponsors-badge" style="display:none;">0</span>
         </button>
+        <div id='hud-balance-pill' onclick="openModal('Finance')" title='Bank Balance — click to open Finance' style='display:none;cursor:pointer;'>
+            <span id='hud-balance-amount'>$—</span>
+        </div>
         <div id="pen-scale-slider-wrap" style="display:none;">
             <input type="range" id="pen-scale-slider" min="0" max="100" value="50" />
             <label id="pen-scale-label">Size</label>
@@ -2404,6 +2409,7 @@ async function init() {
     // Expose for testing
     window._bw = { playerMesh, camera, cameraTarget, scene, workshop, storage, incubator, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house };
     console.log('Business World loaded!');
+    fetchPlaidBalance();
 }
 
 // --- Character ---
@@ -3010,6 +3016,34 @@ window.updateFinanceDisplay = function updateFinanceDisplay() {
     netEl.textContent = (net >= 0 ? '$' : '-$') + Math.abs(Math.round(net)).toLocaleString();
     netEl.style.color = net >= 0 ? '#27ae60' : '#e74c3c';
 };
+async function fetchPlaidBalance() {
+    try {
+        const statusRes = await fetch('/api/finance/status');
+        const status = await statusRes.json();
+        if (!status.connected) return;
+        const res = await fetch('/api/finance/accounts');
+        if (!res.ok) return;
+        const data = await res.json();
+        const accts = data.accounts || [];
+        // Sum all depository account current balances
+        const total = accts
+            .filter(a => a.type === 'depository' || a.subtype === 'checking' || a.subtype === 'savings')
+            .reduce((sum, a) => sum + ((a.balances && a.balances.current) || 0), 0);
+        if (total > 0) {
+            finances.bank = Math.round(total);
+            updateFinanceDisplay();
+            // Show the HUD balance pill
+            const pill = document.getElementById('hud-balance-pill');
+            const amt = document.getElementById('hud-balance-amount');
+            if (pill && amt) {
+                amt.textContent = '$' + total.toLocaleString('en-CA', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                pill.style.display = 'flex';
+            }
+        }
+    } catch(e) {
+        console.warn('fetchPlaidBalance failed:', e);
+    }
+}
 window.editFinance = function(field) {
     const label = field === 'bank' ? 'bank balance' : 'monthly expenses';
     const val = prompt('Enter current ' + label + ':');
