@@ -48,8 +48,6 @@ const FinanceUI = (() => {
         'HOME_IMPROVEMENT': '🔨', 'OTHER': '📦'
     };
 
-    const BAR_COLORS = ['#4ade80', '#60a5fa', '#c084fc', '#fbbf24', '#f87171'];
-
     function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
     function fmt$(n) {
@@ -387,33 +385,6 @@ const FinanceUI = (() => {
                 '<div class="fin-metric-label">Uncategorized</div>' +
             '</div>' +
         '</div>';
-
-        // Bar chart — top 5 spending categories
-        var catTotals = {};
-        transactions.forEach(function(t) {
-            if (t.amount > 0) {
-                var cat = getCategoryPrimary(t);
-                catTotals[cat] = (catTotals[cat] || 0) + t.amount;
-            }
-        });
-        var catSorted = Object.entries(catTotals).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
-        var catMax = catSorted.length > 0 ? catSorted[0][1] : 1;
-
-        if (catSorted.length > 0) {
-            html += '<div class="fin-card">' +
-                '<div class="fin-card-title">Spending by Category</div>' +
-                '<div class="fin-bar-chart">';
-            catSorted.forEach(function(entry, i) {
-                var pct = Math.round((entry[1] / catMax) * 100);
-                var label = entry[0].replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-                html += '<div class="fin-bar-row">' +
-                    '<div class="fin-bar-label">' + esc(label) + '</div>' +
-                    '<div class="fin-bar-track"><div class="fin-bar-fill" style="width:' + pct + '%;background:' + BAR_COLORS[i % BAR_COLORS.length] + '"></div></div>' +
-                    '<div class="fin-bar-value">' + fmt$(entry[1]) + '</div>' +
-                '</div>';
-            });
-            html += '</div></div>';
-        }
 
         // Account balance cards
         if (accounts.length > 0) {

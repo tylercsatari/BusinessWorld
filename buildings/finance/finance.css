@@ -530,47 +530,6 @@
 .fin-status-dot.connected { background: var(--fin-green); }
 .fin-status-dot.disconnected { background: var(--fin-red); }
 
-/* Chart bars (simple CSS-based) */
-.fin-bar-chart {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.fin-bar-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.fin-bar-label {
-    font-size: 12px;
-    color: var(--fin-text-muted);
-    min-width: 80px;
-    text-align: right;
-}
-
-.fin-bar-track {
-    flex: 1;
-    height: 20px;
-    background: rgba(74, 222, 128, 0.06);
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.fin-bar-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.4s;
-}
-
-.fin-bar-value {
-    font-size: 12px;
-    font-family: var(--fin-font-mono);
-    color: var(--fin-text-body);
-    min-width: 70px;
-}
-
 /* Summary row */
 .fin-summary-row {
     display: flex;
