@@ -5,7 +5,7 @@ const GymUI = (() => {
     let activePlayer = 'tyler';
     let selectedRoutineId = null;
     let trainStep = 'choose'; // 'choose' | 'preview' | 'workout' | 'program'
-    let logState = { notes: '', sets: {}, exerciseNotes: {} };
+    let logState = { notes: '', sets: {}, exerciseNotes: {}, additions: [] };
     let editingRoutineId = null;
     let workoutStartTime = null;
     let timerInterval = null;
@@ -510,6 +510,93 @@ const GymUI = (() => {
 
             html += '</div>'; // end exercise card
         });
+        // Render mid-workout additions
+        (logState.additions || []).forEach((add, addIdx) => {
+            const reIdx = routine.exercises.length + addIdx;
+            const exDef = GymService.getExercise(add.exerciseId);
+            if (!exDef) return;
+            const prog = GymService.getProgressionSuggestion(pid, add.exerciseId);
+            const lastW = GymService.getLastWeight(pid, add.exerciseId);
+            const lastSummary = GymService.getLastSessionSummary(pid, add.exerciseId);
+            const suggestedWeight = prog.suggest ? prog.weight : (lastW || 0);
+            const lastReps = GymService.getLastReps(pid, add.exerciseId);
+
+            html += '<div class="gym-exercise-card">' +
+                '<div class="gym-exercise-header">' +
+                    '<div style="flex:1">' +
+                        '<div style="display:flex;align-items:center;gap:8px">' +
+                            '<div class="gym-exercise-name">' + esc(exDef.name) + '</div>' +
+                            '<span style="font-size:10px;color:#7c6aff;font-weight:600;">ADDED</span>' +
+                            '<button class="gym-swap-btn" data-action="swap-exercise" data-ex-idx="' + reIdx + '" title="Swap exercise">⇄</button>' +
+                        '</div>' +
+                        '<span class="gym-category-pill ' + exDef.category + '">' + exDef.category.toUpperCase() + '</span>' +
+                    '</div>' +
+                    (prog.suggest ? '<span class="gym-overload-badge">INCREASE WEIGHT &rarr; ' + prog.weight + 'lbs</span>' : '') +
+                '</div>';
+
+            if (lastSummary) {
+                html += '<div class="gym-exercise-last-session">Last: ' + lastSummary + '</div>';
+            }
+
+            html += '<div class="gym-set-header-row">' +
+                '<span class="gym-set-hdr" style="width:28px">Set</span>' +
+                '<span class="gym-set-hdr" style="width:70px">Weight</span>' +
+                '<span class="gym-set-hdr" style="width:50px">Reps</span>' +
+                '<span class="gym-set-hdr" style="width:56px">RIR</span>' +
+                '<span class="gym-set-hdr" style="width:44px"></span>' +
+            '</div>';
+            html += '<div class="gym-set-rows">';
+
+            const numSets = logState.sets['_count_' + reIdx] || add.defaultSets || 3;
+            for (let s = 0; s < numSets; s++) {
+                const setKey = reIdx + '-' + s;
+                const saved = logState.sets[setKey] || {};
+                const w = saved.weight !== undefined ? saved.weight : suggestedWeight;
+                const reps = saved.reps !== undefined ? saved.reps : (lastReps || '');
+                const rir = saved.rir !== undefined ? saved.rir : 2;
+                const done = saved.completed || false;
+
+                html += '<div class="gym-set-row">' +
+                    '<span class="gym-set-num">' + (s + 1) + '</span>' +
+                    '<input type="number" class="gym-set-input gym-set-weight" data-set="' + setKey + '" value="' + w + '" placeholder="lb" style="width:70px">' +
+                    '<input type="number" min="0" max="100" class="gym-set-input gym-set-reps" data-set="' + setKey + '" value="' + (reps || 0) + '" placeholder="0" style="width:50px">' +
+                    '<select class="gym-set-rir-select" data-set="' + setKey + '">' +
+                        '<option value="0"' + (rir === 0 ? ' selected' : '') + '>0</option>' +
+                        '<option value="1"' + (rir === 1 ? ' selected' : '') + '>1</option>' +
+                        '<option value="2"' + (rir === 2 ? ' selected' : '') + '>2</option>' +
+                        '<option value="3"' + (rir === 3 ? ' selected' : '') + '>3</option>' +
+                        '<option value="4"' + (rir >= 4 ? ' selected' : '') + '>4+</option>' +
+                    '</select>' +
+                    '<button class="gym-set-check ' + (done ? 'done' : '') + '" data-action="complete-set" data-ex-idx="' + reIdx + '" data-set-idx="' + s + '" data-set="' + setKey + '">&#10003;</button>' +
+                '</div>';
+
+                if (done && recordedRests[setKey] !== undefined) {
+                    html += '<div class="gym-rest-recorded">Rest was ' + fmtRestTime(recordedRests[setKey]) + '</div>';
+                } else if (done && restTimerKey === setKey && restTimerStart) {
+                    html += '<div class="gym-rest-active" id="gym-rest-timer">Rest: 0:00</div>';
+                }
+            }
+            html += '</div>';
+
+            html += '<button class="gym-add-set-btn" data-exercise-idx="' + reIdx + '" data-default-sets="' + (add.defaultSets || 3) + '">+ Add Set</button>';
+
+            const noteVal = logState.exerciseNotes[reIdx] || '';
+            if (showExNotes[reIdx]) {
+                html += '<div style="margin-top:8px">' +
+                    '<textarea class="gym-log-notes" placeholder="Exercise notes..." data-ex-note="' + reIdx + '">' + esc(noteVal) + '</textarea>' +
+                '</div>';
+            } else {
+                html += '<button class="gym-add-set-btn" data-action="toggle-ex-note" data-ex-idx="' + reIdx + '" style="margin-top:4px;font-size:12px;border:none;text-align:left;padding:4px 0;color:var(--gym-text-muted)">' +
+                    (noteVal ? 'Note: ' + esc(noteVal.substring(0, 40)) + '...' : '+ Add note') +
+                '</button>';
+            }
+
+            html += '</div>'; // end exercise card
+        });
+
+        // Add exercise mid-workout button
+        html += '<button class="gym-add-exercise-btn" data-action="add-exercise-mid-workout" style="margin:12px 0;width:100%;padding:12px;background:rgba(124,106,255,0.12);border:1px dashed rgba(124,106,255,0.4);border-radius:10px;color:#7c6aff;font-size:14px;font-weight:600;cursor:pointer;">+ Add Exercise to Workout</button>';
+
         html += '</div>'; // end exercise-list
         html += '</div>'; // end exercise-scroll
 
@@ -902,7 +989,7 @@ const GymUI = (() => {
                 if (action === 'start-workout') {
                     selectedRoutineId = actionEl.dataset.routine || selectedRoutineId;
                     trainStep = 'workout';
-                    logState = { notes: '', sets: {}, exerciseNotes: {} };
+                    logState = { notes: '', sets: {}, exerciseNotes: {}, additions: [] };
                     showExNotes = {};
                     recordedRests = {};
                     restTimerStart = null;
@@ -958,7 +1045,12 @@ const GymUI = (() => {
 
                 if (action === 'swap-exercise') {
                     var exIdx = parseInt(actionEl.dataset.exIdx);
-                    showExerciseSwapModal(exIdx);
+                    showExerciseSwapModal(exIdx, 'swap');
+                    return;
+                }
+
+                if (action === 'add-exercise-mid-workout') {
+                    showExerciseSwapModal(null, 'add');
                     return;
                 }
 
@@ -1213,11 +1305,12 @@ const GymUI = (() => {
     }
 
     /* ── Exercise Swap Modal ── */
-    function showExerciseSwapModal(exerciseIdx) {
+    function showExerciseSwapModal(exerciseIdx, mode) {
+        mode = mode || 'swap';
         const routine = GymService.getRoutine(selectedRoutineId);
         if (!routine) return;
-        const currentEx = routine.exercises[exerciseIdx];
-        const currentExDef = GymService.getExercise(currentEx.exerciseId);
+        const currentEx = mode === 'swap' ? routine.exercises[exerciseIdx] : null;
+        const currentExDef = currentEx ? GymService.getExercise(currentEx.exerciseId) : null;
         const allExercises = GymService.getExercises();
 
         // Group by category
@@ -1236,10 +1329,12 @@ const GymUI = (() => {
         // Header
         var html = '<div style="padding:16px 16px 8px;border-bottom:1px solid rgba(255,255,255,0.1);">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
-        html += '<div style="font-weight:700;color:#fff;font-size:15px;">Swap Exercise</div>';
+        html += '<div style="font-weight:700;color:#fff;font-size:15px;">' + (mode === 'add' ? 'Add Exercise to Workout' : 'Swap Exercise') + '</div>';
         html += '<button id="swap-modal-close" style="background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;padding:4px">✕</button>';
         html += '</div>';
-        html += '<div style="font-size:12px;color:#888;">Replacing: <span style="color:#e8a020;">' + (currentExDef ? esc(currentExDef.name) : 'Unknown') + '</span></div>';
+        if (mode === 'swap') {
+            html += '<div style="font-size:12px;color:#888;">Replacing: <span style="color:#e8a020;">' + (currentExDef ? esc(currentExDef.name) : 'Unknown') + '</span></div>';
+        }
         // Search input
         html += '<input type="text" id="swap-search" placeholder="Search exercises..." style="width:100%;margin-top:10px;padding:8px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">';
         html += '</div>';
@@ -1251,7 +1346,7 @@ const GymUI = (() => {
             html += '<div class="swap-cat-group">';
             html += '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;color:#888;letter-spacing:0.5px;">' + esc(cat) + '</div>';
             exes.forEach(function(ex) {
-                var isCurrent = ex.id === currentEx.exerciseId;
+                var isCurrent = currentEx && ex.id === currentEx.exerciseId;
                 html += '<button class="swap-exercise-btn" data-ex-id="' + ex.id + '" style="width:100%;text-align:left;padding:12px 16px;background:' + (isCurrent ? 'rgba(232,160,32,0.15)' : 'none') + ';border:none;cursor:pointer;color:' + (isCurrent ? '#e8a020' : '#fff') + ';font-size:14px;display:flex;align-items:center;gap:10px;">';
                 html += '<span style="flex:1">' + esc(ex.name) + '</span>';
                 if (isCurrent) html += '<span style="font-size:11px;color:#e8a020;">current</span>';
@@ -1302,6 +1397,12 @@ const GymUI = (() => {
         overlay.querySelectorAll('.swap-exercise-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var newExId = btn.dataset.exId;
+                if (mode === 'add') {
+                    logState.additions.push({ exerciseId: newExId, defaultSets: 3 });
+                    overlay.remove();
+                    renderActiveTab();
+                    return;
+                }
                 if (newExId === currentEx.exerciseId) { overlay.remove(); return; }
                 // Apply swap to logState (in-session swap, not permanent)
                 if (!logState.swaps) logState.swaps = {};
@@ -1324,6 +1425,12 @@ const GymUI = (() => {
             var cat = overlay.querySelector('#swap-new-cat').value;
             var newId = 'custom_' + Date.now();
             GymService.addExercise({ id: newId, name: name, category: cat, equipment: 'any' });
+            if (mode === 'add') {
+                logState.additions.push({ exerciseId: newId, defaultSets: 3 });
+                overlay.remove();
+                renderActiveTab();
+                return;
+            }
             // Apply swap
             if (!logState.swaps) logState.swaps = {};
             logState.swaps[exerciseIdx] = newId;
@@ -1363,6 +1470,30 @@ const GymUI = (() => {
             };
         });
 
+        // Include mid-workout additions
+        (logState.additions || []).forEach((add, addIdx) => {
+            const reIdx = routine.exercises.length + addIdx;
+            const sets = [];
+            const numSets = logState.sets['_count_' + reIdx] || add.defaultSets || 3;
+            for (let s = 0; s < numSets; s++) {
+                const key = reIdx + '-' + s;
+                const saved = logState.sets[key] || {};
+                sets.push({
+                    setType: 'working',
+                    weight: saved.weight || 0,
+                    reps: saved.reps || 0,
+                    rir: saved.rir !== undefined ? saved.rir : 2,
+                    completed: saved.completed || false
+                });
+            }
+            exercises.push({
+                exerciseId: add.exerciseId,
+                notes: logState.exerciseNotes[reIdx] || '',
+                sets,
+                addedMidWorkout: true
+            });
+        });
+
         const workout = {
             date: today(),
             routineId: selectedRoutineId,
@@ -1373,7 +1504,7 @@ const GymUI = (() => {
         };
 
         GymService.logWorkout(activePlayer, workout);
-        logState = { notes: '', sets: {}, exerciseNotes: {} };
+        logState = { notes: '', sets: {}, exerciseNotes: {}, additions: [] };
         showExNotes = {};
         recordedRests = {};
         workoutStartTime = null;
@@ -1451,7 +1582,7 @@ const GymUI = (() => {
             activeTab = 'dashboard';
             selectedRoutineId = null;
             trainStep = 'choose';
-            logState = { notes: '', sets: {}, exerciseNotes: {} };
+            logState = { notes: '', sets: {}, exerciseNotes: {}, additions: [] };
             editingRoutineId = null;
             workoutStartTime = null;
             showLevelTooltip = false;
