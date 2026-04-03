@@ -3,7 +3,7 @@
     height: 100%;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #fef8f0;
+    background: #0f1117;
     border-radius: 16px;
 }
 .incubator-page {
@@ -27,11 +27,11 @@
     padding: 16px 20px 10px;
     position: relative;
     z-index: 5;
-    background: rgba(254, 248, 240, 0.85);
+    background: rgba(15, 17, 23, 0.95);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
-.incubator-header h2 { margin: 0; font-size: 22px; font-weight: 700; color: #333; }
+.incubator-header h2 { margin: 0; font-size: 22px; font-weight: 700; color: #ffffff; }
 .incubator-header-actions { display: flex; gap: 8px; }
 .incubator-add-btn {
     background: #6c5ce7; color: white; border: none; border-radius: 10px;
@@ -39,11 +39,11 @@
 }
 .incubator-add-btn:hover { background: #5a4bd1; }
 .incubator-from-library-btn {
-    background: rgba(240, 236, 228, 0.9); color: #5a3e1b; border: none; border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.85); border: none; border-radius: 10px;
     padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
     transition: background 0.15s;
 }
-.incubator-from-library-btn:hover { background: #e4ddd2; }
+.incubator-from-library-btn:hover { background: rgba(255, 255, 255, 0.18); }
 
 /* Filter bar overlay on top of 3D */
 .incubator-filters {
@@ -54,18 +54,18 @@
     flex-shrink: 0;
     position: relative;
     z-index: 5;
-    background: rgba(254, 248, 240, 0.7);
+    background: rgba(15, 17, 23, 0.8);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
 }
 .incubator-filter-btn {
-    border: 1px solid rgba(224, 220, 214, 0.8);
-    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
     border-radius: 20px;
     padding: 5px 14px;
     font-size: 12px;
     font-weight: 600;
-    color: #666;
+    color: rgba(255, 255, 255, 0.7);
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -76,13 +76,13 @@
     border-color: #6c5ce7;
 }
 .incubator-filter-btn:hover:not(.active) {
-    background: rgba(245, 242, 237, 0.9);
+    background: rgba(255, 255, 255, 0.12);
 }
 
 /* Tab bar */
 .incubator-tab-bar {
     display: flex;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgba(255,255,255,0.12);
     margin-bottom: 0;
     padding: 0 12px;
 }
@@ -198,7 +198,7 @@
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     text-align: center;
-    color: #999;
+    color: rgba(255,255,255,0.4);
     font-style: italic;
     padding: 40px 20px;
     z-index: 2;
@@ -209,7 +209,7 @@
 .incubator-detail { display: flex; flex-direction: column; height: 100%; }
 .incubator-detail-toolbar {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px; border-bottom: 1px solid #eee;
+    padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.12);
 }
 .incubator-back-btn {
     display: flex; align-items: center; gap: 4px;
@@ -237,13 +237,13 @@
 .incubator-silhouette-egg { filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3)); }
 .incubator-egg-preview-canvas { border-radius: 12px; display: block; }
 .incubator-detail-fields { flex: 1; display: flex; flex-direction: column; gap: 12px; }
-.incubator-detail-fields label { font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: -6px; }
+.incubator-detail-fields label { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: -6px; }
 .incubator-detail-fields input,
 .incubator-detail-fields select,
 .incubator-detail-fields textarea {
-    border: 1px solid #e0dcd6; border-radius: 10px; padding: 10px 14px;
-    font-size: 15px; font-family: inherit; background: #faf8f5;
-    outline: none; resize: vertical;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 10px 14px;
+    font-size: 15px; font-family: inherit; background: rgba(255,255,255,0.08);
+    outline: none; resize: vertical; color: #fff;
 }
 .incubator-detail-fields textarea { min-height: 60px; }
 
@@ -257,7 +257,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #f0ece4;
+    background: rgba(255,255,255,0.06);
     border-radius: 10px;
     padding: 10px 14px;
 }
@@ -265,7 +265,7 @@
     flex: 1;
     font-size: 14px;
     font-weight: 600;
-    color: #5a3e1b;
+    color: rgba(255,255,255,0.85);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -281,31 +281,31 @@
 }
 .incubator-script-unlink {
     background: none;
-    border: 1px solid #ccc;
+    border: 1px solid rgba(255,255,255,0.12);
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 12px;
-    color: #888;
+    color: rgba(255,255,255,0.5);
     cursor: pointer;
     font-weight: 600;
 }
-.incubator-script-unlink:hover { background: #fff; color: #ff6b6b; border-color: #ff6b6b; }
+.incubator-script-unlink:hover { background: rgba(255,255,255,0.1); color: #ff6b6b; border-color: #ff6b6b; }
 .incubator-script-actions {
     display: flex;
     gap: 8px;
 }
 .incubator-script-btn {
-    border: 1px solid #e0dcd6;
-    background: #faf8f5;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.08);
     border-radius: 8px;
     padding: 8px 14px;
     font-size: 13px;
     font-weight: 600;
-    color: #555;
+    color: rgba(255,255,255,0.7);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
 }
-.incubator-script-btn:hover { background: #f0ece4; border-color: #ccc; }
+.incubator-script-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
 .incubator-script-btn.primary {
     background: #6c5ce7;
     color: white;
@@ -319,18 +319,19 @@
 }
 .incubator-project-search {
     width: 100%;
-    border: 1px solid #e0dcd6;
+    border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px;
     padding: 10px 14px;
     font-size: 15px;
     font-family: inherit;
-    background: #faf8f5;
+    background: rgba(255,255,255,0.08);
     outline: none;
     box-sizing: border-box;
+    color: #fff;
 }
 .incubator-project-search:focus {
     border-color: #6c5ce7;
-    background: #fff;
+    background: rgba(255,255,255,0.12);
 }
 .incubator-project-dropdown {
     display: none;
@@ -338,13 +339,13 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: white;
-    border: 1px solid #e0dcd6;
+    background: #1a1d27;
+    border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px;
     margin-top: 4px;
     max-height: 180px;
     overflow-y: auto;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     z-index: 5;
 }
 .incubator-project-option {
@@ -352,9 +353,10 @@
     font-size: 14px;
     cursor: pointer;
     transition: background 0.1s;
+    color: rgba(255,255,255,0.85);
 }
 .incubator-project-option:hover {
-    background: #f5f2ed;
+    background: rgba(255,255,255,0.08);
 }
 .incubator-project-option:first-child {
     border-radius: 10px 10px 0 0;
@@ -376,8 +378,8 @@
 
 /* Source idea badge */
 .incubator-source-idea {
-    background: #f0ece4;
-    color: #5a3e1b;
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.85);
     font-size: 13px;
     font-weight: 600;
     padding: 6px 12px;
@@ -396,38 +398,38 @@
     z-index: 10;
 }
 .incubator-picker {
-    background: white;
+    background: #1a1d27;
     border-radius: 16px;
     width: 90%;
     max-width: 400px;
     max-height: 70%;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
 }
 .incubator-picker-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
 }
 .incubator-picker-header h3 {
     margin: 0;
     font-size: 16px;
     font-weight: 700;
-    color: #333;
+    color: #fff;
 }
 .incubator-picker-close {
     background: none;
     border: none;
     font-size: 22px;
-    color: #999;
+    color: rgba(255,255,255,0.5);
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 6px;
 }
-.incubator-picker-close:hover { background: #f0f0f0; }
+.incubator-picker-close:hover { background: rgba(255,255,255,0.1); }
 .incubator-picker-list {
     flex: 1;
     overflow-y: auto;
@@ -443,7 +445,7 @@
     gap: 10px;
 }
 .incubator-picker-item:hover {
-    background: #f5f2ed;
+    background: rgba(255,255,255,0.08);
 }
 .incubator-picker-item-info {
     flex: 1;
@@ -452,11 +454,11 @@
 .incubator-picker-name {
     font-size: 14px;
     font-weight: 600;
-    color: #333;
+    color: #fff;
 }
 .incubator-picker-preview {
     font-size: 12px;
-    color: #888;
+    color: rgba(255,255,255,0.5);
     margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
@@ -479,7 +481,7 @@
 }
 .incubator-picker-empty {
     text-align: center;
-    color: #999;
+    color: rgba(255,255,255,0.4);
     font-style: italic;
     padding: 30px 20px;
 }
@@ -488,7 +490,7 @@
 .incubator-reveal-overlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(254, 248, 240, 0.95);
+    background: rgba(15, 17, 23, 0.95);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -520,7 +522,7 @@
 .incubator-reveal-label {
     font-size: 18px;
     font-weight: 700;
-    color: #5a3e1b;
+    color: #fff;
     opacity: 0;
     transition: opacity 0.4s ease 0.3s;
 }
@@ -551,7 +553,7 @@
 .egg-hatch-overlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(254, 248, 240, 0.97);
+    background: rgba(15, 17, 23, 0.97);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -572,7 +574,7 @@
 .egg-hatch-label {
     font-size: 20px;
     font-weight: 700;
-    color: #5a3e1b;
+    color: #fff;
     opacity: 0;
     transition: opacity 0.4s ease;
 }
@@ -592,7 +594,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: #fef8f0;
+    background: #0f1117;
     z-index: 3;
     transition: opacity 0.4s ease;
 }
