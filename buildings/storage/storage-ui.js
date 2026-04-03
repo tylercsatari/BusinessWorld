@@ -269,11 +269,18 @@ const StorageUI = (() => {
                 try {
                     const mergeCheck = await StorageService.checkMerge(itemName.trim());
                     if (mergeCheck.wouldMerge) {
-                        const yes = await showMergeConfirmation(`This looks like <strong>${escHtml(mergeCheck.existingName)}</strong> (Box ${escHtml(mergeCheck.existingBox)}, ${mergeCheck.existingQty}x, ${(mergeCheck.score * 100).toFixed(0)}% match). Merge with it?`);
-                        const r = yes
-                            ? await StorageService.addItem(itemName.trim(), qty, boxName)
-                            : await StorageService.addItemForce(itemName.trim(), qty, boxName);
-                        addChatMsg(yes ? `Merged with "${r.mergedWith}" in Box ${r.boxName}. Now ${r.item.quantity}x total.` : `Added ${qty}x ${r.item.name} to Box ${boxName}.`, 'system');
+                        const choice = await showMergeOptions(itemName.trim(), qty, boxName, mergeCheck);
+                        if (choice === null) return;
+                        let r;
+                        if (choice === 'merge') {
+                            r = await StorageService.addItem(itemName.trim(), qty, boxName);
+                        } else if (choice === 'separate') {
+                            r = await StorageService.addItemForce(itemName.trim(), qty, boxName);
+                        } else if (choice === 'move-all') {
+                            await StorageService.moveItem(mergeCheck.existingName, boxName);
+                            r = await StorageService.addItem(itemName.trim(), qty, boxName);
+                        }
+                        addChatMsg(choice === 'merge' ? `Merged with "${r.mergedWith}" in Box ${r.boxName}. Now ${r.item.quantity}x total.` : choice === 'move-all' ? `Moved all to Box ${boxName}. Now ${r.item.quantity}x total.` : `Added ${qty}x ${r.item.name} to Box ${boxName}.`, 'system');
                         pushUndo(`Add ${qty}x ${r.item.name} to ${r.boxName}`, async () => {
                             await StorageService.removeItem(r.item.name, qty);
                         });
@@ -454,19 +461,26 @@ const StorageUI = (() => {
         chatLog.scrollTop = chatLog.scrollHeight;
     }
 
-    function showMergeConfirmation(msg) {
+    function showMergeOptions(itemName, qty, targetBoxName, mergeCheck) {
+        const { existingName, existingQty, existingBox, score } = mergeCheck;
+        const pct = (score * 100).toFixed(0);
         return new Promise(resolve => {
             const el = document.createElement('div');
-            el.className = 'storage-merge-confirm';
-            el.innerHTML = `<div class="storage-merge-msg">${msg}</div>
-                <div class="storage-merge-btns">
-                    <button class="storage-merge-yes">Yes, merge</button>
-                    <button class="storage-merge-no">No, keep separate</button>
+            el.className = 'storage-merge-options';
+            el.innerHTML = `<div class="storage-merge-title">Similar item found</div>
+                <div class="storage-merge-desc">${existingQty}x ${escHtml(existingName)} already exists in Box ${escHtml(existingBox)} (${pct}% match)</div>
+                <div class="storage-merge-option-btns">
+                    <button class="storage-merge-option-btn merge">Merge (add ${qty} to existing ${existingQty}x = ${existingQty + qty}x in ${escHtml(existingBox)})</button>
+                    <button class="storage-merge-option-btn separate">Keep separate (add as ${escHtml(itemName)} in ${escHtml(targetBoxName)})</button>
+                    <button class="storage-merge-option-btn move-all">Move all to ${escHtml(targetBoxName)} (${existingQty}x existing + ${qty}x new = ${existingQty + qty}x total)</button>
+                    <button class="storage-merge-option-btn cancel">Cancel</button>
                 </div>`;
             const chat = document.getElementById('storage-chat-log');
             if (chat) { chat.appendChild(el); chat.scrollTop = chat.scrollHeight; }
-            el.querySelector('.storage-merge-yes').addEventListener('click', () => { el.remove(); resolve(true); });
-            el.querySelector('.storage-merge-no').addEventListener('click', () => { el.remove(); resolve(false); });
+            el.querySelector('.merge').addEventListener('click', () => { el.remove(); resolve('merge'); });
+            el.querySelector('.separate').addEventListener('click', () => { el.remove(); resolve('separate'); });
+            el.querySelector('.move-all').addEventListener('click', () => { el.remove(); resolve('move-all'); });
+            el.querySelector('.cancel').addEventListener('click', () => { el.remove(); resolve(null); });
         });
     }
 
@@ -797,12 +811,16 @@ const StorageUI = (() => {
                     const mergeCheck = await StorageService.checkMerge(parsed.itemName);
                     let r;
                     if (mergeCheck.wouldMerge) {
-                        const pct = (mergeCheck.score * 100).toFixed(0);
-                        const confirmMsg = `This looks like <strong>${escHtml(mergeCheck.existingName)}</strong> (Box ${escHtml(mergeCheck.existingBox)}, ${mergeCheck.existingQty}x, ${pct}% match). Merge with it?`;
-                        const doMerge = await showMergeConfirmation(confirmMsg);
-                        r = doMerge
-                            ? await StorageService.addItem(parsed.itemName, qty, parsed.boxName)
-                            : await StorageService.addItemForce(parsed.itemName, qty, parsed.boxName);
+                        const choice = await showMergeOptions(parsed.itemName, qty, parsed.boxName, mergeCheck);
+                        if (choice === null) { addChatMsg('Cancelled.', 'system'); return; }
+                        if (choice === 'merge') {
+                            r = await StorageService.addItem(parsed.itemName, qty, parsed.boxName);
+                        } else if (choice === 'separate') {
+                            r = await StorageService.addItemForce(parsed.itemName, qty, parsed.boxName);
+                        } else if (choice === 'move-all') {
+                            await StorageService.moveItem(mergeCheck.existingName, parsed.boxName);
+                            r = await StorageService.addItem(parsed.itemName, qty, parsed.boxName);
+                        }
                     } else {
                         r = await StorageService.addItem(parsed.itemName, qty, parsed.boxName);
                     }
