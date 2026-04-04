@@ -413,7 +413,7 @@ const GymUI = (() => {
         const pid = activePlayer;
         const elapsed = workoutStartTime ? Date.now() - workoutStartTime : 0;
 
-        let html = '<div class="gym-active-workout">';
+        let html = '<div class="gym-active-workout" style="touch-action:manipulation">';
         html += '<div class="gym-workout-header">' +
             '<div style="display:flex;align-items:center;gap:8px">' +
                 '<button class="gym-icon-btn" data-action="back-to-choose" title="Back">' +
@@ -491,7 +491,9 @@ const GymUI = (() => {
 
                 // Rest timer display below completed set
                 if (done && recordedRests[setKey] !== undefined) {
-                    html += '<div class="gym-rest-recorded">Rest was ' + fmtRestTime(recordedRests[setKey]) + '</div>';
+                    html += '<div class="gym-rest-recorded">' +
+                        'Rest: <input type="number" class="gym-rest-edit" data-rest-key="' + setKey + '" value="' + recordedRests[setKey] + '" style="width:48px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;padding:1px 4px;font-size:12px"> sec' +
+                    '</div>';
                 } else if (done && restTimerKey === setKey && restTimerStart) {
                     html += '<div class="gym-rest-active" id="gym-rest-timer">Rest: 0:00</div>';
                 }
@@ -828,12 +830,23 @@ const GymUI = (() => {
     function renderActiveTab() {
         const el = container && container.querySelector('#gym-tab-content');
         if (!el) return;
+        // Save scroll position of active workout list before re-render
+        var savedScroll = 0;
+        if (trainStep === 'workout') {
+            var scrollEl = el.querySelector('.gym-active-workout-list');
+            if (scrollEl) savedScroll = scrollEl.scrollTop;
+        }
         disposeCharacter();
         switch (activeTab) {
             case 'dashboard': el.innerHTML = '<div class="gym-tab-content">' + renderDashboard() + '</div>'; initDashboard(); break;
             case 'train':     el.innerHTML = renderTrain(); startTimerTick(); startRestTimerTick(); break;
             case 'body':      el.innerHTML = '<div class="gym-tab-content">' + renderBody() + '</div>'; break;
             case 'nutrition':  el.innerHTML = '<div class="gym-tab-content">' + renderNutrition() + '</div>'; break;
+        }
+        // Restore scroll position after re-render
+        if (trainStep === 'workout' && savedScroll > 0) {
+            var newScrollEl = el.querySelector('.gym-active-workout-list');
+            if (newScrollEl) newScrollEl.scrollTop = savedScroll;
         }
     }
 
@@ -964,16 +977,17 @@ const GymUI = (() => {
                     if (!logState.sets[csKey]) logState.sets[csKey] = {};
                     var wasDone = logState.sets[csKey].completed;
                     logState.sets[csKey].completed = !wasDone;
+
                     if (!wasDone) {
-                        if (restTimerStart && restTimerKey) {
+                        // Completing a set: record rest for previous set (if timer was running), start new rest
+                        if (restTimerStart && restTimerKey && restTimerKey !== csKey) {
                             recordedRests[restTimerKey] = Math.round((Date.now() - restTimerStart) / 1000);
                         }
                         restTimerStart = Date.now();
                         restTimerKey = csKey;
-                        renderActiveTab();
-                    } else {
-                        actionEl.classList.toggle('done', false);
                     }
+                    // If unchecking: do nothing to the timer - keep it running
+                    renderActiveTab();
                     return;
                 }
 
@@ -1205,6 +1219,11 @@ const GymUI = (() => {
             if (e.target.matches('[data-ex-note]')) {
                 var idx = parseInt(e.target.dataset.exNote);
                 logState.exerciseNotes[idx] = e.target.value;
+            }
+            if (e.target.matches('.gym-rest-edit')) {
+                var restKey = e.target.dataset.restKey;
+                var val = parseInt(e.target.value);
+                if (!isNaN(val) && val >= 0) recordedRests[restKey] = val;
             }
             // Auto-fill meal form from saved meal selection
             if (e.target.matches('#gym-meal-name')) {
