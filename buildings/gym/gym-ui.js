@@ -427,6 +427,7 @@ const GymUI = (() => {
         // Scrollable exercise list
         html += '<div class="gym-active-workout-list">';
         html += '<div class="gym-exercise-list">';
+        html += '<button class="gym-insert-ex-btn" data-action="insert-exercise" data-after-idx="-1" style="margin-bottom:4px">+ Insert at Top</button>';
         sessionExercises.forEach(function(se, reIdx) {
             var exDef = GymService.getExercise(se.exerciseId);
             if (!exDef) return;
@@ -497,8 +498,12 @@ const GymUI = (() => {
             }
             html += '</div>';
 
-            // Add set button
-            html += '<button class="gym-add-set-btn" data-exercise-idx="' + reIdx + '" data-default-sets="' + (se.sets || 3) + '">+ Add Set</button>';
+            // Add/remove set buttons
+            var numSetsNow = logState.sets['_count_' + reIdx] || (se.sets || 3);
+            html += '<div style="display:flex;gap:6px;margin-top:6px;">' +
+                '<button class="gym-add-set-btn" data-exercise-idx="' + reIdx + '" data-default-sets="' + (se.sets || 3) + '">+ Set</button>' +
+                (numSetsNow > 1 ? '<button class="gym-remove-set-btn" data-action="remove-set" data-exercise-idx="' + reIdx + '" data-current-sets="' + numSetsNow + '">− Set</button>' : '') +
+            '</div>';
 
             // Exercise notes (collapsible)
             var noteVal = logState.exerciseNotes[reIdx] || '';
@@ -1029,6 +1034,19 @@ const GymUI = (() => {
                     return;
                 }
 
+                if (action === 'remove-set') {
+                    var exIdx = parseInt(actionEl.dataset.exerciseIdx);
+                    var currentSets = parseInt(actionEl.dataset.currentSets);
+                    if (currentSets <= 1) return;
+                    var countKey = '_count_' + exIdx;
+                    captureAllSetInputs();
+                    var lastSetKey = exIdx + '-' + (currentSets - 1);
+                    delete logState.sets[lastSetKey];
+                    logState.sets[countKey] = currentSets - 1;
+                    renderActiveTab();
+                    return;
+                }
+
                 if (action === 'toggle-ex-note') {
                     var exIdx = parseInt(actionEl.dataset.exIdx);
                     showExNotes[exIdx] = !showExNotes[exIdx];
@@ -1489,7 +1507,7 @@ const GymUI = (() => {
                     return;
                 }
                 if (mode === 'insert') {
-                    var insertPos = afterIdx + 1;
+                    var insertPos = afterIdx === -1 ? 0 : afterIdx + 1;
                     reindexSetsAfterInsert(insertPos);
                     sessionExercises.splice(insertPos, 0, { exerciseId: newExId, sets: 3, defaultWeight: 0 });
                     overlay.remove();
@@ -1522,7 +1540,7 @@ const GymUI = (() => {
                 return;
             }
             if (mode === 'insert') {
-                var insertPos = afterIdx + 1;
+                var insertPos = afterIdx === -1 ? 0 : afterIdx + 1;
                 reindexSetsAfterInsert(insertPos);
                 sessionExercises.splice(insertPos, 0, { exerciseId: newId, sets: 3, defaultWeight: 0 });
                 overlay.remove();

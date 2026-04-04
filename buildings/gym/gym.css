@@ -826,3 +826,17 @@ select.gym-settings-input {
     border-color: rgba(124,106,255,0.6); color: #7c6aff;
     background: rgba(124,106,255,0.06);
 }
+.gym-remove-set-btn {
+    background: rgba(248,113,113,0.1);
+    border: 1px solid rgba(248,113,113,0.3);
+    border-radius: 6px;
+    color: #f87171;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.gym-remove-set-btn:hover {
+    background: rgba(248,113,113,0.2);
+    border-color: #f87171;
+}
