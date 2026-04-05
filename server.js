@@ -200,6 +200,66 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
+    // API: Jarvis Auto-Classify Observation
+    // =========================================
+    if (pathname === '/api/jarvis/classify' && req.method === 'POST') {
+        const body = await readBody(req);
+        const { observation, registry } = body;
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (!openaiKey) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No OpenAI key configured' }));
+            return;
+        }
+        if (!observation || !registry) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing observation or registry' }));
+            return;
+        }
+
+        const levelList = registry.map(r => `${r.id} (level ${r.level}): ${r.name} — ${r.description}`).join('\n');
+
+        const prompt = `You are classifying an observation about a YouTube video analysis into a resolution level system.
+
+Resolution levels (ordered coarsest to finest):
+${levelList}
+
+Observation: "${observation}"
+
+Classify this:
+1. Which existing level best matches this observation's granularity?
+2. Is it between two existing levels? If yes, which two?
+3. What measurable signals/dimensions does it reference?
+4. One sentence reasoning.
+
+Respond ONLY as valid JSON:
+{"matchedLevel": "r0", "isBetween": false, "betweenLower": null, "betweenUpper": null, "signals": ["signal1"], "reasoning": "one sentence"}`;
+
+        try {
+            const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0
+                })
+            });
+            const aiData = await aiResp.json();
+            const content = aiData.choices?.[0]?.message?.content || '';
+            // Extract JSON from response (strip markdown fences if present)
+            const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            const parsed = JSON.parse(jsonStr);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(parsed));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Classification failed: ' + e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: OpenAI Whisper transcription
     // =========================================
     if (pathname === '/api/openai/transcribe' && req.method === 'POST') {
@@ -3227,6 +3287,78 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // Jarvis: Auto-classify observation into resolution tree
+    // =========================================
+    if (pathname === '/api/jarvis/classify' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { observation, registry } = JSON.parse(body);
+            const openaiKey = process.env.OPENAI_API_KEY;
+            if (!openaiKey) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No OpenAI key configured' }));
+                return;
+            }
+            const levelList = (registry || []).map(r => `${r.id} (level ${r.level}): ${r.name} — ${r.description}`).join('\n');
+            const prompt = `You are classifying an observation about a YouTube video analysis into a resolution level system.
+
+Resolution levels (ordered coarsest to finest):
+${levelList}
+
+Observation: "${observation}"
+
+Classify this observation:
+1. Which existing level best matches its granularity?
+2. Is it between two existing levels? If yes, which two?
+3. What measurable signals/dimensions does it reference? (as array of short names)
+4. One sentence reasoning.
+
+Respond ONLY as valid JSON (no markdown):
+{"matchedLevel": "r0", "isBetween": false, "betweenLower": null, "betweenUpper": null, "signals": ["signal1"], "reasoning": "one sentence"}`;
+
+            const https = require('https');
+            const postData = JSON.stringify({
+                model: 'gpt-4o-mini',
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.2,
+                max_tokens: 300
+            });
+            const result = await new Promise((resolve, reject) => {
+                const req2 = https.request({
+                    hostname: 'api.openai.com',
+                    path: '/v1/chat/completions',
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${openaiKey}`,
+                        'Content-Length': Buffer.byteLength(postData)
+                    }
+                }, (r) => {
+                    let data = '';
+                    r.on('data', d => data += d);
+                    r.on('end', () => {
+                        try {
+                            const parsed = JSON.parse(data);
+                            let content = parsed.choices[0].message.content.trim();
+                            if (content.includes('```')) content = content.split('```')[1].replace(/^json/, '').split('```')[0].trim();
+                            resolve(JSON.parse(content));
+                        } catch (e) { reject(e); }
+                    });
+                });
+                req2.on('error', reject);
+                req2.write(postData);
+                req2.end();
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));

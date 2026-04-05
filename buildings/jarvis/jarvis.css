@@ -403,6 +403,9 @@
 .jarvis-res-partial {
     border-left: 3px solid #f59e0b;
 }
+.jarvis-res-observed {
+    border-left: 3px solid var(--j-cyan);
+}
 .jarvis-res-planned {
     border-left: 3px solid rgba(100, 100, 100, 0.5);
     opacity: 0.7;
@@ -423,6 +426,9 @@
 }
 .jarvis-res-status-partial {
     background: rgba(245, 158, 11, 0.15); color: #f59e0b;
+}
+.jarvis-res-status-observed {
+    background: rgba(6, 182, 212, 0.15); color: var(--j-cyan);
 }
 .jarvis-res-status-planned {
     background: rgba(100, 100, 100, 0.15); color: #94a3b8;
@@ -512,6 +518,7 @@
 }
 .jarvis-res-grid-active { background: rgba(16, 185, 129, 0.35); border-color: rgba(16, 185, 129, 0.5); }
 .jarvis-res-grid-partial { background: rgba(245, 158, 11, 0.3); border-color: rgba(245, 158, 11, 0.5); }
+.jarvis-res-grid-observed { background: rgba(6, 182, 212, 0.3); border-color: rgba(6, 182, 212, 0.5); }
 .jarvis-res-grid-planned { background: rgba(100, 100, 100, 0.2); border-color: rgba(100, 100, 100, 0.3); }
 .jarvis-res-grid-cell-empty {
     background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
@@ -569,4 +576,58 @@
     background: rgba(16, 185, 129, 0.08);
     border: 1px solid rgba(16, 185, 129, 0.2);
     border-radius: 6px;
+}
+
+/* ── Auto-Classify Section ── */
+.jarvis-classify-section {
+    background: rgba(6, 182, 212, 0.06);
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    border-radius: 10px; padding: 18px; margin-bottom: 20px;
+}
+.jarvis-classify-title {
+    margin: 0 0 4px; font-size: 14px; font-weight: 700;
+    color: var(--j-cyan); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-classify-sub {
+    margin: 0 0 12px; font-size: 12px; color: var(--j-muted);
+}
+.jarvis-classify-form {
+    display: flex; flex-direction: column; gap: 10px;
+}
+.jarvis-classify-btn {
+    padding: 8px 20px; font-size: 12px; font-weight: 700;
+    background: var(--j-cyan); color: #0a0e1a;
+    border: none; border-radius: 6px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: background 0.2s; align-self: flex-start;
+}
+.jarvis-classify-btn:hover {
+    background: #22d3ee;
+}
+.jarvis-classify-result {
+    margin-top: 12px; padding: 14px;
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px;
+}
+.jarvis-classify-match {
+    font-size: 13px; color: var(--j-text); margin-bottom: 6px;
+}
+.jarvis-classify-match-label {
+    color: var(--j-muted); margin-right: 6px;
+}
+.jarvis-classify-between {
+    font-size: 12px; color: var(--j-cyan); margin-bottom: 6px;
+}
+.jarvis-classify-reasoning {
+    font-size: 12px; color: var(--j-muted); line-height: 1.5;
+    margin-bottom: 8px; font-style: italic;
+}
+.jarvis-classify-actions {
+    display: flex; gap: 8px; margin-top: 10px;
+}
+.jarvis-classify-actions .jarvis-res-log-btn {
+    font-size: 11px; padding: 6px 14px;
+}
+.jarvis-classify-fractional {
+    background: var(--j-cyan) !important; color: #0a0e1a !important;
 }

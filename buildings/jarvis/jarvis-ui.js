@@ -443,7 +443,7 @@ const JarvisUI = (() => {
 
             <div class="jarvis-res-tree">
                 ${registry.map((r, i) => {
-                    const statusClass = r.status === 'active' ? 'active' : r.status === 'partial' ? 'partial' : 'planned';
+                    const statusClass = r.status === 'active' ? 'active' : r.status === 'partial' ? 'partial' : r.status === 'observed' ? 'observed' : 'planned';
                     const parentLabel = r.parent ? registry.find(p => p.id === r.parent) : null;
                     return `<div class="jarvis-res-card-wrapper">
                         <div class="jarvis-res-timeline">
@@ -492,6 +492,19 @@ const JarvisUI = (() => {
                 </div>
             </div>
 
+            <div class="jarvis-classify-section">
+                <h3 class="jarvis-classify-title">Auto-Classify Observation</h3>
+                <p class="jarvis-classify-sub">Describe what you noticed and AI will place it in the resolution tree.</p>
+                <div class="jarvis-classify-form">
+                    <div class="jarvis-res-log-field">
+                        <label>Describe your observation</label>
+                        <textarea id="jarvis-classify-text" rows="3" placeholder="e.g. I noticed videos with a surprising visual in the first frame get significantly higher keep rates"></textarea>
+                    </div>
+                    <button class="jarvis-classify-btn" id="jarvis-classify-submit">Classify &rarr;</button>
+                </div>
+                <div id="jarvis-classify-result" class="jarvis-classify-result" style="display:none;"></div>
+            </div>
+
             <div class="jarvis-res-log-section">
                 <h3 class="jarvis-res-log-title">Log New Observation</h3>
                 <div class="jarvis-res-log-form">
@@ -503,8 +516,7 @@ const JarvisUI = (() => {
                         <div class="jarvis-res-log-field">
                             <label>Resolution Level</label>
                             <select id="jarvis-res-obs-level">
-                                ${registry.map(r => `<option value="R${r.level}">R${r.level} — ${r.name}</option>`).join('')}
-                                <option value="new">New higher resolution</option>
+                                ${buildResolutionOptions(registry)}
                             </select>
                         </div>
                         <div class="jarvis-res-log-field">
@@ -519,18 +531,159 @@ const JarvisUI = (() => {
         `;
     }
 
+    function buildResolutionOptions(registry) {
+        const sorted = [...registry].sort((a, b) => a.level - b.level);
+        const opts = [];
+        for (let i = 0; i < sorted.length; i++) {
+            const r = sorted[i];
+            opts.push(`<option value="R${r.level}">R${r.level} - ${r.name}</option>`);
+            if (i < sorted.length - 1) {
+                const next = sorted[i + 1];
+                opts.push(`<option value="between:${r.id}:${next.id}">Between R${r.level} and R${next.level}</option>`);
+            }
+        }
+        const last = sorted[sorted.length - 1];
+        opts.push(`<option value="new_finer">New resolution (finer than R${last.level})</option>`);
+        return opts.join('');
+    }
+
+    function computeFractionalLevel(lowerLevel, upperLevel, registry) {
+        const mid = (lowerLevel + upperLevel) / 2;
+        // Check if this level already exists
+        const exists = registry.some(r => r.level === mid);
+        if (!exists) return mid;
+        // Recurse: find a slot between lower and mid
+        return computeFractionalLevel(lowerLevel, mid, registry);
+    }
+
+    function insertFractionalLevel(lowerId, upperId, obsText, tags, registry) {
+        const lower = registry.find(r => r.id === lowerId);
+        const upper = registry.find(r => r.id === upperId);
+        if (!lower || !upper) return null;
+
+        const newLevel = computeFractionalLevel(lower.level, upper.level, registry);
+        const newId = `r${newLevel}`;
+        const today = new Date().toISOString().split('T')[0];
+        const tagArr = tags.length > 0 ? tags : [obsText.slice(0, 40)];
+
+        const entry = {
+            id: newId,
+            level: newLevel,
+            name: tagArr.join(', '),
+            unit: 'observation',
+            description: obsText,
+            parent: lowerId,
+            depth: tagArr.length,
+            signals: tagArr,
+            finding: 'Newly logged observation — run through Jarvis pipeline.',
+            gaps: [],
+            status: 'observed',
+            unlockedAt: today,
+            observationCount: 1
+        };
+
+        registry.push(entry);
+        registry.sort((a, b) => a.level - b.level);
+        return entry;
+    }
+
+    function reRenderResolution() {
+        const el = container?.querySelector('.jarvis-resolution-root');
+        if (!el || !resolutionRegistry) return;
+        el.innerHTML = renderResolutionContent(resolutionRegistry);
+        bindResolutionEvents();
+    }
+
     function bindResolutionEvents() {
+        // Submit observation
         const submitBtn = container?.querySelector('#jarvis-res-submit');
         if (submitBtn) {
             submitBtn.addEventListener('click', () => {
                 const text = document.getElementById('jarvis-res-obs-text')?.value || '';
-                const level = document.getElementById('jarvis-res-obs-level')?.value || '';
-                const tags = document.getElementById('jarvis-res-obs-tags')?.value || '';
-                console.log('Jarvis Observation:', { text, level, tags: tags.split(',').map(t => t.trim()).filter(Boolean) });
-                const confirm = document.getElementById('jarvis-res-confirm');
-                if (confirm) {
-                    confirm.style.display = 'block';
-                    confirm.textContent = 'Observation logged. Run through Jarvis pipeline to extract experiments.';
+                const levelVal = document.getElementById('jarvis-res-obs-level')?.value || '';
+                const tagsRaw = document.getElementById('jarvis-res-obs-tags')?.value || '';
+                const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+                const confirmEl = document.getElementById('jarvis-res-confirm');
+
+                if (levelVal.startsWith('between:')) {
+                    const parts = levelVal.split(':');
+                    const entry = insertFractionalLevel(parts[1], parts[2], text, tags, resolutionRegistry);
+                    if (entry && confirmEl) {
+                        confirmEl.style.display = 'block';
+                        confirmEl.textContent = `Created R${entry.level} — "${entry.name}". Re-rendering tree...`;
+                        setTimeout(() => reRenderResolution(), 600);
+                    }
+                } else {
+                    console.log('Jarvis Observation:', { text, level: levelVal, tags });
+                    if (confirmEl) {
+                        confirmEl.style.display = 'block';
+                        confirmEl.textContent = 'Observation logged. Run through Jarvis pipeline to extract experiments.';
+                    }
+                }
+            });
+        }
+
+        // Auto-classify
+        const classifyBtn = container?.querySelector('#jarvis-classify-submit');
+        if (classifyBtn) {
+            classifyBtn.addEventListener('click', async () => {
+                const text = document.getElementById('jarvis-classify-text')?.value || '';
+                const resultDiv = document.getElementById('jarvis-classify-result');
+                if (!text.trim() || !resultDiv) return;
+
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div class="jarvis-loading">Classifying observation...</div>';
+
+                try {
+                    const resp = await fetch('/api/jarvis/classify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ observation: text, registry: resolutionRegistry })
+                    });
+                    const data = await resp.json();
+                    if (data.error) throw new Error(data.error);
+
+                    const matched = resolutionRegistry.find(r => r.id === data.matchedLevel);
+                    const matchLabel = matched ? `R${matched.level} - ${matched.name}` : data.matchedLevel;
+                    const betweenHtml = data.isBetween
+                        ? `<div class="jarvis-classify-between">Between <strong>${data.betweenLower}</strong> and <strong>${data.betweenUpper}</strong></div>`
+                        : '';
+                    const signalChips = (data.signals || []).map(s => `<span class="jarvis-res-signal-chip">${s}</span>`).join('');
+
+                    resultDiv.innerHTML = `
+                        <div class="jarvis-classify-match">
+                            <span class="jarvis-classify-match-label">Matched:</span>
+                            <strong>${matchLabel}</strong>
+                        </div>
+                        ${betweenHtml}
+                        <div class="jarvis-classify-reasoning">${data.reasoning || ''}</div>
+                        ${signalChips ? `<div class="jarvis-res-signals" style="margin-top:8px">${signalChips}</div>` : ''}
+                        <div class="jarvis-classify-actions">
+                            <button class="jarvis-res-log-btn jarvis-classify-log" data-level="${data.matchedLevel}">Log at this level</button>
+                            ${data.isBetween ? `<button class="jarvis-res-log-btn jarvis-classify-fractional" data-lower="${data.betweenLower}" data-upper="${data.betweenUpper}">Create fractional level</button>` : ''}
+                        </div>
+                    `;
+
+                    // Bind action buttons
+                    const logBtn = resultDiv.querySelector('.jarvis-classify-log');
+                    if (logBtn) {
+                        logBtn.addEventListener('click', () => {
+                            console.log('Jarvis Classified Observation:', { text, level: data.matchedLevel, signals: data.signals });
+                            resultDiv.innerHTML = '<div class="jarvis-res-confirm">Observation logged at ' + matchLabel + '.</div>';
+                        });
+                    }
+                    const fracBtn = resultDiv.querySelector('.jarvis-classify-fractional');
+                    if (fracBtn) {
+                        fracBtn.addEventListener('click', () => {
+                            const entry = insertFractionalLevel(data.betweenLower, data.betweenUpper, text, data.signals || [], resolutionRegistry);
+                            if (entry) {
+                                resultDiv.innerHTML = `<div class="jarvis-res-confirm">Created R${entry.level} — "${entry.name}". Re-rendering...</div>`;
+                                setTimeout(() => reRenderResolution(), 600);
+                            }
+                        });
+                    }
+                } catch (e) {
+                    resultDiv.innerHTML = `<div class="jarvis-error">Classification failed: ${e.message}</div>`;
                 }
             });
         }
