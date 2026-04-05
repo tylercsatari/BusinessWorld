@@ -2,7 +2,7 @@
 const JarvisUI = (() => {
     let container = null;
     let activeTab = 'analytical';
-    let selectedNode = null;
+    let dataset = null;
 
     // ── Hardcoded Data ──
     const EXPERIMENTS = [
@@ -19,29 +19,29 @@ const JarvisUI = (() => {
         { id: 'exp_z3', name: 'Zeigarnik Type Breakdown', r: null, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Type B (Challenge/outcome uncertainty): n=88, avg 9.6M views — most common and highest performing. Type E (Social curiosity): n=10, avg 10.1M views — small sample but strong. Type A (Physical danger/threat): n=38, avg 7.4M views, avg Z-score 8.4 — high intensity but narrower. Type C (Mystery/reveal): n=42, avg 5.8M views. Best strategy: lean into B (can it work?) and E (social stakes), not maximum danger.' },
     ];
 
-    const BENCHMARKS = { n: 213, top10_threshold: 17242614, median_views: 1826162, top10_swipeaway: 11.89, top10_retention: 86.88, top10_shares_per_1k: 0.30, bot50_swipeaway: 6.70, bot50_retention: 80.56 };
-
-    const ANALYTICAL_NODES = [
-        { id: 'pearson', name: 'Pearson Correlation', color: '#3b82f6', desc: 'Measures linear relationship strength between two variables. Used across all 6 experiments.' },
-        { id: 'percentile', name: 'Percentile Analysis', color: '#06b6d4', desc: 'Ranks videos by metric to identify top 10% and bottom 50% performance tiers.' },
-        { id: 'regression', name: 'Linear Regression', color: '#8b5cf6', desc: 'Fits best-fit lines to predict views from individual metrics like shares and retention.' },
-        { id: 'llm_score', name: 'LLM Scoring', color: '#f59e0b', desc: 'Uses large language models to score unquantified signals like novelty and emotional pull.' },
-        { id: 'benchmark', name: 'Benchmark Comparison', color: '#10b981', desc: 'Compares individual video metrics against the n=372 dataset benchmarks.' },
+    const TOOLS = [
+        { id: 'pearson', icon: '📐', name: 'Pearson Correlation', desc: 'Measures linear relationship between two signals. Outputs r value (-1 to +1).', use: 'Continuous numeric signals', limitation: 'Misses non-linear patterns' },
+        { id: 'bucket', icon: '📊', name: 'Bucket/Quartile Analysis', desc: 'Groups videos into buckets by one signal, shows avg views per bucket.', use: 'Finding sweet spots, non-linear relationships', limitation: 'Requires enough data per bucket (n>10)' },
+        { id: 'log10', icon: '📉', name: 'log10 Normalization', desc: 'Applies log10 to view counts to reduce outlier skew before correlation.', use: 'Any correlation involving raw view counts', limitation: 'Cannot be used on zero/negative values' },
+        { id: 'llm', icon: '🧠', name: 'LLM Signal Scorer', desc: 'Uses GPT-4o-mini to score videos on qualitative signals (Zeigarnik, Novelty, Cognitive Load, etc.). Outputs numeric scores 1-10.', use: 'Qualitative-to-quantitative conversion', limitation: 'Subjective scoring, needs calibration' },
+        { id: 'ratio', icon: '⚖️', name: 'Ratio Normalizer', desc: 'Converts raw counts to rates (per 1k views, per 1M views).', use: 'Shares, likes, subs — any metric that scales with view count', limitation: 'Low-view videos have noisy rates' },
+        { id: 'net', icon: '➕➖', name: 'Net Signal Calculator', desc: 'Subtracts one signal from another to find optimal balance points. Example: Net Novelty = Novelty - Cognitive Load.', use: 'Signals with opposing effects', limitation: 'Assumes signals are on same scale' },
     ];
 
-    const TACTICAL_QUANTIFIED = [
-        { id: 'views', name: 'Total Views', benchmark: 'median=1.83M, top10 threshold=17.2M' },
-        { id: 'swipe_away', name: 'Swipe-Away Rate', benchmark: 'top10 avg=11.9%, bot50 avg=6.7%' },
-        { id: 'retention', name: 'Avg Retention %', benchmark: 'top10 avg=86.9%, bot50 avg=80.6%' },
-        { id: 'shares', name: 'Shares', benchmark: 'top10 avg=0.30 shares/1k views' },
-        { id: 'discovery', name: 'Discovery Rate', benchmark: 'non-sub view %' },
+    const QUANTIFIED_SIGNALS = [
+        { name: 'Keep Rate (in-video swipe)', tool: 'Pearson + log', r: '0.43', sweetSpot: '75-85% keep (15-25% swipe-away)', icon: '🎯' },
+        { name: 'Retention %', tool: 'Pearson + log', r: '0.27', sweetSpot: '85-87%, diminishing returns above 90%', icon: '📈' },
+        { name: 'Net Novelty (Novelty - Cognitive Load)', tool: 'Bucket', r: null, sweetSpot: '+2 (avg 10.3M views)', icon: '✨' },
+        { name: 'Zeigarnik Score (Z type B)', tool: 'Bucket', r: null, sweetSpot: 'Z=6-7 (avg 10-12.6M views)', icon: '🔄' },
+        { name: 'Share Rate (per 1k views)', tool: 'Ratio Norm', r: null, sweetSpot: 'Viral=0.66/1k vs avg=0.31/1k', icon: '🔗' },
+        { name: 'Discovery Rate (non-sub %)', tool: 'Pearson', r: '0.31', sweetSpot: 'Higher = algorithm pushing to new audiences', icon: '🌍' },
     ];
 
-    const TACTICAL_UNQUANTIFIED = [
-        { id: 'novelty', name: 'Novelty Score', desc: 'How unique/surprising is the concept?' },
-        { id: 'movement', name: 'Intro Movement', desc: 'Motion in first 3 seconds?' },
-        { id: 'hook_clarity', name: 'Hook Clarity', desc: 'How clearly does hook communicate value?' },
-        { id: 'emotional_pull', name: 'Emotional Pull', desc: 'Curiosity, excitement, or humor?' },
+    const UNQUANTIFIED_SIGNALS = [
+        { name: 'Hook Clarity', desc: 'How immediately obvious is what the video is about?', icon: '💡' },
+        { name: 'Visual Surprise', desc: 'Does the first frame make you do a double-take?', icon: '👀' },
+        { name: 'Pacing', desc: 'Does it cut/move faster than expected?', icon: '⚡' },
+        { name: 'Emotional Resonance', desc: 'Does it connect to a universal feeling?', icon: '❤️' },
     ];
 
     const TABS = [
@@ -53,16 +53,85 @@ const JarvisUI = (() => {
     ];
 
     const INSIGHTS = [
-        '<strong>Zeigarnik sweet spot is Z=6-7, NOT Z=10</strong> — videos scored 7 average 12.6M views. Z=10 (maximum danger/intensity) averages only 4.6M. Moderate open loops hook the mass market. Maximum intensity narrows it.',
+        '<strong>Keep Rate (r=0.43) is the strongest quantified predictor</strong> — get swipe-away under 25%. In-video keep rate has real predictive power for total views.',
+        '<strong>Net Novelty sweet spot = +2</strong> (Novelty exceeds Cognitive Load by exactly 2). Both too easy and too complex underperform. Average 10.3M views at the sweet spot.',
+        '<strong>Zeigarnik Z=7 (not Z=10) peaks at 12.6M avg</strong> — moderate open loops beat maximum intensity. Z=10 averages only 4.6M. Enough curiosity to hook, not so intense it filters the mass market.',
         '<strong>Best Zeigarnik type is B (Challenge uncertainty)</strong>: 88 videos, avg 9.6M views. Frame as \'can this actually work?\' not \'watch this dangerous thing happen\'. Type E (social stakes) has the highest avg at 10.1M but only 10 videos.',
         '<strong>Zeigarnik does NOT directly predict keep rate</strong> — high Z-score videos have slightly lower keep rates (72%) than mid-range (77%). Open loops and hook retention are separate mechanisms. Need both.',
-        '<strong>In-video keep rate (swipeRatio.stayedToWatch) has real predictive power</strong> — r=0.44 with log(Views). Tyler was right. Sweet spot: 75-85% keep rate (15-25% swipe-away). Above 30% swipe-away, avg views drop sharply.',
         '<strong>Retention 87%+ correlates with 10M+ avg views</strong> — progression from 79% (sub-1M) to 87% (100M+) is the clearest signal in the dataset.',
         '<strong>CTR (impression to view rate) has zero correlation with total views</strong> — it measures thumbnail appeal, not viral potential.',
         '<strong>The 20-25% swipe-away bucket is the highest performing</strong> (avg 13.2M, max 285M) — some swipe-away is fine and may indicate fast-moving content that not everyone finishes.',
         '<strong>Duration data is confounded</strong> — YouTube Shorts 60s limit existed during most of the 100M+ video era. Inconclusive.',
-        '<strong>Next experiments:</strong> (1) keep rate in first 24h of posting (early signal), (2) LLM novelty scoring vs views, (3) filter Research Center to channels <1M subs at time of viral video.',
     ];
+
+    const SIGNAL_KEYS = {
+        'Keep Rate': 'keep',
+        'Retention %': 'retention',
+        'Zeigarnik Score': 'z_score',
+        'Novelty': 'novelty',
+        'Cognitive Load': 'cognitive_load',
+        'Net Novelty': 'net_novelty',
+        'Share Rate': 'share_rate',
+        'Views': 'views',
+    };
+
+    // ── Dataset loading ──
+    async function loadDataset() {
+        if (dataset) return dataset;
+        try {
+            const resp = await fetch('./buildings/jarvis/signals-dataset.json');
+            dataset = await resp.json();
+            return dataset;
+        } catch (e) {
+            console.error('Failed to load signals dataset:', e);
+            return null;
+        }
+    }
+
+    // ── Analysis functions ──
+    function pearsonCorrelation(xs, ys) {
+        const n = xs.length;
+        if (n < 3) return null;
+        const meanX = xs.reduce((a, b) => a + b, 0) / n;
+        const meanY = ys.reduce((a, b) => a + b, 0) / n;
+        let num = 0, denX = 0, denY = 0;
+        for (let i = 0; i < n; i++) {
+            const dx = xs[i] - meanX;
+            const dy = ys[i] - meanY;
+            num += dx * dy;
+            denX += dx * dx;
+            denY += dy * dy;
+        }
+        const den = Math.sqrt(denX * denY);
+        return den === 0 ? 0 : num / den;
+    }
+
+    function bucketAnalysis(signal, views, numBuckets) {
+        if (!signal.length) return [];
+        const min = Math.min(...signal);
+        const max = Math.max(...signal);
+        if (min === max) return [{ label: `${min}`, avgViews: views.reduce((a, b) => a + b, 0) / views.length, n: views.length }];
+        const step = (max - min) / numBuckets;
+        const buckets = [];
+        for (let i = 0; i < numBuckets; i++) {
+            const lo = min + i * step;
+            const hi = i === numBuckets - 1 ? max + 0.01 : min + (i + 1) * step;
+            const label = `${lo.toFixed(1)}-${hi.toFixed(1)}`;
+            const indices = signal.map((v, idx) => v >= lo && v < hi ? idx : -1).filter(idx => idx >= 0);
+            const bucketViews = indices.map(idx => views[idx]);
+            const avg = bucketViews.length > 0 ? bucketViews.reduce((a, b) => a + b, 0) / bucketViews.length : 0;
+            buckets.push({ label, avgViews: avg, n: bucketViews.length });
+        }
+        return buckets;
+    }
+
+    function interpretR(r) {
+        const abs = Math.abs(r);
+        if (abs >= 0.7) return 'Strong';
+        if (abs >= 0.4) return 'Moderate';
+        if (abs >= 0.2) return 'Weak';
+        return 'Negligible';
+    }
 
     // ── Render ──
     function render() {
@@ -99,65 +168,53 @@ const JarvisUI = (() => {
 
     // ── Analytical Brain ──
     function renderAnalytical() {
-        const cx = 180, cy = 160, r = 120;
-        const nodes = ANALYTICAL_NODES.map((n, i) => {
-            const angle = (i * 2 * Math.PI / 5) - Math.PI / 2;
-            return { ...n, x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
-        });
-
-        // Edges: fully connected mesh
-        let edges = '';
-        for (let i = 0; i < nodes.length; i++) {
-            for (let j = i + 1; j < nodes.length; j++) {
-                edges += `<line class="jarvis-edge" x1="${nodes[i].x}" y1="${nodes[i].y}" x2="${nodes[j].x}" y2="${nodes[j].y}"/>`;
-            }
-        }
-
-        // Nodes
-        let circles = nodes.map(n => {
-            const isSelected = selectedNode === n.id;
-            return `<g class="jarvis-node" data-node="${n.id}">
-                <circle cx="${n.x}" cy="${n.y}" r="28" fill="${isSelected ? n.color : 'rgba(0,0,0,0.6)'}" stroke="${n.color}" opacity="${isSelected ? 1 : 0.9}"/>
-                <text x="${n.x}" y="${n.y + 3}">${n.name.split(' ').slice(0, 2).join(' ')}</text>
-            </g>`;
-        }).join('');
-
-        const detail = selectedNode
-            ? (() => {
-                const n = ANALYTICAL_NODES.find(n => n.id === selectedNode);
-                return `<div class="jarvis-node-detail"><h4>${n.name}</h4><p>${n.desc}</p></div>`;
-            })()
-            : '<div class="jarvis-node-detail"><p style="color:var(--j-muted)">Click a node to see details</p></div>';
-
-        return `<div class="jarvis-network">
-            <svg viewBox="0 0 360 320">${edges}${circles}</svg>
-            ${detail}
+        return `<div class="jarvis-tools-grid">
+            ${TOOLS.map(t => `
+                <div class="jarvis-tool-card">
+                    <div class="jarvis-tool-icon">${t.icon}</div>
+                    <h4 class="jarvis-tool-name">${t.name}</h4>
+                    <p class="jarvis-tool-desc">${t.desc}</p>
+                    <div class="jarvis-tool-meta">
+                        <span class="jarvis-tool-use"><strong>Use for:</strong> ${t.use}</span>
+                        <span class="jarvis-tool-limit"><strong>Limitation:</strong> ${t.limitation}</span>
+                    </div>
+                </div>
+            `).join('')}
         </div>`;
     }
 
     // ── Tactical Brain ──
     function renderTactical() {
-        const leftCards = TACTICAL_QUANTIFIED.map(s =>
-            `<div class="jarvis-signal-card">
-                <h4>${s.name}</h4>
-                <div class="benchmark">${s.benchmark}</div>
-            </div>`
-        ).join('');
+        const leftCards = QUANTIFIED_SIGNALS.map(s => {
+            const rLine = s.r ? `<div class="jarvis-sig-r">r = ${s.r}</div>` : '';
+            return `<div class="jarvis-signal-card jarvis-signal-quantified">
+                <div class="jarvis-sig-header">
+                    <span class="jarvis-sig-icon">${s.icon}</span>
+                    <h4>${s.name}</h4>
+                </div>
+                <div class="jarvis-sig-tool">Tool: ${s.tool}</div>
+                ${rLine}
+                <div class="jarvis-sig-sweet">Sweet spot: ${s.sweetSpot}</div>
+            </div>`;
+        }).join('');
 
-        const rightCards = TACTICAL_UNQUANTIFIED.map(s =>
-            `<div class="jarvis-signal-card">
-                <h4>${s.name}</h4>
-                <div class="desc">${s.desc}</div>
+        const rightCards = UNQUANTIFIED_SIGNALS.map(s =>
+            `<div class="jarvis-signal-card jarvis-signal-unquantified">
+                <div class="jarvis-sig-header">
+                    <span class="jarvis-sig-icon">${s.icon}</span>
+                    <h4>${s.name}</h4>
+                </div>
+                <div class="jarvis-sig-desc">${s.desc}</div>
                 <button class="jarvis-llm-btn">Score with LLM</button>
             </div>`
         ).join('');
 
         return `<div class="jarvis-tactical">
-            <div class="jarvis-tactical-col">
+            <div class="jarvis-tactical-col jarvis-col-quantified">
                 <h3>Quantified Signals</h3>
                 ${leftCards}
             </div>
-            <div class="jarvis-tactical-col">
+            <div class="jarvis-tactical-col jarvis-col-unquantified">
                 <h3>Unquantified Signals</h3>
                 ${rightCards}
             </div>
@@ -166,28 +223,173 @@ const JarvisUI = (() => {
 
     // ── Experiments ──
     function renderExperiments() {
-        return `<div class="jarvis-experiments">
-            ${EXPERIMENTS.map(exp => {
-                const hasR = exp.r !== null;
-                const absR = hasR ? Math.abs(exp.r) : 0;
-                const barColor = hasR ? (absR >= 0.4 ? '#10b981' : absR >= 0.2 ? '#f59e0b' : '#ef4444') : '#3b82f6';
-                const barWidth = hasR ? Math.max(absR / 0.5 * 100, 4) : 0;
-                const rLine = hasR
-                    ? `<div class="jarvis-exp-r" style="color:${barColor}">r = ${exp.r.toFixed(4)}</div>
-                       <div class="jarvis-exp-bar-wrap"><div class="jarvis-exp-bar" style="width:${barWidth}%;background:${barColor}"></div></div>`
-                    : `<div class="jarvis-exp-r" style="color:#3b82f6">comparative analysis</div>`;
-                return `<div class="jarvis-exp-card">
-                    <h4>${exp.name}</h4>
-                    ${rLine}
-                    <div class="jarvis-exp-finding">${exp.finding}</div>
-                    <div class="jarvis-exp-badges">
-                        <span class="jarvis-badge n-badge">n=${exp.n.toLocaleString()}</span>
-                        <span class="jarvis-badge status-badge">${exp.status}</span>
-                        ${exp.source ? `<span class="jarvis-badge source-badge">${exp.source}</span>` : ''}
+        const signalOptions = Object.keys(SIGNAL_KEYS).map(k => `<option value="${k}">${k}</option>`).join('');
+        return `
+            <div class="jarvis-exp-header">
+                <span class="jarvis-exp-count">n=203 videos | 5 signals scored</span>
+            </div>
+            <div class="jarvis-experiments">
+                ${EXPERIMENTS.map(exp => {
+                    const hasR = exp.r !== null;
+                    const absR = hasR ? Math.abs(exp.r) : 0;
+                    const barColor = hasR ? (absR >= 0.4 ? '#10b981' : absR >= 0.2 ? '#f59e0b' : '#ef4444') : '#3b82f6';
+                    const barWidth = hasR ? Math.max(absR / 0.5 * 100, 4) : 0;
+                    const rLine = hasR
+                        ? `<div class="jarvis-exp-r" style="color:${barColor}">r = ${exp.r.toFixed(4)}</div>
+                           <div class="jarvis-exp-bar-wrap"><div class="jarvis-exp-bar" style="width:${barWidth}%;background:${barColor}"></div></div>`
+                        : `<div class="jarvis-exp-r" style="color:#3b82f6">comparative analysis</div>`;
+                    return `<div class="jarvis-exp-card">
+                        <h4>${exp.name}</h4>
+                        ${rLine}
+                        <div class="jarvis-exp-finding">${exp.finding}</div>
+                        <div class="jarvis-exp-badges">
+                            <span class="jarvis-badge n-badge">n=${exp.n.toLocaleString()}</span>
+                            <span class="jarvis-badge status-badge">${exp.status}</span>
+                            ${exp.source ? `<span class="jarvis-badge source-badge">${exp.source}</span>` : ''}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+            <div class="jarvis-builder">
+                <h3 class="jarvis-builder-title">Experiment Builder</h3>
+                <p class="jarvis-builder-sub">Plug any signal × any tool and plot it</p>
+                <div class="jarvis-builder-form">
+                    <div class="jarvis-builder-field">
+                        <label>X Axis Signal</label>
+                        <select id="jarvis-x-axis">${signalOptions}</select>
                     </div>
-                </div>`;
-            }).join('')}
-        </div>`;
+                    <div class="jarvis-builder-field">
+                        <label>Y Axis Signal</label>
+                        <select id="jarvis-y-axis"><option value="Views">Views</option>${Object.keys(SIGNAL_KEYS).filter(k => k !== 'Views').map(k => `<option value="${k}">${k}</option>`).join('')}</select>
+                    </div>
+                    <div class="jarvis-builder-field">
+                        <label>Measurement Tool</label>
+                        <select id="jarvis-tool">
+                            <option value="pearson">Pearson Correlation</option>
+                            <option value="bucket">Bucket Analysis</option>
+                            <option value="ratio">Ratio Normalizer</option>
+                        </select>
+                    </div>
+                    <button class="jarvis-run-btn" id="jarvis-run-experiment">Run Experiment</button>
+                </div>
+                <div id="jarvis-builder-result" class="jarvis-builder-result"></div>
+            </div>
+        `;
+    }
+
+    // ── Run experiment ──
+    async function runExperiment() {
+        const xKey = document.getElementById('jarvis-x-axis').value;
+        const yKey = document.getElementById('jarvis-y-axis').value;
+        const tool = document.getElementById('jarvis-tool').value;
+        const resultDiv = document.getElementById('jarvis-builder-result');
+
+        resultDiv.innerHTML = '<div class="jarvis-loading">Loading dataset...</div>';
+
+        const data = await loadDataset();
+        if (!data) {
+            resultDiv.innerHTML = '<div class="jarvis-error">Failed to load dataset</div>';
+            return;
+        }
+
+        const xField = SIGNAL_KEYS[xKey];
+        const yField = SIGNAL_KEYS[yKey];
+
+        // Filter valid rows
+        const valid = data.filter(d => d[xField] != null && d[yField] != null && d[xField] !== 0 && d[yField] !== 0);
+        const xs = valid.map(d => d[xField]);
+        const ys = valid.map(d => d[yField]);
+
+        if (valid.length < 3) {
+            resultDiv.innerHTML = '<div class="jarvis-error">Not enough valid data points (need at least 3)</div>';
+            return;
+        }
+
+        if (tool === 'pearson') {
+            // Apply log10 to views if views is one of the axes
+            const logXs = xKey === 'Views' ? xs.map(v => Math.log10(Math.max(v, 1))) : xs;
+            const logYs = yKey === 'Views' ? ys.map(v => Math.log10(Math.max(v, 1))) : ys;
+            const r = pearsonCorrelation(logXs, logYs);
+            const strength = interpretR(r);
+            const absR = Math.abs(r);
+            const color = absR >= 0.4 ? '#10b981' : absR >= 0.2 ? '#f59e0b' : '#ef4444';
+            const logNote = (xKey === 'Views' || yKey === 'Views') ? ' (log10 applied to Views)' : '';
+            resultDiv.innerHTML = `
+                <div class="jarvis-result-card">
+                    <div class="jarvis-result-label">Pearson Correlation${logNote}</div>
+                    <div class="jarvis-result-r" style="color:${color}">r = ${r.toFixed(4)}</div>
+                    <div class="jarvis-result-strength" style="color:${color}">${strength} ${r > 0 ? 'positive' : r < 0 ? 'negative' : ''} correlation</div>
+                    <div class="jarvis-exp-bar-wrap"><div class="jarvis-exp-bar" style="width:${Math.max(absR / 0.5 * 100, 4)}%;background:${color}"></div></div>
+                    <div class="jarvis-result-n">n = ${valid.length} videos</div>
+                    <div class="jarvis-result-interp">${xKey} vs ${yKey}: ${absR < 0.1 ? 'Essentially no linear relationship.' : absR < 0.3 ? 'Weak relationship — other factors dominate.' : absR < 0.5 ? 'Moderate relationship — real signal here.' : 'Strong relationship — key predictor.'}</div>
+                </div>
+            `;
+        } else if (tool === 'bucket') {
+            const numBuckets = 6;
+            const buckets = bucketAnalysis(xs, ys.map(v => yKey === 'Views' ? v : v), numBuckets);
+            const maxAvg = Math.max(...buckets.map(b => b.avgViews), 1);
+            const yLabel = yKey === 'Views' ? 'Avg Views' : `Avg ${yKey}`;
+            resultDiv.innerHTML = `
+                <div class="jarvis-result-card">
+                    <div class="jarvis-result-label">Bucket Analysis: ${xKey} → ${yKey}</div>
+                    <div class="jarvis-bucket-chart">
+                        ${buckets.map(b => {
+                            const pct = (b.avgViews / maxAvg * 100).toFixed(0);
+                            const displayVal = yKey === 'Views' ? (b.avgViews >= 1000000 ? (b.avgViews / 1000000).toFixed(1) + 'M' : b.avgViews >= 1000 ? (b.avgViews / 1000).toFixed(0) + 'K' : b.avgViews.toFixed(0)) : b.avgViews.toFixed(1);
+                            return `<div class="jarvis-bucket-row">
+                                <span class="jarvis-bucket-label">${b.label}</span>
+                                <div class="jarvis-bucket-bar-wrap">
+                                    <div class="jarvis-bucket-bar" style="width:${pct}%"></div>
+                                </div>
+                                <span class="jarvis-bucket-val">${displayVal} <span class="jarvis-bucket-n">(n=${b.n})</span></span>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    <div class="jarvis-result-n">n = ${valid.length} videos | ${yLabel}</div>
+                </div>
+            `;
+        } else if (tool === 'ratio') {
+            // Ratio normalizer: compute signal per 1k views
+            const views = valid.map(d => d.views);
+            const ratios = xs.map((x, i) => views[i] > 0 ? (x / views[i]) * 1000 : 0);
+            const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+            const maxRatio = Math.max(...ratios);
+            const minRatio = Math.min(...ratios);
+            // Bucket by view tier
+            const tiers = [
+                { label: 'Sub-1M', lo: 0, hi: 1000000 },
+                { label: '1-5M', lo: 1000000, hi: 5000000 },
+                { label: '5-10M', lo: 5000000, hi: 10000000 },
+                { label: '10-50M', lo: 10000000, hi: 50000000 },
+                { label: '50M+', lo: 50000000, hi: Infinity },
+            ];
+            const tierResults = tiers.map(t => {
+                const tierVids = valid.filter(d => d.views >= t.lo && d.views < t.hi);
+                const tierRatios = tierVids.map(d => d.views > 0 ? (d[xField] / d.views) * 1000 : 0);
+                const avg = tierRatios.length > 0 ? tierRatios.reduce((a, b) => a + b, 0) / tierRatios.length : 0;
+                return { label: t.label, avg, n: tierVids.length };
+            });
+            const maxTierAvg = Math.max(...tierResults.map(t => t.avg), 0.001);
+            resultDiv.innerHTML = `
+                <div class="jarvis-result-card">
+                    <div class="jarvis-result-label">Ratio Normalizer: ${xKey} per 1k Views</div>
+                    <div class="jarvis-result-n">Overall avg: ${avgRatio.toFixed(3)}/1k views | Range: ${minRatio.toFixed(3)} — ${maxRatio.toFixed(3)}</div>
+                    <div class="jarvis-bucket-chart">
+                        ${tierResults.map(t => {
+                            const pct = (t.avg / maxTierAvg * 100).toFixed(0);
+                            return `<div class="jarvis-bucket-row">
+                                <span class="jarvis-bucket-label">${t.label}</span>
+                                <div class="jarvis-bucket-bar-wrap">
+                                    <div class="jarvis-bucket-bar" style="width:${pct}%"></div>
+                                </div>
+                                <span class="jarvis-bucket-val">${t.avg.toFixed(3)}/1k <span class="jarvis-bucket-n">(n=${t.n})</span></span>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    <div class="jarvis-result-n">n = ${valid.length} videos</div>
+                </div>
+            `;
+        }
     }
 
     // ── Insights ──
@@ -224,24 +426,21 @@ const JarvisUI = (() => {
         container.querySelectorAll('.jarvis-tab').forEach(btn => {
             btn.addEventListener('click', () => {
                 activeTab = btn.dataset.tab;
-                selectedNode = null;
                 render();
             });
         });
 
-        container.querySelectorAll('.jarvis-node').forEach(g => {
-            g.addEventListener('click', () => {
-                selectedNode = selectedNode === g.dataset.node ? null : g.dataset.node;
-                render();
-            });
-        });
+        const runBtn = container.querySelector('#jarvis-run-experiment');
+        if (runBtn) {
+            runBtn.addEventListener('click', runExperiment);
+        }
     }
 
     // ── Public API ──
     function open(bodyEl) {
         container = bodyEl;
         activeTab = 'analytical';
-        selectedNode = null;
+        dataset = null;
         render();
     }
 
