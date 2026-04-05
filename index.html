@@ -132,9 +132,6 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span id="sponsors-badge" style="display:none;">0</span>
         </button>
-        <div id='hud-balance-pill' onclick="openModal('Finance')" title='Bank Balance — click to open Finance' style='display:none;cursor:pointer;'>
-            <span id='hud-balance-amount'>$—</span>
-        </div>
         <div id="pen-scale-slider-wrap" style="display:none;">
             <input type="range" id="pen-scale-slider" min="0" max="100" value="50" />
             <label id="pen-scale-label">Size</label>
@@ -143,6 +140,9 @@
     <div id="money-display">
         <div id="level-text">Lv. 1</div>
         <div id="money-bar-container"><div id="money-bar-fill" style="width: 20%"></div></div>
+        <div id='hud-balance-pill' onclick="openModal('Finance')" title='Bank Balance — click to open Finance' style='display:none;cursor:pointer;'>
+            <span id='hud-balance-amount'>$—</span>
+        </div>
         <div id="finance-breakdown">
             <span id="finance-bank" style="display:none">$0</span>
             <div class="finance-row">
