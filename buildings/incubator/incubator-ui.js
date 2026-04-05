@@ -347,16 +347,18 @@ const IncubatorUI = (() => {
         if (!containerEl) return;
 
         renderer3d = new T.WebGLRenderer({ antialias: true, alpha: false });
-        renderer3d.setClearColor(0xfef8f0);
+        renderer3d.setClearColor(0x0f1117);
         renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         const rect = containerEl.getBoundingClientRect();
-        renderer3d.setSize(rect.width, rect.height);
+        const w = rect.width || containerEl.offsetWidth || 400;
+        const h = rect.height || containerEl.offsetHeight || 300;
+        renderer3d.setSize(w, h);
         containerEl.appendChild(renderer3d.domElement);
 
         scene3d = new T.Scene();
-        scene3d.background = new T.Color(0xfef8f0);
+        scene3d.background = new T.Color(0x0f1117);
 
-        camera3d = new T.PerspectiveCamera(50, rect.width / rect.height, 0.1, 100);
+        camera3d = new T.PerspectiveCamera(50, w / h, 0.1, 100);
         camera3d.position.set(0, 5, 6);
         camera3d.lookAt(0, 0, 0);
 
@@ -449,10 +451,12 @@ const IncubatorUI = (() => {
         const containerEl = document.getElementById('incubator-3d-container');
         if (!containerEl || !renderer3d || !camera3d) return;
         const rect = containerEl.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
-        camera3d.aspect = rect.width / rect.height;
+        const w = rect.width || containerEl.offsetWidth || 400;
+        const h = rect.height || containerEl.offsetHeight || 300;
+        if (w === 0 || h === 0) return;
+        camera3d.aspect = w / h;
         camera3d.updateProjectionMatrix();
-        renderer3d.setSize(rect.width, rect.height);
+        renderer3d.setSize(w, h);
     }
 
     function onMouseMove3D(e) {
@@ -685,7 +689,19 @@ const IncubatorUI = (() => {
                 container.querySelectorAll('.incubator-tab-content').forEach(el => el.style.display = 'none');
                 const tabEl = document.getElementById('incubator-tab-' + activeIncubatorTab);
                 if (tabEl) tabEl.style.display = '';
-                if (activeIncubatorTab === 'eggs') render3DEggs();
+                if (activeIncubatorTab === 'eggs') {
+                    if (!scene3d) {
+                        // Tab is now visible - init 3D now that container has real dimensions
+                        requestAnimationFrame(() => {
+                            init3DScene();
+                            render3DEggs();
+                            hideNestLoader();
+                        });
+                    } else {
+                        render3DEggs();
+                        onResize3D(); // re-check size in case window resized
+                    }
+                }
                 if (activeIncubatorTab === 'videos') renderVideoList();
             });
         });
@@ -1491,7 +1507,6 @@ const IncubatorUI = (() => {
             container = bodyEl;
             render();
             showNestLoader();
-            requestAnimationFrame(() => init3DScene());
             const [p] = await Promise.all([
                 VideoService.getProjects(),
                 VideoService.sync(),
@@ -1501,8 +1516,6 @@ const IncubatorUI = (() => {
             projects = p;
             renderFilters();
             renderVideoList();
-            if (!scene3d) await new Promise(r => requestAnimationFrame(() => { if (!scene3d) init3DScene(); r(); }));
-            render3DEggs();
             hideNestLoader();
         },
         close() {
