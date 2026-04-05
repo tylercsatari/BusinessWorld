@@ -153,6 +153,9 @@
 .jarvis-badge.status-badge {
     background: rgba(16, 185, 129, 0.15); color: #10b981;
 }
+.jarvis-badge.source-badge {
+    background: rgba(139, 92, 246, 0.15); color: #a78bfa;
+}
 
 /* ── Insights ── */
 .jarvis-insights {
