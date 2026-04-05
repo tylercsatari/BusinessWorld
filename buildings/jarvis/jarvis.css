@@ -1,0 +1,179 @@
+/* ── Jarvis Building ── Analytical Intelligence Hub ── */
+:root {
+    --j-bg: #070b14;
+    --j-card: #0d1424;
+    --j-accent: #3b82f6;
+    --j-cyan: #06b6d4;
+    --j-text: #e2e8f0;
+    --j-muted: #64748b;
+    --j-border: rgba(59, 130, 246, 0.15);
+}
+
+/* ── Panel ── */
+.jarvis-panel {
+    display: flex; flex-direction: column; height: 100%;
+    min-height: 0; overflow: hidden;
+    background: var(--j-bg); color: var(--j-text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Header ── */
+.jarvis-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px 0; flex-shrink: 0;
+}
+.jarvis-header-title {
+    font-size: 22px; font-weight: 700; margin: 0;
+    color: var(--j-accent); letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.jarvis-header-sub {
+    font-size: 11px; color: var(--j-muted); letter-spacing: 0.5px;
+}
+
+/* ── Tabs ── */
+.jarvis-tabs {
+    display: flex; gap: 2px; padding: 12px 20px 0;
+    border-bottom: 1px solid var(--j-border); flex-shrink: 0;
+}
+.jarvis-tab {
+    padding: 8px 16px; font-size: 12px; font-weight: 600;
+    color: var(--j-muted); cursor: pointer; border: none;
+    background: transparent; border-bottom: 2px solid transparent;
+    transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-tab:hover { color: var(--j-text); }
+.jarvis-tab.active {
+    color: var(--j-accent); border-bottom-color: var(--j-accent);
+}
+
+/* ── Content ── */
+.jarvis-content {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+    min-height: 0;
+}
+.jarvis-content::-webkit-scrollbar { width: 4px; }
+.jarvis-content::-webkit-scrollbar-track { background: transparent; }
+.jarvis-content::-webkit-scrollbar-thumb { background: var(--j-border); border-radius: 2px; }
+
+/* ── Analytical Brain ── */
+.jarvis-network {
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+}
+.jarvis-network svg {
+    width: 100%; max-width: 360px; height: auto;
+}
+.jarvis-node { cursor: pointer; transition: opacity 0.2s; }
+.jarvis-node:hover { opacity: 0.8; }
+.jarvis-node circle { stroke-width: 2; }
+.jarvis-node text {
+    font-size: 9px; fill: var(--j-text); text-anchor: middle;
+    pointer-events: none; font-weight: 600;
+}
+.jarvis-edge { stroke: var(--j-border); stroke-width: 1; }
+.jarvis-node-detail {
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 12px 16px; width: 100%;
+    max-width: 360px; text-align: center;
+}
+.jarvis-node-detail h4 {
+    margin: 0 0 4px; color: var(--j-accent); font-size: 14px;
+}
+.jarvis-node-detail p {
+    margin: 0; color: var(--j-muted); font-size: 12px;
+}
+
+/* ── Tactical Brain ── */
+.jarvis-tactical {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+.jarvis-tactical-col h3 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--j-cyan); margin: 0 0 10px; font-weight: 700;
+}
+.jarvis-signal-card {
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;
+}
+.jarvis-signal-card h4 {
+    margin: 0 0 4px; font-size: 13px; color: var(--j-text); font-weight: 600;
+}
+.jarvis-signal-card .benchmark {
+    font-size: 11px; color: var(--j-cyan); font-family: 'SF Mono', monospace;
+}
+.jarvis-signal-card .desc {
+    font-size: 11px; color: var(--j-muted); margin-top: 2px;
+}
+.jarvis-llm-btn {
+    margin-top: 6px; padding: 4px 10px; font-size: 10px;
+    background: transparent; border: 1px solid var(--j-accent);
+    color: var(--j-accent); border-radius: 4px; cursor: pointer;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    transition: all 0.2s;
+}
+.jarvis-llm-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* ── Experiments ── */
+.jarvis-experiments {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.jarvis-exp-card {
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 12px 14px;
+}
+.jarvis-exp-card h4 {
+    margin: 0 0 8px; font-size: 13px; color: var(--j-text); font-weight: 600;
+}
+.jarvis-exp-bar-wrap {
+    background: rgba(255,255,255,0.05); border-radius: 4px;
+    height: 8px; width: 100%; margin-bottom: 6px; overflow: hidden;
+}
+.jarvis-exp-bar {
+    height: 100%; border-radius: 4px; transition: width 0.4s ease;
+}
+.jarvis-exp-r {
+    font-size: 12px; font-weight: 700; font-family: 'SF Mono', monospace;
+    margin-bottom: 6px;
+}
+.jarvis-exp-finding {
+    font-size: 11px; color: var(--j-muted); line-height: 1.4;
+}
+.jarvis-exp-badges {
+    display: flex; gap: 6px; margin-top: 8px;
+}
+.jarvis-badge {
+    font-size: 9px; padding: 2px 8px; border-radius: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-badge.n-badge {
+    background: rgba(6, 182, 212, 0.15); color: var(--j-cyan);
+}
+.jarvis-badge.status-badge {
+    background: rgba(16, 185, 129, 0.15); color: #10b981;
+}
+
+/* ── Insights ── */
+.jarvis-insights {
+    list-style: none; padding: 0; margin: 0;
+    counter-reset: insight;
+}
+.jarvis-insights li {
+    counter-increment: insight;
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 12px 14px 12px 44px;
+    margin-bottom: 10px; position: relative;
+    font-size: 13px; line-height: 1.5; color: var(--j-text);
+}
+.jarvis-insights li::before {
+    content: counter(insight);
+    position: absolute; left: 14px; top: 12px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--j-accent); color: #fff;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+}
+.jarvis-insights li strong {
+    color: var(--j-cyan);
+}
