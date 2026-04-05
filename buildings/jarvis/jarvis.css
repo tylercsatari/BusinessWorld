@@ -180,3 +180,24 @@
 .jarvis-insights li strong {
     color: var(--j-cyan);
 }
+
+/* ── Methodology ── */
+.jarvis-methodology {
+    display: flex; flex-direction: column; gap: 12px;
+}
+.jarvis-method-intro {
+    font-size: 12px; color: var(--j-muted); margin: 0 0 4px;
+    line-height: 1.5;
+}
+.jarvis-method-card {
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 12px 14px;
+}
+.jarvis-method-card h4 {
+    margin: 0 0 6px; font-size: 13px; color: var(--j-cyan);
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-method-card p {
+    margin: 0; font-size: 12px; color: var(--j-text);
+    line-height: 1.5;
+}

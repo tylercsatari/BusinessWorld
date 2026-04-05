@@ -6,16 +6,16 @@ const JarvisUI = (() => {
 
     // ── Hardcoded Data ──
     const EXPERIMENTS = [
-        { id: 'exp1', name: 'Swipe-Away Rate vs Views', r: 0.1422, n: 372, type: 'quantified', status: 'complete', finding: 'Weak positive — viral algorithm pushes override poor hooks. Not the primary driver.', xLabel: 'Swipe-Away Rate (%)', yLabel: 'View Count', source: 'Tyler Channel (372 videos)' },
-        { id: 'exp2', name: 'Avg Retention vs Views', r: 0.0716, n: 372, type: 'quantified', status: 'complete', finding: 'Very weak — retention alone does not predict virality. Necessary but not sufficient.', xLabel: 'Avg Retention (%)', yLabel: 'View Count', source: 'Tyler Channel (372 videos)' },
-        { id: 'exp3', name: 'Shares vs Views', r: 0.4505, n: 372, type: 'quantified', status: 'complete', finding: 'Moderate positive (r=0.45) — strongest predictor. Shareable content drives discovery.', xLabel: 'Shares', yLabel: 'View Count', source: 'Tyler Channel (372 videos)' },
-        { id: 'exp4', name: 'Discovery Rate vs Views', r: 0.3093, n: 372, type: 'quantified', status: 'complete', finding: 'Moderate — non-subscriber views predict total view accumulation.', xLabel: 'Discovery Rate (%)', yLabel: 'View Count', source: 'Tyler Channel (372 videos)' },
-        { id: 'exp5', name: 'Engagement Rate vs Subs Gained', r: -0.0097, n: 372, type: 'quantified', status: 'complete', finding: 'No correlation. Subscriber growth driven by novelty and algorithm, not engagement rate.', xLabel: 'Engagement Rate (%)', yLabel: 'Subs Gained', source: 'Tyler Channel (372 videos)' },
-        { id: 'exp6', name: 'Like Rate vs Share Rate', r: 0.1893, n: 372, type: 'quantified', status: 'complete', finding: 'Weak — likes and shares are independent signals.', xLabel: 'Like Rate (%)', yLabel: 'Share Rate (%)', source: 'Tyler Channel (372 videos)' },
-        { id: 'exp7', name: 'Duration of 100M+ Videos', r: null, n: 1961, type: 'quantified', status: 'complete', finding: '98% of 100M+ view videos are under 60 seconds. 15-30s sweet spot averages 284M views. Format is non-negotiable for virality.', xLabel: 'Duration (seconds)', yLabel: 'View Count', source: 'Research Center (1,961 videos)' },
-        { id: 'exp8', name: 'Title Length vs Views (100M+ Set)', r: null, n: 1961, type: 'quantified', status: 'complete', finding: 'Short titles (<=30 chars) average 328M views vs 253M for long titles (>60 chars). Concise titles outperform by 30%.', xLabel: 'Title Length (chars)', yLabel: 'Avg Views', source: 'Research Center (1,961 videos)' },
-        { id: 'exp9', name: 'Tyler 50M+ vs Sub-1M: Shares', r: null, n: 372, type: 'quantified', status: 'complete', finding: 'Tyler videos with 50M+ views averaged 47,069 shares vs 100 for sub-1M videos — a 470x difference. Shareability is the #1 separator between viral and average.', xLabel: 'Video tier', yLabel: 'Avg Shares', source: 'Tyler Channel (372 videos)' },
-        { id: 'exp10', name: 'Tyler 50M+ vs Sub-1M: Swipe-Away', r: null, n: 372, type: 'quantified', status: 'complete', finding: 'Viral videos (50M+) have 24.8% avg swipe-away vs 7.7% for sub-1M. COUNTERINTUITIVE: viral videos get swiped MORE. Algorithm distribution overrides hook quality at scale.', xLabel: 'Video tier', yLabel: 'Swipe-Away Rate (%)', source: 'Tyler Channel (372 videos)' },
+        { id: 'exp1', name: 'Keep Rate vs Views (Corrected)', r: -0.037, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Very weak after log-normalization. Swipe-away at 50M+ is HIGH because videos are shown to broad non-core audiences. Controlled by view tier: 5M+ videos have 93.9% keep rate vs 92.1% for <5M — higher quality actually shows at scale.' },
+        { id: 'exp2', name: 'Retention % vs Views (Quartile Analysis)', r: null, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Strong NON-LINEAR pattern. Q1 (≤70% retention) = 2.6M avg views. Q3 (82-86%) = 10.2M avg views — 4x more views. Q4 (86%+) = 9.0M. Getting from 70% to 86% retention is worth 4x views. This is the clearest signal in the dataset.' },
+        { id: 'exp3', name: 'Share RATE vs Views (Normalized)', r: -0.077, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'When normalized to shares per 1k views: 50M+ videos get 0.663 shares/1k vs 0.311 for sub-1M — a 2.1x difference (not 470x as raw count suggested). Share rate still a signal but not the dominant one.' },
+        { id: 'exp4', name: 'Discovery Rate vs Views', r: 0.309, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Moderate positive — non-subscriber view percentage predicts total view accumulation. Algorithm-driven distribution to non-subscribers is a meaningful signal.' },
+        { id: 'exp5', name: 'Engagement Rate vs Subscribers Gained', r: -0.010, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'No correlation. Subscriber growth driven by novelty and algorithm timing, not engagement rate.' },
+        { id: 'exp6', name: 'Title Length vs Views (Variance Check)', r: 0.011, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Near-zero correlation. Short titles have 29M stdev — massive variance. Title length is confounded by content quality. Inconclusive, needs content quality controls.' },
+        { id: 'exp7', name: 'Duration of 100M+ Videos (Confound Flagged)', r: null, n: 1961, type: 'quantified', status: 'complete', source: 'Research Center', finding: 'CONFOUND: 98% under 60s, but YouTube Shorts 60s limit was in effect when most were uploaded. Cannot conclude <60s outperforms without controlling for era. Experiment needs replication with 2024+ data when >60s Shorts exist.' },
+        { id: 'exp8', name: 'Share Rate 50M+ vs Sub-1M (Normalized)', r: null, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: '2.1x share rate difference (per 1k views): 0.663 vs 0.311. Real but modest. Raw share count was 470x because 50M+ videos have 50x more views by definition — ratio normalization is required for all engagement metrics.' },
+        { id: 'exp9', name: 'Keep Rate by View Tier (Controlled)', r: null, n: 372, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Tyler is correct: 5M+ videos average 93.9% keep rate vs 92.1% for <5M. The 50M+ lifetime swipe-away looks higher because broad algorithmic distribution reaches non-ideal audiences AFTER the video has already gone viral.' },
+        { id: 'exp10', name: 'Channel Concentration in 100M+ Set', r: null, n: 1961, type: 'quantified', status: 'complete', source: 'Research Center', finding: '10% of channels have 3+ viral hits, but subscriber base is a major confounder. MrBeast (400M+ subs) having 103 viral videos vs a small creator having 1 are not comparable. Next experiment: filter to channels under 1M subs at time of viral video.' },
     ];
 
     const BENCHMARKS = { n: 372, top10_threshold: 17242614, median_views: 1826162, top10_swipeaway: 11.89, top10_retention: 86.88, top10_shares_per_1k: 0.30, bot50_swipeaway: 6.70, bot50_retention: 80.56 };
@@ -48,15 +48,16 @@ const JarvisUI = (() => {
         { id: 'tactical', label: 'Tactical Brain' },
         { id: 'experiments', label: 'Experiments' },
         { id: 'insights', label: 'Insights' },
+        { id: 'methodology', label: 'Methodology' },
     ];
 
     const INSIGHTS = [
-        '<strong>Shares are the #1 separator</strong> — Tyler 50M+ videos get 470x more shares (47,069 vs 100). Focus on shareable moments.',
-        '<strong>Duration is non-negotiable</strong> — 98% of 100M+ view videos are under 60s. Tyler is already in this format.',
-        '<strong>Algorithm overrides hook quality at scale</strong> — Tyler 50M+ videos have 24.8% swipe-away vs 7.7% for sub-1M. The algorithm forces viral content regardless of swipe rate.',
-        '<strong>Short titles outperform</strong> — 100M+ videos with ≤30 char titles avg 328M views vs 253M for long titles (30% more).',
-        '<strong>Tyler has 1 video at 100M+</strong> (285M — Indestructible armour) and 4 at 50M+. The gap to the Research Center benchmark is bridgeable.',
-        '<strong>Shares (r=0.45) are the strongest quantified predictor</strong> in Tyler\'s dataset. Swipe-away (r=0.14) is NOT predictive.',
+        '<strong>Retention 82-86% is the sweet spot</strong> — Q3 averages 10.2M views, 4x more than Q1 (70%). Getting above 86% shows diminishing returns (Q4 = 9.0M). Target 82-86%+ retention.',
+        '<strong>Share rate is a 2.1x signal</strong> — viral videos get twice as many shares per view. When measuring engagement, always use RATES (per view), never raw counts.',
+        '<strong>Keep rate is actually HIGHER at scale</strong> — Tyler is right. 5M+ videos have 93.9% avg keep rate. Broad distribution dilutes lifetime swipe-away. Early keep rate (first 1M impressions) is the metric to track.',
+        '<strong>Duration data is confounded</strong> — 98% of 100M+ videos are <60s but the 60s limit existed during this era. Cannot conclude shorter is better without controlling for upload date.',
+        '<strong>All Pearson correlations are weak (r<0.2)</strong> — video performance is multi-dimensional. Retention quartile analysis (non-linear bucketing) reveals more than linear correlation.',
+        '<strong>Next experiments needed:</strong> (1) filter Research Center to <1M sub channels, (2) early keep rate (first 24h), (3) novelty/hook scoring via LLM.',
     ];
 
     // ── Render ──
@@ -87,6 +88,7 @@ const JarvisUI = (() => {
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
             case 'insights': return renderInsights();
+            case 'methodology': return renderMethodology();
             default: return '';
         }
     }
@@ -189,6 +191,26 @@ const JarvisUI = (() => {
         return `<ol class="jarvis-insights">
             ${INSIGHTS.map(i => `<li>${i}</li>`).join('')}
         </ol>`;
+    }
+
+    // ── Methodology ──
+    const METHODOLOGICAL_NOTES = [
+        { title: 'Ratio Normalization', desc: 'All engagement metrics (shares, likes, comments) must be expressed as rates per view (e.g., shares per 1k views). Raw counts scale with views by definition — a 50M-view video will always have more raw shares than a 500k-view video. Comparing raw counts produces inflated differences (470x) that collapse to modest ones (2.1x) after normalization.' },
+        { title: 'Log-Normalization for Views', desc: 'View counts follow a power-law distribution — a few videos have 50M+ views while most cluster under 2M. Pearson correlation on raw views is dominated by outliers. Log-transforming view counts before computing correlations gives each video proportional weight and reveals the true relationship strength.' },
+        { title: 'Quartile Analysis > Pearson', desc: 'Pearson measures linear relationships, but video metrics often have non-linear thresholds (e.g., retention below 70% is a cliff, 82-86% is a sweet spot, above 86% has diminishing returns). Bucketing into quartiles captures these step-changes that a single r value averages away.' },
+        { title: 'Confounder Documentation', desc: 'Each experiment must document known confounders. Examples: Duration analysis confounded by YouTube\'s 60s Shorts limit (platform constraint, not creator choice). Channel concentration confounded by subscriber base (large channels produce more content). Title length confounded by content quality (good creators may also write better titles). Unflagged confounders lead to false conclusions.' },
+    ];
+
+    function renderMethodology() {
+        return `<div class="jarvis-methodology">
+            <p class="jarvis-method-intro">Statistical methods and corrections applied across all experiments:</p>
+            ${METHODOLOGICAL_NOTES.map(note => `
+                <div class="jarvis-method-card">
+                    <h4>${note.title}</h4>
+                    <p>${note.desc}</p>
+                </div>
+            `).join('')}
+        </div>`;
     }
 
     // ── Events ──
