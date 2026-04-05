@@ -140,11 +140,13 @@
     <div id="money-display">
         <div id="level-text">Lv. 1</div>
         <div id="money-bar-container"><div id="money-bar-fill" style="width: 20%"></div></div>
-        <div id='hud-balance-pill' onclick="openModal('Finance')" title='Bank Balance — click to open Finance' style='display:none;cursor:pointer;'>
-            <span id='hud-balance-amount'>$—</span>
-        </div>
         <div id="finance-breakdown">
             <span id="finance-bank" style="display:none">$0</span>
+            <span id='hud-balance-amount' style="display:none">$—</span>
+            <div class="finance-row" id="hud-bank-row" style="display:none">
+                <span class="finance-label">Bank</span>
+                <span class="finance-value finance-green" id="hud-bank-value">$0</span>
+            </div>
             <div class="finance-row">
                 <span class="finance-label">Expected</span>
                 <span class="finance-value finance-green" id="finance-expected">+$0</span>
@@ -3028,12 +3030,12 @@ async function fetchPlaidBalance() {
         if (total > 0) {
             finances.bank = Math.round(total);
             updateMoney();
-            // Show the HUD balance pill
-            const pill = document.getElementById('hud-balance-pill');
-            const amt = document.getElementById('hud-balance-amount');
-            if (pill && amt) {
-                amt.textContent = '$' + total.toLocaleString('en-CA', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                pill.style.display = 'flex';
+            // Show Bank row in finance breakdown
+            const bankRow = document.getElementById('hud-bank-row');
+            const bankVal = document.getElementById('hud-bank-value');
+            if (bankRow && bankVal) {
+                bankVal.textContent = '$' + total.toLocaleString('en-CA', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                bankRow.style.display = 'flex';
             }
         }
     } catch(e) {
