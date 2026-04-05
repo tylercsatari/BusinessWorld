@@ -1,0 +1,145 @@
+[
+  {
+    "id": "r0",
+    "level": 0,
+    "name": "Whole Video",
+    "unit": "video",
+    "description": "The video analyzed as a single atomic unit \u2014 one row of data.",
+    "parent": null,
+    "depth": 8,
+    "signals": [
+      "views",
+      "keep_rate",
+      "retention_pct",
+      "share_rate",
+      "zeigarnik_score",
+      "novelty",
+      "cognitive_load",
+      "net_novelty"
+    ],
+    "finding": "Keep Rate (r=0.43) and Retention % (r=0.27) are strongest predictors at this resolution. Net Novelty +2 sweet spot. Zeigarnik Z=6-7 sweet spot.",
+    "gaps": [
+      "pacing",
+      "visual_complexity",
+      "audio_texture",
+      "script_structure",
+      "thumbnail_appeal"
+    ],
+    "status": "active",
+    "unlockedAt": "2026-04-04",
+    "observationCount": 203
+  },
+  {
+    "id": "r1",
+    "level": 1,
+    "name": "Hook vs Body",
+    "unit": "segment",
+    "description": "Video split into two segments: Hook (opening, analyzed) and Body (rest). First step above whole-video resolution.",
+    "parent": "r0",
+    "depth": 3,
+    "signals": [
+      "zeigarnik_type",
+      "zeigarnik_mechanism",
+      "hook_novelty"
+    ],
+    "finding": "Zeigarnik Type B (Challenge/outcome uncertainty) dominates \u2014 88 videos, avg 9.6M views. Hooks scored via LLM on opening transcript.",
+    "gaps": [
+      "body_pacing",
+      "body_retention_slope",
+      "hook_visual_signal",
+      "hook_audio_signal",
+      "transition_sharpness"
+    ],
+    "status": "active",
+    "unlockedAt": "2026-04-04",
+    "observationCount": 204
+  },
+  {
+    "id": "r2",
+    "level": 2,
+    "name": "Second-by-Second Retention",
+    "unit": "second",
+    "description": "Retention curve analyzed per second across video length. Identifies exact drop-off moments.",
+    "parent": "r1",
+    "depth": 1,
+    "signals": [
+      "retention_curve_value"
+    ],
+    "finding": "Data available (retentionCurve in analysis.json for 372 videos). Not yet analyzed \u2014 next experiment is identifying common drop-off second pattern across viral vs non-viral videos.",
+    "gaps": [
+      "visual_signal_per_second",
+      "audio_signal_per_second",
+      "script_per_second",
+      "cut_frequency"
+    ],
+    "status": "planned",
+    "unlockedAt": null,
+    "observationCount": 0
+  },
+  {
+    "id": "r3",
+    "level": 3,
+    "name": "First 3 Seconds",
+    "unit": "micro-segment",
+    "description": "The critical opening micro-segment scored via LLM on hook text + transcript opening.",
+    "parent": "r1",
+    "depth": 2,
+    "signals": [
+      "hook_zeigarnik",
+      "hook_novelty_score"
+    ],
+    "finding": "Currently scored via LLM on hook description + opening transcript lines. Visual and audio dimensions not yet captured. LLM scoring is a proxy \u2014 needs frame-level validation.",
+    "gaps": [
+      "hook_visual_first_frame",
+      "hook_audio_first_3s",
+      "hook_word_count",
+      "hook_subject_clarity"
+    ],
+    "status": "partial",
+    "unlockedAt": "2026-04-04",
+    "observationCount": 204
+  },
+  {
+    "id": "r4",
+    "level": 4,
+    "name": "First Frame",
+    "unit": "frame",
+    "description": "Single frame \u2014 what the viewer sees before deciding to watch. For Shorts, this is the auto-playing moment.",
+    "parent": "r3",
+    "depth": 0,
+    "signals": [],
+    "finding": "Not yet analyzed. Frame images exist in video_data/[ytId]/frames/. Next: LLM visual analysis for face presence, color saturation, visual complexity, motion suggestion, text overlay.",
+    "gaps": [
+      "face_presence",
+      "color_saturation",
+      "visual_complexity",
+      "motion_suggestion",
+      "text_overlay_yn",
+      "subject_identification"
+    ],
+    "status": "planned",
+    "unlockedAt": null,
+    "observationCount": 0
+  },
+  {
+    "id": "r5",
+    "level": 5,
+    "name": "Audio Layer (First 3s)",
+    "unit": "audio-segment",
+    "description": "Isolated audio analysis of the opening 3 seconds \u2014 music, voice, SFX, silence.",
+    "parent": "r3",
+    "depth": 0,
+    "signals": [],
+    "finding": "Not yet analyzed. Would require audio extraction from video files.",
+    "gaps": [
+      "music_present",
+      "voice_present",
+      "sfx_present",
+      "silence_present",
+      "audio_intensity"
+    ],
+    "status": "planned",
+    "unlockedAt": null,
+    "observationCount": 0
+  }
+]

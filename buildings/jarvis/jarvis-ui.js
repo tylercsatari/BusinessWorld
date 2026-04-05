@@ -49,6 +49,7 @@ const JarvisUI = (() => {
         { id: 'tactical', label: 'Tactical Brain' },
         { id: 'experiments', label: 'Experiments' },
         { id: 'insights', label: 'Insights' },
+        { id: 'resolution', label: 'Resolution' },
         { id: 'methodology', label: 'Methodology' },
     ];
 
@@ -161,6 +162,7 @@ const JarvisUI = (() => {
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
             case 'insights': return renderInsights();
+            case 'resolution': return renderResolution();
             case 'methodology': return renderMethodology();
             default: return '';
         }
@@ -389,6 +391,148 @@ const JarvisUI = (() => {
                     <div class="jarvis-result-n">n = ${valid.length} videos</div>
                 </div>
             `;
+        }
+    }
+
+    // ── Resolution ──
+    let resolutionRegistry = null;
+
+    async function loadResolutionRegistry() {
+        if (resolutionRegistry) return resolutionRegistry;
+        try {
+            const resp = await fetch('./buildings/jarvis/resolution-registry.json');
+            resolutionRegistry = await resp.json();
+            return resolutionRegistry;
+        } catch (e) {
+            console.error('Failed to load resolution registry:', e);
+            return null;
+        }
+    }
+
+    function renderResolution() {
+        // Kick off async load, render placeholder, then fill in
+        loadResolutionRegistry().then(registry => {
+            const el = container?.querySelector('.jarvis-resolution-root');
+            if (!el || !registry) return;
+            el.innerHTML = renderResolutionContent(registry);
+            bindResolutionEvents();
+        });
+
+        return `<div class="jarvis-resolution-root"><div class="jarvis-loading">Loading resolution registry...</div></div>`;
+    }
+
+    function renderResolutionContent(registry) {
+        const maxDepth = 10;
+        const levels = registry.map(r => `R${r.level}`);
+
+        // Build depth grid data
+        const gridCells = [];
+        for (let d = maxDepth; d >= 0; d--) {
+            const row = registry.map(r => {
+                const filled = r.signals.length > d ? true : false;
+                return { level: r.level, depth: d, filled, status: r.status };
+            });
+            gridCells.push({ depth: d, cells: row });
+        }
+
+        return `
+            <div class="jarvis-res-header">
+                <h3 class="jarvis-res-title">Analysis Resolution Registry</h3>
+                <p class="jarvis-res-subtitle">Tracking the depth and granularity of what we know. Each row unlocks higher precision &mdash; but resolution is only defined relative to what came before.</p>
+            </div>
+
+            <div class="jarvis-res-tree">
+                ${registry.map((r, i) => {
+                    const statusClass = r.status === 'active' ? 'active' : r.status === 'partial' ? 'partial' : 'planned';
+                    const parentLabel = r.parent ? registry.find(p => p.id === r.parent) : null;
+                    return `<div class="jarvis-res-card-wrapper">
+                        <div class="jarvis-res-timeline">
+                            <div class="jarvis-res-badge-level">R${r.level}</div>
+                            ${i < registry.length - 1 ? '<div class="jarvis-res-timeline-line"></div>' : ''}
+                        </div>
+                        <div class="jarvis-res-card jarvis-res-${statusClass}">
+                            <div class="jarvis-res-card-top">
+                                <h4 class="jarvis-res-card-title">${r.name}</h4>
+                                <span class="jarvis-res-status-badge jarvis-res-status-${statusClass}">${r.status}</span>
+                            </div>
+                            <div class="jarvis-res-unit">Unit of analysis: <strong>${r.unit}</strong></div>
+                            ${parentLabel ? `<div class="jarvis-res-parent">\u2192 finer than: R${parentLabel.level} ${parentLabel.name}</div>` : '<div class="jarvis-res-parent">\u2014 root resolution</div>'}
+                            <span class="jarvis-res-depth-badge">Depth ${r.depth}</span>
+                            ${r.signals.length > 0 ? `<div class="jarvis-res-signals">${r.signals.map(s => `<span class="jarvis-res-signal-chip">${s}</span>`).join('')}</div>` : ''}
+                            <div class="jarvis-res-finding"><em>${r.finding}</em></div>
+                            ${r.gaps.length > 0 ? `<div class="jarvis-res-gaps-section">
+                                <div class="jarvis-res-gaps-label">Known gaps at this resolution:</div>
+                                <div class="jarvis-res-gaps">${r.gaps.map(g => `<span class="jarvis-res-gap-chip">${g}</span>`).join('')}</div>
+                            </div>` : ''}
+                            <div class="jarvis-res-obs">n=${r.observationCount} observations</div>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+
+            <div class="jarvis-res-grid-section">
+                <h3 class="jarvis-res-grid-title">Depth &times; Resolution Grid</h3>
+                <div class="jarvis-res-grid">
+                    <div class="jarvis-res-grid-row jarvis-res-grid-header-row">
+                        <div class="jarvis-res-grid-label"></div>
+                        ${registry.map(r => `<div class="jarvis-res-grid-col-label">R${r.level}</div>`).join('')}
+                    </div>
+                    ${gridCells.map(row => `<div class="jarvis-res-grid-row">
+                        <div class="jarvis-res-grid-label">${row.depth}</div>
+                        ${row.cells.map(c => {
+                            const filled = c.filled;
+                            const cls = filled ? `jarvis-res-grid-cell-filled jarvis-res-grid-${c.status}` : 'jarvis-res-grid-cell-empty';
+                            return `<div class="jarvis-res-grid-cell ${cls}"></div>`;
+                        }).join('')}
+                    </div>`).join('')}
+                    <div class="jarvis-res-grid-row jarvis-res-grid-footer-row">
+                        <div class="jarvis-res-grid-label"></div>
+                        ${registry.map(r => `<div class="jarvis-res-grid-col-label">${r.name}</div>`).join('')}
+                    </div>
+                </div>
+            </div>
+
+            <div class="jarvis-res-log-section">
+                <h3 class="jarvis-res-log-title">Log New Observation</h3>
+                <div class="jarvis-res-log-form">
+                    <div class="jarvis-res-log-field">
+                        <label>What did you notice?</label>
+                        <textarea id="jarvis-res-obs-text" rows="3" placeholder="Describe the observation..."></textarea>
+                    </div>
+                    <div class="jarvis-res-log-row">
+                        <div class="jarvis-res-log-field">
+                            <label>Resolution Level</label>
+                            <select id="jarvis-res-obs-level">
+                                ${registry.map(r => `<option value="R${r.level}">R${r.level} — ${r.name}</option>`).join('')}
+                                <option value="new">New higher resolution</option>
+                            </select>
+                        </div>
+                        <div class="jarvis-res-log-field">
+                            <label>Tags</label>
+                            <input type="text" id="jarvis-res-obs-tags" placeholder="comma-separated signal tags" />
+                        </div>
+                        <button class="jarvis-res-log-btn" id="jarvis-res-submit">Submit</button>
+                    </div>
+                    <div id="jarvis-res-confirm" class="jarvis-res-confirm" style="display:none;"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    function bindResolutionEvents() {
+        const submitBtn = container?.querySelector('#jarvis-res-submit');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', () => {
+                const text = document.getElementById('jarvis-res-obs-text')?.value || '';
+                const level = document.getElementById('jarvis-res-obs-level')?.value || '';
+                const tags = document.getElementById('jarvis-res-obs-tags')?.value || '';
+                console.log('Jarvis Observation:', { text, level, tags: tags.split(',').map(t => t.trim()).filter(Boolean) });
+                const confirm = document.getElementById('jarvis-res-confirm');
+                if (confirm) {
+                    confirm.style.display = 'block';
+                    confirm.textContent = 'Observation logged. Run through Jarvis pipeline to extract experiments.';
+                }
+            });
         }
     }
 

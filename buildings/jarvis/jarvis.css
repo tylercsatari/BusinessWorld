@@ -356,3 +356,217 @@
     margin: 0; font-size: 12px; color: var(--j-text);
     line-height: 1.5;
 }
+
+/* ── Resolution Tab ── */
+.jarvis-res-header {
+    margin-bottom: 20px;
+}
+.jarvis-res-title {
+    margin: 0 0 6px; font-size: 18px; font-weight: 700;
+    color: var(--j-accent); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-res-subtitle {
+    margin: 0; font-size: 12px; color: var(--j-muted); line-height: 1.5;
+}
+
+/* Timeline tree */
+.jarvis-res-tree {
+    display: flex; flex-direction: column; gap: 0; margin-bottom: 28px;
+}
+.jarvis-res-card-wrapper {
+    display: flex; gap: 16px;
+}
+.jarvis-res-timeline {
+    display: flex; flex-direction: column; align-items: center;
+    width: 44px; flex-shrink: 0;
+}
+.jarvis-res-badge-level {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(59, 130, 246, 0.15); border: 2px solid var(--j-accent);
+    color: var(--j-accent); font-size: 12px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'SF Mono', monospace; z-index: 1;
+}
+.jarvis-res-timeline-line {
+    width: 2px; flex: 1; background: rgba(100, 100, 200, 0.4);
+}
+
+/* Resolution cards */
+.jarvis-res-card {
+    flex: 1; background: var(--j-card); border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 12px;
+    border: 1px solid var(--j-border);
+}
+.jarvis-res-active {
+    border-left: 3px solid #10b981;
+}
+.jarvis-res-partial {
+    border-left: 3px solid #f59e0b;
+}
+.jarvis-res-planned {
+    border-left: 3px solid rgba(100, 100, 100, 0.5);
+    opacity: 0.7;
+}
+.jarvis-res-card-top {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+}
+.jarvis-res-card-title {
+    margin: 0; font-size: 14px; font-weight: 700; color: var(--j-text);
+}
+.jarvis-res-status-badge {
+    font-size: 10px; padding: 2px 10px; border-radius: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-res-status-active {
+    background: rgba(16, 185, 129, 0.15); color: #10b981;
+}
+.jarvis-res-status-partial {
+    background: rgba(245, 158, 11, 0.15); color: #f59e0b;
+}
+.jarvis-res-status-planned {
+    background: rgba(100, 100, 100, 0.15); color: #94a3b8;
+}
+.jarvis-res-unit {
+    font-size: 11px; color: var(--j-muted); margin-bottom: 4px;
+}
+.jarvis-res-unit strong { color: var(--j-text); }
+.jarvis-res-parent {
+    font-size: 11px; color: var(--j-muted); margin-bottom: 8px;
+}
+.jarvis-res-depth-badge {
+    display: inline-block; font-size: 10px; padding: 2px 10px;
+    border-radius: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 8px;
+    background: rgba(167, 139, 250, 0.15); color: var(--j-purple);
+}
+.jarvis-res-signals {
+    display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;
+}
+.jarvis-res-signal-chip {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    background: rgba(50, 100, 150, 0.3); border: 1px solid rgba(80, 150, 200, 0.4);
+    color: #60a5fa; font-family: 'SF Mono', monospace;
+}
+.jarvis-res-finding {
+    font-size: 11px; color: var(--j-muted); line-height: 1.5;
+    margin-bottom: 8px;
+}
+.jarvis-res-gaps-section {
+    margin-bottom: 8px;
+}
+.jarvis-res-gaps-label {
+    font-size: 10px; color: var(--j-muted); margin-bottom: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+}
+.jarvis-res-gaps {
+    display: flex; flex-wrap: wrap; gap: 4px;
+}
+.jarvis-res-gap-chip {
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
+    background: rgba(150, 50, 50, 0.3); border: 1px solid rgba(200, 80, 80, 0.4);
+    color: #f87171; font-family: 'SF Mono', monospace;
+}
+.jarvis-res-obs {
+    font-size: 10px; color: var(--j-muted);
+    font-family: 'SF Mono', monospace;
+}
+
+/* Depth × Resolution Grid */
+.jarvis-res-grid-section {
+    margin-bottom: 28px;
+}
+.jarvis-res-grid-title {
+    margin: 0 0 12px; font-size: 14px; font-weight: 700;
+    color: var(--j-accent); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-res-grid {
+    display: flex; flex-direction: column; gap: 2px;
+    background: rgba(30, 30, 50, 0.5); border-radius: 8px;
+    padding: 12px; border: 1px solid var(--j-border);
+}
+.jarvis-res-grid-row {
+    display: flex; gap: 2px; align-items: center;
+}
+.jarvis-res-grid-label {
+    width: 32px; font-size: 10px; color: var(--j-muted);
+    font-family: 'SF Mono', monospace; text-align: center;
+    flex-shrink: 0;
+}
+.jarvis-res-grid-col-label {
+    flex: 1; font-size: 9px; color: var(--j-muted);
+    text-align: center; font-family: 'SF Mono', monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.jarvis-res-grid-header-row {
+    margin-bottom: 4px;
+}
+.jarvis-res-grid-footer-row {
+    margin-top: 4px;
+}
+.jarvis-res-grid-cell {
+    flex: 1; height: 18px; border-radius: 3px;
+}
+.jarvis-res-grid-cell-filled {
+    background: rgba(59, 130, 246, 0.4); border: 1px solid rgba(59, 130, 246, 0.5);
+}
+.jarvis-res-grid-active { background: rgba(16, 185, 129, 0.35); border-color: rgba(16, 185, 129, 0.5); }
+.jarvis-res-grid-partial { background: rgba(245, 158, 11, 0.3); border-color: rgba(245, 158, 11, 0.5); }
+.jarvis-res-grid-planned { background: rgba(100, 100, 100, 0.2); border-color: rgba(100, 100, 100, 0.3); }
+.jarvis-res-grid-cell-empty {
+    background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Log New Observation */
+.jarvis-res-log-section {
+    background: rgba(30, 30, 50, 0.8);
+    border: 1px solid rgba(100, 100, 200, 0.3);
+    border-radius: 10px; padding: 18px;
+}
+.jarvis-res-log-title {
+    margin: 0 0 12px; font-size: 14px; font-weight: 700;
+    color: var(--j-accent); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-res-log-form {
+    display: flex; flex-direction: column; gap: 12px;
+}
+.jarvis-res-log-field {
+    display: flex; flex-direction: column; gap: 4px; flex: 1;
+}
+.jarvis-res-log-field label {
+    font-size: 11px; font-weight: 600; color: var(--j-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-res-log-field textarea,
+.jarvis-res-log-field input,
+.jarvis-res-log-field select {
+    padding: 8px 10px; font-size: 12px;
+    background: #0d1424; color: var(--j-text);
+    border: 1px solid var(--j-border); border-radius: 6px;
+    outline: none; font-family: inherit; resize: vertical;
+}
+.jarvis-res-log-field textarea:focus,
+.jarvis-res-log-field input:focus,
+.jarvis-res-log-field select:focus {
+    border-color: var(--j-accent);
+}
+.jarvis-res-log-row {
+    display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px;
+    align-items: end;
+}
+.jarvis-res-log-btn {
+    padding: 8px 20px; font-size: 12px; font-weight: 700;
+    background: var(--j-accent); color: #fff;
+    border: none; border-radius: 6px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: background 0.2s; white-space: nowrap;
+}
+.jarvis-res-log-btn:hover {
+    background: #2563eb;
+}
+.jarvis-res-confirm {
+    font-size: 12px; color: var(--j-green); padding: 8px 12px;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 6px;
+}
