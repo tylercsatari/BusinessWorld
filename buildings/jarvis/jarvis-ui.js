@@ -17,24 +17,24 @@ const JarvisUI = (() => {
 
     // ── Indicator Registry ──
     const INDICATORS = [
-        { label: 'Keep Rate', key: 'keep', type: '%', source: 'YouTube Analytics', benchmark: 'Sweet spot: 75-85%', category: 'active' },
-        { label: 'Retention %', key: 'retention', type: '%', source: 'YouTube Analytics', benchmark: '85-87% correlates with 10M+', category: 'active' },
-        { label: 'Zeigarnik Score', key: 'z_score', type: '1-10', source: 'LLM Scored', benchmark: 'Sweet spot: Z=6-7', category: 'active' },
-        { label: 'Zeigarnik Type', key: 'z_type', type: 'category', source: 'LLM Scored', benchmark: 'B (challenge) > E > A > C', category: 'active' },
-        { label: 'Novelty', key: 'novelty', type: '1-10', source: 'LLM Scored', benchmark: 'Higher (with cog load balance)', category: 'active' },
-        { label: 'Cognitive Load', key: 'cognitive_load', type: '1-10', source: 'LLM Scored', benchmark: 'Lower is better', category: 'active' },
-        { label: 'Net Novelty', key: 'net_novelty', type: 'derived', source: 'Novelty − Cog Load', benchmark: 'Sweet spot: +2', category: 'active' },
-        { label: 'Share Rate', key: 'share_rate', type: 'per 1k', source: 'YouTube Analytics', benchmark: 'Viral: 0.66/1k vs avg: 0.31/1k', category: 'active' },
-        { label: 'Views', key: 'views', type: 'count', source: 'YouTube Analytics', benchmark: 'Log-normalized for analysis', category: 'active' },
-        { label: 'Visual Zeigarnik Score', key: 'vz_score', type: '1-10', source: 'LLM vision-scored (first 3 frames + 3s transcript)', benchmark: 'Sweet spot: VZ=8 (avg 17.4M views, 77.6% keep)', category: 'active', numeric: true },
-        { label: 'Visual Zeigarnik Type', key: 'vz_type', type: 'categorical', source: 'LLM vision-scored', benchmark: 'Type C (Mystery/reveal) dominates: 119 videos, 9.3M avg', category: 'active', numeric: false },
-        { label: 'Hook Clarity', key: 'hook_clarity', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
-        { label: 'Visual Surprise', key: 'visual_surprise', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
-        { label: 'Pacing', key: 'pacing', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
-        { label: 'Emotional Resonance', key: 'emotional_resonance', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
+        { label: 'Keep Rate', key: 'keep', type: '% (0–100)', source: 'YouTube Analytics (swipeRatio.stayedToWatch)', category: 'active', numeric: true },
+        { label: 'Retention %', key: 'retention', type: '% (0–100)', source: 'YouTube Analytics (avgPercentViewed)', category: 'active', numeric: true },
+        { label: 'Zeigarnik Score (text)', key: 'z_score', type: '1–10', source: 'LLM-scored (title + first 180 chars transcript)', category: 'active', numeric: true },
+        { label: 'Zeigarnik Type (text)', key: 'z_type', type: 'categorical (A/B/C/D/E)', source: 'LLM-scored (title + first 180 chars transcript)', category: 'active', numeric: false },
+        { label: 'Visual Zeigarnik Score', key: 'vz_score', type: '1–10', source: 'LLM vision-scored (frames 1–3 + first 3s transcript)', category: 'active', numeric: true },
+        { label: 'Visual Zeigarnik Type', key: 'vz_type', type: 'categorical (A/B/C/D/E)', source: 'LLM vision-scored', category: 'active', numeric: false },
+        { label: 'Novelty', key: 'novelty', type: '1–10', source: 'LLM-scored (title + opening transcript)', category: 'active', numeric: true },
+        { label: 'Cognitive Load', key: 'cognitive_load', type: '1–10', source: 'LLM-scored (title + opening transcript)', category: 'active', numeric: true },
+        { label: 'Net Novelty', key: 'net_novelty', type: 'integer (Novelty − Cognitive Load)', source: 'Derived: novelty − cognitive_load', category: 'active', numeric: true },
+        { label: 'Share Rate', key: 'share_rate', type: 'ratio (shares per 1k views)', source: 'Derived: shares ÷ (views/1000)', category: 'active', numeric: true },
+        { label: 'Views', key: 'views', type: 'count (use log10 for correlation)', source: 'YouTube Analytics', category: 'active', numeric: true },
+        { label: 'Hook Clarity', key: 'hook_clarity', type: '1–10 (not yet scored)', source: 'Planned: LLM vision (first frame)', category: 'planned', numeric: true },
+        { label: 'Visual Surprise', key: 'visual_surprise', type: '1–10 (not yet scored)', source: 'Planned: LLM vision (first frame)', category: 'planned', numeric: true },
+        { label: 'Pacing', key: 'pacing', type: 'cuts/sec (not yet measured)', source: 'Planned: frame diff analysis (first 3s)', category: 'planned', numeric: true },
+        { label: 'Emotional Resonance', key: 'emotional_resonance', type: '1–10 (not yet scored)', source: 'Planned: LLM vision+text', category: 'planned', numeric: true },
     ];
 
-    const NUMERIC_KEYS = INDICATORS.filter(i => i.category === 'active' && i.type !== 'category').map(i => i.key);
+    const NUMERIC_KEYS = INDICATORS.filter(i => i.category === 'active' && i.numeric).map(i => i.key);
 
     function indicatorLabel(key) {
         const ind = INDICATORS.find(i => i.key === key);
@@ -72,7 +72,7 @@ const JarvisUI = (() => {
     // ── Hardcoded Data ──
     const EXPERIMENTS = [
         { id: 'exp1', name: 'In-Video Keep Rate vs Views (CORRECTED)', r: 0.44, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel (213 videos with swipeRatio data)', finding: 'r=0.44 with log(Views) — MODERATE POSITIVE. Tyler was right. In-video keep rate (% who stay watching past the hook) has real predictive power. Previous experiment used wrong metric (impression CTR, not in-video swipe). Corrected with swipeRatio.stayedToWatch from YouTube Analytics.' },
-        { id: 'exp2', name: 'In-Video Swipe Sweet Spot: 20-25%', r: null, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Bucket analysis: 15-20% swipe-away → avg 11.1M views (n=50). 20-25% swipe → avg 13.2M views (n=58, max=285M). 25-30% swipe → avg 5.4M. Optimal range is 15-25% swipe-away (75-85% keep). Above 30% swipe drops sharply to sub-2M avg.' },
+        { id: 'exp2', name: 'In-Video Swipe Bucket Analysis', r: null, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Bucket analysis: 15-20% swipe-away → avg 11.1M views (n=50). 20-25% → avg 13.2M (n=58, includes 285M video). Note: this is NOT a sweet spot — higher swipe-away does not improve performance. The 20-25% bucket peaks because most of Tyler\'s high-view videos have been pushed broadly by the algorithm to non-core audiences, increasing swipe-away as a side effect of scale, not as a cause of it. Better keep rate is always better.' },
         { id: 'exp3', name: 'Retention % vs log(Views)', r: 0.32, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'r=0.32 with log(Views). Moderate signal. Avg retention by tier: 100M+=87.2%, 10-50M=87.0%, 5-10M=86.7%, 1-5M=82.7%, Sub-1M=79.4%. Clear progression — getting from 79% to 87% retention correlates with ~10x more views.' },
         { id: 'exp4', name: 'CTR (Impression→View Rate) vs Views', r: -0.01, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Near-zero correlation. CTR (viewedRate, the % of people who click from the feed) does NOT predict views. This is the metric previously mislabeled as swipe-away. It measures thumbnail/title performance — important for discoverability but not correlated with total scale.' },
         { id: 'exp5', name: 'Full Profile: Tyler 50M+ Videos', r: null, n: 5, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: '285M: keep=79.4%, ret=87.2% | 80M: keep=84.6%, ret=62.4% | 75M: keep=71.1%, ret=81.6% | 62M: keep=78.3%, ret=86.1% | 55M: keep=74.4%, ret=82.9%. Pattern: all 50M+ videos have in-video keep rates of 71-84% and retention mostly 80%+. The 80M Bulletproof Batman has only 62.4% retention but compensated with high keep (84.6%).' },
@@ -98,14 +98,14 @@ const JarvisUI = (() => {
 
     const INSIGHTS = [
         '<strong>Visual Zeigarnik (r=+0.22) vs text-only (r=-0.06)</strong> — scoring at correct resolution (first 3 seconds, frames + transcript) vs wrong resolution (first 180 chars) completely changes the signal. Visual Type C (Mystery/reveal) dominates at 9.3M avg views — the opposite of what text scoring suggested.',
-        '<strong>Keep Rate (r=0.43) is the strongest quantified predictor</strong> — get swipe-away under 25%. In-video keep rate has real predictive power for total views.',
+        '<strong>Keep Rate (r=0.43) is the strongest quantified predictor</strong> — the data shows keep rate is monotonically positive: higher keep rate always correlates with more views. In-video keep rate has real predictive power for total views.',
         '<strong>Net Novelty sweet spot = +2</strong> (Novelty exceeds Cognitive Load by exactly 2). Both too easy and too complex underperform. Average 10.3M views at the sweet spot.',
         '<strong>Zeigarnik Z=7 (not Z=10) peaks at 12.6M avg</strong> — moderate open loops beat maximum intensity. Z=10 averages only 4.6M. Enough curiosity to hook, not so intense it filters the mass market.',
         '<strong>Best Zeigarnik type is B (Challenge uncertainty)</strong>: 88 videos, avg 9.6M views. Frame as \'can this actually work?\' not \'watch this dangerous thing happen\'. Type E (social stakes) has the highest avg at 10.1M but only 10 videos.',
         '<strong>Zeigarnik does NOT directly predict keep rate</strong> — high Z-score videos have slightly lower keep rates (72%) than mid-range (77%). Open loops and hook retention are separate mechanisms. Need both.',
         '<strong>Retention 87%+ correlates with 10M+ avg views</strong> — progression from 79% (sub-1M) to 87% (100M+) is the clearest signal in the dataset.',
         '<strong>CTR (impression to view rate) has zero correlation with total views</strong> — it measures thumbnail appeal, not viral potential.',
-        '<strong>The 20-25% swipe-away bucket is the highest performing</strong> (avg 13.2M, max 285M) — some swipe-away is fine and may indicate fast-moving content that not everyone finishes.',
+        '<strong>The 20-25% swipe-away bucket has the highest average</strong> (avg 13.2M, includes 285M video) — but this is NOT a sweet spot. The apparent mid-range cluster reflects that low-view videos also have lower keep rates, not that intermediate swipe-away is optimal. The 20-25% bucket peaks because Tyler\'s biggest videos were pushed broadly by the algorithm to non-core audiences, increasing swipe-away as a side effect of scale. Better keep rate is always better.',
         '<strong>Duration data is confounded</strong> — YouTube Shorts 60s limit existed during most of the 100M+ video era. Inconclusive.',
     ];
 
@@ -591,49 +591,173 @@ const JarvisUI = (() => {
             </div>`;
     }
 
-    // ── Tactical Brain — Indicator Registry ──
+    // ── Tactical Brain — Vector Network Graph ──
     function renderTactical() {
-        const active = INDICATORS.filter(i => i.category === 'active');
-        const planned = INDICATORS.filter(i => i.category === 'planned');
-        const isNumeric = (key) => NUMERIC_KEYS.includes(key);
-        const toolNames = TOOL_DEFS.filter(t => !t.planned).map(t => ({ id: t.id, name: t.name }));
-
-        const activeCards = active.map(ind => {
-            const chooserOpen = chooserKey === ind.key;
-            return `<div class="jarvis-indicator-card jarvis-indicator-active">
-                <div class="jarvis-indicator-top">
-                    <h4 class="jarvis-indicator-label">${ind.label}</h4>
-                    <span class="jarvis-indicator-type">${ind.type}</span>
-                </div>
-                <span class="jarvis-indicator-source">${ind.source}</span>
-                <div class="jarvis-indicator-benchmark">${ind.benchmark}</div>
-                ${isNumeric(ind.key) ? `<button class="jarvis-use-in-tool" data-key="${ind.key}">${chooserOpen ? 'Cancel' : 'Use in Tool →'}</button>` : ''}
-                ${chooserOpen ? `<div class="jarvis-indicator-chooser">
-                    ${toolNames.map(t => `<button class="jarvis-chooser-btn" data-tool="${t.id}" data-key="${ind.key}">${t.name}</button>`).join('')}
-                </div>` : ''}
-            </div>`;
-        }).join('');
-
-        const plannedCards = planned.map(ind =>
-            `<div class="jarvis-indicator-card jarvis-indicator-planned">
-                <h4 class="jarvis-indicator-label">${ind.label}</h4>
-                <div class="jarvis-indicator-sub">Not yet scored</div>
-                <div class="jarvis-indicator-actions">
-                    <button class="jarvis-btn-disabled" disabled>Score with LLM</button>
-                    <button class="jarvis-btn-disabled" disabled>Add to Analytical Brain</button>
-                </div>
-            </div>`
-        ).join('');
-
+        setTimeout(() => drawTacticalGraph(), 100);
         return `
-            <div class="jarvis-indicator-section">
-                <h3 class="jarvis-indicator-section-title jarvis-section-active">Active Indicators</h3>
-                <div class="jarvis-indicator-grid">${activeCards}</div>
+            <div class="jarvis-tactical-network">
+                <canvas id="jarvis-network-canvas" width="400" height="350"></canvas>
+                <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
-            <div class="jarvis-indicator-section">
-                <h3 class="jarvis-indicator-section-title jarvis-section-planned">Derived / Planned Indicators</h3>
-                <div class="jarvis-indicator-grid">${plannedCards}</div>
+            <div class="jarvis-network-legend">
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#3b82f6"></span>Analytics</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#8b5cf6"></span>LLM-scored</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#14b8a6"></span>Derived</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#4b5563"></span>Planned</span>
             </div>`;
+    }
+
+    function getNodeColor(ind) {
+        if (ind.category === 'planned') return '#4b5563';
+        if (ind.source.startsWith('Derived')) return '#14b8a6';
+        if (ind.source.startsWith('YouTube') || ind.source.includes('YouTube')) return '#3b82f6';
+        return '#8b5cf6'; // LLM-scored
+    }
+
+    function getNodeRadius(key) {
+        const large = ['keep', 'retention', 'z_score', 'views', 'vz_score'];
+        const medium = ['novelty', 'cognitive_load', 'net_novelty', 'z_type', 'vz_type', 'share_rate'];
+        if (large.includes(key)) return 18;
+        if (medium.includes(key)) return 14;
+        return 10;
+    }
+
+    function drawTacticalGraph() {
+        const canvas = container?.querySelector('#jarvis-network-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.parentElement.clientWidth || 400;
+        const H = 350;
+        canvas.width = W;
+        canvas.height = H;
+
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        ctx.scale(dpr, dpr);
+
+        // Static cluster positions
+        const cx = W / 2, cy = H / 2;
+        const positions = {
+            // Top cluster: analytics outputs
+            keep:       { x: cx - 60, y: 50 },
+            retention:  { x: cx + 60, y: 50 },
+            views:      { x: cx,      y: 90 },
+            // Left cluster: Zeigarnik signals
+            z_score:    { x: 70,       y: cy - 30 },
+            z_type:     { x: 50,       y: cy + 30 },
+            vz_score:   { x: 130,      y: cy - 50 },
+            vz_type:    { x: 130,      y: cy + 20 },
+            // Right cluster: novelty signals
+            novelty:        { x: W - 70,  y: cy - 50 },
+            cognitive_load: { x: W - 70,  y: cy + 10 },
+            net_novelty:    { x: W - 130, y: cy - 20 },
+            // Bottom: misc
+            share_rate:          { x: cx - 80, y: H - 60 },
+            hook_clarity:        { x: cx + 20, y: H - 40 },
+            visual_surprise:     { x: cx + 100,y: H - 60 },
+            pacing:              { x: cx - 30, y: H - 90 },
+            emotional_resonance: { x: cx + 70, y: H - 90 },
+        };
+
+        const edges = [
+            ['net_novelty', 'novelty'],
+            ['net_novelty', 'cognitive_load'],
+            ['share_rate', 'views'],
+            ['vz_score', 'vz_type'],
+            ['z_score', 'z_type'],
+            ['vz_score', 'z_score'],
+            ['keep', 'retention'],
+        ];
+
+        // Build node list
+        const nodes = INDICATORS.map(ind => ({
+            key: ind.key,
+            label: ind.label,
+            type: ind.type,
+            source: ind.source,
+            color: getNodeColor(ind),
+            r: getNodeRadius(ind.key),
+            x: positions[ind.key]?.x || cx,
+            y: positions[ind.key]?.y || cy,
+        }));
+
+        const nodeMap = {};
+        nodes.forEach(n => nodeMap[n.key] = n);
+
+        // Draw edges
+        ctx.lineWidth = 1.5;
+        edges.forEach(([a, b]) => {
+            const na = nodeMap[a], nb = nodeMap[b];
+            if (!na || !nb) return;
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+            ctx.moveTo(na.x, na.y);
+            ctx.lineTo(nb.x, nb.y);
+            ctx.stroke();
+        });
+
+        // Draw nodes
+        nodes.forEach(n => {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+            ctx.fillStyle = n.color;
+            ctx.globalAlpha = 0.85;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '10px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(n.label, n.x, n.y + n.r + 12);
+        });
+
+        // Hover/click interaction
+        const tooltip = container?.querySelector('#jarvis-network-tooltip');
+        canvas.onmousemove = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            let hit = null;
+            for (const n of nodes) {
+                const dx = mx - n.x, dy = my - n.y;
+                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) { hit = n; break; }
+            }
+            if (hit && tooltip) {
+                tooltip.style.display = 'block';
+                tooltip.style.left = (hit.x + hit.r + 8) + 'px';
+                tooltip.style.top = (hit.y - 10) + 'px';
+                tooltip.innerHTML = `<strong>${hit.label}</strong><br><span class="jarvis-tt-dim">Type:</span> ${hit.type}<br><span class="jarvis-tt-dim">Source:</span> ${hit.source}`;
+                canvas.style.cursor = 'pointer';
+            } else if (tooltip) {
+                tooltip.style.display = 'none';
+                canvas.style.cursor = 'default';
+            }
+        };
+
+        canvas.onclick = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            for (const n of nodes) {
+                const dx = mx - n.x, dy = my - n.y;
+                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) {
+                    if (NUMERIC_KEYS.includes(n.key)) {
+                        toolSelections.pearson.signalA = n.key;
+                        activeToolId = 'pearson';
+                        activeTab = 'analytical';
+                        render();
+                    }
+                    break;
+                }
+            }
+        };
     }
 
     // ── Experiments — Saved results only ──
