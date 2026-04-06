@@ -201,55 +201,178 @@
     background: rgba(139, 92, 246, 0.15); color: #a78bfa;
 }
 
-/* ── Experiment Builder ── */
-.jarvis-builder {
-    margin-top: 20px; padding: 18px;
-    background: rgba(30, 30, 50, 0.8);
-    border: 1px solid rgba(100, 100, 200, 0.3);
-    border-radius: 10px;
+/* ── Tool Card States ── */
+.jarvis-tool-card.jarvis-tool-active {
+    grid-column: 1 / -1;
+    border-color: var(--j-accent);
+    background: rgba(59, 130, 246, 0.08);
 }
-.jarvis-builder-title {
-    margin: 0 0 4px; font-size: 16px; font-weight: 700;
-    color: var(--j-accent); text-transform: uppercase; letter-spacing: 0.5px;
+.jarvis-tool-card.jarvis-tool-planned {
+    opacity: 0.55;
+    border-style: dashed;
 }
-.jarvis-builder-sub {
-    margin: 0 0 14px; font-size: 12px; color: var(--j-muted);
+.jarvis-tool-run-btn {
+    padding: 6px 16px; font-size: 11px; font-weight: 700;
+    background: var(--j-accent); color: #fff;
+    border: none; border-radius: 5px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: background 0.2s; margin-top: 8px;
 }
-.jarvis-builder-form {
-    display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px;
-    align-items: end;
+.jarvis-tool-run-btn:hover { background: #2563eb; }
+
+/* ── Tool Panel (expandable) ── */
+.jarvis-tool-panel {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--j-border);
 }
-.jarvis-builder-field {
-    display: flex; flex-direction: column; gap: 4px;
+.jarvis-tool-inputs {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: end;
 }
-.jarvis-builder-field label {
+.jarvis-tool-field {
+    display: flex; flex-direction: column; gap: 4px; min-width: 140px;
+}
+.jarvis-tool-field label {
     font-size: 11px; font-weight: 600; color: var(--j-muted);
     text-transform: uppercase; letter-spacing: 0.5px;
 }
-.jarvis-builder-field select {
-    padding: 8px 10px; font-size: 12px;
+.jarvis-tool-field select,
+.jarvis-tool-field input[type="number"] {
+    padding: 7px 10px; font-size: 12px;
     background: #0d1424; color: var(--j-text);
     border: 1px solid var(--j-border); border-radius: 6px;
-    cursor: pointer; outline: none;
+    outline: none; cursor: pointer;
 }
-.jarvis-builder-field select:focus {
-    border-color: var(--j-accent);
+.jarvis-tool-field select:focus,
+.jarvis-tool-field input:focus { border-color: var(--j-accent); }
+.jarvis-tool-check-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--j-muted); cursor: pointer;
+    width: 100%;
 }
-.jarvis-run-btn {
-    padding: 8px 20px; font-size: 12px; font-weight: 700;
-    background: var(--j-accent); color: #fff;
-    border: none; border-radius: 6px; cursor: pointer;
+.jarvis-proximity-checks {
+    display: flex; flex-wrap: wrap; gap: 4px 14px;
+}
+.jarvis-tool-execute {
+    padding: 7px 20px; font-size: 11px; font-weight: 700;
+    background: var(--j-green); color: #fff;
+    border: none; border-radius: 5px; cursor: pointer;
     text-transform: uppercase; letter-spacing: 0.5px;
-    transition: background 0.2s; white-space: nowrap;
+    transition: background 0.2s; align-self: flex-end;
 }
-.jarvis-run-btn:hover {
-    background: #2563eb;
+.jarvis-tool-execute:hover { background: #059669; }
+.jarvis-tool-result { margin-top: 12px; }
+
+/* ── Pearson r bar ── */
+.jarvis-r-bar { margin: 10px 0; }
+.jarvis-r-bar-track {
+    position: relative; height: 14px;
+    background: rgba(255,255,255,0.05); border-radius: 7px;
+    overflow: hidden;
+}
+.jarvis-r-bar-center {
+    position: absolute; left: 50%; top: 0; bottom: 0;
+    width: 1px; background: var(--j-muted);
+}
+.jarvis-r-bar-fill {
+    position: absolute; top: 2px; bottom: 2px;
+    border-radius: 5px; transition: all 0.3s;
+}
+.jarvis-r-bar-labels {
+    display: flex; justify-content: space-between;
+    font-size: 9px; color: var(--j-muted);
+    font-family: 'SF Mono', monospace; margin-top: 2px;
 }
 
-/* Builder results */
-.jarvis-builder-result {
-    margin-top: 14px;
+/* ── Indicator Registry (Tactical Brain) ── */
+.jarvis-indicator-section { margin-bottom: 20px; }
+.jarvis-indicator-section-title {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+    margin: 0 0 10px; font-weight: 700;
 }
+.jarvis-section-active { color: var(--j-green); }
+.jarvis-section-planned { color: var(--j-purple); }
+.jarvis-indicator-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.jarvis-indicator-card {
+    border-radius: 8px; padding: 12px 14px;
+}
+.jarvis-indicator-active {
+    background: rgba(16, 185, 129, 0.06);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.jarvis-indicator-planned {
+    background: rgba(139, 92, 246, 0.06);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+}
+.jarvis-indicator-top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 4px;
+}
+.jarvis-indicator-label {
+    margin: 0; font-size: 13px; color: var(--j-text); font-weight: 600;
+}
+.jarvis-indicator-type {
+    font-size: 10px; padding: 1px 8px; border-radius: 10px;
+    background: rgba(59, 130, 246, 0.15); color: var(--j-accent);
+    font-weight: 600; font-family: 'SF Mono', monospace;
+}
+.jarvis-indicator-source {
+    font-size: 10px; color: var(--j-muted);
+    display: inline-block; margin-bottom: 4px;
+}
+.jarvis-indicator-benchmark {
+    font-size: 11px; color: var(--j-cyan); line-height: 1.4;
+    margin-bottom: 6px;
+}
+.jarvis-indicator-sub {
+    font-size: 11px; color: var(--j-muted); margin-bottom: 8px;
+}
+.jarvis-indicator-actions {
+    display: flex; gap: 6px; flex-wrap: wrap;
+}
+.jarvis-use-in-tool {
+    padding: 4px 12px; font-size: 10px; font-weight: 600;
+    background: rgba(16, 185, 129, 0.15); color: var(--j-green);
+    border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;
+    transition: all 0.2s;
+}
+.jarvis-use-in-tool:hover {
+    background: rgba(16, 185, 129, 0.25);
+}
+.jarvis-indicator-chooser {
+    display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
+    padding-top: 6px; border-top: 1px solid rgba(16, 185, 129, 0.15);
+}
+.jarvis-chooser-btn {
+    padding: 3px 8px; font-size: 9px; font-weight: 600;
+    background: rgba(59, 130, 246, 0.12); color: var(--j-accent);
+    border: 1px solid var(--j-border); border-radius: 4px;
+    cursor: pointer; transition: all 0.15s;
+}
+.jarvis-chooser-btn:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: var(--j-accent);
+}
+
+/* ── Disabled buttons ── */
+.jarvis-btn-disabled {
+    padding: 4px 12px; font-size: 10px; font-weight: 600;
+    background: rgba(100, 100, 100, 0.15); color: #64748b;
+    border: 1px solid rgba(100, 100, 100, 0.25); border-radius: 4px;
+    cursor: not-allowed; text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+/* ── Experiment footer ── */
+.jarvis-exp-footer {
+    margin-top: 16px; padding: 12px 16px;
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid var(--j-border); border-radius: 8px;
+    font-size: 12px; color: var(--j-muted); line-height: 1.5;
+}
+
+/* Result cards */
 .jarvis-result-card {
     background: var(--j-card); border: 1px solid var(--j-border);
     border-radius: 8px; padding: 16px;
@@ -630,4 +753,276 @@
 }
 .jarvis-classify-fractional {
     background: var(--j-cyan) !important; color: #0a0e1a !important;
+}
+
+/* ══════════════════════════════════════════════════════
+   NEW: Analytical Brain — Tool Cards & Expansion Panels
+   ══════════════════════════════════════════════════════ */
+
+/* Tool card active state */
+.jarvis-tool-card.active {
+    border-color: var(--j-accent);
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.2);
+}
+
+/* Run Tool button on cards */
+.jarvis-tool-run {
+    display: inline-block; margin-top: 10px;
+    padding: 6px 14px; font-size: 11px; font-weight: 700;
+    background: transparent; border: 1px solid var(--j-accent);
+    color: var(--j-accent); border-radius: 5px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: all 0.2s;
+}
+.jarvis-tool-run:hover {
+    background: rgba(59, 130, 246, 0.15);
+}
+.jarvis-tool-card.active .jarvis-tool-run {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444; color: #ef4444;
+}
+
+/* Tool expansion panel — spans both grid columns */
+.jarvis-tool-panel {
+    grid-column: 1 / -1;
+    background: rgba(20, 25, 45, 0.9);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 10px; padding: 18px;
+    animation: jarvisSlideDown 0.2s ease;
+}
+@keyframes jarvisSlideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tool parameter form */
+.jarvis-tool-params {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: end;
+    margin-bottom: 14px;
+}
+.jarvis-param {
+    display: flex; flex-direction: column; gap: 4px; min-width: 140px;
+}
+.jarvis-param label {
+    font-size: 11px; font-weight: 600; color: var(--j-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-param select,
+.jarvis-param input,
+.jarvis-param textarea {
+    padding: 7px 10px; font-size: 12px;
+    background: #0d1424; color: var(--j-text);
+    border: 1px solid var(--j-border); border-radius: 5px;
+    outline: none; font-family: inherit; resize: vertical;
+}
+.jarvis-param select:focus,
+.jarvis-param input:focus,
+.jarvis-param textarea:focus {
+    border-color: var(--j-accent);
+}
+
+/* Checkbox parameter */
+.jarvis-param-check {
+    display: flex; align-items: center;
+    padding-bottom: 4px;
+}
+.jarvis-param-check label {
+    font-size: 11px; color: var(--j-muted); cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+}
+
+/* Run button inside tool panel */
+.jarvis-tool-run-action {
+    padding: 7px 18px; font-size: 12px; font-weight: 700;
+    background: var(--j-accent); color: #fff;
+    border: none; border-radius: 5px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: background 0.2s; white-space: nowrap;
+}
+.jarvis-tool-run-action:hover { background: #2563eb; }
+
+/* Tool result container */
+.jarvis-tool-result:empty { display: none; }
+
+/* ── Correlation Bar (-1 to +1) ── */
+.jarvis-corr-bar {
+    position: relative; height: 28px; border-radius: 4px;
+    background: linear-gradient(90deg, #ef4444 0%, #64748b 50%, #10b981 100%);
+    margin: 10px 0 4px;
+}
+.jarvis-corr-marker {
+    position: absolute; top: -4px; width: 4px; height: 36px;
+    background: #fff; border-radius: 2px;
+    transform: translateX(-2px);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+}
+.jarvis-corr-labels {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--j-muted);
+    font-family: 'SF Mono', monospace;
+}
+
+/* ── Side-by-side Comparison (log10 tool) ── */
+.jarvis-compare {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    margin-top: 10px;
+}
+.jarvis-compare-box {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 14px; text-align: center;
+}
+.jarvis-compare-label {
+    font-size: 11px; color: var(--j-muted); margin-bottom: 6px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-compare-value {
+    font-size: 24px; font-weight: 800;
+    font-family: 'SF Mono', monospace;
+}
+
+/* ── Multi-select checklist (proximity tool) ── */
+.jarvis-multiselect {
+    display: flex; flex-wrap: wrap; gap: 6px;
+}
+.jarvis-multiselect label {
+    font-size: 11px; color: var(--j-text); cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 5px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--j-border);
+    transition: all 0.15s;
+    font-weight: 500;
+}
+.jarvis-multiselect label:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+}
+.jarvis-multiselect input[type="checkbox"] {
+    width: 13px; height: 13px;
+    accent-color: var(--j-accent);
+}
+
+/* ── Scatter Plot (proximity tool) ── */
+.jarvis-scatter-container {
+    position: relative;
+}
+.jarvis-scatter-tooltip {
+    position: absolute; pointer-events: none;
+    background: rgba(13, 20, 36, 0.95);
+    border: 1px solid var(--j-accent);
+    border-radius: 6px; padding: 6px 10px;
+    font-size: 11px; color: var(--j-text);
+    white-space: nowrap; display: none; z-index: 5;
+}
+
+/* ══════════════════════════════════════════════════════
+   NEW: Tactical Brain — Indicator Cards & Popovers
+   ══════════════════════════════════════════════════════ */
+
+/* Section headers */
+.jarvis-section { }
+.jarvis-section-title {
+    font-size: 16px; font-weight: 700;
+    color: var(--j-accent); text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 0 0 6px;
+}
+.jarvis-section-sub {
+    font-size: 12px; color: var(--j-muted); margin: 0;
+    line-height: 1.5;
+}
+
+/* Active indicator card grid */
+.jarvis-indicators-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
+}
+.jarvis-indicator-card {
+    background: rgba(16, 185, 129, 0.05);
+    border: 1px solid rgba(16, 185, 129, 0.18);
+    border-radius: 8px; padding: 14px;
+    position: relative;
+    transition: border-color 0.2s;
+}
+.jarvis-indicator-card:hover {
+    border-color: rgba(16, 185, 129, 0.35);
+}
+.jarvis-ind-name {
+    font-size: 14px; font-weight: 700; color: var(--j-text);
+    margin-bottom: 4px;
+}
+.jarvis-ind-type {
+    font-size: 11px; color: var(--j-muted); margin-bottom: 6px;
+    font-family: 'SF Mono', monospace;
+}
+.jarvis-ind-badges {
+    display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap;
+}
+.jarvis-source-badge {
+    font-size: 9px; padding: 2px 8px; border-radius: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-source-yt {
+    background: rgba(239, 68, 68, 0.12); color: #f87171;
+}
+.jarvis-source-llm {
+    background: rgba(139, 92, 246, 0.12); color: #a78bfa;
+}
+.jarvis-source-derived {
+    background: rgba(6, 182, 212, 0.12); color: var(--j-cyan);
+}
+.jarvis-ind-benchmark {
+    font-size: 11px; color: var(--j-cyan); line-height: 1.4;
+    margin-bottom: 10px;
+}
+
+/* "Use in Tool →" button */
+.jarvis-ind-use-btn {
+    padding: 5px 12px; font-size: 10px; font-weight: 600;
+    background: transparent; border: 1px solid var(--j-accent);
+    color: var(--j-accent); border-radius: 4px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: all 0.2s;
+}
+.jarvis-ind-use-btn:hover {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* Tool popover */
+.jarvis-popover {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+    background: #151b2e; border: 1px solid var(--j-accent);
+    border-radius: 8px; padding: 6px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+    display: none; margin-top: 4px;
+}
+.jarvis-popover.show { display: block; }
+.jarvis-popover-item {
+    padding: 7px 10px; font-size: 11px; color: var(--j-text);
+    cursor: pointer; border-radius: 4px;
+    transition: background 0.15s;
+}
+.jarvis-popover-item:hover {
+    background: rgba(59, 130, 246, 0.15);
+}
+
+/* ── Derived / Planned indicator cards ── */
+.jarvis-derived-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.jarvis-derived-card {
+    background: rgba(100, 100, 100, 0.06);
+    border: 1px solid rgba(100, 100, 100, 0.15);
+    border-radius: 8px; padding: 12px; opacity: 0.7;
+    transition: opacity 0.2s;
+}
+.jarvis-derived-card:hover { opacity: 0.9; }
+.jarvis-derived-name {
+    font-size: 13px; font-weight: 600; color: var(--j-muted);
+    margin-bottom: 4px;
+}
+.jarvis-derived-desc {
+    font-size: 11px; color: var(--j-muted); margin-bottom: 8px;
+    line-height: 1.4;
+}
+.jarvis-derived-actions {
+    display: flex; gap: 6px;
 }

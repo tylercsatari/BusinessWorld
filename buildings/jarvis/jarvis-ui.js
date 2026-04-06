@@ -3,6 +3,69 @@ const JarvisUI = (() => {
     let container = null;
     let activeTab = 'analytical';
     let dataset = null;
+    let activeToolId = null;
+    let toolResults = {};
+    let chooserKey = null;
+    let toolSelections = {
+        pearson: { signalA: 'keep', signalB: 'views', logViews: true },
+        bucket: { groupBy: 'keep', measure: 'views', bucketCount: '5' },
+        log10: { signalA: 'keep', signalB: 'views' },
+        ratio: { numerator: 'share_rate', basis: '1000', compare: 'views' },
+        net: { positive: 'novelty', negative: 'cognitive_load', compare: 'views' },
+        proximity: { signals: ['keep', 'retention', 'z_score'], method: 'euclidean' },
+    };
+
+    // ── Indicator Registry ──
+    const INDICATORS = [
+        { label: 'Keep Rate', key: 'keep', type: '%', source: 'YouTube Analytics', benchmark: 'Sweet spot: 75-85%', category: 'active' },
+        { label: 'Retention %', key: 'retention', type: '%', source: 'YouTube Analytics', benchmark: '85-87% correlates with 10M+', category: 'active' },
+        { label: 'Zeigarnik Score', key: 'z_score', type: '1-10', source: 'LLM Scored', benchmark: 'Sweet spot: Z=6-7', category: 'active' },
+        { label: 'Zeigarnik Type', key: 'z_type', type: 'category', source: 'LLM Scored', benchmark: 'B (challenge) > E > A > C', category: 'active' },
+        { label: 'Novelty', key: 'novelty', type: '1-10', source: 'LLM Scored', benchmark: 'Higher (with cog load balance)', category: 'active' },
+        { label: 'Cognitive Load', key: 'cognitive_load', type: '1-10', source: 'LLM Scored', benchmark: 'Lower is better', category: 'active' },
+        { label: 'Net Novelty', key: 'net_novelty', type: 'derived', source: 'Novelty − Cog Load', benchmark: 'Sweet spot: +2', category: 'active' },
+        { label: 'Share Rate', key: 'share_rate', type: 'per 1k', source: 'YouTube Analytics', benchmark: 'Viral: 0.66/1k vs avg: 0.31/1k', category: 'active' },
+        { label: 'Views', key: 'views', type: 'count', source: 'YouTube Analytics', benchmark: 'Log-normalized for analysis', category: 'active' },
+        { label: 'Hook Clarity', key: 'hook_clarity', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
+        { label: 'Visual Surprise', key: 'visual_surprise', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
+        { label: 'Pacing', key: 'pacing', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
+        { label: 'Emotional Resonance', key: 'emotional_resonance', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
+    ];
+
+    const NUMERIC_KEYS = INDICATORS.filter(i => i.category === 'active' && i.type !== 'category').map(i => i.key);
+
+    function indicatorLabel(key) {
+        const ind = INDICATORS.find(i => i.key === key);
+        return ind ? ind.label : key;
+    }
+
+    function numericOptions(selected) {
+        return NUMERIC_KEYS.map(k =>
+            `<option value="${k}"${k === selected ? ' selected' : ''}>${indicatorLabel(k)}</option>`
+        ).join('');
+    }
+
+    function fmtViews(v) {
+        if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+        if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+        return v.toFixed(0);
+    }
+
+    // ── Tool Definitions ──
+    const TOOL_DEFS = [
+        { id: 'pearson', icon: '📐', name: 'Pearson Correlation', desc: 'Linear relationship between two numeric signals. Outputs r (−1 to +1).' },
+        { id: 'bucket', icon: '📊', name: 'Bucket Analysis', desc: 'Group videos by one signal, show average of another per bucket.' },
+        { id: 'log10', icon: '📉', name: 'log10 Compare', desc: 'Compare raw Pearson r vs log10-normalized Pearson r.' },
+        { id: 'ratio', icon: '⚖️', name: 'Ratio Normalizer', desc: 'Convert raw counts to rates (per 100/1k/1M) and correlate.' },
+        { id: 'net', icon: '➕➖', name: 'Net Signal Calculator', desc: 'Subtract one signal from another to find optimal balance points.' },
+        { id: 'proximity', icon: '🎯', name: 'Proximity / Clustering', desc: 'Multi-signal centroid distance analysis.' },
+        { id: 'llm', icon: '🧠', name: 'LLM Signal Scorer', desc: 'Planned — server scoring pipeline next.', planned: true },
+    ];
+
+    const TOOL_FIRST_PARAM = {
+        pearson: 'signalA', bucket: 'groupBy', log10: 'signalA',
+        ratio: 'numerator', net: 'positive', proximity: 'signals',
+    };
 
     // ── Hardcoded Data ──
     const EXPERIMENTS = [
@@ -17,31 +80,6 @@ const JarvisUI = (() => {
         { id: 'exp_z1', name: 'Zeigarnik Effect Score vs Views', r: -0.08, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Pearson r=-0.08 — near zero linear correlation. BUT bucket analysis reveals a clear non-linear sweet spot: Z=6 → avg 10.2M views, Z=7 → avg 12.6M views. Z=8 drops to 5.9M, Z=9 to 4.9M, Z=10 to 4.6M. Extreme Zeigarnik (high danger/intensity) narrows audience. The sweet spot is moderate open loops — enough curiosity to hook, not so intense it filters the mass market.' },
         { id: 'exp_z2', name: 'Zeigarnik Effect vs Keep Rate', r: -0.06, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Near-zero correlation with in-video keep rate. Zeigarnik score does not directly predict hook retention. High Z-score videos (9-10) average 72-73% keep rate — slightly LOWER than mid-range (Z=6-7 at 77%). Implication: strong open loops alone don\'t prevent swipe-away; content quality and pacing are separate drivers.' },
         { id: 'exp_z3', name: 'Zeigarnik Type Breakdown', r: null, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Type B (Challenge/outcome uncertainty): n=88, avg 9.6M views — most common and highest performing. Type E (Social curiosity): n=10, avg 10.1M views — small sample but strong. Type A (Physical danger/threat): n=38, avg 7.4M views, avg Z-score 8.4 — high intensity but narrower. Type C (Mystery/reveal): n=42, avg 5.8M views. Best strategy: lean into B (can it work?) and E (social stakes), not maximum danger.' },
-    ];
-
-    const TOOLS = [
-        { id: 'pearson', icon: '📐', name: 'Pearson Correlation', desc: 'Measures linear relationship between two signals. Outputs r value (-1 to +1).', use: 'Continuous numeric signals', limitation: 'Misses non-linear patterns' },
-        { id: 'bucket', icon: '📊', name: 'Bucket/Quartile Analysis', desc: 'Groups videos into buckets by one signal, shows avg views per bucket.', use: 'Finding sweet spots, non-linear relationships', limitation: 'Requires enough data per bucket (n>10)' },
-        { id: 'log10', icon: '📉', name: 'log10 Normalization', desc: 'Applies log10 to view counts to reduce outlier skew before correlation.', use: 'Any correlation involving raw view counts', limitation: 'Cannot be used on zero/negative values' },
-        { id: 'llm', icon: '🧠', name: 'LLM Signal Scorer', desc: 'Uses GPT-4o-mini to score videos on qualitative signals (Zeigarnik, Novelty, Cognitive Load, etc.). Outputs numeric scores 1-10.', use: 'Qualitative-to-quantitative conversion', limitation: 'Subjective scoring, needs calibration' },
-        { id: 'ratio', icon: '⚖️', name: 'Ratio Normalizer', desc: 'Converts raw counts to rates (per 1k views, per 1M views).', use: 'Shares, likes, subs — any metric that scales with view count', limitation: 'Low-view videos have noisy rates' },
-        { id: 'net', icon: '➕➖', name: 'Net Signal Calculator', desc: 'Subtracts one signal from another to find optimal balance points. Example: Net Novelty = Novelty - Cognitive Load.', use: 'Signals with opposing effects', limitation: 'Assumes signals are on same scale' },
-    ];
-
-    const QUANTIFIED_SIGNALS = [
-        { name: 'Keep Rate (in-video swipe)', tool: 'Pearson + log', r: '0.43', sweetSpot: '75-85% keep (15-25% swipe-away)', icon: '🎯' },
-        { name: 'Retention %', tool: 'Pearson + log', r: '0.27', sweetSpot: '85-87%, diminishing returns above 90%', icon: '📈' },
-        { name: 'Net Novelty (Novelty - Cognitive Load)', tool: 'Bucket', r: null, sweetSpot: '+2 (avg 10.3M views)', icon: '✨' },
-        { name: 'Zeigarnik Score (Z type B)', tool: 'Bucket', r: null, sweetSpot: 'Z=6-7 (avg 10-12.6M views)', icon: '🔄' },
-        { name: 'Share Rate (per 1k views)', tool: 'Ratio Norm', r: null, sweetSpot: 'Viral=0.66/1k vs avg=0.31/1k', icon: '🔗' },
-        { name: 'Discovery Rate (non-sub %)', tool: 'Pearson', r: '0.31', sweetSpot: 'Higher = algorithm pushing to new audiences', icon: '🌍' },
-    ];
-
-    const UNQUANTIFIED_SIGNALS = [
-        { name: 'Hook Clarity', desc: 'How immediately obvious is what the video is about?', icon: '💡' },
-        { name: 'Visual Surprise', desc: 'Does the first frame make you do a double-take?', icon: '👀' },
-        { name: 'Pacing', desc: 'Does it cut/move faster than expected?', icon: '⚡' },
-        { name: 'Emotional Resonance', desc: 'Does it connect to a universal feeling?', icon: '❤️' },
     ];
 
     const TABS = [
@@ -64,17 +102,6 @@ const JarvisUI = (() => {
         '<strong>The 20-25% swipe-away bucket is the highest performing</strong> (avg 13.2M, max 285M) — some swipe-away is fine and may indicate fast-moving content that not everyone finishes.',
         '<strong>Duration data is confounded</strong> — YouTube Shorts 60s limit existed during most of the 100M+ video era. Inconclusive.',
     ];
-
-    const SIGNAL_KEYS = {
-        'Keep Rate': 'keep',
-        'Retention %': 'retention',
-        'Zeigarnik Score': 'z_score',
-        'Novelty': 'novelty',
-        'Cognitive Load': 'cognitive_load',
-        'Net Novelty': 'net_novelty',
-        'Share Rate': 'share_rate',
-        'Views': 'views',
-    };
 
     // ── Dataset loading ──
     async function loadDataset() {
@@ -107,11 +134,11 @@ const JarvisUI = (() => {
         return den === 0 ? 0 : num / den;
     }
 
-    function bucketAnalysis(signal, views, numBuckets) {
+    function bucketAnalysis(signal, measure, numBuckets) {
         if (!signal.length) return [];
         const min = Math.min(...signal);
         const max = Math.max(...signal);
-        if (min === max) return [{ label: `${min}`, avgViews: views.reduce((a, b) => a + b, 0) / views.length, n: views.length }];
+        if (min === max) return [{ label: `${min}`, avgVal: measure.reduce((a, b) => a + b, 0) / measure.length, n: measure.length }];
         const step = (max - min) / numBuckets;
         const buckets = [];
         for (let i = 0; i < numBuckets; i++) {
@@ -119,9 +146,9 @@ const JarvisUI = (() => {
             const hi = i === numBuckets - 1 ? max + 0.01 : min + (i + 1) * step;
             const label = `${lo.toFixed(1)}-${hi.toFixed(1)}`;
             const indices = signal.map((v, idx) => v >= lo && v < hi ? idx : -1).filter(idx => idx >= 0);
-            const bucketViews = indices.map(idx => views[idx]);
-            const avg = bucketViews.length > 0 ? bucketViews.reduce((a, b) => a + b, 0) / bucketViews.length : 0;
-            buckets.push({ label, avgViews: avg, n: bucketViews.length });
+            const vals = indices.map(idx => measure[idx]);
+            const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+            buckets.push({ label, avgVal: avg, n: vals.length });
         }
         return buckets;
     }
@@ -168,64 +195,443 @@ const JarvisUI = (() => {
         }
     }
 
-    // ── Analytical Brain ──
+    // ── Analytical Brain — Runnable Tool Cards ──
     function renderAnalytical() {
         return `<div class="jarvis-tools-grid">
-            ${TOOLS.map(t => `
-                <div class="jarvis-tool-card">
-                    <div class="jarvis-tool-icon">${t.icon}</div>
-                    <h4 class="jarvis-tool-name">${t.name}</h4>
-                    <p class="jarvis-tool-desc">${t.desc}</p>
-                    <div class="jarvis-tool-meta">
-                        <span class="jarvis-tool-use"><strong>Use for:</strong> ${t.use}</span>
-                        <span class="jarvis-tool-limit"><strong>Limitation:</strong> ${t.limitation}</span>
+            ${TOOL_DEFS.map(t => {
+                if (t.planned) {
+                    return `<div class="jarvis-tool-card jarvis-tool-planned">
+                        <div class="jarvis-tool-icon">${t.icon}</div>
+                        <h4 class="jarvis-tool-name">${t.name}</h4>
+                        <p class="jarvis-tool-desc">${t.desc}</p>
+                    </div>`;
+                }
+                const isOpen = activeToolId === t.id;
+                return `<div class="jarvis-tool-card${isOpen ? ' jarvis-tool-active' : ''}">
+                    <div class="jarvis-tool-card-header">
+                        <div class="jarvis-tool-icon">${t.icon}</div>
+                        <h4 class="jarvis-tool-name">${t.name}</h4>
+                        <p class="jarvis-tool-desc">${t.desc}</p>
                     </div>
-                </div>
-            `).join('')}
+                    <button class="jarvis-tool-run-btn" data-tool="${t.id}">${isOpen ? 'Close' : 'Run Tool →'}</button>
+                    ${isOpen ? `<div class="jarvis-tool-panel">${renderToolPanel(t.id)}</div>` : ''}
+                </div>`;
+            }).join('')}
         </div>`;
     }
 
-    // ── Tactical Brain ──
-    function renderTactical() {
-        const leftCards = QUANTIFIED_SIGNALS.map(s => {
-            const rLine = s.r ? `<div class="jarvis-sig-r">r = ${s.r}</div>` : '';
-            return `<div class="jarvis-signal-card jarvis-signal-quantified">
-                <div class="jarvis-sig-header">
-                    <span class="jarvis-sig-icon">${s.icon}</span>
-                    <h4>${s.name}</h4>
+    function renderToolPanel(toolId) {
+        const sel = toolSelections[toolId] || {};
+        const res = toolResults[toolId] || '';
+        switch (toolId) {
+            case 'pearson': return `
+                <div class="jarvis-tool-inputs">
+                    <div class="jarvis-tool-field">
+                        <label>Signal A</label>
+                        <select data-param="signalA">${numericOptions(sel.signalA)}</select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Signal B</label>
+                        <select data-param="signalB">${numericOptions(sel.signalB)}</select>
+                    </div>
+                    <label class="jarvis-tool-check-label">
+                        <input type="checkbox" data-param="logViews" ${sel.logViews !== false ? 'checked' : ''} /> log10 normalize views if present
+                    </label>
+                    <button class="jarvis-tool-execute" data-tool="pearson">Execute</button>
                 </div>
-                <div class="jarvis-sig-tool">Tool: ${s.tool}</div>
-                ${rLine}
-                <div class="jarvis-sig-sweet">Sweet spot: ${s.sweetSpot}</div>
+                <div class="jarvis-tool-result" data-tool-result="pearson">${res}</div>`;
+            case 'bucket': return `
+                <div class="jarvis-tool-inputs">
+                    <div class="jarvis-tool-field">
+                        <label>Group by</label>
+                        <select data-param="groupBy">${numericOptions(sel.groupBy)}</select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Measure</label>
+                        <select data-param="measure">
+                            ${['views','keep','retention','share_rate'].map(k =>
+                                `<option value="${k}"${k === sel.measure ? ' selected' : ''}>${indicatorLabel(k)}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Buckets</label>
+                        <input type="number" data-param="bucketCount" value="${sel.bucketCount || 5}" min="2" max="20" />
+                    </div>
+                    <button class="jarvis-tool-execute" data-tool="bucket">Execute</button>
+                </div>
+                <div class="jarvis-tool-result" data-tool-result="bucket">${res}</div>`;
+            case 'log10': return `
+                <div class="jarvis-tool-inputs">
+                    <div class="jarvis-tool-field">
+                        <label>Signal A</label>
+                        <select data-param="signalA">${numericOptions(sel.signalA)}</select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Signal B</label>
+                        <select data-param="signalB">${numericOptions(sel.signalB)}</select>
+                    </div>
+                    <button class="jarvis-tool-execute" data-tool="log10">Execute</button>
+                </div>
+                <div class="jarvis-tool-result" data-tool-result="log10">${res}</div>`;
+            case 'ratio': return `
+                <div class="jarvis-tool-inputs">
+                    <div class="jarvis-tool-field">
+                        <label>Numerator</label>
+                        <select data-param="numerator">${numericOptions(sel.numerator)}</select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Denominator basis</label>
+                        <select data-param="basis">
+                            <option value="100"${sel.basis === '100' ? ' selected' : ''}>per 100</option>
+                            <option value="1000"${sel.basis !== '100' && sel.basis !== '1000000' ? ' selected' : ''}>per 1k</option>
+                            <option value="1000000"${sel.basis === '1000000' ? ' selected' : ''}>per 1M</option>
+                        </select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Compare against</label>
+                        <select data-param="compare">${numericOptions(sel.compare)}</select>
+                    </div>
+                    <button class="jarvis-tool-execute" data-tool="ratio">Execute</button>
+                </div>
+                <div class="jarvis-tool-result" data-tool-result="ratio">${res}</div>`;
+            case 'net': return `
+                <div class="jarvis-tool-inputs">
+                    <div class="jarvis-tool-field">
+                        <label>Positive signal</label>
+                        <select data-param="positive">${numericOptions(sel.positive)}</select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Negative signal</label>
+                        <select data-param="negative">${numericOptions(sel.negative)}</select>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Compare against</label>
+                        <select data-param="compare">${numericOptions(sel.compare)}</select>
+                    </div>
+                    <button class="jarvis-tool-execute" data-tool="net">Execute</button>
+                </div>
+                <div class="jarvis-tool-result" data-tool-result="net">${res}</div>`;
+            case 'proximity': return `
+                <div class="jarvis-tool-inputs">
+                    <div class="jarvis-tool-field">
+                        <label>Select Signals (2+)</label>
+                        <div class="jarvis-proximity-checks">
+                            ${NUMERIC_KEYS.map(k => `<label class="jarvis-tool-check-label">
+                                <input type="checkbox" data-multi data-param="signals" value="${k}"
+                                    ${(sel.signals || []).includes(k) ? 'checked' : ''} /> ${indicatorLabel(k)}
+                            </label>`).join('')}
+                        </div>
+                    </div>
+                    <div class="jarvis-tool-field">
+                        <label>Distance method</label>
+                        <select data-param="method">
+                            <option value="euclidean"${sel.method === 'euclidean' ? ' selected' : ''}>Euclidean</option>
+                            <option value="cosine"${sel.method === 'cosine' ? ' selected' : ''}>Cosine</option>
+                        </select>
+                    </div>
+                    <button class="jarvis-tool-execute" data-tool="proximity">Execute</button>
+                </div>
+                <div class="jarvis-tool-result" data-tool-result="proximity">${res}</div>`;
+            default: return '';
+        }
+    }
+
+    // ── Read params from open tool panel ──
+    function readParams(panel) {
+        const p = {};
+        panel.querySelectorAll('select[data-param], input[type="number"][data-param]').forEach(el => {
+            p[el.dataset.param] = el.value;
+        });
+        panel.querySelectorAll('input[type="checkbox"][data-param]:not([data-multi])').forEach(el => {
+            p[el.dataset.param] = el.checked;
+        });
+        const multiKeys = new Set();
+        panel.querySelectorAll('input[type="checkbox"][data-multi][data-param]').forEach(el => {
+            const key = el.dataset.param;
+            if (!multiKeys.has(key)) { p[key] = []; multiKeys.add(key); }
+            if (el.checked) p[key].push(el.value);
+        });
+        return p;
+    }
+
+    // ── Tool execution dispatch ──
+    async function executeTool(toolId) {
+        const panel = container.querySelector('.jarvis-tool-panel');
+        if (!panel) return;
+        const params = readParams(panel);
+        const resultEl = panel.querySelector(`[data-tool-result="${toolId}"]`);
+        if (!resultEl) return;
+        resultEl.innerHTML = '<div class="jarvis-loading">Loading dataset...</div>';
+
+        const data = await loadDataset();
+        if (!data) {
+            resultEl.innerHTML = '<div class="jarvis-error">Failed to load dataset</div>';
+            return;
+        }
+
+        switch (toolId) {
+            case 'pearson': executePearson(data, params, resultEl); break;
+            case 'bucket': executeBucket(data, params, resultEl); break;
+            case 'log10': executeLog10(data, params, resultEl); break;
+            case 'ratio': executeRatio(data, params, resultEl); break;
+            case 'net': executeNet(data, params, resultEl); break;
+            case 'proximity': executeProximity(data, params, resultEl); break;
+        }
+        toolResults[toolId] = resultEl.innerHTML;
+    }
+
+    // ── Pearson ──
+    function executePearson(data, p, el) {
+        const aKey = p.signalA, bKey = p.signalB;
+        const valid = data.filter(d => d[aKey] != null && d[bKey] != null);
+        if (valid.length < 3) { el.innerHTML = '<div class="jarvis-error">Not enough data (need 3+)</div>'; return; }
+        let xs = valid.map(d => d[aKey]);
+        let ys = valid.map(d => d[bKey]);
+        const doLog = p.logViews !== false;
+        if (doLog && aKey === 'views') xs = xs.map(v => Math.log10(Math.max(v, 1)));
+        if (doLog && bKey === 'views') ys = ys.map(v => Math.log10(Math.max(v, 1)));
+        const r = pearsonCorrelation(xs, ys);
+        const strength = interpretR(r);
+        const absR = Math.abs(r);
+        const color = absR >= 0.4 ? '#10b981' : absR >= 0.2 ? '#f59e0b' : '#ef4444';
+        const logNote = (doLog && (aKey === 'views' || bKey === 'views')) ? ' (log10 on views)' : '';
+        const barLeft = r >= 0 ? 50 : 50 - absR * 50;
+        const barWidth = absR * 50;
+        el.innerHTML = `
+            <div class="jarvis-result-card">
+                <div class="jarvis-result-label">Pearson${logNote}: ${indicatorLabel(aKey)} vs ${indicatorLabel(bKey)}</div>
+                <div class="jarvis-result-r" style="color:${color}">r = ${r.toFixed(4)}</div>
+                <div class="jarvis-result-strength" style="color:${color}">${strength} ${r > 0 ? 'positive' : r < 0 ? 'negative' : ''} correlation</div>
+                <div class="jarvis-r-bar">
+                    <div class="jarvis-r-bar-track">
+                        <div class="jarvis-r-bar-center"></div>
+                        <div class="jarvis-r-bar-fill" style="left:${barLeft}%;width:${barWidth}%;background:${color}"></div>
+                    </div>
+                    <div class="jarvis-r-bar-labels"><span>-1</span><span>0</span><span>+1</span></div>
+                </div>
+                <div class="jarvis-result-n">n = ${valid.length} videos</div>
+                <div class="jarvis-result-interp">${absR < 0.1 ? 'Essentially no linear relationship.' : absR < 0.3 ? 'Weak relationship — other factors dominate.' : absR < 0.5 ? 'Moderate relationship — real signal here.' : 'Strong relationship — key predictor.'}</div>
+            </div>`;
+    }
+
+    // ── Bucket ──
+    function executeBucket(data, p, el) {
+        const gKey = p.groupBy, mKey = p.measure;
+        const nBuckets = parseInt(p.bucketCount) || 5;
+        const valid = data.filter(d => d[gKey] != null && d[mKey] != null);
+        if (valid.length < 3) { el.innerHTML = '<div class="jarvis-error">Not enough data</div>'; return; }
+        const groups = valid.map(d => d[gKey]);
+        const measures = valid.map(d => d[mKey]);
+        const buckets = bucketAnalysis(groups, measures, nBuckets);
+        const maxAvg = Math.max(...buckets.map(b => b.avgVal), 1);
+        el.innerHTML = `
+            <div class="jarvis-result-card">
+                <div class="jarvis-result-label">Bucket: ${indicatorLabel(gKey)} → ${indicatorLabel(mKey)}</div>
+                <div class="jarvis-bucket-chart">
+                    ${buckets.map(b => {
+                        const pct = (b.avgVal / maxAvg * 100).toFixed(0);
+                        const display = mKey === 'views' ? fmtViews(b.avgVal) : b.avgVal.toFixed(2);
+                        return `<div class="jarvis-bucket-row">
+                            <span class="jarvis-bucket-label">${b.label}</span>
+                            <div class="jarvis-bucket-bar-wrap"><div class="jarvis-bucket-bar" style="width:${pct}%"></div></div>
+                            <span class="jarvis-bucket-val">${display} <span class="jarvis-bucket-n">(n=${b.n})</span></span>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <div class="jarvis-result-n">n = ${valid.length} videos</div>
+            </div>`;
+    }
+
+    // ── log10 Compare ──
+    function executeLog10(data, p, el) {
+        const aKey = p.signalA, bKey = p.signalB;
+        const valid = data.filter(d => d[aKey] != null && d[bKey] != null && d[aKey] > 0 && d[bKey] > 0);
+        if (valid.length < 3) { el.innerHTML = '<div class="jarvis-error">Not enough data</div>'; return; }
+        const xs = valid.map(d => d[aKey]), ys = valid.map(d => d[bKey]);
+        const rRaw = pearsonCorrelation(xs, ys);
+        const rLog = pearsonCorrelation(xs.map(v => Math.log10(v)), ys.map(v => Math.log10(v)));
+        const colorRaw = Math.abs(rRaw) >= 0.4 ? '#10b981' : Math.abs(rRaw) >= 0.2 ? '#f59e0b' : '#ef4444';
+        const colorLog = Math.abs(rLog) >= 0.4 ? '#10b981' : Math.abs(rLog) >= 0.2 ? '#f59e0b' : '#ef4444';
+        const better = Math.abs(rLog) > Math.abs(rRaw) ? 'log10' : 'raw';
+        el.innerHTML = `
+            <div class="jarvis-result-card">
+                <div class="jarvis-result-label">log10 Compare: ${indicatorLabel(aKey)} vs ${indicatorLabel(bKey)}</div>
+                <div style="display:flex;gap:20px;margin:10px 0">
+                    <div style="flex:1">
+                        <div style="font-size:11px;color:var(--j-muted);text-transform:uppercase;margin-bottom:4px">Raw</div>
+                        <div style="font-size:22px;font-weight:800;font-family:'SF Mono',monospace;color:${colorRaw}">r = ${rRaw.toFixed(4)}</div>
+                        <div style="font-size:11px;color:${colorRaw}">${interpretR(rRaw)}</div>
+                    </div>
+                    <div style="flex:1">
+                        <div style="font-size:11px;color:var(--j-muted);text-transform:uppercase;margin-bottom:4px">log10</div>
+                        <div style="font-size:22px;font-weight:800;font-family:'SF Mono',monospace;color:${colorLog}">r = ${rLog.toFixed(4)}</div>
+                        <div style="font-size:11px;color:${colorLog}">${interpretR(rLog)}</div>
+                    </div>
+                </div>
+                <div class="jarvis-result-interp">log10 normalization ${better === 'log10' ? 'improves' : 'does not improve'} the correlation. Use <strong>${better}</strong> for this signal pair.</div>
+                <div class="jarvis-result-n">n = ${valid.length} videos</div>
+            </div>`;
+    }
+
+    // ── Ratio Normalizer ──
+    function executeRatio(data, p, el) {
+        const numKey = p.numerator, basis = parseInt(p.basis) || 1000, cmpKey = p.compare;
+        const valid = data.filter(d => d[numKey] != null && d.views > 0 && d[cmpKey] != null);
+        if (valid.length < 3) { el.innerHTML = '<div class="jarvis-error">Not enough data</div>'; return; }
+        const ratios = valid.map(d => (d[numKey] / d.views) * basis);
+        const cmpVals = valid.map(d => d[cmpKey]);
+        const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+        const r = pearsonCorrelation(ratios, cmpVals);
+        const color = Math.abs(r) >= 0.4 ? '#10b981' : Math.abs(r) >= 0.2 ? '#f59e0b' : '#ef4444';
+        const basisLabel = basis === 100 ? '/100' : basis === 1000 ? '/1k' : '/1M';
+        el.innerHTML = `
+            <div class="jarvis-result-card">
+                <div class="jarvis-result-label">Ratio: ${indicatorLabel(numKey)} ${basisLabel} views → ${indicatorLabel(cmpKey)}</div>
+                <div style="font-size:13px;color:var(--j-text);margin:8px 0">Avg ratio: <strong>${avgRatio.toFixed(3)}${basisLabel}</strong> views (range: ${Math.min(...ratios).toFixed(3)} — ${Math.max(...ratios).toFixed(3)})</div>
+                <div class="jarvis-result-r" style="color:${color}">r = ${r.toFixed(4)} vs ${indicatorLabel(cmpKey)}</div>
+                <div class="jarvis-result-strength" style="color:${color}">${interpretR(r)}</div>
+                <div class="jarvis-result-n">n = ${valid.length} videos</div>
+                <button class="jarvis-btn-disabled" disabled>Promote as Indicator</button>
+            </div>`;
+    }
+
+    // ── Net Signal Calculator ──
+    function executeNet(data, p, el) {
+        const posKey = p.positive, negKey = p.negative, cmpKey = p.compare;
+        const valid = data.filter(d => d[posKey] != null && d[negKey] != null && d[cmpKey] != null);
+        if (valid.length < 3) { el.innerHTML = '<div class="jarvis-error">Not enough data</div>'; return; }
+        const nets = valid.map(d => d[posKey] - d[negKey]);
+        const cmpVals = valid.map(d => d[cmpKey]);
+        const avgNet = nets.reduce((a, b) => a + b, 0) / nets.length;
+        const r = pearsonCorrelation(nets, cmpVals);
+        const color = Math.abs(r) >= 0.4 ? '#10b981' : Math.abs(r) >= 0.2 ? '#f59e0b' : '#ef4444';
+        const buckets = bucketAnalysis(nets, cmpVals, 5);
+        const peakBucket = buckets.reduce((best, b) => b.avgVal > best.avgVal ? b : best, buckets[0]);
+        const maxAvg = Math.max(...buckets.map(b => b.avgVal), 1);
+        el.innerHTML = `
+            <div class="jarvis-result-card">
+                <div class="jarvis-result-label">Net: ${indicatorLabel(posKey)} − ${indicatorLabel(negKey)} → ${indicatorLabel(cmpKey)}</div>
+                <div style="font-size:13px;color:var(--j-text);margin:8px 0">Avg net value: <strong>${avgNet.toFixed(2)}</strong> (range: ${Math.min(...nets).toFixed(1)} to ${Math.max(...nets).toFixed(1)})</div>
+                <div class="jarvis-result-r" style="color:${color}">r = ${r.toFixed(4)} vs ${indicatorLabel(cmpKey)}</div>
+                <div class="jarvis-result-strength" style="color:${color}">${interpretR(r)}</div>
+                <div class="jarvis-bucket-chart">
+                    ${buckets.map(b => {
+                        const pct = (b.avgVal / maxAvg * 100).toFixed(0);
+                        const display = cmpKey === 'views' ? fmtViews(b.avgVal) : b.avgVal.toFixed(2);
+                        return `<div class="jarvis-bucket-row">
+                            <span class="jarvis-bucket-label">${b.label}</span>
+                            <div class="jarvis-bucket-bar-wrap"><div class="jarvis-bucket-bar" style="width:${pct}%"></div></div>
+                            <span class="jarvis-bucket-val">${display} <span class="jarvis-bucket-n">(n=${b.n})</span></span>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <div class="jarvis-result-interp">Sweet spot: net value <strong>${peakBucket.label}</strong> (avg ${cmpKey === 'views' ? fmtViews(peakBucket.avgVal) : peakBucket.avgVal.toFixed(2)}, n=${peakBucket.n}). The optimal balance between ${indicatorLabel(posKey)} and ${indicatorLabel(negKey)} appears where the net value maximizes ${indicatorLabel(cmpKey)}.</div>
+                <div class="jarvis-result-n">n = ${valid.length} videos</div>
+            </div>`;
+    }
+
+    // ── Proximity / Clustering ──
+    function executeProximity(data, p, el) {
+        const signals = p.signals || [];
+        if (signals.length < 2) { el.innerHTML = '<div class="jarvis-error">Select at least 2 signals</div>'; return; }
+        const method = p.method || 'euclidean';
+        const valid = data.filter(d => signals.every(s => d[s] != null));
+        if (valid.length < 3) { el.innerHTML = '<div class="jarvis-error">Not enough data</div>'; return; }
+
+        const stats = {};
+        signals.forEach(s => {
+            const vals = valid.map(d => d[s]);
+            const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+            const variance = vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length;
+            stats[s] = { mean, std: Math.sqrt(variance) || 1 };
+        });
+
+        const distances = valid.map(d => {
+            let dist;
+            if (method === 'euclidean') {
+                const z = signals.map(s => (d[s] - stats[s].mean) / stats[s].std);
+                dist = Math.sqrt(z.reduce((a, v) => a + v * v, 0));
+            } else {
+                const raw = signals.map(s => d[s]);
+                const cent = signals.map(s => stats[s].mean);
+                const dot = raw.reduce((a, v, j) => a + v * cent[j], 0);
+                const magA = Math.sqrt(raw.reduce((a, v) => a + v * v, 0));
+                const magB = Math.sqrt(cent.reduce((a, v) => a + v * v, 0));
+                dist = (magA > 0 && magB > 0) ? 1 - dot / (magA * magB) : 1;
+            }
+            return { dist, video: d };
+        });
+
+        distances.sort((a, b) => a.dist - b.dist);
+        const top5 = distances.slice(0, 5);
+
+        el.innerHTML = `
+            <div class="jarvis-result-card">
+                <div class="jarvis-result-label">Proximity (${method})</div>
+                <div class="jarvis-result-n">${signals.length} signals · n=${valid.length} videos</div>
+                <div style="margin-top:10px;font-size:12px;color:var(--j-text);font-weight:600">Top 5 closest to centroid:</div>
+                ${top5.map((t, i) => {
+                    const vLabel = t.video.views ? fmtViews(t.video.views) + ' views' : '';
+                    const sigVals = signals.map(s => `${indicatorLabel(s)}: ${typeof t.video[s] === 'number' ? t.video[s].toFixed(1) : t.video[s]}`).join(' · ');
+                    return `<div style="font-size:12px;color:var(--j-muted);padding:6px 0;border-bottom:1px solid var(--j-border)">
+                        <span style="color:var(--j-text)">${i + 1}. ${vLabel}</span> — dist: ${t.dist.toFixed(3)}<br>
+                        <span style="font-size:10px">${sigVals}</span>
+                    </div>`;
+                }).join('')}
+                <div class="jarvis-result-interp" style="margin-top:10px">
+                    <em>2D projection (t-SNE / PCA) is next. This shows which videos are closest to the average profile across selected signals.</em>
+                </div>
+            </div>`;
+    }
+
+    // ── Tactical Brain — Indicator Registry ──
+    function renderTactical() {
+        const active = INDICATORS.filter(i => i.category === 'active');
+        const planned = INDICATORS.filter(i => i.category === 'planned');
+        const isNumeric = (key) => NUMERIC_KEYS.includes(key);
+        const toolNames = TOOL_DEFS.filter(t => !t.planned).map(t => ({ id: t.id, name: t.name }));
+
+        const activeCards = active.map(ind => {
+            const chooserOpen = chooserKey === ind.key;
+            return `<div class="jarvis-indicator-card jarvis-indicator-active">
+                <div class="jarvis-indicator-top">
+                    <h4 class="jarvis-indicator-label">${ind.label}</h4>
+                    <span class="jarvis-indicator-type">${ind.type}</span>
+                </div>
+                <span class="jarvis-indicator-source">${ind.source}</span>
+                <div class="jarvis-indicator-benchmark">${ind.benchmark}</div>
+                ${isNumeric(ind.key) ? `<button class="jarvis-use-in-tool" data-key="${ind.key}">${chooserOpen ? 'Cancel' : 'Use in Tool →'}</button>` : ''}
+                ${chooserOpen ? `<div class="jarvis-indicator-chooser">
+                    ${toolNames.map(t => `<button class="jarvis-chooser-btn" data-tool="${t.id}" data-key="${ind.key}">${t.name}</button>`).join('')}
+                </div>` : ''}
             </div>`;
         }).join('');
 
-        const rightCards = UNQUANTIFIED_SIGNALS.map(s =>
-            `<div class="jarvis-signal-card jarvis-signal-unquantified">
-                <div class="jarvis-sig-header">
-                    <span class="jarvis-sig-icon">${s.icon}</span>
-                    <h4>${s.name}</h4>
+        const plannedCards = planned.map(ind =>
+            `<div class="jarvis-indicator-card jarvis-indicator-planned">
+                <h4 class="jarvis-indicator-label">${ind.label}</h4>
+                <div class="jarvis-indicator-sub">Not yet scored</div>
+                <div class="jarvis-indicator-actions">
+                    <button class="jarvis-btn-disabled" disabled>Score with LLM</button>
+                    <button class="jarvis-btn-disabled" disabled>Add to Analytical Brain</button>
                 </div>
-                <div class="jarvis-sig-desc">${s.desc}</div>
-                <button class="jarvis-llm-btn">Score with LLM</button>
             </div>`
         ).join('');
 
-        return `<div class="jarvis-tactical">
-            <div class="jarvis-tactical-col jarvis-col-quantified">
-                <h3>Quantified Signals</h3>
-                ${leftCards}
+        return `
+            <div class="jarvis-indicator-section">
+                <h3 class="jarvis-indicator-section-title jarvis-section-active">Active Indicators</h3>
+                <div class="jarvis-indicator-grid">${activeCards}</div>
             </div>
-            <div class="jarvis-tactical-col jarvis-col-unquantified">
-                <h3>Unquantified Signals</h3>
-                ${rightCards}
-            </div>
-        </div>`;
+            <div class="jarvis-indicator-section">
+                <h3 class="jarvis-indicator-section-title jarvis-section-planned">Derived / Planned Indicators</h3>
+                <div class="jarvis-indicator-grid">${plannedCards}</div>
+            </div>`;
     }
 
-    // ── Experiments ──
+    // ── Experiments — Saved results only ──
     function renderExperiments() {
-        const signalOptions = Object.keys(SIGNAL_KEYS).map(k => `<option value="${k}">${k}</option>`).join('');
         return `
             <div class="jarvis-exp-header">
                 <span class="jarvis-exp-count">n=203 videos | 5 signals scored</span>
@@ -252,146 +658,10 @@ const JarvisUI = (() => {
                     </div>`;
                 }).join('')}
             </div>
-            <div class="jarvis-builder">
-                <h3 class="jarvis-builder-title">Experiment Builder</h3>
-                <p class="jarvis-builder-sub">Plug any signal × any tool and plot it</p>
-                <div class="jarvis-builder-form">
-                    <div class="jarvis-builder-field">
-                        <label>X Axis Signal</label>
-                        <select id="jarvis-x-axis">${signalOptions}</select>
-                    </div>
-                    <div class="jarvis-builder-field">
-                        <label>Y Axis Signal</label>
-                        <select id="jarvis-y-axis"><option value="Views">Views</option>${Object.keys(SIGNAL_KEYS).filter(k => k !== 'Views').map(k => `<option value="${k}">${k}</option>`).join('')}</select>
-                    </div>
-                    <div class="jarvis-builder-field">
-                        <label>Measurement Tool</label>
-                        <select id="jarvis-tool">
-                            <option value="pearson">Pearson Correlation</option>
-                            <option value="bucket">Bucket Analysis</option>
-                            <option value="ratio">Ratio Normalizer</option>
-                        </select>
-                    </div>
-                    <button class="jarvis-run-btn" id="jarvis-run-experiment">Run Experiment</button>
-                </div>
-                <div id="jarvis-builder-result" class="jarvis-builder-result"></div>
+            <div class="jarvis-exp-footer">
+                Saved Experiments &mdash; results produced by Analytical Brain tools using Tactical Brain indicators. Promote stable derived ratios/signals back into Tactical Brain.
             </div>
         `;
-    }
-
-    // ── Run experiment ──
-    async function runExperiment() {
-        const xKey = document.getElementById('jarvis-x-axis').value;
-        const yKey = document.getElementById('jarvis-y-axis').value;
-        const tool = document.getElementById('jarvis-tool').value;
-        const resultDiv = document.getElementById('jarvis-builder-result');
-
-        resultDiv.innerHTML = '<div class="jarvis-loading">Loading dataset...</div>';
-
-        const data = await loadDataset();
-        if (!data) {
-            resultDiv.innerHTML = '<div class="jarvis-error">Failed to load dataset</div>';
-            return;
-        }
-
-        const xField = SIGNAL_KEYS[xKey];
-        const yField = SIGNAL_KEYS[yKey];
-
-        // Filter valid rows
-        const valid = data.filter(d => d[xField] != null && d[yField] != null && d[xField] !== 0 && d[yField] !== 0);
-        const xs = valid.map(d => d[xField]);
-        const ys = valid.map(d => d[yField]);
-
-        if (valid.length < 3) {
-            resultDiv.innerHTML = '<div class="jarvis-error">Not enough valid data points (need at least 3)</div>';
-            return;
-        }
-
-        if (tool === 'pearson') {
-            // Apply log10 to views if views is one of the axes
-            const logXs = xKey === 'Views' ? xs.map(v => Math.log10(Math.max(v, 1))) : xs;
-            const logYs = yKey === 'Views' ? ys.map(v => Math.log10(Math.max(v, 1))) : ys;
-            const r = pearsonCorrelation(logXs, logYs);
-            const strength = interpretR(r);
-            const absR = Math.abs(r);
-            const color = absR >= 0.4 ? '#10b981' : absR >= 0.2 ? '#f59e0b' : '#ef4444';
-            const logNote = (xKey === 'Views' || yKey === 'Views') ? ' (log10 applied to Views)' : '';
-            resultDiv.innerHTML = `
-                <div class="jarvis-result-card">
-                    <div class="jarvis-result-label">Pearson Correlation${logNote}</div>
-                    <div class="jarvis-result-r" style="color:${color}">r = ${r.toFixed(4)}</div>
-                    <div class="jarvis-result-strength" style="color:${color}">${strength} ${r > 0 ? 'positive' : r < 0 ? 'negative' : ''} correlation</div>
-                    <div class="jarvis-exp-bar-wrap"><div class="jarvis-exp-bar" style="width:${Math.max(absR / 0.5 * 100, 4)}%;background:${color}"></div></div>
-                    <div class="jarvis-result-n">n = ${valid.length} videos</div>
-                    <div class="jarvis-result-interp">${xKey} vs ${yKey}: ${absR < 0.1 ? 'Essentially no linear relationship.' : absR < 0.3 ? 'Weak relationship — other factors dominate.' : absR < 0.5 ? 'Moderate relationship — real signal here.' : 'Strong relationship — key predictor.'}</div>
-                </div>
-            `;
-        } else if (tool === 'bucket') {
-            const numBuckets = 6;
-            const buckets = bucketAnalysis(xs, ys.map(v => yKey === 'Views' ? v : v), numBuckets);
-            const maxAvg = Math.max(...buckets.map(b => b.avgViews), 1);
-            const yLabel = yKey === 'Views' ? 'Avg Views' : `Avg ${yKey}`;
-            resultDiv.innerHTML = `
-                <div class="jarvis-result-card">
-                    <div class="jarvis-result-label">Bucket Analysis: ${xKey} → ${yKey}</div>
-                    <div class="jarvis-bucket-chart">
-                        ${buckets.map(b => {
-                            const pct = (b.avgViews / maxAvg * 100).toFixed(0);
-                            const displayVal = yKey === 'Views' ? (b.avgViews >= 1000000 ? (b.avgViews / 1000000).toFixed(1) + 'M' : b.avgViews >= 1000 ? (b.avgViews / 1000).toFixed(0) + 'K' : b.avgViews.toFixed(0)) : b.avgViews.toFixed(1);
-                            return `<div class="jarvis-bucket-row">
-                                <span class="jarvis-bucket-label">${b.label}</span>
-                                <div class="jarvis-bucket-bar-wrap">
-                                    <div class="jarvis-bucket-bar" style="width:${pct}%"></div>
-                                </div>
-                                <span class="jarvis-bucket-val">${displayVal} <span class="jarvis-bucket-n">(n=${b.n})</span></span>
-                            </div>`;
-                        }).join('')}
-                    </div>
-                    <div class="jarvis-result-n">n = ${valid.length} videos | ${yLabel}</div>
-                </div>
-            `;
-        } else if (tool === 'ratio') {
-            // Ratio normalizer: compute signal per 1k views
-            const views = valid.map(d => d.views);
-            const ratios = xs.map((x, i) => views[i] > 0 ? (x / views[i]) * 1000 : 0);
-            const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
-            const maxRatio = Math.max(...ratios);
-            const minRatio = Math.min(...ratios);
-            // Bucket by view tier
-            const tiers = [
-                { label: 'Sub-1M', lo: 0, hi: 1000000 },
-                { label: '1-5M', lo: 1000000, hi: 5000000 },
-                { label: '5-10M', lo: 5000000, hi: 10000000 },
-                { label: '10-50M', lo: 10000000, hi: 50000000 },
-                { label: '50M+', lo: 50000000, hi: Infinity },
-            ];
-            const tierResults = tiers.map(t => {
-                const tierVids = valid.filter(d => d.views >= t.lo && d.views < t.hi);
-                const tierRatios = tierVids.map(d => d.views > 0 ? (d[xField] / d.views) * 1000 : 0);
-                const avg = tierRatios.length > 0 ? tierRatios.reduce((a, b) => a + b, 0) / tierRatios.length : 0;
-                return { label: t.label, avg, n: tierVids.length };
-            });
-            const maxTierAvg = Math.max(...tierResults.map(t => t.avg), 0.001);
-            resultDiv.innerHTML = `
-                <div class="jarvis-result-card">
-                    <div class="jarvis-result-label">Ratio Normalizer: ${xKey} per 1k Views</div>
-                    <div class="jarvis-result-n">Overall avg: ${avgRatio.toFixed(3)}/1k views | Range: ${minRatio.toFixed(3)} — ${maxRatio.toFixed(3)}</div>
-                    <div class="jarvis-bucket-chart">
-                        ${tierResults.map(t => {
-                            const pct = (t.avg / maxTierAvg * 100).toFixed(0);
-                            return `<div class="jarvis-bucket-row">
-                                <span class="jarvis-bucket-label">${t.label}</span>
-                                <div class="jarvis-bucket-bar-wrap">
-                                    <div class="jarvis-bucket-bar" style="width:${pct}%"></div>
-                                </div>
-                                <span class="jarvis-bucket-val">${t.avg.toFixed(3)}/1k <span class="jarvis-bucket-n">(n=${t.n})</span></span>
-                            </div>`;
-                        }).join('')}
-                    </div>
-                    <div class="jarvis-result-n">n = ${valid.length} videos</div>
-                </div>
-            `;
-        }
     }
 
     // ── Resolution ──
@@ -410,22 +680,18 @@ const JarvisUI = (() => {
     }
 
     function renderResolution() {
-        // Kick off async load, render placeholder, then fill in
         loadResolutionRegistry().then(registry => {
             const el = container?.querySelector('.jarvis-resolution-root');
             if (!el || !registry) return;
             el.innerHTML = renderResolutionContent(registry);
             bindResolutionEvents();
         });
-
         return `<div class="jarvis-resolution-root"><div class="jarvis-loading">Loading resolution registry...</div></div>`;
     }
 
     function renderResolutionContent(registry) {
         const maxDepth = 10;
-        const levels = registry.map(r => `R${r.level}`);
 
-        // Build depth grid data
         const gridCells = [];
         for (let d = maxDepth; d >= 0; d--) {
             const row = registry.map(r => {
@@ -549,10 +815,8 @@ const JarvisUI = (() => {
 
     function computeFractionalLevel(lowerLevel, upperLevel, registry) {
         const mid = (lowerLevel + upperLevel) / 2;
-        // Check if this level already exists
         const exists = registry.some(r => r.level === mid);
         if (!exists) return mid;
-        // Recurse: find a slot between lower and mid
         return computeFractionalLevel(lowerLevel, mid, registry);
     }
 
@@ -595,7 +859,6 @@ const JarvisUI = (() => {
     }
 
     function bindResolutionEvents() {
-        // Submit observation
         const submitBtn = container?.querySelector('#jarvis-res-submit');
         if (submitBtn) {
             submitBtn.addEventListener('click', () => {
@@ -623,7 +886,6 @@ const JarvisUI = (() => {
             });
         }
 
-        // Auto-classify
         const classifyBtn = container?.querySelector('#jarvis-classify-submit');
         if (classifyBtn) {
             classifyBtn.addEventListener('click', async () => {
@@ -664,7 +926,6 @@ const JarvisUI = (() => {
                         </div>
                     `;
 
-                    // Bind action buttons
                     const logBtn = resultDiv.querySelector('.jarvis-classify-log');
                     if (logBtn) {
                         logBtn.addEventListener('click', () => {
@@ -720,6 +981,7 @@ const JarvisUI = (() => {
     function bindEvents() {
         if (!container) return;
 
+        // Tab switching
         container.querySelectorAll('.jarvis-tab').forEach(btn => {
             btn.addEventListener('click', () => {
                 activeTab = btn.dataset.tab;
@@ -727,10 +989,48 @@ const JarvisUI = (() => {
             });
         });
 
-        const runBtn = container.querySelector('#jarvis-run-experiment');
-        if (runBtn) {
-            runBtn.addEventListener('click', runExperiment);
-        }
+        // Analytical: tool open/close
+        container.querySelectorAll('.jarvis-tool-run-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.tool;
+                activeToolId = activeToolId === id ? null : id;
+                render();
+            });
+        });
+
+        // Analytical: tool execute
+        container.querySelectorAll('.jarvis-tool-execute').forEach(btn => {
+            btn.addEventListener('click', () => executeTool(btn.dataset.tool));
+        });
+
+        // Tactical: use in tool toggle
+        container.querySelectorAll('.jarvis-use-in-tool').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.key;
+                chooserKey = chooserKey === key ? null : key;
+                render();
+            });
+        });
+
+        // Tactical: chooser tool button
+        container.querySelectorAll('.jarvis-chooser-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const toolId = btn.dataset.tool;
+                const key = btn.dataset.key;
+                const param = TOOL_FIRST_PARAM[toolId];
+                if (param === 'signals') {
+                    if (!toolSelections.proximity.signals.includes(key)) {
+                        toolSelections.proximity.signals.push(key);
+                    }
+                } else if (toolSelections[toolId]) {
+                    toolSelections[toolId][param] = key;
+                }
+                activeToolId = toolId;
+                activeTab = 'analytical';
+                chooserKey = null;
+                render();
+            });
+        });
     }
 
     // ── Public API ──
@@ -738,6 +1038,9 @@ const JarvisUI = (() => {
         container = bodyEl;
         activeTab = 'analytical';
         dataset = null;
+        activeToolId = null;
+        toolResults = {};
+        chooserKey = null;
         render();
     }
 
