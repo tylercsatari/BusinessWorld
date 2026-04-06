@@ -26,6 +26,8 @@ const JarvisUI = (() => {
         { label: 'Net Novelty', key: 'net_novelty', type: 'derived', source: 'Novelty − Cog Load', benchmark: 'Sweet spot: +2', category: 'active' },
         { label: 'Share Rate', key: 'share_rate', type: 'per 1k', source: 'YouTube Analytics', benchmark: 'Viral: 0.66/1k vs avg: 0.31/1k', category: 'active' },
         { label: 'Views', key: 'views', type: 'count', source: 'YouTube Analytics', benchmark: 'Log-normalized for analysis', category: 'active' },
+        { label: 'Visual Zeigarnik Score', key: 'vz_score', type: '1-10', source: 'LLM vision-scored (first 3 frames + 3s transcript)', benchmark: 'Sweet spot: VZ=8 (avg 17.4M views, 77.6% keep)', category: 'active', numeric: true },
+        { label: 'Visual Zeigarnik Type', key: 'vz_type', type: 'categorical', source: 'LLM vision-scored', benchmark: 'Type C (Mystery/reveal) dominates: 119 videos, 9.3M avg', category: 'active', numeric: false },
         { label: 'Hook Clarity', key: 'hook_clarity', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
         { label: 'Visual Surprise', key: 'visual_surprise', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
         { label: 'Pacing', key: 'pacing', type: '1-10', source: 'Not yet scored', benchmark: 'TBD', category: 'planned' },
@@ -80,6 +82,9 @@ const JarvisUI = (() => {
         { id: 'exp_z1', name: 'Zeigarnik Effect Score vs Views', r: -0.08, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Pearson r=-0.08 — near zero linear correlation. BUT bucket analysis reveals a clear non-linear sweet spot: Z=6 → avg 10.2M views, Z=7 → avg 12.6M views. Z=8 drops to 5.9M, Z=9 to 4.9M, Z=10 to 4.6M. Extreme Zeigarnik (high danger/intensity) narrows audience. The sweet spot is moderate open loops — enough curiosity to hook, not so intense it filters the mass market.' },
         { id: 'exp_z2', name: 'Zeigarnik Effect vs Keep Rate', r: -0.06, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Near-zero correlation with in-video keep rate. Zeigarnik score does not directly predict hook retention. High Z-score videos (9-10) average 72-73% keep rate — slightly LOWER than mid-range (Z=6-7 at 77%). Implication: strong open loops alone don\'t prevent swipe-away; content quality and pacing are separate drivers.' },
         { id: 'exp_z3', name: 'Zeigarnik Type Breakdown', r: null, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Type B (Challenge/outcome uncertainty): n=88, avg 9.6M views — most common and highest performing. Type E (Social curiosity): n=10, avg 10.1M views — small sample but strong. Type A (Physical danger/threat): n=38, avg 7.4M views, avg Z-score 8.4 — high intensity but narrower. Type C (Mystery/reveal): n=42, avg 5.8M views. Best strategy: lean into B (can it work?) and E (social stakes), not maximum danger.' },
+        { id: 'exp_vz1', name: 'Visual Zeigarnik (3s frames+text) vs Keep Rate', r: 0.22, n: 203, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM vision-scored)', finding: 'r=+0.22 using first 3 seconds of frames + spoken words. Text-only Zeigarnik was r=-0.06 (noise). Correct resolution (visual+text, 3s window) reveals a real signal. Visual scoring is more predictive of hook retention than text proxy.' },
+        { id: 'exp_vz2', name: 'Visual Zeigarnik Bucket vs Keep Rate', r: null, n: 203, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'VZ=6: avg keep 73.1% (n=64). VZ=7: avg keep 74.9% (n=101). VZ=8: avg keep 77.6% (n=30), avg views 17.4M. Higher visual Zeigarnik directly predicts both higher keep rate AND more views. VZ=8 is the current sweet spot.' },
+        { id: 'exp_vz3', name: 'Visual vs Text Zeigarnik: Type Reversal', r: null, n: 203, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Text scoring showed Type B (Challenge) dominant. Visual scoring shows Type C (Mystery/reveal) dominant: 119 videos, avg 9.3M views. 47 videos scored LOWER visually than text (visuals less compelling than description). Only 24 scored higher visually. Resolution matters: the same video reads differently at text vs visual resolution.' },
     ];
 
     const TABS = [
@@ -92,6 +97,7 @@ const JarvisUI = (() => {
     ];
 
     const INSIGHTS = [
+        '<strong>Visual Zeigarnik (r=+0.22) vs text-only (r=-0.06)</strong> — scoring at correct resolution (first 3 seconds, frames + transcript) vs wrong resolution (first 180 chars) completely changes the signal. Visual Type C (Mystery/reveal) dominates at 9.3M avg views — the opposite of what text scoring suggested.',
         '<strong>Keep Rate (r=0.43) is the strongest quantified predictor</strong> — get swipe-away under 25%. In-video keep rate has real predictive power for total views.',
         '<strong>Net Novelty sweet spot = +2</strong> (Novelty exceeds Cognitive Load by exactly 2). Both too easy and too complex underperform. Average 10.3M views at the sweet spot.',
         '<strong>Zeigarnik Z=7 (not Z=10) peaks at 12.6M avg</strong> — moderate open loops beat maximum intensity. Z=10 averages only 4.6M. Enough curiosity to hook, not so intense it filters the mass market.',
