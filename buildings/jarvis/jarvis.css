@@ -64,7 +64,7 @@
 
 /* ── Analytical Brain — Tool Cards ── */
 .jarvis-tools-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
 }
 .jarvis-tool-card {
     background: rgba(30, 30, 50, 0.8);
@@ -165,7 +165,7 @@
     font-family: 'SF Mono', monospace;
 }
 .jarvis-experiments {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
 }
 .jarvis-exp-card {
     background: var(--j-card); border: 1px solid var(--j-border);
@@ -1557,4 +1557,80 @@
 .jarvis-res-loop-status {
     font-size: 11px; color: var(--j-muted); line-height: 1.5;
     font-style: italic;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+    /* Global */
+    .jarvis-content { padding: 12px 12px; }
+    .jarvis-header { padding: 12px 12px 0; }
+    .jarvis-header-title { font-size: 18px; }
+    .jarvis-tabs { padding: 8px 12px 0; gap: 0; }
+    .jarvis-tab { padding: 8px 8px; font-size: 10px; letter-spacing: 0; }
+
+    /* Analytical Brain - tool cards */
+    .jarvis-tools-grid { grid-template-columns: 1fr !important; gap: 10px; }
+    .jarvis-tool-card { padding: 14px; }
+    .jarvis-tool-panel { padding: 12px; }
+    .jarvis-tool-inputs { gap: 10px; }
+    .jarvis-tool-field { display: flex; flex-direction: column; gap: 4px; }
+    .jarvis-tool-field select, .jarvis-tool-field input { width: 100%; box-sizing: border-box; }
+    .jarvis-tool-execute { width: 100%; padding: 12px; font-size: 14px; }
+
+    /* Tactical Brain - network graph */
+    .jarvis-tactical-canvas-wrap canvas { width: 100% !important; height: auto !important; }
+    .jarvis-tactical-legend { flex-wrap: wrap; gap: 8px; }
+
+    /* Experiments */
+    .jarvis-exp-header { flex-direction: column; gap: 6px; }
+    .jarvis-experiments { grid-template-columns: 1fr !important; }
+    .jarvis-exp-card { padding: 14px; }
+    .jarvis-exp-badges { flex-wrap: wrap; gap: 4px; }
+
+    /* Indicators in Tactical */
+    .jarvis-indicator-grid { grid-template-columns: 1fr !important; }
+    .jarvis-indicator-card { padding: 12px; }
+    .jarvis-tool-chooser { flex-wrap: wrap; gap: 6px; }
+    .jarvis-tool-choose-btn { flex: 1 1 calc(33% - 6px); text-align: center; padding: 8px 4px; font-size: 10px; }
+
+    /* AutoResearch */
+    .jarvis-ar-framework-cols { grid-template-columns: 1fr !important; gap: 12px; }
+    .jarvis-ar-scorer-grid { grid-template-columns: 1fr !important; }
+    .jarvis-ar-scorer-field { display: flex; flex-direction: column; gap: 4px; }
+    .jarvis-ar-scorer-field input { width: 100%; box-sizing: border-box; }
+    .jarvis-ar-predict-btn { width: 100%; padding: 14px; font-size: 15px; }
+    .jarvis-ar-hyp-grid { grid-template-columns: 1fr !important; }
+    .jarvis-ar-loop-steps { flex-wrap: wrap; gap: 6px; }
+    .jarvis-ar-step { font-size: 10px; padding: 6px 8px; }
+    .jarvis-ar-step-arrow { display: none; }
+    .jarvis-ar-tsv-table { font-size: 11px; }
+    .jarvis-ar-tsv-table th, .jarvis-ar-tsv-table td { padding: 6px 8px; }
+
+    /* Resolution */
+    .jarvis-res-tree { gap: 10px; }
+    .jarvis-res-card-wrapper { flex-direction: row; gap: 8px; }
+    .jarvis-res-card { padding: 12px; }
+    .jarvis-res-grid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .jarvis-res-loops-grid { grid-template-columns: 1fr !important; }
+    .jarvis-res-loop-card { padding: 12px; }
+    .jarvis-res-loop-metrics { gap: 8px; flex-wrap: wrap; }
+    .jarvis-res-mini-loop { gap: 4px; overflow-x: auto; }
+    .jarvis-res-map-section canvas { width: 100% !important; }
+
+    /* Insights */
+    .jarvis-insights { padding-left: 16px; }
+    .jarvis-insights li { margin-bottom: 14px; font-size: 13px; line-height: 1.5; }
+
+    /* Methodology */
+    .jarvis-method-card { padding: 14px; }
+    .jarvis-methodology { gap: 12px; }
+
+    /* Result cards */
+    .jarvis-result-card { padding: 14px; }
+    .jarvis-bucket-chart { gap: 6px; }
+    .jarvis-bucket-row { gap: 6px; }
+    .jarvis-bucket-label { font-size: 10px; min-width: 50px; }
+
+    /* Proximity */
+    .jarvis-proximity-checks { columns: 2; gap: 6px; }
 }
