@@ -3441,6 +3441,70 @@ Respond ONLY as valid JSON (no markdown):
     }
 
     // =========================================
+    // API: Jarvis Loop Status
+    // =========================================
+    if (pathname === '/api/jarvis/loop-status' && req.method === 'GET') {
+        const loops = ['A', 'B', 'C', 'D'];
+        const result = {};
+        loops.forEach(id => {
+            const logPath = `/tmp/autoResearch_loop_${id}.log`;
+            try {
+                const stat = fs.statSync(logPath);
+                const ageMs = Date.now() - stat.mtimeMs;
+                result[id] = {
+                    lastModified: stat.mtime.toISOString(),
+                    ageMinutes: Math.round(ageMs / 60000),
+                };
+            } catch {
+                result[id] = { lastModified: null, ageMinutes: Infinity };
+            }
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+        return;
+    }
+
+    // =========================================
+    // API: Jarvis Loop Log
+    // =========================================
+    if (pathname === '/api/jarvis/loop-log' && req.method === 'GET') {
+        const loopId = url.searchParams.get('loop');
+        if (!loopId || !['A', 'B', 'C', 'D'].includes(loopId)) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Invalid loop parameter. Must be A, B, C, or D.');
+            return;
+        }
+        const logPath = `/tmp/autoResearch_loop_${loopId}.log`;
+        try {
+            const content = fs.readFileSync(logPath, 'utf8');
+            const lines = content.trim().split('\n');
+            const last20 = lines.slice(-20).join('\n');
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end(last20);
+        } catch {
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('No log file found for loop ' + loopId);
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Jarvis Results TSV
+    // =========================================
+    if (pathname === '/api/jarvis/results-tsv' && req.method === 'GET') {
+        const tsvPath = path.join(__dirname, 'buildings', 'jarvis', 'results.tsv');
+        try {
+            const content = fs.readFileSync(tsvPath, 'utf8');
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end(content);
+        } catch {
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('');
+        }
+        return;
+    }
+
+    // =========================================
     // API: Jarvis Run Hypothesis
     // =========================================
     if (pathname === '/api/jarvis/run-hypothesis' && req.method === 'POST') {

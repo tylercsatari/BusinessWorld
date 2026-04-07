@@ -1,0 +1,36 @@
+{
+  "type": "pre_upload_prediction",
+  "version": 1,
+  "features_strict": [
+    "prev_avg_views",
+    "concept_virality_score",
+    "script_vocab_diversity",
+    "prev_trend"
+  ],
+  "weights_strict": {
+    "prev_avg_views": 0.44649127460649346,
+    "concept_virality_score": 0.10762767168077593,
+    "script_vocab_diversity": -1.7699829893510228,
+    "prev_trend": 0.10402755608413239
+  },
+  "bias_strict": 4.434553218098054,
+  "cv_r2_strict": 0.08603548411184711,
+  "cv_r2_std_strict": 0.028197461708929235,
+  "features_full": [
+    "prev_avg_views",
+    "concept_virality_score",
+    "script_vocab_diversity",
+    "prev_trend"
+  ],
+  "weights_full": {
+    "prev_avg_views": 0.44649127460649346,
+    "concept_virality_score": 0.10762767168077593,
+    "script_vocab_diversity": -1.7699829893510228,
+    "prev_trend": 0.10402755608413239
+  },
+  "bias_full": 4.434553218098054,
+  "cv_r2_full": 0.07242996843509017,
+  "cv_r2_std_full": 0.026796344252242393,
+  "loo_r2_full": 0.12001770619784446,
+  "notes": "Pre-upload prediction model. Strict = title+script+history only. Full = includes vz/z/novelty."
+}

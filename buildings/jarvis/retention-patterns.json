@@ -1,0 +1,643 @@
+{
+  "generated_at": "2026-04-07T15:30:00",
+  "updated_at": "2026-04-08T01:00:00",
+  "total_videos": 370,
+  "total_frames_analyzed": 535,
+  "analysis_waves": "Wave 1-20. loop_d_1 through loop_d_286. Total: 425+ entries.",
+
+  "BREAKTHROUGH_WAVE20": {
+    "raw_retention_at_20s": {
+      "r_with_views": 0.600,
+      "description": "THE STRONGEST SINGLE PREDICTOR: raw retention at the 20-second mark. If 80% of viewers are still watching at 20 seconds, the video will perform. This is a stronger predictor than any above-baseline metric.",
+      "retention_by_second": {
+        "@3s": {"r": 0.334, "mean": "114.3%"},
+        "@5s": {"r": 0.435, "mean": "106.7%"},
+        "@10s": {"r": 0.567, "mean": "90.6%"},
+        "@15s": {"r": 0.593, "mean": "83.5%"},
+        "@20s": {"r": 0.600, "mean": "79.3%"},
+        "@30s": {"r": 0.582, "mean": "74.4%"}
+      },
+      "design_rule": "The first 20 seconds are EVERYTHING. If viewers survive to 20s, they watch the whole thing. All content in 0-20s must be engineered to prevent dropout."
+    }
+  },
+
+  "top_5_retention_predictors": [
+    {
+      "rank": 1,
+      "signal": "HOOK_PAYOFF_GAP",
+      "r_with_views": -0.520,
+      "description": "The gap between hook above_baseline and payoff above_baseline. NEGATIVE correlation = over-delivery wins. Videos where the ending exceeds the hook promise get 9x more views.",
+      "over_deliver_avg": "6.50 log_views (3.2M)",
+      "under_deliver_avg": "5.55 log_views (355K)",
+      "design_rule": "The ending MUST exceed the opening promise. Never frontload your best content. Build to a climax that surpasses the hook."
+    },
+    {
+      "rank": 2,
+      "signal": "END_RECOVERY",
+      "r_with_views": 0.506,
+      "description": "Above-baseline retention at 80-95% of the video. The single strongest zone predictor. Q4 videos average +0.055 here while Q1 averages -0.089.",
+      "gap": "0.144 (8.5x larger than hook gap)",
+      "design_rule": "Save the biggest payoff for the final 15%. The ending matters 8.5x more than the hook for total views."
+    },
+    {
+      "rank": 3,
+      "signal": "MOMENTUM_ZONES",
+      "r_with_views": 0.468,
+      "description": "Longest sustained run of above-baseline retention. Mean run = 50 points. % time above baseline also r=+0.47. Sustained quality > dramatic peaks.",
+      "design_rule": "Consistency beats spikes. One long above-baseline run is worth more than multiple isolated peaks."
+    },
+    {
+      "rank": 4,
+      "signal": "VIEWER_FATIGUE_SEVERITY",
+      "r_with_views": -0.313,
+      "description": "Later drops are 2.15x steeper than early drops (-0.129 vs -0.060). And late drops are almost never recovered (3/472). Position × severity interaction.",
+      "design_rule": "A drop at 70% is fatal. A drop at 20% can be recovered. Front-load any risky content."
+    },
+    {
+      "rank": 5,
+      "signal": "EVENT_DENSITY_INVERSE",
+      "r_with_views": -0.329,
+      "description": "MORE retention peaks = FEWER views. Fewer, bigger dramatic moments > many small ones. Peak/drop ratio also inversely predicts (r=-0.33).",
+      "design_rule": "Don't try to pack in multiple peaks. Build one clear narrative arc with one major payoff."
+    }
+  ],
+
+  "top_3_retention_peak_causes": [
+    {
+      "cause": "HIGH-ENERGY ACTION FRAMES",
+      "evidence": "At best above_baseline moments: action frames = 28% (vs 8% at worst). reaction→wide transitions 1.95x enriched at peaks. GPT-4o-mini confirms emotion slightly higher at peaks (2.78 vs 2.72).",
+      "effect_size": "+0.058 average above_baseline",
+      "design_rule": "Every 5-10 seconds, show physical action or an impact/reveal. Reaction shots followed by wide reveals are the strongest transition at peaks."
+    },
+    {
+      "cause": "PHYSICAL/SENSORY LANGUAGE",
+      "evidence": "Word impact scores: painful(+0.059), curious(+0.061), numb(+0.050), stomach(+0.051), skin(+0.046), feeling(+0.037). Sensory rate is the strongest transcript feature for predicting retention (weight=+1.59). Tension words 1.32x enriched at peaks vs drops.",
+      "effect_size": "+0.06 average above_baseline, 1.59 regression weight",
+      "design_rule": "Describe experiences through the body: 'this HURTS', 'my hands are freezing', 'I can feel my legs shaking'. Sensory language is the single best transcript predictor of retention."
+    },
+    {
+      "cause": "SLOWER SPEAKING SPEED AT KEY MOMENTS",
+      "evidence": "Speaking speed at peaks: 3.86 w/s vs drops: 4.26 w/s (p=0.0003). Neutral speed is 4.44 w/s. Slowing down at dramatic moments lets the viewer absorb the impact.",
+      "effect_size": "0.40 w/s slower at peaks vs drops",
+      "design_rule": "Slow down at key moments. Let the impact breathe. Speed up during setup/transitions but deliver payoffs at a deliberate pace."
+    }
+  ],
+
+  "top_3_retention_drop_causes": [
+    {
+      "cause": "TECHNICAL/MATERIAL LANGUAGE",
+      "evidence": "Word impact scores: plastic(-0.171), solid(-0.163), fiber(-0.138), materials(-0.136), carbon(-0.109), built(-0.095), metal(-0.095). Drop-exclusive words: 'plate', 'chest', 'magnets', 'laser'. These are 14x overrepresented at drops.",
+      "effect_size": "-0.17 average above_baseline for 'plastic'",
+      "design_rule": "NEVER name materials. Show the result, not the process. 'Watch what happens' > 'I used carbon fiber reinforced with graphene layers'."
+    },
+    {
+      "cause": "FACE + TEXT WITHOUT ACTION (talking head trap)",
+      "evidence": "GPT-4o-mini vision: face more visible at drops (3.51) than peaks (3.20). Text more present at drops (3.73 vs 3.40). Face alone doesn't retain — face + explaining + text = drop. Face + action = peak.",
+      "effect_size": "Face 0.31 higher at drops, Text 0.33 higher at drops",
+      "design_rule": "Never have Tyler just talking to camera with text overlays. If his face is on screen, he must be DOING something physical."
+    },
+    {
+      "cause": "LATE-VIDEO DROPS ARE FATAL",
+      "evidence": "Viewer fatigue r=-0.31: later drops 2.15x steeper. Only 3/472 late drops were recovered. Once viewers start leaving in the back half, they don't come back.",
+      "effect_size": "-0.129 mean late drop vs -0.060 early",
+      "design_rule": "Never put boring content after 60%. Any setup/explanation must happen in the first 30%. The back half must be pure payoff."
+    }
+  ],
+
+  "narrative_arc_analysis": {
+    "best_arc": {
+      "type": "steady_rise",
+      "n": 198,
+      "median_views": "3,385,484",
+      "description": "54% of all videos follow this arc. Consistently building above_baseline from hook to end."
+    },
+    "second_best": {
+      "type": "mountain",
+      "n": 37,
+      "median_views": "3,515,365",
+      "description": "Strong mid-section peak with good hook and end. Classic narrative arc."
+    },
+    "worst_arc": {
+      "type": "steady_decline",
+      "n": 71,
+      "median_views": "331,902",
+      "description": "Front-loaded content that loses viewers progressively. 10x worse than steady_rise."
+    },
+    "design_rule": "Build upward. Every segment should be more engaging than the last. Never peak in the first third."
+  },
+
+  "shape_clustering": {
+    "consistently_above": {
+      "n": 86,
+      "median_views": "5,197,463",
+      "description": "Above baseline throughout — hook, mid, and end all positive"
+    },
+    "weak_start_strong_end": {
+      "n": 186,
+      "median_views": "2,327,263",
+      "description": "Starts slightly below, builds through. Most common shape (50%)."
+    },
+    "below_baseline_mild": {
+      "n": 66,
+      "median_views": "531,810",
+      "description": "Moderately below baseline. 10x fewer views than consistently_above."
+    },
+    "below_baseline_deep": {
+      "n": 31,
+      "median_views": "260,177",
+      "description": "Deeply below baseline throughout. 20x fewer views."
+    }
+  },
+
+  "quartile_comparison": {
+    "description": "How top 25% vs bottom 25% videos differ in above_baseline curve",
+    "Q4_top": {
+      "avg_views": "21,911,737",
+      "hook": 0.0064,
+      "setup": 0.0036,
+      "mid": 0.0336,
+      "body": 0.0460,
+      "end": 0.0548
+    },
+    "Q1_bottom": {
+      "avg_views": "202,399",
+      "hook": -0.0035,
+      "setup": -0.0046,
+      "mid": -0.0426,
+      "body": -0.0614,
+      "end": -0.0890
+    },
+    "key_insight": "Hook gap is only 0.01 (negligible). End gap is 0.144 (massive). The ending separates 200K from 22M views. The body-to-end progression is what matters, not the hook."
+  },
+
+  "consecutive_event_patterns": {
+    "peak_to_drop_amplification": "Drops after peaks are 22% larger (-0.061 vs -0.050). A peak sets expectations higher, making the subsequent drop more severe.",
+    "drop_to_drop_compounding": "Consecutive drops compound at -0.050 average. Once dropping, it gets worse.",
+    "design_rule": "After a peak moment, immediately follow with another peak or maintain energy. Never let a peak be followed by a lull."
+  },
+
+  "word_impact_dictionary": {
+    "source": "word-retention-impact.json (662 words scored)",
+    "top_positive": ["curious(+0.061)", "painful(+0.059)", "bigger(+0.056)", "stomach(+0.051)", "numb(+0.050)", "skin(+0.046)", "impact(+0.046)", "foot(+0.046)", "instead(+0.041)", "sleep(+0.041)"],
+    "top_negative": ["plastic(-0.171)", "solid(-0.163)", "fiber(-0.138)", "jarvis(-0.150)", "materials(-0.136)", "connect(-0.137)", "carbon(-0.109)", "bulletproof(-0.111)", "water(-0.101)", "plate(-0.103)"],
+    "pattern": "Body sensation words retain. Material/technical words kill. The gap is 3x larger for negative words — avoiding bad words matters more than using good ones."
+  },
+
+  "opening_words": {
+    "best_first_words": ["go(7.10)", "train(6.89)", "how(6.75)", "walk(6.75)", "break(6.65)", "these(6.53)", "can(6.50)", "when(6.46)"],
+    "worst_first_words": ["in(5.20)", "it's(5.60)", "right(5.96)", "spend(5.96)", "i'm(6.05)", "i(6.10)", "learn(6.10)", "apparently(6.10)"],
+    "best_last_words": ["insane(7.44)", "hour(7.21)", "days(6.99)", "right(6.79)", "next(6.71)"],
+    "design_rule": "Start with ACTION or CHALLENGE words, not self-reference. End with IMPACT words. 'Go' > 'I'. 'Insane' > 'subscribe'."
+  },
+
+  "speaking_patterns": {
+    "speed_at_events": "Peaks: 3.86 w/s, Drops: 4.26 w/s, Neutral: 4.44 w/s (p=0.0003)",
+    "repetition_rate": "Mean 30.6%. Higher repetition mildly correlates with views (r=+0.16). Familiar words are comforting, not boring.",
+    "pauses": "Pauses hurt retention (ab=-0.060 during pauses vs -0.016 during speech). Keep talking. Pause rate r=-0.18 vs retention.",
+    "opening_density": "3.9 words/sec average in first 3s. Medium density (1.5-3.0 w/s) performs best (6.39 avg views)."
+  },
+
+  "emotional_trajectory": {
+    "neg_to_pos": {"n": 12, "avg_log_views": 6.753, "description": "Starting negative, ending positive — the comeback arc"},
+    "pos_to_neg": {"n": 9, "avg_log_views": 5.793, "description": "Starting positive, ending negative — the disappointment arc"},
+    "Q3_sensory": "Sensory words in Q3 (40-60%) correlate with Q3 retention r=+0.16 (p=0.002)",
+    "cumulative_tension": "Tension word accumulation positively correlates with above_baseline (r=+0.23). 63% of videos show positive correlation.",
+    "design_rule": "Build tension. Start with a problem, escalate through body/sensory language, resolve at the end. The comeback arc (neg→pos) averages 10x more views than the disappointment arc."
+  },
+
+  "cross_modal_alignment": {
+    "verbal_only_best": "Verbal-only energy moments: ab=+0.009 (best of all categories)",
+    "aligned_second": "Both visual+verbal high: ab=+0.003",
+    "visual_only_negative": "Visual-only energy: ab=-0.017",
+    "both_low_negative": "Both low: ab=-0.005",
+    "key_insight": "Verbal energy is MORE important than visual energy. Words drive retention more than frames. But combining both is second-best."
+  },
+
+  "vision_analysis_gpt4o_mini": {
+    "top_50_videos_analyzed": true,
+    "frames_scored": 144,
+    "energy": {"peaks": 3.17, "drops": 3.20, "neutral": 3.26},
+    "face": {"peaks": 3.20, "drops": 3.51, "neutral": 1.98},
+    "complexity": {"peaks": 2.68, "drops": 2.71, "neutral": 2.68},
+    "emotion": {"peaks": 2.78, "drops": 2.72, "neutral": 2.48},
+    "text": {"peaks": 3.40, "drops": 3.73, "neutral": 3.52},
+    "key_insight": "Face is MORE visible at drops than peaks in high-view videos. The 'talking head + text overlay' combination is a drop trigger. Face + action = peak. Face + explanation = drop."
+  },
+
+  "transcript_prediction_model": {
+    "r2_train": 0.137,
+    "r2_cv": 0.033,
+    "note": "Transcript features alone explain 13.7% of retention variance. Confirms sensory_rate and tension_rate as key script levers.",
+    "feature_weights": {
+      "sensory_rate": 1.59,
+      "tension_rate": 0.92,
+      "unique_rate": 0.28,
+      "action_rate": 0.08,
+      "wps": 0.03,
+      "avg_word_len": -0.06,
+      "sentence_rate": -0.08
+    }
+  },
+
+  "final_predictor_model_wave8": {
+    "r2_train": 0.469,
+    "r2_cv": 0.391,
+    "cv_std": 0.091,
+    "n_videos": 370,
+    "n_features": 13,
+    "note": "Combined curve + transcript features. CV R²=0.391 means we can explain ~39% of view variance. Q1=286K vs Q4=6.9M (24x gap).",
+    "top_features": {
+      "hook_payoff": {"coef": 0.676, "description": "Ending above_baseline minus hook above_baseline. Over-delivery is the #1 predictor."},
+      "curve_slope": {"coef": -0.635, "description": "Overall slope of the retention curve. NEGATIVE because steeper upward slope = already captured in other features."},
+      "log_dur": {"coef": 0.393, "description": "Log duration. Longer videos tend to get more views (within Shorts range)."},
+      "climax": {"coef": 0.310, "description": "Mean above_baseline at 80-95%. The ending zone value."},
+      "pct_above": {"coef": 0.281, "description": "Percentage of time spent above baseline. Consistency."}
+    }
+  },
+
+  "compound_score_v2": {
+    "r_with_views": 0.545,
+    "q1_views": "394K",
+    "q4_views": "5.16M",
+    "gap": "13.1x",
+    "description": "Combines climax, hook_payoff, early_momentum, pct_above, smoothness, sensory_rate, payoff_rate, material_rate, CTA_rate, and duration."
+  },
+
+  "wave5_multi_signal_composite": {
+    "r_with_views": 0.526,
+    "q1_views": "395K",
+    "q4_views": "4.8M",
+    "gap": "12.2x"
+  },
+
+  "duration_insight": {
+    "best_retention": "30-40s (avg above_baseline +0.012)",
+    "most_views": "50-60s (2.88M avg views)",
+    "5s_buckets": {
+      "20-25s": "417K (n=10)",
+      "25-30s": "702K (n=34)",
+      "30-35s": "1.66M (n=51)",
+      "35-40s": "944K (n=50)",
+      "40-45s": "2.19M (n=68)",
+      "45-50s": "2.13M (n=51)",
+      "50-55s": "2.88M (n=46)",
+      "55-60s": "2.69M (n=40)"
+    },
+    "sweet_spot": "50-55s maximizes views. 40-55s is the safe range."
+  },
+
+  "wave6_new_signals": {
+    "retention_smoothness": {
+      "r_with_views": 0.247,
+      "description": "Smoother curves = more views. Q1 jagged=800K vs Q4 smooth=2.5M (3.1x gap).",
+      "design_rule": "Avoid jagged retention — maintain steady engagement without sharp spikes and drops."
+    },
+    "STP_arc": {
+      "r_with_views": 0.182,
+      "description": "Sensory→Tension→Payoff ordering. Perfect arc avg=6.54 (3.4M) vs no arc avg=6.11 (1.3M).",
+      "design_rule": "Structure scripts: start with body/sensory setup, build tension through the middle, resolve with payoff at the end."
+    },
+    "payoff_density_finale": {
+      "r_with_views": 0.166,
+      "description": "Concentrating payoff words (finally, done, worked, survived) in the last 20% correlates with views.",
+      "design_rule": "Save resolution language for the final 20%. Don't reveal outcomes too early."
+    },
+    "early_momentum_predicts_end": {
+      "r_early_end": 0.442,
+      "r_early_views": 0.432,
+      "description": "The slope of retention from 10-30% predicts both the ending value AND views. What happens in the first 15s sets the trajectory.",
+      "design_rule": "The first 15 seconds after the hook must GAIN momentum. If the curve is flat or declining by 30%, the video is already in trouble."
+    },
+    "curve_signature": {
+      "r_with_views": 0.503,
+      "description": "Climax(r=0.506) + early_momentum(r=0.357) + total_above(r=0.458) combined score. Q1=442K vs Q4=3.86M (8.7x gap)."
+    }
+  },
+
+  "wave7_new_signals": {
+    "retention_cliffs": {
+      "description": "Cliff-free videos avg 2.13M vs cliff videos 1.10M. Avoiding sharp drops is critical.",
+      "design_rule": "Never create a retention cliff (>5% drop in 3 normalized points). Smooth transitions always."
+    },
+    "duration_x_arc_interaction": {
+      "best": "rise + xlong(55s+) = 5.5M views",
+      "worst": "decline + short(<25s) = 368K views",
+      "gap": "15x",
+      "design_rule": "If the curve rises, go long (55s+). If the curve declines, duration won't save it."
+    },
+    "quartile_templates": {
+      "Q4_top": {"hook": -0.005, "mid": 0.039, "end": 0.055, "slope": "+0.000708"},
+      "Q1_bottom": {"hook": 0.012, "mid": -0.048, "end": -0.089, "slope": "-0.001130"},
+      "key_insight": "Q4 starts slightly below baseline then climbs. Q1 starts slightly above then declines. The ENDING gap is 14.6% at the 94% mark. Hooks are nearly identical."
+    },
+    "inflection_words": {
+      "upturn_words": ["soon", "rock", "breakfast", "immediately", "shocked", "stopped", "may", "halfway", "big", "several"],
+      "downturn_words": ["fireproof", "seven", "managed", "picked", "damage", "during", "rest", "cube", "plate", "tomorrow"]
+    }
+  },
+
+  "wave8_new_signals": {
+    "derivative_zones": {
+      "strongest": "Zone 0-10% derivative r=-0.492 (the initial drop speed predicts everything)",
+      "second": "Zone 20-30% derivative r=+0.404 (early recovery/momentum)",
+      "note": "The first 10% trajectory is the STRONGEST single zone predictor. Fast initial drop = fewer views."
+    },
+    "word_position_matrix": {
+      "material_words": "Toxic at ALL positions (-0.05 to -0.14 above_baseline)",
+      "sensory_at_D9": "+0.049 (highest impact when used in final 10%)",
+      "emotion_at_D9": "+0.069 (emotion words are most powerful at the very end)",
+      "payoff_at_D9": "+0.026 (payoff words peak at the end, negative everywhere else)"
+    },
+    "negative_AUC": {
+      "r_with_views": 0.420,
+      "description": "The area BELOW baseline matters more than the area above. Minimizing the depth of bad moments is more predictive than maximizing good moments."
+    },
+    "triple_interaction": {
+      "best": "long + high_sensory + rising = 5.61M",
+      "worst": "short + low_sensory + falling = 417K",
+      "gap": "13.5x"
+    },
+    "progression_patterns": {
+      "best": "↑↑↑ (rising every quarter) = 4.19M",
+      "second": "↑↑→ (rise then plateau) = 4.70M",
+      "worst": "↓↓↓ (declining every quarter) = 222K",
+      "gap": "19x from progression alone",
+      "design_rule": "Every quarter must be at least as good as the last. A single declining quarter is acceptable if the others rise."
+    },
+    "refined_peak_words": ["doing", "beat", "keep", "end", "right", "should", "pounds", "world's"],
+    "refined_drop_words": ["first", "these", "might", "tested", "wait", "want", "about", "myself", "wanted"],
+    "optimal_blueprint_top20": {
+      "climax": "+0.052",
+      "pct_above": "68%",
+      "sensory_rate": "1.0%",
+      "material_rate": "0.9%",
+      "duration": "61s",
+      "wps": "4.2"
+    },
+    "vision_expanded": {
+      "frames_analyzed": 191,
+      "face_at_drops": 3.34,
+      "face_at_peaks": 3.01,
+      "peak_frame_types": {"reaction": 33, "other": 25, "action": 17},
+      "drop_frame_types": {"reaction": 56, "other": 29, "action": 14},
+      "key_insight": "Reaction frames dominate both events but 1.7x more at drops. At drops, Tyler is reacting to/explaining something. At peaks, there is more action."
+    }
+  },
+
+  "wave9_10_new_signals": {
+    "worst_moment_timing": {
+      "description": "Top quartile videos have worst moment at 17%. Bottom quartile at 49%. Successful videos front-load their worst content where it's recoverable.",
+      "design_rule": "Put your weakest/setup content in the first 20%. Never let the worst moment happen after 30%."
+    },
+    "recovery_speed": {
+      "r_with_views": 0.398,
+      "fast_recovery_views": "4.8M (n=48)",
+      "no_recovery_views": "510K (n=25)",
+      "gap": "9.3x",
+      "design_rule": "If there's a dip, bounce back FAST. The speed of recovery after the nadir is a strong predictor."
+    },
+    "best_after_worst": {
+      "best_after_worst_views": "6.52 (3.3M)",
+      "best_before_worst_views": "5.81 (650K)",
+      "gap": "5x",
+      "design_rule": "Structure: low point → high point. Never reverse. The nadir must come before the climax."
+    },
+    "utterance_length_at_events": {
+      "peaks": "7.9 words (short, punchy)",
+      "drops": "25.3 words (long, rambling)",
+      "design_rule": "Keep sentences SHORT at high-energy moments. Long explanations cause drops."
+    },
+    "divergence_point": {
+      "first_significant": "22% — where top/bottom quartiles begin to separate",
+      "max_divergence": "94% (+14.6% gap) — where the separation is maximal",
+      "design_rule": "By 22% of the video, the fate is being determined. The gap only grows from there."
+    },
+    "word_velocity_confirmed": {
+      "peaks": "3.02 w/s",
+      "drops": "3.79 w/s",
+      "neutral": "4.45 w/s",
+      "design_rule": "CONFIRMED: speak slower at climactic moments. 3.0 w/s at peaks vs 3.8 at drops."
+    },
+    "effect_sizes": {
+      "pct_above": "d=1.87 (strongest)",
+      "climax": "d=1.69",
+      "smoothness": "d=0.96",
+      "word_count": "d=0.86",
+      "duration": "d=0.68",
+      "note": "Cohen's d between top 50 and bottom 50 videos. pct_above and climax dominate."
+    },
+    "golden_ratio_timing": {
+      "late_best_moment_views": "3.23M (n=165, 70%+)",
+      "early_best_moment_views": "627K (n=141, <30%)",
+      "gap": "5.2x",
+      "distance_from_618_r": -0.415,
+      "design_rule": "Best moment should be LATE (70%+ of video). Closer to 61.8% golden ratio = more views."
+    },
+    "diminishing_returns": {
+      "zero_is_worst": "Videos with 0% of any category word get ~313K-656K views. ANY amount of sensory/action/challenge helps.",
+      "sensory_optimal": "Q2 (0.01%) — a tiny amount suffices",
+      "tension_optimal": "Q3 (2.29%) — moderate tension is best",
+      "challenge_optimal": "Q3 (0.29%) — moderate challenge language is best",
+      "design_rule": "Some is essential. Zero category words is the kiss of death. But more is not always better."
+    },
+    "scorecard_system": {
+      "r_with_views": 0.545,
+      "dimensions": ["over_delivery", "late_retention", "consistency", "smoothness", "sensory_language", "material_avoidance", "early_momentum"],
+      "description": "7-dimension 0-10 scorecard. Total score correlates r=0.545 with views. Saved to video-scorecards.json."
+    },
+    "survival_rates": {
+      "@25%_r": 0.072,
+      "@50%_r": 0.174,
+      "@75%_r": 0.366,
+      "@90%_r": 0.505,
+      "early_loss_25_50_r": -0.439,
+      "design_rule": "Survival at 90% is the best raw retention predictor (r=0.505). Early loss rate (25→50%) is the worst sign (r=-0.44)."
+    }
+  },
+
+  "design_rules_summary": [
+    "1. END > HOOK: The ending matters 8.5x more than the hook. Save your best content for the final 15%.",
+    "2. OVER-DELIVER: The payoff must EXCEED the hook promise. Under-delivery = 9x fewer views. hook_payoff is the #1 predictor in the final model (coef=+0.68).",
+    "3. BODY LANGUAGE: Use sensory words (painful, numb, freezing, sweat). Avoid materials (plastic, fiber, carbon, metal). Material words toxic at ALL positions.",
+    "4. STEADY BUILD: ↑↑↑ progression = 4.2M views. ↓↓↓ = 222K. 19x gap. Every quarter must build.",
+    "5. WORST MOMENT EARLY: Top videos have their worst moment at 17%, bottom at 49%. Front-load weak content. Best AFTER worst = 5x more views.",
+    "6. SLOW THE PAYOFF: 3.0 w/s at peaks vs 3.8 at drops vs 4.4 neutral. Short utterances (7.9w) at peaks, long (25.3w) at drops.",
+    "7. NEVER DROP LATE: A retention drop after 60% is 2.15x steeper and almost unrecoverable. Recovery speed r=0.398 (fast=4.8M vs none=510K).",
+    "8. LATE CLIMAX: Best moment at 70%+ = 3.23M vs <30% = 627K (5.2x). Distance from golden ratio (61.8%) r=-0.415.",
+    "9. SMOOTH CURVES: Retention smoothness r=0.247 (d=0.96). No cliffs (>5% drop). Jagged=800K vs smooth=2.5M.",
+    "10. EARLY MOMENTUM: Slope from 10-30% predicts both ending (r=0.44) and views (r=0.43). Divergence starts at 22%.",
+    "11. STP ARC: Sensory→Tension→Payoff. Perfect ordering = 3.4M, no ordering = 1.3M.",
+    "12. GO LONG + RISE: Long(55s+) + rising curve = 5.5M. Short + falling = 368K. 50-55s = sweet spot (2.88M avg).",
+    "13. MINIMIZE NEGATIVE: Negative AUC (r=0.42) matters more than positive. Avoiding bad moments > maximizing good ones.",
+    "14. INITIAL TRAJECTORY: Zone 0-10% derivative r=-0.49. Don't lose viewers in the first 10%. Survival @90% = r=0.505.",
+    "15. SOME CATEGORY WORDS: Zero sensory/action/challenge = worst (313K-656K). Any amount of category language helps. Optimal sensory ~0.01%, tension ~2.3%, challenge ~0.3%.",
+    "16. SHAPE+DURATION: '++++_long' = 12.6M (above baseline + long). '----_short' = 176K. 71x gap from shape × duration alone.",
+    "17. END>BEGIN RATIO: End stronger than beginning = 4.7M vs begin stronger = 398K (11.8x). r=0.293.",
+    "18. SUSTAINED STREAK: Above-baseline streak of 50+ points = 3.58M vs <20 = 561K. Sustained quality > peaks.",
+    "19. SIMPLE VOCABULARY: Lower word diversity (type-token ratio) = more views (r=-0.216). Use simple, repeated words.",
+    "20. PREDICTION CEILING: Content signals explain ~27% of view variance (CV R²=0.271). ~73% is external (algorithm, thumbnails, timing)."
+  ],
+
+  "wave11_12_new_signals": {
+    "shape_encoding": {
+      "best": "'00+++' (neutral start, rising end) = 6.6M",
+      "second": "'0++++' = 5.1M",
+      "third": "'+++++' = 4.5M",
+      "worst": "'0----' = 313K",
+      "note": "Starting neutral then rising BEATS being above baseline the whole time."
+    },
+    "shape_x_duration": {
+      "best": "'++++_long' = 12.6M",
+      "worst": "'----_short' = 176K",
+      "gap": "71.5x"
+    },
+    "word_diversity": {
+      "ttr_r_views": -0.216,
+      "description": "Lower type-token ratio = more views. Simple, repeated vocabulary outperforms rich vocabulary."
+    },
+    "above_baseline_streak": {
+      "r_views": 0.464,
+      "long_streak_views": "3.58M (n=196, 50+ pts)",
+      "short_streak_views": "561K (n=116, <20 pts)"
+    },
+    "end_begin_ratio": {
+      "r_views": 0.293,
+      "end_stronger_views": "4.70M",
+      "begin_stronger_views": "398K",
+      "gap": "11.8x"
+    },
+    "prediction_ceiling": {
+      "cv_r2_10fold": 0.271,
+      "train_r2": 0.475,
+      "n_features": 19,
+      "explained": "27.1%",
+      "unexplained": "72.9% (algorithm, thumbnails, timing, audience)"
+    },
+    "key_phrases": {
+      "peak_phrases": ["in the comments", "should i keep", "i keep going"],
+      "drop_phrases": ["link in bio", "see what happens", "on my profile"]
+    },
+    "hook_taxonomy": {
+      "best": "transformation (2.24M)",
+      "second": "mystery (2.20M)",
+      "worst": "stakes (1.12M)",
+      "note": "Stakes-based hooks underperform mystery and transformation hooks."
+    }
+  },
+
+  "wave10b_10c_new_signals": {
+    "sub_nonsub_divergence": {
+      "gap_r_views": -0.333,
+      "sub_frac_r_views": -0.865,
+      "description": "Bigger sub-nonsub retention gap = FEWER views. Viral videos retain both audiences equally. Sub fraction is the strongest single predictor (r=-0.86): more non-subscriber views = more total views.",
+      "design_rule": "Content that appeals equally to subscribers and non-subscribers goes viral. Don't make inside-joke content."
+    },
+    "velocity_shape": {
+      "best": "slow_build (3.9M, n=123)",
+      "worst": "fast_decay (557K, n=20)",
+      "gap": "7.0x",
+      "description": "Algorithm rewards sustained growth. Spike-and-die videos (866K) are 4.5x worse than slow builds (3.9M).",
+      "design_rule": "Don't chase day-1 spikes. Videos that build slowly over 14 days get 4.5x more total views."
+    },
+    "curve_asymmetry": {
+      "r_views": 0.324,
+      "back_loaded_views": "3.9M",
+      "front_loaded_views": "580K",
+      "gap": "6.7x",
+      "design_rule": "Back-loaded retention curves (building to the end) get 6.7x more views than front-loaded ones."
+    },
+    "velocity_x_retention": {
+      "slow_good": "5.3M — the winning combo",
+      "fast_bad": "703K — worst combo",
+      "description": "Slow velocity + good retention = the algorithm's favorite. Fast starts with bad retention = the algorithm quickly stops pushing.",
+      "design_rule": "Early velocity doesn't help if retention is bad. Focus on retention quality; the algorithm will find the audience."
+    },
+    "swipe_x_retention": {
+      "low_swipe_strong_end": "5.6M",
+      "high_swipe_weak_end": "493K",
+      "gap": "11.3x",
+      "design_rule": "Low swipe rate + strong ending is the ideal signal to the algorithm."
+    },
+    "concept_intro_timing": {
+      "r_views": -0.277,
+      "early_views": "2.6M (intro <10%)",
+      "late_views": "476K (intro >30%)",
+      "gap": "5.4x",
+      "design_rule": "Mention your main concept in the FIRST 10% of the video. Delaying it past 30% costs 5x views."
+    },
+    "triple_quadrant": {
+      "best": "slow_good_nonsub = 8.2M",
+      "worst": "slow_bad_sub = 201K",
+      "gap": "40.8x",
+      "description": "The 3 dimensions that matter: (1) non-subscriber audience fraction, (2) retention quality, (3) velocity shape. Non-sub fraction is the strongest.",
+      "design_rule": "The ultimate viral formula: high non-sub reach + good retention + slow sustained growth."
+    },
+    "monotonicity": {
+      "r_views": 0.428,
+      "q4_views": "3.5M",
+      "q1_views": "485K",
+      "gap": "7.2x",
+      "description": "Fraction of rising steps in the smoothed curve. More monotonically rising = more views.",
+      "design_rule": "Never let the curve dip. Every segment must be at least as good as the previous one. Monotonically rising = 7.2x more views."
+    },
+    "anchor_points": {
+      "strongest": "90% (r=0.505)",
+      "second": "85% (r=0.504)",
+      "third": "80% (r=0.504)",
+      "description": "The YouTube algorithm appears to heavily weight the 80-95% retention zone. This is the single strongest predictor zone.",
+      "design_rule": "The 80-95% zone of your video is what the algorithm evaluates most. This is where your best content must be."
+    },
+    "zone_transition_speed": {
+      "strongest": "setup_to_mid (25-50%) r=+0.440",
+      "second": "hook_to_setup (5-25%) r=+0.297",
+      "description": "The rate of improvement in the 25-50% zone is the strongest transition speed predictor. Accelerating through setup into the middle is critical.",
+      "design_rule": "Don't linger in setup. Accelerate the retention curve upward through the 25-50% zone."
+    },
+    "speech_gaps": {
+      "gap_ab_vs_views": 0.425,
+      "description": "Surprisingly, above_baseline during speech gaps (>0.5s) strongly predicts views (r=0.425). Videos with higher retention even during pauses are winners.",
+      "design_rule": "Pauses are acceptable IF the visual content holds attention. Pair silence with compelling visuals."
+    },
+    "volatility_10_20": {
+      "r_views": -0.308,
+      "description": "Volatility in the 10-20% window is the most harmful. Unstable early engagement kills videos.",
+      "design_rule": "Keep the 10-20% zone SMOOTH. No sudden changes. Establish a clear trajectory early."
+    },
+    "final_integrated_model": {
+      "train_r2": 0.685,
+      "cv_r2": 0.582,
+      "n_features": 13,
+      "top_features": ["sub_frac (-0.44)", "log_dur (+0.14)", "pct_above (+0.13)", "climax (+0.10)", "early_momentum (+0.08)"],
+      "description": "13-feature ridge regression explains 58% of view variance in cross-validation. Sub fraction is the dominant feature — it's largely a proxy for algorithmic reach."
+    },
+    "compound_v3": {
+      "r_views": 0.488,
+      "q1_views": "414K",
+      "q4_views": "5.8M",
+      "gap": "13.9x"
+    },
+    "final_3s_content": {
+      "top_enriched": ["after", "days", "insane", "subscribe", "comments", "next"],
+      "bottom_enriched": ["here", "already", "mind", "every", "your", "profile"],
+      "design_rule": "Top videos end with impact words (insane, days) and forward momentum (next, after). Bottom videos end with self-reference (your, profile) and pointing elsewhere (here, already)."
+    }
+  },
+
+  "design_rules_summary_v3": [
+    "1. AUDIENCE REACH > EVERYTHING: Non-subscriber fraction r=-0.87 with sub_frac. Making content that reaches BEYOND your subscribers is the #1 predictor. Don't make niche/inside content.",
+    "2. END > HOOK: 80-95% zone is r=0.505 anchor. Back-loaded curves = 3.9M vs front-loaded = 580K (6.7x). Save the best for last.",
+    "3. OVER-DELIVER: Hook-payoff gap remains top regression feature. Ending must EXCEED the opening promise.",
+    "4. MONOTONIC RISE: r=0.428 — every segment must improve. Q4=3.5M vs Q1=485K (7.2x). No dips allowed.",
+    "5. SLOW BUILD VELOCITY: slow_build=3.9M vs spike_and_die=866K. Algorithm rewards sustained 14-day growth, not day-1 spikes.",
+    "6. CONCEPT EARLY: Mention main concept in first 10% (2.6M) vs after 30% (476K). 5.4x gap.",
+    "7. BODY LANGUAGE: Sensory words retain. Material words kill at ALL positions. Gap is 3x larger for negatives.",
+    "8. SMOOTH 10-20% ZONE: Volatility here is most harmful (r=-0.31). Establish trajectory without wobbling.",
+    "9. SETUP→MID ACCELERATION: Speed of improvement in 25-50% zone is the strongest transition predictor (r=0.44).",
+    "10. SWIPE + END COMBO: low_swipe+strong_end=5.6M vs high_swipe+weak_end=493K (11.3x).",
+    "11. SLOW PAYOFF DELIVERY: 3.0 w/s at peaks vs 4.4 neutral. Short sentences at climax (7.9 words).",
+    "12. GO LONG + RISE: 50-55s sweet spot. Long + rising = 5.5M. Short + falling = 368K.",
+    "13. MINIMIZE NEGATIVE AUC: Avoiding bad moments matters more than maximizing good ones.",
+    "14. TRIPLE FORMULA: non-sub reach + good retention + slow build = 8.2M. The opposite = 201K (40.8x).",
+    "15. PREDICTION MODEL: 13-feature model explains 58% of view variance (CV R²=0.58). 42% is external."
+  ]
+}

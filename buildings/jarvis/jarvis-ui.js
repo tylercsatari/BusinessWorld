@@ -984,6 +984,57 @@ const JarvisUI = (() => {
         return { cat: 'exp', label: 'Model Experiments', color: '#3b82f6' };
     }
 
+    function humanizeSignalName(raw) {
+        if (!raw) return 'Unnamed result';
+        const key = String(raw).replace(/^discovery:/, '').trim();
+        const map = {
+            keep_sq: 'Non-linear Keep Rate',
+            ret_mid: 'Midpoint Retention',
+            ret_end: 'End Retention',
+            ret_var: 'Retention Curve Variance',
+            ret_mid_sq: 'Non-linear Midpoint Retention',
+            retention_per_sec_alongside: 'Retention + Duration Context',
+            sub_ret_gap: 'Subscriber vs Non-Subscriber Retention Gap',
+            max_cliff: 'Largest Retention Cliff',
+            hook_word_density: 'Hook Word Density',
+            pat_indestructible: 'Indestructible / Bulletproof Pattern',
+            cat_superhero: 'Superhero Build Category',
+            prev_views: 'Previous Video Views',
+            prev_keep: 'Previous Video Keep Rate',
+            prev_views_sq: 'Non-linear Previous Video Views',
+            indestructible_x_prev_keep: 'Indestructible × Previous Keep Interaction',
+            has_text_overlay: 'First-Frame Text Overlay',
+            duration_x_retention: 'Duration × Retention',
+            effective_watch_sec: 'Effective Watch Seconds',
+            smoothed_slope: 'Smoothed Retention Slope',
+            idea_length: 'Idea Length',
+            stakes_x_duration: 'Stakes × Duration',
+            stakes: 'Perceived Stakes',
+            deriv_entropy: 'Pacing Entropy',
+            hook_silence: 'Silent Visual Hook',
+            view_acceleration: 'View Acceleration',
+            day1_share: 'Day 1 Share of Total Views',
+            w2_w1_ratio: 'Week 2 vs Week 1 Ratio',
+            pre_upload_model_10feat: 'Pre-Upload Prediction Model',
+            pre_upload_final_6feat: 'Final Pre-Upload Model',
+            final_12feat: 'Final 12-Feature Model',
+            final_13feat: 'Final 13-Feature Model',
+            final_14feat: 'Final 14-Feature Model',
+            final_15feat: 'Final 15-Feature Model',
+            final_17feat: 'Final 17-Feature Model',
+            feature_selection: 'Feature Selection Pass',
+            backward_elimination: 'Backward Elimination',
+            optimized_8feat: 'Optimized 8-Feature Model',
+            forward_12feat: 'Forward Selection 12-Feature Model',
+        };
+        if (map[key]) return map[key];
+        return key
+            .replace(/^exp_/, '')
+            .replace(/^loop_[a-z]_/, '')
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase());
+    }
+
     function renderExperimentsContent(rows) {
         if (!rows || !rows.length) return '<div class="jarvis-error">No experiments found.</div>';
 
@@ -1028,7 +1079,8 @@ const JarvisUI = (() => {
                     const isDiscovery = cat === 'loop_b';
                     const status = (row.status || '').trim().toLowerCase();
                     const signalMatch = (row.new_signal || '').match(/^discovery:(.+)$/);
-                    const signalName = signalMatch ? signalMatch[1].replace(/_/g, ' ') : (row.new_signal || '');
+                    const signalRaw = signalMatch ? signalMatch[1] : (row.new_signal || '');
+                    const signalName = humanizeSignalName(signalRaw);
                     const notes = row.notes || '';
 
                     // Determine resolution badge for this experiment
