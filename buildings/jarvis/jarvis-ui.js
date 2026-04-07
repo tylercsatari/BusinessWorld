@@ -88,13 +88,13 @@ const JarvisUI = (() => {
     ];
 
     const TABS = [
-        { id: 'analytical', label: 'Analytical Brain' },
-        { id: 'tactical', label: 'Tactical Brain' },
+        { id: 'analytical', label: 'Analytical' },
+        { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
         { id: 'insights', label: 'Insights' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'resolution', label: 'Resolution' },
-        { id: 'methodology', label: 'Methodology' },
+        { id: 'methodology', label: 'Methods' },
     ];
 
     const INSIGHTS = [
