@@ -1,2 +1,303 @@
 experiment_id	new_signal	r2_before	r2_after	delta_r2	status	n_videos	notes
 exp_baseline	baseline_7signals	0.000	0.147	+0.147	keep	203	Initial model: keep+retention+z_score+novelty+cognitive_load+net_novelty+vz_score
+exp_h0_replace	retention_per_sec_replace	0.3658	0.2875	-0.0783	discard	203	Replacing retention with retention_per_sec hurts — rps has negative weight alone
+exp_h0_both	retention_per_sec_alongside	0.3658	0.4233	+0.0574	keep	203	retention + retention_per_sec together: rps captures duration confound while retention keeps raw signal
+exp_h1_ret_mid	ret_mid	0.3781	0.4026	+0.0245	keep	202	Midpoint retention from retentionCurve. r=+0.29 vs log_views. Best individual curve signal
+exp_h1_ret_var	ret_var	0.3781	0.3902	+0.0121	keep	202	Retention curve variance. r=-0.32 vs log_views (lower variance = more views)
+exp_h1_ret_end	ret_end	0.3781	0.3890	+0.0109	keep	202	Average of last 5 curve points. r=+0.30 vs log_views
+exp_h1_slopes	slope_10/slope_5/drop_3	0.3781	varies	negative	discard	202	All slope signals collinear with retention already in model — negative delta
+loop_b_1	discovery:log_7day_velocity	—	—	—	discovery	202	r=+0.84, r_partial=+0.82. STRONGEST new signal. Log10 of first-7-day view sum predicts total views even after controlling for keep. Early algorithmic push is the mechanism.
+loop_b_2	discovery:rc_max_single_drop	—	—	—	discovery	202	r=+0.41, r_partial=+0.36. Counter-intuitive: BIGGER max retention drops = MORE views. Dramatic narrative turns drive virality, not smooth retention.
+loop_b_3	discovery:retention_variation	—	—	—	discovery	202	r=-0.32, r_partial=-0.26. LOWER retention variation = more views. Smooth, consistent watch patterns get algorithmic reward.
+loop_b_4	discovery:rc_retention_75pct	—	—	—	discovery	202	r=+0.32, r_partial=+0.25. Retention at 75% mark predicts views beyond keep. Deep viewer engagement matters independently.
+loop_b_5	discovery:rc_retention_10s	—	—	—	discovery	202	r=+0.38, r_partial=+0.24. 10-second retention mark predicts views. First 10s = algorithmic fate.
+loop_b_6	discovery:rc_retention_mid	—	—	—	discovery	202	r=+0.29, r_partial=+0.24. Midpoint retention predicts views. Videos maintaining middle engagement outperform.
+loop_b_7	discovery:engagement_min_above_baseline	—	—	—	discovery	202	r=+0.29, r_partial=+0.21. (retention-70)*duration = total watch-minutes above baseline. Algorithm rewards watch time volume.
+loop_b_8	discovery:subscriber_avg_retention	—	—	—	discovery	202	r=+0.22, r_partial=+0.21. Higher sub retention % predicts views. Even loyal audience engagement matters.
+loop_b_9	discovery:nonsub_avg_retention	—	—	—	discovery	202	r=+0.28, r_partial=+0.20. Non-subscriber retention predicts views. Cold traffic retention = virality signal.
+loop_b_10	discovery:like_ratio_inverse	—	—	—	discovery	202	r=-0.30, r_partial=-0.19. Lower like/view ratio = MORE views. Viral videos reach beyond core audience.
+loop_b_11	discovery:peak_view_day	—	—	—	discovery	202	r=+0.24, r_partial=+0.18. Later peak day in first 30 days = more views. Sustained/second-wave virality indicator.
+loop_b_12	discovery:rc_early_drop_0_3s	—	—	—	discovery	202	r=+0.24, r_partial=+0.17. Bigger 0-3s drop = more views (counter-intuitive). High initial spike height matters more than drop.
+loop_b_13	discovery:rc_slope_3_10s	—	—	—	discovery	202	r=+0.14, r_partial=+0.15. Flatter 3-10s slope = more views. Hook retention in seconds 3-10 predicts.
+loop_b_14	discovery:rc_max_drop_timing	—	—	—	discovery	202	r=+0.01, r_partial=+0.14. Later max drop = more views. Early max drops = hook failure.
+loop_b_15	discovery:sub_conversion_rate	—	—	—	discovery	202	r=+0.03, r_partial=+0.10. Subs gained per 10k views weakly predicts. Quality signal to algorithm.
+loop_b_16	discovery:day1_share_inverse	—	—	—	discovery	202	r=-0.38, r_partial=-0.37. Viral videos DON'T peak day 1. Lower day-1 share = more total views. Algorithmic sustained push signal.
+loop_b_17	discovery:day7_day1_ratio	—	—	—	discovery	202	r=+0.34, r_partial=+0.31. Day7/Day1 view ratio predicts total views. Sustained momentum is the key to virality.
+loop_b_18	discovery:hook_hold_ratio_inv	—	—	—	discovery	202	r=-0.39, r_partial=-0.28. Counter-intuitive: lower hook hold ratio = more views. Big initial spike height (replays) matters more than keeping it.
+loop_b_19	discovery:body_hold_ratio	—	—	—	discovery	202	r=+0.34, r_partial=+0.26. Retention at 75%/25% predicts views. The narrative middle separates viral from average.
+loop_b_20	discovery:curve_roughness	—	—	—	discovery	202	r=+0.11, r_partial=+0.23. Rougher retention curves = more views. Dramatic pacing creates engagement through variation.
+loop_b_21	discovery:effective_watch_sec	—	—	—	discovery	202	r=+0.35, r_partial=+0.23. Curve area * duration = total watch seconds per viewer. Algorithm rewards watch time volume.
+loop_b_22	discovery:week2_week1_ratio	—	—	—	discovery	202	r=+0.28, r_partial=+0.22. Second week vs first week view ratio. Second-wave videos outperform.
+loop_b_23	discovery:initial_spike	—	—	—	discovery	202	r=+0.32, r_partial=+0.19. Higher initial retention spike (>1.0 = replays) predicts views. Replay behavior = strong hook.
+loop_b_24	discovery:weighted_eng_inverse	—	—	—	discovery	202	r=-0.30, r_partial=-0.19. Lower weighted engagement per view = more views. Virality dilutes per-view engagement as audience broadens.
+loop_b_25	discovery:decay_rate	—	—	—	discovery	202	r=+0.18, r_partial=+0.18. Slower exponential retention decay predicts views. Captures overall curve shape quality.
+loop_b_26	discovery:combined_score	—	—	—	discovery	202	r=+0.34, r_partial=+0.32. body_hold*10 + d7d1 - retVar*5. Best multi-signal combo found, captures 3 independent dimensions.
+loop_b_27	discovery:duration_sweet_spot	—	—	—	discovery	202	46-60s = sweet spot (28/98 hit 10M+, 2.9M median). 15-30s = death zone (0/11, 513K median). 121s+ small sample but high avg.
+loop_b_28	discovery:vz_B_z_C_combo	—	—	—	discovery	202	Best content combo: vz_type=B + z_type=C. Median 8.2M (3x avg). Visual curiosity gap + challenge/outcome text framing.
+loop_b_29	discovery:swipe_away_paradox	—	—	—	discovery	202	Higher swipe rate = more views (26% high-view vs 12% low-view). But r_partial=0.001 — pure consequence of reaching broader audiences.
+loop_b_30	discovery:rpm_inverse	—	—	—	discovery	202	r_partial=-0.27. Lower RPM = more views after controlling keep. Viral videos get pushed to less-monetizable audiences.
+loop_b_31	discovery:curve_shape_taxonomy	—	—	—	discovery	202	medium_decay=2.8M median vs fast_decay=413K. 7x difference. Curve shape alone separates winners.
+loop_b_32	discovery:title_making_keyword	—	—	—	discovery	202	'Making' = $24M avg (23 videos). Build/creation content is strongest format. 'Shoes' $11.5M, 'testing' $14M.
+exp_h2_hook_clarity	hook_clarity	0.3184	0.2932	-0.0252	discard	199	LLM vision score 1-10. r=+0.21 vs views but hurts regression (noise). r=-0.02 vs keep
+exp_h3_visual_surprise	visual_surprise	0.3184	0.2820	-0.0365	discard	199	LLM vision score 1-10. r=+0.30 vs keep but too noisy for regression
+exp_h4_face_presence	face_presence	0.3184	0.2822	-0.0362	discard	199	LLM vision score 0/1. 80% have faces. r=+0.12 vs views but hurts model
+exp_h5_duration_bucket	is_short/is_long	0.4026	varies	negative	discard	202	Duration buckets don't help. Only 10 shorts in dataset. Long videos R²=0.50 in stratified model
+exp_h6_keep_sq	keep_sq	0.4026	0.4337	+0.0311	keep	202	Non-linear keep effect (keep²). Captures accelerating returns at high keep rates
+exp_h7_keep_x_vz	keep_x_vz	0.4026	0.4199	+0.0173	discard	202	keep×vz interaction. Individually kept but doesn't add on top of keep_sq (+0.001)
+exp_h8_log_duration	log_duration	0.4026	0.4113	+0.0087	discard	202	log10(duration). Below threshold (+0.009)
+exp_h9_net_engagement	net_engagement	0.4026	0.4026	-0.0000	discard	202	keep+retention-100. Perfectly collinear with existing features
+loop_b_33	discovery:derivative_std	—	—	—	discovery	202	r=+0.39, r_partial=+0.38. TOP SIGNAL. StdDev of retention curve derivative = 'dramatic pacing'. Varied rate-of-change beats monotonic decay.
+loop_b_34	discovery:derivative_mean	—	—	—	discovery	202	r=-0.11, r_partial=-0.24. More negative mean derivative = more views. Viral videos decay faster because they start higher.
+loop_b_35	discovery:final_derivative	—	—	—	discovery	202	r=+0.02, r_partial=-0.18. Viral videos still losing viewers at end, not flattening. Tension maintained through finale.
+loop_b_36	discovery:sentence_count	—	—	—	discovery	202	r=+0.19, r_partial=+0.18. More transcript sentences = more views. Narrative density matters.
+loop_b_37	discovery:post_cliff_derivative	—	—	—	discovery	202	r=-0.23, r_partial=-0.15. No recovery needed after cliff. Committed audience stays regardless.
+loop_b_38	discovery:word_count	—	—	—	discovery	202	r=+0.19, r_partial=+0.12. More words = more views. Content density signal.
+exp_curve_max_cliff	max_cliff	0.4337	0.5263	+0.0926	keep	202	Biggest single-point retention drop in curve. r=+0.41 vs log_views. Signals initial virality spike
+exp_curve_roughness	roughness	0.4337	0.5080	+0.0743	discard	202	Mean abs 2nd derivative. r=+0.12. Collinear with max_cliff — doesn't add on top
+exp_curve_ret_q75	ret_q75	0.5263	0.5303	+0.0040	discard	202	75th percentile retention. Doesn't add >0.01 on top of max_cliff
+exp_curve_tail_stab	tail_stability	0.5263	0.5282	+0.0019	discard	202	Tail std dev. Doesn't add incrementally
+exp_curve_shape_ratio	shape_ratio	0.4337	0.4555	+0.0218	discard	202	Early/late retention ratio. Individually kept but collinear with max_cliff
+exp_curve_hook_drop	hook_drop	0.4337	0.4421	+0.0084	discard	202	Drop from peak to first minimum. Below threshold
+loop_b_39	discovery:pacing_ratio	—	—	—	discovery	202	r_partial=+0.42. BEST SINGLE RATIO. deriv_std/retentionVariation = 'dramatic pacing efficiency'. Sharp turns at specific moments + smooth overall arc.
+loop_b_40	discovery:body_trajectory_product	—	—	—	discovery	202	r_partial=+0.40. body_hold × (1-d1_share). Need BOTH mid-video retention AND sustained trajectory.
+loop_b_41	discovery:keep_x_pacing	—	—	—	discovery	202	r_partial=+0.38. keep × deriv_std. Hook + dramatic pacing interaction outperforms either alone.
+loop_b_42	discovery:optimal_3signal_model	—	—	—	discovery	202	r=0.61, r²=0.37. z(keep)+z(deriv_std)+z(d7d1) explains 37% of view variance. Best 3-signal model found.
+loop_b_43	discovery:keep_threshold_75	—	—	—	discovery	202	Non-linear: <75% keep = 3-12% hit 10M+. 75-80% = 25%. 80-85% = 41%. Marginal keep above 75 doubles hit rate.
+loop_b_44	discovery:vz_x_pacing	—	—	—	discovery	202	r_partial=+0.32. vz_score × deriv_std. Visual curiosity + pacing = pre-production predictable virality.
+exp_poly_ret_mid_sq	ret_mid_sq	0.5467	0.5656	+0.0189	keep	202	Non-linear midpoint retention effect. Retained incrementally on top of sub_ret_gap
+exp_sub_ret_gap	sub_ret_gap	0.5263	0.5467	+0.0203	keep	202	Subscriber vs non-subscriber retention gap. r=-0.22 vs views. Broad appeal signal
+exp_deep_curves	replay_energy/entropy/kurtosis/etc	0.5263	varies	negative	discard	202	8 deep curve features tested. None improve over max_cliff. Curve signal already captured
+exp_poly_misc	max_cliff_sq/vz_sq/rps_sq/etc	0.5263	varies	<0.01	discard	202	Most polynomial/interaction terms below threshold or hurt model
+exp_title_caps	title_caps_ratio	0.5656	0.5892	+0.0236	discard	202	Uppercase ratio in title. Holdout +0.024 but CV drops — unstable/noise
+exp_text_misc	idea_words/has_challenge/etc	0.5656	varies	marginal	discard	202	17 text features tested. None stable in CV. Best individual: title_caps_ratio
+exp_viewed_rate	viewed_rate	0.5656	0.5957	+0.0301	note	202	OUTCOME variable (engagedViews/totalViews). +0.03 but circular — engagement predicts views
+exp_growth_misc	growth_trajectory/viral_spike/etc	0.5656	varies	mostly_negative	discard	202	9 growth features. Most hurt model. age_days r=-0.06 (no age confound)
+exp_cv_stability	5fold_cv_v5	n/a	0.3401	n/a	note	202	5-fold CV mean=0.34±0.16. Stable estimate of true generalization. Holdout R² optimistic
+exp_backward_elim	feature_selection	0.3401	0.3613	+0.0212	keep	202	CV-guided backward elimination: dropped z_score, retention, vz_score, novelty, net_novelty. CV 0.340→0.361
+exp_model_v6	optimized_8feat	0.3401	0.3613	+0.0212	keep	202	Final: keep, retention_per_sec, cognitive_load, ret_mid, keep_sq, max_cliff, sub_ret_gap, ret_mid_sq. Holdout=0.566, CV=0.361
+exp_piecewise	piecewise_keep75	0.3613	0.3460	-0.0153	discard	202	Piecewise linear split on keep=75. Holdout +0.06 but CV worse and higher variance
+exp_piecewise70	piecewise_keep70	0.3613	0.3883	+0.0270	note	202	CV best piecewise at keep=70 threshold: CV=0.388±0.155. Marginal but interesting
+exp_knn	knn_k7	0.3613	varies	negative	discard	202	KNN regression doesn't beat OLS. Best k=7: holdout 0.538
+exp_blend	ols_knn_blend	0.3613	0.3832	+0.0219	note	202	OLS+KNN(k=7) blend w=0.7: CV=0.383±0.140. Best CV so far but requires storing training data
+exp_clustering	curve_clusters	0.5664	varies	marginal	discard	202	Retention curve clustering (k=2,3,4). No improvement over linear features
+exp_hook_word_density	hook_word_density	0.3613	0.3756	+0.0143	keep	202	Words/sec in hook segment. CV stable +0.014. Visual hooks beat talky hooks (weight=-0.058)
+exp_segment_misc	n_segments/pacing_var/etc	0.5664	varies	<0.01	discard	202	9 other segment features tested. None improve model
+exp_creative_misc	keep_odds/cliff_sq/interactions	0.5664	varies	negative	discard	202	6 creative features. keep_odds borderline (+0.010) but doesn't pass strict threshold
+exp_interactions	cog_x_cliff/ret_70/ret_80	0.5799	varies	cv_negative	discard	202	Interaction and discrete curve terms. Holdout +0.01 but CV drops. Overfitting
+exp_multi_seed_cv	final_cv_10seeds	n/a	0.3390	n/a	note	202	Multi-seed (10) 5-fold CV: 0.339±0.015. Stable performance estimate for v7
+exp_classification	viral_>10M	n/a	n/a	n/a	note	202	At threshold=6.7: accuracy=0.85, precision=0.60, recall=0.75. Useful for screening
+exp_quintile_err	prediction_by_quintile	n/a	n/a	n/a	note	202	Q1(small): 3.6x error, Q2-Q4(medium): 1.6-2.0x, Q5(huge): 3.3x. Model best at medium range
+exp_hook_llm_scores	open_loop/specificity	0.3756	varies	cv_negative	discard	189	LLM-scored hook open_loop and specificity. Neither helps. LLM content scores too noisy for n=200
+exp_title_patterns	14_title_patterns	0.3756	varies	mostly_negative	note	202	14 regex patterns tested. "indestructible" stands out massively
+exp_pat_indestructible	pat_indestructible	0.3390	0.3745	+0.0355	keep	202	Title contains indestructible/bulletproof/invincible/unbreakable. CV +0.036 (10/10 seeds). 7 videos avg 61M views vs 5.6M rest
+exp_llm_categories	concept_categories	0.3800	varies	mixed	note	195	LLM categorized videos into 10 concepts. INDESTRUCTIBLE avg 26.7M, SUPERHERO_BUILD avg 10.2M
+exp_cat_superhero	cat_superhero	0.3800	0.4010	+0.0210	keep	195	SUPERHERO_BUILD category flag. CV +0.021, wins 10/10 seeds. 30 videos avg 10.2M
+exp_model_v9	final_11feat	0.3390	0.4010	+0.0620	keep	195	BEST MODEL: 11 features, CV=0.401±0.019. From 0.339 baseline to 0.401 via concept categories
+exp_v9_optimized	backward_elim_v9	0.4010	0.4053	+0.0043	keep	195	Dropped ret_mid and cognitive_load from v9. CV improved 0.401→0.405. 9 features optimal
+exp_loop_b_signals	deriv_std/body_hold/pat_making	0.4053	varies	all_negative	discard	195	Tested signals from loop_b (deriv_std, body_hold, pat_making, pat_shoes). None improve v9
+exp_final_summary	v9_optimized_9feat	0.1468	0.4053	+0.2585	final	195	FINAL: 9 features, 10-seed CV R²=0.405. From baseline 0.147→0.405 (+175% improvement). Ran 40+ experiments, tested 100+ features
+exp_upload_day	upload_dow	0.4053	0.4073	+0.0020	discard	195	Upload day of week. Saturday avg 14M views but CV Δ < 0.01
+exp_fft_features	fft_1/2/3/autocorr/entropy	0.4120	varies	all_negative	discard	195	Signal-processing features from retentionCurve FFT. All hurt — curve info already captured by max_cliff
+exp_loocv	loocv_v9	n/a	0.4303	n/a	note	195	Leave-One-Out CV: R²=0.430, RMSE=0.537 (3.4x). Most precise generalization estimate
+exp_prev_views	prev_views	0.4120	0.4458	+0.0338	keep	195	Previous video's log10 views. Channel momentum effect. CV +0.034, 10-seed. Algorithm gives bigger push after a hit
+exp_momentum	rolling_3_views	0.4120	0.4203	+0.0083	discard	195	Rolling 3-video average. Less effective than single prev_views
+exp_model_v10	final_10feat	0.1468	0.4458	+0.2990	final	195	CURRENT BEST: 10 features, CV=0.446±0.018, holdout=0.623, multiplier=2.9x
+exp_prev_keep	prev_keep	0.4511	0.4667	+0.0156	keep	195	Previous video's keep rate. Audience priming effect. Weight=-0.029 (lower prev keep = MORE views — rebound effect?)
+exp_model_v11	final_11feat	0.1468	0.4667	+0.3199	final	195	CURRENT BEST: 11 features, CV=0.467±0.019, multiplier=3.1x. +217% from baseline
+exp_prev_views_sq	prev_views_sq	0.4667	0.4805	+0.0138	keep	195	Non-linear channel momentum (prev_views²). CV +0.014, 10/10 seeds. Accelerating returns from mega-hits
+exp_model_v12	final_12feat	0.1468	0.4805	+0.3337	final	195	CURRENT BEST: 12 features, CV=0.481±0.018. From baseline 0.147→0.481 (+227%). Three dimensions: quality+concept+momentum
+exp_indestructible_x_pk	indestructible_x_prev_keep	0.4805	0.5064	+0.0259	keep	195	Indestructible concept × previous keep rate interaction. CV +0.026, 10/10 seeds. RELEASE STRATEGY: indestructible after high-keep = super-viral
+exp_model_v13	final_13feat	0.1468	0.5064	+0.3596	final	195	MILESTONE: CV R²>0.50! 13 features, CV=0.506±0.017, holdout=0.702, multiplier=2.6x. From 0.147→0.506 (+244%)
+loop_b_45	discovery:view_acceleration	—	—	—	discovery	201	r=+0.37, r_partial=+0.34. Day3-7 avg / Day1 views. Algorithmic acceleration ratio. OUTLIER: 30.4x top10 vs 0.7x bottom10.
+loop_b_46	discovery:late_early_ret_ratio	—	—	—	discovery	370	r=+0.55 (370), r_partial=+0.29 (203). Retention late/early area ratio. Videos holding late viewers massively outperform.
+loop_b_47	discovery:hook_efficiency_inv	—	—	—	discovery	370	r_partial=-0.49 (370), -0.27 (203). Counter-intuitive: lower ret@3s/peak = MORE views. Big initial spike (replays) matters.
+loop_b_48	discovery:curve_entropy	—	—	—	discovery	370	r_partial=+0.48 (370), +0.29 (203). Shannon entropy of retention curve. Information-rich curves outperform monotonic decay.
+loop_b_49	discovery:curve_kurtosis	—	—	—	discovery	370	r_partial=+0.48 (370), +0.27 (203). Excess kurtosis of retention curve. Top10 avg=5.17 vs bottom10=2.10 (2.47x ratio).
+loop_b_50	discovery:trajectory_decay_fit	—	—	—	discovery	201	r=-0.37, r_partial=-0.34. Viral videos DON'T follow exponential decay. Lower R² of log-linear fit = more views.
+loop_b_51	discovery:narrative_momentum	—	—	—	discovery	202	r=+0.46, r_partial=+0.43. BEST NEW COMBO: derivStd × bodyHold × (1-decayR2). Three independent dimensions combined.
+loop_b_52	discovery:momentum_x_cliff	—	—	—	discovery	202	r=+0.46, r_partial=+0.40. prev_views × maxCliff interaction. Channel momentum amplifies dramatic content.
+loop_b_53	discovery:late_early_x_pacing	—	—	—	discovery	202	r=+0.42, r_partial=+0.38. lateEarlyRatio × derivStd. Late retention quality × dramatic pacing interaction.
+loop_b_54	discovery:peak_to_trough	—	—	—	discovery	201	r=+0.23, r_partial=+0.20. Post-peak trough / peak daily views. Sustained viewership after spike.
+loop_b_55	discovery:wm_per_view_day1	—	—	—	discovery	202	r=+0.31, r_partial=+0.22. Watch minutes per view on Day 1. Early engagement quality before algorithm kicks in.
+loop_b_56	discovery:inflection_count_inv	—	—	—	discovery	370	r_partial=-0.23 (370), -0.12 (203). Fewer retention curve inflection points = smoother narrative = more views.
+loop_b_57	discovery:outlier_profile	—	—	—	discovery	203	TOP vs BOTTOM: viewAccel 43x, kurtosis 2.5x, maxCliff 1.7x, subViewShare 0.09x, duration 1.6x. Acceleration is king differentiator.
+exp_text_overlay	has_text_overlay	0.3293	0.3583	+0.0290	keep	203	No text overlay in first frame predicts more views. r=-0.05 but stable CV +0.029. Counter-intuitive: clean thumbnails may perform better
+exp_dur_x_ret	duration_x_retention	0.3293	0.3475	+0.0181	keep	203	Duration × retention = total watch time proxy. r=+0.35, CV +0.018. Captures watch time volume
+exp_eff_watch	effective_watch_sec	0.3293	0.3395	+0.0102	keep	203	Retention curve area × duration. r=+0.34, CV +0.010. Absolute watch seconds per viewer
+exp_outcome_log_d7	log_d7_views	0.3293	0.4164	+0.0870	note_outcome	203	OUTCOME: log10 first-7-day views. r=+0.69, CV +0.087. Strongest outcome signal — early algorithmic push
+exp_outcome_rpm	rpm	0.3293	0.3621	+0.0328	note_outcome	203	OUTCOME: revenue per mille. r=-0.01, CV +0.033. Lower RPM = broader (less monetizable) audience reach
+exp_outcome_likes	likes_per_10k	0.3293	0.3702	+0.0409	note_outcome	203	OUTCOME: likes per 10k views. r=-0.29, CV +0.041. Inverse: viral videos dilute per-view engagement
+exp_outcome_d7d3	d7_d3_ratio	0.3293	0.3612	+0.0318	note_outcome	203	OUTCOME: day7/day3 view ratio. r=+0.36, CV +0.032. Sustained growth trajectory signal
+exp_fwd_pred_v14	pred_model_v14	0.3293	0.3840	+0.0547	keep	203	Forward selection: v13 + has_text_overlay + duration_x_retention. Predictive-only CV=0.384
+exp_fwd_all_v14	all_signals_v14	0.3293	0.6613	+0.3319	note_outcome	203	All signals (13+6): CV=0.661, holdout=0.739. Massive gain from outcome variables but circular
+loop_b_58	discovery:spike_decay_death	—	—	—	discovery	200	0/27 spike_decay videos hit 10M+. Day1 share >15% = DEATH. Median 0.3M. Anti-viral trajectory.
+loop_b_59	discovery:delayed_peak_shape	—	—	—	discovery	200	r_partial=+0.36. Delayed peak (day 3+) shape: 31% hit 10M+, median 3.6M. Best trajectory category.
+loop_b_60	discovery:day1_share_continuous	—	—	—	discovery	200	r=-0.52, r_partial=-0.50. Day1 views as fraction of 30-day total. STRONGEST trajectory signal after controlling for keep.
+loop_b_61	discovery:trajectory_exp_fit	—	—	—	discovery	200	r_partial=-0.34. How well does exponential decay fit? Lower R² = more views. Viral = non-predictable trajectory.
+loop_b_62	discovery:multivar_partial_corrs	—	—	—	discovery	202	Controlling for keep+maxCliff: viewAccel +0.32, narrativeMomentum +0.31, decayR2 -0.30, entropy +0.20. These 4 truly independent.
+loop_b_63	discovery:replay_excess	—	—	—	discovery	202	r=+0.32, r_partial=+0.19. Hook replay intensity (peak retention above 1.0). Top videos have 1.4+ replay peaks.
+loop_b_64	discovery:drop_below_70_point	—	—	—	discovery	202	r=+0.30, r_partial=+0.25. How far through video before 70% retention threshold. Threshold-based narrative quality signal.
+loop_b_65	discovery:mid_section_stability	—	—	—	discovery	202	r=-0.26, r_partial=-0.19. Lower StdDev in middle 50% of curve = smoother narrative = more views.
+loop_b_66	discovery:optimal_3signal_new	—	—	—	discovery	201	r=0.632. BEST 3 NEW SIGNALS: z(kurtosis)+z(viewAccel)-z(day1share). Explains 40% of view variance from new discoveries alone.
+loop_b_67	discovery:keep_plus_day1share	—	—	—	discovery	201	r=0.622. keep + day1share = 39% view variance from just 2 signals. Day1share captures trajectory independently of quality.
+loop_b_68	discovery:dramatic_moments_inv	—	—	—	discovery	370	r_partial=-0.27 (370). FEWER extreme derivative points = more views. Viral pacing is EVEN, not wildly variable.
+loop_b_69	discovery:flat_middle_flag	—	—	—	discovery	370	r_partial=+0.20 (370). Flat middle section (low variance segments 3-7) predicts views. Consistent narrative holding.
+loop_b_70	discovery:sub_view_tiers	—	—	—	discovery	203	subView<5%: 81% hit 10M+ (19.3M avg). subView<10%: 45% hit rate. Algorithm reach is THE differentiator (but outcome).
+loop_b_71	discovery:golden_zone	—	—	—	discovery	203	keep>=75 AND maxCliff>=0.15: 91/203 videos (45%), 36% hit 10M+, avg 5.2M. Practical pre-screening formula.
+loop_b_72	discovery:cliff_0.25_threshold	—	—	—	discovery	203	maxCliff>=0.25: 15 videos, 40% hit 10M+, avg 5.7M. Extreme dramatic moments are the power zone.
+loop_b_73	discovery:tier_engagement_flip	—	—	—	discovery	203	Engaged%: 92.5% for 5-10M tier vs 56.5% for 100M+. Viral videos reach casual viewers. Swipe 43.5% vs 7.5%.
+loop_b_74	discovery:sub_ret_gap_reversal	—	—	—	discovery	203	Sub vs nonSub retention gap REVERSES by tier: 100M+ subs watch 4.2pts more, 10-50M subs watch 1pt LESS. Mega-viral engages loyal fans differently.
+loop_b_75	discovery:transition_count	—	—	—	discovery	202	r=+0.24, r_partial=+0.15. More narrative transition words (but, however, then) = more views. Narrative structure signal.
+loop_b_76	discovery:cum_concavity	—	—	—	discovery	201	r=-0.21, r_partial=-0.18. Concave cumulative view curve = growing interest over time. Viral videos have growth-oriented trajectories.
+loop_b_77	discovery:ideal_curve_shape	—	—	—	discovery	202	Ideal viral curve: 1.64x replay spike → 1.17 at 5% → 0.70 at 95%. Top-bottom gap GROWS toward tail (0.015 at 5% → 0.097 at 95%).
+loop_b_78	discovery:upload_gap_sweetspot	—	—	—	discovery	160	4-7 days between uploads: 33% hit 10M+. 1-3 days: only 11%. Too-fast uploading hurts. Algorithm needs breathing room.
+loop_b_79	discovery:post_hit_momentum	—	—	—	discovery	202	After 10M+ hit: 33% next video also hits (avg 4.1M). After sub-1M miss: 14% hit rate (avg 1.1M). 2.4x momentum effect.
+loop_b_80	discovery:same_vz_type_boost	—	—	—	discovery	160	r_partial=+0.12. Using same visual Zeigarnik type as previous video slightly boosts views. Consistency of visual style helps.
+loop_b_81	discovery:viral_coeff_proxy	—	—	—	discovery	201	r_partial=+0.18. shares/views × day7/day1 ratio. Proxy for organic viral spreading beyond algorithm.
+exp_deep_curve_v2	66_deep_curve_features	0.4246	varies	all_negative	discard	202	66 deep retention curve features tested individually. All collinear with max_cliff — curve info fully captured
+exp_smoothed_slope	smoothed_slope	0.3844	0.4010	+0.0166	keep	203	Slope of 5-pt moving avg retention curve. r=+0.33. Captures overall decay trend independently of max_cliff single-drop
+exp_idea_length	idea_length	0.3844	0.3965	+0.0121	keep	203	Word count of AI-generated videoIdea. r=+0.02. Longer/richer video concepts predict slightly more views
+exp_slope_idea_combo	smoothed_slope+idea_length	0.3844	0.4182	+0.0338	keep	203	Both signals together on v14 base. CV=0.418. Independent dimensions: curve quality + concept richness
+exp_vision_v2	7_visual_attributes	0.4182	varies	all_negative	discard	203	GPT-4o-mini scored color_contrast, composition, scale, action, objects, brightness, person. r=+0.22 best but Δ<0.01 in regression
+exp_sequence	15_sequence_features	0.4182	varies	all_negative	discard	203	Rolling windows, streaks, topic switching. All captured by prev_views. Combined hurts model (-0.12)
+exp_ridge	ridge_alpha_0.1	0.4182	0.4264	+0.0082	note	203	Ridge regression α=0.1 best. Small boost from regularization. Suggests mild OLS overfitting
+exp_nonlinear	RF/GBM/Tree/Poly	0.4127	varies	all_lower	discard	203	Non-linear models all underperform OLS at n=203. Best single: OLS=0.413. GBM overfits
+exp_ols_gbm_blend	OLS0.7+GBM0.3	0.4127	0.4459	+0.0332	note	203	OLS+GBM blend captures non-linearity. Best blend w=0.7/0.3. But not compatible with linear model format
+exp_gbm_importance	feature_importance	n/a	n/a	n/a	note	203	GBM importance: max_cliff(0.19), dur_x_ret(0.13), keep_sq(0.10), keep(0.10), smooth_slope(0.09)
+exp_stakes_x_dur	stakes_x_duration	0.4127	0.4463	+0.0337	keep	203	LLM stakes score × duration/60. High-stakes longer content performs better. CV +0.034
+exp_pat_making_v2	pat_making_v2	0.4127	0.4244	+0.0118	keep	203	Title contains making/build/creat/construct. 34 videos avg 19.7M vs 5.6M rest. CV +0.012
+exp_stakes_raw	stakes	0.4463	0.4702	+0.0121	keep	203	LLM-scored stakes (1-10). Incremental on top of stakes_x_duration. High stakes = more views
+exp_content_misc	shareability/emotional/concept/universality	0.4127	varies	marginal	discard	203	Other LLM content scores. Concept_simplicity marginal r=+0.11. Shareability near zero r=-0.01
+exp_transcript_pacing	speech_pacing_std/gaps/density	0.4127	varies	all_negative	discard	203	Transcript pacing features (word density variation, pauses). All hurt model
+exp_backward_v16	backward_elimination	0.4702	0.4843	+0.0141	keep	203	Dropped hook_word_density, pat_indestructible, keep, max_cliff, retention_per_sec. All captured by other features
+exp_model_v16	final_15feat	0.4127	0.4843	+0.0716	keep	203	15 features: keep_sq, sub_ret_gap, ret_mid_sq, cat_superhero, prev_views, prev_keep, prev_views_sq, indestructible_x_prev_keep, has_text_overlay, duration_x_retention, smoothed_slope, idea_length, stakes_x_duration, pat_making_v2, stakes. Holdout=0.461
+exp_stacking	gbm_oof_pred	0.4843	0.4761	-0.0082	discard	203	GBM out-of-fold predictions as stacking feature. Hurts model — OLS already captures available variance
+exp_early_detect	log_d1/d3/d7/d3_d1/wm	0.4843	varies	all_negative	discard	203	Day 1-3 view signals all hurt v16. Model already captures what early views measure
+exp_creative_v2	7_creative_features	0.4843	varies	all_negative	discard	203	Interactions, composites, quality scores. All overfit at n=203
+exp_outcome_revenue	log_revenue	0.4843	0.6393	+0.1550	note_circular	203	CIRCULAR: log10(estimatedRevenue). Revenue ≈ f(views). r=+0.72. Not a valid predictor
+exp_outcome_rpm_v2	rpm	0.4843	0.5227	+0.0384	note_outcome	203	OUTCOME: Revenue per mille. r=-0.01 but captures audience demographics post-upload
+exp_outcome_engagement	engagement_rate	0.4843	0.5094	+0.0251	note_outcome	203	OUTCOME: (likes+2*comments+3*shares)/views. Quality signal but measured after upload
+exp_ceiling_test	v16+all_outcomes	0.4843	0.8286	+0.3443	note_circular	203	CEILING: Adding circular outcome signals pushes CV to 0.83. Not meaningful for prediction
+exp_h26_temporal_gap	days_gap	0.4843	n/a	n/a	not_feasible	203	Upload dates not available in metadata. Gap defaults to 7 days for all videos
+exp_h21_series	is_series	0.4843	0.4818	-0.0025	discard	203	Series detection (part/episode/#) in title. r=-0.04. Too few series videos to be predictive
+exp_h28_expand	expanded_371	0.4843	-2.75	n/a	not_feasible	371	168 extra videos available but data quality issues: anomalous retention curves, missing keep metric, noisy features. Expansion requires data cleaning pipeline
+exp_hook_llm_v2	promise/tension/speed/action/interrupt	0.4843	varies	all_negative	discard	203	LLM-scored hook quality (5 attributes). action_vs_talk r=+0.31 best individual but none improve v16. Consistent: LLM scores too noisy at n=203
+exp_h23_deriv_entropy	deriv_entropy	0.4843	0.4925	+0.0082	marginal	203	Shannon entropy of retention curve derivatives. r=+0.43 (strongest individual correlation!). Varied pacing = more views
+exp_hook_silence	hook_silence	0.4843	0.4935	+0.0092	marginal	203	Time before first spoken word. r=+0.15. Visual-first hooks outperform talk-first hooks
+exp_both_marginal	deriv_entropy+hook_silence	0.4843	0.5001	+0.0160	keep	203	Both marginal signals combine to pass threshold! Independent dimensions: pacing variety + visual hook priority
+exp_model_v17	final_17feat	0.4843	0.5001	+0.0160	keep	203	CV breaks 0.50! 17 features. Added deriv_entropy (pacing complexity) and hook_silence (visual hook delay). No features removed in backward elimination
+exp_next_round	16_interaction+original_feats	0.5002	varies	all_<0.005	discard	203	Tested entropy×stakes, silence×keep, vz/z re-adds, prev_entropy/silence, superhero×prev. None pass marginal threshold. V17 at linear ceiling for n=203
+exp_ridge_v17	ridge_alpha_0.05	0.5002	0.5018	+0.0016	discard	203	Ridge regularization on v17. Minimal improvement — model not overfitting with 17 features
+exp_blend_v17	OLS0.8+GBM0.2	0.5002	0.5131	+0.0129	note	203	Best ensemble: OLS(0.8)+GBM(0.2) blend. Captures non-linearity. But incompatible with linear model format
+exp_session_summary	v17_final	0.1468	0.5002	+0.3534	final	203	SESSION TOTAL: v1→v17. 40+ experiments, 150+ features tested, 3 LLM scoring rounds. CV 0.147→0.500 (+240%). 5 dimensions: quality, concept, momentum, pacing, hook
+exp_loop_a_late_early_ratio	late_early_ratio	0.4860	0.4700	-0.0160	discard	203	Late/early retention ratio. r=+0.306 vs log_views
+exp_loop_a_hook_efficiency_inv	hook_efficiency_inv	0.4860	0.4740	-0.0120	discard	203	Hook efficiency inverse (ret@3s/peak). r=-0.247 vs log_views
+exp_loop_a_curve_entropy	curve_entropy	0.4860	-215.1044	-215.5904	discard	203	Shannon entropy of retention curve. r=+0.009 vs log_views
+exp_loop_a_curve_kurtosis	curve_kurtosis	0.4860	0.4762	-0.0098	discard	203	Excess kurtosis of retention curve. r=+0.351 vs log_views
+exp_loop_a_replay_excess	replay_excess	0.4860	0.4778	-0.0082	discard	203	Replay intensity (peak above 1.0). r=+0.306 vs log_views
+exp_loop_a_drop_below_70	drop_below_70	0.4860	0.4796	-0.0064	discard	203	Fraction before retention drops below 70%. r=+0.290 vs log_views
+exp_loop_a_mid_stability	mid_stability	0.4860	0.4837	-0.0023	discard	203	Mid-section retention stability (std). r=-0.256 vs log_views
+exp_loop_a_dramatic_moments	dramatic_moments	0.4860	0.4890	+0.0030	discard	203	Count of extreme derivative points. r=-0.121 vs log_views
+exp_loop_a_inflection_count	inflection_count	0.4860	0.4814	-0.0047	discard	203	Retention curve inflection count. r=-0.110 vs log_views
+exp_loop_a_body_hold	body_hold	0.4860	0.4381	-0.0479	discard	203	Body hold ratio (ret@75%/ret@25%). r=+0.237 vs log_views
+exp_loop_a_deriv_std	deriv_std	0.4860	0.4829	-0.0031	discard	203	Derivative std (pacing variability). r=+0.377 vs log_views
+exp_loop_a_max_cliff	max_cliff	0.4860	0.4843	-0.0018	discard	203	Max single-point retention drop. r=+0.394 vs log_views
+exp_loop_a_ret_10pct	ret_10pct	0.4860	0.4632	-0.0228	discard	203	Retention at 10% point. r=+0.045 vs log_views
+exp_loop_a_ret_75pct	ret_75pct	0.4860	0.4510	-0.0350	discard	203	Retention at 75% point. r=+0.281 vs log_views
+exp_loop_a_ret_90pct	ret_90pct	0.4860	0.4763	-0.0097	discard	203	Retention at 90% point. r=+0.280 vs log_views
+exp_loop_a_view_acceleration	view_acceleration	0.4860	0.5338	+0.0478	keep	203	Day3-7 avg / Day1 views. r=+0.370 vs log_views
+exp_loop_a_day1_share	day1_share	0.5338	0.5779	+0.0441	keep	203	Day1 views / 30-day total. r=-0.507 vs log_views
+exp_loop_a_trajectory_decay_r2	trajectory_decay_r2	0.5779	0.5767	-0.0012	discard	203	Exponential decay fit R². r=-0.363 vs log_views
+exp_loop_a_d7_d1_ratio	d7_d1_ratio	0.5779	0.5825	+0.0046	discard	203	Day7 / Day1 view ratio. r=+0.337 vs log_views
+exp_loop_a_w2_w1_ratio	w2_w1_ratio	0.5779	0.6036	+0.0258	keep	203	Week2 / Week1 view ratio. r=+0.278 vs log_views
+exp_loop_a_peak_day	peak_day	0.6036	0.5989	-0.0048	discard	203	Peak view day in first 30. r=+0.242 vs log_views
+exp_loop_a_wm_per_view_d1	wm_per_view_d1	0.6036	0.6039	+0.0003	discard	203	Watch minutes per view on day 1. r=+0.303 vs log_views
+exp_loop_a_narrative_momentum	narrative_momentum	0.6036	0.6021	-0.0016	discard	203	derivStd × bodyHold × (1-decayR2). r=+0.457 vs log_views
+exp_loop_a_momentum_x_cliff	momentum_x_cliff	0.6036	0.6094	+0.0058	marginal	203	prev_views × max_cliff. r=+0.460 vs log_views
+exp_loop_a_late_early_x_pacing	late_early_x_pacing	0.6036	0.6019	-0.0017	discard	203	late/early ratio × deriv_std. r=+0.418 vs log_views
+exp_model_v18	final_15feat	0.4860	0.6273	+0.1413	keep	203	v18: 15 features, CV=0.6273±0.0819, holdout=0.5240
+loop_b_82	discovery:deriv2_std	—	—	—	discovery	202	r=+0.21, r_partial=+0.28. 2nd derivative std = pacing acceleration jerkiness. Different from deriv_std (1st deriv). Top10=0.016 vs bot10=0.010 (1.67x).
+loop_b_83	discovery:max_consec_growth_days	—	—	—	discovery	201	r=+0.23, r_partial=+0.25. Longest streak of consecutive daily view increases. Captures sustained algorithmic push quality.
+loop_b_84	discovery:retention_range	—	—	—	discovery	202	r=+0.11, r_partial=+0.24. Max-min retention across curve. Captures combined spike amplitude + end drop differently from max_cliff.
+loop_b_85	discovery:retention_harmonic_mean	—	—	—	discovery	370	r=+0.29 (203), r=+0.47 (370). Harmonic mean penalizes dips. MASSIVE on full set. Captures 'no weak spots' quality.
+loop_b_86	discovery:area_above_80	—	—	—	discovery	370	r=+0.27 (203), r=+0.47 (370). Fraction above 80% retention. Tier: 100M+=0.69, sub1M=0.44. MASSIVE on full set.
+loop_b_87	discovery:retention_dispersion	—	—	—	discovery	370	r=+0.34 (203), r=+0.47 (370). IQR/median of retention. Wider relative spread = more views. Normalized curve quality metric.
+loop_b_88	discovery:first_3day_share	—	—	—	discovery	201	r=-0.41, r_partial=-0.37. First 3 days as % of 30-day total. Stronger variant of day1_share. Tier: 100M+=0.31, sub1M=0.36.
+loop_b_89	discovery:day3_growth_ratio	—	—	—	discovery	201	r=+0.31, r_partial=+0.29. Day3/Day1 views. OUTLIER KING: top10=13.78x vs bottom10=1.16x (11.86x ratio). Biggest outlier differential found.
+loop_b_90	discovery:views_coeff_variation	—	—	—	discovery	201	r=-0.16, r_partial=-0.16. Lower daily view CV = more consistent = more views. Top10=1.35 vs bot10=1.89.
+loop_b_91	discovery:comment_rate_inverse	—	—	—	discovery	372	r=-0.20, r_partial=-0.14. Fewer comments/10k views = more total views. Tier: 100M+=0.34, sub1M=3.92 (11.5x dilution).
+loop_b_92	discovery:sub_loss_fraction	—	—	—	discovery	372	r=-0.17, r_partial=-0.13. Lower sub loss/gain ratio = better quality. On 370: r=-0.22.
+loop_b_93	discovery:hook_fraction_inverse	—	—	—	discovery	157	r=-0.10, r_partial=-0.12. Shorter hook fraction = more views. 100M+ hookDur=5s vs others=7s. Efficient hooks win.
+loop_b_94	discovery:segment_duration_cv	—	—	—	discovery	192	Tier: 100M+=0.47 vs sub1M=0.30 (1.57x). Uneven narrative segment lengths signal dramatic tension at top tier.
+loop_b_95	discovery:hook_has_question	—	—	—	discovery	372	r=+0.19 (370). 100M+ videos = 100% have question in first 10s. Table stakes for top tier. Questions create open loops.
+loop_b_96	discovery:title_brevity	—	—	—	discovery	372	100M+ avg 4 words vs others 6-7. Weak r=+0.06 overall but strong tier separation. Concise titles at top.
+loop_b_97	discovery:ret_90pct	—	—	—	discovery	370	r=+0.32 (203), r=+0.505 (370). MASSIVE on full set. Near-end retention is top-tier signal. Payoff delivery metric.
+loop_b_98	discovery:ret_95pct	—	—	—	discovery	370	r=+0.32 (203), r=+0.501 (370). Very last moments retention. Near-identical to ret_90pct. Last 5-10% differentiates viral.
+loop_b_99	discovery:nonSub_view_share	—	—	—	discovery	202	r=+0.85, r_partial=+0.82. STRONGEST SIGNAL EVER FOUND. But OUTCOME. Top10=97.8% nonSub vs bot10=74.9%. Algorithm reach factor.
+loop_b_100	discovery:consec_growth_x_keep	—	—	—	discovery	203	r=+0.33, r_partial=+0.24. Growth streak × keep interaction. Best combo from new discoveries. Sustained algo push on quality content.
+loop_b_101	discovery:day3_growth_outlier	—	—	—	discovery	203	OUTLIER PROFILE: day3Growth separates tiers by 11.86x (top/bottom). Next biggest: subViewShare 0.09x, subNonSubDelta 4.66x, d2d1Ratio 3.39x.
+loop_b_102	discovery:tier_narrative_structure	—	—	—	discovery	203	100M+ has 7 segments (avg), segDurationCV=0.47, hookDur=5s, sentenceCount=15.6. Others: 5 segs, CV=0.30, hookDur=7s, sent=4.8. Top videos have MORE complex, VARIED narrative structure.
+loop_b_103	discovery:full_set_retention_signals	—	—	—	discovery	370	On 370 videos: retHarmMean r=+0.47, areaAbove80 r=+0.47, retDispersion r=+0.47, ret90pct r=+0.51, ret95pct r=+0.50. All MASSIVE on expanded sample. These curve tail signals unlock at n>200.
+loop_b_104	discovery:wm_coeff_variation	—	—	—	discovery	366	r=-0.37, r_partial=-0.40. Watch minutes per view CV. STRONG independent signal. Consistent watch quality = algorithm reward. Not in any existing feature.
+loop_b_105	discovery:end_start_ret_ratio	—	—	—	discovery	370	r=+0.54 (370), r_partial=+0.31 (203). End/start retention ratio = payoff delivery. MASSIVE on full set. Did the video pay off its hook promise?
+loop_b_106	discovery:trajectory_delayed_peak	—	—	—	discovery	372	delayed_peak (day3+): 31% hit 10M+, avg 3.3M, n=153. early_peak: 0% hit, avg 0.4M, n=15. TRAJECTORY SHAPE IS DESTINY.
+loop_b_107	discovery:early_peak_death	—	—	—	discovery	372	early_peak (peak day0, d1share>15%): 0% hit 10M+ (n=15). Confirms spike_decay (loop_b_58) on larger sample. Day 1 peaking = algorithm rejection.
+loop_b_108	discovery:independence_matrix	—	—	—	discovery	202	INDEPENDENCE: deriv2Std×day3Growth=0.04, deriv2Std×first3Share=-0.10, day3Growth×first3Share=-0.11. Three truly orthogonal signal dimensions found.
+loop_b_109	discovery:multi_control_surviving	—	—	—	discovery	202	After controlling for BOTH keep AND retention: first3Share r_p=-0.33, day3Growth r_p=+0.29, deriv2Std r_p=+0.28, maxConsecGrowth r_p=+0.22, curveRange r_p=+0.22.
+loop_b_110	discovery:curve_retention_collinearity	—	—	—	discovery	202	areaAbove80, retHarmMean, ret90pct are 85-95% correlated with each other and drop to r_p=0.07-0.11 after controlling keep+retention. COLLINEAR — choose one representative.
+loop_b_111	discovery:wm_growth_trend	—	—	—	discovery	366	avgWmGrowth r=-0.20, r_partial=-0.19. Watch quality declines faster for viral videos (audience dilution). Declining watch efficiency = GOOD sign (means broader reach).
+loop_b_112	discovery:independent_trio	—	—	—	discovery	202	BEST INDEPENDENT 3-SIGNAL SET: z(day3Growth)-z(first3Share)+z(deriv2Std). All three r>0.28 with views after double-control, mutual r<0.15. Three dimensions: acceleration, trajectory, pacing.
+exp_expand_nokeep_203	no_keep_12feat	0.6208	0.5267	-0.0942	note	203	Original 203 without keep features: CV=0.5267
+exp_expand_nokeep_371	no_keep_7feat	0.5267	0.4644	-0.0623	note	371	Expanded 371 videos, keep-free: CV=0.4644±0.0642, holdout=0.4711
+exp_expand_drop_below_70	drop_below_70	-18410.7902	0.4693	keep	keep	371	Kept on expanded dataset
+loop_b_113	discovery:triple_indep_composite	—	—	—	discovery	367	r_partial=+0.52. BEST COMPOSITE EVER. d2Std×(1-f3share)×log(d3g). Three orthogonal dimensions: pacing jerkiness × sustained trajectory × early acceleration. Beats narrative_momentum (+0.43).
+loop_b_114	discovery:payoff_efficiency	—	—	—	discovery	369	r_partial=+0.50. endStartRatio×log(d3g). Payoff delivery × algorithmic acceleration. Two strong independent signals combined.
+loop_b_115	discovery:retention_trajectory	—	—	—	discovery	369	r=+0.52, r_partial=+0.42. endStartRatio×(1-f3share). Curve payoff quality × sustained trajectory. Strong on both raw and partial.
+loop_b_116	discovery:watch_pacing	—	—	—	discovery	367	r=+0.26, r_partial=+0.36. d2Std/wmCV. Pacing dynamics normalized by watch quality consistency. Novel dimension.
+loop_b_117	discovery:curve_trajectory	—	—	—	discovery	369	r=+0.36, r_partial=+0.38. mean(curve)×(1-f3share). Simple but effective: overall retention × trajectory sustainability.
+loop_b_118	discovery:share_per_comment	—	—	—	discovery	368	r=+0.03, r_partial=+0.20. Share/comment ratio. Content that SPREADS vs just gets discussed. Independent of keep.
+loop_b_119	discovery:curvature_energy	—	—	—	discovery	370	r=-0.08, r_partial=+0.24. Total d2 squared of retention curve. Sign FLIPS after controlling for keep. Dynamic pacing after quality.
+loop_b_120	discovery:tail_curvature	—	—	—	discovery	370	r=+0.01, r_partial=+0.21. Curvature in last 20% of curve. Only visible after controlling for keep. Conclusion dynamics matter.
+loop_b_121	discovery:transcript_timing_null	—	—	—	discovery	370	ALL transcript timing signals (word gaps, speaking rate, pauses, breathlessness) have r_partial<0.12. Transcript timing does NOT predict views.
+loop_b_122	discovery:title_numbers_hurt	—	—	—	discovery	372	Titles with numbers: avg 1.1M vs 2.2M without (0.52x). r=-0.18. But r_partial=+0.02 — entirely explained by keep. Number titles have lower keep.
+loop_b_123	discovery:title_I_start_hurt	—	—	—	discovery	372	Titles starting with 'I': avg 1.2M vs 2.0M (0.59x). r=-0.13. But r_partial=-0.03 — mostly explained by keep. First-person framing hurts keep.
+loop_b_124	discovery:engagement_dilution_v2	—	—	—	discovery	372	totalEngagement r_p=-0.20, engQuality r_p=-0.19. ALL per-view engagement metrics are INVERSE. Viral = passive viewers. Consistent across likes, comments, shares per view.
+loop_b_125	discovery:triple_indep_robust	—	—	—	discovery	201	tripleComposite r_p=+0.508 after controlling for keep+retention+maxCliff+keepSq. SURVIVES ALL 4 model features. Captures entirely new dimension.
+loop_b_126	discovery:d3g_standalone_power	—	—	—	discovery	201	day3Growth alone: r_p=+0.482 after controlling keep+ret+cliff+keepSq. Strongest single NEW signal after 4-feature control. Algorithm acceleration is an independent dimension.
+loop_b_127	discovery:sub_efficiency	—	—	—	discovery	370	r=+0.57, r_p=+0.62. Sub conversions per subscriber viewer. VERY STRONG but OUTCOME. Viral videos convert non-sub audiences to subscribers efficiently.
+loop_b_128	discovery:duration_deviation	—	—	—	discovery	369	r=+0.08, r_p=+0.17. Deviating from recent 3-video avg duration predicts MORE views. FORMAT NOVELTY helps. Counter-intuitive: consistency in length hurts.
+loop_b_129	discovery:prev_view_trend	—	—	—	discovery	369	r=+0.07, r_p=+0.16. View trend over last 3 videos (ascending momentum). Captures whether creator momentum is BUILDING vs declining.
+loop_b_130	discovery:duration_sweetspot_v2	—	—	—	discovery	372	45-60s: 28% hit 10M+, avg 2.5M, n=137. 30-45s: 16% hit, avg 1.6M, n=169. 15-30s: 2% hit, avg 0.7M, n=47. DEATH ZONE confirmed <30s.
+loop_b_131	discovery:multi_control_summary	—	—	—	discovery	201	After 4-feature control: tripleComposite +0.51, d3g +0.48, payoffEff +0.49, f3share -0.32, d2Std +0.27, esRatio +0.25. ALL survive. New signals are truly ORTHOGONAL to existing model.
+loop_b_132	discovery:sub_efficiency_outcome	—	—	—	discovery	370	subEfficiency (subs gained per sub viewer) r_p=+0.62. Highest engagement metric found. But circular: algorithm pushes to non-subs who then sub. Consequence not cause.
+loop_b_133	discovery:d3g_unpredictable	—	—	—	discovery	368	day3Growth is UNPREDICTABLE from all pre-upload features (max r=0.08). No content feature, curve feature, or sequence feature predicts early algorithmic acceleration. It IS the algorithm's decision signal.
+loop_b_134	discovery:f3share_predictable	—	—	—	discovery	368	first3Share IS partially predictable: prevKeep r=-0.29, keep r=-0.27, ret90 r=-0.26. Better quality (own + previous) → more sustained trajectory. Partially causal chain.
+loop_b_135	discovery:optimal_2signal	—	—	—	discovery	201	BEST 2-signal combo: -z(f3share)+z(d3g). r=0.587, r_partial=0.557 (controlling keep). Just 2 trajectory signals explain 35% of view variance.
+loop_b_136	discovery:optimal_3signal_v3	—	—	—	discovery	201	BEST 3-signal combos (TIED): f3share+d3g+esRatio AND d2Std+f3share+d3g. Both r_partial=0.579. Three-signal model captures 34% of residual variance after keep.
+loop_b_137	discovery:optimal_4signal	—	—	—	discovery	201	z(keep)-z(f3share)+z(d3g)+z(esRatio): r=0.681. 46% of view variance from just 4 signals. Combines pre-upload quality with post-upload trajectory.
+loop_b_138	discovery:prevKeep_predicts_trajectory	—	—	—	discovery	365	prevKeep → f3share: r=-0.29. Previous video's keep rate predicts THIS video's trajectory sustainability. Mechanism: good prior keep → algorithm gives longer runway.
+loop_b_139	discovery:trajectory_is_algorithm	—	—	—	discovery	368	Meta-finding: trajectory signals (d3g, f3share) are NOT content properties — they are ALGORITHM RESPONSES. d3g captures the algorithm's amplification decision. Cannot be used for pre-upload prediction.
+loop_b_140	discovery:exponential_deviation_hurts	—	—	—	discovery	370	r=-0.26, r_partial=-0.19. Higher deviation from exponential decay fit = fewer views. Clean exponential curves outperform messy ones. Complements inflection_count finding.
+loop_b_141	discovery:earlyEngRate_predicts	—	—	—	discovery	369	r=+0.11, r_partial=+0.31. Early like rate (likes/day1views) strongly predicts total views after controlling keep. Early engagement quality = algorithm signal. But partially outcome.
+loop_b_142	discovery:vzScore_frontloads	—	—	—	discovery	201	vzScore → f3share: r=+0.22. Higher visual Zeigarnik → MORE front-loaded trajectory. Strong hooks attract fast initial viewers but may not sustain. Implication: vz is a day1 signal, not a trajectory signal.
+exp_stakes_llm	stakes_llm	0.6225	0.6211	-0.0014	discard	203	LLM-scored stakes via GPT-4o-mini. Mean=4.7
+exp_r2_view_accel_log	view_accel_log	0.6225	0.6291	+0.0067	marginal	203	r=+0.604
+exp_r2_wm_per_view_trend	wm_per_view_trend	0.6225	0.6299	+0.0074	marginal	203	r=+0.012
+exp_ridge_v19	ridge_alpha_0.001	0.6469	0.6169	-0.0299	note	203	Best Ridge α=0.001
+exp_model_v19	final_14feat	0.6225	0.6469	+0.0244	keep	203	v19: 14 features, CV=0.6469±0.0675, holdout=0.4775. Round 2 improvements.
+exp_stability_analysis	v19_current	n/a	n/a	n/a	note	203	Best composite (CV-0.5*std): v19_current. Evaluated 5 feature sets across 20 holdout seeds.
+exp_forward_selection	forward_12feat	0.0000	0.6644	+0.6644	keep	203	Forward selection: 12 features, CV=0.6644±0.0682, holdout(20seed)=0.6650±0.0752, LOO=0.6777
+exp_model_r4	final_12feat	0.6583	0.6583	+0.0000	keep	203	Round 4: 12 features, CV=0.6583, LOO=0.6710, holdout(20)=0.6590±0.0792
+exp_r5_piecewise	piecewise_model	0.6644	n/a	n/a	note	203	Piecewise: high-tier CV=0.0760 (n=102), low-tier CV=0.2670 (n=101)
+exp_r5_viral_potential	viral_potential	0.6644	0.6644	+0.0000	discard	203	LLM-scored viral potential. r=-0.048. 20M+ mean=6.7 vs rest=6.6
+exp_r5_final	final_12feat	0.6644	0.6644	+0.0000	keep	203	Round 5: 12 features, CV=0.6644, LOO=0.6777
+exp_r6_curve_transfer	curve_quality_5feat	n/a	0.3299	n/a	note	370	Curve model trained on 370 videos: 5 features, CV=0.3299
+exp_r6_curve_quality	curve_quality	0.6644	0.6601	-0.0043	discard	203	Transfer-learned curve quality score
+exp_r6_ridge	ridge_alpha_0.001	0.6644	0.6548	-0.0096	note	203	Best Ridge α=0.001
+exp_r6_wls	wls_3x_mega	0.6644	0.6453	-0.0191	note	203	WLS 3x weight on 20M+. Mega-viral bias: +0.290
+exp_r7_title_emb_supervised	title_emb_supervised	0.6644	0.6749	+0.0105	keep	203	NLP feature. r=+0.560
+exp_r7_emb_projection	title_emb_supervised	0.6644	n/a	n/a	note	203	Supervised title embedding projection: r=+0.560
+exp_r7_final	final_12feat	0.6644	0.6775	+0.0131	keep	203	Round 7: 12 features, CV=0.6775, LOO=0.6912
+exp_r7_emb_leak_check	title_emb_supervised	0.6644	0.6450	-0.0194	discard	203	DATA LEAK: pre-computed CV=0.678 but proper within-fold CV=0.645. Embedding feature DISCARDED. v20 restored.
+exp_r8_final	final_12feat	0.6641	0.6641	+0.0000	note	203	Round 8: sequence + embeddings(unsupervised). CV=0.6641, LOO=0.6779
+loop_session_2	start_nonlinear_architectures	0.6644	—	—	note	203	Starting Loop A v2 (non-linear: RF/GBM/MLP, expanded to 370) + Loop B v2 (visual content analysis, pre-upload predictors)
