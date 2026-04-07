@@ -17,21 +17,21 @@ const JarvisUI = (() => {
 
     // ── Indicator Registry ──
     const INDICATORS = [
-        { label: 'Keep Rate', key: 'keep', type: '% (0–100)', source: 'YouTube Analytics (swipeRatio.stayedToWatch)', category: 'active', numeric: true },
-        { label: 'Retention %', key: 'retention', type: '% (0–100)', source: 'YouTube Analytics (avgPercentViewed)', category: 'active', numeric: true },
-        { label: 'Zeigarnik Score (text)', key: 'z_score', type: '1–10', source: 'LLM-scored (title + first 180 chars transcript)', category: 'active', numeric: true },
-        { label: 'Zeigarnik Type (text)', key: 'z_type', type: 'categorical (A/B/C/D/E)', source: 'LLM-scored (title + first 180 chars transcript)', category: 'active', numeric: false },
-        { label: 'Visual Zeigarnik Score', key: 'vz_score', type: '1–10', source: 'LLM vision-scored (frames 1–3 + first 3s transcript)', category: 'active', numeric: true },
-        { label: 'Visual Zeigarnik Type', key: 'vz_type', type: 'categorical (A/B/C/D/E)', source: 'LLM vision-scored', category: 'active', numeric: false },
-        { label: 'Novelty', key: 'novelty', type: '1–10', source: 'LLM-scored (title + opening transcript)', category: 'active', numeric: true },
-        { label: 'Cognitive Load', key: 'cognitive_load', type: '1–10', source: 'LLM-scored (title + opening transcript)', category: 'active', numeric: true },
-        { label: 'Net Novelty', key: 'net_novelty', type: 'integer (Novelty − Cognitive Load)', source: 'Derived: novelty − cognitive_load', category: 'active', numeric: true },
-        { label: 'Share Rate', key: 'share_rate', type: 'ratio (shares per 1k views)', source: 'Derived: shares ÷ (views/1000)', category: 'active', numeric: true },
-        { label: 'Views', key: 'views', type: 'count (use log10 for correlation)', source: 'YouTube Analytics', category: 'active', numeric: true },
-        { label: 'Hook Clarity', key: 'hook_clarity', type: '1–10 (not yet scored)', source: 'Planned: LLM vision (first frame)', category: 'planned', numeric: true },
-        { label: 'Visual Surprise', key: 'visual_surprise', type: '1–10 (not yet scored)', source: 'Planned: LLM vision (first frame)', category: 'planned', numeric: true },
-        { label: 'Pacing', key: 'pacing', type: 'cuts/sec (not yet measured)', source: 'Planned: frame diff analysis (first 3s)', category: 'planned', numeric: true },
-        { label: 'Emotional Resonance', key: 'emotional_resonance', type: '1–10 (not yet scored)', source: 'Planned: LLM vision+text', category: 'planned', numeric: true },
+        { label: 'Keep Rate', key: 'keep', type: '% (0–100)', source: 'YouTube Analytics (swipeRatio.stayedToWatch)', category: 'active', numeric: true, resolution: 'R0' },
+        { label: 'Retention %', key: 'retention', type: '% (0–100)', source: 'YouTube Analytics (avgPercentViewed)', category: 'active', numeric: true, resolution: 'R0' },
+        { label: 'Zeigarnik Score (text)', key: 'z_score', type: '1–10', source: 'LLM-scored (title + first 180 chars transcript)', category: 'active', numeric: true, resolution: 'R1' },
+        { label: 'Zeigarnik Type (text)', key: 'z_type', type: 'categorical (A/B/C/D/E)', source: 'LLM-scored (title + first 180 chars transcript)', category: 'active', numeric: false, resolution: 'R1' },
+        { label: 'Visual Zeigarnik Score', key: 'vz_score', type: '1–10', source: 'LLM vision-scored (frames 1–3 + first 3s transcript)', category: 'active', numeric: true, resolution: 'R3' },
+        { label: 'Visual Zeigarnik Type', key: 'vz_type', type: 'categorical (A/B/C/D/E)', source: 'LLM vision-scored', category: 'active', numeric: false, resolution: 'R3' },
+        { label: 'Novelty', key: 'novelty', type: '1–10', source: 'LLM-scored (title + opening transcript)', category: 'active', numeric: true, resolution: 'R1' },
+        { label: 'Cognitive Load', key: 'cognitive_load', type: '1–10', source: 'LLM-scored (title + opening transcript)', category: 'active', numeric: true, resolution: 'R1' },
+        { label: 'Net Novelty', key: 'net_novelty', type: 'integer (Novelty − Cognitive Load)', source: 'Derived: novelty − cognitive_load', category: 'active', numeric: true, resolution: 'R1' },
+        { label: 'Share Rate', key: 'share_rate', type: 'ratio (shares per 1k views)', source: 'Derived: shares ÷ (views/1000)', category: 'active', numeric: true, resolution: 'R0' },
+        { label: 'Views', key: 'views', type: 'count (use log10 for correlation)', source: 'YouTube Analytics', category: 'active', numeric: true, resolution: 'R0' },
+        { label: 'Hook Clarity', key: 'hook_clarity', type: '1–10 (not yet scored)', source: 'Planned: LLM vision (first frame)', category: 'planned', numeric: true, resolution: 'R4' },
+        { label: 'Visual Surprise', key: 'visual_surprise', type: '1–10 (not yet scored)', source: 'Planned: LLM vision (first frame)', category: 'planned', numeric: true, resolution: 'R4' },
+        { label: 'Pacing', key: 'pacing', type: 'cuts/sec (not yet measured)', source: 'Planned: frame diff analysis (first 3s)', category: 'planned', numeric: true, resolution: 'R2' },
+        { label: 'Emotional Resonance', key: 'emotional_resonance', type: '1–10 (not yet scored)', source: 'Planned: LLM vision+text', category: 'planned', numeric: true, resolution: 'R1' },
     ];
 
     const NUMERIC_KEYS = INDICATORS.filter(i => i.category === 'active' && i.numeric).map(i => i.key);
@@ -840,6 +840,7 @@ const JarvisUI = (() => {
             x: positions[ind.key]?.x || cx,
             y: positions[ind.key]?.y || cy,
             category: ind.category,
+            resolution: ind.resolution || null,
         }));
 
         const nodeMap = {};
@@ -874,6 +875,31 @@ const JarvisUI = (() => {
             ctx.textAlign = 'center';
             const labelText = n.label.length > 16 ? n.label.slice(0, 14) + '…' : n.label;
             ctx.fillText(labelText, n.x, n.y + n.r + 12);
+
+            // Resolution badge pill
+            if (n.resolution && n.r > 10) {
+                const badgeText = n.resolution;
+                ctx.font = '8px system-ui, sans-serif';
+                const tw = ctx.measureText(badgeText).width;
+                const pw = tw + 6;
+                const ph = 12;
+                const bx = n.x - pw / 2;
+                const by = n.y + n.r + 16;
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.beginPath();
+                ctx.roundRect(bx, by, pw, ph, 3);
+                ctx.fill();
+                // Use node color lightened for text
+                const c = n.color;
+                ctx.fillStyle = c.replace(')', ',0.9)').replace('rgb(', 'rgba(');
+                // fallback for hex colors
+                if (c.startsWith('#')) {
+                    const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
+                    ctx.fillStyle = `rgba(${Math.min(r+80,255)},${Math.min(g+80,255)},${Math.min(b+80,255)},0.9)`;
+                }
+                ctx.textAlign = 'center';
+                ctx.fillText(badgeText, n.x, by + 9);
+            }
         });
 
         // Hover/click
@@ -989,10 +1015,22 @@ const JarvisUI = (() => {
                     const signalName = signalMatch ? signalMatch[1].replace(/_/g, ' ') : (row.new_signal || '');
                     const notes = row.notes || '';
 
+                    // Determine resolution badge for this experiment
+                    const notesLower = notes.toLowerCase();
+                    const signalLower = (row.new_signal || '').toLowerCase();
+                    const hasCurveFeature = /ret_mid|ret_end|retention_at_\d+s|ret_\d+pct|curve|per.?sec/i.test(notes + ' ' + signalName);
+                    const hasWholeVideo = /\b(keep|retention|views|share_rate)\b/.test(signalLower) && !hasCurveFeature;
+                    let expResBadge = '';
+                    if (hasCurveFeature) {
+                        expResBadge = `<span class="jarvis-res-pill" style="color:${info.color}">· R2</span>`;
+                    } else if (hasWholeVideo) {
+                        expResBadge = `<span class="jarvis-res-pill" style="color:${info.color}">· R0</span>`;
+                    }
+
                     if (isDiscovery) {
                         // Signal discovery card (orange)
                         html += `<div class="jarvis-exp-card jarvis-exp-discovery">
-                            <h4>${signalName}</h4>
+                            <h4>${signalName} ${expResBadge}</h4>
                             <div class="jarvis-exp-finding">${notes}</div>
                             <div class="jarvis-exp-badges">
                                 <span class="jarvis-badge" style="background:rgba(249,115,22,0.15);color:#f97316">DISCOVERY</span>
@@ -1005,7 +1043,7 @@ const JarvisUI = (() => {
                         const delta = parseFloat(row.delta_r2) || 0;
                         const barColor = status === 'keep' ? '#10b981' : status === 'error' ? '#ef4444' : '#64748b';
                         html += `<div class="jarvis-exp-card">
-                            <h4>${row.experiment_id}: ${signalName}</h4>
+                            <h4>${row.experiment_id}: ${signalName} ${expResBadge}</h4>
                             ${hasR2 ? `<div class="jarvis-exp-r" style="color:${barColor}">ΔR² = ${row.delta_r2} (${row.r2_before}→${row.r2_after})</div>` : ''}
                             <div class="jarvis-exp-finding">${notes}</div>
                             <div class="jarvis-exp-badges">
@@ -1155,6 +1193,53 @@ const JarvisUI = (() => {
         const pct = Math.round((r2 / target) * 100);
 
         return `
+            <!-- Pipeline Architecture -->
+            <div class="jarvis-ar-section">
+                <h3 class="jarvis-ar-title">Pipeline Architecture</h3>
+                <p class="jarvis-ar-subtitle">Causal flow from raw data to prediction output.</p>
+                <div class="jarvis-pipeline-flow">
+                    <div class="jarvis-pipeline-stage" style="border-left-color:#6b7280">
+                        <div class="jarvis-pipeline-stage-num">1</div>
+                        <div class="jarvis-pipeline-stage-body">
+                            <strong>RESOLUTION</strong>
+                            <p>Defines the unit of analysis (whole video → per-second → per-frame). Determines what resolution level each indicator lives at.</p>
+                        </div>
+                    </div>
+                    <div class="jarvis-pipeline-arrow">↓</div>
+                    <div class="jarvis-pipeline-stage" style="border-left-color:#14b8a6">
+                        <div class="jarvis-pipeline-stage-num">2</div>
+                        <div class="jarvis-pipeline-stage-body">
+                            <strong>TACTICAL BRAIN</strong>
+                            <p>Stores all indicators and data points. Each indicator tagged with resolution level (R0–R5). Discovered nodes from AutoResearch loop automatically appear here.</p>
+                        </div>
+                    </div>
+                    <div class="jarvis-pipeline-arrow">↓</div>
+                    <div class="jarvis-pipeline-stage" style="border-left-color:#3b82f6">
+                        <div class="jarvis-pipeline-stage-num">3</div>
+                        <div class="jarvis-pipeline-stage-body">
+                            <strong>ANALYTICAL BRAIN</strong>
+                            <p>Measurement tools: Pearson, Bucket, Ratio Normalizer, Net Signal, LLM Scorer, Proximity. Takes indicators from Tactical Brain as inputs. Handles linear, non-linear (GBM/RF), and multi-dimensional analysis.</p>
+                        </div>
+                    </div>
+                    <div class="jarvis-pipeline-arrow">↓</div>
+                    <div class="jarvis-pipeline-stage" style="border-left-color:#10b981">
+                        <div class="jarvis-pipeline-stage-num">4</div>
+                        <div class="jarvis-pipeline-stage-body">
+                            <strong>EXPERIMENTS</strong>
+                            <p>Results of running measurement tools on indicator combinations. One unified log (results.tsv). Includes model experiments + signal discoveries. Tracks R² improvement over time.</p>
+                        </div>
+                    </div>
+                    <div class="jarvis-pipeline-arrow">↓</div>
+                    <div class="jarvis-pipeline-stage" style="border-left-color:#8b5cf6">
+                        <div class="jarvis-pipeline-stage-num">5</div>
+                        <div class="jarvis-pipeline-stage-body">
+                            <strong>PREDICTION MODEL</strong>
+                            <p>Output: which combination of indicators predicts 100M+ views. Current: v20, CV R²=0.664, ±2.5x accuracy. Target: R²>0.80 using higher-resolution signals.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Loop Status -->
             <div class="jarvis-ar-section">
                 <h3 class="jarvis-ar-title">Loop Status</h3>
