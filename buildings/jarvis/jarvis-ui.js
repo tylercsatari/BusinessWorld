@@ -88,19 +88,6 @@ const JarvisUI = (() => {
         ['llm', 'net'],
     ];
 
-    const INSIGHTS = [
-        '<strong>Visual Zeigarnik (r=+0.22) vs text-only (r=-0.06)</strong> — scoring at correct resolution (first 3 seconds, frames + transcript) vs wrong resolution (first 180 chars) completely changes the signal. Visual Type C (Mystery/reveal) dominates at 9.3M avg views — the opposite of what text scoring suggested.',
-        '<strong>Keep Rate (r=0.43) is the strongest quantified predictor</strong> — the data shows keep rate is monotonically positive: higher keep rate always correlates with more views. In-video keep rate has real predictive power for total views.',
-        '<strong>Net Novelty sweet spot = +2</strong> (Novelty exceeds Cognitive Load by exactly 2). Both too easy and too complex underperform. Average 10.3M views at the sweet spot.',
-        '<strong>Zeigarnik Z=7 (not Z=10) peaks at 12.6M avg</strong> — moderate open loops beat maximum intensity. Z=10 averages only 4.6M. Enough curiosity to hook, not so intense it filters the mass market.',
-        '<strong>Best Zeigarnik type is B (Challenge uncertainty)</strong>: 88 videos, avg 9.6M views. Frame as \'can this actually work?\' not \'watch this dangerous thing happen\'. Type E (social stakes) has the highest avg at 10.1M but only 10 videos.',
-        '<strong>Zeigarnik does NOT directly predict keep rate</strong> — high Z-score videos have slightly lower keep rates (72%) than mid-range (77%). Open loops and hook retention are separate mechanisms. Need both.',
-        '<strong>Retention 87%+ correlates with 10M+ avg views</strong> — progression from 79% (sub-1M) to 87% (100M+) is the clearest signal in the dataset.',
-        '<strong>CTR (impression to view rate) has zero correlation with total views</strong> — it measures thumbnail appeal, not viral potential.',
-        '<strong>The 20-25% swipe-away bucket has the highest average</strong> (avg 13.2M, includes 285M video) — but this is NOT a sweet spot. The apparent mid-range cluster reflects that low-view videos also have lower keep rates, not that intermediate swipe-away is optimal. The 20-25% bucket peaks because Tyler\'s biggest videos were pushed broadly by the algorithm to non-core audiences, increasing swipe-away as a side effect of scale. Better keep rate is always better.',
-        '<strong>Duration data is confounded</strong> — YouTube Shorts 60s limit existed during most of the 100M+ video era. Inconclusive.',
-    ];
-
     // ── Tab structure (5 tabs) ──
     const TABS = [
         { id: 'analytical', label: 'Analytical' },
@@ -977,14 +964,6 @@ const JarvisUI = (() => {
             <span class="jarvis-exp-summary-item" style="color:#f97316"><strong>${loopBCount}</strong> signals discovered</span>
             <span class="jarvis-exp-summary-item" style="color:#10b981"><strong>${keepCount}</strong> signals kept</span>
             <span class="jarvis-exp-summary-item" style="color:#3b82f6">R² = <strong>${currentR2.toFixed(3)}</strong></span>
-        </div>`;
-
-        // Insights section
-        html += `<div class="jarvis-exp-insights-section">
-            <h4 class="jarvis-exp-insights-title">Key Insights <span style="font-weight:400;color:var(--j-muted);font-size:11px">Derived from experiments — auto-update in progress</span></h4>
-            <ol class="jarvis-insights">
-                ${INSIGHTS.map(i => `<li>${i}</li>`).join('')}
-            </ol>
         </div>`;
 
         // Grouped sections
