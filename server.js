@@ -260,6 +260,80 @@ Respond ONLY as valid JSON:
     }
 
     // =========================================
+    // API: Jarvis LLM Signal Scorer
+    // =========================================
+    if (pathname === '/api/jarvis/score-signal' && req.method === 'POST') {
+        const body = await readBody(req);
+        const { signal, criteria, sampleSize } = body;
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (!openaiKey) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No OpenAI key configured' }));
+            return;
+        }
+        if (!signal || !criteria) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing signal or criteria' }));
+            return;
+        }
+
+        try {
+            const datasetPath = require('path').join(__dirname, 'buildings', 'jarvis', 'signals-dataset.json');
+            const dataset = JSON.parse(require('fs').readFileSync(datasetPath, 'utf8'));
+            const n = Math.min(sampleSize || 20, 50, dataset.length);
+
+            // Pick N random videos
+            const shuffled = [...dataset].sort(() => Math.random() - 0.5);
+            const sample = shuffled.slice(0, n);
+
+            // Score each video via GPT-4o-mini
+            const scores = [];
+            const batchSize = 5;
+            for (let i = 0; i < sample.length; i += batchSize) {
+                const batch = sample.slice(i, i + batchSize);
+                const videoList = batch.map((v, idx) => `${idx + 1}. "${v.name}" (views: ${v.views}, keep: ${v.keep}%, retention: ${v.retention}%)`).join('\n');
+                const prompt = `You are scoring YouTube Shorts videos on the signal "${signal}".
+
+Scoring criteria: ${criteria}
+
+Videos to score:
+${videoList}
+
+Score each video 1-10 based on the criteria. Use only the video title and metrics to infer the score.
+
+Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4}, ...]`;
+
+                const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'gpt-4o-mini',
+                        messages: [{ role: 'user', content: prompt }],
+                        temperature: 0.3
+                    })
+                });
+                const aiData = await aiResp.json();
+                const content = aiData.choices?.[0]?.message?.content || '[]';
+                const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                const parsed = JSON.parse(jsonStr);
+                for (const item of parsed) {
+                    const video = batch[item.idx - 1];
+                    if (video) {
+                        scores.push({ name: video.name, ytId: video.ytId, score: item.score });
+                    }
+                }
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ scores }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'LLM scoring failed: ' + e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: OpenAI Whisper transcription
     // =========================================
     if (pathname === '/api/openai/transcribe' && req.method === 'POST') {
@@ -3359,6 +3433,83 @@ Respond ONLY as valid JSON (no markdown):
             });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Jarvis Run Hypothesis
+    // =========================================
+    if (pathname === '/api/jarvis/run-hypothesis' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const hypId = body.id;
+
+            if (hypId === 'h5') {
+                // retention_slope_3s: read all video analysis files, compute correlation
+                const videoDataDir = path.join(DIR, 'video_data');
+                const entries = fs.readdirSync(videoDataDir).filter(d => {
+                    try { return fs.statSync(path.join(videoDataDir, d)).isDirectory(); } catch { return false; }
+                });
+
+                const dataPoints = [];
+                for (const ytId of entries) {
+                    try {
+                        const raw = fs.readFileSync(path.join(videoDataDir, ytId, 'analysis.json'), 'utf8');
+                        const analysis = JSON.parse(raw);
+                        const analytics = analysis.analytics || {};
+                        const rc = analytics.retentionCurve;
+                        const avgPct = analytics.avgPercentViewed;
+                        if (!rc || !Array.isArray(rc) || rc.length < 10 || avgPct == null) continue;
+
+                        // Compute early slope: linear regression on first 10 points
+                        const first10 = rc.slice(0, 10);
+                        const n = first10.length;
+                        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+                        first10.forEach((pt, i) => {
+                            const x = i;
+                            const y = pt.retention;
+                            sumX += x; sumY += y; sumXY += x * y; sumX2 += x * x;
+                        });
+                        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+                        dataPoints.push({ ytId, slope, avgPercentViewed: avgPct });
+                    } catch { continue; }
+                }
+
+                // Compute Pearson correlation between slope and avgPercentViewed
+                const nn = dataPoints.length;
+                if (nn < 3) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Not enough data points', n: nn }));
+                    return;
+                }
+                let sX = 0, sY = 0, sXY = 0, sX2 = 0, sY2 = 0;
+                dataPoints.forEach(d => {
+                    sX += d.slope; sY += d.avgPercentViewed;
+                    sXY += d.slope * d.avgPercentViewed;
+                    sX2 += d.slope * d.slope;
+                    sY2 += d.avgPercentViewed * d.avgPercentViewed;
+                });
+                const denom = Math.sqrt((nn * sX2 - sX * sX) * (nn * sY2 - sY * sY));
+                const correlation = denom !== 0 ? (nn * sXY - sX * sY) / denom : 0;
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    status: 'complete',
+                    hypothesis: 'h5',
+                    signal: 'retention_slope_3s',
+                    correlation: Math.round(correlation * 1000) / 1000,
+                    n: nn,
+                    avgSlope: Math.round((sX / nn) * 10000) / 10000,
+                    avgRetention: Math.round((sY / nn) * 100) / 100
+                }));
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ status: 'pending', message: 'LLM scoring required' }));
+            }
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));

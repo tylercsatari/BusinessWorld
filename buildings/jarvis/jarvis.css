@@ -1082,3 +1082,264 @@
     border-radius: 50%;
     display: inline-block;
 }
+
+/* ══════════════════════════════════════════════════════
+   AutoResearch Tab
+   ══════════════════════════════════════════════════════ */
+
+.jarvis-ar-root {
+    display: flex; flex-direction: column; gap: 24px;
+}
+.jarvis-ar-section {
+    background: rgba(13, 20, 36, 0.6);
+    border: 1px solid var(--j-border);
+    border-radius: 10px; padding: 20px;
+}
+.jarvis-ar-title {
+    margin: 0 0 4px; font-size: 16px; font-weight: 700;
+    color: var(--j-accent); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-ar-subtitle {
+    margin: 0 0 16px; font-size: 12px; color: var(--j-muted); line-height: 1.5;
+}
+
+/* Stats card */
+.jarvis-ar-stats-card {
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.jarvis-ar-stat {
+    font-size: 12px; color: var(--j-muted);
+}
+.jarvis-ar-stat strong { color: var(--j-text); }
+.jarvis-ar-note {
+    font-style: italic; font-size: 11px; color: var(--j-purple);
+    margin-top: 4px; border-top: 1px solid var(--j-border); padding-top: 8px;
+}
+
+/* Scorer form */
+.jarvis-ar-scorer {
+    background: rgba(30, 30, 50, 0.8);
+    border: 1px solid rgba(100, 100, 200, 0.3);
+    border-radius: 10px; padding: 18px;
+}
+.jarvis-ar-scorer-title {
+    margin: 0 0 14px; font-size: 14px; font-weight: 700;
+    color: var(--j-cyan); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-ar-inputs {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px; margin-bottom: 16px;
+}
+.jarvis-ar-input-group {
+    display: flex; flex-direction: column; gap: 4px;
+}
+.jarvis-ar-input-group label {
+    font-size: 11px; font-weight: 600; color: var(--j-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-ar-input-group input {
+    padding: 8px 10px; font-size: 13px;
+    background: #0d1424; color: var(--j-text);
+    border: 1px solid var(--j-border); border-radius: 6px;
+    outline: none; font-family: 'SF Mono', monospace;
+    width: 100%; box-sizing: border-box;
+}
+.jarvis-ar-input-group input:focus {
+    border-color: var(--j-accent);
+}
+.jarvis-ar-predict-btn {
+    padding: 10px 24px; font-size: 13px; font-weight: 700;
+    background: var(--j-accent); color: #fff;
+    border: none; border-radius: 6px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    transition: background 0.2s;
+}
+.jarvis-ar-predict-btn:hover { background: #2563eb; }
+
+/* Prediction result */
+.jarvis-ar-result { margin-top: 16px; }
+.jarvis-ar-result-card {
+    border-radius: 10px; padding: 20px; text-align: center;
+    border: 1px solid var(--j-border);
+}
+.jarvis-ar-result-green {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+.jarvis-ar-result-green .jarvis-ar-result-views {
+    color: #10b981;
+    text-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
+.jarvis-ar-result-yellow {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.3);
+}
+.jarvis-ar-result-yellow .jarvis-ar-result-views { color: #f59e0b; }
+.jarvis-ar-result-red {
+    background: rgba(248, 113, 113, 0.08);
+    border-color: rgba(248, 113, 113, 0.3);
+}
+.jarvis-ar-result-red .jarvis-ar-result-views { color: #f87171; }
+.jarvis-ar-result-views {
+    font-size: 32px; font-weight: 800; margin-bottom: 6px;
+    letter-spacing: -0.5px;
+}
+.jarvis-ar-result-range {
+    font-size: 13px; color: var(--j-muted); margin-bottom: 8px;
+}
+.jarvis-ar-result-badge {
+    font-size: 10px; color: var(--j-purple); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+/* Hypothesis cards */
+.jarvis-ar-hypotheses {
+    display: flex; flex-direction: column; gap: 12px;
+}
+.jarvis-ar-hyp-card {
+    background: var(--j-card); border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 14px 16px;
+}
+.jarvis-ar-hyp-top {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.jarvis-ar-hyp-id {
+    font-size: 11px; font-weight: 800; color: var(--j-accent);
+    background: rgba(59, 130, 246, 0.15); padding: 2px 10px;
+    border-radius: 10px; text-transform: uppercase;
+    font-family: 'SF Mono', monospace;
+}
+.jarvis-ar-status {
+    font-size: 10px; padding: 2px 10px; border-radius: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.jarvis-ar-status-queued {
+    background: rgba(100, 100, 100, 0.15); color: #94a3b8;
+}
+.jarvis-ar-status-running {
+    background: rgba(245, 158, 11, 0.15); color: #f59e0b;
+}
+.jarvis-ar-status-complete {
+    background: rgba(16, 185, 129, 0.15); color: #10b981;
+}
+.jarvis-ar-res-badge {
+    font-size: 10px; padding: 2px 10px; border-radius: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    background: rgba(167, 139, 250, 0.15); color: var(--j-purple);
+    font-family: 'SF Mono', monospace;
+}
+.jarvis-ar-hyp-signal {
+    font-size: 14px; font-weight: 700; color: var(--j-text); margin-bottom: 4px;
+}
+.jarvis-ar-hyp-text {
+    font-size: 12px; color: var(--j-muted); font-style: italic;
+    line-height: 1.5; margin-bottom: 6px;
+}
+.jarvis-ar-hyp-expected {
+    font-size: 11px; color: var(--j-cyan); margin-bottom: 2px;
+    font-family: 'SF Mono', monospace;
+}
+.jarvis-ar-hyp-method {
+    font-size: 11px; color: var(--j-muted); margin-bottom: 10px;
+}
+.jarvis-ar-run-hyp-btn {
+    padding: 6px 16px; font-size: 11px; font-weight: 700;
+    background: rgba(167, 139, 250, 0.15); color: var(--j-purple);
+    border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 6px;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;
+    transition: all 0.2s;
+}
+.jarvis-ar-run-hyp-btn:hover {
+    background: rgba(167, 139, 250, 0.25);
+    border-color: rgba(167, 139, 250, 0.5);
+}
+.jarvis-ar-run-hyp-btn:disabled {
+    opacity: 0.6; cursor: default;
+}
+
+/* Loop diagram */
+.jarvis-ar-loop {
+    display: flex; align-items: flex-start; gap: 0;
+    overflow-x: auto; padding: 10px 0;
+}
+.jarvis-ar-loop-step {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px; flex-shrink: 0; min-width: 110px;
+}
+.jarvis-ar-loop-pill {
+    padding: 10px 14px; font-size: 12px; font-weight: 700;
+    background: rgba(30, 30, 50, 0.9); color: var(--j-text);
+    border: 1px solid var(--j-border); border-radius: 20px;
+    text-align: center; white-space: nowrap;
+}
+.jarvis-ar-loop-sub {
+    font-size: 10px; color: var(--j-muted); text-align: center;
+    line-height: 1.4; max-width: 120px;
+}
+.jarvis-ar-loop-active .jarvis-ar-loop-pill {
+    border-color: var(--j-purple);
+    box-shadow: 0 0 16px rgba(167, 139, 250, 0.35);
+    color: var(--j-purple);
+}
+.jarvis-ar-loop-arrow {
+    width: 24px; height: 2px; background: var(--j-border);
+    margin-top: 18px; flex-shrink: 0; position: relative;
+}
+.jarvis-ar-loop-arrow::after {
+    content: ''; position: absolute; right: -1px; top: -4px;
+    border: 5px solid transparent;
+    border-left: 6px solid var(--j-muted);
+}
+
+/* Model accuracy history */
+.jarvis-ar-history {
+    display: flex; flex-direction: column; gap: 14px;
+}
+.jarvis-ar-history-row {
+    display: grid; grid-template-columns: 80px 1fr 80px;
+    gap: 12px; align-items: center;
+}
+.jarvis-ar-history-label {
+    font-size: 14px; font-weight: 700; color: var(--j-text);
+}
+.jarvis-ar-history-tag {
+    font-size: 9px; font-weight: 600; color: var(--j-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    display: block;
+}
+.jarvis-ar-history-tag-current {
+    color: var(--j-green);
+}
+.jarvis-ar-history-bar-track {
+    height: 22px; background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+}
+.jarvis-ar-history-bar {
+    height: 100%; border-radius: 4px;
+    background: rgba(100, 100, 100, 0.3);
+    transition: width 0.6s ease;
+}
+.jarvis-ar-history-bar-current {
+    background: linear-gradient(90deg, var(--j-accent), var(--j-purple));
+}
+.jarvis-ar-history-bar-pending {
+    background: repeating-linear-gradient(
+        45deg, rgba(100, 100, 100, 0.2), rgba(100, 100, 100, 0.2) 4px,
+        rgba(100, 100, 100, 0.1) 4px, rgba(100, 100, 100, 0.1) 8px
+    );
+}
+.jarvis-ar-history-val {
+    font-size: 13px; font-weight: 700; color: var(--j-text);
+    font-family: 'SF Mono', monospace; text-align: right;
+}
+.jarvis-ar-history-current .jarvis-ar-history-val {
+    color: var(--j-accent);
+}
+.jarvis-ar-history-desc {
+    grid-column: 1 / -1; font-size: 11px; color: var(--j-muted);
+    line-height: 1.4; padding-left: 92px;
+    margin-top: -8px;
+}

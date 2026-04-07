@@ -1,0 +1,56 @@
+[
+  {
+    "id": "h1",
+    "signal": "hook_clarity",
+    "hypothesis": "Videos where the first frame immediately shows the subject clearly will have higher keep rates",
+    "expected_signal": "r > +0.3 vs keep",
+    "method": "LLM vision-score first frame for subject clarity (1-10)",
+    "status": "queued",
+    "resolution": "R4"
+  },
+  {
+    "id": "h2",
+    "signal": "visual_surprise",
+    "hypothesis": "First frames that show something unexpected or impossible-looking will drive higher Visual Zeigarnik",
+    "expected_signal": "r > +0.2 vs vz_score",
+    "method": "LLM vision-score first frame for visual surprise (1-10)",
+    "status": "queued",
+    "resolution": "R4"
+  },
+  {
+    "id": "h3",
+    "signal": "cut_frequency_3s",
+    "hypothesis": "Faster cuts in the first 3 seconds correlate with higher keep rate in Shorts audiences",
+    "expected_signal": "r > +0.2 vs keep",
+    "method": "Frame diff analysis: count cuts in frames 1-3",
+    "status": "queued",
+    "resolution": "R3"
+  },
+  {
+    "id": "h4",
+    "signal": "face_presence",
+    "hypothesis": "Videos showing a human face in the first frame have higher social engagement (Zeigarnik E)",
+    "expected_signal": "type E frequency higher in face videos",
+    "method": "LLM vision-score first frame for face presence (y/n)",
+    "status": "queued",
+    "resolution": "R4"
+  },
+  {
+    "id": "h5",
+    "signal": "retention_slope_3s",
+    "hypothesis": "Videos with a steep retention drop in seconds 3-10 have lower overall retention \u2014 early hook retention is the key lever",
+    "expected_signal": "r > +0.4 between 3-10s retention and total retention",
+    "method": "Analyze retentionCurve in analysis.json for first 10 data points",
+    "status": "queued",
+    "resolution": "R2"
+  },
+  {
+    "id": "h6",
+    "signal": "text_overlay_yn",
+    "hypothesis": "Videos with text overlay in first frame have higher click-through and keep rate",
+    "expected_signal": "r > +0.15 vs keep",
+    "method": "LLM vision-score first frame for text overlay presence",
+    "status": "queued",
+    "resolution": "R4"
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "trainedOn": 203,
+  "r2": 0.1468,
+  "test_r2": 0.287,
+  "test_rmse_log": 0.6623,
+  "prediction_range_multiplier": 4.6,
+  "features": [
+    "keep",
+    "retention",
+    "vz_score",
+    "z_score",
+    "novelty",
+    "cognitive_load",
+    "net_novelty"
+  ],
+  "weights": {
+    "keep": 0.662,
+    "retention": 0.3176,
+    "z_score": -0.2002,
+    "vz_score": -0.1175,
+    "net_novelty": -0.091,
+    "cognitive_load": -0.0846,
+    "novelty": -0.0777
+  },
+  "bias": 5.85,
+  "feature_mins": {
+    "keep": 62.7,
+    "retention": 45.0,
+    "vz_score": 4,
+    "z_score": 4,
+    "novelty": 2,
+    "cognitive_load": 1,
+    "net_novelty": -3
+  },
+  "feature_maxs": {
+    "keep": 100.0,
+    "retention": 100.0,
+    "vz_score": 10,
+    "z_score": 10,
+    "novelty": 9,
+    "cognitive_load": 8,
+    "net_novelty": 8
+  },
+  "notes": "v1 baseline: 7 signals, keep+retention dominate. Visual Zeigarnik (vz_score) has negative weight suggesting confound \u2014 higher VZ videos may be conceptually complex. Next: add first-frame hook_clarity, visual_surprise."
+}
