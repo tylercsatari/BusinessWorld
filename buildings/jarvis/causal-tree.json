@@ -1,0 +1,112 @@
+{
+  "goal": "100M+ Views",
+  "metric": "log10_views",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "views", "label": "Total Views", "type": "goal", "controllable": false,
+      "r_vs_parent": null, "depth": 0, "parent": null
+    },
+    {
+      "id": "keep", "label": "Swipe Rate (Keep %)", "type": "metric", "controllable": false,
+      "r_vs_parent": 0.43, "depth": 1, "parent": "views",
+      "note": "Measured after upload — but INFLUENCED by pre-upload choices"
+    },
+    {
+      "id": "retention", "label": "Retention %", "type": "metric", "controllable": false,
+      "r_vs_parent": 0.32, "depth": 1, "parent": "views",
+      "note": "Measured after upload"
+    },
+    {
+      "id": "share_rate", "label": "Share Rate (per 1k views)", "type": "metric", "controllable": false,
+      "r_vs_parent": 0.22, "depth": 1, "parent": "views",
+      "note": "Measured after upload"
+    },
+    {
+      "id": "visual_hook", "label": "Visual Hook Quality", "type": "indicator", "controllable": true,
+      "r_vs_parent": 0.22, "depth": 2, "parent": "keep",
+      "resolution": "R4", "status": "partial",
+      "note": "First frame — LLM vision scored"
+    },
+    {
+      "id": "vz_score", "label": "Visual Zeigarnik (3s)", "type": "indicator", "controllable": true,
+      "r_vs_parent": 0.22, "depth": 2, "parent": "keep",
+      "resolution": "R3", "status": "active"
+    },
+    {
+      "id": "concept_type", "label": "Concept Category", "type": "indicator", "controllable": true,
+      "r_vs_parent": null, "depth": 2, "parent": "keep",
+      "resolution": "R0", "status": "active",
+      "note": "Making/Build=19.7M avg, Superhero=10.2M avg, Indestructible=61M avg"
+    },
+    {
+      "id": "pacing", "label": "Pacing (deriv_entropy)", "type": "indicator", "controllable": true,
+      "r_vs_parent": null, "depth": 2, "parent": "retention",
+      "resolution": "R2", "status": "active",
+      "note": "Retention curve variation — dramatic narrative turns"
+    },
+    {
+      "id": "narrative_arc", "label": "Narrative Structure", "type": "indicator", "controllable": true,
+      "r_vs_parent": null, "depth": 2, "parent": "retention",
+      "resolution": "R1", "status": "planned",
+      "note": "Hook→conflict→escalation→payoff arc"
+    },
+    {
+      "id": "visual_x_timestamp", "label": "Visual Tactic × Timestamp", "type": "indicator", "controllable": true,
+      "r_vs_parent": null, "depth": 2, "parent": "retention",
+      "resolution": "R2/R4 intersection", "status": "planned",
+      "note": "What happens at retention peak/drop moments?"
+    },
+    {
+      "id": "emotional_resonance", "label": "Emotional Resonance", "type": "indicator", "controllable": true,
+      "r_vs_parent": null, "depth": 2, "parent": "share_rate",
+      "resolution": "R0", "status": "planned"
+    },
+    {
+      "id": "universality", "label": "Concept Universality", "type": "indicator", "controllable": true,
+      "r_vs_parent": null, "depth": 2, "parent": "share_rate",
+      "resolution": "R0", "status": "planned"
+    },
+    {
+      "id": "hook_clarity", "label": "Hook Clarity (first frame)", "type": "signal", "controllable": true,
+      "r_vs_parent": 0.21, "depth": 3, "parent": "visual_hook",
+      "resolution": "R4", "status": "planned",
+      "note": "r=+0.21 vs views but noisy in regression at n=203"
+    },
+    {
+      "id": "action_intensity", "label": "Action Intensity (frame 1-5)", "type": "signal", "controllable": true,
+      "r_vs_parent": null, "depth": 3, "parent": "visual_hook",
+      "resolution": "R4", "status": "planned"
+    },
+    {
+      "id": "segment_quality", "label": "Segment Concept Quality", "type": "signal", "controllable": true,
+      "r_vs_parent": null, "depth": 3, "parent": "narrative_arc",
+      "resolution": "R1", "status": "planned",
+      "note": "Label each 10s segment with function — does function predict local retention?"
+    },
+    {
+      "id": "connector_density", "label": "Connector Word Density", "type": "signal", "controllable": true,
+      "r_vs_parent": null, "depth": 3, "parent": "narrative_arc",
+      "resolution": "R5", "status": "planned",
+      "note": "'so', 'but', 'wait', 'actually' — forward momentum words"
+    },
+    {
+      "id": "callback_count", "label": "Hook Callback at End", "type": "signal", "controllable": true,
+      "r_vs_parent": null, "depth": 3, "parent": "narrative_arc",
+      "resolution": "R1", "status": "planned",
+      "note": "Does transcript mention hook concept in final 20%?"
+    },
+    {
+      "id": "above_baseline_curve", "label": "Retention Above Baseline (normalized)", "type": "signal", "controllable": false,
+      "r_vs_parent": null, "depth": 3, "parent": "visual_x_timestamp",
+      "resolution": "R2", "status": "planned",
+      "note": "Subtract avg decay from actual curve — isolates above/below expected retention"
+    },
+    {
+      "id": "audio_cue_retention", "label": "Audio Event × Retention Delta", "type": "signal", "controllable": true,
+      "r_vs_parent": null, "depth": 3, "parent": "visual_x_timestamp",
+      "resolution": "R5", "status": "planned",
+      "note": "Music drop, silence, voice change at second X → retention effect at X through X+5"
+    }
+  ]
+}
