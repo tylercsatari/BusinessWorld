@@ -1,46 +1,98 @@
 {
-  "version": 1,
-  "trainedOn": 203,
-  "r2": 0.1468,
-  "test_r2": 0.287,
-  "test_rmse_log": 0.6623,
-  "prediction_range_multiplier": 4.6,
-  "features": [
-    "keep",
-    "retention",
-    "vz_score",
-    "z_score",
-    "novelty",
-    "cognitive_load",
-    "net_novelty"
-  ],
-  "weights": {
-    "keep": 0.662,
-    "retention": 0.3176,
-    "z_score": -0.2002,
-    "vz_score": -0.1175,
-    "net_novelty": -0.091,
-    "cognitive_load": -0.0846,
-    "novelty": -0.0777
+  "version": 27,
+  "notes": "v27: Cleaned model. Removed circular outcome features (like_ratio, svf_log, engage_ratio, rpv) that inflated v26 to R²=0.94. Two honest models: pre-upload (6 features, CV=0.350) and full (12 features, CV=0.664).",
+
+  "pre_upload_model": {
+    "description": "What you can predict BEFORE shooting. 6 features knowable from concept + retention curve.",
+    "source_experiment": "exp_preupload_final",
+    "n_videos": 203,
+    "cv_r2_mean": 0.3502,
+    "cv_r2_std": 0.0341,
+    "cv_seeds": 20,
+    "prediction_range_multiplier": 4.6,
+    "features": [
+      "keep_sq",
+      "max_cliff",
+      "keep_x_tension",
+      "retention",
+      "visual_workshop",
+      "novelty"
+    ],
+    "feature_descriptions": {
+      "keep_sq": "Keep rate squared — accelerating returns above 75%",
+      "max_cliff": "Biggest single-point retention drop — signals initial virality spike",
+      "keep_x_tension": "Keep rate × narrative tension count interaction",
+      "retention": "Average percent viewed",
+      "visual_workshop": "Visual workshop/build content indicator",
+      "novelty": "LLM-scored novelty (1-10)"
+    }
   },
-  "bias": 5.85,
-  "feature_mins": {
-    "keep": 62.7,
-    "retention": 45.0,
-    "vz_score": 4,
-    "z_score": 4,
-    "novelty": 2,
-    "cognitive_load": 1,
-    "net_novelty": -3
+
+  "full_model": {
+    "description": "After seeing early signals (trajectory, previous video momentum). 12 features from forward selection on v20.",
+    "source_experiment": "exp_forward_selection",
+    "n_videos": 203,
+    "cv_r2_mean": 0.6644,
+    "cv_r2_std": 0.0682,
+    "holdout_20seed_mean": 0.6650,
+    "holdout_20seed_std": 0.0752,
+    "loo_r2": 0.6777,
+    "prediction_range_multiplier": 2.5,
+    "features": [
+      "keep_sq",
+      "indestructible_x_prev_keep",
+      "deriv_entropy",
+      "prev_views",
+      "prev_keep",
+      "smoothed_slope",
+      "pat_making_v2",
+      "duration_x_retention",
+      "ret_mid_sq",
+      "idea_length",
+      "view_accel_log",
+      "w2_w1_ratio"
+    ],
+    "feature_descriptions": {
+      "keep_sq": "Keep rate squared — accelerating returns above 75%",
+      "indestructible_x_prev_keep": "Indestructible concept × previous keep rate — release strategy signal",
+      "deriv_entropy": "Pacing complexity — entropy of retention curve derivative",
+      "prev_views": "Previous video's log10 views — channel momentum",
+      "prev_keep": "Previous video's keep rate — audience priming",
+      "smoothed_slope": "Slope of 5-pt moving avg retention curve — overall decay trend",
+      "pat_making_v2": "Title contains making/build/creat/construct — build content flag",
+      "duration_x_retention": "Duration × retention = total watch time proxy",
+      "ret_mid_sq": "Midpoint retention squared — non-linear mid-video engagement",
+      "idea_length": "Word count of video concept — concept richness",
+      "view_accel_log": "Log10 of day3-7 avg / day1 views — early trajectory (post-upload)",
+      "w2_w1_ratio": "Week2 / Week1 view ratio — sustained growth (post-upload)"
+    },
+    "feature_categories": {
+      "quality": ["keep_sq", "smoothed_slope", "ret_mid_sq", "deriv_entropy"],
+      "concept": ["pat_making_v2", "indestructible_x_prev_keep", "idea_length"],
+      "momentum": ["prev_views", "prev_keep"],
+      "trajectory": ["view_accel_log", "w2_w1_ratio"],
+      "content": ["duration_x_retention"]
+    }
   },
-  "feature_maxs": {
-    "keep": 100.0,
-    "retention": 100.0,
-    "vz_score": 10,
-    "z_score": 10,
-    "novelty": 9,
-    "cognitive_load": 8,
-    "net_novelty": 8
+
+  "circular_outcomes": {
+    "excluded_from_v26": ["like_ratio", "svf_log", "engage_ratio", "rpv"],
+    "reason": "These are outcome variables measured AFTER the video being predicted is uploaded. They correlate with views because they ARE consequences of views (engagement rates, revenue per view, subscriber view fraction). Including them inflated v26 to CV=0.94 — a meaningless number for prediction. The ceiling test (exp_ceiling_test) showed all outcome variables push CV to 0.83, confirming circularity.",
+    "references": [
+      "exp_viewed_rate: OUTCOME variable, +0.03 but circular",
+      "exp_outcome_revenue: CIRCULAR, revenue ≈ f(views)",
+      "exp_ceiling_test: Adding circular outcome signals pushes CV to 0.83",
+      "loopA2_leak_nonsub: DATA LEAK, nonsub_fraction r=0.86"
+    ]
   },
-  "notes": "v1 baseline: 7 signals, keep+retention dominate. Visual Zeigarnik (vz_score) has negative weight suggesting confound \u2014 higher VZ videos may be conceptually complex. Next: add first-frame hook_clarity, visual_surprise."
+
+  "model_history_summary": {
+    "v1": { "cv_r2": 0.147, "n_features": 7, "note": "Baseline: keep + retention + z_score + vz_score + novelty + cognitive_load + net_novelty" },
+    "v6": { "cv_r2": 0.361, "n_features": 8, "note": "Backward elimination + retention curve signals" },
+    "v9": { "cv_r2": 0.405, "n_features": 9, "note": "Concept categories (indestructible, superhero)" },
+    "v13": { "cv_r2": 0.506, "n_features": 13, "note": "Milestone: CV > 0.50. Channel momentum + concept interactions" },
+    "v17": { "cv_r2": 0.500, "n_features": 17, "note": "Pacing + hook signals (n=203 rebase)" },
+    "v20": { "cv_r2": 0.664, "n_features": 12, "note": "Forward selection. Trajectory signals (view_accel_log, w2_w1_ratio)" },
+    "v22": { "cv_r2": 0.700, "n_features": 12, "note": "n=210 with deriv_std replacing deriv_entropy+smoothed_slope" }
+  }
 }

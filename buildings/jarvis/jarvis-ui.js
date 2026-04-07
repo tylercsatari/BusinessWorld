@@ -61,6 +61,12 @@ const JarvisUI = (() => {
         { id: 'ratio', icon: '⚖️', name: 'Ratio Normalizer', desc: 'Convert raw counts to rates (per 100/1k/1M) and correlate.', methodology: 'All engagement metrics must be expressed as rates per view. Raw counts scale with views by definition — comparing them produces inflated differences.' },
         { id: 'net', icon: '➕➖', name: 'Net Signal Calculator', desc: 'Subtract one signal from another to find optimal balance points.', methodology: 'Net signals reveal sweet spots where the balance between two opposing forces maximizes outcome.' },
         { id: 'llm', icon: '🧠', name: 'LLM Signal Scorer', desc: 'Server scoring pipeline — scores videos via LLM vision.', methodology: 'Each experiment must document known confounders. Unflagged confounders lead to false conclusions.', planned: true },
+        { id: 'ols', icon: '📈', name: 'Linear Regression (OLS)', desc: 'Ordinary Least Squares — multiple signals → log10(views). The core model.', methodology: 'Standard regression with holdout evaluation. Dominates at n<300 due to stability. Always log-transform target (views) to handle power-law distribution.' },
+        { id: 'cv', icon: '🎯', name: 'Cross-Validated Regression', desc: '5-fold or 10-fold CV with 10-20 random seeds. More reliable than single holdout.', methodology: 'Multi-seed CV averages out holdout variance. 20-seed CV std ≈ 0.015 vs single-holdout std ≈ 0.08. Used for all model experiments. Report mean ± std.' },
+        { id: 'feature_sel', icon: '🔍', name: 'Forward/Backward Selection', desc: 'Iteratively add or remove features based on CV improvement.', methodology: 'Forward: start empty, add feature with highest CV gain >0.01. Backward: start full, drop feature with lowest CV cost. Found optimal 12-feature set from 100+ candidates.' },
+        { id: 'gbm', icon: '🌲', name: 'GBM (Gradient Boosted Machines)', desc: 'Non-linear ensemble — 200 sequential decision trees, each correcting the last.', methodology: 'Better than OLS for non-linear relationships but needs n>300 to avoid overfitting. At n=203: GBM CV=0.56 vs OLS CV=0.66. Useful in blends (0.8 OLS + 0.2 GBM).' },
+        { id: 'rf', icon: '🌳', name: 'Random Forest', desc: 'Parallel ensemble of decision trees with random feature subsets.', methodology: 'More stable than GBM at small n but still underperformed OLS at n=203 (RF CV=0.53). Bagging reduces variance but can\'t recover from high-bias small-sample regime.' },
+        { id: 'blend', icon: '⚗️', name: 'OLS+GBM Blend', desc: 'Weighted average of OLS (linear) and GBM (non-linear) predictions.', methodology: 'OLS captures linear patterns, GBM captures residual non-linearity. Best blend at n=203: 0.8 OLS + 0.2 GBM. At n=210: 0.55 OLS + 0.45 GBM. Blend improves as n grows.' },
     ];
 
     const TOOL_FIRST_PARAM = {
@@ -70,12 +76,18 @@ const JarvisUI = (() => {
 
     // ── Tool graph layout ──
     const ANALYTICAL_NODES = [
-        { id: 'pearson', x: 80, y: 60 },
-        { id: 'bucket', x: 280, y: 60 },
-        { id: 'log10', x: 50, y: 170 },
-        { id: 'ratio', x: 160, y: 170 },
-        { id: 'net', x: 310, y: 170 },
-        { id: 'llm', x: 180, y: 100 },
+        { id: 'pearson', x: 60, y: 40 },
+        { id: 'bucket', x: 200, y: 40 },
+        { id: 'log10', x: 340, y: 40 },
+        { id: 'ratio', x: 60, y: 130 },
+        { id: 'net', x: 200, y: 130 },
+        { id: 'llm', x: 340, y: 130 },
+        { id: 'ols', x: 60, y: 220 },
+        { id: 'cv', x: 140, y: 220 },
+        { id: 'feature_sel', x: 220, y: 220 },
+        { id: 'gbm', x: 300, y: 220 },
+        { id: 'rf', x: 340, y: 175 },
+        { id: 'blend', x: 380, y: 220 },
     ];
     const ANALYTICAL_EDGES = [
         ['log10', 'pearson'],
@@ -83,9 +95,12 @@ const JarvisUI = (() => {
         ['net', 'bucket'],
         ['llm', 'pearson'],
         ['llm', 'bucket'],
-        ['llm', 'log10'],
-        ['llm', 'ratio'],
-        ['llm', 'net'],
+        ['cv', 'ols'],
+        ['feature_sel', 'cv'],
+        ['gbm', 'ols'],
+        ['rf', 'ols'],
+        ['blend', 'ols'],
+        ['blend', 'gbm'],
     ];
 
     // ── Tab structure (5 tabs) ──
@@ -195,11 +210,12 @@ const JarvisUI = (() => {
         setTimeout(() => drawAnalyticalGraph(), 100);
         return `
             <div class="jarvis-analytical-network">
-                <canvas id="jarvis-analytical-canvas" width="360" height="250"></canvas>
+                <canvas id="jarvis-analytical-canvas" width="440" height="280"></canvas>
                 <div id="jarvis-analytical-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
             <div class="jarvis-network-legend">
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#3b82f6"></span>Measurement Tool</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#10b981"></span>Model Tool</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>LLM Scorer</span>
                 <span class="jarvis-legend-item jarvis-legend-hint">Click a node to run the tool</span>
             </div>
@@ -211,8 +227,8 @@ const JarvisUI = (() => {
         const canvas = container?.querySelector('#jarvis-analytical-canvas');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const W = canvas.parentElement.clientWidth || 360;
-        const H = 250;
+        const W = canvas.parentElement.clientWidth || 440;
+        const H = 280;
         canvas.style.width = W + 'px';
         canvas.style.height = H + 'px';
         const dpr = window.devicePixelRatio || 1;
@@ -221,8 +237,8 @@ const JarvisUI = (() => {
         ctx.scale(dpr, dpr);
 
         // Scale node positions to actual width
-        const scaleX = W / 360;
-        const scaleY = H / 250;
+        const scaleX = W / 440;
+        const scaleY = H / 280;
         const nodes = ANALYTICAL_NODES.map(n => {
             const def = TOOL_DEFS.find(t => t.id === n.id);
             return {
@@ -230,7 +246,7 @@ const JarvisUI = (() => {
                 x: n.x * scaleX,
                 y: n.y * scaleY,
                 r: def?.planned ? 16 : 20,
-                color: def?.planned ? '#a78bfa' : '#3b82f6',
+                color: def?.planned ? '#a78bfa' : ['ols','cv','feature_sel','gbm','rf','blend'].includes(n.id) ? '#10b981' : '#3b82f6',
                 label: def?.name || n.id,
                 icon: def?.icon || '',
                 desc: def?.desc || '',
@@ -1172,14 +1188,28 @@ const JarvisUI = (() => {
     function renderAutoResearchContent() {
         if (!arModel) return '<div style="color:#f87171;padding:20px;">Failed to load prediction model.</div>';
         const m = arModel;
-        const signals = [
-            { key: 'keep', label: 'Keep Rate', placeholder: '0–100', def: 80 },
-            { key: 'retention', label: 'Retention %', placeholder: '0–100', def: 87 },
-            { key: 'vz_score', label: 'Visual Zeigarnik', placeholder: '1–10', def: 8 },
-            { key: 'z_score', label: 'Zeigarnik Score', placeholder: '1–10', def: 7 },
-            { key: 'novelty', label: 'Novelty', placeholder: '1–10', def: 7 },
-            { key: 'cognitive_load', label: 'Cognitive Load', placeholder: '1–10', def: 3 },
-            { key: 'net_novelty', label: 'Net Novelty', placeholder: '-3 to 8', def: 4 },
+        // Pre-upload model inputs (6 features, CV=0.350)
+        const preUploadSignals = [
+            { key: 'keep_sq', label: 'Keep Rate²', placeholder: 'e.g. 6400 (80²)', def: 6400, derive: (v) => v, note: 'keep² — enter raw or type keep below' },
+            { key: 'max_cliff', label: 'Max Cliff', placeholder: '0–1', def: 0.20, note: 'Biggest single-point retention drop' },
+            { key: 'keep_x_tension', label: 'Keep × Tension', placeholder: 'e.g. 240', def: 240, note: 'keep rate × narrative tension count' },
+            { key: 'retention', label: 'Retention %', placeholder: '0–100', def: 60, note: 'Average percent viewed' },
+            { key: 'visual_workshop', label: 'Visual Workshop', placeholder: '0 or 1', def: 1, note: '1 if build/workshop content' },
+            { key: 'novelty', label: 'Novelty', placeholder: '1–10', def: 7, note: 'LLM-scored novelty' },
+        ];
+        // Full model additional inputs (6 more features for 12 total, CV=0.664)
+        const fullModelSignals = [
+            { key: 'indestructible_x_prev_keep', label: 'Indestructible × Prev Keep', placeholder: '0–84', def: 0, note: 'Indestructible concept × prev keep rate' },
+            { key: 'deriv_entropy', label: 'Pacing Complexity', placeholder: '0–5', def: 2.5, note: 'Entropy of retention curve derivative' },
+            { key: 'prev_views', label: 'Prev Video Views (log10)', placeholder: '5–9', def: 6.5, note: 'log10 of previous video views' },
+            { key: 'prev_keep', label: 'Prev Video Keep %', placeholder: '0–100', def: 75, note: 'Previous video keep rate' },
+            { key: 'smoothed_slope', label: 'Smoothed Slope', placeholder: '-1 to 0', def: -0.3, note: 'Slope of 5-pt moving avg retention' },
+            { key: 'pat_making_v2', label: 'Making Content', placeholder: '0 or 1', def: 1, note: '1 if title has making/build/creat' },
+            { key: 'duration_x_retention', label: 'Duration × Retention', placeholder: '10–120', def: 45, note: 'Duration(s) × retention(%)/100' },
+            { key: 'ret_mid_sq', label: 'Mid Retention²', placeholder: '0–1', def: 0.36, note: 'Midpoint retention (0-1) squared' },
+            { key: 'idea_length', label: 'Idea Length', placeholder: 'word count', def: 25, note: 'Word count of video concept' },
+            { key: 'view_accel_log', label: 'View Acceleration (log)', placeholder: '-1 to 3', def: 0.5, note: 'log10(day3-7 avg / day1 views)' },
+            { key: 'w2_w1_ratio', label: 'Week2/Week1 Ratio', placeholder: '0–25', def: 1.0, note: 'Week 2 views / Week 1 views' },
         ];
 
         const statusBadge = (s) => {
@@ -1188,9 +1218,9 @@ const JarvisUI = (() => {
             return '<span class="jarvis-ar-status jarvis-ar-status-queued">queued</span>';
         };
 
-        const r2 = 0.147;
-        const target = 0.50;
-        const pct = Math.round((r2 / target) * 100);
+        const r2 = 0.664;
+        const target = 0.80;
+        const pct = Math.min(100, Math.round((r2 / target) * 100));
 
         return `
             <!-- Pipeline Architecture -->
@@ -1218,7 +1248,7 @@ const JarvisUI = (() => {
                         <div class="jarvis-pipeline-stage-num">3</div>
                         <div class="jarvis-pipeline-stage-body">
                             <strong>ANALYTICAL BRAIN</strong>
-                            <p>Measurement tools: Pearson, Bucket, Ratio Normalizer, Net Signal, LLM Scorer, Proximity. Takes indicators from Tactical Brain as inputs. Handles linear, non-linear (GBM/RF), and multi-dimensional analysis.</p>
+                            <p>Measurement tools: Pearson, Bucket, log10, Ratio, Net Signal, LLM Scorer. Model tools: OLS, Cross-Validated Regression, Forward/Backward Selection, GBM, Random Forest, OLS+GBM Blend.</p>
                         </div>
                     </div>
                     <div class="jarvis-pipeline-arrow">↓</div>
@@ -1234,7 +1264,7 @@ const JarvisUI = (() => {
                         <div class="jarvis-pipeline-stage-num">5</div>
                         <div class="jarvis-pipeline-stage-body">
                             <strong>PREDICTION MODEL</strong>
-                            <p>Output: which combination of indicators predicts 100M+ views. Current: v20, CV R²=0.664, ±2.5x accuracy. Target: R²>0.80 using higher-resolution signals.</p>
+                            <p>Output: which combination of indicators predicts views. Pre-upload: 6 features, CV R²=0.350. Full: 12 features, CV R²=0.664, ±2.5x. Target: R²>0.80.</p>
                         </div>
                     </div>
                 </div>
@@ -1250,7 +1280,7 @@ const JarvisUI = (() => {
             <!-- Framework -->
             <div class="jarvis-ar-section jarvis-ar-framework">
                 <h3 class="jarvis-ar-title">AutoResearch — Karpathy-style Autonomous Research Loop</h3>
-                <p class="jarvis-ar-subtitle">Autonomous agent improves the prediction model overnight. The agent scores new signals, runs experiments, keeps improvements, discards failures — loop forever until R² > 0.50.</p>
+                <p class="jarvis-ar-subtitle">Autonomous agent improves the prediction model overnight. The agent scores new signals, runs experiments, keeps improvements, discards failures — loop forever until R² > 0.80.</p>
 
                 <div class="jarvis-ar-framework-cols">
                     <div class="jarvis-ar-framework-col">
@@ -1267,9 +1297,9 @@ const JarvisUI = (() => {
                     <div class="jarvis-ar-framework-col">
                         <h4 class="jarvis-ar-framework-heading">Current stats</h4>
                         <div class="jarvis-ar-framework-stats">
-                            <div class="jarvis-ar-fstat"><span>Model version</span><strong>v1</strong></div>
-                            <div class="jarvis-ar-fstat"><span>R²</span><strong>0.147 (14.7% of variance)</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Target R²</span><strong>0.50</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Model version</span><strong>v20 (clean)</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Pre-upload R²</span><strong>0.350 (6 features)</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Full model R²</span><strong>0.664 (12 features)</strong></div>
                             <div class="jarvis-ar-fstat jarvis-ar-fstat-bar">
                                 <span>Progress</span>
                                 <div class="jarvis-ar-progress-track">
@@ -1278,7 +1308,7 @@ const JarvisUI = (() => {
                                 </div>
                             </div>
                             <div class="jarvis-ar-fstat"><span>Videos</span><strong>203</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Active signals</span><strong>7</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Active signals</span><strong>12 (full) / 6 (pre-upload)</strong></div>
                             <div class="jarvis-ar-fstat"><span>Hypotheses queued</span><strong>${(arHypotheses || []).filter(h => h.status === 'queued').length || 6}</strong></div>
                         </div>
                     </div>
@@ -1294,22 +1324,33 @@ const JarvisUI = (() => {
             <!-- Video Scorer -->
             <div class="jarvis-ar-section">
                 <h3 class="jarvis-ar-title">Video Success Predictor</h3>
-                <p class="jarvis-ar-subtitle">Multi-signal regression model. Input your signals, get a predicted view count.</p>
+                <p class="jarvis-ar-subtitle">Two models: pre-upload (before shooting) and full (with early signals).</p>
 
                 <div class="jarvis-ar-stats-card">
                     <div class="jarvis-ar-stat">Training data: <strong>203 videos</strong></div>
-                    <div class="jarvis-ar-stat">R² = <strong>0.147</strong> (14.7% of variance explained)</div>
-                    <div class="jarvis-ar-stat">Cross-validation R² = <strong>0.287</strong></div>
-                    <div class="jarvis-ar-stat">Prediction accuracy: <strong>±4.6x</strong></div>
-                    <div class="jarvis-ar-stat jarvis-ar-note">Baseline v1 — model improves as we add depth (new signals from hypothesis queue)</div>
+                    <div class="jarvis-ar-stat">Pre-upload: R² = <strong>0.350</strong> (6 features, ±4.6x accuracy)</div>
+                    <div class="jarvis-ar-stat">Full model: R² = <strong>0.664</strong> (12 features, ±2.5x accuracy)</div>
+                    <div class="jarvis-ar-stat jarvis-ar-note">v20 clean models — circular outcome features removed</div>
                 </div>
 
                 <div class="jarvis-ar-scorer">
-                    <h4 class="jarvis-ar-scorer-title">Video Scorer</h4>
+                    <h4 class="jarvis-ar-scorer-title">Pre-Upload Prediction</h4>
+                    <p style="color:var(--j-muted);font-size:11px;margin:0 0 8px">What you can know before shooting (CV R²=0.350)</p>
                     <div class="jarvis-ar-inputs">
-                        ${signals.map(s => `
+                        ${preUploadSignals.map(s => `
                             <div class="jarvis-ar-input-group">
-                                <label>${s.label}</label>
+                                <label title="${s.note}">${s.label}</label>
+                                <input type="number" id="ar-input-${s.key}" value="${s.def}" placeholder="${s.placeholder}" step="any" />
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <h4 class="jarvis-ar-scorer-title" style="margin-top:12px">With Early Signals</h4>
+                    <p style="color:var(--j-muted);font-size:11px;margin:0 0 8px">Additional inputs after upload (CV R²=0.664)</p>
+                    <div class="jarvis-ar-inputs">
+                        ${fullModelSignals.map(s => `
+                            <div class="jarvis-ar-input-group">
+                                <label title="${s.note}">${s.label}</label>
                                 <input type="number" id="ar-input-${s.key}" value="${s.def}" placeholder="${s.placeholder}" step="any" />
                             </div>
                         `).join('')}
@@ -1346,30 +1387,25 @@ const JarvisUI = (() => {
             <div class="jarvis-ar-section">
                 <h3 class="jarvis-ar-title">R² Improvement Over Time</h3>
                 <div class="jarvis-ar-history">
-                    <div class="jarvis-ar-history-row">
-                        <div class="jarvis-ar-history-label">v0 <span class="jarvis-ar-history-tag">baseline</span></div>
-                        <div class="jarvis-ar-history-bar-track">
-                            <div class="jarvis-ar-history-bar" style="width:0%"></div>
+                    ${[
+                        { v: 'v1', r2: 0.147, desc: 'Baseline: keep + retention + LLM scores', tag: '' },
+                        { v: 'v6', r2: 0.361, desc: 'Backward elim + retention curve signals', tag: '' },
+                        { v: 'v9', r2: 0.405, desc: 'Concept categories (indestructible, superhero)', tag: '' },
+                        { v: 'v13', r2: 0.506, desc: 'Channel momentum + concept interactions', tag: '' },
+                        { v: 'v17', r2: 0.500, desc: 'Rebased n=203. Pacing + hook signals', tag: '' },
+                        { v: 'v20', r2: 0.664, desc: 'Forward selection. Trajectory signals', tag: 'current' },
+                        { v: 'v22', r2: 0.700, desc: 'n=210, deriv_std replaces entropy+slope', tag: '' },
+                        { v: '—', r2: 0.80, desc: 'Target: higher-resolution signals', tag: 'target' },
+                    ].map(h => `
+                        <div class="jarvis-ar-history-row${h.tag === 'current' ? ' jarvis-ar-history-current' : ''}">
+                            <div class="jarvis-ar-history-label">${h.v} ${h.tag ? '<span class="jarvis-ar-history-tag' + (h.tag === 'current' ? ' jarvis-ar-history-tag-current' : '') + '">' + h.tag + '</span>' : ''}</div>
+                            <div class="jarvis-ar-history-bar-track">
+                                <div class="jarvis-ar-history-bar${h.tag === 'current' ? ' jarvis-ar-history-bar-current' : h.tag === 'target' ? ' jarvis-ar-history-bar-pending' : ''}" style="width:${(h.r2 * 100).toFixed(1)}%"></div>
+                            </div>
+                            <div class="jarvis-ar-history-val">R²=${h.r2.toFixed(3)}</div>
+                            <div class="jarvis-ar-history-desc">${h.desc}</div>
                         </div>
-                        <div class="jarvis-ar-history-val">R²=0.000</div>
-                        <div class="jarvis-ar-history-desc">no signals</div>
-                    </div>
-                    <div class="jarvis-ar-history-row jarvis-ar-history-current">
-                        <div class="jarvis-ar-history-label">v1 <span class="jarvis-ar-history-tag jarvis-ar-history-tag-current">current</span></div>
-                        <div class="jarvis-ar-history-bar-track">
-                            <div class="jarvis-ar-history-bar jarvis-ar-history-bar-current" style="width:14.7%"></div>
-                        </div>
-                        <div class="jarvis-ar-history-val">R²=0.147</div>
-                        <div class="jarvis-ar-history-desc">keep + retention + z_score + vz_score + novelty + cognitive_load + net_novelty</div>
-                    </div>
-                    <div class="jarvis-ar-history-row">
-                        <div class="jarvis-ar-history-label">v2 <span class="jarvis-ar-history-tag">next</span></div>
-                        <div class="jarvis-ar-history-bar-track">
-                            <div class="jarvis-ar-history-bar jarvis-ar-history-bar-pending" style="width:5%"></div>
-                        </div>
-                        <div class="jarvis-ar-history-val">R²=?</div>
-                        <div class="jarvis-ar-history-desc">pending hypothesis queue results</div>
-                    </div>
+                    `).join('')}
                 </div>
             </div>
         `;
@@ -1379,36 +1415,46 @@ const JarvisUI = (() => {
         if (!arModel) return;
         const m = arModel;
         const inputs = {};
-        m.features.forEach(f => {
+        // Read all inputs (both pre-upload and full model)
+        const allFeatures = [...(m.pre_upload_model?.features || []), ...(m.full_model?.features || [])];
+        const uniqueFeatures = [...new Set(allFeatures)];
+        uniqueFeatures.forEach(f => {
             const el = container?.querySelector('#ar-input-' + f);
             inputs[f] = el ? parseFloat(el.value) : 0;
         });
 
-        let predicted_log = m.bias;
-        m.features.forEach(f => {
-            const min = m.feature_mins[f];
-            const max = m.feature_maxs[f];
-            const norm = max !== min ? (inputs[f] - min) / (max - min) : 0;
-            predicted_log += m.weights[f] * norm;
-        });
-        const predicted_views = Math.pow(10, predicted_log);
-        const range_low = predicted_views / m.prediction_range_multiplier;
-        const range_high = predicted_views * m.prediction_range_multiplier;
-
-        let colorClass = 'jarvis-ar-result-red';
-        if (predicted_views >= 10e6) colorClass = 'jarvis-ar-result-green';
-        else if (predicted_views >= 1e6) colorClass = 'jarvis-ar-result-yellow';
-
         const resultEl = container?.querySelector('#ar-prediction-result');
-        if (resultEl) {
-            resultEl.innerHTML = `
-                <div class="jarvis-ar-result-card ${colorClass}">
-                    <div class="jarvis-ar-result-views">${fmtViews(predicted_views)} predicted views</div>
-                    <div class="jarvis-ar-result-range">±4.6x → range: ${fmtViews(range_low)} — ${fmtViews(range_high)}</div>
-                    <div class="jarvis-ar-result-badge">v1 model · R²=0.147 · improves with more signals</div>
-                </div>
-            `;
-        }
+        if (!resultEl) return;
+
+        // Show both model results as informational summaries (no weights — models need retraining)
+        const preModel = m.pre_upload_model;
+        const fullModel = m.full_model;
+
+        const preFeatureList = (preModel?.features || []).map(f => {
+            const val = inputs[f];
+            const desc = preModel.feature_descriptions?.[f] || f;
+            return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--j-muted)">${f}</span><strong>${isNaN(val) ? '—' : val}</strong></div>`;
+        }).join('');
+
+        const fullFeatureList = (fullModel?.features || []).map(f => {
+            const val = inputs[f];
+            return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--j-muted)">${f}</span><strong>${isNaN(val) ? '—' : val}</strong></div>`;
+        }).join('');
+
+        resultEl.innerHTML = `
+            <div class="jarvis-ar-result-card jarvis-ar-result-yellow" style="margin-bottom:8px">
+                <div class="jarvis-ar-result-views">Pre-Upload Model</div>
+                <div class="jarvis-ar-result-range">CV R² = ${preModel?.cv_r2_mean || '?'} · ±${preModel?.prediction_range_multiplier || '?'}x · ${preModel?.features?.length || '?'} features</div>
+                <div style="margin-top:6px">${preFeatureList}</div>
+                <div class="jarvis-ar-result-badge">Weights not stored — run regression to get prediction</div>
+            </div>
+            <div class="jarvis-ar-result-card jarvis-ar-result-green">
+                <div class="jarvis-ar-result-views">Full Model (with early signals)</div>
+                <div class="jarvis-ar-result-range">CV R² = ${fullModel?.cv_r2_mean || '?'} · ±${fullModel?.prediction_range_multiplier || '?'}x · ${fullModel?.features?.length || '?'} features</div>
+                <div style="margin-top:6px">${fullFeatureList}</div>
+                <div class="jarvis-ar-result-badge">Weights not stored — run regression to get prediction</div>
+            </div>
+        `;
     }
 
     async function runHypothesis(hypId) {

@@ -1,0 +1,93 @@
+{
+  "generated": "2026-04-07",
+  "source": "results.tsv (2271 rows, 203-210 videos)",
+
+  "model_history": [
+    { "model": "v1", "cv_r2": 0.147, "n_features": 7, "features": ["keep", "retention", "z_score", "novelty", "cognitive_load", "net_novelty", "vz_score"], "notes": "Baseline: 7 LLM-scored + YouTube Analytics signals" },
+    { "model": "v6", "cv_r2": 0.361, "n_features": 8, "features": ["keep", "retention_per_sec", "cognitive_load", "ret_mid", "keep_sq", "max_cliff", "sub_ret_gap", "ret_mid_sq"], "notes": "Backward elimination + retention curve signals. Dropped z_score, vz_score, novelty" },
+    { "model": "v9", "cv_r2": 0.405, "n_features": 9, "features": ["keep_sq", "retention_per_sec", "ret_mid_sq", "max_cliff", "sub_ret_gap", "hook_word_density", "pat_indestructible", "cat_superhero", "keep"], "notes": "Concept categories (indestructible, superhero). +175% from baseline" },
+    { "model": "v13", "cv_r2": 0.506, "n_features": 13, "features": ["keep_sq", "sub_ret_gap", "ret_mid_sq", "cat_superhero", "prev_views", "prev_keep", "prev_views_sq", "indestructible_x_prev_keep"], "notes": "Milestone: CV > 0.50. Channel momentum + concept×momentum interactions" },
+    { "model": "v17", "cv_r2": 0.500, "n_features": 17, "features": ["keep_sq", "sub_ret_gap", "ret_mid_sq", "cat_superhero", "prev_views", "prev_keep", "prev_views_sq", "indestructible_x_prev_keep", "has_text_overlay", "duration_x_retention", "smoothed_slope", "idea_length", "stakes_x_duration", "pat_making_v2", "stakes", "deriv_entropy", "hook_silence"], "notes": "Rebased to n=203 (different holdout). Pacing + hook signals. CV breaks 0.50" },
+    { "model": "v20", "cv_r2": 0.664, "n_features": 12, "features": ["view_accel_log", "keep_sq", "indestructible_x_prev_keep", "deriv_entropy", "prev_views", "w2_w1_ratio", "prev_keep", "smoothed_slope", "pat_making_v2", "duration_x_retention", "ret_mid_sq", "idea_length"], "notes": "Forward selection. Trajectory signals (view_accel_log, w2_w1_ratio) add +0.16. LOO=0.678" },
+    { "model": "v22", "cv_r2": 0.700, "n_features": 12, "features": ["view_accel_log", "keep_sq", "indestructible_x_prev_keep", "deriv_std", "prev_views", "w2_w1_ratio", "prev_keep", "pat_making_v2", "duration_x_retention", "ret_mid_sq", "idea_length", "ret_25"], "notes": "n=210. deriv_std replaces deriv_entropy+smoothed_slope. OLS optimal vs GBM/RF/etc." },
+    { "model": "v26_CORRUPTED", "cv_r2": 0.942, "n_features": 15, "features": ["view_accel_log", "keep_sq", "indestructible_x_prev_keep", "w2_w1_ratio", "duration_x_retention", "prev_views", "prev_keep", "ret_mid_sq", "pat_making_v2", "sub_gap", "like_ratio", "rc_convexity", "svf_log", "engage_ratio", "rpv"], "notes": "CORRUPTED: Contains circular outcome features (like_ratio, svf_log, engage_ratio, rpv). R²=0.94 is meaningless for prediction." }
+  ],
+
+  "kept_signals": [
+    { "signal": "keep_sq", "delta_r2": "+0.031", "meaning": "Non-linear keep rate — accelerating returns above 75%. Marginal keep above 75 doubles hit rate.", "category": "quality" },
+    { "signal": "max_cliff", "delta_r2": "+0.093", "meaning": "Biggest single-point retention drop. Signals initial virality spike (high initial replay → big drop). Counter-intuitive: bigger drops = more views.", "category": "quality" },
+    { "signal": "ret_mid_sq", "delta_r2": "+0.019", "meaning": "Midpoint retention squared. Non-linear mid-video engagement. Videos maintaining middle engagement outperform.", "category": "quality" },
+    { "signal": "sub_ret_gap", "delta_r2": "+0.020", "meaning": "Subscriber vs non-subscriber retention gap. Smaller gap = broader appeal = more views.", "category": "quality" },
+    { "signal": "smoothed_slope", "delta_r2": "+0.017", "meaning": "Slope of 5-pt moving avg retention curve. Captures overall decay trend independently of max_cliff.", "category": "quality" },
+    { "signal": "deriv_entropy", "delta_r2": "+0.008", "meaning": "Pacing complexity — entropy of retention curve derivative. Varied pacing beats monotonic.", "category": "quality" },
+    { "signal": "duration_x_retention", "delta_r2": "+0.018", "meaning": "Duration × retention = total watch time proxy. Algorithm rewards absolute watch minutes.", "category": "content" },
+    { "signal": "idea_length", "delta_r2": "+0.012", "meaning": "Word count of AI-generated videoIdea. Longer/richer video concepts predict slightly more views.", "category": "content" },
+    { "signal": "pat_making_v2", "delta_r2": "+0.012", "meaning": "Title contains making/build/creat/construct. 34 videos avg 19.7M vs 5.6M rest.", "category": "concept" },
+    { "signal": "indestructible_x_prev_keep", "delta_r2": "+0.026", "meaning": "Indestructible concept × previous keep rate. RELEASE STRATEGY: indestructible after high-keep = super-viral.", "category": "concept" },
+    { "signal": "prev_views", "delta_r2": "+0.034", "meaning": "Previous video's log10 views. Channel momentum — algorithm gives bigger push after a hit.", "category": "momentum" },
+    { "signal": "prev_keep", "delta_r2": "+0.016", "meaning": "Previous video's keep rate. Audience priming effect. Weight negative = rebound after low keep.", "category": "momentum" },
+    { "signal": "view_accel_log", "delta_r2": "+0.048", "meaning": "Log10 of day3-7 avg / day1 views. Early trajectory signal. Strongest predictor of total views.", "category": "trajectory" },
+    { "signal": "w2_w1_ratio", "delta_r2": "+0.026", "meaning": "Week2 / Week1 view ratio. Sustained growth predicts total views. Second-wave videos outperform.", "category": "trajectory" }
+  ],
+
+  "top_discoveries": [
+    { "discovery": "log_7day_velocity", "r_partial": 0.82, "meaning": "STRONGEST signal. First 7-day view sum predicts total views even after controlling keep. Early algorithmic push is the mechanism.", "loop": "B" },
+    { "discovery": "derivative_std", "r_partial": 0.38, "meaning": "StdDev of retention curve derivative = dramatic pacing. Varied rate-of-change beats monotonic decay.", "loop": "B" },
+    { "discovery": "pacing_ratio", "r_partial": 0.42, "meaning": "deriv_std / retentionVariation = dramatic pacing efficiency. Sharp turns at specific moments + smooth overall arc.", "loop": "B" },
+    { "discovery": "day1_share_inverse", "r_partial": -0.37, "meaning": "Viral videos DON'T peak day 1. Lower day-1 share = more total views. Algorithmic sustained push.", "loop": "B" },
+    { "discovery": "day7_day1_ratio", "r_partial": 0.31, "meaning": "Day7/Day1 view ratio predicts total views. Sustained momentum is the key to virality.", "loop": "B" },
+    { "discovery": "body_hold_ratio", "r_partial": 0.26, "meaning": "Retention at 75%/25% predicts views. The narrative middle separates viral from average.", "loop": "B" },
+    { "discovery": "max_cliff_single_drop", "r_partial": 0.36, "meaning": "Counter-intuitive: BIGGER max retention drops = MORE views. Dramatic narrative turns drive virality.", "loop": "B" },
+    { "discovery": "like_ratio_inverse", "r_partial": -0.19, "meaning": "Lower like/view ratio = MORE views. Viral videos reach beyond core audience, diluting engagement per view.", "loop": "B" },
+    { "discovery": "combined_score", "r_partial": 0.32, "meaning": "body_hold*10 + d7d1 - retVar*5. Best multi-signal combo — captures 3 independent dimensions.", "loop": "B" },
+    { "discovery": "duration_sweet_spot", "r_partial": null, "meaning": "46-60s = sweet spot (28/98 hit 10M+, 2.9M median). 15-30s = death zone (0/11, 513K median).", "loop": "B" },
+    { "discovery": "title_making_keyword", "r_partial": null, "meaning": "'Making' = $24M avg (23 videos). Build/creation content is strongest format.", "loop": "B" },
+    { "discovery": "golden_zone", "r_partial": null, "meaning": "keep>=75 AND maxCliff>=0.15: 45% of videos, 36% hit 10M+. Practical pre-screening formula.", "loop": "B" },
+    { "discovery": "keep_threshold_75", "r_partial": null, "meaning": "Non-linear: <75% keep = 3-12% hit 10M+. 75-80% = 25%. 80-85% = 41%. Marginal keep above 75 doubles hit rate.", "loop": "B" }
+  ],
+
+  "causal_findings": [
+    { "signal": "connector_density", "r_vs_parent": 0.047, "parent_metric": "retention", "meaning": "Forward-momentum words (so/but/wait/actually) show r=0.05 vs retention but r=0.23 vs keep. Connector/pivot words predict KEEP not retention.", "loop": "C" },
+    { "signal": "pivot_density", "r_vs_parent": 0.26, "parent_metric": "keep", "meaning": "Pivot words (but/however/wait/suddenly) per 100 words. r=0.26 vs keep, r=0.10 vs retention. Narrative surprise drives initial hook.", "loop": "C" },
+    { "signal": "has_callback", "r_vs_parent": 0.14, "parent_metric": "keep", "meaning": "Hook concept callback in last 20%. Only r=0.05 vs end retention (weak). 46% callback rate. Callbacks help keep, not retention.", "loop": "C" },
+    { "signal": "three_channel_frac", "r_vs_parent": 0.07, "parent_metric": "retention", "meaning": "Fraction of seconds with audio+visual+concept all active. Weak signal (r=0.07). Multi-channel completeness is noise at n=203.", "loop": "C" },
+    { "signal": "total_above_baseline", "r_vs_parent": 0.27, "parent_metric": "log_views", "meaning": "Total above-baseline retention area vs views. r=0.27. Watch time above baseline correlates with views.", "loop": "C" },
+    { "signal": "narrative_arc_score", "r_vs_parent": 0.13, "parent_metric": "keep", "meaning": "Narrative arc quality (hook→climax→payoff). Weak: r=0.13 vs keep, r=-0.01 vs retention. Arc quality doesn't predict retention.", "loop": "C" },
+    { "signal": "action_intensity_hook_seg", "r_vs_parent": 0.15, "parent_metric": "keep", "meaning": "Action word density in hook segment vs keep. r=0.15. Physical/action hooks slightly better than talking hooks.", "loop": "C" }
+  ],
+
+  "retention_patterns": [
+    { "pattern": "Late peak = 10x more views", "evidence": "Videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). Building narrative arc beats front-loaded content.", "loop": "D" },
+    { "pattern": "Visceral words retain, transition words kill", "evidence": "Retention GAIN: visceral/physical (painful +5.9%, difference +4.3%, hurt +2.5%). Retention DROP: transitions (so -11.2%, however -8.6%). Show don't tell.", "loop": "D" },
+    { "pattern": "Golden final 5%", "evidence": "Videos at 95-99% retention percentile: +8.0% above baseline while rest is -0.4%. Final 5% of video is THE differentiator for mega-virality.", "loop": "D" },
+    { "pattern": "Hook window is 10-20%", "evidence": "56% of videos have worst retention in first 20%. 10-20% is the critical make-or-break transition zone.", "loop": "D" },
+    { "pattern": "Action retains, product drops", "evidence": "Physical challenge visuals +12% at peaks. Product/food shots without human anchor cause drops.", "loop": "D" },
+    { "pattern": "Speech rate: fast = retained, pauses = dropped", "evidence": "Speech rate r=+0.24 vs retention. Long pauses >1s: r=-0.22 vs retention. Pacing speed matters.", "loop": "D" },
+    { "pattern": "Anticipation phrases retain", "evidence": "'would happen' +4.3%, 'my body' +3.3% retain. Transitional setups 'so, i' -10.4% kill retention. Bigrams matter.", "loop": "D" },
+    { "pattern": "Late visceral amplification", "evidence": "'crazy' at Q1=+0.000, Q4=+0.060. Visceral words 60x more effective later in narrative — context amplifies impact.", "loop": "D" },
+    { "pattern": "Vocab diversity hurts keep but helps retention", "evidence": "Type-token ratio: r=-0.33 vs keep but r=+0.13 vs retention. Simple vocabulary hooks viewers, but diversity sustains.", "loop": "D" },
+    { "pattern": "Duration × retention sweet spot", "evidence": "Duration r=-0.57 vs retention (longer = lower retention) but duration×retention r=+0.35 vs views. Algorithm rewards total watch minutes.", "loop": "D" }
+  ],
+
+  "discarded_reasons": {
+    "hook_clarity": "LLM vision score 1-10. r=+0.21 vs views individually but hurts regression (too noisy at n=203). r=-0.02 vs keep.",
+    "visual_surprise": "LLM vision score 1-10. r=+0.30 vs keep but too noisy for regression. Delta=-0.037.",
+    "face_presence": "80% of videos have faces. r=+0.12 vs views but hurts model. Too uniform a distribution.",
+    "vz_score": "Removed in backward elimination — captured by keep_sq and other features. Originally r=+0.30 individually.",
+    "z_score": "Removed in backward elimination — captured by other features in v6.",
+    "net_novelty": "Perfectly collinear with novelty - cognitive_load already in model.",
+    "roughness": "Mean abs 2nd derivative. r=+0.12. Collinear with max_cliff — doesn't add incremental value.",
+    "title_caps_ratio": "Uppercase ratio in title. Holdout +0.024 but CV drops. Unstable/noise at n=203.",
+    "hook_word_density": "Dropped in backward elimination v16. Captured by other features (has_text_overlay, hook_silence).",
+    "fft_features": "Signal-processing features from retention curve FFT. All hurt — curve info already captured by max_cliff.",
+    "knn_k7": "KNN regression doesn't beat OLS at n=203. Best k=7: holdout 0.538 vs OLS 0.566.",
+    "curve_clusters": "Retention curve clustering (k=2,3,4). No improvement over linear features.",
+    "LLM_content_scores": "5+ rounds of LLM-scored content attributes (hook quality, specificity, open loop). Consistently too noisy at n=200.",
+    "duration_buckets": "Only 10 shorts in dataset. Long videos R²=0.50 stratified but buckets don't help regression.",
+    "deep_curve_features": "66 deep retention curve features tested. All collinear with max_cliff. Curve signal fully captured.",
+    "RF_GBM_at_n203": "Random Forest and GBM both underperform OLS at n=203. RF overfits. OLS dominates at small n.",
+    "upload_day": "Saturday avg 14M views but CV delta < 0.01. Day of week is noise.",
+    "piecewise_keep": "Piecewise linear split on keep=75. Holdout +0.06 but CV worse and higher variance.",
+    "nonsub_fraction": "DATA LEAK: r=0.86 vs views. Algorithm pushes to non-subscribers. Consequence not cause."
+  }
+}
