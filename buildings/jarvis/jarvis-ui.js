@@ -55,13 +55,12 @@ const JarvisUI = (() => {
 
     // ── Tool Definitions ──
     const TOOL_DEFS = [
-        { id: 'pearson', icon: '📐', name: 'Pearson Correlation', desc: 'Linear relationship between two numeric signals. Outputs r (−1 to +1).' },
-        { id: 'bucket', icon: '📊', name: 'Bucket Analysis', desc: 'Group videos by one signal, show average of another per bucket.' },
-        { id: 'log10', icon: '📉', name: 'log10 Compare', desc: 'Compare raw Pearson r vs log10-normalized Pearson r.' },
-        { id: 'ratio', icon: '⚖️', name: 'Ratio Normalizer', desc: 'Convert raw counts to rates (per 100/1k/1M) and correlate.' },
-        { id: 'net', icon: '➕➖', name: 'Net Signal Calculator', desc: 'Subtract one signal from another to find optimal balance points.' },
-        { id: 'proximity', icon: '🎯', name: 'Proximity / Clustering', desc: 'Multi-signal centroid distance analysis.' },
-        { id: 'llm', icon: '🧠', name: 'LLM Signal Scorer', desc: 'Planned — server scoring pipeline next.', planned: true },
+        { id: 'pearson', icon: '📐', name: 'Pearson Correlation', desc: 'Linear relationship between two numeric signals. Outputs r (−1 to +1).', methodology: 'Pearson measures linear association. Log-transform view counts before computing to prevent outlier domination.' },
+        { id: 'bucket', icon: '📊', name: 'Bucket Analysis', desc: 'Group videos by one signal, show average of another per bucket.', methodology: 'Quartile analysis captures non-linear thresholds (e.g., retention cliffs) that a single r value averages away.' },
+        { id: 'log10', icon: '📉', name: 'log10 Compare', desc: 'Compare raw Pearson r vs log10-normalized Pearson r.', methodology: 'View counts follow a power-law distribution. Log-transforming gives each video proportional weight and reveals true relationship strength.' },
+        { id: 'ratio', icon: '⚖️', name: 'Ratio Normalizer', desc: 'Convert raw counts to rates (per 100/1k/1M) and correlate.', methodology: 'All engagement metrics must be expressed as rates per view. Raw counts scale with views by definition — comparing them produces inflated differences.' },
+        { id: 'net', icon: '➕➖', name: 'Net Signal Calculator', desc: 'Subtract one signal from another to find optimal balance points.', methodology: 'Net signals reveal sweet spots where the balance between two opposing forces maximizes outcome.' },
+        { id: 'llm', icon: '🧠', name: 'LLM Signal Scorer', desc: 'Server scoring pipeline — scores videos via LLM vision.', methodology: 'Each experiment must document known confounders. Unflagged confounders lead to false conclusions.', planned: true },
     ];
 
     const TOOL_FIRST_PARAM = {
@@ -69,32 +68,24 @@ const JarvisUI = (() => {
         ratio: 'numerator', net: 'positive', proximity: 'signals',
     };
 
-    // ── Hardcoded Data ──
-    const EXPERIMENTS = [
-        { id: 'exp1', name: 'In-Video Keep Rate vs Views (CORRECTED)', r: 0.44, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel (213 videos with swipeRatio data)', finding: 'r=0.44 with log(Views) — MODERATE POSITIVE. Tyler was right. In-video keep rate (% who stay watching past the hook) has real predictive power. Previous experiment used wrong metric (impression CTR, not in-video swipe). Corrected with swipeRatio.stayedToWatch from YouTube Analytics.' },
-        { id: 'exp2', name: 'In-Video Swipe Bucket Analysis', r: null, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Bucket analysis: 15-20% swipe-away → avg 11.1M views (n=50). 20-25% → avg 13.2M (n=58, includes 285M video). Note: this is NOT a sweet spot — higher swipe-away does not improve performance. The 20-25% bucket peaks because most of Tyler\'s high-view videos have been pushed broadly by the algorithm to non-core audiences, increasing swipe-away as a side effect of scale, not as a cause of it. Better keep rate is always better.' },
-        { id: 'exp3', name: 'Retention % vs log(Views)', r: 0.32, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'r=0.32 with log(Views). Moderate signal. Avg retention by tier: 100M+=87.2%, 10-50M=87.0%, 5-10M=86.7%, 1-5M=82.7%, Sub-1M=79.4%. Clear progression — getting from 79% to 87% retention correlates with ~10x more views.' },
-        { id: 'exp4', name: 'CTR (Impression→View Rate) vs Views', r: -0.01, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Near-zero correlation. CTR (viewedRate, the % of people who click from the feed) does NOT predict views. This is the metric previously mislabeled as swipe-away. It measures thumbnail/title performance — important for discoverability but not correlated with total scale.' },
-        { id: 'exp5', name: 'Full Profile: Tyler 50M+ Videos', r: null, n: 5, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: '285M: keep=79.4%, ret=87.2% | 80M: keep=84.6%, ret=62.4% | 75M: keep=71.1%, ret=81.6% | 62M: keep=78.3%, ret=86.1% | 55M: keep=74.4%, ret=82.9%. Pattern: all 50M+ videos have in-video keep rates of 71-84% and retention mostly 80%+. The 80M Bulletproof Batman has only 62.4% retention but compensated with high keep (84.6%).' },
-        { id: 'exp6', name: 'Keep Rate Distribution by View Tier (Corrected)', r: null, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'In-video keep rate by tier: 100M+=79.4%, 50-100M=77.1%, 10-50M=79.3%, 5-10M=76.9%, 1-5M=75.2%, Sub-1M=70.4%. Clear step up at 1M+ threshold. Previous analysis showed wrong data (keep=56% and 99% were impression CTRs, not in-video metrics).' },
-        { id: 'exp7', name: 'Duration of 100M+ Videos (Confound Flagged)', r: null, n: 1961, type: 'quantified', status: 'complete', source: 'Research Center (1,961 videos)', finding: 'CONFOUND: 98% under 60s, but YouTube Shorts 60s limit was in effect when most were uploaded. Cannot conclude <60s outperforms without controlling for upload era. Experiment needs replication with 2024+ data.' },
-        { id: 'exp8', name: 'Share Rate vs Views (Normalized)', r: null, n: 213, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Share rate per 1k views by tier: 10-50M=0.282, 5-10M=0.301, 1-5M=0.264, Sub-1M=0.311. Surprisingly similar across tiers. Raw share counts are misleading (50M views = more shares by definition). Rate normalization shows shares are not a strong tier separator.' },
-        { id: 'exp_z1', name: 'Zeigarnik Effect Score vs Views', r: -0.08, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Pearson r=-0.08 — near zero linear correlation. BUT bucket analysis reveals a clear non-linear sweet spot: Z=6 → avg 10.2M views, Z=7 → avg 12.6M views. Z=8 drops to 5.9M, Z=9 to 4.9M, Z=10 to 4.6M. Extreme Zeigarnik (high danger/intensity) narrows audience. The sweet spot is moderate open loops — enough curiosity to hook, not so intense it filters the mass market.' },
-        { id: 'exp_z2', name: 'Zeigarnik Effect vs Keep Rate', r: -0.06, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Near-zero correlation with in-video keep rate. Zeigarnik score does not directly predict hook retention. High Z-score videos (9-10) average 72-73% keep rate — slightly LOWER than mid-range (Z=6-7 at 77%). Implication: strong open loops alone don\'t prevent swipe-away; content quality and pacing are separate drivers.' },
-        { id: 'exp_z3', name: 'Zeigarnik Type Breakdown', r: null, n: 204, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM-scored)', finding: 'Type B (Challenge/outcome uncertainty): n=88, avg 9.6M views — most common and highest performing. Type E (Social curiosity): n=10, avg 10.1M views — small sample but strong. Type A (Physical danger/threat): n=38, avg 7.4M views, avg Z-score 8.4 — high intensity but narrower. Type C (Mystery/reveal): n=42, avg 5.8M views. Best strategy: lean into B (can it work?) and E (social stakes), not maximum danger.' },
-        { id: 'exp_vz1', name: 'Visual Zeigarnik (3s frames+text) vs Keep Rate', r: 0.22, n: 203, type: 'quantified', status: 'complete', source: 'Tyler Channel (LLM vision-scored)', finding: 'r=+0.22 using first 3 seconds of frames + spoken words. Text-only Zeigarnik was r=-0.06 (noise). Correct resolution (visual+text, 3s window) reveals a real signal. Visual scoring is more predictive of hook retention than text proxy.' },
-        { id: 'exp_vz2', name: 'Visual Zeigarnik Bucket vs Keep Rate', r: null, n: 203, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'VZ=6: avg keep 73.1% (n=64). VZ=7: avg keep 74.9% (n=101). VZ=8: avg keep 77.6% (n=30), avg views 17.4M. Higher visual Zeigarnik directly predicts both higher keep rate AND more views. VZ=8 is the current sweet spot.' },
-        { id: 'exp_vz3', name: 'Visual vs Text Zeigarnik: Type Reversal', r: null, n: 203, type: 'quantified', status: 'complete', source: 'Tyler Channel', finding: 'Text scoring showed Type B (Challenge) dominant. Visual scoring shows Type C (Mystery/reveal) dominant: 119 videos, avg 9.3M views. 47 videos scored LOWER visually than text (visuals less compelling than description). Only 24 scored higher visually. Resolution matters: the same video reads differently at text vs visual resolution.' },
+    // ── Tool graph layout ──
+    const ANALYTICAL_NODES = [
+        { id: 'pearson', x: 80, y: 60 },
+        { id: 'bucket', x: 280, y: 60 },
+        { id: 'log10', x: 50, y: 170 },
+        { id: 'ratio', x: 160, y: 170 },
+        { id: 'net', x: 310, y: 170 },
+        { id: 'llm', x: 180, y: 100 },
     ];
-
-    const TABS = [
-        { id: 'analytical', label: 'Analytical' },
-        { id: 'tactical', label: 'Tactical' },
-        { id: 'experiments', label: 'Experiments' },
-        { id: 'insights', label: 'Insights' },
-        { id: 'autoResearch', label: 'AutoResearch' },
-        { id: 'resolution', label: 'Resolution' },
-        { id: 'methodology', label: 'Methods' },
+    const ANALYTICAL_EDGES = [
+        ['log10', 'pearson'],
+        ['ratio', 'pearson'],
+        ['net', 'bucket'],
+        ['llm', 'pearson'],
+        ['llm', 'bucket'],
+        ['llm', 'log10'],
+        ['llm', 'ratio'],
+        ['llm', 'net'],
     ];
 
     const INSIGHTS = [
@@ -108,6 +99,15 @@ const JarvisUI = (() => {
         '<strong>CTR (impression to view rate) has zero correlation with total views</strong> — it measures thumbnail appeal, not viral potential.',
         '<strong>The 20-25% swipe-away bucket has the highest average</strong> (avg 13.2M, includes 285M video) — but this is NOT a sweet spot. The apparent mid-range cluster reflects that low-view videos also have lower keep rates, not that intermediate swipe-away is optimal. The 20-25% bucket peaks because Tyler\'s biggest videos were pushed broadly by the algorithm to non-core audiences, increasing swipe-away as a side effect of scale. Better keep rate is always better.',
         '<strong>Duration data is confounded</strong> — YouTube Shorts 60s limit existed during most of the 100M+ video era. Inconclusive.',
+    ];
+
+    // ── Tab structure (5 tabs) ──
+    const TABS = [
+        { id: 'analytical', label: 'Analytical' },
+        { id: 'tactical', label: 'Tactical' },
+        { id: 'experiments', label: 'Experiments' },
+        { id: 'autoResearch', label: 'AutoResearch' },
+        { id: 'resolution', label: 'Resolution' },
     ];
 
     // ── Dataset loading ──
@@ -195,37 +195,141 @@ const JarvisUI = (() => {
             case 'analytical': return renderAnalytical();
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
-            case 'insights': return renderInsights();
             case 'autoResearch': return renderAutoResearch();
             case 'resolution': return renderResolution();
-            case 'methodology': return renderMethodology();
             default: return '';
         }
     }
 
-    // ── Analytical Brain — Runnable Tool Cards ──
+    // ══════════════════════════════════════════════════
+    // TAB 1: ANALYTICAL BRAIN — Vector Network Graph
+    // ══════════════════════════════════════════════════
     function renderAnalytical() {
-        return `<div class="jarvis-tools-grid">
-            ${TOOL_DEFS.map(t => {
-                if (t.planned) {
-                    return `<div class="jarvis-tool-card jarvis-tool-planned">
-                        <div class="jarvis-tool-icon">${t.icon}</div>
-                        <h4 class="jarvis-tool-name">${t.name}</h4>
-                        <p class="jarvis-tool-desc">${t.desc}</p>
-                    </div>`;
+        setTimeout(() => drawAnalyticalGraph(), 100);
+        return `
+            <div class="jarvis-analytical-network">
+                <canvas id="jarvis-analytical-canvas" width="360" height="250"></canvas>
+                <div id="jarvis-analytical-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
+            </div>
+            <div class="jarvis-network-legend">
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#3b82f6"></span>Measurement Tool</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>LLM Scorer</span>
+                <span class="jarvis-legend-item jarvis-legend-hint">Click a node to run the tool</span>
+            </div>
+            ${activeToolId ? `<div class="jarvis-tool-panel-below">${renderToolPanel(activeToolId)}</div>` : ''}
+        `;
+    }
+
+    function drawAnalyticalGraph() {
+        const canvas = container?.querySelector('#jarvis-analytical-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.parentElement.clientWidth || 360;
+        const H = 250;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        ctx.scale(dpr, dpr);
+
+        // Scale node positions to actual width
+        const scaleX = W / 360;
+        const scaleY = H / 250;
+        const nodes = ANALYTICAL_NODES.map(n => {
+            const def = TOOL_DEFS.find(t => t.id === n.id);
+            return {
+                id: n.id,
+                x: n.x * scaleX,
+                y: n.y * scaleY,
+                r: def?.planned ? 16 : 20,
+                color: def?.planned ? '#a78bfa' : '#3b82f6',
+                label: def?.name || n.id,
+                icon: def?.icon || '',
+                desc: def?.desc || '',
+                methodology: def?.methodology || '',
+                planned: !!def?.planned,
+            };
+        });
+        const nodeMap = {};
+        nodes.forEach(n => nodeMap[n.id] = n);
+
+        // Draw edges
+        ctx.lineWidth = 1.5;
+        ANALYTICAL_EDGES.forEach(([a, b]) => {
+            const na = nodeMap[a], nb = nodeMap[b];
+            if (!na || !nb) return;
+            ctx.beginPath();
+            ctx.strokeStyle = a === 'llm' || b === 'llm' ? 'rgba(167, 139, 250, 0.35)' : 'rgba(100, 116, 139, 0.4)';
+            ctx.moveTo(na.x, na.y);
+            ctx.lineTo(nb.x, nb.y);
+            ctx.stroke();
+        });
+
+        // Draw nodes
+        nodes.forEach(n => {
+            const isActive = activeToolId === n.id;
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+            ctx.fillStyle = n.color;
+            ctx.globalAlpha = isActive ? 1 : 0.8;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = isActive ? '#fff' : 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = isActive ? 2.5 : 1;
+            ctx.stroke();
+
+            // Icon
+            ctx.font = `${n.r * 0.9}px system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(n.icon, n.x, n.y);
+
+            // Label below
+            ctx.fillStyle = isActive ? '#fff' : '#cbd5e1';
+            ctx.font = '10px system-ui, sans-serif';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText(n.label, n.x, n.y + n.r + 13);
+        });
+
+        // Tooltip on hover
+        const tooltip = container?.querySelector('#jarvis-analytical-tooltip');
+        canvas.onmousemove = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            let hit = null;
+            for (const n of nodes) {
+                const dx = mx - n.x, dy = my - n.y;
+                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) { hit = n; break; }
+            }
+            if (hit && tooltip) {
+                tooltip.style.display = 'block';
+                tooltip.style.left = (hit.x + hit.r + 8) + 'px';
+                tooltip.style.top = (hit.y - 10) + 'px';
+                tooltip.innerHTML = `<strong>${hit.label}</strong><br><span class="jarvis-tt-dim">${hit.desc}</span><br><span class="jarvis-tt-dim" style="color:var(--j-cyan);font-style:italic">${hit.methodology}</span>`;
+                canvas.style.cursor = 'pointer';
+            } else if (tooltip) {
+                tooltip.style.display = 'none';
+                canvas.style.cursor = 'default';
+            }
+        };
+
+        // Click opens tool panel
+        canvas.onclick = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            for (const n of nodes) {
+                const dx = mx - n.x, dy = my - n.y;
+                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) {
+                    if (n.planned) return;
+                    activeToolId = activeToolId === n.id ? null : n.id;
+                    render();
+                    return;
                 }
-                const isOpen = activeToolId === t.id;
-                return `<div class="jarvis-tool-card${isOpen ? ' jarvis-tool-active' : ''}">
-                    <div class="jarvis-tool-card-header">
-                        <div class="jarvis-tool-icon">${t.icon}</div>
-                        <h4 class="jarvis-tool-name">${t.name}</h4>
-                        <p class="jarvis-tool-desc">${t.desc}</p>
-                    </div>
-                    <button class="jarvis-tool-run-btn" data-tool="${t.id}">${isOpen ? 'Close' : 'Run Tool →'}</button>
-                    ${isOpen ? `<div class="jarvis-tool-panel">${renderToolPanel(t.id)}</div>` : ''}
-                </div>`;
-            }).join('')}
-        </div>`;
+            }
+        };
     }
 
     function renderToolPanel(toolId) {
@@ -365,7 +469,7 @@ const JarvisUI = (() => {
 
     // ── Tool execution dispatch ──
     async function executeTool(toolId) {
-        const panel = container.querySelector('.jarvis-tool-panel');
+        const panel = container.querySelector('.jarvis-tool-panel-below');
         if (!panel) return;
         const params = readParams(panel);
         const resultEl = panel.querySelector(`[data-tool-result="${toolId}"]`);
@@ -500,7 +604,6 @@ const JarvisUI = (() => {
                 <div class="jarvis-result-r" style="color:${color}">r = ${r.toFixed(4)} vs ${indicatorLabel(cmpKey)}</div>
                 <div class="jarvis-result-strength" style="color:${color}">${interpretR(r)}</div>
                 <div class="jarvis-result-n">n = ${valid.length} videos</div>
-                <button class="jarvis-btn-disabled" disabled>Promote as Indicator</button>
             </div>`;
     }
 
@@ -587,15 +690,19 @@ const JarvisUI = (() => {
                         <span style="font-size:10px">${sigVals}</span>
                     </div>`;
                 }).join('')}
-                <div class="jarvis-result-interp" style="margin-top:10px">
-                    <em>2D projection (t-SNE / PCA) is next. This shows which videos are closest to the average profile across selected signals.</em>
-                </div>
             </div>`;
     }
 
-    // ── Tactical Brain — Vector Network Graph ──
+    // ══════════════════════════════════════════════════
+    // TAB 2: TACTICAL BRAIN — Vector Network Graph
+    // ══════════════════════════════════════════════════
+    let tacticalDiscoveredNodes = [];
+
     function renderTactical() {
-        setTimeout(() => drawTacticalGraph(), 100);
+        // Load results.tsv for discovered nodes, then draw
+        loadResultsTSV().then(() => {
+            drawTacticalGraph();
+        });
         return `
             <div class="jarvis-tactical-network">
                 <canvas id="jarvis-network-canvas" width="400" height="350"></canvas>
@@ -606,22 +713,65 @@ const JarvisUI = (() => {
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#8b5cf6"></span>LLM-scored</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#14b8a6"></span>Derived</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#4b5563"></span>Planned</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f97316"></span>Discovered</span>
             </div>`;
     }
 
     function getNodeColor(ind) {
+        if (ind.category === 'discovered') return '#f97316';
         if (ind.category === 'planned') return '#4b5563';
         if (ind.source.startsWith('Derived')) return '#14b8a6';
         if (ind.source.startsWith('YouTube') || ind.source.includes('YouTube')) return '#3b82f6';
         return '#8b5cf6'; // LLM-scored
     }
 
-    function getNodeRadius(key) {
+    function getNodeRadius(key, category) {
+        if (category === 'discovered') return 14;
         const large = ['keep', 'retention', 'z_score', 'views', 'vz_score'];
         const medium = ['novelty', 'cognitive_load', 'net_novelty', 'z_type', 'vz_type', 'share_rate'];
         if (large.includes(key)) return 18;
         if (medium.includes(key)) return 14;
         return 10;
+    }
+
+    // Parse discovered signals from results.tsv
+    let cachedResultsRows = null;
+    async function loadResultsTSV() {
+        if (cachedResultsRows) return cachedResultsRows;
+        try {
+            const resp = await fetch('/api/jarvis/results-tsv');
+            const text = await resp.text();
+            const lines = text.trim().split('\n');
+            const headers = lines[0].split('\t');
+            cachedResultsRows = lines.slice(1).filter(l => l.trim()).map(line => {
+                const cols = line.split('\t');
+                const row = {};
+                headers.forEach((h, i) => row[h.trim()] = (cols[i] || '').trim());
+                return row;
+            });
+
+            // Extract discovered nodes from loop_b rows
+            tacticalDiscoveredNodes = cachedResultsRows
+                .filter(r => (r.experiment_id || '').startsWith('loop_b'))
+                .map(r => {
+                    const signalMatch = (r.new_signal || '').match(/^discovery:(.+)$/);
+                    const signalKey = signalMatch ? signalMatch[1] : r.new_signal;
+                    return {
+                        key: signalKey,
+                        label: signalKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                        type: 'discovered signal',
+                        source: 'Loop B: ' + (r.notes || '').slice(0, 80),
+                        category: 'discovered',
+                        numeric: true,
+                    };
+                });
+
+            return cachedResultsRows;
+        } catch (e) {
+            console.error('Failed to load results.tsv:', e);
+            cachedResultsRows = [];
+            return [];
+        }
     }
 
     function drawTacticalGraph() {
@@ -640,23 +790,18 @@ const JarvisUI = (() => {
         canvas.style.height = H + 'px';
         ctx.scale(dpr, dpr);
 
-        // Static cluster positions
         const cx = W / 2, cy = H / 2;
         const positions = {
-            // Top cluster: analytics outputs
             keep:       { x: cx - 60, y: 50 },
             retention:  { x: cx + 60, y: 50 },
             views:      { x: cx,      y: 90 },
-            // Left cluster: Zeigarnik signals
             z_score:    { x: 70,       y: cy - 30 },
             z_type:     { x: 50,       y: cy + 30 },
             vz_score:   { x: 130,      y: cy - 50 },
             vz_type:    { x: 130,      y: cy + 20 },
-            // Right cluster: novelty signals
             novelty:        { x: W - 70,  y: cy - 50 },
             cognitive_load: { x: W - 70,  y: cy + 10 },
             net_novelty:    { x: W - 130, y: cy - 20 },
-            // Bottom: misc
             share_rate:          { x: cx - 80, y: H - 60 },
             hook_clarity:        { x: cx + 20, y: H - 40 },
             visual_surprise:     { x: cx + 100,y: H - 60 },
@@ -674,16 +819,40 @@ const JarvisUI = (() => {
             ['keep', 'retention'],
         ];
 
-        // Build node list
-        const nodes = INDICATORS.map(ind => ({
+        // Build base indicator nodes
+        const allIndicators = [...INDICATORS];
+        // Add discovered nodes
+        tacticalDiscoveredNodes.forEach(d => {
+            if (!allIndicators.find(i => i.key === d.key)) {
+                allIndicators.push(d);
+            }
+        });
+
+        // Place discovered nodes in an arc below the main graph
+        const discoveredKeys = tacticalDiscoveredNodes.map(d => d.key);
+        const discoveredCount = discoveredKeys.length;
+        discoveredKeys.forEach((key, i) => {
+            if (!positions[key]) {
+                const angle = Math.PI * 0.15 + (Math.PI * 0.7) * (i / Math.max(discoveredCount - 1, 1));
+                const rx = W * 0.42;
+                const ry = H * 0.32;
+                positions[key] = {
+                    x: cx + rx * Math.cos(angle),
+                    y: cy + ry * Math.sin(angle),
+                };
+            }
+        });
+
+        const nodes = allIndicators.map(ind => ({
             key: ind.key,
             label: ind.label,
             type: ind.type,
             source: ind.source,
             color: getNodeColor(ind),
-            r: getNodeRadius(ind.key),
+            r: getNodeRadius(ind.key, ind.category),
             x: positions[ind.key]?.x || cx,
             y: positions[ind.key]?.y || cy,
+            category: ind.category,
         }));
 
         const nodeMap = {};
@@ -706,21 +875,21 @@ const JarvisUI = (() => {
             ctx.beginPath();
             ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
             ctx.fillStyle = n.color;
-            ctx.globalAlpha = 0.85;
+            ctx.globalAlpha = n.category === 'discovered' ? 0.9 : 0.85;
             ctx.fill();
             ctx.globalAlpha = 1;
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.strokeStyle = n.category === 'discovered' ? 'rgba(249,115,22,0.5)' : 'rgba(255,255,255,0.2)';
             ctx.lineWidth = 1;
             ctx.stroke();
 
-            // Label
             ctx.fillStyle = '#cbd5e1';
-            ctx.font = '10px system-ui, sans-serif';
+            ctx.font = n.category === 'discovered' ? '8px system-ui, sans-serif' : '10px system-ui, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(n.label, n.x, n.y + n.r + 12);
+            const labelText = n.label.length > 16 ? n.label.slice(0, 14) + '…' : n.label;
+            ctx.fillText(labelText, n.x, n.y + n.r + 12);
         });
 
-        // Hover/click interaction
+        // Hover/click
         const tooltip = container?.querySelector('#jarvis-network-tooltip');
         canvas.onmousemove = (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -762,41 +931,458 @@ const JarvisUI = (() => {
         };
     }
 
-    // ── Experiments — Saved results only ──
+    // ══════════════════════════════════════════════════
+    // TAB 3: EXPERIMENTS — Unified log from results.tsv
+    // ══════════════════════════════════════════════════
+    let expCollapsed = {};
+
     function renderExperiments() {
+        loadResultsTSV().then(rows => {
+            const el = container?.querySelector('.jarvis-exp-root');
+            if (!el) return;
+            el.innerHTML = renderExperimentsContent(rows);
+            bindExperimentEvents();
+        });
+        // Also load prediction model for R²
+        loadAutoResearchData();
+        return '<div class="jarvis-exp-root"><div class="jarvis-loading">Loading experiments from results.tsv...</div></div>';
+    }
+
+    function categorizeExperiment(expId) {
+        if (expId.startsWith('loop_b')) return { cat: 'loop_b', label: 'Signal Discoveries', color: '#f97316' };
+        if (expId.startsWith('loop_c')) return { cat: 'loop_c', label: 'Causal Tree', color: '#06b6d4' };
+        if (expId.startsWith('loop_d')) return { cat: 'loop_d', label: 'Retention Mapping', color: '#a78bfa' };
+        return { cat: 'exp', label: 'Model Experiments', color: '#3b82f6' };
+    }
+
+    function renderExperimentsContent(rows) {
+        if (!rows || !rows.length) return '<div class="jarvis-error">No experiments found.</div>';
+
+        // Group by category
+        const groups = {};
+        rows.forEach(row => {
+            const { cat } = categorizeExperiment(row.experiment_id || '');
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(row);
+        });
+
+        const groupOrder = ['exp', 'loop_b', 'loop_c', 'loop_d'];
+        const loopBCount = (groups.loop_b || []).length;
+        const keepCount = rows.filter(r => (r.status || '').trim().toLowerCase() === 'keep').length;
+        const currentR2 = arModel ? arModel.r2 || 0.147 : 0.147;
+
+        // Summary bar
+        let html = `<div class="jarvis-exp-summary">
+            <span class="jarvis-exp-summary-item"><strong>${rows.length}</strong> experiments</span>
+            <span class="jarvis-exp-summary-item" style="color:#f97316"><strong>${loopBCount}</strong> signals discovered</span>
+            <span class="jarvis-exp-summary-item" style="color:#10b981"><strong>${keepCount}</strong> signals kept</span>
+            <span class="jarvis-exp-summary-item" style="color:#3b82f6">R² = <strong>${currentR2.toFixed(3)}</strong></span>
+        </div>`;
+
+        // Insights section
+        html += `<div class="jarvis-exp-insights-section">
+            <h4 class="jarvis-exp-insights-title">Key Insights <span style="font-weight:400;color:var(--j-muted);font-size:11px">Derived from experiments — auto-update in progress</span></h4>
+            <ol class="jarvis-insights">
+                ${INSIGHTS.map(i => `<li>${i}</li>`).join('')}
+            </ol>
+        </div>`;
+
+        // Grouped sections
+        groupOrder.forEach(cat => {
+            const catRows = groups[cat];
+            if (!catRows || !catRows.length) return;
+            const info = categorizeExperiment(cat === 'exp' ? 'exp_x' : cat + '_x');
+            const isCollapsed = expCollapsed[cat] === true;
+
+            html += `<div class="jarvis-exp-group">
+                <div class="jarvis-exp-group-header" data-group="${cat}">
+                    <span class="jarvis-exp-group-toggle">${isCollapsed ? '▶' : '▼'}</span>
+                    <span class="jarvis-exp-group-label" style="color:${info.color}">${info.label}</span>
+                    <span class="jarvis-exp-group-count">${catRows.length}</span>
+                </div>`;
+
+            if (!isCollapsed) {
+                html += '<div class="jarvis-experiments">';
+                catRows.forEach(row => {
+                    const isDiscovery = cat === 'loop_b';
+                    const status = (row.status || '').trim().toLowerCase();
+                    const signalMatch = (row.new_signal || '').match(/^discovery:(.+)$/);
+                    const signalName = signalMatch ? signalMatch[1].replace(/_/g, ' ') : (row.new_signal || '');
+                    const notes = row.notes || '';
+
+                    if (isDiscovery) {
+                        // Signal discovery card (orange)
+                        html += `<div class="jarvis-exp-card jarvis-exp-discovery">
+                            <h4>${signalName}</h4>
+                            <div class="jarvis-exp-finding">${notes}</div>
+                            <div class="jarvis-exp-badges">
+                                <span class="jarvis-badge" style="background:rgba(249,115,22,0.15);color:#f97316">DISCOVERY</span>
+                                <span class="jarvis-badge n-badge">n=${row.n_videos || '—'}</span>
+                            </div>
+                        </div>`;
+                    } else {
+                        // Model experiment card
+                        const hasR2 = row.delta_r2 && row.delta_r2 !== '—';
+                        const delta = parseFloat(row.delta_r2) || 0;
+                        const barColor = status === 'keep' ? '#10b981' : status === 'error' ? '#ef4444' : '#64748b';
+                        html += `<div class="jarvis-exp-card">
+                            <h4>${row.experiment_id}: ${signalName}</h4>
+                            ${hasR2 ? `<div class="jarvis-exp-r" style="color:${barColor}">ΔR² = ${row.delta_r2} (${row.r2_before}→${row.r2_after})</div>` : ''}
+                            <div class="jarvis-exp-finding">${notes}</div>
+                            <div class="jarvis-exp-badges">
+                                <span class="jarvis-badge status-badge" style="background:rgba(${status === 'keep' ? '16,185,129' : status === 'error' ? '248,113,113' : '100,100,100'},0.15);color:${barColor}">${status}</span>
+                                <span class="jarvis-badge n-badge">n=${row.n_videos || '—'}</span>
+                            </div>
+                        </div>`;
+                    }
+                });
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+
+        return html;
+    }
+
+    function bindExperimentEvents() {
+        container?.querySelectorAll('.jarvis-exp-group-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const group = header.dataset.group;
+                expCollapsed[group] = !expCollapsed[group];
+                loadResultsTSV().then(rows => {
+                    const el = container?.querySelector('.jarvis-exp-root');
+                    if (el) {
+                        el.innerHTML = renderExperimentsContent(rows);
+                        bindExperimentEvents();
+                    }
+                });
+            });
+        });
+    }
+
+    // ══════════════════════════════════════════════════
+    // TAB 4: AUTORESEARCH — Engine only
+    // ══════════════════════════════════════════════════
+    let arModel = null;
+    let arHypotheses = null;
+
+    async function loadAutoResearchData() {
+        if (!arModel) {
+            try {
+                const r = await fetch('./buildings/jarvis/prediction-model.json');
+                arModel = await r.json();
+            } catch (e) { arModel = null; }
+        }
+        if (!arHypotheses) {
+            try {
+                const r = await fetch('./buildings/jarvis/hypothesis-queue.json');
+                arHypotheses = await r.json();
+            } catch (e) { arHypotheses = []; }
+        }
+    }
+
+    function renderAutoResearch() {
+        loadAutoResearchData().then(() => {
+            const el = container?.querySelector('.jarvis-ar-root');
+            if (el) {
+                el.innerHTML = renderAutoResearchContent();
+                bindAutoResearchEvents();
+                loadLoopStatus();
+            }
+        });
+        return '<div class="jarvis-ar-root"><div style="color:var(--j-muted);padding:20px;">Loading AutoResearch data…</div></div>';
+    }
+
+    async function loadLoopStatus() {
+        const statusEl = container?.querySelector('.jarvis-loop-status-grid');
+        if (!statusEl) return;
+        try {
+            const resp = await fetch('/api/jarvis/loop-status');
+            const status = await resp.json();
+            const loops = [
+                { id: 'A', name: 'Non-Linear Architecture', purpose: 'Test non-linear model architectures and feature transforms' },
+                { id: 'B', name: 'Signal Discovery', purpose: 'Discover new signals via partial correlation screening' },
+                { id: 'C', name: 'Causal Tree', purpose: 'Map causal relationships between signals and outcomes' },
+                { id: 'D', name: 'Retention Mapping', purpose: 'Channel×timestamp retention pattern analysis' },
+            ];
+            statusEl.innerHTML = loops.map(loop => {
+                const s = status[loop.id] || {};
+                const age = s.ageMinutes || Infinity;
+                let statusLabel, statusColor;
+                if (age < 120) { statusLabel = 'active'; statusColor = '#10b981'; }
+                else if (age < 360) { statusLabel = 'stale'; statusColor = '#f59e0b'; }
+                else { statusLabel = 'dead'; statusColor = '#ef4444'; }
+                const lastMod = s.lastModified ? new Date(s.lastModified).toLocaleString() : 'never';
+                return `<div class="jarvis-loop-card">
+                    <div class="jarvis-loop-card-header">
+                        <span class="jarvis-loop-card-id">Loop ${loop.id}</span>
+                        <span class="jarvis-loop-card-status" style="background:${statusColor}20;color:${statusColor}">${statusLabel}</span>
+                    </div>
+                    <div class="jarvis-loop-card-purpose">${loop.purpose}</div>
+                    <div class="jarvis-loop-card-time">Last: ${lastMod}</div>
+                    <button class="jarvis-loop-card-log-btn" data-loop="${loop.id}">View Log</button>
+                    <div class="jarvis-loop-card-log" id="jarvis-loop-log-${loop.id}" style="display:none;"></div>
+                </div>`;
+            }).join('');
+
+            // Bind log buttons
+            statusEl.querySelectorAll('.jarvis-loop-card-log-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const loopId = btn.dataset.loop;
+                    const logEl = container?.querySelector(`#jarvis-loop-log-${loopId}`);
+                    if (!logEl) return;
+                    if (logEl.style.display === 'block') {
+                        logEl.style.display = 'none';
+                        btn.textContent = 'View Log';
+                        return;
+                    }
+                    logEl.style.display = 'block';
+                    logEl.textContent = 'Loading...';
+                    btn.textContent = 'Hide Log';
+                    try {
+                        const resp = await fetch(`/api/jarvis/loop-log?loop=${loopId}`);
+                        logEl.textContent = await resp.text();
+                    } catch (e) {
+                        logEl.textContent = 'Failed to load log.';
+                    }
+                });
+            });
+        } catch (e) {
+            statusEl.innerHTML = '<div class="jarvis-error">Failed to load loop status</div>';
+        }
+    }
+
+    function renderAutoResearchContent() {
+        if (!arModel) return '<div style="color:#f87171;padding:20px;">Failed to load prediction model.</div>';
+        const m = arModel;
+        const signals = [
+            { key: 'keep', label: 'Keep Rate', placeholder: '0–100', def: 80 },
+            { key: 'retention', label: 'Retention %', placeholder: '0–100', def: 87 },
+            { key: 'vz_score', label: 'Visual Zeigarnik', placeholder: '1–10', def: 8 },
+            { key: 'z_score', label: 'Zeigarnik Score', placeholder: '1–10', def: 7 },
+            { key: 'novelty', label: 'Novelty', placeholder: '1–10', def: 7 },
+            { key: 'cognitive_load', label: 'Cognitive Load', placeholder: '1–10', def: 3 },
+            { key: 'net_novelty', label: 'Net Novelty', placeholder: '-3 to 8', def: 4 },
+        ];
+
+        const statusBadge = (s) => {
+            if (s === 'complete') return '<span class="jarvis-ar-status jarvis-ar-status-complete">complete</span>';
+            if (s === 'running') return '<span class="jarvis-ar-status jarvis-ar-status-running">running</span>';
+            return '<span class="jarvis-ar-status jarvis-ar-status-queued">queued</span>';
+        };
+
+        const r2 = 0.147;
+        const target = 0.50;
+        const pct = Math.round((r2 / target) * 100);
+
         return `
-            <div class="jarvis-exp-header">
-                <span class="jarvis-exp-count">n=203 videos | 5 signals scored</span>
+            <!-- Loop Status -->
+            <div class="jarvis-ar-section">
+                <h3 class="jarvis-ar-title">Loop Status</h3>
+                <p class="jarvis-ar-subtitle">Real-time status of autonomous research loops.</p>
+                <div class="jarvis-loop-status-grid"></div>
             </div>
-            <div class="jarvis-experiments">
-                ${EXPERIMENTS.map(exp => {
-                    const hasR = exp.r !== null;
-                    const absR = hasR ? Math.abs(exp.r) : 0;
-                    const barColor = hasR ? (absR >= 0.4 ? '#10b981' : absR >= 0.2 ? '#f59e0b' : '#ef4444') : '#3b82f6';
-                    const barWidth = hasR ? Math.max(absR / 0.5 * 100, 4) : 0;
-                    const rLine = hasR
-                        ? `<div class="jarvis-exp-r" style="color:${barColor}">r = ${exp.r.toFixed(4)}</div>
-                           <div class="jarvis-exp-bar-wrap"><div class="jarvis-exp-bar" style="width:${barWidth}%;background:${barColor}"></div></div>`
-                        : `<div class="jarvis-exp-r" style="color:#3b82f6">comparative analysis</div>`;
-                    return `<div class="jarvis-exp-card">
-                        <h4>${exp.name}</h4>
-                        ${rLine}
-                        <div class="jarvis-exp-finding">${exp.finding}</div>
-                        <div class="jarvis-exp-badges">
-                            <span class="jarvis-badge n-badge">n=${exp.n.toLocaleString()}</span>
-                            <span class="jarvis-badge status-badge">${exp.status}</span>
-                            ${exp.source ? `<span class="jarvis-badge source-badge">${exp.source}</span>` : ''}
+
+            <!-- Framework -->
+            <div class="jarvis-ar-section jarvis-ar-framework">
+                <h3 class="jarvis-ar-title">AutoResearch — Karpathy-style Autonomous Research Loop</h3>
+                <p class="jarvis-ar-subtitle">Autonomous agent improves the prediction model overnight. The agent scores new signals, runs experiments, keeps improvements, discards failures — loop forever until R² > 0.50.</p>
+
+                <div class="jarvis-ar-framework-cols">
+                    <div class="jarvis-ar-framework-col">
+                        <h4 class="jarvis-ar-framework-heading">How it works</h4>
+                        <ul class="jarvis-ar-framework-list">
+                            <li>program.md defines the research rules and metric (R²)</li>
+                            <li>Agent picks the next hypothesis from the queue</li>
+                            <li>Scores new signal on 203 videos via LLM vision</li>
+                            <li>Runs regression with new signal — keep if R² improves > 0.01</li>
+                            <li>Logs result to results.tsv, updates model, repeats</li>
+                            <li>Never stops until manually interrupted</li>
+                        </ul>
+                    </div>
+                    <div class="jarvis-ar-framework-col">
+                        <h4 class="jarvis-ar-framework-heading">Current stats</h4>
+                        <div class="jarvis-ar-framework-stats">
+                            <div class="jarvis-ar-fstat"><span>Model version</span><strong>v1</strong></div>
+                            <div class="jarvis-ar-fstat"><span>R²</span><strong>0.147 (14.7% of variance)</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Target R²</span><strong>0.50</strong></div>
+                            <div class="jarvis-ar-fstat jarvis-ar-fstat-bar">
+                                <span>Progress</span>
+                                <div class="jarvis-ar-progress-track">
+                                    <div class="jarvis-ar-progress-fill" style="width:${pct}%"></div>
+                                    <div class="jarvis-ar-progress-label">${pct}%</div>
+                                </div>
+                            </div>
+                            <div class="jarvis-ar-fstat"><span>Videos</span><strong>203</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Active signals</span><strong>7</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Hypotheses queued</span><strong>${(arHypotheses || []).filter(h => h.status === 'queued').length || 6}</strong></div>
                         </div>
-                    </div>`;
-                }).join('')}
+                    </div>
+                </div>
+
+                <div class="jarvis-ar-framework-actions">
+                    <a href="./buildings/jarvis/program.md" target="_blank" class="jarvis-ar-framework-btn">Read program.md →</a>
+                    <a href="./buildings/jarvis/results.tsv" target="_blank" class="jarvis-ar-framework-btn jarvis-ar-framework-btn-alt">View results.tsv →</a>
+                </div>
+                <p class="jarvis-ar-framework-note">To run autonomously: point Claude Code or Codex at program.md in this directory with full file access. The agent will run the loop overnight.</p>
             </div>
-            <div class="jarvis-exp-footer">
-                Saved Experiments &mdash; results produced by Analytical Brain tools using Tactical Brain indicators. Promote stable derived ratios/signals back into Tactical Brain.
+
+            <!-- Video Scorer -->
+            <div class="jarvis-ar-section">
+                <h3 class="jarvis-ar-title">Video Success Predictor</h3>
+                <p class="jarvis-ar-subtitle">Multi-signal regression model. Input your signals, get a predicted view count.</p>
+
+                <div class="jarvis-ar-stats-card">
+                    <div class="jarvis-ar-stat">Training data: <strong>203 videos</strong></div>
+                    <div class="jarvis-ar-stat">R² = <strong>0.147</strong> (14.7% of variance explained)</div>
+                    <div class="jarvis-ar-stat">Cross-validation R² = <strong>0.287</strong></div>
+                    <div class="jarvis-ar-stat">Prediction accuracy: <strong>±4.6x</strong></div>
+                    <div class="jarvis-ar-stat jarvis-ar-note">Baseline v1 — model improves as we add depth (new signals from hypothesis queue)</div>
+                </div>
+
+                <div class="jarvis-ar-scorer">
+                    <h4 class="jarvis-ar-scorer-title">Video Scorer</h4>
+                    <div class="jarvis-ar-inputs">
+                        ${signals.map(s => `
+                            <div class="jarvis-ar-input-group">
+                                <label>${s.label}</label>
+                                <input type="number" id="ar-input-${s.key}" value="${s.def}" placeholder="${s.placeholder}" step="any" />
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button class="jarvis-ar-predict-btn" id="ar-predict-btn">Predict Views →</button>
+                    <div id="ar-prediction-result" class="jarvis-ar-result"></div>
+                </div>
+            </div>
+
+            <!-- Hypothesis Queue -->
+            <div class="jarvis-ar-section">
+                <h3 class="jarvis-ar-title">Research Hypotheses</h3>
+                <p class="jarvis-ar-subtitle">Experiments queued to increase model accuracy. Run each to unlock a new signal.</p>
+
+                <div class="jarvis-ar-hypotheses">
+                    ${(arHypotheses || []).map(h => `
+                        <div class="jarvis-ar-hyp-card">
+                            <div class="jarvis-ar-hyp-top">
+                                <span class="jarvis-ar-hyp-id">${h.id}</span>
+                                ${statusBadge(h.status)}
+                                <span class="jarvis-ar-res-badge">${h.resolution}</span>
+                            </div>
+                            <div class="jarvis-ar-hyp-signal">${h.signal}</div>
+                            <div class="jarvis-ar-hyp-text">${h.hypothesis}</div>
+                            <div class="jarvis-ar-hyp-expected">Expected: ${h.expected_signal}</div>
+                            <div class="jarvis-ar-hyp-method">Method: ${h.method}</div>
+                            <button class="jarvis-ar-run-hyp-btn" data-hyp="${h.id}">Run Hypothesis →</button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- R² History -->
+            <div class="jarvis-ar-section">
+                <h3 class="jarvis-ar-title">R² Improvement Over Time</h3>
+                <div class="jarvis-ar-history">
+                    <div class="jarvis-ar-history-row">
+                        <div class="jarvis-ar-history-label">v0 <span class="jarvis-ar-history-tag">baseline</span></div>
+                        <div class="jarvis-ar-history-bar-track">
+                            <div class="jarvis-ar-history-bar" style="width:0%"></div>
+                        </div>
+                        <div class="jarvis-ar-history-val">R²=0.000</div>
+                        <div class="jarvis-ar-history-desc">no signals</div>
+                    </div>
+                    <div class="jarvis-ar-history-row jarvis-ar-history-current">
+                        <div class="jarvis-ar-history-label">v1 <span class="jarvis-ar-history-tag jarvis-ar-history-tag-current">current</span></div>
+                        <div class="jarvis-ar-history-bar-track">
+                            <div class="jarvis-ar-history-bar jarvis-ar-history-bar-current" style="width:14.7%"></div>
+                        </div>
+                        <div class="jarvis-ar-history-val">R²=0.147</div>
+                        <div class="jarvis-ar-history-desc">keep + retention + z_score + vz_score + novelty + cognitive_load + net_novelty</div>
+                    </div>
+                    <div class="jarvis-ar-history-row">
+                        <div class="jarvis-ar-history-label">v2 <span class="jarvis-ar-history-tag">next</span></div>
+                        <div class="jarvis-ar-history-bar-track">
+                            <div class="jarvis-ar-history-bar jarvis-ar-history-bar-pending" style="width:5%"></div>
+                        </div>
+                        <div class="jarvis-ar-history-val">R²=?</div>
+                        <div class="jarvis-ar-history-desc">pending hypothesis queue results</div>
+                    </div>
+                </div>
             </div>
         `;
     }
 
-    // ── Resolution ──
+    function runPrediction() {
+        if (!arModel) return;
+        const m = arModel;
+        const inputs = {};
+        m.features.forEach(f => {
+            const el = container?.querySelector('#ar-input-' + f);
+            inputs[f] = el ? parseFloat(el.value) : 0;
+        });
+
+        let predicted_log = m.bias;
+        m.features.forEach(f => {
+            const min = m.feature_mins[f];
+            const max = m.feature_maxs[f];
+            const norm = max !== min ? (inputs[f] - min) / (max - min) : 0;
+            predicted_log += m.weights[f] * norm;
+        });
+        const predicted_views = Math.pow(10, predicted_log);
+        const range_low = predicted_views / m.prediction_range_multiplier;
+        const range_high = predicted_views * m.prediction_range_multiplier;
+
+        let colorClass = 'jarvis-ar-result-red';
+        if (predicted_views >= 10e6) colorClass = 'jarvis-ar-result-green';
+        else if (predicted_views >= 1e6) colorClass = 'jarvis-ar-result-yellow';
+
+        const resultEl = container?.querySelector('#ar-prediction-result');
+        if (resultEl) {
+            resultEl.innerHTML = `
+                <div class="jarvis-ar-result-card ${colorClass}">
+                    <div class="jarvis-ar-result-views">${fmtViews(predicted_views)} predicted views</div>
+                    <div class="jarvis-ar-result-range">±4.6x → range: ${fmtViews(range_low)} — ${fmtViews(range_high)}</div>
+                    <div class="jarvis-ar-result-badge">v1 model · R²=0.147 · improves with more signals</div>
+                </div>
+            `;
+        }
+    }
+
+    async function runHypothesis(hypId) {
+        if (hypId === 'h5') {
+            const btn = container?.querySelector(`.jarvis-ar-run-hyp-btn[data-hyp="${hypId}"]`);
+            if (btn) { btn.textContent = 'Running…'; btn.disabled = true; }
+            try {
+                const resp = await fetch('/api/jarvis/run-hypothesis', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: 'h5' })
+                });
+                const data = await resp.json();
+                if (btn) {
+                    btn.textContent = data.correlation !== undefined
+                        ? `Done! r=${data.correlation.toFixed(3)} (n=${data.n})`
+                        : (data.message || 'Complete');
+                }
+            } catch (e) {
+                if (btn) { btn.textContent = 'Error — retry'; btn.disabled = false; }
+            }
+        } else {
+            alert('This hypothesis requires LLM scoring — feature in progress');
+        }
+    }
+
+    function bindAutoResearchEvents() {
+        const predictBtn = container?.querySelector('#ar-predict-btn');
+        if (predictBtn) predictBtn.addEventListener('click', runPrediction);
+
+        container?.querySelectorAll('.jarvis-ar-run-hyp-btn').forEach(btn => {
+            btn.addEventListener('click', () => runHypothesis(btn.dataset.hyp));
+        });
+    }
+
+    // ══════════════════════════════════════════════════
+    // TAB 5: RESOLUTION — kept exactly as-is
+    // ══════════════════════════════════════════════════
     let resolutionRegistry = null;
 
     async function loadResolutionRegistry() {
@@ -836,7 +1422,6 @@ const JarvisUI = (() => {
 
         const statusColor = { active: '#10b981', partial: '#f59e0b', planned: '#4b5563', observed: '#06b6d4' };
 
-        // axes
         ctx.strokeStyle = 'rgba(100,120,180,0.3)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -845,7 +1430,6 @@ const JarvisUI = (() => {
         ctx.lineTo(pad.left + plotW, pad.top + plotH);
         ctx.stroke();
 
-        // x-axis labels
         const levels = registry.map(r => r.level);
         const minL = Math.min(...levels), maxL = Math.max(...levels);
         const rangeL = maxL - minL || 1;
@@ -856,7 +1440,6 @@ const JarvisUI = (() => {
         }
         ctx.fillText('Resolution (coarse → fine)', pad.left + plotW / 2, pad.top + plotH + 30);
 
-        // y-axis labels
         ctx.textAlign = 'right';
         for (let d = 0; d <= 10; d += 2) {
             const y = pad.top + plotH - (d / 10) * plotH;
@@ -869,7 +1452,6 @@ const JarvisUI = (() => {
         ctx.fillText('Depth (signals measured)', 0, 0);
         ctx.restore();
 
-        // research target depth line (dashed at depth=4)
         const targetY = pad.top + plotH - (4 / 10) * plotH;
         ctx.setLineDash([6, 4]);
         ctx.strokeStyle = 'rgba(167,139,250,0.4)';
@@ -880,7 +1462,6 @@ const JarvisUI = (() => {
         ctx.fillStyle = '#a78bfa'; ctx.textAlign = 'left'; ctx.font = '9px system-ui';
         ctx.fillText('Research target depth', pad.left + 4, targetY - 4);
 
-        // current focus line (dashed at R3)
         const focusX = pad.left + (3 / rangeL) * plotW;
         ctx.strokeStyle = 'rgba(6,182,212,0.4)';
         ctx.beginPath();
@@ -891,52 +1472,45 @@ const JarvisUI = (() => {
         ctx.fillText('Current focus', focusX, pad.top - 6);
         ctx.setLineDash([]);
 
-        // draw gaps as small dim red dots
         registry.forEach(r => {
-            const cx = pad.left + ((r.level - minL) / rangeL) * plotW;
+            const ccx = pad.left + ((r.level - minL) / rangeL) * plotW;
             (r.gaps || []).forEach((_, gi) => {
                 const gapDepth = Math.max(0, r.signals.length - 1 - gi * 0.5);
-                const cy = pad.top + plotH - (gapDepth / 10) * plotH;
+                const ccy = pad.top + plotH - (gapDepth / 10) * plotH;
                 const offX = (Math.random() - 0.5) * 16;
                 const offY = (Math.random() - 0.5) * 10 + 12;
                 ctx.beginPath();
-                ctx.arc(cx + offX, cy + offY, 3, 0, Math.PI * 2);
+                ctx.arc(ccx + offX, ccy + offY, 3, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(248,113,113,0.35)';
                 ctx.fill();
             });
         });
 
-        // draw main circles
         registry.forEach(r => {
-            const cx = pad.left + ((r.level - minL) / rangeL) * plotW;
-            const cy = pad.top + plotH - (r.depth / 10) * plotH;
+            const ccx = pad.left + ((r.level - minL) / rangeL) * plotW;
+            const ccy = pad.top + plotH - (r.depth / 10) * plotH;
             const radius = Math.min(50, Math.max(20, 20 + (r.observationCount / 10)));
             const color = statusColor[r.status] || statusColor.planned;
 
-            // glow
             ctx.beginPath();
-            ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2);
-            ctx.fillStyle = color.replace(')', ',0.1)').replace('rgb', 'rgba').replace('#', '');
-            // manual hex to rgba glow
+            ctx.arc(ccx, ccy, radius + 6, 0, Math.PI * 2);
             ctx.globalAlpha = 0.15;
             ctx.fillStyle = color;
             ctx.fill();
             ctx.globalAlpha = 1;
 
-            // main circle
             ctx.beginPath();
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.arc(ccx, ccy, radius, 0, Math.PI * 2);
             ctx.fillStyle = color + '33';
             ctx.strokeStyle = color;
             ctx.lineWidth = 2;
             ctx.fill();
             ctx.stroke();
 
-            // label
             ctx.fillStyle = '#e2e8f0';
             ctx.font = 'bold 12px system-ui';
             ctx.textAlign = 'center';
-            ctx.fillText('R' + r.level, cx, cy + 4);
+            ctx.fillText('R' + r.level, ccx, ccy + 4);
         });
     }
 
@@ -952,7 +1526,6 @@ const JarvisUI = (() => {
             gridCells.push({ depth: d, cells: row });
         }
 
-        // Build research loop status text per level
         const loopStatusText = {
             0: `Running — ${registry.find(r=>r.level===0)?.signals.length||0} signals active, R²=0.147. Hypothesis queue: 6 experiments pending`,
             1: `Running — ${registry.find(r=>r.level===1)?.signals.length||0} signals active (Zeigarnik text, visual, type). Gap: body segment analysis`,
@@ -960,11 +1533,9 @@ const JarvisUI = (() => {
         };
         const defaultLoopStatus = (r) => `Planned — no signals scored yet. Priority: ${r.gaps[0] || 'TBD'} (R${r.level})`;
 
-        // Research loop step for each status
-        const loopStepByStatus = { active: 3, partial: 2, planned: 0 }; // 0-indexed: active=Experiment(3), partial=Score(2), planned=Observe(0)
+        const loopStepByStatus = { active: 3, partial: 2, planned: 0 };
         const loopSteps = ['Observe', 'Hypothesize', 'Score', 'Experiment', 'Update'];
 
-        // Filter active/partial for research loop cards
         const loopLevels = registry.filter(r => r.status === 'active' || r.status === 'partial');
 
         return `
@@ -982,7 +1553,6 @@ const JarvisUI = (() => {
             <div class="jarvis-res-tree">
                 ${registry.map((r, i) => {
                     const statusClass = r.status === 'active' ? 'active' : r.status === 'partial' ? 'partial' : r.status === 'observed' ? 'observed' : 'planned';
-                    const parentLabel = r.parent ? registry.find(p => p.id === r.parent) : null;
                     return `<div class="jarvis-res-card-wrapper">
                         <div class="jarvis-res-timeline">
                             <div class="jarvis-res-badge-level">R${r.level}</div>
@@ -994,7 +1564,6 @@ const JarvisUI = (() => {
                                 <span class="jarvis-res-status-badge jarvis-res-status-${statusClass}">${r.status}</span>
                             </div>
                             <div class="jarvis-res-unit">Unit of analysis: <strong>${r.unit}</strong></div>
-                            ${parentLabel ? `<div class="jarvis-res-parent">\u2192 finer than: R${parentLabel.level} ${parentLabel.name}</div>` : '<div class="jarvis-res-parent">\u2014 root resolution</div>'}
                             <span class="jarvis-res-depth-badge">Depth ${r.depth}</span>
                             ${r.signals.length > 0 ? `<div class="jarvis-res-signals">${r.signals.map(s => `<span class="jarvis-res-signal-chip">${s}</span>`).join('')}</div>` : ''}
                             <div class="jarvis-res-finding"><em>${r.finding}</em></div>
@@ -1255,367 +1824,9 @@ const JarvisUI = (() => {
         }
     }
 
-    // ── Insights ──
-    // ── AutoResearch ──
-    let arModel = null;
-    let arHypotheses = null;
-    let arResults = null;
-
-    async function loadAutoResearchData() {
-        if (!arModel) {
-            try {
-                const r = await fetch('./buildings/jarvis/prediction-model.json');
-                arModel = await r.json();
-            } catch (e) { arModel = null; }
-        }
-        if (!arHypotheses) {
-            try {
-                const r = await fetch('./buildings/jarvis/hypothesis-queue.json');
-                arHypotheses = await r.json();
-            } catch (e) { arHypotheses = []; }
-        }
-        if (!arResults) {
-            try {
-                const r = await fetch('./buildings/jarvis/results.tsv');
-                const text = await r.text();
-                const lines = text.trim().split('\n');
-                const headers = lines[0].split('\t');
-                arResults = lines.slice(1).filter(l => l.trim()).map(line => {
-                    const cols = line.split('\t');
-                    const row = {};
-                    headers.forEach((h, i) => row[h] = cols[i] || '');
-                    return row;
-                });
-            } catch (e) { arResults = []; }
-        }
-    }
-
-    function renderAutoResearch() {
-        loadAutoResearchData().then(() => {
-            const el = container?.querySelector('.jarvis-ar-root');
-            if (el) el.innerHTML = renderAutoResearchContent();
-            bindAutoResearchEvents();
-        });
-        return '<div class="jarvis-ar-root"><div style="color:var(--j-muted);padding:20px;">Loading AutoResearch data…</div></div>';
-    }
-
-    function renderAutoResearchContent() {
-        if (!arModel) return '<div style="color:#f87171;padding:20px;">Failed to load prediction model.</div>';
-        const m = arModel;
-        const signals = [
-            { key: 'keep', label: 'Keep Rate', placeholder: '0–100', def: 80 },
-            { key: 'retention', label: 'Retention %', placeholder: '0–100', def: 87 },
-            { key: 'vz_score', label: 'Visual Zeigarnik', placeholder: '1–10', def: 8 },
-            { key: 'z_score', label: 'Zeigarnik Score', placeholder: '1–10', def: 7 },
-            { key: 'novelty', label: 'Novelty', placeholder: '1–10', def: 7 },
-            { key: 'cognitive_load', label: 'Cognitive Load', placeholder: '1–10', def: 3 },
-            { key: 'net_novelty', label: 'Net Novelty', placeholder: '-3 to 8', def: 4 },
-        ];
-
-        const statusBadge = (s) => {
-            if (s === 'complete') return '<span class="jarvis-ar-status jarvis-ar-status-complete">complete</span>';
-            if (s === 'running') return '<span class="jarvis-ar-status jarvis-ar-status-running">running</span>';
-            return '<span class="jarvis-ar-status jarvis-ar-status-queued">queued</span>';
-        };
-
-        const r2 = 0.147;
-        const target = 0.50;
-        const pct = Math.round((r2 / target) * 100);
-
-        const resultsRows = (arResults || []).map(row => {
-            const status = (row.status || '').trim().toLowerCase();
-            let cls = 'jarvis-ar-tsv-discard';
-            if (status === 'keep') cls = 'jarvis-ar-tsv-keep';
-            else if (status === 'error') cls = 'jarvis-ar-tsv-error';
-            return `<tr class="${cls}">
-                <td>${row.experiment_id || ''}</td>
-                <td>${row.new_signal || ''}</td>
-                <td>${row.r2_before || ''}→${row.r2_after || ''}</td>
-                <td>${row.delta_r2 || ''}</td>
-                <td><span class="jarvis-ar-tsv-status jarvis-ar-tsv-status-${status}">${status}</span></td>
-                <td>${row.notes || ''}</td>
-            </tr>`;
-        }).join('');
-
-        return `
-            <!-- Section 0: AutoResearch Framework -->
-            <div class="jarvis-ar-section jarvis-ar-framework">
-                <h3 class="jarvis-ar-title">AutoResearch — Karpathy-style Autonomous Research Loop</h3>
-                <p class="jarvis-ar-subtitle">Autonomous agent improves the prediction model overnight. The agent scores new signals, runs experiments, keeps improvements, discards failures — loop forever until R² > 0.50.</p>
-
-                <div class="jarvis-ar-framework-cols">
-                    <div class="jarvis-ar-framework-col">
-                        <h4 class="jarvis-ar-framework-heading">How it works</h4>
-                        <ul class="jarvis-ar-framework-list">
-                            <li>program.md defines the research rules and metric (R²)</li>
-                            <li>Agent picks the next hypothesis from the queue</li>
-                            <li>Scores new signal on 203 videos via LLM vision</li>
-                            <li>Runs regression with new signal — keep if R² improves > 0.01</li>
-                            <li>Logs result to results.tsv, updates model, repeats</li>
-                            <li>Never stops until manually interrupted</li>
-                        </ul>
-                    </div>
-                    <div class="jarvis-ar-framework-col">
-                        <h4 class="jarvis-ar-framework-heading">Current stats</h4>
-                        <div class="jarvis-ar-framework-stats">
-                            <div class="jarvis-ar-fstat"><span>Model version</span><strong>v1</strong></div>
-                            <div class="jarvis-ar-fstat"><span>R²</span><strong>0.147 (14.7% of variance)</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Target R²</span><strong>0.50</strong></div>
-                            <div class="jarvis-ar-fstat jarvis-ar-fstat-bar">
-                                <span>Progress</span>
-                                <div class="jarvis-ar-progress-track">
-                                    <div class="jarvis-ar-progress-fill" style="width:${pct}%"></div>
-                                    <div class="jarvis-ar-progress-label">${pct}%</div>
-                                </div>
-                            </div>
-                            <div class="jarvis-ar-fstat"><span>Videos</span><strong>203</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Active signals</span><strong>7</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Hypotheses queued</span><strong>${(arHypotheses || []).filter(h => h.status === 'queued').length || 6}</strong></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="jarvis-ar-framework-actions">
-                    <a href="./buildings/jarvis/program.md" target="_blank" class="jarvis-ar-framework-btn">Read program.md →</a>
-                    <a href="./buildings/jarvis/results.tsv" target="_blank" class="jarvis-ar-framework-btn jarvis-ar-framework-btn-alt">View results.tsv →</a>
-                </div>
-                <p class="jarvis-ar-framework-note">To run autonomously: point Claude Code or Codex at program.md in this directory with full file access. The agent will run the loop overnight.</p>
-            </div>
-
-            <!-- Experiment Log -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Experiment Log</h3>
-                <div class="jarvis-ar-tsv-wrap">
-                    <table class="jarvis-ar-tsv-table">
-                        <thead>
-                            <tr>
-                                <th>Experiment</th>
-                                <th>Signal</th>
-                                <th>R² before→after</th>
-                                <th>Delta</th>
-                                <th>Status</th>
-                                <th>Notes</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${resultsRows || '<tr><td colspan="6" style="color:var(--j-muted);text-align:center;">No experiments logged yet.</td></tr>'}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Section 1: Prediction Model -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Video Success Predictor</h3>
-                <p class="jarvis-ar-subtitle">Multi-signal regression model. Input your signals, get a predicted view count.</p>
-
-                <div class="jarvis-ar-stats-card">
-                    <div class="jarvis-ar-stat">Training data: <strong>203 videos</strong></div>
-                    <div class="jarvis-ar-stat">R² = <strong>0.147</strong> (14.7% of variance explained)</div>
-                    <div class="jarvis-ar-stat">Cross-validation R² = <strong>0.287</strong></div>
-                    <div class="jarvis-ar-stat">Prediction accuracy: <strong>±4.6x</strong></div>
-                    <div class="jarvis-ar-stat jarvis-ar-note">Baseline v1 — model improves as we add depth (new signals from hypothesis queue)</div>
-                </div>
-
-                <div class="jarvis-ar-scorer">
-                    <h4 class="jarvis-ar-scorer-title">Video Scorer</h4>
-                    <div class="jarvis-ar-inputs">
-                        ${signals.map(s => `
-                            <div class="jarvis-ar-input-group">
-                                <label>${s.label}</label>
-                                <input type="number" id="ar-input-${s.key}" value="${s.def}" placeholder="${s.placeholder}" step="any" />
-                            </div>
-                        `).join('')}
-                    </div>
-                    <button class="jarvis-ar-predict-btn" id="ar-predict-btn">Predict Views →</button>
-                    <div id="ar-prediction-result" class="jarvis-ar-result"></div>
-                </div>
-            </div>
-
-            <!-- Section 2: Hypothesis Queue -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Research Hypotheses</h3>
-                <p class="jarvis-ar-subtitle">Experiments queued to increase model accuracy. Run each to unlock a new signal.</p>
-
-                <div class="jarvis-ar-hypotheses">
-                    ${(arHypotheses || []).map(h => `
-                        <div class="jarvis-ar-hyp-card">
-                            <div class="jarvis-ar-hyp-top">
-                                <span class="jarvis-ar-hyp-id">${h.id}</span>
-                                ${statusBadge(h.status)}
-                                <span class="jarvis-ar-res-badge">${h.resolution}</span>
-                            </div>
-                            <div class="jarvis-ar-hyp-signal">${h.signal}</div>
-                            <div class="jarvis-ar-hyp-text">${h.hypothesis}</div>
-                            <div class="jarvis-ar-hyp-expected">Expected: ${h.expected_signal}</div>
-                            <div class="jarvis-ar-hyp-method">Method: ${h.method}</div>
-                            <button class="jarvis-ar-run-hyp-btn" data-hyp="${h.id}">Run Hypothesis →</button>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-
-            <!-- Section 3: Research Loop Diagram -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">AutoResearch Loop</h3>
-                <div class="jarvis-ar-loop">
-                    <div class="jarvis-ar-loop-step">
-                        <div class="jarvis-ar-loop-pill">1. Observe</div>
-                        <div class="jarvis-ar-loop-sub">Watch videos, note patterns</div>
-                    </div>
-                    <div class="jarvis-ar-loop-arrow"></div>
-                    <div class="jarvis-ar-loop-step">
-                        <div class="jarvis-ar-loop-pill">2. Hypothesize</div>
-                        <div class="jarvis-ar-loop-sub">Propose what to measure</div>
-                    </div>
-                    <div class="jarvis-ar-loop-arrow"></div>
-                    <div class="jarvis-ar-loop-step jarvis-ar-loop-active">
-                        <div class="jarvis-ar-loop-pill">3. Score Signal</div>
-                        <div class="jarvis-ar-loop-sub">Score 203 videos via LLM vision</div>
-                    </div>
-                    <div class="jarvis-ar-loop-arrow"></div>
-                    <div class="jarvis-ar-loop-step">
-                        <div class="jarvis-ar-loop-pill">4. Run Experiment</div>
-                        <div class="jarvis-ar-loop-sub">Compute r value vs keep/views</div>
-                    </div>
-                    <div class="jarvis-ar-loop-arrow"></div>
-                    <div class="jarvis-ar-loop-step">
-                        <div class="jarvis-ar-loop-pill">5. Update Model</div>
-                        <div class="jarvis-ar-loop-sub">Add signal to model, measure R² gain</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 4: Model Accuracy History -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">R² Improvement Over Time</h3>
-                <div class="jarvis-ar-history">
-                    <div class="jarvis-ar-history-row">
-                        <div class="jarvis-ar-history-label">v0 <span class="jarvis-ar-history-tag">baseline</span></div>
-                        <div class="jarvis-ar-history-bar-track">
-                            <div class="jarvis-ar-history-bar" style="width:0%"></div>
-                        </div>
-                        <div class="jarvis-ar-history-val">R²=0.000</div>
-                        <div class="jarvis-ar-history-desc">no signals</div>
-                    </div>
-                    <div class="jarvis-ar-history-row jarvis-ar-history-current">
-                        <div class="jarvis-ar-history-label">v1 <span class="jarvis-ar-history-tag jarvis-ar-history-tag-current">current</span></div>
-                        <div class="jarvis-ar-history-bar-track">
-                            <div class="jarvis-ar-history-bar jarvis-ar-history-bar-current" style="width:14.7%"></div>
-                        </div>
-                        <div class="jarvis-ar-history-val">R²=0.147</div>
-                        <div class="jarvis-ar-history-desc">keep + retention + z_score + vz_score + novelty + cognitive_load + net_novelty</div>
-                    </div>
-                    <div class="jarvis-ar-history-row">
-                        <div class="jarvis-ar-history-label">v2 <span class="jarvis-ar-history-tag">next</span></div>
-                        <div class="jarvis-ar-history-bar-track">
-                            <div class="jarvis-ar-history-bar jarvis-ar-history-bar-pending" style="width:5%"></div>
-                        </div>
-                        <div class="jarvis-ar-history-val">R²=?</div>
-                        <div class="jarvis-ar-history-desc">pending hypothesis queue results</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    function runPrediction() {
-        if (!arModel) return;
-        const m = arModel;
-        const inputs = {};
-        m.features.forEach(f => {
-            const el = container?.querySelector('#ar-input-' + f);
-            inputs[f] = el ? parseFloat(el.value) : 0;
-        });
-
-        // Normalize and predict
-        let predicted_log = m.bias;
-        m.features.forEach(f => {
-            const min = m.feature_mins[f];
-            const max = m.feature_maxs[f];
-            const norm = max !== min ? (inputs[f] - min) / (max - min) : 0;
-            predicted_log += m.weights[f] * norm;
-        });
-        const predicted_views = Math.pow(10, predicted_log);
-        const range_low = predicted_views / m.prediction_range_multiplier;
-        const range_high = predicted_views * m.prediction_range_multiplier;
-
-        let colorClass = 'jarvis-ar-result-red';
-        if (predicted_views >= 10e6) colorClass = 'jarvis-ar-result-green';
-        else if (predicted_views >= 1e6) colorClass = 'jarvis-ar-result-yellow';
-
-        const resultEl = container?.querySelector('#ar-prediction-result');
-        if (resultEl) {
-            resultEl.innerHTML = `
-                <div class="jarvis-ar-result-card ${colorClass}">
-                    <div class="jarvis-ar-result-views">${fmtViews(predicted_views)} predicted views</div>
-                    <div class="jarvis-ar-result-range">±4.6x → range: ${fmtViews(range_low)} — ${fmtViews(range_high)}</div>
-                    <div class="jarvis-ar-result-badge">v1 model · R²=0.147 · improves with more signals</div>
-                </div>
-            `;
-        }
-    }
-
-    async function runHypothesis(hypId) {
-        if (hypId === 'h5') {
-            const btn = container?.querySelector(`.jarvis-ar-run-hyp-btn[data-hyp="${hypId}"]`);
-            if (btn) { btn.textContent = 'Running…'; btn.disabled = true; }
-            try {
-                const resp = await fetch('/api/jarvis/run-hypothesis', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: 'h5' })
-                });
-                const data = await resp.json();
-                if (btn) {
-                    btn.textContent = data.correlation !== undefined
-                        ? `Done! r=${data.correlation.toFixed(3)} (n=${data.n})`
-                        : (data.message || 'Complete');
-                }
-            } catch (e) {
-                if (btn) { btn.textContent = 'Error — retry'; btn.disabled = false; }
-            }
-        } else {
-            alert('This hypothesis requires LLM scoring — feature in progress');
-        }
-    }
-
-    function bindAutoResearchEvents() {
-        const predictBtn = container?.querySelector('#ar-predict-btn');
-        if (predictBtn) predictBtn.addEventListener('click', runPrediction);
-
-        container?.querySelectorAll('.jarvis-ar-run-hyp-btn').forEach(btn => {
-            btn.addEventListener('click', () => runHypothesis(btn.dataset.hyp));
-        });
-    }
-
-    function renderInsights() {
-        return `<ol class="jarvis-insights">
-            ${INSIGHTS.map(i => `<li>${i}</li>`).join('')}
-        </ol>`;
-    }
-
-    // ── Methodology ──
-    const METHODOLOGICAL_NOTES = [
-        { title: 'Ratio Normalization', desc: 'All engagement metrics (shares, likes, comments) must be expressed as rates per view (e.g., shares per 1k views). Raw counts scale with views by definition — a 50M-view video will always have more raw shares than a 500k-view video. Comparing raw counts produces inflated differences (470x) that collapse to modest ones (2.1x) after normalization.' },
-        { title: 'Log-Normalization for Views', desc: 'View counts follow a power-law distribution — a few videos have 50M+ views while most cluster under 2M. Pearson correlation on raw views is dominated by outliers. Log-transforming view counts before computing correlations gives each video proportional weight and reveals the true relationship strength.' },
-        { title: 'Quartile Analysis > Pearson', desc: 'Pearson measures linear relationships, but video metrics often have non-linear thresholds (e.g., retention below 70% is a cliff, 82-86% is a sweet spot, above 86% has diminishing returns). Bucketing into quartiles captures these step-changes that a single r value averages away.' },
-        { title: 'Confounder Documentation', desc: 'Each experiment must document known confounders. Examples: Duration analysis confounded by YouTube\'s 60s Shorts limit (platform constraint, not creator choice). Channel concentration confounded by subscriber base (large channels produce more content). Title length confounded by content quality (good creators may also write better titles). Unflagged confounders lead to false conclusions.' },
-    ];
-
-    function renderMethodology() {
-        return `<div class="jarvis-methodology">
-            <p class="jarvis-method-intro">Statistical methods and corrections applied across all experiments:</p>
-            ${METHODOLOGICAL_NOTES.map(note => `
-                <div class="jarvis-method-card">
-                    <h4>${note.title}</h4>
-                    <p>${note.desc}</p>
-                </div>
-            `).join('')}
-        </div>`;
-    }
-
-    // ── Events ──
+    // ══════════════════════════════════════════════════
+    // EVENTS
+    // ══════════════════════════════════════════════════
     function bindEvents() {
         if (!container) return;
 
@@ -1627,47 +1838,9 @@ const JarvisUI = (() => {
             });
         });
 
-        // Analytical: tool open/close
-        container.querySelectorAll('.jarvis-tool-run-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.dataset.tool;
-                activeToolId = activeToolId === id ? null : id;
-                render();
-            });
-        });
-
         // Analytical: tool execute
         container.querySelectorAll('.jarvis-tool-execute').forEach(btn => {
             btn.addEventListener('click', () => executeTool(btn.dataset.tool));
-        });
-
-        // Tactical: use in tool toggle
-        container.querySelectorAll('.jarvis-use-in-tool').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const key = btn.dataset.key;
-                chooserKey = chooserKey === key ? null : key;
-                render();
-            });
-        });
-
-        // Tactical: chooser tool button
-        container.querySelectorAll('.jarvis-chooser-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const toolId = btn.dataset.tool;
-                const key = btn.dataset.key;
-                const param = TOOL_FIRST_PARAM[toolId];
-                if (param === 'signals') {
-                    if (!toolSelections.proximity.signals.includes(key)) {
-                        toolSelections.proximity.signals.push(key);
-                    }
-                } else if (toolSelections[toolId]) {
-                    toolSelections[toolId][param] = key;
-                }
-                activeToolId = toolId;
-                activeTab = 'analytical';
-                chooserKey = null;
-                render();
-            });
         });
     }
 
@@ -1679,6 +1852,10 @@ const JarvisUI = (() => {
         activeToolId = null;
         toolResults = {};
         chooserKey = null;
+        cachedResultsRows = null;
+        tacticalDiscoveredNodes = [];
+        arModel = null;
+        arHypotheses = null;
         render();
     }
 

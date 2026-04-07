@@ -3518,6 +3518,70 @@ Respond ONLY as valid JSON (no markdown):
     }
 
     // =========================================
+    // Jarvis: loop status + loop logs + unified results.tsv
+    // =========================================
+    if (pathname === '/api/jarvis/loop-status' && req.method === 'GET') {
+        try {
+            const loops = ['A', 'B', 'C', 'D'];
+            const out = {};
+            for (const loop of loops) {
+                const logPath = `/tmp/autoResearch_loop_${loop}.log`;
+                if (fs.existsSync(logPath)) {
+                    const st = fs.statSync(logPath);
+                    const ageMinutes = Math.round((Date.now() - st.mtimeMs) / 60000);
+                    out[loop] = { lastModified: new Date(st.mtimeMs).toISOString(), ageMinutes };
+                } else {
+                    out[loop] = { lastModified: null, ageMinutes: null };
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(out));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/jarvis/loop-log' && req.method === 'GET') {
+        try {
+            const loop = String(url.searchParams.get('loop') || '').toUpperCase();
+            if (!['A', 'B', 'C', 'D'].includes(loop)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid loop. Use A, B, C, or D.' }));
+                return;
+            }
+            const logPath = `/tmp/autoResearch_loop_${loop}.log`;
+            if (!fs.existsSync(logPath)) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('No log file found');
+                return;
+            }
+            const text = fs.readFileSync(logPath, 'utf8');
+            const lines = text.split(/\r?\n/).filter(Boolean).slice(-20).join('\n');
+            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end(lines || '(no output yet)');
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/jarvis/results-tsv' && req.method === 'GET') {
+        try {
+            const resultsPath = path.join(DIR, 'buildings', 'jarvis', 'results.tsv');
+            const text = fs.existsSync(resultsPath) ? fs.readFileSync(resultsPath, 'utf8') : '';
+            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end(text);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // Static file serving
     // =========================================
     let filePath = path.join(DIR, pathname === '/' ? 'index.html' : pathname);
