@@ -1086,6 +1086,7 @@ const JarvisUI = (() => {
     // ── AutoResearch ──
     let arModel = null;
     let arHypotheses = null;
+    let arResults = null;
 
     async function loadAutoResearchData() {
         if (!arModel) {
@@ -1099,6 +1100,20 @@ const JarvisUI = (() => {
                 const r = await fetch('./buildings/jarvis/hypothesis-queue.json');
                 arHypotheses = await r.json();
             } catch (e) { arHypotheses = []; }
+        }
+        if (!arResults) {
+            try {
+                const r = await fetch('./buildings/jarvis/results.tsv');
+                const text = await r.text();
+                const lines = text.trim().split('\n');
+                const headers = lines[0].split('\t');
+                arResults = lines.slice(1).filter(l => l.trim()).map(line => {
+                    const cols = line.split('\t');
+                    const row = {};
+                    headers.forEach((h, i) => row[h] = cols[i] || '');
+                    return row;
+                });
+            } catch (e) { arResults = []; }
         }
     }
 
@@ -1130,7 +1145,92 @@ const JarvisUI = (() => {
             return '<span class="jarvis-ar-status jarvis-ar-status-queued">queued</span>';
         };
 
+        const r2 = 0.147;
+        const target = 0.50;
+        const pct = Math.round((r2 / target) * 100);
+
+        const resultsRows = (arResults || []).map(row => {
+            const status = (row.status || '').trim().toLowerCase();
+            let cls = 'jarvis-ar-tsv-discard';
+            if (status === 'keep') cls = 'jarvis-ar-tsv-keep';
+            else if (status === 'error') cls = 'jarvis-ar-tsv-error';
+            return `<tr class="${cls}">
+                <td>${row.experiment_id || ''}</td>
+                <td>${row.new_signal || ''}</td>
+                <td>${row.r2_before || ''}→${row.r2_after || ''}</td>
+                <td>${row.delta_r2 || ''}</td>
+                <td><span class="jarvis-ar-tsv-status jarvis-ar-tsv-status-${status}">${status}</span></td>
+                <td>${row.notes || ''}</td>
+            </tr>`;
+        }).join('');
+
         return `
+            <!-- Section 0: AutoResearch Framework -->
+            <div class="jarvis-ar-section jarvis-ar-framework">
+                <h3 class="jarvis-ar-title">AutoResearch — Karpathy-style Autonomous Research Loop</h3>
+                <p class="jarvis-ar-subtitle">Autonomous agent improves the prediction model overnight. The agent scores new signals, runs experiments, keeps improvements, discards failures — loop forever until R² > 0.50.</p>
+
+                <div class="jarvis-ar-framework-cols">
+                    <div class="jarvis-ar-framework-col">
+                        <h4 class="jarvis-ar-framework-heading">How it works</h4>
+                        <ul class="jarvis-ar-framework-list">
+                            <li>program.md defines the research rules and metric (R²)</li>
+                            <li>Agent picks the next hypothesis from the queue</li>
+                            <li>Scores new signal on 203 videos via LLM vision</li>
+                            <li>Runs regression with new signal — keep if R² improves > 0.01</li>
+                            <li>Logs result to results.tsv, updates model, repeats</li>
+                            <li>Never stops until manually interrupted</li>
+                        </ul>
+                    </div>
+                    <div class="jarvis-ar-framework-col">
+                        <h4 class="jarvis-ar-framework-heading">Current stats</h4>
+                        <div class="jarvis-ar-framework-stats">
+                            <div class="jarvis-ar-fstat"><span>Model version</span><strong>v1</strong></div>
+                            <div class="jarvis-ar-fstat"><span>R²</span><strong>0.147 (14.7% of variance)</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Target R²</span><strong>0.50</strong></div>
+                            <div class="jarvis-ar-fstat jarvis-ar-fstat-bar">
+                                <span>Progress</span>
+                                <div class="jarvis-ar-progress-track">
+                                    <div class="jarvis-ar-progress-fill" style="width:${pct}%"></div>
+                                    <div class="jarvis-ar-progress-label">${pct}%</div>
+                                </div>
+                            </div>
+                            <div class="jarvis-ar-fstat"><span>Videos</span><strong>203</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Active signals</span><strong>7</strong></div>
+                            <div class="jarvis-ar-fstat"><span>Hypotheses queued</span><strong>${(arHypotheses || []).filter(h => h.status === 'queued').length || 6}</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="jarvis-ar-framework-actions">
+                    <a href="./buildings/jarvis/program.md" target="_blank" class="jarvis-ar-framework-btn">Read program.md →</a>
+                    <a href="./buildings/jarvis/results.tsv" target="_blank" class="jarvis-ar-framework-btn jarvis-ar-framework-btn-alt">View results.tsv →</a>
+                </div>
+                <p class="jarvis-ar-framework-note">To run autonomously: point Claude Code or Codex at program.md in this directory with full file access. The agent will run the loop overnight.</p>
+            </div>
+
+            <!-- Experiment Log -->
+            <div class="jarvis-ar-section">
+                <h3 class="jarvis-ar-title">Experiment Log</h3>
+                <div class="jarvis-ar-tsv-wrap">
+                    <table class="jarvis-ar-tsv-table">
+                        <thead>
+                            <tr>
+                                <th>Experiment</th>
+                                <th>Signal</th>
+                                <th>R² before→after</th>
+                                <th>Delta</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${resultsRows || '<tr><td colspan="6" style="color:var(--j-muted);text-align:center;">No experiments logged yet.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Section 1: Prediction Model -->
             <div class="jarvis-ar-section">
                 <h3 class="jarvis-ar-title">Video Success Predictor</h3>

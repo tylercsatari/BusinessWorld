@@ -1,0 +1,2 @@
+experiment_id	new_signal	r2_before	r2_after	delta_r2	status	n_videos	notes
+exp_baseline	baseline_7signals	0.000	0.147	+0.147	keep	203	Initial model: keep+retention+z_score+novelty+cognitive_load+net_novelty+vz_score
