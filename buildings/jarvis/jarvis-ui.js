@@ -817,8 +817,127 @@ const JarvisUI = (() => {
             if (!el || !registry) return;
             el.innerHTML = renderResolutionContent(registry);
             bindResolutionEvents();
+            setTimeout(() => {
+                const cvs = container?.querySelector('#jarvis-res-coverage-canvas');
+                if (cvs) { cvs.width = cvs.offsetWidth * 2; cvs.height = 440; drawResolutionMap(cvs, registry); }
+            }, 100);
         });
         return `<div class="jarvis-resolution-root"><div class="jarvis-loading">Loading resolution registry...</div></div>`;
+    }
+
+    function drawResolutionMap(canvas, registry) {
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        ctx.clearRect(0, 0, W, H);
+
+        const pad = { top: 20, right: 30, bottom: 36, left: 50 };
+        const plotW = W - pad.left - pad.right;
+        const plotH = H - pad.top - pad.bottom;
+
+        const statusColor = { active: '#10b981', partial: '#f59e0b', planned: '#4b5563', observed: '#06b6d4' };
+
+        // axes
+        ctx.strokeStyle = 'rgba(100,120,180,0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, pad.top);
+        ctx.lineTo(pad.left, pad.top + plotH);
+        ctx.lineTo(pad.left + plotW, pad.top + plotH);
+        ctx.stroke();
+
+        // x-axis labels
+        const levels = registry.map(r => r.level);
+        const minL = Math.min(...levels), maxL = Math.max(...levels);
+        const rangeL = maxL - minL || 1;
+        ctx.font = '10px system-ui'; ctx.fillStyle = '#64748b'; ctx.textAlign = 'center';
+        for (let i = 0; i <= 5; i++) {
+            const x = pad.left + (i / 5) * plotW;
+            ctx.fillText('R' + i, x, pad.top + plotH + 14);
+        }
+        ctx.fillText('Resolution (coarse → fine)', pad.left + plotW / 2, pad.top + plotH + 30);
+
+        // y-axis labels
+        ctx.textAlign = 'right';
+        for (let d = 0; d <= 10; d += 2) {
+            const y = pad.top + plotH - (d / 10) * plotH;
+            ctx.fillText(d, pad.left - 8, y + 3);
+        }
+        ctx.save();
+        ctx.translate(12, pad.top + plotH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = 'center';
+        ctx.fillText('Depth (signals measured)', 0, 0);
+        ctx.restore();
+
+        // research target depth line (dashed at depth=4)
+        const targetY = pad.top + plotH - (4 / 10) * plotH;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = 'rgba(167,139,250,0.4)';
+        ctx.beginPath();
+        ctx.moveTo(pad.left, targetY);
+        ctx.lineTo(pad.left + plotW, targetY);
+        ctx.stroke();
+        ctx.fillStyle = '#a78bfa'; ctx.textAlign = 'left'; ctx.font = '9px system-ui';
+        ctx.fillText('Research target depth', pad.left + 4, targetY - 4);
+
+        // current focus line (dashed at R3)
+        const focusX = pad.left + (3 / rangeL) * plotW;
+        ctx.strokeStyle = 'rgba(6,182,212,0.4)';
+        ctx.beginPath();
+        ctx.moveTo(focusX, pad.top);
+        ctx.lineTo(focusX, pad.top + plotH);
+        ctx.stroke();
+        ctx.fillStyle = '#06b6d4'; ctx.textAlign = 'center';
+        ctx.fillText('Current focus', focusX, pad.top - 6);
+        ctx.setLineDash([]);
+
+        // draw gaps as small dim red dots
+        registry.forEach(r => {
+            const cx = pad.left + ((r.level - minL) / rangeL) * plotW;
+            (r.gaps || []).forEach((_, gi) => {
+                const gapDepth = Math.max(0, r.signals.length - 1 - gi * 0.5);
+                const cy = pad.top + plotH - (gapDepth / 10) * plotH;
+                const offX = (Math.random() - 0.5) * 16;
+                const offY = (Math.random() - 0.5) * 10 + 12;
+                ctx.beginPath();
+                ctx.arc(cx + offX, cy + offY, 3, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(248,113,113,0.35)';
+                ctx.fill();
+            });
+        });
+
+        // draw main circles
+        registry.forEach(r => {
+            const cx = pad.left + ((r.level - minL) / rangeL) * plotW;
+            const cy = pad.top + plotH - (r.depth / 10) * plotH;
+            const radius = Math.min(50, Math.max(20, 20 + (r.observationCount / 10)));
+            const color = statusColor[r.status] || statusColor.planned;
+
+            // glow
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius + 6, 0, Math.PI * 2);
+            ctx.fillStyle = color.replace(')', ',0.1)').replace('rgb', 'rgba').replace('#', '');
+            // manual hex to rgba glow
+            ctx.globalAlpha = 0.15;
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // main circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.fillStyle = color + '33';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.fill();
+            ctx.stroke();
+
+            // label
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 12px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText('R' + r.level, cx, cy + 4);
+        });
     }
 
     function renderResolutionContent(registry) {
@@ -833,7 +952,28 @@ const JarvisUI = (() => {
             gridCells.push({ depth: d, cells: row });
         }
 
+        // Build research loop status text per level
+        const loopStatusText = {
+            0: `Running — ${registry.find(r=>r.level===0)?.signals.length||0} signals active, R²=0.147. Hypothesis queue: 6 experiments pending`,
+            1: `Running — ${registry.find(r=>r.level===1)?.signals.length||0} signals active (Zeigarnik text, visual, type). Gap: body segment analysis`,
+            3: `Partial — ${registry.find(r=>r.level===3)?.signals.length||0} signals scored (vz_score, z_score). Gaps: audio layer, first-frame visual`,
+        };
+        const defaultLoopStatus = (r) => `Planned — no signals scored yet. Priority: ${r.gaps[0] || 'TBD'} (R${r.level})`;
+
+        // Research loop step for each status
+        const loopStepByStatus = { active: 3, partial: 2, planned: 0 }; // 0-indexed: active=Experiment(3), partial=Score(2), planned=Observe(0)
+        const loopSteps = ['Observe', 'Hypothesize', 'Score', 'Experiment', 'Update'];
+
+        // Filter active/partial for research loop cards
+        const loopLevels = registry.filter(r => r.status === 'active' || r.status === 'partial');
+
         return `
+            <div class="jarvis-res-map-section">
+                <h3 class="jarvis-res-title">Resolution Coverage Map</h3>
+                <p class="jarvis-res-subtitle">The resolution framework defines the complete picture. Filled cells = signals measured. Empty cells = known gaps. The research loop targets empty cells at priority resolution levels.</p>
+                <canvas id="jarvis-res-coverage-canvas" width="800" height="220" style="width:100%;height:220px;border-radius:8px;background:rgba(30,30,50,0.5);border:1px solid rgba(100,100,200,0.15);"></canvas>
+            </div>
+
             <div class="jarvis-res-header">
                 <h3 class="jarvis-res-title">Analysis Resolution Registry</h3>
                 <p class="jarvis-res-subtitle">Tracking the depth and granularity of what we know. Each row unlocks higher precision &mdash; but resolution is only defined relative to what came before.</p>
@@ -887,6 +1027,35 @@ const JarvisUI = (() => {
                         <div class="jarvis-res-grid-label"></div>
                         ${registry.map(r => `<div class="jarvis-res-grid-col-label">${r.name}</div>`).join('')}
                     </div>
+                </div>
+            </div>
+
+            <div class="jarvis-res-loops-section">
+                <h3 class="jarvis-res-title">Research Loops by Resolution Level</h3>
+                <p class="jarvis-res-subtitle">Each resolution level has its own autonomous research loop. Multiple loops can run in parallel &mdash; each improves depth at its level independently.</p>
+                <div class="jarvis-res-loops-grid">
+                    ${loopLevels.map(r => {
+                        const sc = r.status === 'active' ? 'active' : r.status === 'partial' ? 'partial' : 'planned';
+                        const statusCol = { active: '#10b981', partial: '#f59e0b', planned: '#4b5563' }[sc];
+                        const activeStep = loopStepByStatus[r.status] ?? 0;
+                        const statusTxt = loopStatusText[r.level] || defaultLoopStatus(r);
+                        return `<div class="jarvis-res-loop-card" style="border-left-color:${statusCol}">
+                            <div class="jarvis-res-loop-header">
+                                <span class="jarvis-res-badge-level" style="width:28px;height:28px;font-size:10px;">R${r.level}</span>
+                                <span class="jarvis-res-loop-name">${r.name}</span>
+                                <span class="jarvis-res-loop-dot" style="background:${statusCol}"></span>
+                            </div>
+                            <div class="jarvis-res-loop-metrics">
+                                <span>Depth: <strong>${r.depth}</strong> signals</span>
+                                <span>Gaps: <strong>${r.gaps.length}</strong> known</span>
+                                <span>Observations: <strong>${r.observationCount}</strong></span>
+                            </div>
+                            <div class="jarvis-res-mini-loop">
+                                ${loopSteps.map((s, si) => `<span class="jarvis-res-mini-step${si === activeStep ? ' jarvis-res-mini-step-active' : ''}">${s}</span>${si < loopSteps.length - 1 ? '<span class="jarvis-res-mini-arrow">→</span>' : ''}`).join('')}
+                            </div>
+                            <div class="jarvis-res-loop-status">${statusTxt}</div>
+                        </div>`;
+                    }).join('')}
                 </div>
             </div>
 
@@ -988,6 +1157,10 @@ const JarvisUI = (() => {
         if (!el || !resolutionRegistry) return;
         el.innerHTML = renderResolutionContent(resolutionRegistry);
         bindResolutionEvents();
+        setTimeout(() => {
+            const cvs = container?.querySelector('#jarvis-res-coverage-canvas');
+            if (cvs) { cvs.width = cvs.offsetWidth * 2; cvs.height = 440; drawResolutionMap(cvs, resolutionRegistry); }
+        }, 100);
     }
 
     function bindResolutionEvents() {
