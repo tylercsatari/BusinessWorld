@@ -774,10 +774,23 @@ const JarvisUI = (() => {
             bindTacticalEvents();
         });
         return `
-            <div class="jarvis-network-legend" style="margin-bottom:4px">
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload (control before filming)</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured after upload)</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (prediction target)</span>
+            <div style="text-align:center;padding:6px 0 2px;margin-bottom:2px">
+                <div style="font-size:13px;font-weight:700;letter-spacing:0.5px;color:var(--j-text)">
+                    <span style="color:#06b6d4">PRE-UPLOAD</span>
+                    <span style="color:var(--j-muted);font-size:15px"> ⇄ </span>
+                    <span style="color:#a78bfa">POST-UPLOAD</span>
+                    <span style="color:var(--j-muted);font-size:15px"> → </span>
+                    <span style="color:#f59e0b">VIEWS</span>
+                </div>
+                <div style="font-size:9px;color:var(--j-muted);margin-top:2px">All connections determined by experiments</div>
+            </div>
+            <div class="jarvis-network-legend" style="margin-bottom:4px;flex-wrap:wrap">
+                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:2px;background:#06b6d4;vertical-align:middle;margin-right:4px"></span>Pre → Views</span>
+                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:2px;background:#a78bfa;vertical-align:middle;margin-right:4px"></span>Post → Views</span>
+                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:2px;background:#06b6d4;vertical-align:middle;margin-right:4px;border-top:1px dashed #06b6d4;height:0"></span>Pre → Post</span>
+                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:0;border-top:1px dashed #06b6d4;vertical-align:middle;margin-right:4px"></span>Pre ↔ Pre</span>
+                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:0;border-top:1px dashed #a78bfa;vertical-align:middle;margin-right:4px"></span>Post ↔ Post</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views target</span>
             </div>
             <div class="jarvis-tactical-network" style="margin-bottom:12px">
                 <canvas id="jarvis-network-canvas" width="400" height="550"></canvas>
@@ -995,8 +1008,27 @@ const JarvisUI = (() => {
         const fullNotes = sig.notes || '';
         const connections = sig.connections || [];
 
+        // Determine causal role based on layer + target
+        let causalRole, causalColor;
+        if (sig.layer === 'pre' && (!sig.target || sig.target === 'views')) {
+            causalRole = 'Direct pre-upload predictor';
+            causalColor = '#06b6d4';
+        } else if (sig.layer === 'pre') {
+            causalRole = 'Pre-upload → post-upload mechanism';
+            causalColor = '#06b6d4';
+        } else if (sig.layer === 'post' && (!sig.target || sig.target === 'views')) {
+            causalRole = 'Post-upload outcome predictor';
+            causalColor = '#a78bfa';
+        } else {
+            causalRole = 'Intermediate post-upload signal';
+            causalColor = '#a78bfa';
+        }
+
         return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
             <div class="jarvis-signal-detail-name">${sig.label}</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+                <span style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;background:rgba(${causalColor === '#06b6d4' ? '6,182,212' : '167,139,250'},0.2);color:${causalColor};border:1px solid ${causalColor}40">${causalRole}</span>
+            </div>
             <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
                 ${sig.r_partial !== null ? `<span style="font-family:'SF Mono',monospace;font-size:16px;font-weight:700;color:${color}">r_partial = ${sig.r_partial.toFixed(3)}</span>` : ''}
                 <span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${layerLabel}</span>
@@ -1202,7 +1234,37 @@ const JarvisUI = (() => {
             ctx.setLineDash([]);
         });
 
-        // Draw edges from each node to VIEWS
+        // Draw within-layer peer edges (pre↔pre, post↔post)
+        // Connect same-layer nodes that share 2+ underscore tokens OR have r_partial within 0.05 + same resolution
+        const nonViewNodes = nodes.filter(n => n.layer !== 'views');
+        for (let i = 0; i < nonViewNodes.length; i++) {
+            for (let j = i + 1; j < nonViewNodes.length; j++) {
+                const a = nonViewNodes[i], b = nonViewNodes[j];
+                if (a.layer !== b.layer) continue;
+                const tokensA = a.key.split('_');
+                const tokensB = b.key.split('_');
+                const shared = tokensA.filter(t => t.length > 1 && tokensB.includes(t)).length;
+                const rClose = a.resolution === b.resolution &&
+                    a.r_partial !== null && b.r_partial !== null &&
+                    Math.abs(Math.abs(a.r_partial) - Math.abs(b.r_partial)) < 0.05;
+                if (shared >= 2 || rClose) {
+                    const hex = a.color;
+                    const cr = parseInt(hex.slice(1, 3), 16);
+                    const cg = parseInt(hex.slice(3, 5), 16);
+                    const cb = parseInt(hex.slice(5, 7), 16);
+                    ctx.beginPath();
+                    ctx.setLineDash([2, 5]);
+                    ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.08)`;
+                    ctx.lineWidth = 0.5;
+                    ctx.moveTo(a.x, a.y);
+                    ctx.lineTo(b.x, b.y);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+        }
+
+        // Draw edges from each node to VIEWS (solid — direct prediction)
         nodes.forEach(n => {
             if (n.layer === 'views') return;
             const absR = Math.abs(n.r_partial || 0);
@@ -1220,7 +1282,7 @@ const JarvisUI = (() => {
             ctx.stroke();
         });
 
-        // Draw dashed edges for keep/retention target nodes
+        // Draw dashed cross-layer edges (pre→post for keep/retention targets)
         nodes.forEach(n => {
             if (n.layer === 'views' || !n.target || n.target === 'views') return;
             // Find nearest post-upload node with highest r_partial
@@ -1740,7 +1802,7 @@ const JarvisUI = (() => {
                             <div style="font-size:10px;color:#06b6d4;text-transform:uppercase;font-weight:600">Pre-upload</div>
                             <div style="font-size:18px;font-weight:700;color:#06b6d4">${preCount}</div>
                         </div>
-                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u2192</div>
+                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u21c4</div>
                         <div style="text-align:center;padding:10px 18px;background:rgba(167,139,250,0.12)">
                             <div style="font-size:10px;color:#a78bfa;text-transform:uppercase;font-weight:600">Post-upload</div>
                             <div style="font-size:18px;font-weight:700;color:#a78bfa">${postCount}</div>
@@ -1751,6 +1813,7 @@ const JarvisUI = (() => {
                             <div style="font-size:18px;font-weight:700;color:#f59e0b">1</div>
                         </div>
                     </div>
+                    <div style="font-size:10px;color:var(--j-muted);text-align:center;margin-top:6px">Connection types active: <span style="color:#06b6d4">Pre\u2192Views</span> · <span style="color:#06b6d4">Pre\u2192Post</span> · <span style="color:#a78bfa">Post\u2192Views</span> · <span style="color:#06b6d4">Pre\u2194Pre</span> · <span style="color:#a78bfa">Post\u2194Post</span></div>
                 </div>
             </div>
 
