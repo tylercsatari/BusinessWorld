@@ -754,12 +754,12 @@ const JarvisUI = (() => {
     function renderTactical() {
         loadAutoResearchData(); // load prediction model for signal detail panel
         loadResultsTSV().then(() => {
-            drawTacticalCoreGraph();
+            drawTacticalFullGraph();
             bindTacticalEvents();
         });
         return `
             <div class="jarvis-tactical-network" style="margin-bottom:12px">
-                <canvas id="jarvis-network-canvas" width="400" height="300"></canvas>
+                <canvas id="jarvis-network-canvas" width="400" height="500"></canvas>
                 <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
             <div class="jarvis-network-legend">
@@ -772,7 +772,7 @@ const JarvisUI = (() => {
             <div class="jarvis-signal-list-section">
                 <input type="text" class="jarvis-signal-search" id="jarvis-signal-search" placeholder="Search signals..." value="${tacticalSearch}" />
                 <div class="jarvis-signal-filters" id="jarvis-signal-filters">
-                    ${['all','analytics','llm-scored','derived','discovered'].map(f =>
+                    ${['all','analytics','llm-scored','derived','discovered','pre-upload','post-upload'].map(f =>
                         `<button class="jarvis-signal-filter-btn${tacticalFilter === f ? ' active' : ''}" data-filter="${f}">${f === 'all' ? 'All' : f === 'llm-scored' ? 'LLM-scored' : f.charAt(0).toUpperCase() + f.slice(1)}</button>`
                     ).join('')}
                 </div>
@@ -797,6 +797,16 @@ const JarvisUI = (() => {
         if (large.includes(key)) return 18;
         if (medium.includes(key)) return 14;
         return 10;
+    }
+
+    const PRE_UPLOAD_KEYS = new Set(['keep','retention','vz_score','vz_type','z_score','z_type','novelty','cognitive_load','net_novelty','idea_length','pat_making_v2','indestructible_x_prev_keep','hook_clarity','visual_surprise','cut_frequency_3s','face_presence','text_overlay_yn','duration','share_rate']);
+    const POST_UPLOAD_KEYS = new Set(['view_accel_log','w2_w1_ratio','sub_gap','prev_views','prev_keep','views','like_ratio','svf_log','engage_ratio','rpv','sub_ret_gap','smoothed_slope','deriv_entropy','duration_x_retention','max_cliff','ret_mid_sq','ret_mid','retention_per_sec']);
+
+    function getSignalUploadPhase(ind) {
+        if (PRE_UPLOAD_KEYS.has(ind.key)) return 'pre-upload';
+        if (POST_UPLOAD_KEYS.has(ind.key)) return 'post-upload';
+        if (ind.category === 'discovered') return 'post-upload';
+        return null;
     }
 
     // Parse discovered signals from results.tsv
@@ -861,7 +871,9 @@ const JarvisUI = (() => {
         const allIndicators = getAllSignals();
         const search = tacticalSearch.toLowerCase();
         const filtered = allIndicators.filter(ind => {
-            if (tacticalFilter !== 'all' && getSignalFilterCategory(ind) !== tacticalFilter) return false;
+            if (tacticalFilter === 'pre-upload' || tacticalFilter === 'post-upload') {
+                if (getSignalUploadPhase(ind) !== tacticalFilter) return false;
+            } else if (tacticalFilter !== 'all' && getSignalFilterCategory(ind) !== tacticalFilter) return false;
             if (search && !ind.label.toLowerCase().includes(search) && !ind.key.toLowerCase().includes(search)) return false;
             return true;
         });
@@ -989,12 +1001,13 @@ const JarvisUI = (() => {
         });
     }
 
-    function drawTacticalCoreGraph() {
+    function drawTacticalFullGraph() {
         const canvas = container?.querySelector('#jarvis-network-canvas');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const W = canvas.parentElement.clientWidth || 400;
-        const H = 300;
+        const H = 500;
+        const PAD = 50;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = W * dpr;
         canvas.height = H * dpr;
@@ -1003,52 +1016,172 @@ const JarvisUI = (() => {
         ctx.scale(dpr, dpr);
 
         const cx = W / 2, cy = H / 2;
-        // Only show 9 core indicators
-        const CORE_KEYS = ['keep', 'retention', 'vz_score', 'novelty', 'cognitive_load', 'net_novelty', 'share_rate', 'views', 'vz_type'];
-        const positions = {
-            keep:           { x: cx - 70, y: 50 },
-            retention:      { x: cx + 70, y: 50 },
-            views:          { x: cx,      y: 110 },
-            vz_score:       { x: 80,      y: cy },
-            vz_type:        { x: 80,      y: cy + 60 },
-            novelty:        { x: W - 80,  y: cy - 20 },
-            cognitive_load: { x: W - 80,  y: cy + 40 },
-            net_novelty:    { x: W - 160, y: cy + 10 },
-            share_rate:     { x: cx,      y: H - 50 },
-        };
+        const allSignals = getAllSignals();
 
-        const edges = [
-            ['net_novelty', 'novelty'],
-            ['net_novelty', 'cognitive_load'],
-            ['share_rate', 'views'],
-            ['vz_score', 'vz_type'],
-            ['keep', 'retention'],
-            ['keep', 'views'],
-            ['retention', 'views'],
-        ];
+        // Determine node radius based on role
+        const CORE_METRICS = new Set(['views', 'keep', 'retention']);
+        const inModelKeys = new Set();
+        if (arModel) {
+            (arModel.pre_upload_model?.features || []).forEach(f => inModelKeys.add(f));
+            (arModel.full_model?.features || []).forEach(f => inModelKeys.add(f));
+        }
 
-        const coreIndicators = INDICATORS.filter(i => CORE_KEYS.includes(i.key));
-        const nodes = coreIndicators.map(ind => ({
-            key: ind.key,
-            label: ind.label,
-            type: ind.type,
-            source: ind.source,
-            color: getNodeColor(ind),
-            r: 18,
-            x: positions[ind.key]?.x || cx,
-            y: positions[ind.key]?.y || cy,
-            category: ind.category,
-        }));
+        function nodeRadius(ind) {
+            if (CORE_METRICS.has(ind.key)) return 22;
+            if (inModelKeys.has(ind.key)) return 18;
+            if (ind.category === 'active') return 15;
+            if (ind.category === 'discovered') return 12;
+            return 10; // planned
+        }
+
+        // Build nodes with circular initial positions
+        const nodes = allSignals.map((ind, i) => {
+            const angle = (i / allSignals.length) * Math.PI * 2;
+            const spread = Math.min(W, H) * 0.3;
+            return {
+                key: ind.key,
+                label: ind.label,
+                type: ind.type,
+                source: ind.source,
+                color: getNodeColor(ind),
+                r: nodeRadius(ind),
+                x: cx + Math.cos(angle) * spread + (Math.random() - 0.5) * 40,
+                y: cy + Math.sin(angle) * spread + (Math.random() - 0.5) * 40,
+                vx: 0,
+                vy: 0,
+                category: ind.category,
+                ind: ind,
+            };
+        });
         const nodeMap = {};
         nodes.forEach(n => nodeMap[n.key] = n);
 
-        // Draw edges
-        ctx.lineWidth = 1.5;
-        edges.forEach(([a, b]) => {
-            const na = nodeMap[a], nb = nodeMap[b];
-            if (!na || !nb) return;
+        // Build edges
+        const edges = [];
+        const edgeSet = new Set();
+
+        function addEdge(a, b, weight, type) {
+            const ek = a < b ? a + '|' + b : b + '|' + a;
+            if (edgeSet.has(ek)) return;
+            edgeSet.add(ek);
+            edges.push({ a, b, weight: Math.abs(weight), type });
+        }
+
+        // Parse r-values from cachedResultsRows for edge weights
+        const signalCorrelations = {};
+        if (cachedResultsRows) {
+            cachedResultsRows.forEach(row => {
+                const sig = (row.new_signal || '').replace(/^discovery:/, '');
+                if (!sig || !row.notes) return;
+                const notes = row.notes;
+                const rpM = notes.match(/r_partial\s*=\s*([-+]?\d*\.?\d+)/i);
+                if (rpM) {
+                    const rv = parseFloat(rpM[1]);
+                    if (!signalCorrelations[sig] || Math.abs(rv) > Math.abs(signalCorrelations[sig].r)) {
+                        signalCorrelations[sig] = { metric: 'views', r: rv };
+                    }
+                    return;
+                }
+                const rM = notes.match(/\br\s*=\s*([-+]?\d*\.?\d+)/i);
+                if (rM) {
+                    const rv = parseFloat(rM[1]);
+                    const nl = notes.toLowerCase();
+                    let metric = 'keep';
+                    if (nl.includes('views')) metric = 'views';
+                    else if (nl.includes('retention')) metric = 'retention';
+                    if (!signalCorrelations[sig] || Math.abs(rv) > Math.abs(signalCorrelations[sig].r)) {
+                        signalCorrelations[sig] = { metric, r: rv };
+                    }
+                }
+            });
+        }
+
+        // Core metrics connected to everything with correlation data
+        nodes.forEach(n => {
+            if (CORE_METRICS.has(n.key)) return;
+            if (signalCorrelations[n.key]) {
+                addEdge(n.key, signalCorrelations[n.key].metric, signalCorrelations[n.key].r, 'correlation');
+            }
+        });
+
+        // Core-to-core edges
+        addEdge('keep', 'retention', 0.7, 'correlation');
+        addEdge('keep', 'views', 0.5, 'correlation');
+        addEdge('retention', 'views', 0.5, 'correlation');
+
+        // Category edges (weak attraction — half strength, not drawn)
+        const catGroups = {};
+        nodes.forEach(n => {
+            const cat = getSignalFilterCategory(n.ind);
+            if (!catGroups[cat]) catGroups[cat] = [];
+            catGroups[cat].push(n.key);
+        });
+        Object.values(catGroups).forEach(group => {
+            for (let i = 0; i < group.length; i++) {
+                for (let j = i + 1; j < group.length; j++) {
+                    addEdge(group[i], group[j], 0.2, 'category');
+                }
+            }
+        });
+
+        // Force-directed simulation
+        for (let iter = 0; iter < 200; iter++) {
+            // Repulsion between all pairs
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const a = nodes[i], b = nodes[j];
+                    let dx = b.x - a.x, dy = b.y - a.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    if (dist < 120) {
+                        const force = 800 / (dist * dist);
+                        const fx = (dx / dist) * force;
+                        const fy = (dy / dist) * force;
+                        a.vx -= fx; a.vy -= fy;
+                        b.vx += fx; b.vy += fy;
+                    }
+                }
+            }
+
+            // Spring attraction for edges
+            edges.forEach(e => {
+                const na = nodeMap[e.a], nb = nodeMap[e.b];
+                if (!na || !nb) return;
+                const dx = nb.x - na.x, dy = nb.y - na.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const strength = e.type === 'category' ? 0.02 : 0.04;
+                const displacement = dist - 90;
+                const fx = (dx / dist) * displacement * strength;
+                const fy = (dy / dist) * displacement * strength;
+                na.vx += fx; na.vy += fy;
+                nb.vx -= fx; nb.vy -= fy;
+            });
+
+            // Center gravity
+            nodes.forEach(n => {
+                n.vx += (cx - n.x) * 0.002;
+                n.vy += (cy - n.y) * 0.002;
+            });
+
+            // Apply velocities with damping + boundary
+            nodes.forEach(n => {
+                n.vx *= 0.85;
+                n.vy *= 0.85;
+                n.x += n.vx;
+                n.y += n.vy;
+                n.x = Math.max(PAD + n.r, Math.min(W - PAD - n.r, n.x));
+                n.y = Math.max(PAD + n.r, Math.min(H - PAD - n.r, n.y));
+            });
+        }
+
+        // Draw correlation edges (not category edges)
+        edges.forEach(e => {
+            const na = nodeMap[e.a], nb = nodeMap[e.b];
+            if (!na || !nb || e.type === 'category') return;
+            const thickness = Math.min(0.5 + e.weight * 3, 3);
+            const opacity = Math.min(0.15 + e.weight * 0.4, 0.6);
             ctx.beginPath();
-            ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+            ctx.strokeStyle = `rgba(100, 116, 139, ${opacity})`;
+            ctx.lineWidth = thickness;
             ctx.moveTo(na.x, na.y);
             ctx.lineTo(nb.x, nb.y);
             ctx.stroke();
@@ -1065,11 +1198,29 @@ const JarvisUI = (() => {
             ctx.strokeStyle = 'rgba(255,255,255,0.2)';
             ctx.lineWidth = 1;
             ctx.stroke();
+        });
 
-            ctx.fillStyle = '#cbd5e1';
-            ctx.font = '10px system-ui, sans-serif';
+        // Draw labels with dark pill background
+        nodes.forEach(n => {
+            const fontSize = CORE_METRICS.has(n.key) ? 11 : 9;
+            ctx.font = `${fontSize}px system-ui, sans-serif`;
             ctx.textAlign = 'center';
-            ctx.fillText(n.label, n.x, n.y + n.r + 13);
+            const truncated = n.label.length > 14 ? n.label.slice(0, 13) + '\u2026' : n.label;
+            const textW = ctx.measureText(truncated).width;
+            const pillX = n.x - textW / 2 - 3;
+            const pillY = n.y + n.r + 4;
+            const pillW = textW + 6;
+            const pillH = fontSize + 4;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(pillX, pillY, pillW, pillH, 3);
+            } else {
+                ctx.rect(pillX, pillY, pillW, pillH);
+            }
+            ctx.fill();
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(truncated, n.x, pillY + fontSize);
         });
 
         // Tooltip
@@ -1095,7 +1246,7 @@ const JarvisUI = (() => {
             }
         };
 
-        // Click core node -> expand in signal list
+        // Click node -> expand in signal list + scroll to entry
         canvas.onclick = (e) => {
             const rect = canvas.getBoundingClientRect();
             const mx = e.clientX - rect.left;
@@ -1105,7 +1256,12 @@ const JarvisUI = (() => {
                 if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) {
                     tacticalExpandedSignal = tacticalExpandedSignal === n.key ? null : n.key;
                     const list = container?.querySelector('#jarvis-signal-list');
-                    if (list) { list.innerHTML = renderSignalList(); bindSignalRowClicks(); }
+                    if (list) {
+                        list.innerHTML = renderSignalList();
+                        bindSignalRowClicks();
+                        const row = list.querySelector(`[data-signal-key="${n.key}"]`);
+                        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
                     break;
                 }
             }
