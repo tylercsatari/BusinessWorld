@@ -750,10 +750,26 @@ const JarvisUI = (() => {
     let tacticalFilter = 'all';
     let tacticalSearch = '';
     let tacticalExpandedSignal = null;
+    let cachedIndicatorRegistry = null;
+    let currentMergeThreshold = 0;
+
+    async function loadIndicatorRegistry() {
+        if (cachedIndicatorRegistry) return cachedIndicatorRegistry;
+        try {
+            const r = await fetch('./buildings/jarvis/indicator-registry.json');
+            cachedIndicatorRegistry = await r.json();
+            return cachedIndicatorRegistry;
+        } catch (e) {
+            console.error('Failed to load indicator registry:', e);
+            cachedIndicatorRegistry = null;
+            return null;
+        }
+    }
 
     function renderTactical() {
         loadAutoResearchData(); // load prediction model for signal detail panel
-        loadResultsTSV().then(() => {
+        loadResultsTSV();
+        loadIndicatorRegistry().then(() => {
             drawTacticalFullGraph();
             bindTacticalEvents();
         });
@@ -764,8 +780,13 @@ const JarvisUI = (() => {
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (prediction target)</span>
             </div>
             <div class="jarvis-tactical-network" style="margin-bottom:12px">
-                <canvas id="jarvis-network-canvas" width="400" height="600"></canvas>
+                <canvas id="jarvis-network-canvas" width="400" height="550"></canvas>
                 <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:4px 0 10px;font-size:11px;color:var(--j-muted)">
+                <label for="jarvis-merge-slider">Merge threshold:</label>
+                <input type="range" id="jarvis-merge-slider" min="0" max="100" value="${currentMergeThreshold}" style="width:140px" />
+                <span id="jarvis-merge-value">${currentMergeThreshold}</span>
             </div>
             <div class="jarvis-signal-list-section">
                 <input type="text" class="jarvis-signal-search" id="jarvis-signal-search" placeholder="Search signals..." value="${tacticalSearch}" />
@@ -882,8 +903,13 @@ const JarvisUI = (() => {
         return preFeats.includes(key) || fullFeats.includes(key);
     }
 
+    function getRegistrySignals() {
+        if (!cachedIndicatorRegistry || !cachedIndicatorRegistry.indicators) return getDiscoveredSignals();
+        return cachedIndicatorRegistry.indicators;
+    }
+
     function renderSignalList() {
-        const signals = getDiscoveredSignals();
+        const signals = getRegistrySignals();
         const search = tacticalSearch.toLowerCase();
 
         const filtered = signals.filter(sig => {
@@ -899,19 +925,28 @@ const JarvisUI = (() => {
         // Sort by |r_partial| descending
         filtered.sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0));
 
-        return filtered.map(sig => {
+        // Apply merge threshold
+        const merged = applyMergeThreshold(filtered, currentMergeThreshold);
+
+        return merged.map(sig => {
             const color = sig.layer === 'pre' ? '#06b6d4' : '#a78bfa';
-            const layerLabel = sig.layer === 'pre' ? 'PRE-UPLOAD' : 'POST-UPLOAD';
+            const layerLabel = sig.layer === 'pre' ? 'PRE' : 'POST';
             const layerBg = sig.layer === 'pre' ? 'rgba(6,182,212,0.15)' : 'rgba(167,139,250,0.15)';
+            const resBg = { R0: 'rgba(100,116,139,0.15)', R1: 'rgba(59,130,246,0.15)', R2: 'rgba(168,85,247,0.15)', R3: 'rgba(236,72,153,0.15)' };
+            const resColor = { R0: '#64748b', R1: '#3b82f6', R2: '#a855f7', R3: '#ec4899' };
             const isExpanded = tacticalExpandedSignal === sig.key;
             const rDisplay = sig.r_partial !== null ? sig.r_partial.toFixed(3) : '';
             const rBar = sig.r_partial !== null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(sig.r_partial) * 100, 100)}%;background:${color}"></div></div>` : '';
+            const clusterBadge = sig._clusterCount > 1 ? `<span style="font-size:9px;background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:8px;color:var(--j-muted)">+${sig._clusterCount - 1}</span>` : '';
 
             return `<div class="jarvis-signal-row-wrapper">
                 <div class="jarvis-signal-row${isExpanded ? ' expanded' : ''}" data-signal-key="${sig.key}">
                     <span class="jarvis-signal-dot" style="background:${color}"></span>
                     <span class="jarvis-signal-name">${sig.label}</span>
                     <span class="jarvis-signal-type-badge" style="background:${layerBg};color:${color}">${layerLabel}</span>
+                    <span class="jarvis-signal-type-badge" style="background:${resBg[sig.resolution] || resBg.R0};color:${resColor[sig.resolution] || resColor.R0};font-size:9px">${sig.resolution || 'R0'}</span>
+                    <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,0.08);font-size:8px;color:var(--j-muted)">${sig.depth || 1}</span>
+                    ${clusterBadge}
                     ${rDisplay ? `<span style="font-family:'SF Mono',monospace;font-size:10px;color:var(--j-muted);white-space:nowrap">r=${rDisplay}</span>` : ''}
                     ${rBar}
                 </div>
@@ -920,52 +955,67 @@ const JarvisUI = (() => {
         }).join('');
     }
 
+    function applyMergeThreshold(signals, threshold) {
+        if (threshold <= 0) return signals.map(s => ({ ...s, _clusterCount: 1 }));
+        const thresh = threshold / 100;
+        const used = new Set();
+        const result = [];
+        for (let i = 0; i < signals.length; i++) {
+            if (used.has(i)) continue;
+            const cluster = [i];
+            const tokensA = signals[i].key.split('_');
+            for (let j = i + 1; j < signals.length; j++) {
+                if (used.has(j)) continue;
+                const tokensB = signals[j].key.split('_');
+                const shared = tokensA.filter(t => tokensB.includes(t)).length;
+                const overlap = shared / Math.max(tokensA.length, tokensB.length);
+                if (overlap >= thresh) { cluster.push(j); used.add(j); }
+            }
+            used.add(i);
+            const rep = { ...signals[i], _clusterCount: cluster.length };
+            if (cluster.length > 1) {
+                // Find most common token for label
+                const allTokens = cluster.flatMap(ci => signals[ci].key.split('_'));
+                const freq = {};
+                allTokens.forEach(t => freq[t] = (freq[t] || 0) + 1);
+                const topToken = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+                rep.label = topToken.charAt(0).toUpperCase() + topToken.slice(1) + ' cluster';
+            }
+            result.push(rep);
+        }
+        return result;
+    }
+
     function renderSignalDetail(sig) {
         const color = sig.layer === 'pre' ? '#06b6d4' : '#a78bfa';
         const layerLabel = sig.layer === 'pre' ? 'Pre-upload' : 'Post-upload';
         const inModel = isSignalInModel(sig.key);
+        const resBadgeColor = { R0: '#64748b', R1: '#3b82f6', R2: '#a855f7', R3: '#ec4899' };
 
-        // Find all related experiments (not just loop_b)
-        const relatedExps = (cachedResultsRows || []).filter(r => {
-            const rSig = (r.new_signal || '').replace(/^discovery:/, '').trim();
-            return rSig === sig.key;
-        });
-
-        // Full notes text — untruncated
         const fullNotes = sig.notes || '';
-
-        // Derive plain-English implication from notes
-        let implication = '';
-        if (fullNotes) {
-            if (sig.r_partial !== null && sig.r_partial > 0) {
-                implication = `Higher ${sig.label.toLowerCase()} is associated with more views. Consider increasing this in your content.`;
-            } else if (sig.r_partial !== null && sig.r_partial < 0) {
-                implication = `Higher ${sig.label.toLowerCase()} is associated with fewer views. Consider reducing or avoiding this.`;
-            }
-            // Try to extract more specific advice from notes
-            const adviceMatch = fullNotes.match(/(?:suggests?|means?|implies?|indicates?|use more|avoid|try)[^.]+\./i);
-            if (adviceMatch) implication = adviceMatch[0];
-        }
+        const connections = sig.connections || [];
 
         return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
             <div class="jarvis-signal-detail-name">${sig.label}</div>
             <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
                 ${sig.r_partial !== null ? `<span style="font-family:'SF Mono',monospace;font-size:16px;font-weight:700;color:${color}">r_partial = ${sig.r_partial.toFixed(3)}</span>` : ''}
                 <span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${layerLabel}</span>
+                <span class="jarvis-signal-type-badge" style="background:rgba(100,116,139,0.15);color:${resBadgeColor[sig.resolution] || '#64748b'}">${sig.resolution || 'R0'}</span>
+                <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--j-muted)">Depth: <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.1);font-weight:700">${sig.depth || 1}</span></span>
+                <span style="font-size:10px;color:var(--j-muted)">Connections: ${connections.length}</span>
                 ${inModel ? '<span class="jarvis-signal-type-badge" style="background:rgba(16,185,129,0.15);color:#10b981">IN MODEL</span>' : ''}
             </div>
             ${fullNotes ? `<div style="font-size:12px;color:var(--j-text);line-height:1.6;margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;white-space:pre-wrap">${fullNotes}</div>` : ''}
-            ${implication ? `<div style="font-size:12px;color:#f59e0b;margin-bottom:12px;padding:8px 10px;background:rgba(245,158,11,0.08);border-radius:6px;border-left:3px solid #f59e0b"><strong>What this means:</strong> ${implication}</div>` : ''}
-            ${relatedExps.length > 1 ? `
+            ${connections.length > 0 ? `
                 <div class="jarvis-signal-detail-exps">
-                    <div style="font-size:11px;font-weight:600;color:var(--j-muted);text-transform:uppercase;margin-bottom:6px">Related experiments (${relatedExps.length})</div>
-                    ${relatedExps.map(r => {
-                        const st = (r.status || '').trim().toLowerCase();
-                        const stColor = st === 'keep' ? '#10b981' : st === 'discard' ? '#ef4444' : '#64748b';
+                    <div style="font-size:11px;font-weight:600;color:var(--j-muted);text-transform:uppercase;margin-bottom:6px">Connections (${connections.length})</div>
+                    ${connections.map(c => {
+                        const st = (c.status || '').toLowerCase();
+                        const stColor = st === 'keep' ? '#10b981' : st === 'discard' ? '#ef4444' : st === 'discovery' ? '#06b6d4' : '#64748b';
                         return `<div class="jarvis-signal-detail-exp">
-                            <span style="color:var(--j-text);font-weight:600">${r.experiment_id}</span>
-                            <span class="jarvis-badge" style="background:rgba(${st === 'keep' ? '16,185,129' : '100,100,100'},0.15);color:${stColor}">${st}</span>
-                            ${r.delta_r2 && r.delta_r2 !== '\u2014' ? `<span style="font-family:'SF Mono',monospace;font-size:11px;color:var(--j-cyan)">dR\u00b2=${r.delta_r2}</span>` : ''}
+                            <span style="color:var(--j-text);font-weight:600">${c.experiment}</span>
+                            <span class="jarvis-badge" style="background:rgba(${st === 'keep' ? '16,185,129' : st === 'discovery' ? '6,182,212' : '100,100,100'},0.15);color:${stColor}">${st}</span>
+                            ${c.delta_r2 && c.delta_r2 !== '\u2014' ? `<span style="font-family:'SF Mono',monospace;font-size:11px;color:var(--j-cyan)">dR\u00b2=${c.delta_r2}</span>` : ''}
                         </div>`;
                     }).join('')}
                 </div>` : ''}
@@ -992,6 +1042,18 @@ const JarvisUI = (() => {
                 bindSignalRowClicks();
             });
         });
+        const mergeSlider = container?.querySelector('#jarvis-merge-slider');
+        const mergeValue = container?.querySelector('#jarvis-merge-value');
+        if (mergeSlider) {
+            mergeSlider.addEventListener('input', (e) => {
+                currentMergeThreshold = parseInt(e.target.value);
+                if (mergeValue) mergeValue.textContent = currentMergeThreshold;
+                const list = container?.querySelector('#jarvis-signal-list');
+                if (list) list.innerHTML = renderSignalList();
+                bindSignalRowClicks();
+                drawTacticalFullGraph();
+            });
+        }
         bindSignalRowClicks();
     }
 
@@ -1012,7 +1074,7 @@ const JarvisUI = (() => {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const W = canvas.parentElement.clientWidth || 400;
-        const H = 600;
+        const H = 550;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = W * dpr;
         canvas.height = H * dpr;
@@ -1020,72 +1082,88 @@ const JarvisUI = (() => {
         canvas.style.height = H + 'px';
         ctx.scale(dpr, dpr);
 
-        const signals = getDiscoveredSignals();
+        // Use indicator registry as source, fallback to discovered signals
+        const allSignals = getRegistrySignals();
 
-        // Filter to top 80 by |r_partial|, exclude nulls
-        const withR = signals.filter(s => s.r_partial !== null);
+        // Filter to top 100 by |r_partial|, exclude nulls
+        const withR = allSignals.filter(s => s.r_partial !== null);
         withR.sort((a, b) => Math.abs(b.r_partial) - Math.abs(a.r_partial));
-        const top = withR.slice(0, 80);
+        const top = withR.slice(0, 100);
 
-        const preNodes = top.filter(s => s.layer === 'pre');
-        const postNodes = top.filter(s => s.layer === 'post');
+        // Apply merge threshold for graph too
+        const merged = applyMergeThreshold(top, currentMergeThreshold);
 
-        // Node sizing
-        function nodeRadius(rp) {
-            const abs = Math.abs(rp || 0);
-            if (abs >= 0.5) return 16;
-            if (abs >= 0.3) return 13;
-            if (abs >= 0.1) return 11;
-            return 9;
+        const preNodes = merged.filter(s => s.layer === 'pre');
+        const postNodes = merged.filter(s => s.layer === 'post');
+
+        // Resolution Y zones
+        const resZones = { R0: [0.05, 0.30], R1: [0.30, 0.55], R2: [0.55, 0.75], R3: [0.75, 0.90] };
+
+        // Node sizing: 8 + depth * 2, max 20
+        function nodeRadius(sig) {
+            const depthR = 8 + (sig.depth || 1) * 2;
+            const clusterBonus = (sig._clusterCount || 1) > 1 ? 4 : 0;
+            return Math.min(depthR + clusterBonus, 24);
         }
 
-        // Build nodes with initial positions spread vertically in their zone
-        const VPAD = 30;
+        // Build nodes with initial positions: X by layer column, Y by resolution zone
         const nodes = [];
 
-        preNodes.forEach((s, i) => {
-            const ySpread = (H - VPAD * 2) / Math.max(preNodes.length - 1, 1);
-            nodes.push({
-                key: s.key, label: s.label, r_partial: s.r_partial, layer: s.layer,
-                color: '#06b6d4', r: nodeRadius(s.r_partial),
-                x: W * 0.15 + (Math.random() - 0.5) * W * 0.08,
-                y: VPAD + i * ySpread,
-                vx: 0, vy: 0, notes: s.notes,
-            });
-        });
+        function initY(sig, indexInZone, totalInZone) {
+            const zone = resZones[sig.resolution] || resZones.R0;
+            const yStart = zone[0] * H;
+            const yEnd = zone[1] * H;
+            const spread = (yEnd - yStart) / Math.max(totalInZone, 1);
+            return yStart + spread * (indexInZone + 0.5);
+        }
 
-        postNodes.forEach((s, i) => {
-            const ySpread = (H - VPAD * 2) / Math.max(postNodes.length - 1, 1);
-            nodes.push({
-                key: s.key, label: s.label, r_partial: s.r_partial, layer: s.layer,
-                color: '#a78bfa', r: nodeRadius(s.r_partial),
-                x: W * 0.50 + (Math.random() - 0.5) * W * 0.08,
-                y: VPAD + i * ySpread,
-                vx: 0, vy: 0, notes: s.notes,
+        // Group pre/post nodes by resolution for proper Y distribution
+        function addNodes(layerNodes, xMin, xMax, color) {
+            const byRes = { R0: [], R1: [], R2: [], R3: [] };
+            layerNodes.forEach(s => (byRes[s.resolution] || byRes.R0).push(s));
+            // Sort each zone alphabetically
+            Object.values(byRes).forEach(arr => arr.sort((a, b) => a.key.localeCompare(b.key)));
+            Object.entries(byRes).forEach(([, arr]) => {
+                arr.forEach((s, i) => {
+                    nodes.push({
+                        key: s.key, label: s.label, r_partial: s.r_partial, layer: s.layer,
+                        resolution: s.resolution, depth: s.depth, target: s.target,
+                        color: color, r: nodeRadius(s),
+                        _clusterCount: s._clusterCount || 1,
+                        x: xMin * W + Math.random() * (xMax - xMin) * W,
+                        y: initY(s, i, arr.length),
+                        vx: 0, vy: 0, notes: s.notes,
+                        xMin: xMin, xMax: xMax,
+                    });
+                });
             });
-        });
+        }
+
+        addNodes(preNodes, 0.10, 0.35, '#06b6d4');
+        addNodes(postNodes, 0.50, 0.75, '#a78bfa');
 
         // VIEWS target node
         const viewsNode = {
             key: 'views', label: 'VIEWS', r_partial: 1, layer: 'views',
+            resolution: 'R0', depth: 0, target: 'views',
             color: '#f59e0b', r: 28,
-            x: W * 0.85, y: H / 2,
+            x: W * 0.88, y: H * 0.50,
             vx: 0, vy: 0, notes: 'Prediction target: log10(views)',
         };
         nodes.push(viewsNode);
 
         // Force-directed simulation (150 iterations)
         for (let iter = 0; iter < 150; iter++) {
-            // Repulsion between nodes of same layer only
+            // Repulsion between nodes in SAME zone only (same column + same resolution)
             for (let i = 0; i < nodes.length; i++) {
                 for (let j = i + 1; j < nodes.length; j++) {
                     const a = nodes[i], b = nodes[j];
-                    if (a.layer !== b.layer) continue;
-                    if (a.layer === 'views') continue;
+                    if (a.layer === 'views' || b.layer === 'views') continue;
+                    if (a.layer !== b.layer) continue; // same column only
                     const dx = b.x - a.x, dy = b.y - a.y;
                     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                    if (dist < 100) {
-                        const force = 600 / (dist * dist);
+                    if (dist < 80) {
+                        const force = 400 / (dist * dist);
                         const fx = (dx / dist) * force;
                         const fy = (dy / dist) * force;
                         a.vx -= fx; a.vy -= fy;
@@ -1094,48 +1172,73 @@ const JarvisUI = (() => {
                 }
             }
 
-            // Weak spring pull toward VIEWS node
-            nodes.forEach(n => {
-                if (n.layer === 'views') return;
-                const dx = viewsNode.x - n.x, dy = viewsNode.y - n.y;
-                n.vx += dx * 0.01;
-                n.vy += dy * 0.01;
-            });
-
             // Apply velocities with damping
             nodes.forEach(n => {
-                if (n.layer === 'views') return; // VIEWS stays fixed
+                if (n.layer === 'views') return;
                 n.vx *= 0.8;
                 n.vy *= 0.8;
                 n.x += n.vx;
                 n.y += n.vy;
-                // Boundary constraints per zone
-                if (n.layer === 'pre') {
-                    n.x = Math.max(n.r + 5, Math.min(W * 0.35 - n.r, n.x));
-                } else {
-                    n.x = Math.max(W * 0.40 + n.r, Math.min(W * 0.80 - n.r, n.x));
-                }
-                n.y = Math.max(VPAD + n.r, Math.min(H - VPAD - n.r, n.y));
+                // Boundary: keep in assigned zone
+                n.x = Math.max(n.xMin * W + n.r, Math.min(n.xMax * W - n.r, n.x));
+                const zone = resZones[n.resolution] || resZones.R0;
+                n.y = Math.max(zone[0] * H + n.r, Math.min(zone[1] * H - n.r, n.y));
             });
         }
+
+        // Draw resolution zone labels (left side)
+        ctx.font = '9px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(100,116,139,0.4)';
+        Object.entries(resZones).forEach(([label, [y0]]) => {
+            ctx.fillText(label, 4, y0 * H + 12);
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(100,116,139,0.08)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 6]);
+            ctx.moveTo(0, y0 * H);
+            ctx.lineTo(W, y0 * H);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        });
 
         // Draw edges from each node to VIEWS
         nodes.forEach(n => {
             if (n.layer === 'views') return;
             const absR = Math.abs(n.r_partial || 0);
-            const thickness = Math.min(0.5 + absR * 2.5, 3);
-            const opacity = Math.min(0.08 + absR * 0.35, 0.5);
-            // Parse hex color to rgb
+            const thickness = Math.min(0.5 + absR * 2, 3);
+            const opacity = Math.min(0.05 + absR * 0.3, 0.45);
             const hex = n.color;
-            const r = parseInt(hex.slice(1, 3), 16);
-            const g = parseInt(hex.slice(3, 5), 16);
-            const b = parseInt(hex.slice(5, 7), 16);
+            const cr = parseInt(hex.slice(1, 3), 16);
+            const cg = parseInt(hex.slice(3, 5), 16);
+            const cb = parseInt(hex.slice(5, 7), 16);
             ctx.beginPath();
-            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${opacity})`;
             ctx.lineWidth = thickness;
             ctx.moveTo(n.x, n.y);
             ctx.lineTo(viewsNode.x, viewsNode.y);
             ctx.stroke();
+        });
+
+        // Draw dashed edges for keep/retention target nodes
+        nodes.forEach(n => {
+            if (n.layer === 'views' || !n.target || n.target === 'views') return;
+            // Find nearest post-upload node with highest r_partial
+            const postCandidates = nodes.filter(p => p.layer === 'post' && p.key !== n.key);
+            if (!postCandidates.length) return;
+            const nearest = postCandidates.sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0))[0];
+            const hex = n.color;
+            const cr = parseInt(hex.slice(1, 3), 16);
+            const cg = parseInt(hex.slice(3, 5), 16);
+            const cb = parseInt(hex.slice(5, 7), 16);
+            ctx.beginPath();
+            ctx.setLineDash([3, 4]);
+            ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.06)`;
+            ctx.lineWidth = 1;
+            ctx.moveTo(n.x, n.y);
+            ctx.lineTo(nearest.x, nearest.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
         });
 
         // Draw nodes
@@ -1151,13 +1254,13 @@ const JarvisUI = (() => {
             ctx.stroke();
         });
 
-        // Draw labels only for nodes with |r_partial| >= 0.3 (or VIEWS)
+        // Draw labels only for nodes with |r_partial| >= 0.2 (or VIEWS)
         nodes.forEach(n => {
-            if (n.layer !== 'views' && Math.abs(n.r_partial || 0) < 0.3) return;
+            if (n.layer !== 'views' && Math.abs(n.r_partial || 0) < 0.2) return;
             const fontSize = n.layer === 'views' ? 12 : 9;
             ctx.font = `${fontSize}px system-ui, sans-serif`;
             ctx.textAlign = 'center';
-            const truncated = n.label.length > 12 ? n.label.slice(0, 11) + '\u2026' : n.label;
+            const truncated = n.label.length > 14 ? n.label.slice(0, 13) + '\u2026' : n.label;
             const textW = ctx.measureText(truncated).width;
             const pillX = n.x - textW / 2 - 3;
             const pillY = n.y + n.r + 4;
@@ -1191,7 +1294,8 @@ const JarvisUI = (() => {
                 tooltip.style.left = (hit.x + hit.r + 8) + 'px';
                 tooltip.style.top = (hit.y - 10) + 'px';
                 const rText = hit.r_partial !== null ? `<br><span class="jarvis-tt-dim">r_partial:</span> ${hit.r_partial.toFixed(3)}` : '';
-                tooltip.innerHTML = `<strong>${hit.label}</strong>${rText}`;
+                const resText = `<br><span class="jarvis-tt-dim">${hit.resolution || 'R0'} · depth ${hit.depth || 1}</span>`;
+                tooltip.innerHTML = `<strong>${hit.label}</strong>${rText}${resText}`;
                 canvas.style.cursor = 'pointer';
             } else if (tooltip) {
                 tooltip.style.display = 'none';
@@ -1501,7 +1605,7 @@ const JarvisUI = (() => {
     }
 
     function renderAutoResearch() {
-        loadAutoResearchData().then(() => {
+        Promise.all([loadAutoResearchData(), loadIndicatorRegistry()]).then(() => {
             const el = container?.querySelector('.jarvis-ar-root');
             if (el) {
                 el.innerHTML = renderAutoResearchContent();
@@ -1571,11 +1675,14 @@ const JarvisUI = (() => {
         }
     }
 
-    let arSummaryOpen = true;
-
     function renderAutoResearchContent() {
         if (!arModel) return '<div style="color:#f87171;padding:20px;">Failed to load prediction model.</div>';
         const m = arModel;
+        const regTotal = cachedIndicatorRegistry ? cachedIndicatorRegistry.total : '—';
+        const preR2 = m.pre_upload_model?.cv_r2_mean || '?';
+        const fullR2 = m.full_model?.cv_r2_mean || '?';
+        const preCount = cachedIndicatorRegistry ? cachedIndicatorRegistry.indicators.filter(i => i.layer === 'pre').length : '?';
+        const postCount = cachedIndicatorRegistry ? cachedIndicatorRegistry.indicators.filter(i => i.layer === 'post').length : '?';
         // Pre-upload model inputs (6 features, CV=0.350)
         const preUploadSignals = [
             { key: 'keep_sq', label: 'Keep Rate²', placeholder: 'e.g. 6400 (80²)', def: 6400, derive: (v) => v, note: 'keep² — enter raw or type keep below' },
@@ -1611,68 +1718,40 @@ const JarvisUI = (() => {
         const pct = Math.min(100, Math.round((r2 / target) * 100));
 
         return `
-            <!-- Research Summary -->
+            <!-- Model Status -->
             <div class="jarvis-ar-section">
-                <div class="jarvis-ar-summary-toggle" id="jarvis-ar-summary-toggle">
-                    <h3 class="jarvis-ar-title" style="display:inline;cursor:pointer">
-                        <span>${arSummaryOpen ? '\u25BC' : '\u25B6'}</span> Research Summary
-                    </h3>
+                <h3 class="jarvis-ar-title">Model Status</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+                    <div style="padding:12px;background:rgba(6,182,212,0.08);border-radius:8px;border-left:3px solid #06b6d4">
+                        <div style="font-size:11px;color:var(--j-muted);margin-bottom:4px">Pre-upload model</div>
+                        <div style="font-family:'SF Mono',monospace;font-size:18px;font-weight:700;color:#06b6d4">CV R\u00b2 = ${preR2}</div>
+                        <div style="font-size:10px;color:var(--j-muted);margin-top:2px">${m.pre_upload_model?.features?.length || '?'} features</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(167,139,250,0.08);border-radius:8px;border-left:3px solid #a78bfa">
+                        <div style="font-size:11px;color:var(--j-muted);margin-bottom:4px">Full model</div>
+                        <div style="font-family:'SF Mono',monospace;font-size:18px;font-weight:700;color:#a78bfa">CV R\u00b2 = ${fullR2}</div>
+                        <div style="font-size:10px;color:var(--j-muted);margin-top:2px">${m.full_model?.features?.length || '?'} features</div>
+                    </div>
                 </div>
-                ${arSummaryOpen ? `<div class="jarvis-ar-summary-cards">
-                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #3b82f6">
-                        <div class="jarvis-ar-summary-card-title" style="color:#3b82f6">The Prediction Model</div>
-                        <div class="jarvis-ar-summary-card-text">
-                            <p>We analyzed 203 of Tyler's YouTube videos and ran 2,271 experiments to find what predicts viral success. The model currently explains 66% of view variance (R\u00b2=0.664). Prediction accuracy: \u00b12.5x. Two versions: Pre-upload model (35% variance, 6 signals you can control before shooting) and Full model (66% variance, includes early trajectory signals).</p>
-                            <p style="margin-top:8px;font-weight:600">The most predictive signals are:</p>
-                            <ul>
-                                <li><strong>Keep Rate\u00b2</strong> \u2014 non-linear: above 75% keep rate, each percent doubles hit rate</li>
-                                <li><strong>Max Cliff</strong> \u2014 bigger retention drops = more views (signals dramatic narrative moments)</li>
-                                <li><strong>Previous Video Views</strong> \u2014 channel momentum: bigger hit \u2192 bigger push on next video</li>
-                                <li><strong>View Acceleration</strong> \u2014 day3-7 vs day1 views. Sustained trajectory beats day-1 spike</li>
-                                <li><strong>Making/Build content</strong> \u2014 avg 19.7M views vs 5.6M for other formats</li>
-                            </ul>
+                <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px">
+                    <div style="font-size:11px;color:var(--j-muted);margin-bottom:6px">Total indicators in registry: <strong style="color:var(--j-text)">${regTotal}</strong></div>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:0;padding:8px 0">
+                        <div style="text-align:center;padding:10px 18px;background:rgba(6,182,212,0.12);border-radius:8px 0 0 8px">
+                            <div style="font-size:10px;color:#06b6d4;text-transform:uppercase;font-weight:600">Pre-upload</div>
+                            <div style="font-size:18px;font-weight:700;color:#06b6d4">${preCount}</div>
+                        </div>
+                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u2192</div>
+                        <div style="text-align:center;padding:10px 18px;background:rgba(167,139,250,0.12)">
+                            <div style="font-size:10px;color:#a78bfa;text-transform:uppercase;font-weight:600">Post-upload</div>
+                            <div style="font-size:18px;font-weight:700;color:#a78bfa">${postCount}</div>
+                        </div>
+                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u2192</div>
+                        <div style="text-align:center;padding:10px 18px;background:rgba(245,158,11,0.12);border-radius:0 8px 8px 0">
+                            <div style="font-size:10px;color:#f59e0b;text-transform:uppercase;font-weight:600">Views</div>
+                            <div style="font-size:18px;font-weight:700;color:#f59e0b">1</div>
                         </div>
                     </div>
-                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #06b6d4">
-                        <div class="jarvis-ar-summary-card-title" style="color:#06b6d4">What Causes Keep Rate (pre-upload)</div>
-                        <div class="jarvis-ar-summary-card-text">
-                            <p>These signals were found to cause better keep rate \u2014 things you can control before shooting:</p>
-                            <ul>
-                                <li><strong>Pivot density:</strong> more but/wait/however transitions \u2192 higher keep rate (r=+0.26)</li>
-                                <li><strong>Action word density in hook:</strong> physical/action hooks beat talking hooks (r=+0.15)</li>
-                                <li><strong>Indestructible/bulletproof/superhero concept:</strong> avg 61M views vs 5.6M (7 videos \u2014 confirmed category)</li>
-                                <li><strong>Making/Build content:</strong> avg 19.7M views (34 videos)</li>
-                            </ul>
-                            <p style="margin-top:8px;color:var(--j-muted);font-style:italic">NOT causal: Zeigarnik score, novelty, cognitive load \u2014 these correlate with keep rate but don't improve the prediction model.</p>
-                        </div>
-                    </div>
-                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #a78bfa">
-                        <div class="jarvis-ar-summary-card-title" style="color:#a78bfa">What Retention Curves Reveal</div>
-                        <div class="jarvis-ar-summary-card-text">
-                            <p>Second-by-second retention analysis of 372 videos found:</p>
-                            <ul>
-                                <li><strong>Late narrative peak beats early:</strong> videos peaking at 60-80% of runtime get 10x more views than videos that peak early</li>
-                                <li><strong>Visceral words retain:</strong> painful, difference, hurt cause retention gains. Transition words (so, however) cause drops (-11%)</li>
-                                <li><strong>Final 5% is the mega-virality differentiator:</strong> top videos hold +8% above baseline in the last 5% of video</li>
-                                <li><strong>Physical challenge visuals +12%</strong> at retention peaks. Product/food shots without human anchor cause drops</li>
-                                <li><strong>Anticipation phrases retain:</strong> would it, what if, let's see create +6-8% bumps</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #10b981">
-                        <div class="jarvis-ar-summary-card-title" style="color:#10b981">What Doesn't Matter (Yet)</div>
-                        <div class="jarvis-ar-summary-card-text">
-                            <p>Signals that were tested but did NOT improve the prediction model:</p>
-                            <ul>
-                                <li><strong>Zeigarnik score</strong> \u2014 correlates with keep rate (r=0.18) but already captured by keep\u00b2</li>
-                                <li><strong>Cognitive load</strong> \u2014 weak negative correlation, dominated by other signals</li>
-                                <li><strong>Net novelty (novelty - cognitive_load)</strong> \u2014 interesting concept, redundant in full model</li>
-                                <li><strong>Text overlay presence</strong> \u2014 no significant effect on views or keep rate</li>
-                                <li><strong>Silent visual hook</strong> \u2014 tested but inconclusive at n=203</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>` : ''}
+                </div>
             </div>
 
             <!-- Pipeline Architecture -->
@@ -1941,18 +2020,7 @@ const JarvisUI = (() => {
             btn.addEventListener('click', () => runHypothesis(btn.dataset.hyp));
         });
 
-        const summaryToggle = container?.querySelector('#jarvis-ar-summary-toggle');
-        if (summaryToggle) {
-            summaryToggle.addEventListener('click', () => {
-                arSummaryOpen = !arSummaryOpen;
-                const el = container?.querySelector('.jarvis-ar-root');
-                if (el) {
-                    el.innerHTML = renderAutoResearchContent();
-                    bindAutoResearchEvents();
-                    loadLoopStatus();
-                }
-            });
-        }
+        // (arSummaryOpen toggle removed — replaced by Model Status section)
     }
 
     // ══════════════════════════════════════════════════

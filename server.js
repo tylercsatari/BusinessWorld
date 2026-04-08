@@ -3505,6 +3505,22 @@ Respond ONLY as valid JSON (no markdown):
     }
 
     // =========================================
+    // API: Jarvis Indicator Registry
+    // =========================================
+    if (pathname === '/api/jarvis/indicators' && req.method === 'GET') {
+        const regPath = path.join(__dirname, 'buildings', 'jarvis', 'indicator-registry.json');
+        try {
+            const content = fs.readFileSync(regPath, 'utf8');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(content);
+        } catch {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'indicator-registry.json not found' }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Jarvis Run Hypothesis
     // =========================================
     if (pathname === '/api/jarvis/run-hypothesis' && req.method === 'POST') {
