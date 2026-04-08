@@ -770,7 +770,7 @@ const JarvisUI = (() => {
         loadAutoResearchData(); // load prediction model for signal detail panel
         loadResultsTSV();
         loadIndicatorRegistry().then(() => {
-            drawTacticalFullGraph();
+            buildD3TacticalGraph();
             bindTacticalEvents();
         });
         return `
@@ -779,8 +779,8 @@ const JarvisUI = (() => {
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured after upload)</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (prediction target)</span>
             </div>
-            <div class="jarvis-tactical-network" style="margin-bottom:12px">
-                <canvas id="jarvis-network-canvas" width="400" height="550"></canvas>
+            <div class="jarvis-tactical-network" style="margin-bottom:12px;position:relative">
+                <div id="jarvis-d3-graph" style="width:100%;overflow:hidden"></div>
                 <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;padding:4px 0 10px;font-size:11px;color:var(--j-muted)">
@@ -1051,7 +1051,7 @@ const JarvisUI = (() => {
                 const list = container?.querySelector('#jarvis-signal-list');
                 if (list) list.innerHTML = renderSignalList();
                 bindSignalRowClicks();
-                drawTacticalFullGraph();
+                buildD3TacticalGraph();
             });
         }
         bindSignalRowClicks();
@@ -1069,260 +1069,219 @@ const JarvisUI = (() => {
         });
     }
 
-    function drawTacticalFullGraph() {
-        const canvas = container?.querySelector('#jarvis-network-canvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const W = canvas.parentElement.clientWidth || 400;
-        const H = 550;
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = W * dpr;
-        canvas.height = H * dpr;
-        canvas.style.width = W + 'px';
-        canvas.style.height = H + 'px';
-        ctx.scale(dpr, dpr);
+    function buildD3TacticalGraph() {
+        const graphEl = container?.querySelector('#jarvis-d3-graph');
+        if (!graphEl || typeof d3 === 'undefined') return;
+        graphEl.innerHTML = '';
 
-        // Use indicator registry as source, fallback to discovered signals
-        const allSignals = getRegistrySignals();
+        const width = graphEl.clientWidth || 500;
+        const height = 550;
 
-        // Filter to top 100 by |r_partial|, exclude nulls
-        const withR = allSignals.filter(s => s.r_partial !== null);
+        const svg = d3.select(graphEl).append('svg')
+            .attr('width', width).attr('height', height)
+            .style('background', 'transparent');
+
+        // ── Data: nodes from registry, edges from registry.edges ──
+        const registry = cachedIndicatorRegistry;
+        if (!registry) return;
+
+        const allIndicators = registry.indicators || [];
+        const allEdges = registry.edges || [];
+
+        // Core node keys always included
+        const coreKeys = new Set(['views', 'keep', 'retention', 'swipe_ratio']);
+
+        // Top 150 by |r_partial| + all core nodes
+        const withR = allIndicators.filter(s => s.r_partial != null && !coreKeys.has(s.key));
         withR.sort((a, b) => Math.abs(b.r_partial) - Math.abs(a.r_partial));
-        const top = withR.slice(0, 100);
+        const topSignals = withR.slice(0, 150);
+        const coreSignals = allIndicators.filter(s => coreKeys.has(s.key));
+        const selectedSignals = [...coreSignals, ...topSignals];
 
-        // Apply merge threshold for graph too
-        const merged = applyMergeThreshold(top, currentMergeThreshold);
+        // Apply merge threshold
+        const merged = applyMergeThreshold(
+            selectedSignals.filter(s => !coreKeys.has(s.key)),
+            currentMergeThreshold
+        );
+        const nodes = [...coreSignals, ...merged];
+        const nodeKeySet = new Set(nodes.map(n => n.key));
 
-        const preNodes = merged.filter(s => s.layer === 'pre');
-        const postNodes = merged.filter(s => s.layer === 'post');
+        // Filter edges to only those where BOTH source and target exist in nodes
+        const links = allEdges
+            .filter(e => nodeKeySet.has(e.from) && nodeKeySet.has(e.to))
+            .map(e => ({ source: e.from, target: e.to, r: e.r || 0, experiment: e.experiment }));
 
-        // Resolution Y zones
-        const resZones = { R0: [0.05, 0.30], R1: [0.30, 0.55], R2: [0.55, 0.75], R3: [0.75, 0.90] };
-
-        // Node sizing: 8 + depth * 2, max 20
-        function nodeRadius(sig) {
-            const depthR = 8 + (sig.depth || 1) * 2;
-            const clusterBonus = (sig._clusterCount || 1) > 1 ? 4 : 0;
-            return Math.min(depthR + clusterBonus, 24);
+        // Node color + radius helpers
+        function nodeColor(d) {
+            if (d.key === 'views') return '#f59e0b';
+            if (d.layer === 'pre') return '#06b6d4';
+            return '#a78bfa';
+        }
+        function nodeRadius(d) {
+            if (d.key === 'views') return 24;
+            return Math.max(6, Math.min(20, 5 + (d.depth || 1) * 1.8 + Math.abs(d.r_partial || 0) * 6));
         }
 
-        // Build nodes with initial positions: X by layer column, Y by resolution zone
-        const nodes = [];
+        // Initial positions from zone
+        const yMap = { R0: height * 0.15, R1: height * 0.40, R2: height * 0.64, R3: height * 0.85 };
+        nodes.forEach(d => {
+            d.x = d.layer === 'views' ? width * 0.88 : d.layer === 'pre' ? width * 0.20 : width * 0.58;
+            d.y = yMap[d.resolution || 'R0'] || height * 0.15;
+            d.x += (Math.random() - 0.5) * 50;
+            d.y += (Math.random() - 0.5) * 30;
+        });
 
-        function initY(sig, indexInZone, totalInZone) {
-            const zone = resZones[sig.resolution] || resZones.R0;
-            const yStart = zone[0] * H;
-            const yEnd = zone[1] * H;
-            const spread = (yEnd - yStart) / Math.max(totalInZone, 1);
-            return yStart + spread * (indexInZone + 0.5);
-        }
+        // Pin views node
+        const viewsNode = nodes.find(n => n.key === 'views');
+        if (viewsNode) { viewsNode.fx = width * 0.88; viewsNode.fy = height * 0.30; }
 
-        // Group pre/post nodes by resolution for proper Y distribution
-        function addNodes(layerNodes, xMin, xMax, color) {
-            const byRes = { R0: [], R1: [], R2: [], R3: [] };
-            layerNodes.forEach(s => (byRes[s.resolution] || byRes.R0).push(s));
-            // Sort each zone alphabetically
-            Object.values(byRes).forEach(arr => arr.sort((a, b) => a.key.localeCompare(b.key)));
-            Object.entries(byRes).forEach(([, arr]) => {
-                arr.forEach((s, i) => {
-                    nodes.push({
-                        key: s.key, label: s.label, r_partial: s.r_partial, layer: s.layer,
-                        resolution: s.resolution, depth: s.depth, target: s.target,
-                        color: color, r: nodeRadius(s),
-                        _clusterCount: s._clusterCount || 1,
-                        x: xMin * W + Math.random() * (xMax - xMin) * W,
-                        y: initY(s, i, arr.length),
-                        vx: 0, vy: 0, notes: s.notes,
-                        xMin: xMin, xMax: xMax,
-                    });
-                });
+        // ── Background zones ──
+        // Vertical bands
+        svg.append('rect').attr('x', 0).attr('y', 0).attr('width', width * 0.38).attr('height', height)
+            .attr('fill', 'rgba(6,182,212,0.04)');
+        svg.append('rect').attr('x', width * 0.38).attr('y', 0).attr('width', width * 0.42).attr('height', height)
+            .attr('fill', 'rgba(167,139,250,0.04)');
+        svg.append('rect').attr('x', width * 0.80).attr('y', 0).attr('width', width * 0.20).attr('height', height)
+            .attr('fill', 'rgba(245,158,11,0.04)');
+
+        // Horizontal resolution lines
+        [height * 0.28, height * 0.54, height * 0.76].forEach(y => {
+            svg.append('line').attr('x1', 0).attr('x2', width).attr('y1', y).attr('y2', y)
+                .attr('stroke', 'rgba(255,255,255,0.05)').attr('stroke-width', 1);
+        });
+
+        // Column headers
+        [['PRE-UPLOAD', width * 0.20, '#06b6d4'], ['POST-UPLOAD', width * 0.58, '#a78bfa'], ['VIEWS', width * 0.88, '#f59e0b']].forEach(([label, x, fill]) => {
+            svg.append('text').attr('x', x).attr('y', 12).attr('text-anchor', 'middle')
+                .attr('fill', fill).attr('font-size', '10px').attr('font-weight', '600')
+                .attr('font-family', 'system-ui, sans-serif').text(label);
+        });
+
+        // Resolution labels
+        [['R0 \u00b7 Full Video', height * 0.15], ['R1 \u00b7 Segment', height * 0.40], ['R2 \u00b7 Fine', height * 0.64], ['R3 \u00b7 Frame', height * 0.85]].forEach(([label, y]) => {
+            svg.append('text').attr('x', 8).attr('y', y).attr('fill', '#334155')
+                .attr('font-size', '8px').attr('font-family', 'system-ui, sans-serif').text(label);
+        });
+
+        // ── D3 Force Simulation ──
+        const simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.key)
+                .distance(d => 70 + (1 - Math.abs(d.r || 0.2)) * 50)
+                .strength(0.25))
+            .force('charge', d3.forceManyBody().strength(-120).distanceMax(180))
+            .force('x', d3.forceX(d => {
+                if (d.layer === 'views') return width * 0.88;
+                if (d.layer === 'pre') return width * 0.20;
+                return width * 0.58;
+            }).strength(d => d.layer === 'views' ? 1.0 : 0.55))
+            .force('y', d3.forceY(d => {
+                return yMap[d.resolution || 'R0'] || height * 0.15;
+            }).strength(0.50))
+            .force('collide', d3.forceCollide(d => nodeRadius(d) + 4))
+            .stop();
+
+        // Run simulation synchronously
+        for (let i = 0; i < 200; i++) simulation.tick();
+
+        // ── Edge rendering (drawn BEFORE nodes so nodes appear on top) ──
+        const linkGroup = svg.append('g').attr('class', 'links');
+        linkGroup.selectAll('line')
+            .data(links)
+            .join('line')
+            .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y)
+            .attr('stroke', d => nodeColor(d.source))
+            .attr('stroke-opacity', d => {
+                const absR = Math.abs(d.r || 0);
+                let op = Math.min(0.06 + absR * 0.38, 0.55);
+                // Same-layer edges: halve opacity
+                if (d.source.layer === d.target.layer && d.source.layer !== 'views') op *= 0.5;
+                return op;
+            })
+            .attr('stroke-width', d => Math.min(0.4 + Math.abs(d.r || 0) * 2.0, 3))
+            .attr('stroke-dasharray', d => {
+                // Same-layer edges
+                if (d.source.layer === d.target.layer && d.source.layer !== 'views') return '2,5';
+                // Edges to keep or retention (intermediate)
+                const tKey = typeof d.target === 'object' ? d.target.key : d.target;
+                if (tKey === 'keep' || tKey === 'retention') return '4,3';
+                return null; // solid for edges to views
             });
-        }
 
-        addNodes(preNodes, 0.10, 0.35, '#06b6d4');
-        addNodes(postNodes, 0.50, 0.75, '#a78bfa');
+        // ── Node rendering ──
+        const nodeGroup = svg.append('g').attr('class', 'nodes');
+        const nodeEls = nodeGroup.selectAll('g')
+            .data(nodes)
+            .join('g')
+            .attr('transform', d => `translate(${d.x},${d.y})`);
 
-        // VIEWS target node
-        const viewsNode = {
-            key: 'views', label: 'VIEWS', r_partial: 1, layer: 'views',
-            resolution: 'R0', depth: 0, target: 'views',
-            color: '#f59e0b', r: 28,
-            x: W * 0.88, y: H * 0.50,
-            vx: 0, vy: 0, notes: 'Prediction target: log10(views)',
-        };
-        nodes.push(viewsNode);
+        // Circle
+        nodeEls.append('circle')
+            .attr('r', d => nodeRadius(d))
+            .attr('fill', d => nodeColor(d))
+            .attr('fill-opacity', 0.85)
+            .attr('stroke', 'rgba(255,255,255,0.2)')
+            .attr('stroke-width', 1)
+            .style('cursor', 'pointer');
 
-        // Force-directed simulation (150 iterations)
-        for (let iter = 0; iter < 150; iter++) {
-            // Repulsion between nodes in SAME zone only (same column + same resolution)
-            for (let i = 0; i < nodes.length; i++) {
-                for (let j = i + 1; j < nodes.length; j++) {
-                    const a = nodes[i], b = nodes[j];
-                    if (a.layer === 'views' || b.layer === 'views') continue;
-                    if (a.layer !== b.layer) continue; // same column only
-                    const dx = b.x - a.x, dy = b.y - a.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                    if (dist < 80) {
-                        const force = 400 / (dist * dist);
-                        const fx = (dx / dist) * force;
-                        const fy = (dy / dist) * force;
-                        a.vx -= fx; a.vy -= fy;
-                        b.vx += fx; b.vy += fy;
-                    }
-                }
-            }
+        // Depth badge (if depth >= 3)
+        nodeEls.filter(d => (d.depth || 1) >= 3)
+            .append('circle')
+            .attr('cx', d => nodeRadius(d) * 0.7)
+            .attr('cy', d => -nodeRadius(d) * 0.7)
+            .attr('r', 6)
+            .attr('fill', '#1e293b')
+            .attr('stroke', 'rgba(255,255,255,0.15)')
+            .attr('stroke-width', 0.5);
 
-            // Apply velocities with damping
-            nodes.forEach(n => {
-                if (n.layer === 'views') return;
-                n.vx *= 0.8;
-                n.vy *= 0.8;
-                n.x += n.vx;
-                n.y += n.vy;
-                // Boundary: keep in assigned zone
-                n.x = Math.max(n.xMin * W + n.r, Math.min(n.xMax * W - n.r, n.x));
-                const zone = resZones[n.resolution] || resZones.R0;
-                n.y = Math.max(zone[0] * H + n.r, Math.min(zone[1] * H - n.r, n.y));
+        nodeEls.filter(d => (d.depth || 1) >= 3)
+            .append('text')
+            .attr('x', d => nodeRadius(d) * 0.7)
+            .attr('y', d => -nodeRadius(d) * 0.7 + 2.5)
+            .attr('text-anchor', 'middle')
+            .attr('fill', 'white')
+            .attr('font-size', '7px')
+            .attr('font-family', 'system-ui, sans-serif')
+            .text(d => d.depth || 1);
+
+        // Labels (show if r_partial >= 0.20 or core node)
+        nodeEls.filter(d => coreKeys.has(d.key) || Math.abs(d.r_partial || 0) >= 0.20)
+            .append('text')
+            .attr('y', d => nodeRadius(d) + 12)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#94a3b8')
+            .attr('font-size', '9px')
+            .attr('font-family', 'system-ui, sans-serif')
+            .text(d => {
+                const lbl = d.label || d.key;
+                return lbl.length > 13 ? lbl.slice(0, 12) + '\u2026' : lbl;
             });
-        }
 
-        // Draw resolution zone labels (left side)
-        ctx.font = '9px system-ui, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(100,116,139,0.4)';
-        Object.entries(resZones).forEach(([label, [y0]]) => {
-            ctx.fillText(label, 4, y0 * H + 12);
-            ctx.beginPath();
-            ctx.strokeStyle = 'rgba(100,116,139,0.08)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([4, 6]);
-            ctx.moveTo(0, y0 * H);
-            ctx.lineTo(W, y0 * H);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        });
-
-        // Draw edges from each node to VIEWS
-        nodes.forEach(n => {
-            if (n.layer === 'views') return;
-            const absR = Math.abs(n.r_partial || 0);
-            const thickness = Math.min(0.5 + absR * 2, 3);
-            const opacity = Math.min(0.05 + absR * 0.3, 0.45);
-            const hex = n.color;
-            const cr = parseInt(hex.slice(1, 3), 16);
-            const cg = parseInt(hex.slice(3, 5), 16);
-            const cb = parseInt(hex.slice(5, 7), 16);
-            ctx.beginPath();
-            ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${opacity})`;
-            ctx.lineWidth = thickness;
-            ctx.moveTo(n.x, n.y);
-            ctx.lineTo(viewsNode.x, viewsNode.y);
-            ctx.stroke();
-        });
-
-        // Draw dashed edges for keep/retention target nodes
-        nodes.forEach(n => {
-            if (n.layer === 'views' || !n.target || n.target === 'views') return;
-            // Find nearest post-upload node with highest r_partial
-            const postCandidates = nodes.filter(p => p.layer === 'post' && p.key !== n.key);
-            if (!postCandidates.length) return;
-            const nearest = postCandidates.sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0))[0];
-            const hex = n.color;
-            const cr = parseInt(hex.slice(1, 3), 16);
-            const cg = parseInt(hex.slice(3, 5), 16);
-            const cb = parseInt(hex.slice(5, 7), 16);
-            ctx.beginPath();
-            ctx.setLineDash([3, 4]);
-            ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.06)`;
-            ctx.lineWidth = 1;
-            ctx.moveTo(n.x, n.y);
-            ctx.lineTo(nearest.x, nearest.y);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        });
-
-        // Draw nodes
-        nodes.forEach(n => {
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-            ctx.fillStyle = n.color;
-            ctx.globalAlpha = 0.85;
-            ctx.fill();
-            ctx.globalAlpha = 1;
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        });
-
-        // Draw labels only for nodes with |r_partial| >= 0.2 (or VIEWS)
-        nodes.forEach(n => {
-            if (n.layer !== 'views' && Math.abs(n.r_partial || 0) < 0.2) return;
-            const fontSize = n.layer === 'views' ? 12 : 9;
-            ctx.font = `${fontSize}px system-ui, sans-serif`;
-            ctx.textAlign = 'center';
-            const truncated = n.label.length > 14 ? n.label.slice(0, 13) + '\u2026' : n.label;
-            const textW = ctx.measureText(truncated).width;
-            const pillX = n.x - textW / 2 - 3;
-            const pillY = n.y + n.r + 4;
-            const pillW = textW + 6;
-            const pillH = fontSize + 4;
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-            ctx.beginPath();
-            if (ctx.roundRect) {
-                ctx.roundRect(pillX, pillY, pillW, pillH, 3);
-            } else {
-                ctx.rect(pillX, pillY, pillW, pillH);
-            }
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.fillText(truncated, n.x, pillY + fontSize);
-        });
-
-        // Tooltip
+        // ── Tooltip ──
         const tooltip = container?.querySelector('#jarvis-network-tooltip');
-        canvas.onmousemove = (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
-            let hit = null;
-            for (const n of nodes) {
-                const dx = mx - n.x, dy = my - n.y;
-                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) { hit = n; break; }
-            }
-            if (hit && tooltip) {
+        nodeEls
+            .on('mouseover', (event, d) => {
+                if (!tooltip) return;
                 tooltip.style.display = 'block';
-                tooltip.style.left = (hit.x + hit.r + 8) + 'px';
-                tooltip.style.top = (hit.y - 10) + 'px';
-                const rText = hit.r_partial !== null ? `<br><span class="jarvis-tt-dim">r_partial:</span> ${hit.r_partial.toFixed(3)}` : '';
-                const resText = `<br><span class="jarvis-tt-dim">${hit.resolution || 'R0'} · depth ${hit.depth || 1}</span>`;
-                tooltip.innerHTML = `<strong>${hit.label}</strong>${rText}${resText}`;
-                canvas.style.cursor = 'pointer';
-            } else if (tooltip) {
-                tooltip.style.display = 'none';
-                canvas.style.cursor = 'default';
-            }
-        };
-
-        // Click node -> expand in signal list + scroll to entry
-        canvas.onclick = (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
-            for (const n of nodes) {
-                const dx = mx - n.x, dy = my - n.y;
-                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) {
-                    tacticalExpandedSignal = tacticalExpandedSignal === n.key ? null : n.key;
-                    const list = container?.querySelector('#jarvis-signal-list');
-                    if (list) {
-                        list.innerHTML = renderSignalList();
-                        bindSignalRowClicks();
-                        const row = list.querySelector(`[data-signal-key="${n.key}"]`);
-                        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }
-                    break;
+                tooltip.style.left = (d.x + nodeRadius(d) + 8) + 'px';
+                tooltip.style.top = (d.y - 10) + 'px';
+                const rText = d.r_partial != null ? `<br><span class="jarvis-tt-dim">r_partial:</span> ${Number(d.r_partial).toFixed(3)}` : '';
+                const resText = `<br><span class="jarvis-tt-dim">${d.resolution || 'R0'} \u00b7 depth ${d.depth || 1}</span>`;
+                tooltip.innerHTML = `<strong>${d.label || d.key}</strong>${rText}${resText}`;
+            })
+            .on('mouseout', () => {
+                if (tooltip) tooltip.style.display = 'none';
+            })
+            .on('click', (event, d) => {
+                tacticalExpandedSignal = tacticalExpandedSignal === d.key ? null : d.key;
+                const list = container?.querySelector('#jarvis-signal-list');
+                if (list) {
+                    list.innerHTML = renderSignalList();
+                    bindSignalRowClicks();
+                    const row = list.querySelector(`[data-signal-key="${d.key}"]`);
+                    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
-            }
-        };
+            });
     }
 
     // ══════════════════════════════════════════════════
