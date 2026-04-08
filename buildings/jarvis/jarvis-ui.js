@@ -74,7 +74,7 @@ const JarvisUI = (() => {
         ratio: 'numerator', net: 'positive', proximity: 'signals',
     };
 
-    // ── Tool graph layout ──
+    // ── Tool graph layout (initial hints, refined by force simulation) ──
     const ANALYTICAL_NODES = [
         { id: 'pearson', x: 60, y: 40 },
         { id: 'bucket', x: 200, y: 40 },
@@ -236,15 +236,18 @@ const JarvisUI = (() => {
         canvas.height = H * dpr;
         ctx.scale(dpr, dpr);
 
-        // Scale node positions to actual width
+        const PAD = 40;
         const scaleX = W / 440;
         const scaleY = H / 280;
+
+        // Initialize nodes with slightly randomized positions from hints
         const nodes = ANALYTICAL_NODES.map(n => {
             const def = TOOL_DEFS.find(t => t.id === n.id);
             return {
                 id: n.id,
-                x: n.x * scaleX,
-                y: n.y * scaleY,
+                x: n.x * scaleX + (Math.random() - 0.5) * 20,
+                y: n.y * scaleY + (Math.random() - 0.5) * 20,
+                vx: 0, vy: 0,
                 r: def?.planned ? 16 : 20,
                 color: def?.planned ? '#a78bfa' : ['ols','cv','feature_sel','gbm','rf','blend'].includes(n.id) ? '#10b981' : '#3b82f6',
                 label: def?.name || n.id,
@@ -256,6 +259,50 @@ const JarvisUI = (() => {
         });
         const nodeMap = {};
         nodes.forEach(n => nodeMap[n.id] = n);
+
+        // Force-directed simulation: 100 iterations
+        for (let iter = 0; iter < 100; iter++) {
+            // Reset forces
+            nodes.forEach(n => { n.vx = 0; n.vy = 0; });
+
+            // Repulsion between all node pairs
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const a = nodes[i], b = nodes[j];
+                    let dx = b.x - a.x, dy = b.y - a.y;
+                    let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    if (dist < 80) {
+                        const force = (1 / (dist * dist)) * 200;
+                        const fx = (dx / dist) * force;
+                        const fy = (dy / dist) * force;
+                        a.vx -= fx; a.vy -= fy;
+                        b.vx += fx; b.vy += fy;
+                    }
+                }
+            }
+
+            // Spring edges: attract connected nodes toward 100px distance
+            ANALYTICAL_EDGES.forEach(([aId, bId]) => {
+                const a = nodeMap[aId], b = nodeMap[bId];
+                if (!a || !b) return;
+                let dx = b.x - a.x, dy = b.y - a.y;
+                let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const diff = dist - 100;
+                const force = diff * 0.05;
+                const fx = (dx / dist) * force;
+                const fy = (dy / dist) * force;
+                a.vx += fx; a.vy += fy;
+                b.vx -= fx; b.vy -= fy;
+            });
+
+            // Apply velocities with damping, clamp to bounds
+            nodes.forEach(n => {
+                n.x += n.vx * 0.5;
+                n.y += n.vy * 0.5;
+                n.x = Math.max(PAD, Math.min(W - PAD, n.x));
+                n.y = Math.max(PAD, Math.min(H - PAD, n.y));
+            });
+        }
 
         // Draw edges
         ctx.lineWidth = 1.5;
@@ -697,18 +744,22 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
-    // TAB 2: TACTICAL BRAIN — Vector Network Graph
+    // TAB 2: TACTICAL BRAIN — Core Canvas + Signal List
     // ══════════════════════════════════════════════════
     let tacticalDiscoveredNodes = [];
+    let tacticalFilter = 'all';
+    let tacticalSearch = '';
+    let tacticalExpandedSignal = null;
 
     function renderTactical() {
-        // Load results.tsv for discovered nodes, then draw
+        loadAutoResearchData(); // load prediction model for signal detail panel
         loadResultsTSV().then(() => {
-            drawTacticalGraph();
+            drawTacticalCoreGraph();
+            bindTacticalEvents();
         });
         return `
-            <div class="jarvis-tactical-network">
-                <canvas id="jarvis-network-canvas" width="400" height="350"></canvas>
+            <div class="jarvis-tactical-network" style="margin-bottom:12px">
+                <canvas id="jarvis-network-canvas" width="400" height="300"></canvas>
                 <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
             <div class="jarvis-network-legend">
@@ -717,6 +768,17 @@ const JarvisUI = (() => {
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#14b8a6"></span>Derived</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#4b5563"></span>Planned</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f97316"></span>Discovered</span>
+            </div>
+            <div class="jarvis-signal-list-section">
+                <input type="text" class="jarvis-signal-search" id="jarvis-signal-search" placeholder="Search signals..." value="${tacticalSearch}" />
+                <div class="jarvis-signal-filters" id="jarvis-signal-filters">
+                    ${['all','analytics','llm-scored','derived','discovered'].map(f =>
+                        `<button class="jarvis-signal-filter-btn${tacticalFilter === f ? ' active' : ''}" data-filter="${f}">${f === 'all' ? 'All' : f === 'llm-scored' ? 'LLM-scored' : f.charAt(0).toUpperCase() + f.slice(1)}</button>`
+                    ).join('')}
+                </div>
+                <div class="jarvis-signal-list" id="jarvis-signal-list">
+                    ${renderSignalList()}
+                </div>
             </div>`;
     }
 
@@ -777,15 +839,162 @@ const JarvisUI = (() => {
         }
     }
 
-    function drawTacticalGraph() {
+    function getSignalFilterCategory(ind) {
+        if (ind.category === 'discovered') return 'discovered';
+        if (ind.category === 'planned') return 'analytics'; // group planned with analytics
+        if (ind.source.startsWith('Derived')) return 'derived';
+        if (ind.source.startsWith('YouTube') || ind.source.includes('YouTube')) return 'analytics';
+        return 'llm-scored';
+    }
+
+    function getAllSignals() {
+        const allIndicators = [...INDICATORS];
+        tacticalDiscoveredNodes.forEach(d => {
+            if (!allIndicators.find(i => i.key === d.key)) {
+                allIndicators.push(d);
+            }
+        });
+        return allIndicators;
+    }
+
+    function renderSignalList() {
+        const allIndicators = getAllSignals();
+        const search = tacticalSearch.toLowerCase();
+        const filtered = allIndicators.filter(ind => {
+            if (tacticalFilter !== 'all' && getSignalFilterCategory(ind) !== tacticalFilter) return false;
+            if (search && !ind.label.toLowerCase().includes(search) && !ind.key.toLowerCase().includes(search)) return false;
+            return true;
+        });
+
+        if (!filtered.length) return '<div style="color:var(--j-muted);padding:12px;font-size:12px;">No signals match your search.</div>';
+
+        return filtered.map(ind => {
+            const color = getNodeColor(ind);
+            const filterCat = getSignalFilterCategory(ind);
+            const isExpanded = tacticalExpandedSignal === ind.key;
+            // Try to find r value from cachedResultsRows
+            let rValue = null;
+            if (cachedResultsRows) {
+                const match = cachedResultsRows.find(r => {
+                    const sig = (r.new_signal || '').replace(/^discovery:/, '');
+                    return sig === ind.key;
+                });
+                if (match && match.notes) {
+                    const rMatch = match.notes.match(/r[_=]\s*([-+]?[0-9]*\.?[0-9]+)/i);
+                    if (rMatch) rValue = parseFloat(rMatch[1]);
+                }
+            }
+            const rBar = rValue !== null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(rValue) * 100, 100)}%;background:${color}"></div></div>` : '';
+
+            return `<div class="jarvis-signal-row-wrapper">
+                <div class="jarvis-signal-row${isExpanded ? ' expanded' : ''}" data-signal-key="${ind.key}">
+                    <span class="jarvis-signal-dot" style="background:${color}"></span>
+                    <span class="jarvis-signal-name">${ind.label}</span>
+                    <span class="jarvis-signal-type-badge">${ind.numeric ? 'numeric' : 'categorical'}</span>
+                    <span class="jarvis-signal-source">${filterCat}</span>
+                    ${rBar}
+                </div>
+                ${isExpanded ? renderSignalDetail(ind) : ''}
+            </div>`;
+        }).join('');
+    }
+
+    function renderSignalDetail(ind) {
+        const color = getNodeColor(ind);
+        // Find experiments that used this signal
+        const relatedExps = (cachedResultsRows || []).filter(r => {
+            const sig = (r.new_signal || '').replace(/^discovery:/, '');
+            return sig === ind.key;
+        });
+        // Check if in prediction model
+        let inModel = false;
+        if (arModel) {
+            const preFeats = arModel.pre_upload_model?.features || [];
+            const fullFeats = arModel.full_model?.features || [];
+            inModel = preFeats.includes(ind.key) || fullFeats.includes(ind.key);
+        }
+        // Determine status
+        let status = 'planned';
+        if (inModel) status = 'in model';
+        else if (ind.category === 'discovered') status = 'discovery';
+        else if (ind.category === 'active') status = 'active signal';
+        else if (ind.category === 'planned') status = 'planned';
+        // Check if discarded
+        const discardedExp = relatedExps.find(r => (r.status || '').trim().toLowerCase() === 'discard');
+        if (discardedExp && !inModel) status = 'discarded';
+
+        const statusColors = { 'in model': '#10b981', 'discovery': '#f97316', 'active signal': '#3b82f6', 'planned': '#64748b', 'discarded': '#ef4444' };
+
+        return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
+            <div class="jarvis-signal-detail-name">${ind.label}</div>
+            <div class="jarvis-signal-detail-meta">
+                <span>Type: <strong>${ind.type}</strong></span>
+                <span>Source: <strong>${ind.source}</strong></span>
+                ${ind.resolution ? `<span>Resolution: <strong>${ind.resolution}</strong></span>` : ''}
+                <span>Category: <strong>${getSignalFilterCategory(ind)}</strong></span>
+            </div>
+            <div class="jarvis-signal-detail-status">
+                Status: <span style="color:${statusColors[status] || '#64748b'};font-weight:700">${status.toUpperCase()}</span>
+                ${inModel ? ' (in prediction model)' : ''}
+            </div>
+            ${relatedExps.length ? `
+                <div class="jarvis-signal-detail-exps">
+                    <div style="font-size:11px;font-weight:600;color:var(--j-muted);text-transform:uppercase;margin-bottom:6px">Experiments (${relatedExps.length})</div>
+                    ${relatedExps.map(r => {
+                        const st = (r.status || '').trim().toLowerCase();
+                        const stColor = st === 'keep' ? '#10b981' : st === 'discard' ? '#ef4444' : '#64748b';
+                        return `<div class="jarvis-signal-detail-exp">
+                            <span style="color:var(--j-text);font-weight:600">${r.experiment_id}</span>
+                            <span class="jarvis-badge" style="background:rgba(${st === 'keep' ? '16,185,129' : '100,100,100'},0.15);color:${stColor}">${st}</span>
+                            ${r.delta_r2 && r.delta_r2 !== '—' ? `<span style="font-family:'SF Mono',monospace;font-size:11px;color:var(--j-cyan)">dR²=${r.delta_r2}</span>` : ''}
+                            <div style="font-size:10px;color:var(--j-muted);margin-top:2px">${r.notes || ''}</div>
+                        </div>`;
+                    }).join('')}
+                </div>` : '<div style="font-size:11px;color:var(--j-muted);margin-top:8px">No experiments found for this signal.</div>'}
+        </div>`;
+    }
+
+    function bindTacticalEvents() {
+        const searchInput = container?.querySelector('#jarvis-signal-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                tacticalSearch = e.target.value;
+                const list = container?.querySelector('#jarvis-signal-list');
+                if (list) list.innerHTML = renderSignalList();
+                bindSignalRowClicks();
+            });
+        }
+        container?.querySelectorAll('.jarvis-signal-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                tacticalFilter = btn.dataset.filter;
+                container.querySelectorAll('.jarvis-signal-filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const list = container?.querySelector('#jarvis-signal-list');
+                if (list) list.innerHTML = renderSignalList();
+                bindSignalRowClicks();
+            });
+        });
+        bindSignalRowClicks();
+    }
+
+    function bindSignalRowClicks() {
+        container?.querySelectorAll('.jarvis-signal-row').forEach(row => {
+            row.addEventListener('click', () => {
+                const key = row.dataset.signalKey;
+                tacticalExpandedSignal = tacticalExpandedSignal === key ? null : key;
+                const list = container?.querySelector('#jarvis-signal-list');
+                if (list) list.innerHTML = renderSignalList();
+                bindSignalRowClicks();
+            });
+        });
+    }
+
+    function drawTacticalCoreGraph() {
         const canvas = container?.querySelector('#jarvis-network-canvas');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const W = canvas.parentElement.clientWidth || 400;
-        const H = 350;
-        canvas.width = W;
-        canvas.height = H;
-
+        const H = 300;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = W * dpr;
         canvas.height = H * dpr;
@@ -794,22 +1003,18 @@ const JarvisUI = (() => {
         ctx.scale(dpr, dpr);
 
         const cx = W / 2, cy = H / 2;
+        // Only show 9 core indicators
+        const CORE_KEYS = ['keep', 'retention', 'vz_score', 'novelty', 'cognitive_load', 'net_novelty', 'share_rate', 'views', 'vz_type'];
         const positions = {
-            keep:       { x: cx - 60, y: 50 },
-            retention:  { x: cx + 60, y: 50 },
-            views:      { x: cx,      y: 90 },
-            z_score:    { x: 70,       y: cy - 30 },
-            z_type:     { x: 50,       y: cy + 30 },
-            vz_score:   { x: 130,      y: cy - 50 },
-            vz_type:    { x: 130,      y: cy + 20 },
-            novelty:        { x: W - 70,  y: cy - 50 },
-            cognitive_load: { x: W - 70,  y: cy + 10 },
-            net_novelty:    { x: W - 130, y: cy - 20 },
-            share_rate:          { x: cx - 80, y: H - 60 },
-            hook_clarity:        { x: cx + 20, y: H - 40 },
-            visual_surprise:     { x: cx + 100,y: H - 60 },
-            pacing:              { x: cx - 30, y: H - 90 },
-            emotional_resonance: { x: cx + 70, y: H - 90 },
+            keep:           { x: cx - 70, y: 50 },
+            retention:      { x: cx + 70, y: 50 },
+            views:          { x: cx,      y: 110 },
+            vz_score:       { x: 80,      y: cy },
+            vz_type:        { x: 80,      y: cy + 60 },
+            novelty:        { x: W - 80,  y: cy - 20 },
+            cognitive_load: { x: W - 80,  y: cy + 40 },
+            net_novelty:    { x: W - 160, y: cy + 10 },
+            share_rate:     { x: cx,      y: H - 50 },
         };
 
         const edges = [
@@ -817,48 +1022,23 @@ const JarvisUI = (() => {
             ['net_novelty', 'cognitive_load'],
             ['share_rate', 'views'],
             ['vz_score', 'vz_type'],
-            ['z_score', 'z_type'],
-            ['vz_score', 'z_score'],
             ['keep', 'retention'],
+            ['keep', 'views'],
+            ['retention', 'views'],
         ];
 
-        // Build base indicator nodes
-        const allIndicators = [...INDICATORS];
-        // Add discovered nodes
-        tacticalDiscoveredNodes.forEach(d => {
-            if (!allIndicators.find(i => i.key === d.key)) {
-                allIndicators.push(d);
-            }
-        });
-
-        // Place discovered nodes in an arc below the main graph
-        const discoveredKeys = tacticalDiscoveredNodes.map(d => d.key);
-        const discoveredCount = discoveredKeys.length;
-        discoveredKeys.forEach((key, i) => {
-            if (!positions[key]) {
-                const angle = Math.PI * 0.15 + (Math.PI * 0.7) * (i / Math.max(discoveredCount - 1, 1));
-                const rx = W * 0.42;
-                const ry = H * 0.32;
-                positions[key] = {
-                    x: cx + rx * Math.cos(angle),
-                    y: cy + ry * Math.sin(angle),
-                };
-            }
-        });
-
-        const nodes = allIndicators.map(ind => ({
+        const coreIndicators = INDICATORS.filter(i => CORE_KEYS.includes(i.key));
+        const nodes = coreIndicators.map(ind => ({
             key: ind.key,
             label: ind.label,
             type: ind.type,
             source: ind.source,
             color: getNodeColor(ind),
-            r: getNodeRadius(ind.key, ind.category),
+            r: 18,
             x: positions[ind.key]?.x || cx,
             y: positions[ind.key]?.y || cy,
             category: ind.category,
-            resolution: ind.resolution || null,
         }));
-
         const nodeMap = {};
         nodes.forEach(n => nodeMap[n.key] = n);
 
@@ -879,46 +1059,20 @@ const JarvisUI = (() => {
             ctx.beginPath();
             ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
             ctx.fillStyle = n.color;
-            ctx.globalAlpha = n.category === 'discovered' ? 0.9 : 0.85;
+            ctx.globalAlpha = 0.85;
             ctx.fill();
             ctx.globalAlpha = 1;
-            ctx.strokeStyle = n.category === 'discovered' ? 'rgba(249,115,22,0.5)' : 'rgba(255,255,255,0.2)';
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
             ctx.lineWidth = 1;
             ctx.stroke();
 
             ctx.fillStyle = '#cbd5e1';
-            ctx.font = n.category === 'discovered' ? '8px system-ui, sans-serif' : '10px system-ui, sans-serif';
+            ctx.font = '10px system-ui, sans-serif';
             ctx.textAlign = 'center';
-            const labelText = n.label.length > 16 ? n.label.slice(0, 14) + '…' : n.label;
-            ctx.fillText(labelText, n.x, n.y + n.r + 12);
-
-            // Resolution badge pill
-            if (n.resolution && n.r > 10) {
-                const badgeText = n.resolution;
-                ctx.font = '8px system-ui, sans-serif';
-                const tw = ctx.measureText(badgeText).width;
-                const pw = tw + 6;
-                const ph = 12;
-                const bx = n.x - pw / 2;
-                const by = n.y + n.r + 16;
-                ctx.fillStyle = 'rgba(0,0,0,0.4)';
-                ctx.beginPath();
-                ctx.roundRect(bx, by, pw, ph, 3);
-                ctx.fill();
-                // Use node color lightened for text
-                const c = n.color;
-                ctx.fillStyle = c.replace(')', ',0.9)').replace('rgb(', 'rgba(');
-                // fallback for hex colors
-                if (c.startsWith('#')) {
-                    const r = parseInt(c.slice(1,3),16), g = parseInt(c.slice(3,5),16), b = parseInt(c.slice(5,7),16);
-                    ctx.fillStyle = `rgba(${Math.min(r+80,255)},${Math.min(g+80,255)},${Math.min(b+80,255)},0.9)`;
-                }
-                ctx.textAlign = 'center';
-                ctx.fillText(badgeText, n.x, by + 9);
-            }
+            ctx.fillText(n.label, n.x, n.y + n.r + 13);
         });
 
-        // Hover/click
+        // Tooltip
         const tooltip = container?.querySelector('#jarvis-network-tooltip');
         canvas.onmousemove = (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -941,6 +1095,7 @@ const JarvisUI = (() => {
             }
         };
 
+        // Click core node -> expand in signal list
         canvas.onclick = (e) => {
             const rect = canvas.getBoundingClientRect();
             const mx = e.clientX - rect.left;
@@ -948,12 +1103,9 @@ const JarvisUI = (() => {
             for (const n of nodes) {
                 const dx = mx - n.x, dy = my - n.y;
                 if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) {
-                    if (NUMERIC_KEYS.includes(n.key)) {
-                        toolSelections.pearson.signalA = n.key;
-                        activeToolId = 'pearson';
-                        activeTab = 'analytical';
-                        render();
-                    }
+                    tacticalExpandedSignal = tacticalExpandedSignal === n.key ? null : n.key;
+                    const list = container?.querySelector('#jarvis-signal-list');
+                    if (list) { list.innerHTML = renderSignalList(); bindSignalRowClicks(); }
                     break;
                 }
             }
@@ -964,6 +1116,8 @@ const JarvisUI = (() => {
     // TAB 3: EXPERIMENTS — Unified log from results.tsv
     // ══════════════════════════════════════════════════
     let expCollapsed = {};
+    let expSort = 'newest'; // 'best_r2' | 'newest' | 'kept'
+    let expExplainOpen = false;
 
     function renderExperiments() {
         loadResultsTSV().then(rows => {
@@ -1035,6 +1189,32 @@ const JarvisUI = (() => {
             .replace(/\b\w/g, c => c.toUpperCase());
     }
 
+    function sortExperimentRows(rows, sort) {
+        const sorted = [...rows];
+        if (sort === 'best_r2') {
+            sorted.sort((a, b) => {
+                let aR = parseFloat(a.delta_r2) || 0;
+                let bR = parseFloat(b.delta_r2) || 0;
+                // For discoveries, try to parse r from notes
+                if (!aR && a.notes) { const m = a.notes.match(/r[_=]\s*([-+]?[0-9]*\.?[0-9]+)/i); if (m) aR = Math.abs(parseFloat(m[1])); }
+                if (!bR && b.notes) { const m = b.notes.match(/r[_=]\s*([-+]?[0-9]*\.?[0-9]+)/i); if (m) bR = Math.abs(parseFloat(m[1])); }
+                return bR - aR;
+            });
+        } else if (sort === 'kept') {
+            sorted.sort((a, b) => {
+                const aKept = (a.status || '').trim().toLowerCase() === 'keep' ? 1 : 0;
+                const bKept = (b.status || '').trim().toLowerCase() === 'keep' ? 1 : 0;
+                return bKept - aKept;
+            });
+        }
+        // 'newest' = default order from file (already chronological)
+        return sorted;
+    }
+
+    function boldRValues(text) {
+        return text.replace(/(r[_=]\s*[-+]?[0-9]*\.?[0-9]+)/gi, '<strong style="color:var(--j-cyan)">$1</strong>');
+    }
+
     function renderExperimentsContent(rows) {
         if (!rows || !rows.length) return '<div class="jarvis-error">No experiments found.</div>';
 
@@ -1051,18 +1231,50 @@ const JarvisUI = (() => {
         const keepCount = rows.filter(r => (r.status || '').trim().toLowerCase() === 'keep').length;
         const currentR2 = arModel ? arModel.r2 || 0.147 : 0.147;
 
+        // Category explanation cards
+        const explanationCards = [
+            { cat: 'exp', color: '#3b82f6', title: 'Model Experiments', text: 'These are experiments that tested whether adding a new signal improves the prediction model. The model predicts how many views a video will get. Each experiment adds one new signal, trains the model, and measures the R\u00b2 improvement on a held-out test set. KEPT means it improved predictions. DISCARDED means it added noise or was circular.' },
+            { cat: 'loop_b', color: '#f97316', title: 'Signal Discoveries', text: 'These are observations from the data \u2014 things that correlate with views or keep rate. They are NOT yet validated by the prediction model. Think of them as hypotheses: interesting patterns found by exploring the 203-video dataset. Many correlate individually but fail when added to the full model because they\'re already captured by something else.' },
+            { cat: 'loop_c', color: '#06b6d4', title: 'Causal Tree', text: 'These measure what causes the intermediate metrics (keep rate, retention) rather than views directly. The goal: find what you can control BEFORE shooting that will cause good keep rate and retention. Measured against keep/retention as the target, not log(views).' },
+            { cat: 'loop_d', color: '#a78bfa', title: 'Retention Mapping', text: 'These analyze the second-by-second retention curve aligned with what\'s being said and shown at each moment. What words cause retention gains? What visual types cause drops? The goal: find specific techniques that move the retention needle at specific timestamps.' },
+        ];
+
+        let html = '';
+
+        // Collapsible explanation section
+        html += `<div class="jarvis-exp-explain-toggle" id="jarvis-exp-explain-toggle">
+            <span>${expExplainOpen ? '▼' : '▶'}</span> What do these categories mean?
+        </div>`;
+        if (expExplainOpen) {
+            html += `<div class="jarvis-exp-explain-cards">
+                ${explanationCards.map(c => `<div class="jarvis-exp-explain-card" style="border-left:3px solid ${c.color}">
+                    <div class="jarvis-exp-explain-card-title" style="color:${c.color}">${c.title}</div>
+                    <div class="jarvis-exp-explain-card-text">${c.text}</div>
+                </div>`).join('')}
+            </div>`;
+        }
+
         // Summary bar
-        let html = `<div class="jarvis-exp-summary">
+        html += `<div class="jarvis-exp-summary">
             <span class="jarvis-exp-summary-item"><strong>${rows.length}</strong> experiments</span>
             <span class="jarvis-exp-summary-item" style="color:#f97316"><strong>${loopBCount}</strong> signals discovered</span>
             <span class="jarvis-exp-summary-item" style="color:#10b981"><strong>${keepCount}</strong> signals kept</span>
             <span class="jarvis-exp-summary-item" style="color:#3b82f6">R² = <strong>${currentR2.toFixed(3)}</strong></span>
         </div>`;
 
+        // Sort controls
+        html += `<div class="jarvis-exp-sort-bar">
+            <span style="font-size:11px;color:var(--j-muted);font-weight:600">Sort by:</span>
+            ${[{id:'newest',label:'Newest'},{id:'best_r2',label:'Best R\u00b2 \u2193'},{id:'kept',label:'Status: kept'}].map(s =>
+                `<button class="jarvis-exp-sort-btn${expSort === s.id ? ' active' : ''}" data-sort="${s.id}">${s.label}</button>`
+            ).join('')}
+        </div>`;
+
         // Grouped sections
         groupOrder.forEach(cat => {
             const catRows = groups[cat];
             if (!catRows || !catRows.length) return;
+            const sortedRows = sortExperimentRows(catRows, expSort);
             const info = categorizeExperiment(cat === 'exp' ? 'exp_x' : cat + '_x');
             const isCollapsed = expCollapsed[cat] === true;
 
@@ -1075,7 +1287,7 @@ const JarvisUI = (() => {
 
             if (!isCollapsed) {
                 html += '<div class="jarvis-experiments">';
-                catRows.forEach(row => {
+                sortedRows.forEach(row => {
                     const isDiscovery = cat === 'loop_b';
                     const status = (row.status || '').trim().toLowerCase();
                     const signalMatch = (row.new_signal || '').match(/^discovery:(.+)$/);
@@ -1084,39 +1296,35 @@ const JarvisUI = (() => {
                     const notes = row.notes || '';
 
                     // Determine resolution badge for this experiment
-                    const notesLower = notes.toLowerCase();
                     const signalLower = (row.new_signal || '').toLowerCase();
                     const hasCurveFeature = /ret_mid|ret_end|retention_at_\d+s|ret_\d+pct|curve|per.?sec/i.test(notes + ' ' + signalName);
                     const hasWholeVideo = /\b(keep|retention|views|share_rate)\b/.test(signalLower) && !hasCurveFeature;
                     let expResBadge = '';
                     if (hasCurveFeature) {
-                        expResBadge = `<span class="jarvis-res-pill" style="color:${info.color}">· R2</span>`;
+                        expResBadge = `<span class="jarvis-res-pill" style="color:${info.color}">\u00b7 R2</span>`;
                     } else if (hasWholeVideo) {
-                        expResBadge = `<span class="jarvis-res-pill" style="color:${info.color}">· R0</span>`;
+                        expResBadge = `<span class="jarvis-res-pill" style="color:${info.color}">\u00b7 R0</span>`;
                     }
 
                     if (isDiscovery) {
-                        // Signal discovery card (orange)
                         html += `<div class="jarvis-exp-card jarvis-exp-discovery">
                             <h4>${signalName} ${expResBadge}</h4>
-                            <div class="jarvis-exp-finding">${notes}</div>
+                            <div class="jarvis-exp-finding jarvis-exp-finding-full">${boldRValues(notes)}</div>
                             <div class="jarvis-exp-badges">
                                 <span class="jarvis-badge" style="background:rgba(249,115,22,0.15);color:#f97316">DISCOVERY</span>
-                                <span class="jarvis-badge n-badge">n=${row.n_videos || '—'}</span>
+                                <span class="jarvis-badge n-badge">n=${row.n_videos || '\u2014'}</span>
                             </div>
                         </div>`;
                     } else {
-                        // Model experiment card
-                        const hasR2 = row.delta_r2 && row.delta_r2 !== '—';
-                        const delta = parseFloat(row.delta_r2) || 0;
+                        const hasR2 = row.delta_r2 && row.delta_r2 !== '\u2014';
                         const barColor = status === 'keep' ? '#10b981' : status === 'error' ? '#ef4444' : '#64748b';
                         html += `<div class="jarvis-exp-card">
                             <h4>${row.experiment_id}: ${signalName} ${expResBadge}</h4>
-                            ${hasR2 ? `<div class="jarvis-exp-r" style="color:${barColor}">ΔR² = ${row.delta_r2} (${row.r2_before}→${row.r2_after})</div>` : ''}
-                            <div class="jarvis-exp-finding">${notes}</div>
+                            ${hasR2 ? `<div class="jarvis-exp-r" style="color:${barColor}">\u0394R\u00b2 = ${row.delta_r2} (${row.r2_before}\u2192${row.r2_after})</div>` : ''}
+                            <div class="jarvis-exp-finding jarvis-exp-finding-full">${notes}</div>
                             <div class="jarvis-exp-badges">
                                 <span class="jarvis-badge status-badge" style="background:rgba(${status === 'keep' ? '16,185,129' : status === 'error' ? '248,113,113' : '100,100,100'},0.15);color:${barColor}">${status}</span>
-                                <span class="jarvis-badge n-badge">n=${row.n_videos || '—'}</span>
+                                <span class="jarvis-badge n-badge">n=${row.n_videos || '\u2014'}</span>
                             </div>
                         </div>`;
                     }
@@ -1129,20 +1337,37 @@ const JarvisUI = (() => {
         return html;
     }
 
+    function reRenderExperiments() {
+        loadResultsTSV().then(rows => {
+            const el = container?.querySelector('.jarvis-exp-root');
+            if (el) {
+                el.innerHTML = renderExperimentsContent(rows);
+                bindExperimentEvents();
+            }
+        });
+    }
+
     function bindExperimentEvents() {
         container?.querySelectorAll('.jarvis-exp-group-header').forEach(header => {
             header.addEventListener('click', () => {
                 const group = header.dataset.group;
                 expCollapsed[group] = !expCollapsed[group];
-                loadResultsTSV().then(rows => {
-                    const el = container?.querySelector('.jarvis-exp-root');
-                    if (el) {
-                        el.innerHTML = renderExperimentsContent(rows);
-                        bindExperimentEvents();
-                    }
-                });
+                reRenderExperiments();
             });
         });
+        container?.querySelectorAll('.jarvis-exp-sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                expSort = btn.dataset.sort;
+                reRenderExperiments();
+            });
+        });
+        const explainToggle = container?.querySelector('#jarvis-exp-explain-toggle');
+        if (explainToggle) {
+            explainToggle.addEventListener('click', () => {
+                expExplainOpen = !expExplainOpen;
+                reRenderExperiments();
+            });
+        }
     }
 
     // ══════════════════════════════════════════════════
@@ -1237,6 +1462,8 @@ const JarvisUI = (() => {
         }
     }
 
+    let arSummaryOpen = true;
+
     function renderAutoResearchContent() {
         if (!arModel) return '<div style="color:#f87171;padding:20px;">Failed to load prediction model.</div>';
         const m = arModel;
@@ -1275,6 +1502,70 @@ const JarvisUI = (() => {
         const pct = Math.min(100, Math.round((r2 / target) * 100));
 
         return `
+            <!-- Research Summary -->
+            <div class="jarvis-ar-section">
+                <div class="jarvis-ar-summary-toggle" id="jarvis-ar-summary-toggle">
+                    <h3 class="jarvis-ar-title" style="display:inline;cursor:pointer">
+                        <span>${arSummaryOpen ? '\u25BC' : '\u25B6'}</span> Research Summary
+                    </h3>
+                </div>
+                ${arSummaryOpen ? `<div class="jarvis-ar-summary-cards">
+                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #3b82f6">
+                        <div class="jarvis-ar-summary-card-title" style="color:#3b82f6">The Prediction Model</div>
+                        <div class="jarvis-ar-summary-card-text">
+                            <p>We analyzed 203 of Tyler's YouTube videos and ran 2,271 experiments to find what predicts viral success. The model currently explains 66% of view variance (R\u00b2=0.664). Prediction accuracy: \u00b12.5x. Two versions: Pre-upload model (35% variance, 6 signals you can control before shooting) and Full model (66% variance, includes early trajectory signals).</p>
+                            <p style="margin-top:8px;font-weight:600">The most predictive signals are:</p>
+                            <ul>
+                                <li><strong>Keep Rate\u00b2</strong> \u2014 non-linear: above 75% keep rate, each percent doubles hit rate</li>
+                                <li><strong>Max Cliff</strong> \u2014 bigger retention drops = more views (signals dramatic narrative moments)</li>
+                                <li><strong>Previous Video Views</strong> \u2014 channel momentum: bigger hit \u2192 bigger push on next video</li>
+                                <li><strong>View Acceleration</strong> \u2014 day3-7 vs day1 views. Sustained trajectory beats day-1 spike</li>
+                                <li><strong>Making/Build content</strong> \u2014 avg 19.7M views vs 5.6M for other formats</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #06b6d4">
+                        <div class="jarvis-ar-summary-card-title" style="color:#06b6d4">What Causes Keep Rate (pre-upload)</div>
+                        <div class="jarvis-ar-summary-card-text">
+                            <p>These signals were found to cause better keep rate \u2014 things you can control before shooting:</p>
+                            <ul>
+                                <li><strong>Pivot density:</strong> more but/wait/however transitions \u2192 higher keep rate (r=+0.26)</li>
+                                <li><strong>Action word density in hook:</strong> physical/action hooks beat talking hooks (r=+0.15)</li>
+                                <li><strong>Indestructible/bulletproof/superhero concept:</strong> avg 61M views vs 5.6M (7 videos \u2014 confirmed category)</li>
+                                <li><strong>Making/Build content:</strong> avg 19.7M views (34 videos)</li>
+                            </ul>
+                            <p style="margin-top:8px;color:var(--j-muted);font-style:italic">NOT causal: Zeigarnik score, novelty, cognitive load \u2014 these correlate with keep rate but don't improve the prediction model.</p>
+                        </div>
+                    </div>
+                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #a78bfa">
+                        <div class="jarvis-ar-summary-card-title" style="color:#a78bfa">What Retention Curves Reveal</div>
+                        <div class="jarvis-ar-summary-card-text">
+                            <p>Second-by-second retention analysis of 372 videos found:</p>
+                            <ul>
+                                <li><strong>Late narrative peak beats early:</strong> videos peaking at 60-80% of runtime get 10x more views than videos that peak early</li>
+                                <li><strong>Visceral words retain:</strong> painful, difference, hurt cause retention gains. Transition words (so, however) cause drops (-11%)</li>
+                                <li><strong>Final 5% is the mega-virality differentiator:</strong> top videos hold +8% above baseline in the last 5% of video</li>
+                                <li><strong>Physical challenge visuals +12%</strong> at retention peaks. Product/food shots without human anchor cause drops</li>
+                                <li><strong>Anticipation phrases retain:</strong> would it, what if, let's see create +6-8% bumps</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="jarvis-ar-summary-card" style="border-left:3px solid #10b981">
+                        <div class="jarvis-ar-summary-card-title" style="color:#10b981">What Doesn't Matter (Yet)</div>
+                        <div class="jarvis-ar-summary-card-text">
+                            <p>Signals that were tested but did NOT improve the prediction model:</p>
+                            <ul>
+                                <li><strong>Zeigarnik score</strong> \u2014 correlates with keep rate (r=0.18) but already captured by keep\u00b2</li>
+                                <li><strong>Cognitive load</strong> \u2014 weak negative correlation, dominated by other signals</li>
+                                <li><strong>Net novelty (novelty - cognitive_load)</strong> \u2014 interesting concept, redundant in full model</li>
+                                <li><strong>Text overlay presence</strong> \u2014 no significant effect on views or keep rate</li>
+                                <li><strong>Silent visual hook</strong> \u2014 tested but inconclusive at n=203</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>` : ''}
+            </div>
+
             <!-- Pipeline Architecture -->
             <div class="jarvis-ar-section">
                 <h3 class="jarvis-ar-title">Pipeline Architecture</h3>
@@ -1540,6 +1831,19 @@ const JarvisUI = (() => {
         container?.querySelectorAll('.jarvis-ar-run-hyp-btn').forEach(btn => {
             btn.addEventListener('click', () => runHypothesis(btn.dataset.hyp));
         });
+
+        const summaryToggle = container?.querySelector('#jarvis-ar-summary-toggle');
+        if (summaryToggle) {
+            summaryToggle.addEventListener('click', () => {
+                arSummaryOpen = !arSummaryOpen;
+                const el = container?.querySelector('.jarvis-ar-root');
+                if (el) {
+                    el.innerHTML = renderAutoResearchContent();
+                    bindAutoResearchEvents();
+                    loadLoopStatus();
+                }
+            });
+        }
     }
 
     // ══════════════════════════════════════════════════
@@ -2016,8 +2320,14 @@ const JarvisUI = (() => {
         chooserKey = null;
         cachedResultsRows = null;
         tacticalDiscoveredNodes = [];
+        tacticalFilter = 'all';
+        tacticalSearch = '';
+        tacticalExpandedSignal = null;
+        expSort = 'newest';
+        expExplainOpen = false;
         arModel = null;
         arHypotheses = null;
+        arSummaryOpen = true;
         render();
     }
 

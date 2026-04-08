@@ -1207,3 +1207,216 @@
     font-size: 10px; font-weight: 600; opacity: 0.7;
     margin-left: 4px;
 }
+
+/* ══════════════════════════════════��═══════════════════
+   TAB 2: Tactical Brain — Signal List + Detail Panel
+   ══════════════════════════════════════════════════════ */
+.jarvis-signal-list-section {
+    background: rgba(13, 20, 36, 0.6);
+    border: 1px solid var(--j-border);
+    border-radius: 10px;
+    padding: 14px;
+}
+.jarvis-signal-search {
+    width: 100%; box-sizing: border-box;
+    padding: 8px 12px; font-size: 12px;
+    background: #0d1424; color: var(--j-text);
+    border: 1px solid var(--j-border); border-radius: 6px;
+    outline: none; margin-bottom: 10px;
+}
+.jarvis-signal-search:focus { border-color: var(--j-accent); }
+.jarvis-signal-search::placeholder { color: var(--j-muted); }
+.jarvis-signal-filters {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.jarvis-signal-filter-btn {
+    padding: 4px 12px; font-size: 10px; font-weight: 600;
+    background: rgba(255,255,255,0.04); color: var(--j-muted);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;
+    transition: all 0.15s;
+}
+.jarvis-signal-filter-btn:hover { background: rgba(255,255,255,0.08); color: var(--j-text); }
+.jarvis-signal-filter-btn.active {
+    background: rgba(59, 130, 246, 0.15); color: var(--j-accent);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+.jarvis-signal-list {
+    max-height: 420px; overflow-y: auto;
+}
+.jarvis-signal-list::-webkit-scrollbar { width: 4px; }
+.jarvis-signal-list::-webkit-scrollbar-thumb { background: var(--j-border); border-radius: 2px; }
+.jarvis-signal-row-wrapper {
+    margin-bottom: 2px;
+}
+.jarvis-signal-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 6px;
+    cursor: pointer; transition: background 0.1s;
+}
+.jarvis-signal-row:hover { background: rgba(255,255,255,0.04); }
+.jarvis-signal-row.expanded { background: rgba(59, 130, 246, 0.08); }
+.jarvis-signal-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.jarvis-signal-name {
+    font-size: 12px; font-weight: 600; color: var(--j-text);
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jarvis-signal-type-badge {
+    font-size: 9px; padding: 2px 8px; border-radius: 8px;
+    background: rgba(255,255,255,0.06); color: var(--j-muted);
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+.jarvis-signal-source {
+    font-size: 10px; color: var(--j-muted); white-space: nowrap;
+}
+.jarvis-signal-rbar {
+    width: 50px; height: 6px; border-radius: 3px;
+    background: rgba(255,255,255,0.06); overflow: hidden;
+    flex-shrink: 0;
+}
+.jarvis-signal-rbar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 0.3s;
+}
+
+/* Signal detail panel */
+.jarvis-signal-detail {
+    background: rgba(13, 20, 36, 0.9);
+    border: 1px solid var(--j-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 4px 0 8px 18px;
+    animation: jarvisSlideDown 0.15s ease;
+}
+.jarvis-signal-detail-name {
+    font-size: 15px; font-weight: 700; color: var(--j-text);
+    margin-bottom: 10px;
+}
+.jarvis-signal-detail-meta {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: 11px; color: var(--j-muted);
+    margin-bottom: 10px;
+}
+.jarvis-signal-detail-meta strong { color: var(--j-text); }
+.jarvis-signal-detail-status {
+    font-size: 12px; color: var(--j-muted);
+    margin-bottom: 10px; padding: 6px 10px;
+    background: rgba(255,255,255,0.03); border-radius: 6px;
+}
+.jarvis-signal-detail-exps {
+    margin-top: 10px;
+}
+.jarvis-signal-detail-exp {
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 11px;
+}
+.jarvis-signal-detail-exp:last-child { border-bottom: none; }
+
+/* ══════════════════════════════════════════════════════
+   TAB 3: Experiments — Explanation Cards + Sort Bar
+   ══════════════════════════════════════════════════════ */
+.jarvis-exp-explain-toggle {
+    padding: 10px 14px; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: var(--j-muted);
+    background: rgba(30, 30, 50, 0.4);
+    border: 1px solid var(--j-border);
+    border-radius: 8px; margin-bottom: 12px;
+    transition: background 0.15s;
+}
+.jarvis-exp-explain-toggle:hover {
+    background: rgba(30, 30, 50, 0.7); color: var(--j-text);
+}
+.jarvis-exp-explain-cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin-bottom: 16px;
+}
+.jarvis-exp-explain-card {
+    background: var(--j-card);
+    border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 14px 16px;
+}
+.jarvis-exp-explain-card-title {
+    font-size: 13px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+.jarvis-exp-explain-card-text {
+    font-size: 11px; color: var(--j-muted); line-height: 1.6;
+}
+.jarvis-exp-sort-bar {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 14px; flex-wrap: wrap;
+}
+.jarvis-exp-sort-btn {
+    padding: 4px 12px; font-size: 10px; font-weight: 600;
+    background: rgba(255,255,255,0.04); color: var(--j-muted);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    cursor: pointer; transition: all 0.15s;
+}
+.jarvis-exp-sort-btn:hover { background: rgba(255,255,255,0.08); color: var(--j-text); }
+.jarvis-exp-sort-btn.active {
+    background: rgba(59, 130, 246, 0.15); color: var(--j-accent);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+/* Full notes - no truncation */
+.jarvis-exp-finding-full {
+    white-space: normal;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    display: block;
+    line-height: 1.5;
+}
+
+/* ══════════════════════════════════════════════════════
+   TAB 4: AutoResearch — Research Summary Cards
+   ══════════════════════════════════════════════════════ */
+.jarvis-ar-summary-toggle {
+    cursor: pointer;
+    margin-bottom: 12px;
+}
+.jarvis-ar-summary-toggle:hover .jarvis-ar-title {
+    color: #60a5fa;
+}
+.jarvis-ar-summary-cards {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    margin-top: 4px;
+}
+.jarvis-ar-summary-card {
+    background: var(--j-card);
+    border: 1px solid var(--j-border);
+    border-radius: 8px; padding: 16px 18px;
+}
+.jarvis-ar-summary-card-title {
+    font-size: 13px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 10px;
+}
+.jarvis-ar-summary-card-text {
+    font-size: 12px; color: var(--j-muted); line-height: 1.6;
+}
+.jarvis-ar-summary-card-text p {
+    margin: 0 0 6px;
+}
+.jarvis-ar-summary-card-text ul {
+    margin: 6px 0 0; padding: 0 0 0 18px;
+}
+.jarvis-ar-summary-card-text li {
+    margin-bottom: 4px; line-height: 1.5;
+}
+.jarvis-ar-summary-card-text strong {
+    color: var(--j-text);
+}
+
+/* ── Mobile overrides for new components ── */
+@media (max-width: 640px) {
+    .jarvis-signal-list { max-height: 300px; }
+    .jarvis-signal-row { gap: 6px; padding: 6px 8px; }
+    .jarvis-signal-source { display: none; }
+    .jarvis-signal-rbar { display: none; }
+    .jarvis-exp-explain-cards { grid-template-columns: 1fr; }
+    .jarvis-ar-summary-cards { grid-template-columns: 1fr; }
+}
