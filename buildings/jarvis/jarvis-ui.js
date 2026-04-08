@@ -1123,6 +1123,37 @@ const JarvisUI = (() => {
         merge.append('feMergeNode').attr('in', 'blur');
         merge.append('feMergeNode').attr('in', 'SourceGraphic');
 
+        // Zone divider lines (resolution band boundaries)
+        [H * 0.28, H * 0.54, H * 0.76].forEach(yPos => {
+            svg.append('line')
+                .attr('x1', 0).attr('y1', yPos).attr('x2', W).attr('y2', yPos)
+                .attr('stroke', 'rgba(255,255,255,0.06)').attr('stroke-width', 1);
+        });
+
+        // Resolution row labels (left edge)
+        [
+            { label: 'R0 \u00b7 Full Video', y: H * 0.14 },
+            { label: 'R1 \u00b7 Segment', y: H * 0.40 },
+            { label: 'R2 \u00b7 Fine', y: H * 0.64 },
+            { label: 'R3 \u00b7 Frame/Word', y: H * 0.85 },
+        ].forEach(r => {
+            svg.append('text').attr('x', 6).attr('y', r.y)
+                .attr('font-size', '9px').attr('fill', '#475569')
+                .attr('font-family', "'SF Mono', monospace").text(r.label);
+        });
+
+        // Column headers (top)
+        [
+            { label: 'PRE-UPLOAD', x: W * 0.20, color: '#06b6d4' },
+            { label: 'POST-UPLOAD', x: W * 0.58, color: '#a78bfa' },
+            { label: 'VIEWS', x: W * 0.90, color: '#f59e0b' },
+        ].forEach(c => {
+            svg.append('text').attr('x', c.x).attr('y', 14)
+                .attr('text-anchor', 'middle').attr('font-size', '10px')
+                .attr('font-weight', '700').attr('fill', c.color)
+                .attr('font-family', "'SF Mono', monospace").text(c.label);
+        });
+
         // Tooltip div
         const tooltip = container?.querySelector('#jarvis-tactical-tooltip');
 
@@ -1138,6 +1169,13 @@ const JarvisUI = (() => {
         function nodeRadius(d) {
             if (d.layer === 'views') return 26;
             return Math.max(6, Math.min(22, 5 + (d.depth || 1) * 2.5 + Math.abs(d.r_partial || 0) * 8));
+        }
+
+        function resolutionYBounds(res, H) {
+            if (res === 'R0') return [0, H * 0.28];
+            if (res === 'R1') return [H * 0.28, H * 0.54];
+            if (res === 'R2') return [H * 0.54, H * 0.76];
+            return [H * 0.76, H]; // R3
         }
 
         function titleCase(s) {
@@ -1159,6 +1197,17 @@ const JarvisUI = (() => {
             depth: 1, r_partial: 1.0, color: '#f59e0b',
             notes: 'Prediction target: log10(views)', target: 'views', _clusterCount: 1,
         });
+
+        // Set initial positions to zone centers
+        nodes.forEach(d => {
+            d.x = d.layer === 'views' ? W * 0.90 : d.layer === 'pre' ? W * 0.20 + (Math.random() - 0.5) * 40 : W * 0.58 + (Math.random() - 0.5) * 40;
+            const [y0, y1] = resolutionYBounds(d.resolution || 'R0', H);
+            d.y = (y0 + y1) / 2 + (Math.random() - 0.5) * 20;
+        });
+
+        // Pin VIEWS node
+        const viewsNode = nodes.find(n => n.id === 'views');
+        if (viewsNode) { viewsNode.fx = W * 0.90; viewsNode.fy = H * 0.30; }
 
         // Build edges
         const edges = [];
@@ -1199,22 +1248,24 @@ const JarvisUI = (() => {
             });
         }
 
-        // Resolution Y targets
-        const resY = { R0: H * 0.2, R1: H * 0.4, R2: H * 0.6, R3: H * 0.8 };
-
-        // D3 force simulation
+        // D3 force simulation — strict zone layout
         const simulation = d3.forceSimulation(nodes)
             .force('link', d3.forceLink(edges).id(d => d.id)
                 .distance(d => 80 + (1 - Math.abs(d.r || 0.3)) * 40).strength(0.3))
-            .force('charge', d3.forceManyBody().strength(-180).distanceMax(220))
-            .force('center', d3.forceCenter(W / 2, H / 2).strength(0.08))
+            .force('charge', d3.forceManyBody().strength(-80).distanceMax(120))
             .force('x', d3.forceX(d => {
-                if (d.layer === 'pre') return W * 0.22;
-                if (d.layer === 'post') return W * 0.58;
-                return W * 0.88;
-            }).strength(d => d.layer === 'views' ? 1.0 : 0.15))
-            .force('y', d3.forceY(d => resY[d.resolution] || resY.R0).strength(0.12))
-            .force('collide', d3.forceCollide(d => nodeRadius(d) + 4))
+                if (d.layer === 'views') return W * 0.90;
+                if (d.layer === 'pre') return W * 0.20;
+                return W * 0.58; // post
+            }).strength(d => d.layer === 'views' ? 1.0 : 0.65))
+            .force('y', d3.forceY(d => {
+                const res = d.resolution || 'R0';
+                if (res === 'R0') return H * 0.15;
+                if (res === 'R1') return H * 0.40;
+                if (res === 'R2') return H * 0.64;
+                return H * 0.85; // R3
+            }).strength(0.60))
+            .force('collide', d3.forceCollide(d => nodeRadius(d) + 5))
             .alpha(1).alphaDecay(0.02);
 
         d3Simulation = simulation;
@@ -1299,7 +1350,8 @@ const JarvisUI = (() => {
             })
             .on('end', (event, d) => {
                 if (!event.active) simulation.alphaTarget(0);
-                d.fx = null; d.fy = null;
+                if (d.layer === 'views') { d.fx = W * 0.90; d.fy = H * 0.30; }
+                else { d.fx = null; d.fy = null; }
             });
         nodeEls.call(drag);
 
@@ -1337,10 +1389,22 @@ const JarvisUI = (() => {
             }
         });
 
-        // Tick: update positions
+        // Tick: update positions with zone clamping
         let tickCount = 0;
         simulation.on('tick', () => {
             tickCount++;
+            // Clamp nodes to zone bounds
+            nodes.forEach(d => {
+                if (d.fx !== null && d.fx !== undefined) return; // skip pinned
+                const r = nodeRadius(d) + 5;
+                if (d.layer === 'pre') {
+                    d.x = Math.max(r, Math.min(W * 0.38 - r, d.x));
+                } else if (d.layer === 'post') {
+                    d.x = Math.max(W * 0.42 + r, Math.min(W * 0.78 - r, d.x));
+                }
+                const [yMin, yMax] = resolutionYBounds(d.resolution || 'R0', H);
+                d.y = Math.max(yMin + r, Math.min(yMax - r, d.y));
+            });
             linkEls
                 .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
                 .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
