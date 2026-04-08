@@ -758,22 +758,20 @@ const JarvisUI = (() => {
             bindTacticalEvents();
         });
         return `
-            <div class="jarvis-tactical-network" style="margin-bottom:12px">
-                <canvas id="jarvis-network-canvas" width="400" height="500"></canvas>
-                <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
+            <div class="jarvis-network-legend" style="margin-bottom:4px">
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload (control before filming)</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured after upload)</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (prediction target)</span>
             </div>
-            <div class="jarvis-network-legend">
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#3b82f6"></span>Analytics</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#8b5cf6"></span>LLM-scored</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#14b8a6"></span>Derived</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#4b5563"></span>Planned</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f97316"></span>Discovered</span>
+            <div class="jarvis-tactical-network" style="margin-bottom:12px">
+                <canvas id="jarvis-network-canvas" width="400" height="600"></canvas>
+                <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
             <div class="jarvis-signal-list-section">
                 <input type="text" class="jarvis-signal-search" id="jarvis-signal-search" placeholder="Search signals..." value="${tacticalSearch}" />
                 <div class="jarvis-signal-filters" id="jarvis-signal-filters">
-                    ${['all','analytics','llm-scored','derived','discovered','pre-upload','post-upload'].map(f =>
-                        `<button class="jarvis-signal-filter-btn${tacticalFilter === f ? ' active' : ''}" data-filter="${f}">${f === 'all' ? 'All' : f === 'llm-scored' ? 'LLM-scored' : f.charAt(0).toUpperCase() + f.slice(1)}</button>`
+                    ${['all','pre-upload','post-upload','in-model'].map(f =>
+                        `<button class="jarvis-signal-filter-btn${tacticalFilter === f ? ' active' : ''}" data-filter="${f}">${f === 'all' ? 'All' : f === 'in-model' ? 'In Model' : f === 'pre-upload' ? 'Pre-upload' : 'Post-upload'}</button>`
                     ).join('')}
                 </div>
                 <div class="jarvis-signal-list" id="jarvis-signal-list">
@@ -782,30 +780,50 @@ const JarvisUI = (() => {
             </div>`;
     }
 
-    function getNodeColor(ind) {
-        if (ind.category === 'discovered') return '#f97316';
-        if (ind.category === 'planned') return '#4b5563';
-        if (ind.source.startsWith('Derived')) return '#14b8a6';
-        if (ind.source.startsWith('YouTube') || ind.source.includes('YouTube')) return '#3b82f6';
-        return '#8b5cf6'; // LLM-scored
+    // Pre-upload pattern matching (case-insensitive)
+    const PRE_UPLOAD_PATTERNS = /word|language|script|text|title|concept|idea|hook|novelty|cognitive|zeigarnik|vz_|z_score|z_type|pat_|category|indestructible|making|face|visual_surprise|cut_|pivot|connector|action_word|bigram|starts_with_i|thumbnail|content_type|hook_clarity|text_overlay|net_novelty|idea_length|superhero|challenge|narrative_arc|has_callback|three_channel|action_intensity|phrase|total_word|speech_rate|duration_sweet|pacing/i;
+
+    function classifySignalLayer(key) {
+        if (key === 'views' || key === 'log_views') return 'views';
+        if (PRE_UPLOAD_PATTERNS.test(key)) return 'pre';
+        return 'post';
     }
 
-    function getNodeRadius(key, category) {
-        if (category === 'discovered') return 14;
-        const large = ['keep', 'retention', 'z_score', 'views', 'vz_score'];
-        const medium = ['novelty', 'cognitive_load', 'net_novelty', 'z_type', 'vz_type', 'share_rate'];
-        if (large.includes(key)) return 18;
-        if (medium.includes(key)) return 14;
-        return 10;
+    function getDiscoveredSignals() {
+        if (!cachedResultsRows) return [];
+        const byKey = {};
+        cachedResultsRows
+            .filter(r => (r.experiment_id || '').startsWith('loop_b'))
+            .forEach(r => {
+                const signalKey = (r.new_signal || '').replace(/^discovery:/, '').trim();
+                if (!signalKey) return;
+                const notes = r.notes || '';
+                // Keep the one with longest notes for dedup
+                if (!byKey[signalKey] || notes.length > (byKey[signalKey].notes || '').length) {
+                    let rPartial = null;
+                    const rpM = notes.match(/r_partial\s*=\s*([-+]?\d*\.?\d+)/i);
+                    if (rpM) rPartial = parseFloat(rpM[1]);
+                    else {
+                        const rM = notes.match(/\br\s*=\s*([-+]?\d*\.?\d+)/i);
+                        if (rM) rPartial = parseFloat(rM[1]);
+                    }
+                    const layer = classifySignalLayer(signalKey);
+                    byKey[signalKey] = {
+                        key: signalKey,
+                        label: signalKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                        notes: notes,
+                        r_partial: rPartial,
+                        layer: layer,
+                    };
+                }
+            });
+        return Object.values(byKey);
     }
-
-    const PRE_UPLOAD_KEYS = new Set(['keep','retention','vz_score','vz_type','z_score','z_type','novelty','cognitive_load','net_novelty','idea_length','pat_making_v2','indestructible_x_prev_keep','hook_clarity','visual_surprise','cut_frequency_3s','face_presence','text_overlay_yn','duration','share_rate']);
-    const POST_UPLOAD_KEYS = new Set(['view_accel_log','w2_w1_ratio','sub_gap','prev_views','prev_keep','views','like_ratio','svf_log','engage_ratio','rpv','sub_ret_gap','smoothed_slope','deriv_entropy','duration_x_retention','max_cliff','ret_mid_sq','ret_mid','retention_per_sec']);
 
     function getSignalUploadPhase(ind) {
-        if (PRE_UPLOAD_KEYS.has(ind.key)) return 'pre-upload';
-        if (POST_UPLOAD_KEYS.has(ind.key)) return 'post-upload';
-        if (ind.category === 'discovered') return 'post-upload';
+        const layer = classifySignalLayer(ind.key);
+        if (layer === 'pre') return 'pre-upload';
+        if (layer === 'post') return 'post-upload';
         return null;
     }
 
@@ -851,118 +869,106 @@ const JarvisUI = (() => {
 
     function getSignalFilterCategory(ind) {
         if (ind.category === 'discovered') return 'discovered';
-        if (ind.category === 'planned') return 'analytics'; // group planned with analytics
-        if (ind.source.startsWith('Derived')) return 'derived';
-        if (ind.source.startsWith('YouTube') || ind.source.includes('YouTube')) return 'analytics';
+        if (ind.category === 'planned') return 'analytics';
+        if (ind.source && ind.source.startsWith('Derived')) return 'derived';
+        if (ind.source && (ind.source.startsWith('YouTube') || ind.source.includes('YouTube'))) return 'analytics';
         return 'llm-scored';
     }
 
-    function getAllSignals() {
-        const allIndicators = [...INDICATORS];
-        tacticalDiscoveredNodes.forEach(d => {
-            if (!allIndicators.find(i => i.key === d.key)) {
-                allIndicators.push(d);
-            }
-        });
-        return allIndicators;
+    function isSignalInModel(key) {
+        if (!arModel) return false;
+        const preFeats = arModel.pre_upload_model?.features || [];
+        const fullFeats = arModel.full_model?.features || [];
+        return preFeats.includes(key) || fullFeats.includes(key);
     }
 
     function renderSignalList() {
-        const allIndicators = getAllSignals();
+        const signals = getDiscoveredSignals();
         const search = tacticalSearch.toLowerCase();
-        const filtered = allIndicators.filter(ind => {
-            if (tacticalFilter === 'pre-upload' || tacticalFilter === 'post-upload') {
-                if (getSignalUploadPhase(ind) !== tacticalFilter) return false;
-            } else if (tacticalFilter !== 'all' && getSignalFilterCategory(ind) !== tacticalFilter) return false;
-            if (search && !ind.label.toLowerCase().includes(search) && !ind.key.toLowerCase().includes(search)) return false;
+
+        const filtered = signals.filter(sig => {
+            if (tacticalFilter === 'pre-upload' && sig.layer !== 'pre') return false;
+            if (tacticalFilter === 'post-upload' && sig.layer !== 'post') return false;
+            if (tacticalFilter === 'in-model' && !isSignalInModel(sig.key)) return false;
+            if (search && !sig.label.toLowerCase().includes(search) && !sig.key.toLowerCase().includes(search)) return false;
             return true;
         });
 
         if (!filtered.length) return '<div style="color:var(--j-muted);padding:12px;font-size:12px;">No signals match your search.</div>';
 
-        return filtered.map(ind => {
-            const color = getNodeColor(ind);
-            const filterCat = getSignalFilterCategory(ind);
-            const isExpanded = tacticalExpandedSignal === ind.key;
-            // Try to find r value from cachedResultsRows
-            let rValue = null;
-            if (cachedResultsRows) {
-                const match = cachedResultsRows.find(r => {
-                    const sig = (r.new_signal || '').replace(/^discovery:/, '');
-                    return sig === ind.key;
-                });
-                if (match && match.notes) {
-                    const rMatch = match.notes.match(/r[_=]\s*([-+]?[0-9]*\.?[0-9]+)/i);
-                    if (rMatch) rValue = parseFloat(rMatch[1]);
-                }
-            }
-            const rBar = rValue !== null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(rValue) * 100, 100)}%;background:${color}"></div></div>` : '';
+        // Sort by |r_partial| descending
+        filtered.sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0));
+
+        return filtered.map(sig => {
+            const color = sig.layer === 'pre' ? '#06b6d4' : '#a78bfa';
+            const layerLabel = sig.layer === 'pre' ? 'PRE-UPLOAD' : 'POST-UPLOAD';
+            const layerBg = sig.layer === 'pre' ? 'rgba(6,182,212,0.15)' : 'rgba(167,139,250,0.15)';
+            const isExpanded = tacticalExpandedSignal === sig.key;
+            const rDisplay = sig.r_partial !== null ? sig.r_partial.toFixed(3) : '';
+            const rBar = sig.r_partial !== null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(sig.r_partial) * 100, 100)}%;background:${color}"></div></div>` : '';
 
             return `<div class="jarvis-signal-row-wrapper">
-                <div class="jarvis-signal-row${isExpanded ? ' expanded' : ''}" data-signal-key="${ind.key}">
+                <div class="jarvis-signal-row${isExpanded ? ' expanded' : ''}" data-signal-key="${sig.key}">
                     <span class="jarvis-signal-dot" style="background:${color}"></span>
-                    <span class="jarvis-signal-name">${ind.label}</span>
-                    <span class="jarvis-signal-type-badge">${ind.numeric ? 'numeric' : 'categorical'}</span>
-                    <span class="jarvis-signal-source">${filterCat}</span>
+                    <span class="jarvis-signal-name">${sig.label}</span>
+                    <span class="jarvis-signal-type-badge" style="background:${layerBg};color:${color}">${layerLabel}</span>
+                    ${rDisplay ? `<span style="font-family:'SF Mono',monospace;font-size:10px;color:var(--j-muted);white-space:nowrap">r=${rDisplay}</span>` : ''}
                     ${rBar}
                 </div>
-                ${isExpanded ? renderSignalDetail(ind) : ''}
+                ${isExpanded ? renderSignalDetail(sig) : ''}
             </div>`;
         }).join('');
     }
 
-    function renderSignalDetail(ind) {
-        const color = getNodeColor(ind);
-        // Find experiments that used this signal
-        const relatedExps = (cachedResultsRows || []).filter(r => {
-            const sig = (r.new_signal || '').replace(/^discovery:/, '');
-            return sig === ind.key;
-        });
-        // Check if in prediction model
-        let inModel = false;
-        if (arModel) {
-            const preFeats = arModel.pre_upload_model?.features || [];
-            const fullFeats = arModel.full_model?.features || [];
-            inModel = preFeats.includes(ind.key) || fullFeats.includes(ind.key);
-        }
-        // Determine status
-        let status = 'planned';
-        if (inModel) status = 'in model';
-        else if (ind.category === 'discovered') status = 'discovery';
-        else if (ind.category === 'active') status = 'active signal';
-        else if (ind.category === 'planned') status = 'planned';
-        // Check if discarded
-        const discardedExp = relatedExps.find(r => (r.status || '').trim().toLowerCase() === 'discard');
-        if (discardedExp && !inModel) status = 'discarded';
+    function renderSignalDetail(sig) {
+        const color = sig.layer === 'pre' ? '#06b6d4' : '#a78bfa';
+        const layerLabel = sig.layer === 'pre' ? 'Pre-upload' : 'Post-upload';
+        const inModel = isSignalInModel(sig.key);
 
-        const statusColors = { 'in model': '#10b981', 'discovery': '#f97316', 'active signal': '#3b82f6', 'planned': '#64748b', 'discarded': '#ef4444' };
+        // Find all related experiments (not just loop_b)
+        const relatedExps = (cachedResultsRows || []).filter(r => {
+            const rSig = (r.new_signal || '').replace(/^discovery:/, '').trim();
+            return rSig === sig.key;
+        });
+
+        // Full notes text — untruncated
+        const fullNotes = sig.notes || '';
+
+        // Derive plain-English implication from notes
+        let implication = '';
+        if (fullNotes) {
+            if (sig.r_partial !== null && sig.r_partial > 0) {
+                implication = `Higher ${sig.label.toLowerCase()} is associated with more views. Consider increasing this in your content.`;
+            } else if (sig.r_partial !== null && sig.r_partial < 0) {
+                implication = `Higher ${sig.label.toLowerCase()} is associated with fewer views. Consider reducing or avoiding this.`;
+            }
+            // Try to extract more specific advice from notes
+            const adviceMatch = fullNotes.match(/(?:suggests?|means?|implies?|indicates?|use more|avoid|try)[^.]+\./i);
+            if (adviceMatch) implication = adviceMatch[0];
+        }
 
         return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
-            <div class="jarvis-signal-detail-name">${ind.label}</div>
-            <div class="jarvis-signal-detail-meta">
-                <span>Type: <strong>${ind.type}</strong></span>
-                <span>Source: <strong>${ind.source}</strong></span>
-                ${ind.resolution ? `<span>Resolution: <strong>${ind.resolution}</strong></span>` : ''}
-                <span>Category: <strong>${getSignalFilterCategory(ind)}</strong></span>
+            <div class="jarvis-signal-detail-name">${sig.label}</div>
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+                ${sig.r_partial !== null ? `<span style="font-family:'SF Mono',monospace;font-size:16px;font-weight:700;color:${color}">r_partial = ${sig.r_partial.toFixed(3)}</span>` : ''}
+                <span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${layerLabel}</span>
+                ${inModel ? '<span class="jarvis-signal-type-badge" style="background:rgba(16,185,129,0.15);color:#10b981">IN MODEL</span>' : ''}
             </div>
-            <div class="jarvis-signal-detail-status">
-                Status: <span style="color:${statusColors[status] || '#64748b'};font-weight:700">${status.toUpperCase()}</span>
-                ${inModel ? ' (in prediction model)' : ''}
-            </div>
-            ${relatedExps.length ? `
+            ${fullNotes ? `<div style="font-size:12px;color:var(--j-text);line-height:1.6;margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;white-space:pre-wrap">${fullNotes}</div>` : ''}
+            ${implication ? `<div style="font-size:12px;color:#f59e0b;margin-bottom:12px;padding:8px 10px;background:rgba(245,158,11,0.08);border-radius:6px;border-left:3px solid #f59e0b"><strong>What this means:</strong> ${implication}</div>` : ''}
+            ${relatedExps.length > 1 ? `
                 <div class="jarvis-signal-detail-exps">
-                    <div style="font-size:11px;font-weight:600;color:var(--j-muted);text-transform:uppercase;margin-bottom:6px">Experiments (${relatedExps.length})</div>
+                    <div style="font-size:11px;font-weight:600;color:var(--j-muted);text-transform:uppercase;margin-bottom:6px">Related experiments (${relatedExps.length})</div>
                     ${relatedExps.map(r => {
                         const st = (r.status || '').trim().toLowerCase();
                         const stColor = st === 'keep' ? '#10b981' : st === 'discard' ? '#ef4444' : '#64748b';
                         return `<div class="jarvis-signal-detail-exp">
                             <span style="color:var(--j-text);font-weight:600">${r.experiment_id}</span>
                             <span class="jarvis-badge" style="background:rgba(${st === 'keep' ? '16,185,129' : '100,100,100'},0.15);color:${stColor}">${st}</span>
-                            ${r.delta_r2 && r.delta_r2 !== '—' ? `<span style="font-family:'SF Mono',monospace;font-size:11px;color:var(--j-cyan)">dR²=${r.delta_r2}</span>` : ''}
-                            <div style="font-size:10px;color:var(--j-muted);margin-top:2px">${r.notes || ''}</div>
+                            ${r.delta_r2 && r.delta_r2 !== '\u2014' ? `<span style="font-family:'SF Mono',monospace;font-size:11px;color:var(--j-cyan)">dR\u00b2=${r.delta_r2}</span>` : ''}
                         </div>`;
                     }).join('')}
-                </div>` : '<div style="font-size:11px;color:var(--j-muted);margin-top:8px">No experiments found for this signal.</div>'}
+                </div>` : ''}
         </div>`;
     }
 
@@ -1006,8 +1012,7 @@ const JarvisUI = (() => {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const W = canvas.parentElement.clientWidth || 400;
-        const H = 500;
-        const PAD = 50;
+        const H = 600;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = W * dpr;
         canvas.height = H * dpr;
@@ -1015,125 +1020,72 @@ const JarvisUI = (() => {
         canvas.style.height = H + 'px';
         ctx.scale(dpr, dpr);
 
-        const cx = W / 2, cy = H / 2;
-        const allSignals = getAllSignals();
+        const signals = getDiscoveredSignals();
 
-        // Determine node radius based on role
-        const CORE_METRICS = new Set(['views', 'keep', 'retention']);
-        const inModelKeys = new Set();
-        if (arModel) {
-            (arModel.pre_upload_model?.features || []).forEach(f => inModelKeys.add(f));
-            (arModel.full_model?.features || []).forEach(f => inModelKeys.add(f));
+        // Filter to top 80 by |r_partial|, exclude nulls
+        const withR = signals.filter(s => s.r_partial !== null);
+        withR.sort((a, b) => Math.abs(b.r_partial) - Math.abs(a.r_partial));
+        const top = withR.slice(0, 80);
+
+        const preNodes = top.filter(s => s.layer === 'pre');
+        const postNodes = top.filter(s => s.layer === 'post');
+
+        // Node sizing
+        function nodeRadius(rp) {
+            const abs = Math.abs(rp || 0);
+            if (abs >= 0.5) return 16;
+            if (abs >= 0.3) return 13;
+            if (abs >= 0.1) return 11;
+            return 9;
         }
 
-        function nodeRadius(ind) {
-            if (CORE_METRICS.has(ind.key)) return 22;
-            if (inModelKeys.has(ind.key)) return 18;
-            if (ind.category === 'active') return 15;
-            if (ind.category === 'discovered') return 12;
-            return 10; // planned
-        }
+        // Build nodes with initial positions spread vertically in their zone
+        const VPAD = 30;
+        const nodes = [];
 
-        // Build nodes with circular initial positions
-        const nodes = allSignals.map((ind, i) => {
-            const angle = (i / allSignals.length) * Math.PI * 2;
-            const spread = Math.min(W, H) * 0.3;
-            return {
-                key: ind.key,
-                label: ind.label,
-                type: ind.type,
-                source: ind.source,
-                color: getNodeColor(ind),
-                r: nodeRadius(ind),
-                x: cx + Math.cos(angle) * spread + (Math.random() - 0.5) * 40,
-                y: cy + Math.sin(angle) * spread + (Math.random() - 0.5) * 40,
-                vx: 0,
-                vy: 0,
-                category: ind.category,
-                ind: ind,
-            };
-        });
-        const nodeMap = {};
-        nodes.forEach(n => nodeMap[n.key] = n);
-
-        // Build edges
-        const edges = [];
-        const edgeSet = new Set();
-
-        function addEdge(a, b, weight, type) {
-            const ek = a < b ? a + '|' + b : b + '|' + a;
-            if (edgeSet.has(ek)) return;
-            edgeSet.add(ek);
-            edges.push({ a, b, weight: Math.abs(weight), type });
-        }
-
-        // Parse r-values from cachedResultsRows for edge weights
-        const signalCorrelations = {};
-        if (cachedResultsRows) {
-            cachedResultsRows.forEach(row => {
-                const sig = (row.new_signal || '').replace(/^discovery:/, '');
-                if (!sig || !row.notes) return;
-                const notes = row.notes;
-                const rpM = notes.match(/r_partial\s*=\s*([-+]?\d*\.?\d+)/i);
-                if (rpM) {
-                    const rv = parseFloat(rpM[1]);
-                    if (!signalCorrelations[sig] || Math.abs(rv) > Math.abs(signalCorrelations[sig].r)) {
-                        signalCorrelations[sig] = { metric: 'views', r: rv };
-                    }
-                    return;
-                }
-                const rM = notes.match(/\br\s*=\s*([-+]?\d*\.?\d+)/i);
-                if (rM) {
-                    const rv = parseFloat(rM[1]);
-                    const nl = notes.toLowerCase();
-                    let metric = 'keep';
-                    if (nl.includes('views')) metric = 'views';
-                    else if (nl.includes('retention')) metric = 'retention';
-                    if (!signalCorrelations[sig] || Math.abs(rv) > Math.abs(signalCorrelations[sig].r)) {
-                        signalCorrelations[sig] = { metric, r: rv };
-                    }
-                }
+        preNodes.forEach((s, i) => {
+            const ySpread = (H - VPAD * 2) / Math.max(preNodes.length - 1, 1);
+            nodes.push({
+                key: s.key, label: s.label, r_partial: s.r_partial, layer: s.layer,
+                color: '#06b6d4', r: nodeRadius(s.r_partial),
+                x: W * 0.15 + (Math.random() - 0.5) * W * 0.08,
+                y: VPAD + i * ySpread,
+                vx: 0, vy: 0, notes: s.notes,
             });
-        }
-
-        // Core metrics connected to everything with correlation data
-        nodes.forEach(n => {
-            if (CORE_METRICS.has(n.key)) return;
-            if (signalCorrelations[n.key]) {
-                addEdge(n.key, signalCorrelations[n.key].metric, signalCorrelations[n.key].r, 'correlation');
-            }
         });
 
-        // Core-to-core edges
-        addEdge('keep', 'retention', 0.7, 'correlation');
-        addEdge('keep', 'views', 0.5, 'correlation');
-        addEdge('retention', 'views', 0.5, 'correlation');
-
-        // Category edges (weak attraction — half strength, not drawn)
-        const catGroups = {};
-        nodes.forEach(n => {
-            const cat = getSignalFilterCategory(n.ind);
-            if (!catGroups[cat]) catGroups[cat] = [];
-            catGroups[cat].push(n.key);
-        });
-        Object.values(catGroups).forEach(group => {
-            for (let i = 0; i < group.length; i++) {
-                for (let j = i + 1; j < group.length; j++) {
-                    addEdge(group[i], group[j], 0.2, 'category');
-                }
-            }
+        postNodes.forEach((s, i) => {
+            const ySpread = (H - VPAD * 2) / Math.max(postNodes.length - 1, 1);
+            nodes.push({
+                key: s.key, label: s.label, r_partial: s.r_partial, layer: s.layer,
+                color: '#a78bfa', r: nodeRadius(s.r_partial),
+                x: W * 0.50 + (Math.random() - 0.5) * W * 0.08,
+                y: VPAD + i * ySpread,
+                vx: 0, vy: 0, notes: s.notes,
+            });
         });
 
-        // Force-directed simulation
-        for (let iter = 0; iter < 200; iter++) {
-            // Repulsion between all pairs
+        // VIEWS target node
+        const viewsNode = {
+            key: 'views', label: 'VIEWS', r_partial: 1, layer: 'views',
+            color: '#f59e0b', r: 28,
+            x: W * 0.85, y: H / 2,
+            vx: 0, vy: 0, notes: 'Prediction target: log10(views)',
+        };
+        nodes.push(viewsNode);
+
+        // Force-directed simulation (150 iterations)
+        for (let iter = 0; iter < 150; iter++) {
+            // Repulsion between nodes of same layer only
             for (let i = 0; i < nodes.length; i++) {
                 for (let j = i + 1; j < nodes.length; j++) {
                     const a = nodes[i], b = nodes[j];
-                    let dx = b.x - a.x, dy = b.y - a.y;
+                    if (a.layer !== b.layer) continue;
+                    if (a.layer === 'views') continue;
+                    const dx = b.x - a.x, dy = b.y - a.y;
                     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                    if (dist < 120) {
-                        const force = 800 / (dist * dist);
+                    if (dist < 100) {
+                        const force = 600 / (dist * dist);
                         const fx = (dx / dist) * force;
                         const fy = (dy / dist) * force;
                         a.vx -= fx; a.vy -= fy;
@@ -1142,48 +1094,47 @@ const JarvisUI = (() => {
                 }
             }
 
-            // Spring attraction for edges
-            edges.forEach(e => {
-                const na = nodeMap[e.a], nb = nodeMap[e.b];
-                if (!na || !nb) return;
-                const dx = nb.x - na.x, dy = nb.y - na.y;
-                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                const strength = e.type === 'category' ? 0.02 : 0.04;
-                const displacement = dist - 90;
-                const fx = (dx / dist) * displacement * strength;
-                const fy = (dy / dist) * displacement * strength;
-                na.vx += fx; na.vy += fy;
-                nb.vx -= fx; nb.vy -= fy;
+            // Weak spring pull toward VIEWS node
+            nodes.forEach(n => {
+                if (n.layer === 'views') return;
+                const dx = viewsNode.x - n.x, dy = viewsNode.y - n.y;
+                n.vx += dx * 0.01;
+                n.vy += dy * 0.01;
             });
 
-            // Center gravity
+            // Apply velocities with damping
             nodes.forEach(n => {
-                n.vx += (cx - n.x) * 0.002;
-                n.vy += (cy - n.y) * 0.002;
-            });
-
-            // Apply velocities with damping + boundary
-            nodes.forEach(n => {
-                n.vx *= 0.85;
-                n.vy *= 0.85;
+                if (n.layer === 'views') return; // VIEWS stays fixed
+                n.vx *= 0.8;
+                n.vy *= 0.8;
                 n.x += n.vx;
                 n.y += n.vy;
-                n.x = Math.max(PAD + n.r, Math.min(W - PAD - n.r, n.x));
-                n.y = Math.max(PAD + n.r, Math.min(H - PAD - n.r, n.y));
+                // Boundary constraints per zone
+                if (n.layer === 'pre') {
+                    n.x = Math.max(n.r + 5, Math.min(W * 0.35 - n.r, n.x));
+                } else {
+                    n.x = Math.max(W * 0.40 + n.r, Math.min(W * 0.80 - n.r, n.x));
+                }
+                n.y = Math.max(VPAD + n.r, Math.min(H - VPAD - n.r, n.y));
             });
         }
 
-        // Draw correlation edges (not category edges)
-        edges.forEach(e => {
-            const na = nodeMap[e.a], nb = nodeMap[e.b];
-            if (!na || !nb || e.type === 'category') return;
-            const thickness = Math.min(0.5 + e.weight * 3, 3);
-            const opacity = Math.min(0.15 + e.weight * 0.4, 0.6);
+        // Draw edges from each node to VIEWS
+        nodes.forEach(n => {
+            if (n.layer === 'views') return;
+            const absR = Math.abs(n.r_partial || 0);
+            const thickness = Math.min(0.5 + absR * 2.5, 3);
+            const opacity = Math.min(0.08 + absR * 0.35, 0.5);
+            // Parse hex color to rgb
+            const hex = n.color;
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
             ctx.beginPath();
-            ctx.strokeStyle = `rgba(100, 116, 139, ${opacity})`;
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
             ctx.lineWidth = thickness;
-            ctx.moveTo(na.x, na.y);
-            ctx.lineTo(nb.x, nb.y);
+            ctx.moveTo(n.x, n.y);
+            ctx.lineTo(viewsNode.x, viewsNode.y);
             ctx.stroke();
         });
 
@@ -1200,12 +1151,13 @@ const JarvisUI = (() => {
             ctx.stroke();
         });
 
-        // Draw labels with dark pill background
+        // Draw labels only for nodes with |r_partial| >= 0.3 (or VIEWS)
         nodes.forEach(n => {
-            const fontSize = CORE_METRICS.has(n.key) ? 11 : 9;
+            if (n.layer !== 'views' && Math.abs(n.r_partial || 0) < 0.3) return;
+            const fontSize = n.layer === 'views' ? 12 : 9;
             ctx.font = `${fontSize}px system-ui, sans-serif`;
             ctx.textAlign = 'center';
-            const truncated = n.label.length > 14 ? n.label.slice(0, 13) + '\u2026' : n.label;
+            const truncated = n.label.length > 12 ? n.label.slice(0, 11) + '\u2026' : n.label;
             const textW = ctx.measureText(truncated).width;
             const pillX = n.x - textW / 2 - 3;
             const pillY = n.y + n.r + 4;
@@ -1219,7 +1171,7 @@ const JarvisUI = (() => {
                 ctx.rect(pillX, pillY, pillW, pillH);
             }
             ctx.fill();
-            ctx.fillStyle = '#cbd5e1';
+            ctx.fillStyle = '#fff';
             ctx.fillText(truncated, n.x, pillY + fontSize);
         });
 
@@ -1238,7 +1190,8 @@ const JarvisUI = (() => {
                 tooltip.style.display = 'block';
                 tooltip.style.left = (hit.x + hit.r + 8) + 'px';
                 tooltip.style.top = (hit.y - 10) + 'px';
-                tooltip.innerHTML = `<strong>${hit.label}</strong><br><span class="jarvis-tt-dim">Type:</span> ${hit.type}<br><span class="jarvis-tt-dim">Source:</span> ${hit.source}`;
+                const rText = hit.r_partial !== null ? `<br><span class="jarvis-tt-dim">r_partial:</span> ${hit.r_partial.toFixed(3)}` : '';
+                tooltip.innerHTML = `<strong>${hit.label}</strong>${rText}`;
                 canvas.style.cursor = 'pointer';
             } else if (tooltip) {
                 tooltip.style.display = 'none';
