@@ -770,35 +770,23 @@ const JarvisUI = (() => {
         loadAutoResearchData(); // load prediction model for signal detail panel
         loadResultsTSV();
         loadIndicatorRegistry().then(() => {
-            buildD3TacticalGraph();
+            drawTacticalFullGraph();
             bindTacticalEvents();
         });
         return `
-            <div style="text-align:center;padding:6px 0 2px;margin-bottom:2px">
-                <div style="font-size:13px;font-weight:700;letter-spacing:0.5px;color:var(--j-text)">
-                    <span style="color:#06b6d4">PRE-UPLOAD</span>
-                    <span style="color:var(--j-muted);font-size:15px"> ⇄ </span>
-                    <span style="color:#a78bfa">POST-UPLOAD</span>
-                    <span style="color:var(--j-muted);font-size:15px"> → </span>
-                    <span style="color:#f59e0b">VIEWS</span>
-                </div>
-                <div style="font-size:9px;color:var(--j-muted);margin-top:2px">All connections determined by experiments</div>
-            </div>
-            <div class="jarvis-network-legend" style="margin-bottom:4px;flex-wrap:wrap">
-                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:2px;background:#06b6d4;vertical-align:middle;margin-right:4px"></span>Pre → Views</span>
-                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:2px;background:#a78bfa;vertical-align:middle;margin-right:4px"></span>Post → Views</span>
-                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:2px;background:#06b6d4;vertical-align:middle;margin-right:4px;border-top:1px dashed #06b6d4;height:0"></span>Pre → Post</span>
-                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:0;border-top:1px dashed #06b6d4;vertical-align:middle;margin-right:4px"></span>Pre ↔ Pre</span>
-                <span class="jarvis-legend-item"><span style="display:inline-block;width:14px;height:0;border-top:1px dashed #a78bfa;vertical-align:middle;margin-right:4px"></span>Post ↔ Post</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views target</span>
+            <div class="jarvis-network-legend" style="margin-bottom:4px">
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload (control before filming)</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured after upload)</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (prediction target)</span>
             </div>
             <div class="jarvis-tactical-network" style="margin-bottom:12px">
-                <div class="jarvis-d3-graph" id="jarvis-d3-graph"></div>
-                <div id="jarvis-tactical-tooltip" class="jarvis-tactical-tooltip" style="display:none"></div>
+                <canvas id="jarvis-network-canvas" width="400" height="550"></canvas>
+                <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
-            <div class="jarvis-merge-slider-row">
-                <label>Merge similar: <span id="jarvis-merge-val">${currentMergeThreshold > 0 ? currentMergeThreshold : 'off'}</span></label>
-                <input type="range" id="jarvis-merge-slider" min="0" max="100" value="${currentMergeThreshold}" />
+            <div style="display:flex;align-items:center;gap:10px;padding:4px 0 10px;font-size:11px;color:var(--j-muted)">
+                <label for="jarvis-merge-slider">Merge threshold:</label>
+                <input type="range" id="jarvis-merge-slider" min="0" max="100" value="${currentMergeThreshold}" style="width:140px" />
+                <span id="jarvis-merge-value">${currentMergeThreshold}</span>
             </div>
             <div class="jarvis-signal-list-section">
                 <input type="text" class="jarvis-signal-search" id="jarvis-signal-search" placeholder="Search signals..." value="${tacticalSearch}" />
@@ -1007,27 +995,8 @@ const JarvisUI = (() => {
         const fullNotes = sig.notes || '';
         const connections = sig.connections || [];
 
-        // Determine causal role based on layer + target
-        let causalRole, causalColor;
-        if (sig.layer === 'pre' && (!sig.target || sig.target === 'views')) {
-            causalRole = 'Direct pre-upload predictor';
-            causalColor = '#06b6d4';
-        } else if (sig.layer === 'pre') {
-            causalRole = 'Pre-upload → post-upload mechanism';
-            causalColor = '#06b6d4';
-        } else if (sig.layer === 'post' && (!sig.target || sig.target === 'views')) {
-            causalRole = 'Post-upload outcome predictor';
-            causalColor = '#a78bfa';
-        } else {
-            causalRole = 'Intermediate post-upload signal';
-            causalColor = '#a78bfa';
-        }
-
         return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
             <div class="jarvis-signal-detail-name">${sig.label}</div>
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                <span style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:10px;background:rgba(${causalColor === '#06b6d4' ? '6,182,212' : '167,139,250'},0.2);color:${causalColor};border:1px solid ${causalColor}40">${causalRole}</span>
-            </div>
             <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
                 ${sig.r_partial !== null ? `<span style="font-family:'SF Mono',monospace;font-size:16px;font-weight:700;color:${color}">r_partial = ${sig.r_partial.toFixed(3)}</span>` : ''}
                 <span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${layerLabel}</span>
@@ -1074,15 +1043,15 @@ const JarvisUI = (() => {
             });
         });
         const mergeSlider = container?.querySelector('#jarvis-merge-slider');
-        const mergeVal = container?.querySelector('#jarvis-merge-val');
+        const mergeValue = container?.querySelector('#jarvis-merge-value');
         if (mergeSlider) {
             mergeSlider.addEventListener('input', (e) => {
                 currentMergeThreshold = parseInt(e.target.value);
-                if (mergeVal) mergeVal.textContent = currentMergeThreshold > 0 ? currentMergeThreshold : 'off';
+                if (mergeValue) mergeValue.textContent = currentMergeThreshold;
                 const list = container?.querySelector('#jarvis-signal-list');
                 if (list) list.innerHTML = renderSignalList();
                 bindSignalRowClicks();
-                buildD3TacticalGraph();
+                drawTacticalFullGraph();
             });
         }
         bindSignalRowClicks();
@@ -1100,319 +1069,260 @@ const JarvisUI = (() => {
         });
     }
 
-    let d3Simulation = null;
+    function drawTacticalFullGraph() {
+        const canvas = container?.querySelector('#jarvis-network-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.parentElement.clientWidth || 400;
+        const H = 550;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        ctx.scale(dpr, dpr);
 
-    function buildD3TacticalGraph() {
-        const graphDiv = container?.querySelector('#jarvis-d3-graph');
-        if (!graphDiv) return;
-        // Clear previous
-        graphDiv.innerHTML = '';
-        if (d3Simulation) { d3Simulation.stop(); d3Simulation = null; }
-
-        const rect = graphDiv.getBoundingClientRect();
-        const W = rect.width || 400;
-        const H = 560;
-
-        const svg = d3.select(graphDiv).append('svg').attr('width', W).attr('height', H);
-
-        // Glow filter
-        const defs = svg.append('defs');
-        const filter = defs.append('filter').attr('id', 'jarvis-glow');
-        filter.append('feGaussianBlur').attr('stdDeviation', '2').attr('result', 'blur');
-        const merge = filter.append('feMerge');
-        merge.append('feMergeNode').attr('in', 'blur');
-        merge.append('feMergeNode').attr('in', 'SourceGraphic');
-
-        // Zone divider lines (resolution band boundaries)
-        [H * 0.28, H * 0.54, H * 0.76].forEach(yPos => {
-            svg.append('line')
-                .attr('x1', 0).attr('y1', yPos).attr('x2', W).attr('y2', yPos)
-                .attr('stroke', 'rgba(255,255,255,0.06)').attr('stroke-width', 1);
-        });
-
-        // Resolution row labels (left edge)
-        [
-            { label: 'R0 \u00b7 Full Video', y: H * 0.14 },
-            { label: 'R1 \u00b7 Segment', y: H * 0.40 },
-            { label: 'R2 \u00b7 Fine', y: H * 0.64 },
-            { label: 'R3 \u00b7 Frame/Word', y: H * 0.85 },
-        ].forEach(r => {
-            svg.append('text').attr('x', 6).attr('y', r.y)
-                .attr('font-size', '9px').attr('fill', '#475569')
-                .attr('font-family', "'SF Mono', monospace").text(r.label);
-        });
-
-        // Column headers (top)
-        [
-            { label: 'PRE-UPLOAD', x: W * 0.20, color: '#06b6d4' },
-            { label: 'POST-UPLOAD', x: W * 0.58, color: '#a78bfa' },
-            { label: 'VIEWS', x: W * 0.90, color: '#f59e0b' },
-        ].forEach(c => {
-            svg.append('text').attr('x', c.x).attr('y', 14)
-                .attr('text-anchor', 'middle').attr('font-size', '10px')
-                .attr('font-weight', '700').attr('fill', c.color)
-                .attr('font-family', "'SF Mono', monospace").text(c.label);
-        });
-
-        // Tooltip div
-        const tooltip = container?.querySelector('#jarvis-tactical-tooltip');
-
-        // Load signals
+        // Use indicator registry as source, fallback to discovered signals
         const allSignals = getRegistrySignals();
+
+        // Filter to top 100 by |r_partial|, exclude nulls
         const withR = allSignals.filter(s => s.r_partial !== null);
         withR.sort((a, b) => Math.abs(b.r_partial) - Math.abs(a.r_partial));
-        const top = withR.slice(0, 120);
+        const top = withR.slice(0, 100);
+
+        // Apply merge threshold for graph too
         const merged = applyMergeThreshold(top, currentMergeThreshold);
 
-        const colorMap = { pre: '#06b6d4', post: '#a78bfa', views: '#f59e0b' };
+        const preNodes = merged.filter(s => s.layer === 'pre');
+        const postNodes = merged.filter(s => s.layer === 'post');
 
-        function nodeRadius(d) {
-            if (d.layer === 'views') return 26;
-            return Math.max(6, Math.min(22, 5 + (d.depth || 1) * 2.5 + Math.abs(d.r_partial || 0) * 8));
+        // Resolution Y zones
+        const resZones = { R0: [0.05, 0.30], R1: [0.30, 0.55], R2: [0.55, 0.75], R3: [0.75, 0.90] };
+
+        // Node sizing: 8 + depth * 2, max 20
+        function nodeRadius(sig) {
+            const depthR = 8 + (sig.depth || 1) * 2;
+            const clusterBonus = (sig._clusterCount || 1) > 1 ? 4 : 0;
+            return Math.min(depthR + clusterBonus, 24);
         }
 
-        function resolutionYBounds(res, H) {
-            if (res === 'R0') return [0, H * 0.28];
-            if (res === 'R1') return [H * 0.28, H * 0.54];
-            if (res === 'R2') return [H * 0.54, H * 0.76];
-            return [H * 0.76, H]; // R3
+        // Build nodes with initial positions: X by layer column, Y by resolution zone
+        const nodes = [];
+
+        function initY(sig, indexInZone, totalInZone) {
+            const zone = resZones[sig.resolution] || resZones.R0;
+            const yStart = zone[0] * H;
+            const yEnd = zone[1] * H;
+            const spread = (yEnd - yStart) / Math.max(totalInZone, 1);
+            return yStart + spread * (indexInZone + 0.5);
         }
 
-        function titleCase(s) {
-            return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        // Group pre/post nodes by resolution for proper Y distribution
+        function addNodes(layerNodes, xMin, xMax, color) {
+            const byRes = { R0: [], R1: [], R2: [], R3: [] };
+            layerNodes.forEach(s => (byRes[s.resolution] || byRes.R0).push(s));
+            // Sort each zone alphabetically
+            Object.values(byRes).forEach(arr => arr.sort((a, b) => a.key.localeCompare(b.key)));
+            Object.entries(byRes).forEach(([, arr]) => {
+                arr.forEach((s, i) => {
+                    nodes.push({
+                        key: s.key, label: s.label, r_partial: s.r_partial, layer: s.layer,
+                        resolution: s.resolution, depth: s.depth, target: s.target,
+                        color: color, r: nodeRadius(s),
+                        _clusterCount: s._clusterCount || 1,
+                        x: xMin * W + Math.random() * (xMax - xMin) * W,
+                        y: initY(s, i, arr.length),
+                        vx: 0, vy: 0, notes: s.notes,
+                        xMin: xMin, xMax: xMax,
+                    });
+                });
+            });
         }
 
-        // Build nodes
-        const nodes = merged.map(s => ({
-            id: s.key, label: s._clusterCount > 1 ? s.label : titleCase(s.key),
-            layer: s.layer, resolution: s.resolution || 'R0',
-            depth: s.depth || 1, r_partial: s.r_partial,
-            color: colorMap[s.layer] || '#a78bfa',
-            notes: s.notes || '', target: s.target,
-            _clusterCount: s._clusterCount || 1,
-        }));
-        // Add VIEWS node
-        nodes.push({
-            id: 'views', label: 'VIEWS', layer: 'views', resolution: 'R0',
-            depth: 1, r_partial: 1.0, color: '#f59e0b',
-            notes: 'Prediction target: log10(views)', target: 'views', _clusterCount: 1,
+        addNodes(preNodes, 0.10, 0.35, '#06b6d4');
+        addNodes(postNodes, 0.50, 0.75, '#a78bfa');
+
+        // VIEWS target node
+        const viewsNode = {
+            key: 'views', label: 'VIEWS', r_partial: 1, layer: 'views',
+            resolution: 'R0', depth: 0, target: 'views',
+            color: '#f59e0b', r: 28,
+            x: W * 0.88, y: H * 0.50,
+            vx: 0, vy: 0, notes: 'Prediction target: log10(views)',
+        };
+        nodes.push(viewsNode);
+
+        // Force-directed simulation (150 iterations)
+        for (let iter = 0; iter < 150; iter++) {
+            // Repulsion between nodes in SAME zone only (same column + same resolution)
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const a = nodes[i], b = nodes[j];
+                    if (a.layer === 'views' || b.layer === 'views') continue;
+                    if (a.layer !== b.layer) continue; // same column only
+                    const dx = b.x - a.x, dy = b.y - a.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    if (dist < 80) {
+                        const force = 400 / (dist * dist);
+                        const fx = (dx / dist) * force;
+                        const fy = (dy / dist) * force;
+                        a.vx -= fx; a.vy -= fy;
+                        b.vx += fx; b.vy += fy;
+                    }
+                }
+            }
+
+            // Apply velocities with damping
+            nodes.forEach(n => {
+                if (n.layer === 'views') return;
+                n.vx *= 0.8;
+                n.vy *= 0.8;
+                n.x += n.vx;
+                n.y += n.vy;
+                // Boundary: keep in assigned zone
+                n.x = Math.max(n.xMin * W + n.r, Math.min(n.xMax * W - n.r, n.x));
+                const zone = resZones[n.resolution] || resZones.R0;
+                n.y = Math.max(zone[0] * H + n.r, Math.min(zone[1] * H - n.r, n.y));
+            });
+        }
+
+        // Draw resolution zone labels (left side)
+        ctx.font = '9px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(100,116,139,0.4)';
+        Object.entries(resZones).forEach(([label, [y0]]) => {
+            ctx.fillText(label, 4, y0 * H + 12);
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(100,116,139,0.08)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 6]);
+            ctx.moveTo(0, y0 * H);
+            ctx.lineTo(W, y0 * H);
+            ctx.stroke();
+            ctx.setLineDash([]);
         });
 
-        // Set initial positions to zone centers
-        nodes.forEach(d => {
-            d.x = d.layer === 'views' ? W * 0.90 : d.layer === 'pre' ? W * 0.20 + (Math.random() - 0.5) * 40 : W * 0.58 + (Math.random() - 0.5) * 40;
-            const [y0, y1] = resolutionYBounds(d.resolution || 'R0', H);
-            d.y = (y0 + y1) / 2 + (Math.random() - 0.5) * 20;
-        });
-
-        // Pin VIEWS node
-        const viewsNode = nodes.find(n => n.id === 'views');
-        if (viewsNode) { viewsNode.fx = W * 0.90; viewsNode.fy = H * 0.30; }
-
-        // Build edges
-        const edges = [];
-        const nodeMap = new Map(nodes.map(n => [n.id, n]));
-
-        // 1. Every non-views node → VIEWS
+        // Draw edges from each node to VIEWS
         nodes.forEach(n => {
             if (n.layer === 'views') return;
-            edges.push({ source: n.id, target: 'views', r: n.r_partial, type: 'to-views' });
+            const absR = Math.abs(n.r_partial || 0);
+            const thickness = Math.min(0.5 + absR * 2, 3);
+            const opacity = Math.min(0.05 + absR * 0.3, 0.45);
+            const hex = n.color;
+            const cr = parseInt(hex.slice(1, 3), 16);
+            const cg = parseInt(hex.slice(3, 5), 16);
+            const cb = parseInt(hex.slice(5, 7), 16);
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${opacity})`;
+            ctx.lineWidth = thickness;
+            ctx.moveTo(n.x, n.y);
+            ctx.lineTo(viewsNode.x, viewsNode.y);
+            ctx.stroke();
         });
 
-        // 2. Within-layer peer edges: same-layer nodes sharing 2+ underscore tokens
-        const nonView = nodes.filter(n => n.layer !== 'views');
-        for (let i = 0; i < nonView.length; i++) {
-            for (let j = i + 1; j < nonView.length; j++) {
-                const a = nonView[i], b = nonView[j];
-                if (a.layer !== b.layer) continue;
-                const tokA = a.id.split('_'), tokB = b.id.split('_');
-                const shared = tokA.filter(t => t.length > 1 && tokB.includes(t)).length;
-                if (shared >= 2) {
-                    edges.push({ source: a.id, target: b.id, r: 0.15, type: 'peer' });
-                }
-            }
-        }
-
-        // 3. Cross-layer edges: pre nodes mentioning "vs keep" or "vs retention" → highest r_partial post node
-        const postNodes = nodes.filter(n => n.layer === 'post');
-        let topPost = null;
-        if (postNodes.length) {
-            topPost = postNodes.reduce((best, n) => Math.abs(n.r_partial || 0) > Math.abs(best.r_partial || 0) ? n : best, postNodes[0]);
-        }
-        if (topPost) {
-            nodes.forEach(n => {
-                if (n.layer !== 'pre') return;
-                if (/vs\s*keep|vs\s*retention/i.test(n.notes)) {
-                    edges.push({ source: n.id, target: topPost.id, r: 0.2, type: 'cross' });
-                }
-            });
-        }
-
-        // D3 force simulation — strict zone layout
-        const simulation = d3.forceSimulation(nodes)
-            .force('link', d3.forceLink(edges).id(d => d.id)
-                .distance(d => 80 + (1 - Math.abs(d.r || 0.3)) * 40).strength(0.3))
-            .force('charge', d3.forceManyBody().strength(-80).distanceMax(120))
-            .force('x', d3.forceX(d => {
-                if (d.layer === 'views') return W * 0.90;
-                if (d.layer === 'pre') return W * 0.20;
-                return W * 0.58; // post
-            }).strength(d => d.layer === 'views' ? 1.0 : 0.65))
-            .force('y', d3.forceY(d => {
-                const res = d.resolution || 'R0';
-                if (res === 'R0') return H * 0.15;
-                if (res === 'R1') return H * 0.40;
-                if (res === 'R2') return H * 0.64;
-                return H * 0.85; // R3
-            }).strength(0.60))
-            .force('collide', d3.forceCollide(d => nodeRadius(d) + 5))
-            .alpha(1).alphaDecay(0.02);
-
-        d3Simulation = simulation;
-
-        // Helper: parse hex color to RGB
-        function hexRgb(hex) {
-            return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
-        }
-
-        // Draw edges
-        const linkGroup = svg.append('g').attr('class', 'jarvis-d3-links');
-        const linkEls = linkGroup.selectAll('line').data(edges).enter().append('line')
-            .each(function(d) {
-                const srcNode = typeof d.source === 'object' ? d.source : nodeMap.get(d.source);
-                const [cr, cg, cb] = hexRgb(srcNode ? srcNode.color : '#64748b');
-                const absR = Math.abs(d.r || 0.3);
-                let opacity, sw, dash;
-                if (d.type === 'peer') {
-                    opacity = 0.05; sw = 0.5; dash = '3,5';
-                } else if (d.type === 'cross') {
-                    opacity = 0.12; sw = 1; dash = '4,3';
-                } else {
-                    opacity = Math.min(0.08 + absR * 0.35, 0.55);
-                    sw = Math.min(0.4 + absR * 1.8, 2.5);
-                    dash = null;
-                }
-                const el = d3.select(this);
-                el.attr('stroke', `rgba(${cr},${cg},${cb},${opacity})`)
-                  .attr('stroke-width', sw);
-                if (dash) el.attr('stroke-dasharray', dash);
-            });
+        // Draw dashed edges for keep/retention target nodes
+        nodes.forEach(n => {
+            if (n.layer === 'views' || !n.target || n.target === 'views') return;
+            // Find nearest post-upload node with highest r_partial
+            const postCandidates = nodes.filter(p => p.layer === 'post' && p.key !== n.key);
+            if (!postCandidates.length) return;
+            const nearest = postCandidates.sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0))[0];
+            const hex = n.color;
+            const cr = parseInt(hex.slice(1, 3), 16);
+            const cg = parseInt(hex.slice(3, 5), 16);
+            const cb = parseInt(hex.slice(5, 7), 16);
+            ctx.beginPath();
+            ctx.setLineDash([3, 4]);
+            ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.06)`;
+            ctx.lineWidth = 1;
+            ctx.moveTo(n.x, n.y);
+            ctx.lineTo(nearest.x, nearest.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        });
 
         // Draw nodes
-        const nodeGroup = svg.append('g').attr('class', 'jarvis-d3-nodes');
-        const nodeEls = nodeGroup.selectAll('g').data(nodes).enter().append('g');
-
-        nodeEls.append('circle')
-            .attr('r', d => nodeRadius(d))
-            .attr('fill', d => d.color)
-            .attr('fill-opacity', 0.85)
-            .attr('stroke', 'rgba(255,255,255,0.2)')
-            .attr('stroke-width', 1)
-            .attr('filter', 'url(#jarvis-glow)')
-            .style('cursor', 'pointer');
-
-        // Depth badges for depth >= 3
-        nodeEls.filter(d => d.depth >= 3 && d.layer !== 'views').each(function(d) {
-            const g = d3.select(this);
-            const r = nodeRadius(d);
-            g.append('circle')
-                .attr('class', 'jarvis-depth-badge')
-                .attr('cx', r * 0.7).attr('cy', -r * 0.7)
-                .attr('r', 6).attr('fill', '#1e293b').attr('stroke', d.color).attr('stroke-width', 0.8);
-            g.append('text')
-                .attr('class', 'jarvis-depth-badge-text')
-                .attr('x', r * 0.7).attr('y', -r * 0.7 + 3.5)
-                .attr('text-anchor', 'middle').attr('font-size', '8px')
-                .attr('fill', '#cbd5e1').text(d.depth);
+        nodes.forEach(n => {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+            ctx.fillStyle = n.color;
+            ctx.globalAlpha = 0.85;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
         });
 
-        // Labels (only if r_partial >= 0.25 or VIEWS)
-        nodeEls.filter(d => d.layer === 'views' || Math.abs(d.r_partial || 0) >= 0.25)
-            .append('text')
-            .attr('class', 'jarvis-d3-label')
-            .attr('dy', d => nodeRadius(d) + 12)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '9px')
-            .attr('fill', '#cbd5e1')
-            .text(d => {
-                const label = d.label || d.id;
-                return label.length > 13 ? label.slice(0, 12) + '\u2026' : label;
-            });
-
-        // Drag behavior
-        const drag = d3.drag()
-            .on('start', (event, d) => {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x; d.fy = d.y;
-            })
-            .on('drag', (event, d) => {
-                d.fx = event.x; d.fy = event.y;
-            })
-            .on('end', (event, d) => {
-                if (!event.active) simulation.alphaTarget(0);
-                if (d.layer === 'views') { d.fx = W * 0.90; d.fy = H * 0.30; }
-                else { d.fx = null; d.fy = null; }
-            });
-        nodeEls.call(drag);
-
-        // Hover tooltip
-        nodeEls.on('mouseover', (event, d) => {
-            if (!tooltip) return;
-            const layerLabel = d.layer === 'pre' ? 'PRE' : d.layer === 'post' ? 'POST' : 'VIEWS';
-            const layerColor = d.color;
-            tooltip.innerHTML = `
-                <strong style="color:#e2e8f0">${d.label || d.id}</strong><br>
-                <span style="color:#64748b">r_partial:</span> <span style="color:${layerColor};font-family:'SF Mono',monospace">${(d.r_partial || 0).toFixed(3)}</span><br>
-                <span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;background:${layerColor}22;color:${layerColor};margin:2px 0">${layerLabel}</span>
-                <span style="color:#64748b;font-size:10px">${d.resolution} · depth ${d.depth}</span>`;
-            tooltip.style.display = 'block';
-            tooltip.style.left = (event.clientX + 12) + 'px';
-            tooltip.style.top = (event.clientY - 10) + 'px';
-        }).on('mousemove', (event) => {
-            if (!tooltip) return;
-            tooltip.style.left = (event.clientX + 12) + 'px';
-            tooltip.style.top = (event.clientY - 10) + 'px';
-        }).on('mouseout', () => {
-            if (tooltip) tooltip.style.display = 'none';
-        });
-
-        // Click to expand signal
-        nodeEls.on('click', (event, d) => {
-            if (d.layer === 'views') return;
-            tacticalExpandedSignal = tacticalExpandedSignal === d.id ? null : d.id;
-            const list = container?.querySelector('#jarvis-signal-list');
-            if (list) {
-                list.innerHTML = renderSignalList();
-                bindSignalRowClicks();
-                const row = list.querySelector(`[data-signal-key="${d.id}"]`);
-                if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // Draw labels only for nodes with |r_partial| >= 0.2 (or VIEWS)
+        nodes.forEach(n => {
+            if (n.layer !== 'views' && Math.abs(n.r_partial || 0) < 0.2) return;
+            const fontSize = n.layer === 'views' ? 12 : 9;
+            ctx.font = `${fontSize}px system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            const truncated = n.label.length > 14 ? n.label.slice(0, 13) + '\u2026' : n.label;
+            const textW = ctx.measureText(truncated).width;
+            const pillX = n.x - textW / 2 - 3;
+            const pillY = n.y + n.r + 4;
+            const pillW = textW + 6;
+            const pillH = fontSize + 4;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(pillX, pillY, pillW, pillH, 3);
+            } else {
+                ctx.rect(pillX, pillY, pillW, pillH);
             }
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillText(truncated, n.x, pillY + fontSize);
         });
 
-        // Tick: update positions with zone clamping
-        let tickCount = 0;
-        simulation.on('tick', () => {
-            tickCount++;
-            // Clamp nodes to zone bounds
-            nodes.forEach(d => {
-                if (d.fx !== null && d.fx !== undefined) return; // skip pinned
-                const r = nodeRadius(d) + 5;
-                if (d.layer === 'pre') {
-                    d.x = Math.max(r, Math.min(W * 0.38 - r, d.x));
-                } else if (d.layer === 'post') {
-                    d.x = Math.max(W * 0.42 + r, Math.min(W * 0.78 - r, d.x));
+        // Tooltip
+        const tooltip = container?.querySelector('#jarvis-network-tooltip');
+        canvas.onmousemove = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            let hit = null;
+            for (const n of nodes) {
+                const dx = mx - n.x, dy = my - n.y;
+                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) { hit = n; break; }
+            }
+            if (hit && tooltip) {
+                tooltip.style.display = 'block';
+                tooltip.style.left = (hit.x + hit.r + 8) + 'px';
+                tooltip.style.top = (hit.y - 10) + 'px';
+                const rText = hit.r_partial !== null ? `<br><span class="jarvis-tt-dim">r_partial:</span> ${hit.r_partial.toFixed(3)}` : '';
+                const resText = `<br><span class="jarvis-tt-dim">${hit.resolution || 'R0'} · depth ${hit.depth || 1}</span>`;
+                tooltip.innerHTML = `<strong>${hit.label}</strong>${rText}${resText}`;
+                canvas.style.cursor = 'pointer';
+            } else if (tooltip) {
+                tooltip.style.display = 'none';
+                canvas.style.cursor = 'default';
+            }
+        };
+
+        // Click node -> expand in signal list + scroll to entry
+        canvas.onclick = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            for (const n of nodes) {
+                const dx = mx - n.x, dy = my - n.y;
+                if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) {
+                    tacticalExpandedSignal = tacticalExpandedSignal === n.key ? null : n.key;
+                    const list = container?.querySelector('#jarvis-signal-list');
+                    if (list) {
+                        list.innerHTML = renderSignalList();
+                        bindSignalRowClicks();
+                        const row = list.querySelector(`[data-signal-key="${n.key}"]`);
+                        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                    break;
                 }
-                const [yMin, yMax] = resolutionYBounds(d.resolution || 'R0', H);
-                d.y = Math.max(yMin + r, Math.min(yMax - r, d.y));
-            });
-            linkEls
-                .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-            nodeEls.attr('transform', d => `translate(${d.x},${d.y})`);
-            if (tickCount >= 300 || simulation.alpha() < 0.01) {
-                simulation.stop();
             }
-        });
+        };
     }
 
     // ══════════════════════════════════════════════════
@@ -1830,7 +1740,7 @@ const JarvisUI = (() => {
                             <div style="font-size:10px;color:#06b6d4;text-transform:uppercase;font-weight:600">Pre-upload</div>
                             <div style="font-size:18px;font-weight:700;color:#06b6d4">${preCount}</div>
                         </div>
-                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u21c4</div>
+                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u2192</div>
                         <div style="text-align:center;padding:10px 18px;background:rgba(167,139,250,0.12)">
                             <div style="font-size:10px;color:#a78bfa;text-transform:uppercase;font-weight:600">Post-upload</div>
                             <div style="font-size:18px;font-weight:700;color:#a78bfa">${postCount}</div>
@@ -1841,7 +1751,6 @@ const JarvisUI = (() => {
                             <div style="font-size:18px;font-weight:700;color:#f59e0b">1</div>
                         </div>
                     </div>
-                    <div style="font-size:10px;color:var(--j-muted);text-align:center;margin-top:6px">Connection types active: <span style="color:#06b6d4">Pre\u2192Views</span> · <span style="color:#06b6d4">Pre\u2192Post</span> · <span style="color:#a78bfa">Post\u2192Views</span> · <span style="color:#06b6d4">Pre\u2194Pre</span> · <span style="color:#a78bfa">Post\u2194Post</span></div>
                 </div>
             </div>
 
