@@ -206,21 +206,254 @@ const JarvisUI = (() => {
     // ══════════════════════════════════════════════════
     // TAB 1: ANALYTICAL BRAIN — Vector Network Graph
     // ══════════════════════════════════════════════════
+    // ── Analytical Brain: active selections ──
+    let analyticalSelectedTool = null;   // tool id from v2Tools
+    let analyticalSelectedExpId = null;  // experiment instance id
+
     function renderAnalytical() {
-        setTimeout(() => drawAnalyticalGraph(), 100);
+        // Load v2 tools if not loaded yet
+        if (!v2Tools) loadV2Data().then(() => {
+            const panel = container?.querySelector('#jarvis-analytical-content');
+            if (panel) panel.innerHTML = renderAnalyticalContent();
+            bindAnalyticalEvents();
+        });
+        setTimeout(bindAnalyticalEvents, 50);
+        return `<div id="jarvis-analytical-content">${renderAnalyticalContent()}</div>`;
+    }
+
+    function renderAnalyticalContent() {
+        const tools = v2Tools || [];
+        const experiments = v2Indicators || []; // each indicator has one experiment instance
+
+        const toolColors = {
+            pearson_r: '#3b82f6',
+            spearman_rho: '#06b6d4',
+            partial_correlation: '#a78bfa',
+            ols_r2_delta: '#10b981',
+        };
+        const toolIcons = {
+            pearson_r: '\uD83D\uDCCF',
+            spearman_rho: '\uD83D\uDCC8',
+            partial_correlation: '\uD83E\uDDF9',
+            ols_r2_delta: '\uD83D\uDCC9',
+        };
+
+        // Tool cards
+        const toolCards = tools.map(tool => {
+            const color = toolColors[tool.id] || '#64748b';
+            const icon = toolIcons[tool.id] || '⚙️';
+            const isSelected = analyticalSelectedTool === tool.id;
+            // Count how many experiments used this tool
+            const usageCount = experiments.filter(i => i.experiment && i.experiment.tool_id === tool.id).length;
+            return `<div class="jarvis-tool-card${isSelected ? ' selected' : ''}" data-tool-id="${tool.id}" style="border-left:3px solid ${color}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div style="font-size:14px;font-weight:700;color:#f1f5f9">${icon} ${tool.name}</div>
+                    <span style="font-size:10px;color:#64748b;background:#1e293b;padding:2px 6px;border-radius:8px">${usageCount} experiments</span>
+                </div>
+                <div style="font-size:12px;color:#94a3b8;margin:4px 0 6px">${tool.description}</div>
+                <div style="font-size:10px;color:#64748b">v${tool.version || '1.0'} &middot; ${tool.analytical_brain_tab || 'correlation'} tab</div>
+            </div>`;
+        }).join('');
+
+        // Selected tool detail panel
+        let toolDetail = '';
+        if (analyticalSelectedTool) {
+            const tool = tools.find(t => t.id === analyticalSelectedTool);
+            if (tool) toolDetail = renderToolDefinitionCard(tool, toolColors[tool.id] || '#64748b');
+        }
+
+        // Selected experiment instance panel
+        let expDetail = '';
+        if (analyticalSelectedExpId) {
+            const ind = experiments.find(i => i.experiment && i.experiment.id === analyticalSelectedExpId);
+            if (ind) expDetail = renderExperimentInstanceCard(ind);
+        }
+
         return `
-            <div class="jarvis-analytical-network">
-                <canvas id="jarvis-analytical-canvas" width="440" height="280"></canvas>
-                <div id="jarvis-analytical-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
+            <div style="margin-bottom:12px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Experiment Tools &mdash; click to inspect</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="jarvis-tool-cards">
+                    ${toolCards}
+                </div>
             </div>
-            <div class="jarvis-network-legend">
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#3b82f6"></span>Measurement Tool</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#10b981"></span>Model Tool</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>LLM Scorer</span>
-                <span class="jarvis-legend-item jarvis-legend-hint">Click a node to run the tool</span>
-            </div>
-            ${activeToolId ? `<div class="jarvis-tool-panel-below">${renderToolPanel(activeToolId)}</div>` : ''}
+            ${toolDetail}
+            ${expDetail}
+            ${!analyticalSelectedTool && !analyticalSelectedExpId ? `
+            <div style="margin-top:12px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Experiment Instances (${experiments.length} run)</div>
+                <div style="display:flex;flex-direction:column;gap:4px" id="jarvis-exp-instances">
+                    ${experiments.map(ind => {
+                        const exp = ind.experiment;
+                        if (!exp) return '';
+                        const r = ind.result ? ind.result.primary_r : null;
+                        const rStr = r != null ? `<span style="font-family:'SF Mono',monospace;color:${r >= 0 ? '#22d3ee' : '#f87171'}">r=${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '';
+                        const tool = tools.find(t => t.id === exp.tool_id);
+                        return `<div class="jarvis-exp-instance-row" data-exp-id="${exp.id}" style="display:flex;align-items:center;gap:8px;background:#0a1628;padding:8px 10px;border-radius:6px;cursor:pointer">
+                            <code style="font-size:10px;color:#94a3b8;flex:1">${exp.id}</code>
+                            <span style="font-size:10px;color:#64748b">${tool ? tool.name : exp.tool_id}</span>
+                            <span style="font-size:11px;color:#94a3b8">${ind.key}</span>
+                            ${rStr}
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>` : ''}
         `;
+    }
+
+    function renderToolDefinitionCard(tool, color) {
+        const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
+        const paramRows = Object.entries(tool.parameters || {}).map(([k, v]) => {
+            const desc = typeof v === 'object' ? v.description || '' : '';
+            const type = typeof v === 'object' ? v.type || '' : typeof v;
+            const def = typeof v === 'object' && v.default != null ? ` (default: ${v.default})` : '';
+            return `<tr><td style="font-family:monospace;font-size:11px;color:#22d3ee;padding:3px 8px 3px 0">${k}</td><td style="font-size:11px;color:#94a3b8">${type}${def}</td><td style="font-size:11px;color:#64748b;padding-left:8px">${desc}</td></tr>`;
+        }).join('');
+        const outputRows = Object.entries(tool.outputs || {}).map(([k, v]) =>
+            `<tr><td style="font-family:monospace;font-size:11px;color:#a78bfa;padding:3px 8px 3px 0">${k}</td><td style="font-size:11px;color:#94a3b8">${v}</td></tr>`
+        ).join('');
+
+        return `
+            <div style="background:#0a1628;border-left:3px solid ${color};border-radius:0 8px 8px 0;padding:14px;margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div style="font-size:15px;font-weight:700;color:#f1f5f9">${tool.name}</div>
+                    <button onclick="JarvisUI.closeAnalyticalPanel()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer">×</button>
+                </div>
+                <div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:8px">${tool.description}</div>
+
+                ${sectionHdr('When to Use')}
+                <div style="font-size:12px;color:#cbd5e1;line-height:1.6">${tool.when_to_use || '—'}</div>
+
+                ${sectionHdr('Formula')}
+                <div style="background:#0f172a;border-radius:6px;padding:10px;font-size:12px;font-family:monospace;color:#22d3ee;line-height:1.6">${tool.formula || '—'}</div>
+
+                ${sectionHdr('Parameters')}
+                <table style="width:100%;border-collapse:collapse">${paramRows || '<tr><td style="color:#64748b;font-size:11px">None</td></tr>'}</table>
+
+                ${sectionHdr('Outputs')}
+                <table style="width:100%;border-collapse:collapse">${outputRows || '<tr><td style="color:#64748b;font-size:11px">None</td></tr>'}</table>
+
+                ${sectionHdr('Interpretation Guide')}
+                <div style="font-size:12px;color:#94a3b8;line-height:1.6">${tool.interpretation || '—'}</div>
+            </div>`;
+    }
+
+    function renderExperimentInstanceCard(ind) {
+        const exp = ind.experiment;
+        const result = ind.result;
+        const tool = v2Tools ? v2Tools.find(t => t.id === exp.tool_id) : null;
+        const dataset = ind.dataset || [];
+        const metricDef = ind.metric_definition || {};
+        const color = ind.layer === 'pre' ? '#06b6d4' : '#a78bfa';
+
+        const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
+
+        // Stats
+        const r = result ? result.primary_r : null;
+        const rho = result ? result.rho : null;
+        const p = exp.outputs ? exp.outputs.p_value : null;
+        const ciLow = exp.outputs ? exp.outputs.ci_low : null;
+        const ciHigh = exp.outputs ? exp.outputs.ci_high : null;
+        const rStr = r != null ? `<span style="font-weight:700;color:${r >= 0 ? '#22d3ee' : '#f87171'}">${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '—';
+
+        // Data points table (show first 20, with toggle hint)
+        const dataRows = dataset.slice(0, 20).map((d, i) =>
+            `<tr style="background:${i % 2 === 0 ? '#0a1020' : '#0d1525'}">
+                <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${d.ytId}</td>
+                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#cbd5e1;text-align:right">${typeof d.value === 'number' ? d.value.toFixed(4) : d.value}</td>
+                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#94a3b8;text-align:right">${typeof d.target_value === 'number' ? d.target_value.toFixed(4) : d.target_value}</td>
+            </tr>`
+        ).join('');
+
+        return `
+            <div style="background:#0a1628;border-left:3px solid ${color};border-radius:0 8px 8px 0;padding:14px;margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:#f1f5f9">${ind.label || ind.key}</div>
+                        <code style="font-size:10px;color:#475569">${exp.id}</code>
+                    </div>
+                    <button onclick="JarvisUI.closeAnalyticalPanel()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer">×</button>
+                </div>
+
+                ${sectionHdr('Instance: Method Applied to Indicator')}
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">
+                    Tool: <strong style="color:#cbd5e1">${tool ? tool.name : exp.tool_id}</strong> &mdash;
+                    Indicator: <code style="color:${color}">${ind.key}</code> →
+                    Target: <code style="color:#f59e0b">${exp.parameters ? exp.parameters.target : 'views'}</code>
+                    (transform: <code>${exp.parameters ? exp.parameters.transform_target : 'log10'}</code>)
+                </div>
+
+                ${sectionHdr('What Was Measured')}
+                <div style="background:#0f172a;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8;margin-bottom:4px">
+                    <div><span style="color:#64748b">Description: </span>${metricDef.description || '—'}</div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Formula: </span><code style="color:#22d3ee">${metricDef.formula || '—'}</code></div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Extracted from: </span>${(metricDef.data_sources || []).join(', ')}</div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Resolution: </span>${ind.resolution_id || 'r0'}</div>
+                </div>
+
+                ${sectionHdr('Results')}
+                <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #1e293b;margin-bottom:8px">
+                    <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">Pearson r</span><span style="font-size:13px">${rStr}</span></div>
+                    ${rho != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">Spearman ρ</span><span style="font-size:13px;color:${rho >= 0 ? '#22d3ee' : '#f87171'}">${rho >= 0 ? '+' : ''}${rho.toFixed(3)}</span></div>` : ''}
+                    ${p != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">p-value</span><span style="font-size:13px;color:${p < 0.05 ? '#22d3ee' : '#f87171'}">${p.toFixed(4)}</span></div>` : ''}
+                    ${ciLow != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">95% CI</span><span style="font-size:12px;color:#94a3b8">[${ciLow >= 0 ? '+' : ''}${ciLow.toFixed(3)}, ${ciHigh >= 0 ? '+' : ''}${ciHigh.toFixed(3)}]</span></div>` : ''}
+                    <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">n videos</span><span style="font-size:13px;color:#cbd5e1">${exp.n_videos}</span></div>
+                </div>
+
+                ${result && result.conclusion ? `
+                <div style="background:#0f2942;border-left:3px solid #22d3ee;padding:10px;border-radius:0 6px 6px 0;font-size:12px;color:#e2e8f0;line-height:1.6;margin-bottom:8px">${result.conclusion}</div>
+                ${result.practical_insight ? `<div style="background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">💡 ${result.practical_insight}</div>` : ''}
+                ` : ''}
+
+                ${sectionHdr(`Data Points (${dataset.length} videos)`)}
+                <div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="background:#1e293b;position:sticky;top:0">
+                            <th style="padding:4px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Video ID</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">${ind.key}</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">log10(views)</th>
+                        </tr></thead>
+                        <tbody>${dataRows}</tbody>
+                    </table>
+                    ${dataset.length > 20 ? `<div style="padding:6px 8px;font-size:10px;color:#475569;text-align:center">… ${dataset.length - 20} more rows</div>` : ''}
+                </div>
+            </div>`;
+    }
+
+    function bindAnalyticalEvents() {
+        container?.querySelectorAll('[data-tool-id]').forEach(card => {
+            card.addEventListener('click', () => {
+                const tid = card.dataset.toolId;
+                analyticalSelectedTool = analyticalSelectedTool === tid ? null : tid;
+                analyticalSelectedExpId = null;
+                const p = container?.querySelector('#jarvis-analytical-content');
+                if (p) p.innerHTML = renderAnalyticalContent();
+                bindAnalyticalEvents();
+            });
+        });
+        container?.querySelectorAll('[data-exp-id]').forEach(row => {
+            row.addEventListener('click', () => {
+                analyticalSelectedExpId = row.dataset.expId;
+                analyticalSelectedTool = null;
+                const p = container?.querySelector('#jarvis-analytical-content');
+                if (p) p.innerHTML = renderAnalyticalContent();
+                bindAnalyticalEvents();
+            });
+        });
+    }
+
+    // Global functions accessible from inline onclick handlers
+    function openExperimentInstance(expId) {
+        activeTab = 'analytical';
+        analyticalSelectedExpId = expId;
+        analyticalSelectedTool = null;
+        render();
+    }
+
+    function closeAnalyticalPanel() {
+        analyticalSelectedTool = null;
+        analyticalSelectedExpId = null;
+        const p = container?.querySelector('#jarvis-analytical-content');
+        if (p) { p.innerHTML = renderAnalyticalContent(); bindAnalyticalEvents(); }
     }
 
     function drawAnalyticalGraph() {
@@ -1104,10 +1337,10 @@ const JarvisUI = (() => {
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Experiment</div>
                 <div style="background:#0a1628;border-radius:6px;padding:10px;font-size:11px">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-                        <code style="color:#94a3b8;font-size:10px">${exp.id}</code>
+                        <code style="color:#22d3ee;font-size:10px;cursor:pointer;text-decoration:underline" onclick="JarvisUI.openExperimentInstance('${exp.id}')" title="Open in Analytical Brain">${exp.id} &#x2197;&#xfe0f;</code>
                         <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(14,116,144,0.2);color:#0e7490">${result ? result.status : 'discovery'}</span>
                     </div>
-                    <div style="color:#94a3b8"><span style="color:#64748b">Tool:</span> <strong style="color:#cbd5e1">${tool ? tool.name : exp.tool_id}</strong> v${exp.tool_version || '1.0'}</div>
+                    <div style="color:#94a3b8"><span style="color:#64748b">Tool:</span> <strong style="color:#cbd5e1">${tool ? tool.name : exp.tool_id}</strong> v${tool ? tool.version || '1.0' : '1.0'}</div>
                     ${tool ? `<div style="margin-top:3px;font-size:10px;color:#64748b">${tool.description}</div>` : ''}
                     <div style="margin-top:6px;color:#94a3b8">
                         <span style="color:#64748b">Parameters:</span>
@@ -1279,7 +1512,7 @@ const JarvisUI = (() => {
             expHtml = sectionHdr('Experiment')
                 + '<div style="background:#0a1628;border-radius:6px;padding:10px;font-size:11px">'
                 + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
-                + '<code style="color:#94a3b8;font-size:10px">' + exp.id + '</code>'
+                + '<code style="color:#22d3ee;font-size:10px;cursor:pointer;text-decoration:underline" onclick="JarvisUI.openExperimentInstance(\'' + exp.id + '\')" title="Open in Analytical Brain">' + exp.id + ' \u2197\ufe0f</code>'
                 + '<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(14,116,144,0.2);color:#0e7490">' + (result ? result.status : 'discovery') + '</span>'
                 + '</div>'
                 + '<div><span style="color:#64748b">Tool: </span><strong style="color:#cbd5e1">' + (tool ? tool.name : exp.tool_id) + '</strong></div>'
@@ -2818,7 +3051,7 @@ const JarvisUI = (() => {
         container = null;
     }
 
-    return { open, close };
+    return { open, close, openExperimentInstance, closeAnalyticalPanel };
 })();
 
 BuildingRegistry.register('Jarvis', {
