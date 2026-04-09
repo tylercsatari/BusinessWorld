@@ -770,8 +770,10 @@ const JarvisUI = (() => {
         loadAutoResearchData(); // load prediction model for signal detail panel
         loadResultsTSV();
         loadIndicatorRegistry().then(() => {
-            buildD3TacticalGraph();
-            bindTacticalEvents();
+            setTimeout(() => {
+                buildD3TacticalGraph();
+                bindTacticalEvents();
+            }, 50);
         });
         return `
             <div class="jarvis-network-legend" style="margin-bottom:4px">
@@ -1071,11 +1073,13 @@ const JarvisUI = (() => {
 
     function buildD3TacticalGraph() {
         const graphEl = container?.querySelector('#jarvis-d3-graph');
-        if (!graphEl || typeof d3 === 'undefined') return;
+        if (!graphEl) { console.error('Jarvis: #jarvis-d3-graph not found'); return; }
+        if (typeof d3 === 'undefined') { console.error('Jarvis: D3 not loaded'); return; }
         graphEl.innerHTML = '';
 
-        const width = graphEl.clientWidth || 500;
-        const height = 550;
+        const width = graphEl.getBoundingClientRect().width || graphEl.offsetWidth || graphEl.parentElement?.clientWidth || 360;
+        const height = 520;
+        graphEl.style.height = height + 'px';
 
         const svg = d3.select(graphEl).append('svg')
             .attr('width', width).attr('height', height)
