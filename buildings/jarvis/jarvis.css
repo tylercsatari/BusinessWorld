@@ -16,7 +16,8 @@
 .jarvis-panel {
     display: flex; flex-direction: column; height: 100%;
     min-height: 0; overflow: hidden;
-    background: var(--j-bg); color: var(--j-text);
+    background: linear-gradient(180deg, #0a0f1a 0%, #060b14 100%);
+    color: var(--j-text);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
@@ -46,12 +47,12 @@
     padding: 8px 12px; font-size: 11px; font-weight: 600;
     color: var(--j-muted); cursor: pointer; border: none;
     background: transparent; border-bottom: 2px solid transparent;
-    transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+    transition: color 0.15s, border-color 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
     white-space: nowrap; flex-shrink: 0;
 }
-.jarvis-tab:hover { color: var(--j-text); }
+.jarvis-tab:hover { color: var(--j-text); border-bottom-color: rgba(34,211,238,0.3); }
 .jarvis-tab.active {
-    color: var(--j-accent); border-bottom-color: var(--j-accent);
+    color: #22d3ee; border-bottom-color: #22d3ee;
 }
 
 /* ── Content ── */
@@ -62,6 +63,13 @@
 .jarvis-content::-webkit-scrollbar { width: 4px; }
 .jarvis-content::-webkit-scrollbar-track { background: transparent; }
 .jarvis-content::-webkit-scrollbar-thumb { background: var(--j-border); border-radius: 2px; }
+
+/* ── Global polish ── */
+.jarvis-panel [style*="font-size:10px"][style*="text-transform:uppercase"],
+.jarvis-panel [style*="font-size:10px"][style*="letter-spacing:0.08em"] {
+    padding-left: 8px;
+    border-left: 1px solid #334155;
+}
 
 /* ══════════════════════════════════════════════════════
    TAB 1: Analytical Brain — Vector Network Graph
@@ -136,6 +144,48 @@
 }
 .jarvis-tool-execute:hover { background: #059669; }
 .jarvis-tool-result { margin-top: 12px; }
+
+/* ── Analytical Brain — scrollable tool list ── */
+.jarvis-tool-list {
+    display: flex; flex-direction: column; gap: 0;
+    max-height: 60vh; overflow-y: auto;
+    border-radius: 8px; border: 1px solid #1e293b;
+}
+.jarvis-tool-list::-webkit-scrollbar { width: 4px; }
+.jarvis-tool-list::-webkit-scrollbar-thumb { background: var(--j-border); border-radius: 2px; }
+.jarvis-tool-list-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; cursor: pointer;
+    border-bottom: 1px solid #1e293b;
+    transition: background 0.12s; position: relative;
+}
+.jarvis-tool-list-row:last-child { border-bottom: none; }
+.jarvis-tool-list-row:hover { background: #0f1e2e; }
+.jarvis-tool-list-row.expanded { background: #0a1628; }
+.jarvis-tool-list-accent {
+    width: 3px; height: 100%; position: absolute; left: 0; top: 0;
+    border-radius: 3px 0 0 3px;
+}
+.jarvis-tool-list-icon { font-size: 18px; flex-shrink: 0; width: 28px; text-align: center; }
+.jarvis-tool-list-name { font-size: 13px; font-weight: 700; color: #f1f5f9; }
+.jarvis-tool-list-desc {
+    font-size: 11px; color: #64748b; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; max-width: 180px;
+}
+.jarvis-tool-list-badge {
+    font-size: 10px; color: #64748b; background: #1e293b;
+    padding: 2px 7px; border-radius: 8px; white-space: nowrap;
+}
+.jarvis-tool-list-chevron {
+    font-size: 11px; color: #475569; margin-left: 6px;
+    transition: transform 0.15s;
+}
+.jarvis-tool-list-row.expanded .jarvis-tool-list-chevron { transform: rotate(90deg); }
+.jarvis-tool-list-detail {
+    padding: 14px 16px 16px 16px; background: #060d1a;
+    border-bottom: 1px solid #1e293b;
+}
+.jarvis-tool-list-detail:last-child { border-bottom: none; }
 
 /* ── Pearson r bar ── */
 .jarvis-r-bar { margin: 10px 0; }
@@ -1436,6 +1486,112 @@
     border-color: rgba(59,130,246,0.3);
 }
 
+/* ── Signal list polish ── */
+.jarvis-signal-row-wrapper.pre-signal > .jarvis-signal-row {
+    border-left: 3px solid #06b6d4;
+}
+.jarvis-signal-row-wrapper.post-signal > .jarvis-signal-row {
+    border-left: 3px solid #a78bfa;
+}
+.jarvis-signal-detail {
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+.jarvis-signal-row-wrapper.pre-signal > .jarvis-signal-detail {
+    border-top: 2px solid rgba(6,182,212,0.3);
+}
+.jarvis-signal-row-wrapper.post-signal > .jarvis-signal-detail {
+    border-top: 2px solid rgba(167,139,250,0.3);
+}
+
+/* ── Graph node popup polish ── */
+#jarvis-node-popup {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border-radius: 12px !important;
+}
+
+/* ── Resolution shelf cards polish ── */
+.jarvis-res-card {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.jarvis-res-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+/* ── Stats rows (multi-tab) ── */
+.jarvis-resv2-stats {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.jarvis-resv2-stat {
+    background: #0a1628; border: 1px solid #1e293b;
+    border-radius: 8px; padding: 8px 14px;
+    font-size: 12px; color: #94a3b8;
+}
+.jarvis-resv2-stat strong { color: #f1f5f9; }
+
+/* ── Experiments tab polish ── */
+.jarvis-exp-card {
+    transition: background 0.15s, border-color 0.15s;
+}
+.jarvis-exp-card:hover {
+    border-color: rgba(59,130,246,0.3);
+}
+.jarvis-exp-card.selected {
+    border-left: 3px solid #22d3ee;
+    box-shadow: 0 0 12px rgba(34,211,238,0.15);
+}
+.jarvis-exp-group-header::after {
+    content: '\u25B8';
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--j-muted);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.jarvis-exp-group-header:hover::after {
+    opacity: 1;
+}
+
+/* ── AutoResearch polish ── */
+.jarvis-res-mini-step {
+    transition: border-color 0.15s, background 0.15s;
+    border: 1px solid transparent;
+}
+.jarvis-res-mini-step:hover {
+    border-color: rgba(34,211,238,0.4);
+}
+.jarvis-ar-stats-card,
+.jarvis-ar-summary-card {
+    transition: transform 0.15s;
+}
+.jarvis-ar-stats-card:hover,
+.jarvis-ar-summary-card:hover {
+    transform: scale(1.02);
+}
+.jarvis-ar-framework-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+.jarvis-ar-framework-btn:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+}
+.jarvis-ar-framework-btn:active {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    transform: translateY(1px);
+}
+
+/* ── Cards & panels universal polish ── */
+.jarvis-result-card,
+.jarvis-exp-card,
+.jarvis-loop-card,
+.jarvis-ar-section,
+.jarvis-ar-hyp-card {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border: 1px solid #1e293b;
+}
+
 /* ── Mobile overrides for new components ── */
 @media (max-width: 640px) {
     .jarvis-signal-list { max-height: 300px; }
@@ -1444,4 +1600,214 @@
     .jarvis-signal-rbar { display: none; }
     .jarvis-exp-explain-cards { grid-template-columns: 1fr; }
     .jarvis-ar-summary-cards { grid-template-columns: 1fr; }
+    .jarvis-tool-list { max-height: 50vh; }
+    .jarvis-tool-list-desc { max-width: 100px; }
+}
+
+/* ── Jarvis UI Polish ── */
+
+/* Analytical Brain: scrollable tool list */
+.jarvis-tool-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 60vh;
+    overflow-y: auto;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+    background: #060d1a;
+    scrollbar-width: thin;
+    scrollbar-color: #1e293b #060d1a;
+}
+.jarvis-tool-list-item {
+    border-bottom: 1px solid #1e293b;
+}
+.jarvis-tool-list-item:last-child {
+    border-bottom: none;
+}
+.jarvis-tool-list-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px 10px 17px;
+    cursor: pointer;
+    transition: background 0.12s;
+    position: relative;
+    user-select: none;
+}
+.jarvis-tool-list-row:hover {
+    background: #0f1e2e;
+}
+.jarvis-tool-list-row.expanded {
+    background: #0a1628;
+}
+.jarvis-tool-list-accent {
+    width: 3px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 3px 0 0 3px;
+}
+.jarvis-tool-list-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
+}
+.jarvis-tool-list-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.jarvis-tool-list-desc {
+    font-size: 11px;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+    margin-top: 1px;
+}
+.jarvis-tool-list-badge {
+    font-size: 10px;
+    color: #64748b;
+    background: #1e293b;
+    padding: 2px 7px;
+    border-radius: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.jarvis-tool-list-chevron {
+    font-size: 11px;
+    color: #475569;
+    margin-left: 4px;
+    flex-shrink: 0;
+    transition: transform 0.15s;
+}
+.jarvis-tool-list-detail {
+    padding: 0 16px 14px 16px;
+    background: #060d1a;
+}
+
+/* Tab bar improvements */
+.jarvis-tab {
+    position: relative;
+    transition: color 0.15s;
+}
+.jarvis-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #22d3ee;
+    border-radius: 2px 2px 0 0;
+}
+
+/* Stats rows */
+.jarvis-resv2-stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.jarvis-resv2-stat {
+    background: #0a1628;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    color: #94a3b8;
+    transition: border-color 0.15s;
+}
+.jarvis-resv2-stat:hover {
+    border-color: #334155;
+}
+.jarvis-resv2-stat strong {
+    color: #f1f5f9;
+}
+
+/* Resolution shelf cards */
+.jarvis-resv2-shelf {
+    transition: transform 0.12s, box-shadow 0.12s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.jarvis-resv2-shelf:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+/* Experiment rows hover */
+.jarvis-exp-instance-row {
+    transition: background 0.12s;
+}
+.jarvis-exp-instance-row:hover {
+    background: #0f2942 !important;
+}
+
+/* Signal list row accent */
+.jarvis-signal-row {
+    transition: background 0.12s;
+}
+
+/* AutoResearch stat cards hover */
+[style*="jarvis-ar-stat"] {
+    transition: transform 0.12s;
+}
+
+/* Node popup improvements */
+#jarvis-node-popup {
+    border-radius: 12px !important;
+    backdrop-filter: blur(8px);
+}
+
+/* Pipeline step hover */
+.jarvis-pipeline-step {
+    transition: border-color 0.15s, background 0.15s;
+}
+.jarvis-pipeline-step:hover {
+    border-color: #22d3ee !important;
+    background: #0f1e2e !important;
+}
+
+/* Run button */
+#ar-run-btn {
+    background: linear-gradient(135deg, #0e7490, #0284c7);
+    transition: opacity 0.15s, transform 0.1s;
+}
+#ar-run-btn:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+#ar-run-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+#ar-run-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Scrollbar styling */
+.jarvis-tool-list::-webkit-scrollbar {
+    width: 6px;
+}
+.jarvis-tool-list::-webkit-scrollbar-track {
+    background: #060d1a;
+}
+.jarvis-tool-list::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 3px;
+}
+.jarvis-tool-list::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+}
+
+/* Experiments selected instance */
+.jarvis-exp-selected {
+    border-left: 3px solid #22d3ee;
+    box-shadow: 0 0 12px rgba(34,211,238,0.1);
 }

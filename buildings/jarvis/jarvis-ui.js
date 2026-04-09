@@ -224,54 +224,45 @@ const JarvisUI = (() => {
 
     function renderAnalyticalContent() {
         const tools = v2Tools || [];
-        const experiments = v2Indicators || []; // each indicator has one experiment instance
-
+        const experiments = v2Indicators || [];
         const toolColors = {
-            pearson_r: '#3b82f6',
-            spearman_rho: '#06b6d4',
-            partial_correlation: '#a78bfa',
-            ols_r2_delta: '#10b981',
+            pearson_r: '#3b82f6', spearman_rho: '#06b6d4',
+            partial_correlation: '#a78bfa', ols_r2_delta: '#10b981',
         };
         const toolIcons = {
-            pearson_r: '\uD83D\uDCCF',
-            spearman_rho: '\uD83D\uDCC8',
-            partial_correlation: '\uD83E\uDDF9',
-            ols_r2_delta: '\uD83D\uDCC9',
+            pearson_r: '\uD83D\uDCCF', spearman_rho: '\uD83D\uDCCA',
+            partial_correlation: '\uD83E\uDDF9', ols_r2_delta: '\uD83D\uDCC8',
         };
 
-        // Tool cards
-        const toolCards = tools.map(tool => {
-            const color = toolColors[tool.id] || '#64748b';
-            const icon = toolIcons[tool.id] || '⚙️';
-            const isSelected = analyticalSelectedTool === tool.id;
-            // Count how many experiments used this tool
-            const usageCount = experiments.filter(i => i.experiment && i.experiment.tool_id === tool.id).length;
-            return `<div class="jarvis-tool-card${isSelected ? ' selected' : ''}" data-tool-id="${tool.id}" style="border-left:3px solid ${color}">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                    <div style="font-size:14px;font-weight:700;color:#f1f5f9">${icon} ${tool.name}</div>
-                    <span style="font-size:10px;color:#64748b;background:#1e293b;padding:2px 6px;border-radius:8px">${usageCount} experiments</span>
-                </div>
-                <div style="font-size:12px;color:#94a3b8;margin:4px 0 6px">${tool.description}</div>
-                <div style="font-size:10px;color:#64748b">v${tool.version || '1.0'} &middot; ${tool.analytical_brain_tab || 'correlation'} tab</div>
-            </div>`;
-        }).join('');
-
-        // Selected tool detail panel
-        let toolDetail = '';
-        if (analyticalSelectedTool) {
-            const tool = tools.find(t => t.id === analyticalSelectedTool);
-            if (tool) toolDetail = renderToolDefinitionCard(tool, toolColors[tool.id] || '#64748b');
+        if (!tools.length) {
+            return '<div style="color:#475569;padding:20px;text-align:center">Loading tools...</div>';
         }
 
-        return `
-            <div style="margin-bottom:12px">
-                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Experiment Tools &mdash; click to inspect</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="jarvis-tool-cards">
-                    ${toolCards}
+        const toolRows = tools.map(tool => {
+            const color = toolColors[tool.id] || '#64748b';
+            const icon = toolIcons[tool.id] || '⚙️';
+            const usageCount = experiments.filter(i => i.experiment && i.experiment.tool_id === tool.id).length;
+            const isExpanded = analyticalSelectedTool === tool.id;
+            const detail = isExpanded ? `<div class="jarvis-tool-list-detail">${renderToolDefinitionCard(tool, color)}</div>` : '';
+            return `<div class="jarvis-tool-list-item">
+            <div class="jarvis-tool-list-row${isExpanded ? ' expanded' : ''}" data-tool-id="${tool.id}">
+                <div class="jarvis-tool-list-accent" style="background:${color}"></div>
+                <span class="jarvis-tool-list-icon">${icon}</span>
+                <div style="flex:1;min-width:0;overflow:hidden">
+                    <div class="jarvis-tool-list-name">${tool.name}</div>
+                    <div class="jarvis-tool-list-desc">${tool.description}</div>
                 </div>
+                <span class="jarvis-tool-list-badge">${usageCount} used</span>
+                <span class="jarvis-tool-list-chevron">${isExpanded ? '\u25BE' : '\u25B8'}</span>
             </div>
-            ${toolDetail}
-        `;
+            ${detail}
+        </div>`;
+        }).join('');
+
+        return `<div style="margin-bottom:12px">
+        <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Experiment Tools \u2014 click to inspect</div>
+        <div class="jarvis-tool-list">${toolRows}</div>
+    </div>`;
     }
 
     function renderToolDefinitionCard(tool, color) {
@@ -394,14 +385,22 @@ const JarvisUI = (() => {
     }
 
     function bindAnalyticalEvents() {
-        container?.querySelectorAll('[data-tool-id]').forEach(card => {
-            card.addEventListener('click', () => {
-                const tid = card.dataset.toolId;
+        container?.querySelectorAll('[data-tool-id]').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('.jarvis-tool-list-detail')) return;
+                const tid = row.dataset.toolId;
                 analyticalSelectedTool = analyticalSelectedTool === tid ? null : tid;
                 analyticalSelectedExpId = null;
                 const p = container?.querySelector('#jarvis-analytical-content');
-                if (p) p.innerHTML = renderAnalyticalContent();
-                bindAnalyticalEvents();
+                if (p) { p.innerHTML = renderAnalyticalContent(); bindAnalyticalEvents(); }
+            });
+        });
+        container?.querySelectorAll('[data-exp-id]').forEach(row => {
+            row.addEventListener('click', () => {
+                analyticalSelectedExpId = row.dataset.expId;
+                analyticalSelectedTool = null;
+                const p = container?.querySelector('#jarvis-analytical-content');
+                if (p) { p.innerHTML = renderAnalyticalContent(); bindAnalyticalEvents(); }
             });
         });
     }
