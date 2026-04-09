@@ -772,6 +772,9 @@ const JarvisUI = (() => {
         loadIndicatorRegistry().then(() => {
             setTimeout(() => {
                 buildD3TacticalGraph();
+                // Re-render signal list now that registry is loaded
+                const list = container?.querySelector('#jarvis-signal-list');
+                if (list) list.innerHTML = renderSignalList();
                 bindTacticalEvents();
             }, 50);
         });
