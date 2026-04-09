@@ -1411,6 +1411,31 @@
     color: var(--j-text);
 }
 
+/* ── Graph Controls (Tactical Brain) ── */
+.jarvis-graph-controls {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    padding: 8px 2px; align-items: center;
+}
+.jarvis-graph-ctrl-label {
+    font-size: 10px; font-weight: 600; color: var(--j-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-right: 4px;
+}
+.jarvis-graph-filters, .jarvis-graph-sizeBy {
+    display: flex; gap: 4px; align-items: center; flex-wrap: wrap;
+}
+.jarvis-graph-btn {
+    padding: 3px 10px; font-size: 10px; font-weight: 600;
+    background: rgba(255,255,255,0.04); color: var(--j-muted);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+    cursor: pointer; transition: all 0.12s;
+}
+.jarvis-graph-btn:hover { background: rgba(255,255,255,0.08); color: var(--j-text); }
+.jarvis-graph-btn.active {
+    background: rgba(59,130,246,0.15); color: #60a5fa;
+    border-color: rgba(59,130,246,0.3);
+}
+
 /* ── Mobile overrides for new components ── */
 @media (max-width: 640px) {
     .jarvis-signal-list { max-height: 300px; }

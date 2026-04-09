@@ -752,6 +752,15 @@ const JarvisUI = (() => {
     let tacticalExpandedSignal = null;
     let cachedIndicatorRegistry = null;
     let currentMergeThreshold = 0;
+    let graphFilter = 'all';
+    let graphSizeBy = 'r2';
+
+    function isSignalKept(key) {
+        if (!cachedIndicatorRegistry) return false;
+        const ind = (cachedIndicatorRegistry.indicators || []).find(i => i.key === key);
+        if (!ind || !ind.connections) return false;
+        return ind.connections.some(c => (c.status || '').toLowerCase() === 'keep');
+    }
 
     async function loadIndicatorRegistry() {
         if (cachedIndicatorRegistry) return cachedIndicatorRegistry;
@@ -778,14 +787,26 @@ const JarvisUI = (() => {
                 bindTacticalEvents();
             }, 50);
         });
+        const gfBtn = (val, label) => `<button data-gfilter="${val}" class="jarvis-graph-btn${graphFilter === val ? ' active' : ''}">${label}</button>`;
+        const gsBtn = (val, label) => `<button data-sizeby="${val}" class="jarvis-graph-btn${graphSizeBy === val ? ' active' : ''}">${label}</button>`;
         return `
             <div class="jarvis-network-legend" style="margin-bottom:4px">
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload (control before filming)</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured after upload)</span>
                 <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (prediction target)</span>
             </div>
+            <div class="jarvis-graph-controls" id="jarvis-graph-controls">
+                <div class="jarvis-graph-filters">
+                    <span class="jarvis-graph-ctrl-label">Show:</span>
+                    ${gfBtn('all','All')}${gfBtn('pre-upload','Pre-upload')}${gfBtn('post-upload','Post-upload')}${gfBtn('kept','Kept')}${gfBtn('in-model','In Model')}
+                </div>
+                <div class="jarvis-graph-sizeBy">
+                    <span class="jarvis-graph-ctrl-label">Size by:</span>
+                    ${gsBtn('r2','R²')}${gsBtn('connections','Connections')}${gsBtn('depth','Depth')}
+                </div>
+            </div>
             <div class="jarvis-tactical-network" style="margin-bottom:12px;position:relative">
-                <div id="jarvis-d3-graph" style="width:100%;overflow:hidden"></div>
+                <div id="jarvis-d3-graph" style="width:100%;height:520px;overflow:hidden"></div>
                 <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;padding:4px 0 10px;font-size:11px;color:var(--j-muted)">
@@ -796,8 +817,8 @@ const JarvisUI = (() => {
             <div class="jarvis-signal-list-section">
                 <input type="text" class="jarvis-signal-search" id="jarvis-signal-search" placeholder="Search signals..." value="${tacticalSearch}" />
                 <div class="jarvis-signal-filters" id="jarvis-signal-filters">
-                    ${['all','pre-upload','post-upload','in-model'].map(f =>
-                        `<button class="jarvis-signal-filter-btn${tacticalFilter === f ? ' active' : ''}" data-filter="${f}">${f === 'all' ? 'All' : f === 'in-model' ? 'In Model' : f === 'pre-upload' ? 'Pre-upload' : 'Post-upload'}</button>`
+                    ${['all','pre-upload','post-upload','kept','in-model'].map(f =>
+                        `<button class="jarvis-signal-filter-btn${tacticalFilter === f ? ' active' : ''}" data-filter="${f}">${f === 'all' ? 'All' : f === 'in-model' ? 'In Model' : f === 'kept' ? 'Kept' : f === 'pre-upload' ? 'Pre-upload' : 'Post-upload'}</button>`
                     ).join('')}
                 </div>
                 <div class="jarvis-signal-list" id="jarvis-signal-list">
@@ -921,6 +942,7 @@ const JarvisUI = (() => {
             if (tacticalFilter === 'pre-upload' && sig.layer !== 'pre') return false;
             if (tacticalFilter === 'post-upload' && sig.layer !== 'post') return false;
             if (tacticalFilter === 'in-model' && !isSignalInModel(sig.key)) return false;
+            if (tacticalFilter === 'kept' && !isSignalKept(sig.key)) return false;
             if (search && !sig.label.toLowerCase().includes(search) && !sig.key.toLowerCase().includes(search)) return false;
             return true;
         });
@@ -1059,6 +1081,24 @@ const JarvisUI = (() => {
                 buildD3TacticalGraph();
             });
         }
+        // Graph filter buttons
+        container?.querySelectorAll('.jarvis-graph-btn[data-gfilter]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                graphFilter = btn.dataset.gfilter;
+                container.querySelectorAll('.jarvis-graph-btn[data-gfilter]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                buildD3TacticalGraph();
+            });
+        });
+        // Graph size-by buttons
+        container?.querySelectorAll('.jarvis-graph-btn[data-sizeby]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                graphSizeBy = btn.dataset.sizeby;
+                container.querySelectorAll('.jarvis-graph-btn[data-sizeby]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                buildD3TacticalGraph();
+            });
+        });
         bindSignalRowClicks();
     }
 
@@ -1088,180 +1128,234 @@ const JarvisUI = (() => {
             .attr('width', width).attr('height', height)
             .style('background', 'transparent');
 
-        // ── Data: nodes from registry, edges from registry.edges ──
+        // ── Zoom + pan ──
+        const graphGroup = svg.append('g').attr('class', 'graph-group');
+        const zoom = d3.zoom()
+            .scaleExtent([0.2, 4])
+            .on('zoom', (event) => {
+                graphGroup.attr('transform', event.transform);
+            });
+        svg.call(zoom);
+
+        // ── Data: nodes from registry ──
         const registry = cachedIndicatorRegistry;
         if (!registry) return;
 
         const allIndicators = registry.indicators || [];
-        const allEdges = registry.edges || [];
+        const coreKeys = new Set(['views', 'keep', 'retention']);
 
-        // Core node keys always included
-        const coreKeys = new Set(['views', 'keep', 'retention', 'swipe_ratio']);
+        // Ensure core nodes exist (synthesize if missing from registry)
+        let coreNodes = ['views', 'keep', 'retention'].map(k => {
+            const existing = allIndicators.find(i => i.key === k);
+            if (existing) return { ...existing };
+            return { key: k, label: k.charAt(0).toUpperCase() + k.slice(1), layer: k === 'views' ? 'views' : 'post', r_partial: null, depth: 0, resolution: 'R0', target: null, connections: [] };
+        });
 
-        // Top 150 by |r_partial| + all core nodes
-        const withR = allIndicators.filter(s => s.r_partial != null && !coreKeys.has(s.key));
-        withR.sort((a, b) => Math.abs(b.r_partial) - Math.abs(a.r_partial));
-        const topSignals = withR.slice(0, 150);
-        const coreSignals = allIndicators.filter(s => coreKeys.has(s.key));
-        const selectedSignals = [...coreSignals, ...topSignals];
+        // Apply graphFilter to select indicator subset
+        let candidates = allIndicators.filter(i => !coreKeys.has(i.key));
+        if (graphFilter === 'pre-upload') {
+            candidates = candidates.filter(i => i.layer === 'pre');
+        } else if (graphFilter === 'post-upload') {
+            candidates = candidates.filter(i => i.layer === 'post');
+        } else if (graphFilter === 'in-model') {
+            candidates = candidates.filter(i => isSignalInModel(i.key));
+        } else if (graphFilter === 'kept') {
+            candidates = candidates.filter(i => isSignalKept(i.key));
+        }
+        // graphFilter === 'all' → keep all candidates
 
         // Apply merge threshold
-        const merged = applyMergeThreshold(
-            selectedSignals.filter(s => !coreKeys.has(s.key)),
-            currentMergeThreshold
-        );
-        const nodes = [...coreSignals, ...merged];
+        const merged = applyMergeThreshold(candidates, currentMergeThreshold);
+
+        // Performance: cap nodes for smooth rendering
+        let selected;
+        if (merged.length > 400) {
+            // Top 200 by |r_partial| + nodes with 3+ connections
+            const sorted = [...merged].sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0));
+            const top200 = new Set(sorted.slice(0, 200).map(n => n.key));
+            const connCount = {};
+            allIndicators.forEach(ind => {
+                (ind.connections || []).forEach(c => {
+                    if (c.to) { connCount[ind.key] = (connCount[ind.key] || 0) + 1; }
+                });
+            });
+            selected = merged.filter(n => top200.has(n.key) || (connCount[n.key] || 0) >= 3);
+        } else {
+            selected = merged;
+        }
+
+        const nodes = [...coreNodes, ...selected];
         const nodeKeySet = new Set(nodes.map(n => n.key));
 
-        // Filter edges to only those where BOTH source and target exist in nodes
-        const links = allEdges
-            .filter(e => nodeKeySet.has(e.from) && nodeKeySet.has(e.to))
-            .map(e => ({ source: e.from, target: e.to, r: e.r || 0, experiment: e.experiment }));
+        // ── Edge routing: chain structure, no star pattern ──
+        const links = [];
+        const nodeTargetMap = {}; // indicator key → its target (views/keep/retention)
+        nodes.forEach(n => {
+            if (coreKeys.has(n.key)) return;
+            const target = n.target || 'views';
+            nodeTargetMap[n.key] = target;
+            if (nodeKeySet.has(target)) {
+                links.push({ source: n.key, target: target, r: Math.abs(n.r_partial || 0), peer: false });
+            }
+        });
+        // Core chain edges: keep→views, retention→views
+        if (nodeKeySet.has('keep') && nodeKeySet.has('views')) {
+            links.push({ source: 'keep', target: 'views', r: 0.5, peer: false });
+        }
+        if (nodeKeySet.has('retention') && nodeKeySet.has('views')) {
+            links.push({ source: 'retention', target: 'views', r: 0.5, peer: false });
+        }
 
-        // Node color + radius helpers
+        // ── Peer edges: indicators sharing target + overlapping key tokens ──
+        const byTarget = {};
+        nodes.forEach(n => {
+            if (coreKeys.has(n.key)) return;
+            const t = nodeTargetMap[n.key] || 'views';
+            if (!byTarget[t]) byTarget[t] = [];
+            byTarget[t].push(n);
+        });
+        const peerCount = {};
+        Object.values(byTarget).forEach(group => {
+            for (let i = 0; i < group.length; i++) {
+                for (let j = i + 1; j < group.length; j++) {
+                    const a = group[i], b = group[j];
+                    if ((peerCount[a.key] || 0) >= 3 || (peerCount[b.key] || 0) >= 3) continue;
+                    const tokA = a.key.split('_'), tokB = b.key.split('_');
+                    const shared = tokA.filter(t => tokB.includes(t)).length;
+                    if (shared >= 2) {
+                        links.push({ source: a.key, target: b.key, r: 0, peer: true });
+                        peerCount[a.key] = (peerCount[a.key] || 0) + 1;
+                        peerCount[b.key] = (peerCount[b.key] || 0) + 1;
+                    }
+                }
+            }
+        });
+
+        // ── Node helpers ──
         function nodeColor(d) {
             if (d.key === 'views') return '#f59e0b';
+            if (d.key === 'keep') return '#10b981';
+            if (d.key === 'retention') return '#a78bfa';
             if (d.layer === 'pre') return '#06b6d4';
             return '#a78bfa';
         }
         function nodeRadius(d) {
-            if (d.key === 'views') return 24;
-            return Math.max(6, Math.min(20, 5 + (d.depth || 1) * 1.8 + Math.abs(d.r_partial || 0) * 6));
+            if (d.key === 'views') return 20;
+            if (d.key === 'keep' || d.key === 'retention') return 14;
+            const base = 4;
+            if (graphSizeBy === 'r2') return base + Math.abs(d.r_partial || 0) * 14;
+            if (graphSizeBy === 'connections') {
+                const connCt = links.filter(l => {
+                    const sk = typeof l.source === 'object' ? l.source.key : l.source;
+                    const tk = typeof l.target === 'object' ? l.target.key : l.target;
+                    return sk === d.key || tk === d.key;
+                }).length;
+                return base + Math.min(connCt * 1.5, 14);
+            }
+            if (graphSizeBy === 'depth') return base + Math.min((d.depth || 1) * 2, 14);
+            return base + 4;
         }
 
-        // Initial positions from zone
-        const yMap = { R0: height * 0.15, R1: height * 0.40, R2: height * 0.64, R3: height * 0.85 };
-        nodes.forEach(d => {
-            d.x = d.layer === 'views' ? width * 0.88 : d.layer === 'pre' ? width * 0.20 : width * 0.58;
-            d.y = yMap[d.resolution || 'R0'] || height * 0.15;
-            d.x += (Math.random() - 0.5) * 50;
-            d.y += (Math.random() - 0.5) * 30;
-        });
-
-        // Pin views node
-        const viewsNode = nodes.find(n => n.key === 'views');
-        if (viewsNode) { viewsNode.fx = width * 0.88; viewsNode.fy = height * 0.30; }
-
         // ── Background zones ──
-        // Vertical bands
-        svg.append('rect').attr('x', 0).attr('y', 0).attr('width', width * 0.38).attr('height', height)
-            .attr('fill', 'rgba(6,182,212,0.04)');
-        svg.append('rect').attr('x', width * 0.38).attr('y', 0).attr('width', width * 0.42).attr('height', height)
-            .attr('fill', 'rgba(167,139,250,0.04)');
-        svg.append('rect').attr('x', width * 0.80).attr('y', 0).attr('width', width * 0.20).attr('height', height)
-            .attr('fill', 'rgba(245,158,11,0.04)');
-
-        // Horizontal resolution lines
-        [height * 0.28, height * 0.54, height * 0.76].forEach(y => {
-            svg.append('line').attr('x1', 0).attr('x2', width).attr('y1', y).attr('y2', y)
-                .attr('stroke', 'rgba(255,255,255,0.05)').attr('stroke-width', 1);
-        });
+        graphGroup.append('rect').attr('x', 0).attr('y', 0).attr('width', width * 0.38).attr('height', height)
+            .attr('fill', 'rgba(6,182,212,0.03)');
+        graphGroup.append('rect').attr('x', width * 0.38).attr('y', 0).attr('width', width * 0.42).attr('height', height)
+            .attr('fill', 'rgba(167,139,250,0.03)');
+        graphGroup.append('rect').attr('x', width * 0.80).attr('y', 0).attr('width', width * 0.20).attr('height', height)
+            .attr('fill', 'rgba(245,158,11,0.03)');
 
         // Column headers
-        [['PRE-UPLOAD', width * 0.20, '#06b6d4'], ['POST-UPLOAD', width * 0.58, '#a78bfa'], ['VIEWS', width * 0.88, '#f59e0b']].forEach(([label, x, fill]) => {
-            svg.append('text').attr('x', x).attr('y', 12).attr('text-anchor', 'middle')
-                .attr('fill', fill).attr('font-size', '10px').attr('font-weight', '600')
-                .attr('font-family', 'system-ui, sans-serif').text(label);
+        [['PRE-UPLOAD', width * 0.20, '#06b6d4'], ['POST-UPLOAD', width * 0.58, '#a78bfa'], ['TARGET', width * 0.88, '#f59e0b']].forEach(([label, x, fill]) => {
+            graphGroup.append('text').attr('x', x).attr('y', 14).attr('text-anchor', 'middle')
+                .attr('fill', fill).attr('font-size', '9px').attr('font-weight', '600')
+                .attr('font-family', 'system-ui, sans-serif').attr('opacity', 0.5).text(label);
         });
 
-        // Resolution labels
-        [['R0 \u00b7 Full Video', height * 0.15], ['R1 \u00b7 Segment', height * 0.40], ['R2 \u00b7 Fine', height * 0.64], ['R3 \u00b7 Frame', height * 0.85]].forEach(([label, y]) => {
-            svg.append('text').attr('x', 8).attr('y', y).attr('fill', '#334155')
-                .attr('font-size', '8px').attr('font-family', 'system-ui, sans-serif').text(label);
+        // ── Initial positions ──
+        nodes.forEach(d => {
+            if (d.key === 'views') { d.x = width * 0.85; d.y = height * 0.35; }
+            else if (d.key === 'keep') { d.x = width * 0.72; d.y = height * 0.55; }
+            else if (d.key === 'retention') { d.x = width * 0.72; d.y = height * 0.25; }
+            else if (d.layer === 'pre') { d.x = width * 0.22 + (Math.random() - 0.5) * 80; d.y = height * 0.5 + (Math.random() - 0.5) * 200; }
+            else { d.x = width * 0.55 + (Math.random() - 0.5) * 80; d.y = height * 0.5 + (Math.random() - 0.5) * 200; }
         });
 
-        // ── D3 Force Simulation ──
+        // ── D3 Force Simulation — Obsidian style ──
         const simulation = d3.forceSimulation(nodes)
-            .force('link', d3.forceLink(links).id(d => d.key)
-                .distance(d => 70 + (1 - Math.abs(d.r || 0.2)) * 50)
-                .strength(0.25))
-            .force('charge', d3.forceManyBody().strength(-120).distanceMax(180))
+            .force('link', d3.forceLink(links).id(d => d.key).distance(d => {
+                const tk = typeof d.target === 'object' ? d.target.key : d.target;
+                if (tk === 'views') return 180;
+                if (tk === 'keep' || tk === 'retention') return 120;
+                return 60; // peer edges
+            }).strength(d => d.peer ? 0.05 : 0.3))
+            .force('charge', d3.forceManyBody().strength(-200).distanceMax(300))
             .force('x', d3.forceX(d => {
-                if (d.layer === 'views') return width * 0.88;
-                if (d.layer === 'pre') return width * 0.20;
-                return width * 0.58;
-            }).strength(d => d.layer === 'views' ? 1.0 : 0.55))
-            .force('y', d3.forceY(d => {
-                return yMap[d.resolution || 'R0'] || height * 0.15;
-            }).strength(0.50))
-            .force('collide', d3.forceCollide(d => nodeRadius(d) + 4))
+                if (d.key === 'views' || d.key === 'keep' || d.key === 'retention') return width * 0.85;
+                if (d.layer === 'pre') return width * 0.22;
+                return width * 0.55;
+            }).strength(0.06))
+            .force('y', d3.forceY(height / 2).strength(0.02))
+            .force('collide', d3.forceCollide(d => nodeRadius(d) + 3))
+            .alphaDecay(0.015)
             .stop();
 
         // Run simulation synchronously
-        for (let i = 0; i < 200; i++) simulation.tick();
+        for (let i = 0; i < 300; i++) simulation.tick();
 
-        // ── Edge rendering (drawn BEFORE nodes so nodes appear on top) ──
-        const linkGroup = svg.append('g').attr('class', 'links');
+        // ── Edge rendering ──
+        const linkGroup = graphGroup.append('g').attr('class', 'links');
         linkGroup.selectAll('line')
             .data(links)
             .join('line')
             .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x).attr('y2', d => d.target.y)
-            .attr('stroke', d => nodeColor(d.source))
-            .attr('stroke-opacity', d => {
-                const absR = Math.abs(d.r || 0);
-                let op = Math.min(0.06 + absR * 0.38, 0.55);
-                // Same-layer edges: halve opacity
-                if (d.source.layer === d.target.layer && d.source.layer !== 'views') op *= 0.5;
-                return op;
+            .attr('stroke', d => {
+                if (d.peer) return 'rgba(255,255,255,0.15)';
+                return nodeColor(d.source);
             })
-            .attr('stroke-width', d => Math.min(0.4 + Math.abs(d.r || 0) * 2.0, 3))
+            .attr('stroke-opacity', d => {
+                if (d.peer) return 0.04;
+                const absR = Math.abs(d.r || 0);
+                return Math.min(0.08 + absR * 0.4, 0.55);
+            })
+            .attr('stroke-width', d => {
+                if (d.peer) return 0.5;
+                return Math.min(0.5 + Math.abs(d.r || 0) * 2.0, 3);
+            })
             .attr('stroke-dasharray', d => {
-                // Same-layer edges
-                if (d.source.layer === d.target.layer && d.source.layer !== 'views') return '2,5';
-                // Edges to keep or retention (intermediate)
-                const tKey = typeof d.target === 'object' ? d.target.key : d.target;
-                if (tKey === 'keep' || tKey === 'retention') return '4,3';
-                return null; // solid for edges to views
+                if (d.peer) return '2,4';
+                const tk = typeof d.target === 'object' ? d.target.key : d.target;
+                if (tk === 'keep' || tk === 'retention') return '4,3';
+                return null;
             });
 
         // ── Node rendering ──
-        const nodeGroup = svg.append('g').attr('class', 'nodes');
+        const nodeGroup = graphGroup.append('g').attr('class', 'nodes');
         const nodeEls = nodeGroup.selectAll('g')
             .data(nodes)
             .join('g')
-            .attr('transform', d => `translate(${d.x},${d.y})`);
+            .attr('transform', d => `translate(${d.x},${d.y})`)
+            .style('cursor', 'pointer');
 
         // Circle
         nodeEls.append('circle')
             .attr('r', d => nodeRadius(d))
             .attr('fill', d => nodeColor(d))
-            .attr('fill-opacity', 0.85)
-            .attr('stroke', 'rgba(255,255,255,0.2)')
-            .attr('stroke-width', 1)
-            .style('cursor', 'pointer');
+            .attr('fill-opacity', d => coreKeys.has(d.key) ? 0.95 : 0.75)
+            .attr('stroke', 'rgba(255,255,255,0.12)')
+            .attr('stroke-width', 1);
 
-        // Depth badge (if depth >= 3)
-        nodeEls.filter(d => (d.depth || 1) >= 3)
-            .append('circle')
-            .attr('cx', d => nodeRadius(d) * 0.7)
-            .attr('cy', d => -nodeRadius(d) * 0.7)
-            .attr('r', 6)
-            .attr('fill', '#1e293b')
-            .attr('stroke', 'rgba(255,255,255,0.15)')
-            .attr('stroke-width', 0.5);
-
-        nodeEls.filter(d => (d.depth || 1) >= 3)
+        // Labels: only for core nodes or nodes with radius >= 10
+        nodeEls.filter(d => coreKeys.has(d.key) || nodeRadius(d) >= 10)
             .append('text')
-            .attr('x', d => nodeRadius(d) * 0.7)
-            .attr('y', d => -nodeRadius(d) * 0.7 + 2.5)
+            .attr('y', d => nodeRadius(d) + 11)
             .attr('text-anchor', 'middle')
-            .attr('fill', 'white')
-            .attr('font-size', '7px')
-            .attr('font-family', 'system-ui, sans-serif')
-            .text(d => d.depth || 1);
-
-        // Labels (show if r_partial >= 0.20 or core node)
-        nodeEls.filter(d => coreKeys.has(d.key) || Math.abs(d.r_partial || 0) >= 0.20)
-            .append('text')
-            .attr('y', d => nodeRadius(d) + 12)
-            .attr('text-anchor', 'middle')
-            .attr('fill', '#94a3b8')
+            .attr('fill', '#64748b')
             .attr('font-size', '9px')
             .attr('font-family', 'system-ui, sans-serif')
             .text(d => {
                 const lbl = d.label || d.key;
-                return lbl.length > 13 ? lbl.slice(0, 12) + '\u2026' : lbl;
+                return lbl.length > 16 ? lbl.slice(0, 15) + '\u2026' : lbl;
             });
 
         // ── Tooltip ──
@@ -1269,26 +1363,64 @@ const JarvisUI = (() => {
         nodeEls
             .on('mouseover', (event, d) => {
                 if (!tooltip) return;
+                // Highlight connected edges
+                linkGroup.selectAll('line').attr('stroke-opacity', l => {
+                    const sk = typeof l.source === 'object' ? l.source.key : l.source;
+                    const tk = typeof l.target === 'object' ? l.target.key : l.target;
+                    if (sk === d.key || tk === d.key) return l.peer ? 0.2 : 0.7;
+                    return l.peer ? 0.02 : 0.06;
+                });
                 tooltip.style.display = 'block';
-                tooltip.style.left = (d.x + nodeRadius(d) + 8) + 'px';
-                tooltip.style.top = (d.y - 10) + 'px';
+                const svgRect = graphEl.getBoundingClientRect();
+                tooltip.style.left = (event.clientX - svgRect.left + 12) + 'px';
+                tooltip.style.top = (event.clientY - svgRect.top - 10) + 'px';
+                const connCt = links.filter(l => {
+                    const sk = typeof l.source === 'object' ? l.source.key : l.source;
+                    const tk = typeof l.target === 'object' ? l.target.key : l.target;
+                    return sk === d.key || tk === d.key;
+                }).length;
                 const rText = d.r_partial != null ? `<br><span class="jarvis-tt-dim">r_partial:</span> ${Number(d.r_partial).toFixed(3)}` : '';
-                const resText = `<br><span class="jarvis-tt-dim">${d.resolution || 'R0'} \u00b7 depth ${d.depth || 1}</span>`;
-                tooltip.innerHTML = `<strong>${d.label || d.key}</strong>${rText}${resText}`;
+                tooltip.innerHTML = `<strong>${d.label || d.key}</strong>${rText}<br><span class="jarvis-tt-dim">connections:</span> ${connCt}`;
             })
             .on('mouseout', () => {
                 if (tooltip) tooltip.style.display = 'none';
+                // Restore edge opacity
+                linkGroup.selectAll('line').attr('stroke-opacity', d => {
+                    if (d.peer) return 0.04;
+                    return Math.min(0.08 + Math.abs(d.r || 0) * 0.4, 0.55);
+                });
             })
             .on('click', (event, d) => {
-                tacticalExpandedSignal = tacticalExpandedSignal === d.key ? null : d.key;
+                event.stopPropagation();
+                tacticalExpandedSignal = d.key;
                 const list = container?.querySelector('#jarvis-signal-list');
                 if (list) {
                     list.innerHTML = renderSignalList();
                     bindSignalRowClicks();
-                    const row = list.querySelector(`[data-signal-key="${d.key}"]`);
+                    const row = list.querySelector('[data-signal-key="' + d.key + '"]');
                     if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
             });
+
+        // Click on SVG background clears selection
+        svg.on('click', (event) => {
+            if (event.target.tagName === 'svg' || event.target.tagName === 'rect') {
+                tacticalExpandedSignal = null;
+                const list = container?.querySelector('#jarvis-signal-list');
+                if (list) {
+                    list.innerHTML = renderSignalList();
+                    bindSignalRowClicks();
+                }
+            }
+        });
+
+        // ── Node count indicator ──
+        graphGroup.append('text')
+            .attr('x', width - 8).attr('y', height - 8)
+            .attr('text-anchor', 'end')
+            .attr('fill', '#334155').attr('font-size', '9px')
+            .attr('font-family', 'system-ui, sans-serif')
+            .text(nodes.length + ' nodes \u00b7 ' + links.length + ' edges');
     }
 
     // ══════════════════════════════════════════════════
@@ -2466,6 +2598,8 @@ const JarvisUI = (() => {
         tacticalFilter = 'all';
         tacticalSearch = '';
         tacticalExpandedSignal = null;
+        graphFilter = 'all';
+        graphSizeBy = 'r2';
         expSort = 'newest';
         expExplainOpen = false;
         arModel = null;
