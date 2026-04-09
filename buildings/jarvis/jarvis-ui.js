@@ -750,40 +750,53 @@ const JarvisUI = (() => {
     let tacticalFilter = 'all';
     let tacticalSearch = '';
     let tacticalExpandedSignal = null;
-    let cachedIndicatorRegistry = null;
+    let cachedIndicatorRegistry = null; // legacy, kept for compat
     let currentMergeThreshold = 0;
     let graphFilter = 'all';
     let graphSizeBy = 'r2';
     let selectedNodeKey = null;
     let nodeClickCount = {};
 
-    function isSignalKept(key) {
-        if (!cachedIndicatorRegistry) return false;
-        const ind = (cachedIndicatorRegistry.indicators || []).find(i => i.key === key);
-        if (!ind || !ind.connections) return false;
-        return ind.connections.some(c => (c.status || '').toLowerCase() === 'keep');
-    }
+    // ── v2 data cache ──
+    let v2Indicators = null;   // array from /api/jarvis/v2/indicators
+    let v2Graph = null;        // {nodes, edges} from /api/jarvis/v2/graph
+    let v2Tools = null;        // array from /api/jarvis/v2/tools
+    let v2Resolutions = null;  // array from /api/jarvis/v2/resolutions
 
-    async function loadIndicatorRegistry() {
-        if (cachedIndicatorRegistry) return cachedIndicatorRegistry;
+    async function loadV2Data() {
         try {
-            const r = await fetch('/api/jarvis/indicators');
-            cachedIndicatorRegistry = await r.json();
-            return cachedIndicatorRegistry;
+            const [iRes, gRes, tRes, rRes] = await Promise.all([
+                fetch('/api/jarvis/v2/indicators'),
+                fetch('/api/jarvis/v2/graph'),
+                fetch('/api/jarvis/v2/tools'),
+                fetch('/api/jarvis/v2/resolutions'),
+            ]);
+            v2Indicators = await iRes.json();
+            v2Graph = await gRes.json();
+            v2Tools = await tRes.json();
+            v2Resolutions = await rRes.json();
+            return true;
         } catch (e) {
-            console.error('Failed to load indicator registry:', e);
-            cachedIndicatorRegistry = null;
-            return null;
+            console.error('Jarvis v2 load failed:', e);
+            return false;
         }
     }
 
+    function isSignalKept(key) {
+        if (!v2Indicators) return false;
+        const ind = v2Indicators.find(i => i.key === key);
+        return ind ? ind.status === 'keep' : false;
+    }
+
+    async function loadIndicatorRegistry() {
+        // Legacy shim — load v2 data instead
+        return loadV2Data();
+    }
+
     function renderTactical() {
-        loadAutoResearchData(); // load prediction model for signal detail panel
-        loadResultsTSV();
-        loadIndicatorRegistry().then(() => {
+        loadV2Data().then(() => {
             setTimeout(() => {
                 buildD3TacticalGraph();
-                // Re-render signal list now that registry is loaded
                 const list = container?.querySelector('#jarvis-signal-list');
                 if (list) list.innerHTML = renderSignalList();
                 bindTacticalEvents();
@@ -935,8 +948,15 @@ const JarvisUI = (() => {
     }
 
     function getRegistrySignals() {
-        if (!cachedIndicatorRegistry || !cachedIndicatorRegistry.indicators) return getDiscoveredSignals();
-        return cachedIndicatorRegistry.indicators;
+        if (!v2Indicators || !v2Indicators.length) return [];
+        // Normalize v2 schema to what the UI expects
+        return v2Indicators.map(ind => ({
+            ...ind,
+            // UI compatibility shims
+            r_partial: ind.result ? ind.result.primary_r : null,
+            resolution: ind.resolution_id || 'r0',
+            notes: ind.result ? ind.result.conclusion : (ind.metric_definition ? ind.metric_definition.description : ''),
+        }));
     }
 
     function humanizeKey(key) {
@@ -1025,36 +1045,100 @@ const JarvisUI = (() => {
     function renderSignalDetail(sig) {
         const color = sig.layer === 'pre' ? '#06b6d4' : '#a78bfa';
         const layerLabel = sig.layer === 'pre' ? 'Pre-upload' : 'Post-upload';
-        const inModel = isSignalInModel(sig.key);
-        const resBadgeColor = { R0: '#64748b', R1: '#3b82f6', R2: '#a855f7', R3: '#ec4899' };
+        // v2 full data
+        const ind = v2Indicators ? v2Indicators.find(i => i.key === sig.key) : null;
+        const metricDef = ind ? ind.metric_definition : null;
+        const exp = ind ? ind.experiment : null;
+        const result = ind ? ind.result : null;
+        const dataset = ind ? ind.dataset : null;
+        const tool = (v2Tools && exp) ? v2Tools.find(t => t.id === exp.tool_id) : null;
+        const resObj = (v2Resolutions && ind) ? v2Resolutions.find(r => r.id === ind.resolution_id) : null;
+        const connTargets = (ind && ind.connections) ? ind.connections : [];
 
-        const fullNotes = sig.notes || '';
-        const connections = sig.connections || [];
+        const statPill = (label, val, valColor) => `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">${label}</span><span style="font-size:12px;color:${valColor || '#cbd5e1'}">${val}</span></div>`;
+
+        // r value with sign and color
+        const rVal = result ? result.primary_r : null;
+        const rhoVal = result ? result.rho : null;
+        const rStr = rVal != null ? `<span style="font-weight:700;color:${rVal >= 0 ? '#22d3ee' : '#f87171'}">${rVal >= 0 ? '+' : ''}${rVal.toFixed(3)}</span>` : '—';
+        const rhoStr = rhoVal != null ? `<span style="color:${rhoVal >= 0 ? '#22d3ee' : '#f87171'}">${rhoVal >= 0 ? '+' : ''}${rhoVal.toFixed(3)}</span>` : '—';
+        const pStr = (exp && exp.outputs && exp.outputs.p_value != null) ? exp.outputs.p_value.toFixed(4) : '—';
+        const ciStr = (exp && exp.outputs && exp.outputs.ci_low != null) ? `[${exp.outputs.ci_low >= 0 ? '+' : ''}${exp.outputs.ci_low.toFixed(3)}, ${exp.outputs.ci_high >= 0 ? '+' : ''}${exp.outputs.ci_high.toFixed(3)}]` : '';
 
         return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
-            <div class="jarvis-signal-detail-name">${sig.label}</div>
-            <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-                ${sig.r_partial != null ? `<span style="font-family:'SF Mono',monospace;font-size:16px;font-weight:700;color:${color}">Strength: ${Math.abs(sig.r_partial).toFixed(3)}</span>` : ''}
-                <span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${layerLabel}</span>
-                <span class="jarvis-signal-type-badge" style="background:rgba(100,116,139,0.15);color:${resBadgeColor[sig.resolution] || '#64748b'}">${sig.resolution || 'R0'}</span>
-                <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--j-muted)">Depth: <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.1);font-weight:700">${sig.depth || 1}</span></span>
-                <span style="font-size:10px;color:var(--j-muted)">Connections: ${connections.length}</span>
-                ${inModel ? '<span class="jarvis-signal-type-badge" style="background:rgba(16,185,129,0.15);color:#10b981">IN MODEL</span>' : ''}
+            <div class="jarvis-signal-detail-name">${sig.label || sig.key}</div>
+
+            <!-- Stats row -->
+            <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #1e293b;margin-bottom:10px">
+                ${statPill('Pearson r', rStr)}
+                ${rhoVal != null ? statPill('Spearman ρ', rhoStr) : ''}
+                ${pStr !== '—' ? statPill('p-value', `<span style="color:${parseFloat(pStr) < 0.05 ? '#22d3ee' : '#f87171'}">${pStr}</span>`) : ''}
+                ${ciStr ? statPill('95% CI', `<span style="font-size:10px">${ciStr}</span>`) : ''}
+                ${statPill('n videos', exp ? exp.n_videos : '—')}
+                ${result ? statPill('Strength', `<span style="color:${result.strength_label === 'strong' ? '#22d3ee' : result.strength_label === 'moderate' ? '#a78bfa' : result.strength_label === 'weak' ? '#64748b' : '#475569'}">${result.strength_label}</span>`) : ''}
+                ${statPill('Layer', `<span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${sig.layer === 'pre' ? 'Pre-upload' : 'Post-upload'}</span>`)}
+                ${statPill('Resolution', resObj ? resObj.label : (ind ? ind.resolution_id : 'r0'))}
+                ${statPill('Target', connTargets.join(', ') || 'views')}
+                ${statPill('Depth', sig.depth || 1)}
             </div>
-            ${fullNotes ? `<div style="font-size:12px;color:var(--j-text);line-height:1.6;margin-bottom:12px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;white-space:pre-wrap">${fullNotes}</div>` : ''}
-            ${connections.length > 0 ? `
-                <div class="jarvis-signal-detail-exps">
-                    <div style="font-size:11px;font-weight:600;color:var(--j-muted);text-transform:uppercase;margin-bottom:6px">Connections (${connections.length})</div>
-                    ${connections.map(c => {
-                        const st = (c.status || '').toLowerCase();
-                        const stColor = st === 'keep' ? '#10b981' : st === 'discard' ? '#ef4444' : st === 'discovery' ? '#06b6d4' : '#64748b';
-                        return `<div class="jarvis-signal-detail-exp">
-                            <span style="color:var(--j-text);font-weight:600">${c.experiment}</span>
-                            <span class="jarvis-badge" style="background:rgba(${st === 'keep' ? '16,185,129' : st === 'discovery' ? '6,182,212' : '100,100,100'},0.15);color:${stColor}">${st}</span>
-                            ${c.delta_r2 && c.delta_r2 !== '\u2014' ? `<span style="font-family:'SF Mono',monospace;font-size:11px;color:var(--j-cyan)">dR\u00b2=${c.delta_r2}</span>` : ''}
-                        </div>`;
-                    }).join('')}
-                </div>` : ''}
+
+            <!-- Metric Definition -->
+            ${metricDef ? `
+            <div style="margin-bottom:10px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">What This Measures</div>
+                <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:6px">${metricDef.description}</div>
+                <div style="background:#0f172a;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">
+                    <div><span style="color:#64748b">Formula:</span> <code style="color:#22d3ee">${metricDef.formula}</code></div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Sources:</span> ${(metricDef.data_sources || []).join(', ')}</div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Expected range:</span> ${metricDef.expected_range || '—'}</div>
+                </div>
+            </div>` : ''}
+
+            <!-- Experiment -->
+            ${exp ? `
+            <div style="margin-bottom:10px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Experiment</div>
+                <div style="background:#0a1628;border-radius:6px;padding:10px;font-size:11px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+                        <code style="color:#94a3b8;font-size:10px">${exp.id}</code>
+                        <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(14,116,144,0.2);color:#0e7490">${result ? result.status : 'discovery'}</span>
+                    </div>
+                    <div style="color:#94a3b8"><span style="color:#64748b">Tool:</span> <strong style="color:#cbd5e1">${tool ? tool.name : exp.tool_id}</strong> v${exp.tool_version || '1.0'}</div>
+                    ${tool ? `<div style="margin-top:3px;font-size:10px;color:#64748b">${tool.description}</div>` : ''}
+                    <div style="margin-top:6px;color:#94a3b8">
+                        <span style="color:#64748b">Parameters:</span>
+                        target=<code style="color:#22d3ee">${exp.parameters ? exp.parameters.target : 'views'}</code>,
+                        transform=<code style="color:#22d3ee">${exp.parameters ? exp.parameters.transform_target : 'log10'}</code>,
+                        min_n=<code style="color:#22d3ee">${exp.parameters ? exp.parameters.min_n : 50}</code>
+                    </div>
+                    <div style="margin-top:4px;color:#94a3b8"><span style="color:#64748b">Ran:</span> ${exp.ran_at ? new Date(exp.ran_at).toLocaleString() : '—'}</div>
+                </div>
+            </div>` : ''}
+
+            <!-- Dataset sample -->
+            ${dataset && dataset.length ? `
+            <div style="margin-bottom:10px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Dataset (${dataset.length} videos)</div>
+                <div style="background:#0a1628;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">
+                    <div>Min: <span style="color:#cbd5e1">${Math.min(...dataset.map(d => d.value)).toFixed(3)}</span> &nbsp; Max: <span style="color:#cbd5e1">${Math.max(...dataset.map(d => d.value)).toFixed(3)}</span> &nbsp; Mean: <span style="color:#cbd5e1">${(dataset.reduce((s,d) => s+d.value, 0)/dataset.length).toFixed(3)}</span></div>
+                    <div style="margin-top:4px;font-size:10px;color:#475569">Per-video values stored for all ${dataset.length} videos. Click to inspect individual data points.</div>
+                </div>
+            </div>` : ''}
+
+            <!-- Conclusion -->
+            ${result && result.conclusion ? `
+            <div style="margin-bottom:6px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Finding</div>
+                <div style="background:#0f2942;border-left:3px solid #22d3ee;padding:10px;border-radius:0 6px 6px 0;font-size:12px;color:#e2e8f0;line-height:1.6">${result.conclusion}</div>
+                ${result.practical_insight ? `<div style="margin-top:6px;background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">💡 ${result.practical_insight}</div>` : ''}
+            </div>` : ''}
+
+            <!-- Connections -->
+            ${connTargets.length ? `
+            <div>
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Graph Connections</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">${connTargets.map(t => `<span style="background:#1e293b;padding:3px 8px;border-radius:12px;font-size:11px;color:#94a3b8">→ ${t}</span>`).join('')}</div>
+            </div>` : ''}
         </div>`;
     }
 
@@ -1126,127 +1210,118 @@ const JarvisUI = (() => {
     function showNodePopup(d, event) {
         const popup = document.getElementById('jarvis-node-popup');
         if (!popup) return;
-        const label = d.label || humanizeKey(d.key);
-        const reg = cachedIndicatorRegistry;
 
-        // ── Layer badge ──
-        const layerBadge = d.layer === 'pre'
+        // Look up full v2 indicator record
+        const ind = v2Indicators ? v2Indicators.find(i => i.key === d.key) : null;
+        const result = ind ? ind.result : null;
+        const exp = ind ? ind.experiment : null;
+        const metricDef = ind ? ind.metric_definition : null;
+        const tool = (v2Tools && exp) ? v2Tools.find(t => t.id === exp.tool_id) : null;
+        const resObj = (v2Resolutions && ind) ? v2Resolutions.find(r => r.id === ind.resolution_id) : null;
+        const dataset = ind ? ind.dataset : null;
+        const connTargets = ind ? (ind.connections || []) : (d.connections || []);
+
+        const label = d.label || humanizeKey(d.key);
+        const layer = d.layer || (ind ? ind.layer : 'post');
+
+        const layerBadge = layer === 'pre'
             ? '<span style="display:inline-block;background:#7c3aed;color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle">pre-upload</span>'
-            : d.layer === 'post'
+            : layer === 'post'
             ? '<span style="display:inline-block;background:#0284c7;color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle">post-upload</span>'
             : '<span style="display:inline-block;background:#d97706;color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle">target</span>';
 
-        // ── Stats ──
-        const rPartial = d.r_partial != null ? Number(d.r_partial) : null;
-        const rDirect = d.r_direct != null ? Number(d.r_direct) : null;
-        const strengthStr = rPartial != null
-            ? '<span style="color:' + (rPartial >= 0 ? '#22d3ee' : '#f87171') + ';font-weight:700">' + (rPartial >= 0 ? '+' : '') + rPartial.toFixed(3) + '</span>'
-            : '<span style="color:#64748b">—</span>';
-        const corrStr = rDirect != null
-            ? '<span style="color:' + (rDirect >= 0 ? '#22d3ee' : '#f87171') + ';font-weight:700">' + (rDirect >= 0 ? '+' : '') + rDirect.toFixed(3) + '</span>'
-            : null;
-        const targetMap = { views: 'Views', keep: 'Keep Rate', retention: 'Retention' };
-        const targetStr = d.target ? (targetMap[d.target] || humanizeKey(d.target)) : '—';
-
-        // Connections count: real edges only (not peer)
-        const connCount = reg
-            ? (reg.edges || []).filter(e => e.from === d.key || e.to === d.key).length
-            : (d.connections || []).filter(c => c.to).length;
-
-        // ── Section header helper ──
+        const statPill = (lbl, val) => '<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">' + lbl + '</span><span style="font-size:12px;color:#cbd5e1">' + val + '</span></div>';
         const sectionHdr = (text) => '<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;margin-top:14px">' + text + '</div>';
 
-        // ── Stats row ──
-        const statPill = (lbl, val) => '<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">' + lbl + '</span><span style="font-size:12px;color:#cbd5e1">' + val + '</span></div>';
+        const rVal = result ? result.primary_r : (d.r_partial != null ? d.r_partial : null);
+        const rhoVal = result ? result.rho : null;
+        const rStr = rVal != null ? '<span style="font-weight:700;color:' + (rVal >= 0 ? '#22d3ee' : '#f87171') + '">' + (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3) + '</span>' : '<span style="color:#64748b">—</span>';
+        const rhoStr = rhoVal != null ? '<span style="color:' + (rhoVal >= 0 ? '#22d3ee' : '#f87171') + '">' + (rhoVal >= 0 ? '+' : '') + Number(rhoVal).toFixed(3) + '</span>' : null;
+        const pVal = exp && exp.outputs ? exp.outputs.p_value : null;
+        const ciLow = exp && exp.outputs ? exp.outputs.ci_low : null;
+        const ciHigh = exp && exp.outputs ? exp.outputs.ci_high : null;
+        const nVid = exp ? exp.n_videos : (dataset ? dataset.length : null);
+
+        // Real connection count from v2 graph edges
+        const graphEdgeCount = v2Graph ? (v2Graph.edges || []).filter(e => e.from === d.key || e.to === d.key).length : connTargets.length;
+
         let statsHtml = '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;padding:8px 0;border-bottom:1px solid #1e293b">';
-        statsHtml += statPill('Strength', strengthStr);
-        if (corrStr) statsHtml += statPill('r_direct', corrStr);
-        statsHtml += statPill('Target', targetStr);
-        if (d.resolution) statsHtml += statPill('Resolution', d.resolution);
+        statsHtml += statPill('Pearson r', rStr);
+        if (rhoStr) statsHtml += statPill('Spearman ρ', rhoStr);
+        if (pVal != null) statsHtml += statPill('p-value', '<span style="color:' + (pVal < 0.05 ? '#22d3ee' : '#f87171') + '">' + pVal.toFixed(4) + '</span>');
+        if (ciLow != null) statsHtml += statPill('95% CI', '<span style="font-size:10px">[' + (ciLow >= 0 ? '+' : '') + ciLow.toFixed(3) + ', ' + (ciHigh >= 0 ? '+' : '') + ciHigh.toFixed(3) + ']</span>');
+        if (nVid) statsHtml += statPill('n videos', nVid);
+        if (result) statsHtml += statPill('Strength', '<span style="color:' + (result.strength_label === 'strong' ? '#22d3ee' : result.strength_label === 'moderate' ? '#a78bfa' : '#64748b') + '">' + result.strength_label + '</span>');
+        statsHtml += statPill('Resolution', resObj ? resObj.label : (ind ? ind.resolution_id : 'r0'));
         statsHtml += statPill('Depth', d.depth || 1);
-        statsHtml += statPill('Connections', connCount);
+        statsHtml += statPill('Connections', graphEdgeCount);
         statsHtml += '</div>';
 
-        // ── Experiments section ──
-        let experimentsHtml = '';
-        const rows = cachedResultsRows;
-        let expRows = [];
-        if (rows && rows.length) {
-            // Match experiments where new_signal contains this key, or experiment_id matches a connection
-            const connExpIds = new Set((d.connections || []).map(c => c.experiment).filter(Boolean));
-            expRows = rows.filter(r => {
-                const sig = (r.new_signal || '');
-                if (sig === d.key || sig === 'discovery:' + d.key) return true;
-                if (connExpIds.has(r.experiment_id)) return true;
-                return false;
-            });
-        }
-        if (!expRows.length && d.connections && d.connections.length) {
-            // Fallback: build cards from connections data
-            expRows = d.connections.filter(c => c.experiment).map(c => ({
-                experiment_id: c.experiment,
-                status: c.status || '',
-                delta_r2: c.delta_r2 || '—',
-                r2_before: '',
-                r2_after: '',
-                n_videos: '',
-                new_signal: d.key,
-                notes: ''
-            }));
-        }
-        if (expRows.length) {
-            experimentsHtml += sectionHdr('Experiments');
-            expRows.forEach((row, idx) => {
-                const status = (row.status || '').trim().toLowerCase();
-                const statusColor = status === 'keep' ? '#16a34a' : status === 'discovery' ? '#0e7490' : '#7f1d1d';
-                const statusBg = status === 'keep' ? 'rgba(22,163,74,0.2)' : status === 'discovery' ? 'rgba(14,116,144,0.2)' : 'rgba(127,29,29,0.2)';
-                const bgColor = idx % 2 === 0 ? '#0f2020' : '#0a1628';
-                const nVid = row.n_videos ? '<span style="font-size:10px;color:#64748b;margin-left:8px">n=' + row.n_videos + '</span>' : '';
-                const hasR2 = row.delta_r2 && row.delta_r2 !== '—' && row.delta_r2 !== '\u2014';
-                const r2Line = hasR2
-                    ? '<div style="font-size:11px;color:#94a3b8;margin-top:3px">R\u00b2: ' + (row.r2_before || '?') + ' \u2192 ' + (row.r2_after || '?') + ' (delta: ' + row.delta_r2 + ')</div>'
-                    : '<div style="font-size:11px;color:#475569;margin-top:3px">R\u00b2: \u2014</div>';
-                const notes = row.notes || '';
-                experimentsHtml += '<div style="background:' + bgColor + ';border-radius:6px;padding:8px 10px;margin-bottom:4px">'
-                    + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-                    + '<span style="font-family:monospace;font-size:10px;color:#94a3b8">' + (row.experiment_id || '—') + '</span>'
-                    + '<span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:3px;background:' + statusBg + ';color:' + statusColor + '">' + (status || '—') + '</span>'
-                    + nVid
-                    + '</div>'
-                    + r2Line
-                    + (notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:4px;line-height:1.5">' + notes + '</div>' : '')
-                    + '</div>';
-            });
+        // Metric definition
+        let metricHtml = '';
+        if (metricDef) {
+            metricHtml = sectionHdr('What This Measures')
+                + '<div style="font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:6px">' + metricDef.description + '</div>'
+                + '<div style="background:#0f172a;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">'
+                + '<div><span style="color:#64748b">Formula: </span><code style="color:#22d3ee">' + (metricDef.formula || '—') + '</code></div>'
+                + '<div style="margin-top:3px"><span style="color:#64748b">Data sources: </span>' + (metricDef.data_sources || []).join(', ') + '</div>'
+                + '<div style="margin-top:3px"><span style="color:#64748b">Expected range: </span>' + (metricDef.expected_range || '—') + '</div>'
+                + '</div>';
         }
 
-        // ── Finding section ──
-        const fullNotes = d.notes || '';
+        // Experiment
+        let expHtml = '';
+        if (exp) {
+            expHtml = sectionHdr('Experiment')
+                + '<div style="background:#0a1628;border-radius:6px;padding:10px;font-size:11px">'
+                + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
+                + '<code style="color:#94a3b8;font-size:10px">' + exp.id + '</code>'
+                + '<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(14,116,144,0.2);color:#0e7490">' + (result ? result.status : 'discovery') + '</span>'
+                + '</div>'
+                + '<div><span style="color:#64748b">Tool: </span><strong style="color:#cbd5e1">' + (tool ? tool.name : exp.tool_id) + '</strong></div>'
+                + (tool ? '<div style="margin-top:2px;font-size:10px;color:#475569">' + tool.description + '</div>' : '')
+                + '<div style="margin-top:6px"><span style="color:#64748b">target=</span><code style="color:#22d3ee">' + (exp.parameters ? exp.parameters.target : 'views') + '</code>'
+                + ' <span style="color:#64748b">transform=</span><code style="color:#22d3ee">' + (exp.parameters ? exp.parameters.transform_target : 'log10') + '</code>'
+                + ' <span style="color:#64748b">min_n=</span><code style="color:#22d3ee">' + (exp.parameters ? exp.parameters.min_n : 50) + '</code></div>'
+                + (exp.ran_at ? '<div style="margin-top:4px;color:#475569">Ran: ' + new Date(exp.ran_at).toLocaleString() + '</div>' : '')
+                + '</div>';
+        }
+
+        // Dataset summary
+        let dataHtml = '';
+        if (dataset && dataset.length) {
+            const vals = dataset.map(d => d.value);
+            const mn = Math.min(...vals), mx = Math.max(...vals), mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+            dataHtml = sectionHdr('Dataset')
+                + '<div style="background:#0a1628;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">'
+                + dataset.length + ' videos &nbsp;—&nbsp; min: <span style="color:#cbd5e1">' + mn.toFixed(3) + '</span>'
+                + ' &nbsp; max: <span style="color:#cbd5e1">' + mx.toFixed(3) + '</span>'
+                + ' &nbsp; mean: <span style="color:#cbd5e1">' + mean.toFixed(3) + '</span>'
+                + '</div>';
+        }
+
+        // Conclusion
         let findingHtml = '';
-        if (fullNotes) {
-            findingHtml += sectionHdr('Finding');
-            findingHtml += '<div style="font-size:11px;color:#94a3b8;line-height:1.6">' + fullNotes + '</div>';
-            // Parse r_partial=+X.XX (N) patterns and render highlighted
-            const rMatches = fullNotes.match(/r_partial\s*=\s*([-+]?[0-9]*\.?[0-9]+)\s*\((\d+)\)/g);
-            if (rMatches) {
-                rMatches.forEach(m => {
-                    const parts = m.match(/r_partial\s*=\s*([-+]?[0-9]*\.?[0-9]+)\s*\((\d+)\)/);
-                    if (parts) {
-                        findingHtml += '<div style="background:#0f2942;border-left:3px solid #22d3ee;padding:8px;margin-top:6px;border-radius:0 4px 4px 0;font-size:11px;color:#e2e8f0">'
-                            + 'Strength on ' + parts[2] + ' videos: <strong style="color:#22d3ee">' + parts[1] + '</strong>'
-                            + '</div>';
-                    }
-                });
-            }
+        if (result && result.conclusion) {
+            findingHtml = sectionHdr('Finding')
+                + '<div style="background:#0f2942;border-left:3px solid #22d3ee;padding:10px;border-radius:0 6px 6px 0;font-size:11px;color:#e2e8f0;line-height:1.6">' + result.conclusion + '</div>'
+                + (result.practical_insight ? '<div style="margin-top:6px;background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">💡 ' + result.practical_insight + '</div>' : '');
         }
 
-        // ── Assemble popup ──
+        // Connections
+        let connHtml = '';
+        if (connTargets.length) {
+            connHtml = sectionHdr('Graph Connections')
+                + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+                + connTargets.map(t => '<span style="background:#1e293b;padding:3px 8px;border-radius:12px;font-size:11px;color:#94a3b8">→ ' + t + '</span>').join('')
+                + '</div>';
+        }
+
         popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
             + '<div style="font-size:15px;font-weight:700;color:#f1f5f9;flex:1">' + label + layerBadge + '</div>'
             + '<button onclick="document.getElementById(\'jarvis-node-popup\').style.display=\'none\'" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1">\u00d7</button>'
             + '</div>'
-            + statsHtml
-            + experimentsHtml
-            + findingHtml;
+            + statsHtml + metricHtml + expHtml + dataHtml + findingHtml + connHtml;
 
         popup.style.display = 'block';
         const x = Math.min(event.clientX + 10, window.innerWidth - 460);
@@ -1279,101 +1354,44 @@ const JarvisUI = (() => {
             });
         svg.call(zoom);
 
-        // ── Data: nodes from registry ──
-        const registry = cachedIndicatorRegistry;
-        if (!registry) return;
+        // ── Data: nodes + edges from v2 graph ──
+        if (!v2Graph || !v2Graph.nodes) {
+            graphEl.innerHTML = '<div style="padding:24px;color:#64748b;text-align:center">No graph data yet. Run the pipeline to add indicators.</div>';
+            return;
+        }
 
-        const allIndicators = registry.indicators || [];
         const coreKeys = new Set(['views', 'keep', 'retention']);
 
-        // Ensure core nodes exist (synthesize if missing from registry)
-        let coreNodes = ['views', 'keep', 'retention'].map(k => {
-            const existing = allIndicators.find(i => i.key === k);
-            if (existing) return { ...existing };
-            return { key: k, label: k.charAt(0).toUpperCase() + k.slice(1), layer: k === 'views' ? 'views' : 'post', r_partial: null, depth: 0, resolution: 'R0', target: null, connections: [] };
-        });
+        // All graph nodes from v2Graph, normalized for D3
+        let allNodes = v2Graph.nodes.map(n => ({
+            ...n,
+            r_partial: n.r_partial,
+            _clusterCount: 1,
+        }));
 
-        // Apply graphFilter to select indicator subset
-        let candidates = allIndicators.filter(i => !coreKeys.has(i.key));
-        if (graphFilter === 'pre-upload') {
-            candidates = candidates.filter(i => i.layer === 'pre');
-        } else if (graphFilter === 'post-upload') {
-            candidates = candidates.filter(i => i.layer === 'post');
-        } else if (graphFilter === 'in-model') {
-            candidates = candidates.filter(i => isSignalInModel(i.key));
-        } else if (graphFilter === 'kept') {
-            candidates = candidates.filter(i => isSignalKept(i.key));
-        }
-        // graphFilter === 'all' → keep all candidates
+        // Apply graphFilter
+        let candidates = allNodes.filter(n => !coreKeys.has(n.key));
+        if (graphFilter === 'pre-upload') candidates = candidates.filter(n => n.layer === 'pre');
+        else if (graphFilter === 'post-upload') candidates = candidates.filter(n => n.layer === 'post');
+        else if (graphFilter === 'kept') candidates = candidates.filter(n => isSignalKept(n.key));
+        // 'all' and 'in-model' → keep all
 
-        // Apply merge threshold
-        const merged = applyMergeThreshold(candidates, currentMergeThreshold);
-
-        // Performance: cap nodes for smooth rendering
-        let selected;
-        if (merged.length > 400) {
-            // Top 200 by |r_partial| + nodes with 3+ connections
-            const sorted = [...merged].sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0));
-            const top200 = new Set(sorted.slice(0, 200).map(n => n.key));
-            const connCount = {};
-            allIndicators.forEach(ind => {
-                (ind.connections || []).forEach(c => {
-                    if (c.to) { connCount[ind.key] = (connCount[ind.key] || 0) + 1; }
-                });
-            });
-            selected = merged.filter(n => top200.has(n.key) || (connCount[n.key] || 0) >= 3);
-        } else {
-            selected = merged;
-        }
-
-        const nodes = [...coreNodes, ...selected];
+        const coreNodes = allNodes.filter(n => coreKeys.has(n.key));
+        const nodes = [...coreNodes, ...candidates];
         const nodeKeySet = new Set(nodes.map(n => n.key));
 
-        // ── Edge routing: chain structure, no star pattern ──
-        // NOTE: 1194 edges connect to views (verified correct - most experiments measured vs log(views) directly)
-        // 564 edges connect to retention, 360 to keep. This is accurate experiment data.
-        const links = [];
-        const nodeTargetMap = {}; // indicator key → its target (views/keep/retention)
-        nodes.forEach(n => {
-            if (coreKeys.has(n.key)) return;
-            const target = n.target || 'views';
-            nodeTargetMap[n.key] = target;
-            if (nodeKeySet.has(target)) {
-                links.push({ source: n.key, target: target, r: Math.abs(n.r_partial || 0), peer: false });
-            }
-        });
-        // Core chain edges: keep→views, retention→views
-        if (nodeKeySet.has('keep') && nodeKeySet.has('views')) {
+        // Edges from v2Graph — only include edges where both endpoints are in the visible node set
+        const links = (v2Graph.edges || []).filter(e => nodeKeySet.has(e.from) && nodeKeySet.has(e.to))
+            .map(e => ({ source: e.from, target: e.to, r: Math.abs(e.r || 0), peer: false }));
+
+        // Core chain: keep→views, retention→views (always add if both visible)
+        const hasViews = nodeKeySet.has('views');
+        if (hasViews && nodeKeySet.has('keep') && !links.find(l => l.source === 'keep' && l.target === 'views')) {
             links.push({ source: 'keep', target: 'views', r: 0.5, peer: false });
         }
-        if (nodeKeySet.has('retention') && nodeKeySet.has('views')) {
+        if (hasViews && nodeKeySet.has('retention') && !links.find(l => l.source === 'retention' && l.target === 'views')) {
             links.push({ source: 'retention', target: 'views', r: 0.5, peer: false });
         }
-
-        // ── Peer edges: indicators sharing target + overlapping key tokens ──
-        const byTarget = {};
-        nodes.forEach(n => {
-            if (coreKeys.has(n.key)) return;
-            const t = nodeTargetMap[n.key] || 'views';
-            if (!byTarget[t]) byTarget[t] = [];
-            byTarget[t].push(n);
-        });
-        const peerCount = {};
-        Object.values(byTarget).forEach(group => {
-            for (let i = 0; i < group.length; i++) {
-                for (let j = i + 1; j < group.length; j++) {
-                    const a = group[i], b = group[j];
-                    if ((peerCount[a.key] || 0) >= 3 || (peerCount[b.key] || 0) >= 3) continue;
-                    const tokA = a.key.split('_'), tokB = b.key.split('_');
-                    const shared = tokA.filter(t => tokB.includes(t)).length;
-                    if (shared >= 2) {
-                        links.push({ source: a.key, target: b.key, r: 0, peer: true });
-                        peerCount[a.key] = (peerCount[a.key] || 0) + 1;
-                        peerCount[b.key] = (peerCount[b.key] || 0) + 1;
-                    }
-                }
-            }
-        });
 
         // ── Node helpers ──
         function nodeColor(d) {
