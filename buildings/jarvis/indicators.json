@@ -1870,7 +1870,7 @@
       }
     ],
     "experiment": {
-      "id": "exp_hook_retention_pct_20260409_161059",
+      "id": "exp_hook_retention_pct_20260409_174639",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
       "tool_name": "Pearson Correlation",
@@ -1880,7 +1880,7 @@
         "confounds": [],
         "min_n": 50
       },
-      "ran_at": "2026-04-09T16:10:59.905358Z",
+      "ran_at": "2026-04-09T17:46:39.729613Z",
       "n_videos": 370,
       "outputs": {
         "r": -0.04996365118112891,
@@ -1907,15 +1907,15 @@
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T16:10:59.905375Z",
-    "updated_at": "2026-04-09T16:10:59.905377Z"
+    "created_at": "2026-04-09T17:46:39.729632Z",
+    "updated_at": "2026-04-09T17:46:39.729633Z"
   },
   {
     "key": "final_5pct_retention",
     "label": "Final 5Pct Retention",
     "layer": "post",
     "status": "discovery",
-    "resolution_id": "r0",
+    "resolution_id": "r_last5pct",
     "depth": 1,
     "target": "views",
     "metric_definition": {
@@ -3781,7 +3781,7 @@
       }
     ],
     "experiment": {
-      "id": "exp_final_5pct_retention_20260409_161059",
+      "id": "exp_final_5pct_retention_20260409_174639",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
       "tool_name": "Pearson Correlation",
@@ -3791,7 +3791,7 @@
         "confounds": [],
         "min_n": 50
       },
-      "ran_at": "2026-04-09T16:10:59.910440Z",
+      "ran_at": "2026-04-09T17:46:39.734344Z",
       "n_videos": 370,
       "outputs": {
         "r": 0.4715732924173845,
@@ -3818,8 +3818,8 @@
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T16:10:59.910452Z",
-    "updated_at": "2026-04-09T16:10:59.910453Z"
+    "created_at": "2026-04-09T17:46:39.734360Z",
+    "updated_at": "2026-04-09T17:46:39.734362Z"
   },
   {
     "key": "mid_video_cliff",
@@ -5692,7 +5692,7 @@
       }
     ],
     "experiment": {
-      "id": "exp_mid_video_cliff_20260409_161059",
+      "id": "exp_mid_video_cliff_20260409_174639",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
       "tool_name": "Pearson Correlation",
@@ -5702,7 +5702,7 @@
         "confounds": [],
         "min_n": 50
       },
-      "ran_at": "2026-04-09T16:10:59.918095Z",
+      "ran_at": "2026-04-09T17:46:39.742747Z",
       "n_videos": 370,
       "outputs": {
         "r": 0.17664005735272306,
@@ -5729,8 +5729,8 @@
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T16:10:59.918104Z",
-    "updated_at": "2026-04-09T16:10:59.918105Z"
+    "created_at": "2026-04-09T17:46:39.742763Z",
+    "updated_at": "2026-04-09T17:46:39.742765Z"
   },
   {
     "key": "retention_entropy",
@@ -7603,7 +7603,7 @@
       }
     ],
     "experiment": {
-      "id": "exp_retention_entropy_20260409_161059",
+      "id": "exp_retention_entropy_20260409_174639",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
       "tool_name": "Pearson Correlation",
@@ -7613,7 +7613,7 @@
         "confounds": [],
         "min_n": 50
       },
-      "ran_at": "2026-04-09T16:10:59.928268Z",
+      "ran_at": "2026-04-09T17:46:39.753885Z",
       "n_videos": 370,
       "outputs": {
         "r": 0.4651759674555697,
@@ -7640,15 +7640,15 @@
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T16:10:59.928279Z",
-    "updated_at": "2026-04-09T16:10:59.928280Z"
+    "created_at": "2026-04-09T17:46:39.753899Z",
+    "updated_at": "2026-04-09T17:46:39.753900Z"
   },
   {
     "key": "hook_drop_rate",
     "label": "Hook Drop Rate",
     "layer": "post",
     "status": "discovery",
-    "resolution_id": "r0",
+    "resolution_id": "r_hook",
     "depth": 1,
     "target": "views",
     "metric_definition": {
@@ -9514,7 +9514,7 @@
       }
     ],
     "experiment": {
-      "id": "exp_hook_drop_rate_20260409_161059",
+      "id": "exp_hook_drop_rate_20260409_174639",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
       "tool_name": "Pearson Correlation",
@@ -9524,7 +9524,7 @@
         "confounds": [],
         "min_n": 50
       },
-      "ran_at": "2026-04-09T16:10:59.975044Z",
+      "ran_at": "2026-04-09T17:46:39.804537Z",
       "n_videos": 370,
       "outputs": {
         "r": -0.4019295720284731,
@@ -9551,7 +9551,7 @@
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T16:10:59.975056Z",
-    "updated_at": "2026-04-09T16:10:59.975057Z"
+    "created_at": "2026-04-09T17:46:39.804554Z",
+    "updated_at": "2026-04-09T17:46:39.804555Z"
   }
 ]

@@ -806,14 +806,15 @@ const JarvisUI = (() => {
         const gsBtn = (val, label) => `<button data-sizeby="${val}" class="jarvis-graph-btn${graphSizeBy === val ? ' active' : ''}">${label}</button>`;
         return `
             <div class="jarvis-network-legend" style="margin-bottom:4px">
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload (control before filming)</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured after upload)</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (prediction target)</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload (you control before filming)</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured by YouTube)</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (target)</span>
+                <span class="jarvis-legend-item"><span style="font-family:'SF Mono',monospace;font-size:10px;color:#22d3ee">r=+0.47</span> = positive &nbsp; <span style="font-family:'SF Mono',monospace;font-size:10px;color:#f87171">r=-0.40</span> = negative</span>
             </div>
             <div class="jarvis-graph-controls" id="jarvis-graph-controls">
                 <div class="jarvis-graph-filters">
                     <span class="jarvis-graph-ctrl-label">Show:</span>
-                    ${gfBtn('all','All')}${gfBtn('pre-upload','Pre-upload')}${gfBtn('post-upload','Post-upload')}${gfBtn('kept','Kept')}${gfBtn('in-model','In Model')}
+                    ${gfBtn('all','All')}${gfBtn('pre-upload','Pre-upload')}${gfBtn('post-upload','Post-upload')}
                 </div>
                 <div class="jarvis-graph-sizeBy">
                     <span class="jarvis-graph-ctrl-label">Size by:</span>
@@ -993,8 +994,11 @@ const JarvisUI = (() => {
             const resColor = { R0: '#64748b', R1: '#3b82f6', R2: '#a855f7', R3: '#ec4899' };
             const isExpanded = tacticalExpandedSignal === sig.key;
             const label = sig.label || humanizeKey(sig.key);
-            const strengthVal = sig.r_partial != null ? Math.abs(sig.r_partial).toFixed(2) : '';
-            const rBar = sig.r_partial != null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(sig.r_partial) * 100, 100)}%;background:${color}"></div></div>` : '';
+            const rVal = sig.r_partial;
+            const rSign = rVal != null ? (rVal >= 0 ? '+' : '') : '';
+            const rDisplay = rVal != null ? `${rSign}${rVal.toFixed(3)}` : '';
+            const rColor = rVal != null ? (rVal >= 0 ? '#22d3ee' : '#f87171') : 'var(--j-muted)';
+            const rBar = rVal != null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(rVal) * 100, 100)}%;background:${color}"></div></div>` : '';
             const clusterBadge = sig._clusterCount > 1 ? `<span style="font-size:9px;background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:8px;color:var(--j-muted)">+${sig._clusterCount - 1}</span>` : '';
 
             return `<div class="jarvis-signal-row-wrapper">
@@ -1003,7 +1007,7 @@ const JarvisUI = (() => {
                     <span class="jarvis-signal-name">${label}</span>
                     <span class="jarvis-signal-type-badge" style="background:${layerBg};color:${color}">${layerLabel}</span>
                     ${clusterBadge}
-                    ${strengthVal ? `<span style="font-family:'SF Mono',monospace;font-size:10px;color:var(--j-muted);white-space:nowrap">Strength: ${strengthVal}</span>` : ''}
+                    ${rDisplay ? `<span style="font-family:'SF Mono',monospace;font-size:10px;color:${rColor};white-space:nowrap">r=${rDisplay}</span>` : ''}
                     ${rBar}
                 </div>
                 ${isExpanded ? renderSignalDetail(sig) : ''}
@@ -1075,7 +1079,7 @@ const JarvisUI = (() => {
                 ${pStr !== '—' ? statPill('p-value', `<span style="color:${parseFloat(pStr) < 0.05 ? '#22d3ee' : '#f87171'}">${pStr}</span>`) : ''}
                 ${ciStr ? statPill('95% CI', `<span style="font-size:10px">${ciStr}</span>`) : ''}
                 ${statPill('n videos', exp ? exp.n_videos : '—')}
-                ${result ? statPill('Strength', `<span style="color:${result.strength_label === 'strong' ? '#22d3ee' : result.strength_label === 'moderate' ? '#a78bfa' : result.strength_label === 'weak' ? '#64748b' : '#475569'}">${result.strength_label}</span>`) : ''}
+                ${result ? statPill('r', rStr) : ''}
                 ${statPill('Layer', `<span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${sig.layer === 'pre' ? 'Pre-upload' : 'Post-upload'}</span>`)}
                 ${statPill('Resolution', resObj ? resObj.label : (ind ? ind.resolution_id : 'r0'))}
                 ${statPill('Target', connTargets.join(', ') || 'views')}
@@ -1251,7 +1255,7 @@ const JarvisUI = (() => {
         if (pVal != null) statsHtml += statPill('p-value', '<span style="color:' + (pVal < 0.05 ? '#22d3ee' : '#f87171') + '">' + pVal.toFixed(4) + '</span>');
         if (ciLow != null) statsHtml += statPill('95% CI', '<span style="font-size:10px">[' + (ciLow >= 0 ? '+' : '') + ciLow.toFixed(3) + ', ' + (ciHigh >= 0 ? '+' : '') + ciHigh.toFixed(3) + ']</span>');
         if (nVid) statsHtml += statPill('n videos', nVid);
-        if (result) statsHtml += statPill('Strength', '<span style="color:' + (result.strength_label === 'strong' ? '#22d3ee' : result.strength_label === 'moderate' ? '#a78bfa' : '#64748b') + '">' + result.strength_label + '</span>');
+        // strength shown via rStr above — no separate label needed
         statsHtml += statPill('Resolution', resObj ? resObj.label : (ind ? ind.resolution_id : 'r0'));
         statsHtml += statPill('Depth', d.depth || 1);
         statsHtml += statPill('Connections', graphEdgeCount);
@@ -1396,14 +1400,11 @@ const JarvisUI = (() => {
         // ── Node helpers ──
         function nodeColor(d) {
             if (d.key === 'views') return '#f59e0b';
-            if (d.key === 'keep') return '#10b981';
-            if (d.key === 'retention') return '#a78bfa';
             if (d.layer === 'pre') return '#06b6d4';
             return '#a78bfa';
         }
         function nodeRadius(d) {
             if (d.key === 'views') return 20;
-            if (d.key === 'keep' || d.key === 'retention') return 14;
             const base = 4;
             if (graphSizeBy === 'r2') return base + Math.abs(d.r_partial || 0) * 14;
             if (graphSizeBy === 'connections') {
@@ -1422,8 +1423,6 @@ const JarvisUI = (() => {
         // ── Initial positions ──
         nodes.forEach(d => {
             if (d.key === 'views') { d.x = width * 0.85; d.y = height * 0.35; }
-            else if (d.key === 'keep') { d.x = width * 0.72; d.y = height * 0.55; }
-            else if (d.key === 'retention') { d.x = width * 0.72; d.y = height * 0.25; }
             else if (d.layer === 'pre') { d.x = width * 0.22 + (Math.random() - 0.5) * 80; d.y = height * 0.5 + (Math.random() - 0.5) * 200; }
             else { d.x = width * 0.55 + (Math.random() - 0.5) * 80; d.y = height * 0.5 + (Math.random() - 0.5) * 200; }
         });
@@ -1438,7 +1437,7 @@ const JarvisUI = (() => {
             }).strength(d => d.peer ? 0.05 : 0.3))
             .force('charge', d3.forceManyBody().strength(-200).distanceMax(300))
             .force('x', d3.forceX(d => {
-                if (d.key === 'views' || d.key === 'keep' || d.key === 'retention') return width * 0.85;
+                if (d.key === 'views') return width * 0.85;
                 if (d.layer === 'pre') return width * 0.22;
                 return width * 0.55;
             }).strength(0.06))

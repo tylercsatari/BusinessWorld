@@ -674,26 +674,83 @@ def step_quantify(key):
     return METRIC_DEFINITIONS.get(key)
 
 
+# ── Resolution map: what each indicator actually measures ─────────────────
+INDICATOR_RESOLUTION_MAP = {
+    # Whole-video aggregates → r0
+    'mid_video_cliff':        ('r0',         0,   100,  None,  None),
+    'retention_entropy':      ('r0',         0,   100,  None,  None),
+    'above_baseline_mean':    ('r0',         0,   100,  None,  None),
+    'peak_count':             ('r0',         0,   100,  None,  None),
+    'drop_count':             ('r0',         0,   100,  None,  None),
+    'max_peak_delta':         ('r0',         0,   100,  None,  None),
+    'max_drop_delta':         ('r0',         0,   100,  None,  None),
+    'retention_variance':     ('r0',         0,   100,  None,  None),
+    'retention_skew':         ('r0',         0,   100,  None,  None),
+    'non_sub_view_share':     ('r0',         0,   100,  None,  None),
+    'swipe_away_rate':        ('r0',         0,   100,  None,  None),
+    'daily_view_peak_day':    ('r0',         0,   100,  None,  None),
+    'duration_log':           ('r0',         0,   100,  None,  None),
+    'transcript_word_count':  ('r0',         0,   100,  None,  None),
+    'speech_rate_wps':        ('r0',         0,   100,  None,  None),
+    'segment_count':          ('r0',         0,   100,  None,  None),
+    'scene_change_count':     ('r0',         0,   100,  None,  None),
+    'like_rate':              ('r0',         0,   100,  None,  None),
+    'comment_rate':           ('r0',         0,   100,  None,  None),
+    'share_rate':             ('r0',         0,   100,  None,  None),
+    'subs_gained_per_view':   ('r0',         0,   100,  None,  None),
+    'subs_per_like':          ('r0',         0,   100,  None,  None),
+    'revenue_per_view':       ('r0',         0,   100,  None,  None),
+    'keep_x_non_sub_share':   ('r0',         0,   100,  None,  None),
+    'face_frame_pct':         ('r0',         0,   100,  None,  None),
+    'text_overlay_frame_pct': ('r0',         0,   100,  None,  None),
+    # Single-point measurements (a point on the curve, not a window) → r0
+    'hook_retention_pct':     ('r0',         0,   100,  None,  None),
+    'retention_25pct':        ('r0',         0,   100,  None,  None),
+    'retention_50pct':        ('r0',         0,   100,  None,  None),
+    'retention_75pct':        ('r0',         0,   100,  None,  None),
+    'retention_90pct':        ('r0',         0,   100,  None,  None),
+    # Sub-video windows
+    'final_5pct_retention':   ('r_last5pct', 95,  100,  None,  None),
+    'hook_drop_rate':         ('r_hook',     0,   10,   None,  None),
+    'hook_word_count':        ('r_hook',     0,   10,   None,  None),
+    'has_hook_segment':       ('r_hook',     0,   10,   None,  None),
+    'hook_duration_s':        ('r_hook',     0,   10,   None,  None),
+    'early_momentum':         ('r_early',    10,  25,   None,  None),
+    # Time-based (days, not video position)
+    'view_accel_7day':        ('r_week1',    None, None, 0,    7),
+    'week1_week2_ratio':      ('r_week1_2',  None, None, 0,    14),
+}
+
+DEFAULT_RESOLUTION_DEFS = {
+    'r0':         {'id': 'r0',         'label': 'Full Video',          'description': 'Entire video analyzed as one unit. One scalar per video.',            'start_pct': 0,   'end_pct': 100, 'start_day': None, 'end_day': None, 'granularity': 'whole'},
+    'r_last5pct': {'id': 'r_last5pct', 'label': 'Last 5% of Video',    'description': 'Final 5 percent of video. Measures end-completion signals.',          'start_pct': 95,  'end_pct': 100, 'start_day': None, 'end_day': None, 'granularity': 'video_window'},
+    'r_hook':     {'id': 'r_hook',     'label': 'Hook Window (0-10%)', 'description': 'First 10 percent of video. Hook and opening retention behavior.',       'start_pct': 0,   'end_pct': 10,  'start_day': None, 'end_day': None, 'granularity': 'video_window'},
+    'r_early':    {'id': 'r_early',    'label': 'Early Window (10-25%)','description': 'Second quarter of video. Post-hook momentum and engagement signal.',  'start_pct': 10,  'end_pct': 25,  'start_day': None, 'end_day': None, 'granularity': 'video_window'},
+    'r_week1':    {'id': 'r_week1',    'label': 'First 7 Days',        'description': 'First 7 days post-upload. Early algorithmic distribution window.',      'start_pct': None,'end_pct': None,'start_day': 0,   'end_day': 7,   'granularity': 'time_window'},
+    'r_week1_2':  {'id': 'r_week1_2',  'label': 'Days 0-14',           'description': 'First two weeks post-upload. Week-over-week virality pattern.',         'start_pct': None,'end_pct': None,'start_day': 0,   'end_day': 14,  'granularity': 'time_window'},
+}
+
+
 def step_resolve(key, resolutions):
-    """Step 4: Assign resolution. Phase 1 = always r0. Check for gaps. Save."""
-    resolution_id = "r0"
+    """Step 4: Assign resolution based on what the indicator actually measures."""
+    # Look up the correct resolution for this indicator
+    res_info = INDICATOR_RESOLUTION_MAP.get(key, ('r0', 0, 100, None, None))
+    resolution_id = res_info[0]
     exists = any(r["id"] == resolution_id for r in resolutions)
     if not exists:
-        resolutions.append({
-            "id": "r0",
-            "label": "Full Video",
-            "description": "Entire video as single unit",
-            "unit": "video",
-            "granularity": "whole",
-            "start_pct": 0,
-            "end_pct": 100,
-            "start_s": None,
-            "end_s": None,
-            "created_from": "auto",
+        # Create the shelf from the definition map
+        defn = DEFAULT_RESOLUTION_DEFS.get(resolution_id, DEFAULT_RESOLUTION_DEFS['r0'])
+        new_shelf = {
+            **defn,
+            "created_from": "pipeline",
             "created_at": now_iso(),
             "indicator_keys": [],
-            "depth_in_hierarchy": 0,
-        })
+            "depth_in_hierarchy": 0 if resolution_id == 'r0' else 1,
+        }
+        resolutions.append(new_shelf)
+        # Sort by start_pct (video-position shelves first, then time-based)
+        resolutions.sort(key=lambda r: (r.get('start_pct') or 999, r['id']))
+        print(f"  [RESOLVE]    *** New resolution shelf created: {resolution_id} ({defn['label']}) ***")
     for r in resolutions:
         if r["id"] == resolution_id:
             if key not in r.get("indicator_keys", []):
