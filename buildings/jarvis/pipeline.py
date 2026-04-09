@@ -19,6 +19,9 @@ import numpy as np
 from scipy import stats
 from scipy.stats import pearsonr, spearmanr
 
+# HTTP bridge for R2 persistence (when spawned by server)
+JARVIS_API_URL = os.environ.get("JARVIS_API_URL")  # e.g. http://localhost:8002
+
 # ── Paths ──────────────────────────────────────────────────────────────────
 JARVIS_DIR = Path(__file__).parent
 VIDEO_DATA_DIR = JARVIS_DIR.parent.parent / "video_data"
@@ -374,6 +377,25 @@ METRIC_DEFINITIONS = {
 
 AUTONOMOUS_RUNS_FILE = JARVIS_DIR / "autonomous_runs.json"
 AUTONOMOUS_PROGRESS_FILE = JARVIS_DIR / "autonomous_progress.json"
+
+# Map local file paths to R2-bridged data names (used by HTTP bridge)
+_FILE_TO_R2_NAME = None  # lazily built after all paths are defined
+
+def _get_r2_name(filepath):
+    """Map a local Jarvis JSON path to its canonical R2 name, or None."""
+    global _FILE_TO_R2_NAME
+    if _FILE_TO_R2_NAME is None:
+        _FILE_TO_R2_NAME = {
+            str(TOOLS_FILE): "tools",
+            str(RESOLUTIONS_FILE): "resolutions",
+            str(GRAPH_FILE): "graph",
+            str(INDICATORS_FILE): "indicators",
+            str(EXPERIMENTS_FILE): "experiments_log",
+            str(QUEUE_FILE): "candidate_queue",
+            str(AUTONOMOUS_RUNS_FILE): "autonomous_runs",
+            str(AUTONOMOUS_PROGRESS_FILE): "autonomous_progress",
+        }
+    return _FILE_TO_R2_NAME.get(str(filepath))
 
 
 def _init_progress(run_id, requested_iterations, llm_candidates):
@@ -802,16 +824,44 @@ def get_resolution_for_key(key):
     return ('r0', 0, 100, None, None)
 
 
-# ── JSON helpers ───────────────────────────────────────────────────────────
+# ── JSON helpers (R2-aware via HTTP bridge) ────────────────────────────────
 def load_json(path, default=None):
+    fb = default if default is not None else []
+    name = _get_r2_name(path)
+    if JARVIS_API_URL and name:
+        try:
+            import requests as _req
+            resp = _req.get(f"{JARVIS_API_URL}/api/jarvis/v2/data/{name}", timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data is not None:
+                    return data
+        except Exception as e:
+            print(f"[R2-bridge] load {name} failed, falling back to local: {e}")
+    # Local fallback
     p = Path(path)
     if p.exists():
         with open(p) as f:
             return json.load(f)
-    return default if default is not None else []
+    return fb
 
 
 def save_json(path, data):
+    name = _get_r2_name(path)
+    if JARVIS_API_URL and name:
+        try:
+            import requests as _req
+            resp = _req.put(
+                f"{JARVIS_API_URL}/api/jarvis/v2/data/{name}",
+                json=data,
+                timeout=60,
+            )
+            if resp.status_code == 200:
+                return  # server wrote R2 + local
+            print(f"[R2-bridge] save {name} got {resp.status_code}, writing local")
+        except Exception as e:
+            print(f"[R2-bridge] save {name} failed, writing local: {e}")
+    # Local fallback
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 

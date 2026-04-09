@@ -19,6 +19,7 @@ const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
 const shortsCrawler = require('./shorts-crawler');
 const financeService = require('./buildings/finance/finance-service');
+const jarvisStore = require('./buildings/jarvis/jarvis-store');
 const PDFDocument = require('pdfkit');
 const PORT = process.env.PORT || 8002;
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -3523,9 +3524,65 @@ Respond ONLY as valid JSON (no markdown):
     // =========================================
     // API: Jarvis v2 (new unified architecture)
     // =========================================
+
+    // Generic data bridge — used by pipeline HTTP bridge for read/write
+    if (pathname.startsWith('/api/jarvis/v2/data/') && (req.method === 'GET' || req.method === 'PUT')) {
+        const name = pathname.slice('/api/jarvis/v2/data/'.length);
+        if (!jarvisStore.CANONICAL_FILES.includes(name)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Unknown Jarvis data file: ${name}` }));
+            return;
+        }
+        if (req.method === 'GET') {
+            try {
+                const data = await jarvisStore.loadJson(name);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(data));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+            return;
+        }
+        // PUT — pipeline writes data back
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                await jarvisStore.saveJson(name, data);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // Migration endpoint — seed or overwrite R2 from local files
+    if (pathname === '/api/jarvis/v2/migrate-to-r2' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', async () => {
+            try {
+                const opts = JSON.parse(body || '{}');
+                const mode = opts.overwrite ? 'overwrite' : 'seed';
+                const results = await jarvisStore.migrateAll(mode);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ mode, results }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
     if (pathname === '/api/jarvis/v2/indicators' && req.method === 'GET') {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/indicators.json'), 'utf8'));
+            const data = await jarvisStore.loadJson('indicators', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
         } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
@@ -3533,7 +3590,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/graph' && req.method === 'GET') {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/graph.json'), 'utf8'));
+            const data = await jarvisStore.loadJson('graph', { nodes: [], edges: [] });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
         } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"nodes":[],"edges":[]}'); }
@@ -3541,7 +3598,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/tools' && req.method === 'GET') {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/tools.json'), 'utf8'));
+            const data = await jarvisStore.loadJson('tools', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
         } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
@@ -3549,7 +3606,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/resolutions' && req.method === 'GET') {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/resolutions.json'), 'utf8'));
+            const data = await jarvisStore.loadJson('resolutions', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
         } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
@@ -3557,7 +3614,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/experiments' && req.method === 'GET') {
         try {
-            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/experiments_log.json'), 'utf8'));
+            const data = await jarvisStore.loadJson('experiments_log', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
         } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
@@ -3571,7 +3628,8 @@ Respond ONLY as valid JSON (no markdown):
                 const { n = 5 } = JSON.parse(body || '{}');
                 const { spawn } = require('child_process');
                 const proc = spawn('python3', [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--run', String(n)], {
-                    cwd: __dirname, detached: true
+                    cwd: __dirname, detached: true,
+                    env: { ...process.env, JARVIS_API_URL: `http://localhost:${PORT}` }
                 });
                 proc.unref();
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -3600,7 +3658,10 @@ Respond ONLY as valid JSON (no markdown):
                 if (opts.maxNoSignal) args.push('--max-no-signal', String(opts.maxNoSignal));
                 if (opts.llmCandidates != null) args.push('--llm-candidates', String(opts.llmCandidates));
                 const { spawn } = require('child_process');
-                const proc = spawn('python3', args, { cwd: __dirname, detached: true });
+                const proc = spawn('python3', args, {
+                    cwd: __dirname, detached: true,
+                    env: { ...process.env, JARVIS_API_URL: `http://localhost:${PORT}` }
+                });
                 proc.unref();
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ started: true, n, pid: proc.pid }));
@@ -3613,8 +3674,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/auto-run-progress' && req.method === 'GET') {
         try {
-            const progressPath = path.join(__dirname, 'buildings/jarvis/autonomous_progress.json');
-            const data = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+            const data = await jarvisStore.loadJson('autonomous_progress', { active: false, run_id: null, recent_events: [] });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
         } catch {
@@ -3625,8 +3685,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/auto-run-status' && req.method === 'GET') {
         try {
-            const runsPath = path.join(__dirname, 'buildings/jarvis/autonomous_runs.json');
-            const data = JSON.parse(fs.readFileSync(runsPath, 'utf8'));
+            const data = await jarvisStore.loadJson('autonomous_runs', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
         } catch {
@@ -4150,6 +4209,8 @@ cloud.initR2();
 server.listen(PORT, () => {
     console.log(`Business World running at http://localhost:${PORT}`);
     videoAnalyzer.resumeJobs(process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
+    // Auto-seed Jarvis data to R2 if missing
+    jarvisStore.autoSeed().catch(e => console.warn('Jarvis auto-seed failed:', e.message));
     // Pre-warm metrics cache in background (ready before user opens Pen)
     _loadOrBuildMetrics().catch(e => console.warn('Metrics pre-warm failed:', e.message));
     // Start shorts crawler — initial crawl after 5s, then every 30 minutes

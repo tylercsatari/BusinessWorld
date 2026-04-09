@@ -210,6 +210,63 @@ Each entry records one completed autonomous run:
 
 ---
 
+## Data Persistence (R2-backed)
+
+Jarvis runtime/state data is persisted to **Cloudflare R2** as the single source of truth when R2 env vars are configured. This ensures data survives Render's ephemeral filesystem.
+
+### Architecture
+
+```
+┌─────────────┐    HTTP bridge     ┌──────────────┐    R2 API     ┌────────────┐
+│  pipeline.py │ ←──────────────→  │  server.js   │ ←──────────→  │ Cloudflare │
+│  (Python)    │  GET/PUT          │  jarvis-store │              │    R2      │
+└─────────────┘  /api/jarvis/v2/   └──────────────┘              └────────────┘
+                   data/{name}           │
+                                         │ also writes
+                                         ↓
+                                    local disk
+                                  (safety copy)
+```
+
+### R2 Keys
+
+All Jarvis data stored under the `jarvis/` prefix in the R2 bucket:
+
+| File | R2 Key | Description |
+|------|--------|-------------|
+| `indicators.json` | `jarvis/indicators.json` | All discovered indicators with datasets, experiments, results |
+| `experiments_log.json` | `jarvis/experiments_log.json` | Chronological log of all experiments |
+| `graph.json` | `jarvis/graph.json` | Nodes + edges for the indicator correlation graph |
+| `resolutions.json` | `jarvis/resolutions.json` | Resolution shelves (r0, r_hook, etc.) |
+| `tools.json` | `jarvis/tools.json` | Statistical tool definitions |
+| `autonomous_runs.json` | `jarvis/autonomous_runs.json` | Completed autonomous run history |
+| `autonomous_progress.json` | `jarvis/autonomous_progress.json` | Live progress of current/last run |
+| `candidate_queue.json` | `jarvis/candidate_queue.json` | Queue of candidates to process |
+
+### Read/Write Flow
+
+**Server (Node.js):**
+- `jarvis-store.js` provides `loadJson(name, fallback)` and `saveJson(name, data)`
+- Read priority: in-memory cache (30s TTL) → R2 → local file → fallback
+- Writes go to R2 + local disk + cache simultaneously
+
+**Pipeline (Python):**
+- When spawned by the server, receives `JARVIS_API_URL` env var
+- `load_json()` and `save_json()` use HTTP bridge via `GET/PUT /api/jarvis/v2/data/{name}`
+- Falls back to local file I/O if HTTP bridge is unavailable or `JARVIS_API_URL` is not set
+
+### Local-Only Mode
+
+When R2 env vars are not configured (local development), everything works as before — local JSON files are the source of truth. No R2 calls are attempted.
+
+### Migration
+
+- **Auto-seed:** On server startup, `jarvisStore.autoSeed()` uploads any local files missing from R2
+- **Manual migration:** `POST /api/jarvis/v2/migrate-to-r2` with optional `{"overwrite": true}` to force re-upload all files
+- Safe by default: seed mode only uploads files not already present in R2
+
+---
+
 ## Resolution System (Emergent)
 
 Resolution describes WHERE in the video something is measured.
