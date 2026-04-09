@@ -756,7 +756,7 @@ const JarvisUI = (() => {
     async function loadIndicatorRegistry() {
         if (cachedIndicatorRegistry) return cachedIndicatorRegistry;
         try {
-            const r = await fetch('./buildings/jarvis/indicator-registry.json');
+            const r = await fetch('/api/jarvis/indicators');
             cachedIndicatorRegistry = await r.json();
             return cachedIndicatorRegistry;
         } catch (e) {
