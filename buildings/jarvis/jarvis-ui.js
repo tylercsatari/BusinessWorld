@@ -1126,7 +1126,8 @@ const JarvisUI = (() => {
 
         const svg = d3.select(graphEl).append('svg')
             .attr('width', width).attr('height', height)
-            .style('background', 'transparent');
+            .style('background', 'transparent')
+            .style('touch-action', 'none');
 
         // ── Zoom + pan ──
         const graphGroup = svg.append('g').attr('class', 'graph-group');
@@ -1188,6 +1189,8 @@ const JarvisUI = (() => {
         const nodeKeySet = new Set(nodes.map(n => n.key));
 
         // ── Edge routing: chain structure, no star pattern ──
+        // NOTE: 1194 edges connect to views (verified correct - most experiments measured vs log(views) directly)
+        // 564 edges connect to retention, 360 to keep. This is accurate experiment data.
         const links = [];
         const nodeTargetMap = {}; // indicator key → its target (views/keep/retention)
         nodes.forEach(n => {
@@ -1255,21 +1258,6 @@ const JarvisUI = (() => {
             if (graphSizeBy === 'depth') return base + Math.min((d.depth || 1) * 2, 14);
             return base + 4;
         }
-
-        // ── Background zones ──
-        graphGroup.append('rect').attr('x', 0).attr('y', 0).attr('width', width * 0.38).attr('height', height)
-            .attr('fill', 'rgba(6,182,212,0.03)');
-        graphGroup.append('rect').attr('x', width * 0.38).attr('y', 0).attr('width', width * 0.42).attr('height', height)
-            .attr('fill', 'rgba(167,139,250,0.03)');
-        graphGroup.append('rect').attr('x', width * 0.80).attr('y', 0).attr('width', width * 0.20).attr('height', height)
-            .attr('fill', 'rgba(245,158,11,0.03)');
-
-        // Column headers
-        [['PRE-UPLOAD', width * 0.20, '#06b6d4'], ['POST-UPLOAD', width * 0.58, '#a78bfa'], ['TARGET', width * 0.88, '#f59e0b']].forEach(([label, x, fill]) => {
-            graphGroup.append('text').attr('x', x).attr('y', 14).attr('text-anchor', 'middle')
-                .attr('fill', fill).attr('font-size', '9px').attr('font-weight', '600')
-                .attr('font-family', 'system-ui, sans-serif').attr('opacity', 0.5).text(label);
-        });
 
         // ── Initial positions ──
         nodes.forEach(d => {
@@ -1421,6 +1409,49 @@ const JarvisUI = (() => {
             .attr('fill', '#334155').attr('font-size', '9px')
             .attr('font-family', 'system-ui, sans-serif')
             .text(nodes.length + ' nodes \u00b7 ' + links.length + ' edges');
+
+        // ── Drag support (with touch) ──
+        const drag = d3.drag()
+            .subject((event, d) => d)
+            .on('start', (event, d) => {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x; d.fy = d.y;
+            })
+            .on('drag', (event, d) => {
+                d.fx = event.x; d.fy = event.y;
+            })
+            .on('end', (event, d) => {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null; d.fy = null;
+            });
+        nodeEls.call(drag);
+
+        simulation.on('tick', () => {
+            linkGroup.selectAll('line')
+                .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+            nodeEls.attr('transform', d => `translate(${d.x},${d.y})`);
+        });
+
+        // Re-bind control buttons so they work after each rebuild
+        container?.querySelectorAll('.jarvis-graph-btn[data-gfilter]').forEach(btn => {
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            newBtn.addEventListener('click', () => {
+                graphFilter = newBtn.dataset.gfilter;
+                container?.querySelectorAll('.jarvis-graph-btn[data-gfilter]').forEach(b => b.classList.toggle('active', b.dataset.gfilter === graphFilter));
+                buildD3TacticalGraph();
+            });
+        });
+        container?.querySelectorAll('.jarvis-graph-btn[data-sizeby]').forEach(btn => {
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            newBtn.addEventListener('click', () => {
+                graphSizeBy = newBtn.dataset.sizeby;
+                container?.querySelectorAll('.jarvis-graph-btn[data-sizeby]').forEach(b => b.classList.toggle('active', b.dataset.sizeby === graphSizeBy));
+                buildD3TacticalGraph();
+            });
+        });
     }
 
     // ══════════════════════════════════════════════════
