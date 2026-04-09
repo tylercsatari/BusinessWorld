@@ -2596,447 +2596,215 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
-    // TAB 5: RESOLUTION — kept exactly as-is
+    // TAB 5: RESOLUTION — v2 data model
     // ══════════════════════════════════════════════════
-    let resolutionRegistry = null;
 
-    async function loadResolutionRegistry() {
-        if (resolutionRegistry) return resolutionRegistry;
-        try {
-            const resp = await fetch('./buildings/jarvis/resolution-registry.json');
-            resolutionRegistry = await resp.json();
-            return resolutionRegistry;
-        } catch (e) {
-            console.error('Failed to load resolution registry:', e);
-            return null;
-        }
-    }
+    const SHELF_COLORS = {
+        r0: '#64748b', r_hook: '#06b6d4', r_last5pct: '#22d3ee',
+        r_early: '#a78bfa', r_week1: '#f59e0b', default: '#3b82f6'
+    };
 
     function renderResolution() {
-        loadResolutionRegistry().then(registry => {
-            const el = container?.querySelector('.jarvis-resolution-root');
-            if (!el || !registry) return;
-            el.innerHTML = renderResolutionContent(registry);
-            bindResolutionEvents();
-            setTimeout(() => {
-                const cvs = container?.querySelector('#jarvis-res-coverage-canvas');
-                if (cvs) { cvs.width = cvs.offsetWidth * 2; cvs.height = 440; drawResolutionMap(cvs, registry); }
-            }, 100);
-        });
-        return `<div class="jarvis-resolution-root"><div class="jarvis-loading">Loading resolution registry...</div></div>`;
+        if (!v2Resolutions || !v2Indicators) {
+            loadV2Data().then(() => {
+                const el = container?.querySelector('.jarvis-resolution-root');
+                if (el) { el.innerHTML = renderResolutionV2(); bindResolutionV2Events(); }
+            });
+            return '<div class="jarvis-resolution-root"><div class="jarvis-loading">Loading resolution data...</div></div>';
+        }
+        setTimeout(bindResolutionV2Events, 50);
+        return `<div class="jarvis-resolution-root">${renderResolutionV2()}</div>`;
     }
 
-    function drawResolutionMap(canvas, registry) {
-        const ctx = canvas.getContext('2d');
-        const W = canvas.width, H = canvas.height;
-        ctx.clearRect(0, 0, W, H);
+    function renderResolutionV2() {
+        const shelves = v2Resolutions || [];
+        const indicators = v2Indicators || [];
 
-        const pad = { top: 20, right: 30, bottom: 36, left: 50 };
-        const plotW = W - pad.left - pad.right;
-        const plotH = H - pad.top - pad.bottom;
+        // Separate percentage-based vs time-based shelves
+        const pctShelves = shelves.filter(s => s.start_pct != null && s.end_pct != null).sort((a, b) => a.start_pct - b.start_pct);
+        const timeShelves = shelves.filter(s => s.start_pct == null || s.end_pct == null);
 
-        const statusColor = { active: '#10b981', partial: '#f59e0b', planned: '#4b5563', observed: '#06b6d4' };
+        // Compute gaps between percentage shelves (excluding r0 full-video)
+        const narrowShelves = pctShelves.filter(s => !(s.start_pct === 0 && s.end_pct === 100));
+        const gaps = computeResGaps(narrowShelves);
 
-        ctx.strokeStyle = 'rgba(100,120,180,0.3)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(pad.left, pad.top);
-        ctx.lineTo(pad.left, pad.top + plotH);
-        ctx.lineTo(pad.left + plotW, pad.top + plotH);
-        ctx.stroke();
+        // Coverage: union of narrow shelf ranges (r0 covers everything, so exclude from gap calc)
+        const coveredPct = computeCoverage(narrowShelves);
+        const gapCount = gaps.length;
 
-        const levels = registry.map(r => r.level);
-        const minL = Math.min(...levels), maxL = Math.max(...levels);
-        const rangeL = maxL - minL || 1;
-        ctx.font = '10px system-ui'; ctx.fillStyle = '#64748b'; ctx.textAlign = 'center';
-        for (let i = 0; i <= 5; i++) {
-            const x = pad.left + (i / 5) * plotW;
-            ctx.fillText('R' + i, x, pad.top + plotH + 14);
+        // Stats
+        const shelfCount = shelves.length;
+        const indicatorCount = indicators.length;
+
+        // ── Section 1: Stats row ──
+        const statsHtml = `
+            <div class="jarvis-resv2-stats">
+                <span class="jarvis-resv2-stat"><strong>${shelfCount}</strong> shelves</span>
+                <span class="jarvis-resv2-stat"><strong>${indicatorCount}</strong> indicators mapped</span>
+                <span class="jarvis-resv2-stat"><strong>${coveredPct}%</strong> of video covered</span>
+                <span class="jarvis-resv2-stat">${gapCount > 0 ? `<strong style="color:#f59e0b">${gapCount}</strong> gaps detected` : '<strong style="color:#10b981">0</strong> gaps'}</span>
+            </div>
+        `;
+
+        // ── Section 2: Timeline SVG ──
+        const timelineHtml = renderResTimeline(pctShelves, narrowShelves, gaps);
+
+        // ── Section 3: Shelf cards with indicators ──
+        const allSorted = [...narrowShelves, ...timeShelves];
+        // Add r0 at the end if it exists
+        const r0 = pctShelves.find(s => s.start_pct === 0 && s.end_pct === 100);
+        if (r0 && !allSorted.includes(r0)) allSorted.push(r0);
+
+        let cardsHtml = '';
+        for (let i = 0; i < allSorted.length; i++) {
+            const shelf = allSorted[i];
+            const shelfIndicators = indicators.filter(ind => ind.resolution_id === shelf.id);
+            const color = SHELF_COLORS[shelf.id] || SHELF_COLORS.default;
+            const rangeLabel = (shelf.start_pct != null && shelf.end_pct != null)
+                ? `${shelf.start_pct}% – ${shelf.end_pct}%`
+                : (shelf.start_day != null && shelf.end_day != null)
+                    ? `Days ${shelf.start_day}–${shelf.end_day}`
+                    : shelf.granularity || '';
+
+            cardsHtml += `
+                <div class="jarvis-resv2-shelf" style="border-left:3px solid ${color}">
+                    <div class="jarvis-resv2-shelf-header">
+                        <span class="jarvis-resv2-shelf-label" style="color:${color}">${shelf.label}</span>
+                        <span class="jarvis-resv2-shelf-range">${rangeLabel}</span>
+                        <span class="jarvis-resv2-shelf-count">${shelfIndicators.length} indicator${shelfIndicators.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    ${shelf.description ? `<div class="jarvis-resv2-shelf-desc">${shelf.description}</div>` : ''}
+                    ${shelfIndicators.length > 0 ? `<div class="jarvis-resv2-indicators">${shelfIndicators.map(ind => {
+                        const r = ind.result?.primary_r;
+                        const rVal = r != null ? (r >= 0 ? '+' : '') + r.toFixed(3) : '—';
+                        const rColor = r != null ? (r >= 0 ? '#06b6d4' : '#f87171') : '#64748b';
+                        const layer = ind.layer || '';
+                        return `<div class="jarvis-resv2-ind-card">
+                            <span class="jarvis-resv2-ind-label">${ind.label}</span>
+                            <span class="jarvis-resv2-ind-r" style="color:${rColor}">${rVal}</span>
+                            ${layer ? `<span class="jarvis-resv2-ind-layer">${layer}</span>` : ''}
+                        </div>`;
+                    }).join('')}</div>` : '<div class="jarvis-resv2-no-indicators">No indicators yet</div>'}
+                </div>
+            `;
+
+            // Insert gap warning between consecutive narrow pct shelves
+            if (shelf.start_pct != null && i < allSorted.length - 1) {
+                const next = allSorted[i + 1];
+                if (next.start_pct != null) {
+                    const gapStart = shelf.end_pct;
+                    const gapEnd = next.start_pct;
+                    if (gapEnd > gapStart) {
+                        cardsHtml += `<div class="jarvis-resv2-gap-warning">&#9888; Gap: ${gapStart}%–${gapEnd}% not yet measured (${gapEnd - gapStart}% uncovered)</div>`;
+                    }
+                }
+            }
         }
-        ctx.fillText('Resolution (coarse → fine)', pad.left + plotW / 2, pad.top + plotH + 30);
-
-        ctx.textAlign = 'right';
-        for (let d = 0; d <= 10; d += 2) {
-            const y = pad.top + plotH - (d / 10) * plotH;
-            ctx.fillText(d, pad.left - 8, y + 3);
-        }
-        ctx.save();
-        ctx.translate(12, pad.top + plotH / 2);
-        ctx.rotate(-Math.PI / 2);
-        ctx.textAlign = 'center';
-        ctx.fillText('Depth (signals measured)', 0, 0);
-        ctx.restore();
-
-        const targetY = pad.top + plotH - (4 / 10) * plotH;
-        ctx.setLineDash([6, 4]);
-        ctx.strokeStyle = 'rgba(167,139,250,0.4)';
-        ctx.beginPath();
-        ctx.moveTo(pad.left, targetY);
-        ctx.lineTo(pad.left + plotW, targetY);
-        ctx.stroke();
-        ctx.fillStyle = '#a78bfa'; ctx.textAlign = 'left'; ctx.font = '9px system-ui';
-        ctx.fillText('Research target depth', pad.left + 4, targetY - 4);
-
-        const focusX = pad.left + (3 / rangeL) * plotW;
-        ctx.strokeStyle = 'rgba(6,182,212,0.4)';
-        ctx.beginPath();
-        ctx.moveTo(focusX, pad.top);
-        ctx.lineTo(focusX, pad.top + plotH);
-        ctx.stroke();
-        ctx.fillStyle = '#06b6d4'; ctx.textAlign = 'center';
-        ctx.fillText('Current focus', focusX, pad.top - 6);
-        ctx.setLineDash([]);
-
-        registry.forEach(r => {
-            const ccx = pad.left + ((r.level - minL) / rangeL) * plotW;
-            (r.gaps || []).forEach((_, gi) => {
-                const gapDepth = Math.max(0, r.signals.length - 1 - gi * 0.5);
-                const ccy = pad.top + plotH - (gapDepth / 10) * plotH;
-                const offX = (Math.random() - 0.5) * 16;
-                const offY = (Math.random() - 0.5) * 10 + 12;
-                ctx.beginPath();
-                ctx.arc(ccx + offX, ccy + offY, 3, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(248,113,113,0.35)';
-                ctx.fill();
-            });
-        });
-
-        registry.forEach(r => {
-            const ccx = pad.left + ((r.level - minL) / rangeL) * plotW;
-            const ccy = pad.top + plotH - (r.depth / 10) * plotH;
-            const radius = Math.min(50, Math.max(20, 20 + (r.observationCount / 10)));
-            const color = statusColor[r.status] || statusColor.planned;
-
-            ctx.beginPath();
-            ctx.arc(ccx, ccy, radius + 6, 0, Math.PI * 2);
-            ctx.globalAlpha = 0.15;
-            ctx.fillStyle = color;
-            ctx.fill();
-            ctx.globalAlpha = 1;
-
-            ctx.beginPath();
-            ctx.arc(ccx, ccy, radius, 0, Math.PI * 2);
-            ctx.fillStyle = color + '33';
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.fillStyle = '#e2e8f0';
-            ctx.font = 'bold 12px system-ui';
-            ctx.textAlign = 'center';
-            ctx.fillText('R' + r.level, ccx, ccy + 4);
-        });
-    }
-
-    function renderResolutionContent(registry) {
-        const maxDepth = 10;
-
-        const gridCells = [];
-        for (let d = maxDepth; d >= 0; d--) {
-            const row = registry.map(r => {
-                const filled = r.signals.length > d ? true : false;
-                return { level: r.level, depth: d, filled, status: r.status };
-            });
-            gridCells.push({ depth: d, cells: row });
-        }
-
-        const loopStatusText = {
-            0: `Running — ${registry.find(r=>r.level===0)?.signals.length||0} signals active, R²=0.147. Hypothesis queue: 6 experiments pending`,
-            1: `Running — ${registry.find(r=>r.level===1)?.signals.length||0} signals active (Zeigarnik text, visual, type). Gap: body segment analysis`,
-            3: `Partial — ${registry.find(r=>r.level===3)?.signals.length||0} signals scored (vz_score, z_score). Gaps: audio layer, first-frame visual`,
-        };
-        const defaultLoopStatus = (r) => `Planned — no signals scored yet. Priority: ${r.gaps[0] || 'TBD'} (R${r.level})`;
-
-        const loopStepByStatus = { active: 3, partial: 2, planned: 0 };
-        const loopSteps = ['Observe', 'Hypothesize', 'Score', 'Experiment', 'Update'];
-
-        const loopLevels = registry.filter(r => r.status === 'active' || r.status === 'partial');
 
         return `
-            <div class="jarvis-res-map-section">
-                <h3 class="jarvis-res-title">Resolution Coverage Map</h3>
-                <p class="jarvis-res-subtitle">The resolution framework defines the complete picture. Filled cells = signals measured. Empty cells = known gaps. The research loop targets empty cells at priority resolution levels.</p>
-                <canvas id="jarvis-res-coverage-canvas" width="800" height="220" style="width:100%;height:220px;border-radius:8px;background:rgba(30,30,50,0.5);border:1px solid rgba(100,100,200,0.15);"></canvas>
-            </div>
-
-            <div class="jarvis-res-header">
-                <h3 class="jarvis-res-title">Analysis Resolution Registry</h3>
-                <p class="jarvis-res-subtitle">Tracking the depth and granularity of what we know. Each row unlocks higher precision &mdash; but resolution is only defined relative to what came before.</p>
-            </div>
-
-            <div class="jarvis-res-tree">
-                ${registry.map((r, i) => {
-                    const statusClass = r.status === 'active' ? 'active' : r.status === 'partial' ? 'partial' : r.status === 'observed' ? 'observed' : 'planned';
-                    return `<div class="jarvis-res-card-wrapper">
-                        <div class="jarvis-res-timeline">
-                            <div class="jarvis-res-badge-level">R${r.level}</div>
-                            ${i < registry.length - 1 ? '<div class="jarvis-res-timeline-line"></div>' : ''}
-                        </div>
-                        <div class="jarvis-res-card jarvis-res-${statusClass}">
-                            <div class="jarvis-res-card-top">
-                                <h4 class="jarvis-res-card-title">${r.name}</h4>
-                                <span class="jarvis-res-status-badge jarvis-res-status-${statusClass}">${r.status}</span>
-                            </div>
-                            <div class="jarvis-res-unit">Unit of analysis: <strong>${r.unit}</strong></div>
-                            <span class="jarvis-res-depth-badge">Depth ${r.depth}</span>
-                            ${r.signals.length > 0 ? `<div class="jarvis-res-signals">${r.signals.map(s => `<span class="jarvis-res-signal-chip">${s}</span>`).join('')}</div>` : ''}
-                            <div class="jarvis-res-finding"><em>${r.finding}</em></div>
-                            ${r.gaps.length > 0 ? `<div class="jarvis-res-gaps-section">
-                                <div class="jarvis-res-gaps-label">Known gaps at this resolution:</div>
-                                <div class="jarvis-res-gaps">${r.gaps.map(g => `<span class="jarvis-res-gap-chip">${g}</span>`).join('')}</div>
-                            </div>` : ''}
-                            <div class="jarvis-res-obs">n=${r.observationCount} observations</div>
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>
-
-            <div class="jarvis-res-grid-section">
-                <h3 class="jarvis-res-grid-title">Depth &times; Resolution Grid</h3>
-                <div class="jarvis-res-grid">
-                    <div class="jarvis-res-grid-row jarvis-res-grid-header-row">
-                        <div class="jarvis-res-grid-label"></div>
-                        ${registry.map(r => `<div class="jarvis-res-grid-col-label">R${r.level}</div>`).join('')}
-                    </div>
-                    ${gridCells.map(row => `<div class="jarvis-res-grid-row">
-                        <div class="jarvis-res-grid-label">${row.depth}</div>
-                        ${row.cells.map(c => {
-                            const filled = c.filled;
-                            const cls = filled ? `jarvis-res-grid-cell-filled jarvis-res-grid-${c.status}` : 'jarvis-res-grid-cell-empty';
-                            return `<div class="jarvis-res-grid-cell ${cls}"></div>`;
-                        }).join('')}
-                    </div>`).join('')}
-                    <div class="jarvis-res-grid-row jarvis-res-grid-footer-row">
-                        <div class="jarvis-res-grid-label"></div>
-                        ${registry.map(r => `<div class="jarvis-res-grid-col-label">${r.name}</div>`).join('')}
-                    </div>
-                </div>
-            </div>
-
-            <div class="jarvis-res-loops-section">
-                <h3 class="jarvis-res-title">Research Loops by Resolution Level</h3>
-                <p class="jarvis-res-subtitle">Each resolution level has its own autonomous research loop. Multiple loops can run in parallel &mdash; each improves depth at its level independently.</p>
-                <div class="jarvis-res-loops-grid">
-                    ${loopLevels.map(r => {
-                        const sc = r.status === 'active' ? 'active' : r.status === 'partial' ? 'partial' : 'planned';
-                        const statusCol = { active: '#10b981', partial: '#f59e0b', planned: '#4b5563' }[sc];
-                        const activeStep = loopStepByStatus[r.status] ?? 0;
-                        const statusTxt = loopStatusText[r.level] || defaultLoopStatus(r);
-                        return `<div class="jarvis-res-loop-card" style="border-left-color:${statusCol}">
-                            <div class="jarvis-res-loop-header">
-                                <span class="jarvis-res-badge-level" style="width:28px;height:28px;font-size:10px;">R${r.level}</span>
-                                <span class="jarvis-res-loop-name">${r.name}</span>
-                                <span class="jarvis-res-loop-dot" style="background:${statusCol}"></span>
-                            </div>
-                            <div class="jarvis-res-loop-metrics">
-                                <span>Depth: <strong>${r.depth}</strong> signals</span>
-                                <span>Gaps: <strong>${r.gaps.length}</strong> known</span>
-                                <span>Observations: <strong>${r.observationCount}</strong></span>
-                            </div>
-                            <div class="jarvis-res-mini-loop">
-                                ${loopSteps.map((s, si) => `<span class="jarvis-res-mini-step${si === activeStep ? ' jarvis-res-mini-step-active' : ''}">${s}</span>${si < loopSteps.length - 1 ? '<span class="jarvis-res-mini-arrow">→</span>' : ''}`).join('')}
-                            </div>
-                            <div class="jarvis-res-loop-status">${statusTxt}</div>
-                        </div>`;
-                    }).join('')}
-                </div>
-            </div>
-
-            <div class="jarvis-classify-section">
-                <h3 class="jarvis-classify-title">Auto-Classify Observation</h3>
-                <p class="jarvis-classify-sub">Describe what you noticed and AI will place it in the resolution tree.</p>
-                <div class="jarvis-classify-form">
-                    <div class="jarvis-res-log-field">
-                        <label>Describe your observation</label>
-                        <textarea id="jarvis-classify-text" rows="3" placeholder="e.g. I noticed videos with a surprising visual in the first frame get significantly higher keep rates"></textarea>
-                    </div>
-                    <button class="jarvis-classify-btn" id="jarvis-classify-submit">Classify &rarr;</button>
-                </div>
-                <div id="jarvis-classify-result" class="jarvis-classify-result" style="display:none;"></div>
-            </div>
-
-            <div class="jarvis-res-log-section">
-                <h3 class="jarvis-res-log-title">Log New Observation</h3>
-                <div class="jarvis-res-log-form">
-                    <div class="jarvis-res-log-field">
-                        <label>What did you notice?</label>
-                        <textarea id="jarvis-res-obs-text" rows="3" placeholder="Describe the observation..."></textarea>
-                    </div>
-                    <div class="jarvis-res-log-row">
-                        <div class="jarvis-res-log-field">
-                            <label>Resolution Level</label>
-                            <select id="jarvis-res-obs-level">
-                                ${buildResolutionOptions(registry)}
-                            </select>
-                        </div>
-                        <div class="jarvis-res-log-field">
-                            <label>Tags</label>
-                            <input type="text" id="jarvis-res-obs-tags" placeholder="comma-separated signal tags" />
-                        </div>
-                        <button class="jarvis-res-log-btn" id="jarvis-res-submit">Submit</button>
-                    </div>
-                    <div id="jarvis-res-confirm" class="jarvis-res-confirm" style="display:none;"></div>
-                </div>
+            <div class="jarvis-resv2-container">
+                <h3 class="jarvis-res-title">Resolution Shelves</h3>
+                <p class="jarvis-res-subtitle">Where indicators live on the video timeline. Gaps highlight uncovered regions.</p>
+                ${statsHtml}
+                ${timelineHtml}
+                <div class="jarvis-resv2-shelves">${cardsHtml}</div>
             </div>
         `;
     }
 
-    function buildResolutionOptions(registry) {
-        const sorted = [...registry].sort((a, b) => a.level - b.level);
-        const opts = [];
-        for (let i = 0; i < sorted.length; i++) {
-            const r = sorted[i];
-            opts.push(`<option value="R${r.level}">R${r.level} - ${r.name}</option>`);
-            if (i < sorted.length - 1) {
-                const next = sorted[i + 1];
-                opts.push(`<option value="between:${r.id}:${next.id}">Between R${r.level} and R${next.level}</option>`);
+    function renderResTimeline(pctShelves, narrowShelves, gaps) {
+        const barH = 40;
+        const labelH = 20;
+        const totalH = barH + labelH + 10;
+
+        let rects = '';
+        let labels = '';
+
+        // Background bar
+        rects += `<rect x="0" y="0" width="100%" height="${barH}" rx="4" fill="#1e293b"/>`;
+
+        // Gap regions
+        for (const g of gaps) {
+            const x = g.start + '%';
+            const w = (g.end - g.start) + '%';
+            rects += `<rect x="${x}" y="0" width="${w}" height="${barH}" fill="#374151" opacity="0.7"/>`;
+            const mid = g.start + (g.end - g.start) / 2;
+            if (g.end - g.start > 8) {
+                labels += `<text x="${mid}%" y="${barH + labelH - 4}" text-anchor="middle" fill="#f59e0b" font-size="10" font-family="system-ui">&#9888; ${(g.end - g.start)}% gap</text>`;
             }
         }
-        const last = sorted[sorted.length - 1];
-        opts.push(`<option value="new_finer">New resolution (finer than R${last.level})</option>`);
-        return opts.join('');
-    }
 
-    function computeFractionalLevel(lowerLevel, upperLevel, registry) {
-        const mid = (lowerLevel + upperLevel) / 2;
-        const exists = registry.some(r => r.level === mid);
-        if (!exists) return mid;
-        return computeFractionalLevel(lowerLevel, mid, registry);
-    }
-
-    function insertFractionalLevel(lowerId, upperId, obsText, tags, registry) {
-        const lower = registry.find(r => r.id === lowerId);
-        const upper = registry.find(r => r.id === upperId);
-        if (!lower || !upper) return null;
-
-        const newLevel = computeFractionalLevel(lower.level, upper.level, registry);
-        const newId = `r${newLevel}`;
-        const today = new Date().toISOString().split('T')[0];
-        const tagArr = tags.length > 0 ? tags : [obsText.slice(0, 40)];
-
-        const entry = {
-            id: newId,
-            level: newLevel,
-            name: tagArr.join(', '),
-            unit: 'observation',
-            description: obsText,
-            parent: lowerId,
-            depth: tagArr.length,
-            signals: tagArr,
-            finding: 'Newly logged observation — run through Jarvis pipeline.',
-            gaps: [],
-            status: 'observed',
-            unlockedAt: today,
-            observationCount: 1
-        };
-
-        registry.push(entry);
-        registry.sort((a, b) => a.level - b.level);
-        return entry;
-    }
-
-    function reRenderResolution() {
-        const el = container?.querySelector('.jarvis-resolution-root');
-        if (!el || !resolutionRegistry) return;
-        el.innerHTML = renderResolutionContent(resolutionRegistry);
-        bindResolutionEvents();
-        setTimeout(() => {
-            const cvs = container?.querySelector('#jarvis-res-coverage-canvas');
-            if (cvs) { cvs.width = cvs.offsetWidth * 2; cvs.height = 440; drawResolutionMap(cvs, resolutionRegistry); }
-        }, 100);
-    }
-
-    function bindResolutionEvents() {
-        const submitBtn = container?.querySelector('#jarvis-res-submit');
-        if (submitBtn) {
-            submitBtn.addEventListener('click', () => {
-                const text = document.getElementById('jarvis-res-obs-text')?.value || '';
-                const levelVal = document.getElementById('jarvis-res-obs-level')?.value || '';
-                const tagsRaw = document.getElementById('jarvis-res-obs-tags')?.value || '';
-                const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
-                const confirmEl = document.getElementById('jarvis-res-confirm');
-
-                if (levelVal.startsWith('between:')) {
-                    const parts = levelVal.split(':');
-                    const entry = insertFractionalLevel(parts[1], parts[2], text, tags, resolutionRegistry);
-                    if (entry && confirmEl) {
-                        confirmEl.style.display = 'block';
-                        confirmEl.textContent = `Created R${entry.level} — "${entry.name}". Re-rendering tree...`;
-                        setTimeout(() => reRenderResolution(), 600);
-                    }
-                } else {
-                    console.log('Jarvis Observation:', { text, level: levelVal, tags });
-                    if (confirmEl) {
-                        confirmEl.style.display = 'block';
-                        confirmEl.textContent = 'Observation logged. Run through Jarvis pipeline to extract experiments.';
-                    }
+        // Shelf segments
+        for (const s of pctShelves) {
+            const color = SHELF_COLORS[s.id] || SHELF_COLORS.default;
+            const x = s.start_pct + '%';
+            const w = (s.end_pct - s.start_pct) + '%';
+            const isFullVideo = s.start_pct === 0 && s.end_pct === 100;
+            if (isFullVideo) {
+                // Draw as outline behind everything
+                rects = `<rect x="0" y="0" width="100%" height="${barH}" rx="4" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4,3"/>` + rects;
+            } else {
+                rects += `<rect x="${x}" y="2" width="${w}" height="${barH - 4}" rx="3" fill="${color}" opacity="0.7"/>`;
+                // Label inside if wide enough
+                const span = s.end_pct - s.start_pct;
+                if (span >= 8) {
+                    const mid = s.start_pct + span / 2;
+                    rects += `<text x="${mid}%" y="${barH / 2 + 4}" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold" font-family="system-ui">${s.label}</text>`;
                 }
-            });
+            }
         }
 
-        const classifyBtn = container?.querySelector('#jarvis-classify-submit');
-        if (classifyBtn) {
-            classifyBtn.addEventListener('click', async () => {
-                const text = document.getElementById('jarvis-classify-text')?.value || '';
-                const resultDiv = document.getElementById('jarvis-classify-result');
-                if (!text.trim() || !resultDiv) return;
-
-                resultDiv.style.display = 'block';
-                resultDiv.innerHTML = '<div class="jarvis-loading">Classifying observation...</div>';
-
-                try {
-                    const resp = await fetch('/api/jarvis/classify', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ observation: text, registry: resolutionRegistry })
-                    });
-                    const data = await resp.json();
-                    if (data.error) throw new Error(data.error);
-
-                    const matched = resolutionRegistry.find(r => r.id === data.matchedLevel);
-                    const matchLabel = matched ? `R${matched.level} - ${matched.name}` : data.matchedLevel;
-                    const betweenHtml = data.isBetween
-                        ? `<div class="jarvis-classify-between">Between <strong>${data.betweenLower}</strong> and <strong>${data.betweenUpper}</strong></div>`
-                        : '';
-                    const signalChips = (data.signals || []).map(s => `<span class="jarvis-res-signal-chip">${s}</span>`).join('');
-
-                    resultDiv.innerHTML = `
-                        <div class="jarvis-classify-match">
-                            <span class="jarvis-classify-match-label">Matched:</span>
-                            <strong>${matchLabel}</strong>
-                        </div>
-                        ${betweenHtml}
-                        <div class="jarvis-classify-reasoning">${data.reasoning || ''}</div>
-                        ${signalChips ? `<div class="jarvis-res-signals" style="margin-top:8px">${signalChips}</div>` : ''}
-                        <div class="jarvis-classify-actions">
-                            <button class="jarvis-res-log-btn jarvis-classify-log" data-level="${data.matchedLevel}">Log at this level</button>
-                            ${data.isBetween ? `<button class="jarvis-res-log-btn jarvis-classify-fractional" data-lower="${data.betweenLower}" data-upper="${data.betweenUpper}">Create fractional level</button>` : ''}
-                        </div>
-                    `;
-
-                    const logBtn = resultDiv.querySelector('.jarvis-classify-log');
-                    if (logBtn) {
-                        logBtn.addEventListener('click', () => {
-                            console.log('Jarvis Classified Observation:', { text, level: data.matchedLevel, signals: data.signals });
-                            resultDiv.innerHTML = '<div class="jarvis-res-confirm">Observation logged at ' + matchLabel + '.</div>';
-                        });
-                    }
-                    const fracBtn = resultDiv.querySelector('.jarvis-classify-fractional');
-                    if (fracBtn) {
-                        fracBtn.addEventListener('click', () => {
-                            const entry = insertFractionalLevel(data.betweenLower, data.betweenUpper, text, data.signals || [], resolutionRegistry);
-                            if (entry) {
-                                resultDiv.innerHTML = `<div class="jarvis-res-confirm">Created R${entry.level} — "${entry.name}". Re-rendering...</div>`;
-                                setTimeout(() => reRenderResolution(), 600);
-                            }
-                        });
-                    }
-                } catch (e) {
-                    resultDiv.innerHTML = `<div class="jarvis-error">Classification failed: ${e.message}</div>`;
-                }
-            });
+        // Percentage axis labels
+        let axis = '';
+        for (let p = 0; p <= 100; p += 25) {
+            axis += `<text x="${p}%" y="${barH + labelH + 8}" text-anchor="middle" fill="#64748b" font-size="9" font-family="system-ui">${p}%</text>`;
         }
+
+        return `
+            <div class="jarvis-resv2-timeline">
+                <svg width="100%" height="${totalH + 10}" viewBox="0 0 100 ${totalH + 10}" preserveAspectRatio="none" style="overflow:visible">
+                    ${rects}
+                    ${labels}
+                    ${axis}
+                </svg>
+            </div>
+        `;
+    }
+
+    function computeResGaps(narrowShelves) {
+        if (narrowShelves.length === 0) return [{ start: 0, end: 100 }];
+        const sorted = [...narrowShelves].sort((a, b) => a.start_pct - b.start_pct);
+        const gaps = [];
+        let cursor = 0;
+        for (const s of sorted) {
+            if (s.start_pct > cursor) {
+                gaps.push({ start: cursor, end: s.start_pct });
+            }
+            cursor = Math.max(cursor, s.end_pct);
+        }
+        if (cursor < 100) {
+            gaps.push({ start: cursor, end: 100 });
+        }
+        return gaps;
+    }
+
+    function computeCoverage(narrowShelves) {
+        if (narrowShelves.length === 0) return 0;
+        const sorted = [...narrowShelves].sort((a, b) => a.start_pct - b.start_pct);
+        let covered = 0;
+        let cursor = 0;
+        for (const s of sorted) {
+            const start = Math.max(s.start_pct, cursor);
+            if (s.end_pct > start) {
+                covered += s.end_pct - start;
+                cursor = s.end_pct;
+            }
+        }
+        return Math.round(covered);
+    }
+
+    function bindResolutionV2Events() {
+        // Minimal — no interactions needed yet
     }
 
     // ══════════════════════════════════════════════════
