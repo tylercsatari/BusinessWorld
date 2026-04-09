@@ -704,9 +704,15 @@ def get_resolution_for_key(key):
     if key in INDICATOR_RESOLUTION_MAP:
         return INDICATOR_RESOLUTION_MAP[key]
 
-    # retention_pct_N → r0 (single point, whole-video scalar)
-    if re.match(r'^retention_pct_\d+$', key):
-        return ('r0', 0, 100, None, None)
+    # retention_pct_N → point shelf at N%
+    m = re.match(r'^retention_pct_(\d+)$', key)
+    if m:
+        n = int(m.group(1))
+        if n <= 10:
+            return ('r_hook', 0, 10, None, None)
+        if n >= 95:
+            return ('r_last5pct', 95, 100, None, None)
+        return (f'r_pct_{n}_{n}', n, n, None, None)
 
     # retention_mean/slope/volatility windows
     m = re.match(r'^retention_(?:mean|slope|volatility)_(\d+)_(\d+)$', key)
@@ -714,6 +720,10 @@ def get_resolution_for_key(key):
         lo, hi = int(m.group(1)), int(m.group(2))
         if lo == 0 and hi == 100:
             return ('r0', 0, 100, None, None)
+        if hi <= 10:
+            return ('r_hook', 0, 10, None, None)
+        if lo >= 95:
+            return ('r_last5pct', 95, 100, None, None)
         res_id = f"r_pct_{lo}_{hi}"
         return (res_id, lo, hi, None, None)
 
@@ -1189,9 +1199,14 @@ def step_resolve(key, resolutions):
         if not defn:
             _, sp, ep, sd, ed = res_info
             if sp is not None and ep is not None:
-                label = f"{sp}-{ep}% of Video"
-                desc = f"Retention window from {sp}% to {ep}% of video."
-                gran = "whole" if (sp == 0 and ep == 100) else "video_window"
+                if sp == ep:
+                    label = f"{sp}% Point"
+                    desc = f"Single-point measurement at {sp}% through the video."
+                    gran = "video_window"
+                else:
+                    label = f"{sp}-{ep}% of Video"
+                    desc = f"Retention window from {sp}% to {ep}% of video."
+                    gran = "whole" if (sp == 0 and ep == 100) else "video_window"
             elif sd is not None and ed is not None:
                 label = f"Days {sd}-{ed}"
                 desc = f"View data from day {sd} to day {ed} after upload."
