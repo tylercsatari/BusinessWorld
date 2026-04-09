@@ -754,6 +754,8 @@ const JarvisUI = (() => {
     let currentMergeThreshold = 0;
     let graphFilter = 'all';
     let graphSizeBy = 'r2';
+    let selectedNodeKey = null;
+    let nodeClickCount = {};
 
     function isSignalKept(key) {
         if (!cachedIndicatorRegistry) return false;
@@ -809,6 +811,8 @@ const JarvisUI = (() => {
                 <div id="jarvis-d3-graph" style="width:100%;height:520px;overflow:hidden"></div>
                 <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
+            <div id="jarvis-node-label" style="display:none;position:fixed;background:#1e293b;color:#e2e8f0;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;pointer-events:none;z-index:10000;border:1px solid #334155;"></div>
+            <div id="jarvis-node-popup" style="display:none;position:fixed;background:#0f172a;color:#cbd5e1;padding:16px 18px;border-radius:10px;font-size:12px;z-index:10001;border:1px solid #1e293b;max-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.6);"></div>
             <div style="display:flex;align-items:center;gap:10px;padding:4px 0 10px;font-size:11px;color:var(--j-muted)">
                 <label for="jarvis-merge-slider">Merge threshold:</label>
                 <input type="range" id="jarvis-merge-slider" min="0" max="100" value="${currentMergeThreshold}" style="width:140px" />
@@ -821,6 +825,7 @@ const JarvisUI = (() => {
                         `<button class="jarvis-signal-filter-btn${tacticalFilter === f ? ' active' : ''}" data-filter="${f}">${f === 'all' ? 'All' : f === 'in-model' ? 'In Model' : f === 'kept' ? 'Kept' : f === 'pre-upload' ? 'Pre-upload' : 'Post-upload'}</button>`
                     ).join('')}
                 </div>
+                <div style="font-size:10px;color:#64748b;padding:2px 0 6px;cursor:help" title="Strength = how strongly this indicator predicts the outcome. Range: 0 to 1. Higher = stronger prediction.">\u2139\ufe0f Strength = prediction power (hover for info)</div>
                 <div class="jarvis-signal-list" id="jarvis-signal-list">
                     ${renderSignalList()}
                 </div>
@@ -934,6 +939,10 @@ const JarvisUI = (() => {
         return cachedIndicatorRegistry.indicators;
     }
 
+    function humanizeKey(key) {
+        return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
     function renderSignalList() {
         const signals = getRegistrySignals();
         const search = tacticalSearch.toLowerCase();
@@ -943,17 +952,18 @@ const JarvisUI = (() => {
             if (tacticalFilter === 'post-upload' && sig.layer !== 'post') return false;
             if (tacticalFilter === 'in-model' && !isSignalInModel(sig.key)) return false;
             if (tacticalFilter === 'kept' && !isSignalKept(sig.key)) return false;
-            if (search && !sig.label.toLowerCase().includes(search) && !sig.key.toLowerCase().includes(search)) return false;
+            if (search && !(sig.label || '').toLowerCase().includes(search) && !sig.key.toLowerCase().includes(search)) return false;
             return true;
         });
 
         if (!filtered.length) return '<div style="color:var(--j-muted);padding:12px;font-size:12px;">No signals match your search.</div>';
 
-        // Sort by |r_partial| descending
+        // Sort by |r_partial| descending, limit 200
         filtered.sort((a, b) => Math.abs(b.r_partial || 0) - Math.abs(a.r_partial || 0));
+        const capped = filtered.slice(0, 200);
 
         // Apply merge threshold
-        const merged = applyMergeThreshold(filtered, currentMergeThreshold);
+        const merged = applyMergeThreshold(capped, currentMergeThreshold);
 
         return merged.map(sig => {
             const color = sig.layer === 'pre' ? '#06b6d4' : '#a78bfa';
@@ -962,19 +972,18 @@ const JarvisUI = (() => {
             const resBg = { R0: 'rgba(100,116,139,0.15)', R1: 'rgba(59,130,246,0.15)', R2: 'rgba(168,85,247,0.15)', R3: 'rgba(236,72,153,0.15)' };
             const resColor = { R0: '#64748b', R1: '#3b82f6', R2: '#a855f7', R3: '#ec4899' };
             const isExpanded = tacticalExpandedSignal === sig.key;
-            const rDisplay = sig.r_partial !== null ? sig.r_partial.toFixed(3) : '';
-            const rBar = sig.r_partial !== null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(sig.r_partial) * 100, 100)}%;background:${color}"></div></div>` : '';
+            const label = sig.label || humanizeKey(sig.key);
+            const strengthVal = sig.r_partial != null ? Math.abs(sig.r_partial).toFixed(2) : '';
+            const rBar = sig.r_partial != null ? `<div class="jarvis-signal-rbar"><div class="jarvis-signal-rbar-fill" style="width:${Math.min(Math.abs(sig.r_partial) * 100, 100)}%;background:${color}"></div></div>` : '';
             const clusterBadge = sig._clusterCount > 1 ? `<span style="font-size:9px;background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:8px;color:var(--j-muted)">+${sig._clusterCount - 1}</span>` : '';
 
             return `<div class="jarvis-signal-row-wrapper">
                 <div class="jarvis-signal-row${isExpanded ? ' expanded' : ''}" data-signal-key="${sig.key}">
                     <span class="jarvis-signal-dot" style="background:${color}"></span>
-                    <span class="jarvis-signal-name">${sig.label}</span>
+                    <span class="jarvis-signal-name">${label}</span>
                     <span class="jarvis-signal-type-badge" style="background:${layerBg};color:${color}">${layerLabel}</span>
-                    <span class="jarvis-signal-type-badge" style="background:${resBg[sig.resolution] || resBg.R0};color:${resColor[sig.resolution] || resColor.R0};font-size:9px">${sig.resolution || 'R0'}</span>
-                    <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,0.08);font-size:8px;color:var(--j-muted)">${sig.depth || 1}</span>
                     ${clusterBadge}
-                    ${rDisplay ? `<span style="font-family:'SF Mono',monospace;font-size:10px;color:var(--j-muted);white-space:nowrap">r=${rDisplay}</span>` : ''}
+                    ${strengthVal ? `<span style="font-family:'SF Mono',monospace;font-size:10px;color:var(--j-muted);white-space:nowrap">Strength: ${strengthVal}</span>` : ''}
                     ${rBar}
                 </div>
                 ${isExpanded ? renderSignalDetail(sig) : ''}
@@ -1025,7 +1034,7 @@ const JarvisUI = (() => {
         return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
             <div class="jarvis-signal-detail-name">${sig.label}</div>
             <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-                ${sig.r_partial !== null ? `<span style="font-family:'SF Mono',monospace;font-size:16px;font-weight:700;color:${color}">r_partial = ${sig.r_partial.toFixed(3)}</span>` : ''}
+                ${sig.r_partial != null ? `<span style="font-family:'SF Mono',monospace;font-size:16px;font-weight:700;color:${color}">Strength: ${Math.abs(sig.r_partial).toFixed(3)}</span>` : ''}
                 <span class="jarvis-signal-type-badge" style="background:rgba(${sig.layer === 'pre' ? '6,182,212' : '167,139,250'},0.15);color:${color}">${layerLabel}</span>
                 <span class="jarvis-signal-type-badge" style="background:rgba(100,116,139,0.15);color:${resBadgeColor[sig.resolution] || '#64748b'}">${sig.resolution || 'R0'}</span>
                 <span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--j-muted)">Depth: <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.1);font-weight:700">${sig.depth || 1}</span></span>
@@ -1112,6 +1121,36 @@ const JarvisUI = (() => {
                 bindSignalRowClicks();
             });
         });
+    }
+
+    function showNodePopup(d, event) {
+        const popup = document.getElementById('jarvis-node-popup');
+        if (!popup) return;
+        const label = d.label || humanizeKey(d.key);
+        const layer = d.layer === 'pre' ? 'Pre-upload (you control this before filming)' : d.layer === 'post' ? 'Post-upload (measured by YouTube after upload)' : 'Target metric';
+        const strength = d.r_partial != null ? Math.abs(d.r_partial).toFixed(2) : 'unknown';
+        const depth = d.depth || 1;
+        const notes = d.notes || 'No additional context available.';
+        const reg = cachedIndicatorRegistry;
+        const connEdges = reg ? (reg.edges || []).filter(e => e.from === d.key || e.to === d.key) : [];
+        const connCount = connEdges.length;
+        const truncNotes = notes.length > 300 ? notes.slice(0, 300) + '\u2026' : notes;
+        popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
+            + '<div style="font-size:14px;font-weight:700;color:#f1f5f9;flex:1">' + label + '</div>'
+            + '<button onclick="document.getElementById(\'jarvis-node-popup\').style.display=\'none\'" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 0 0 8px">\u00d7</button>'
+            + '</div>'
+            + '<div style="margin-bottom:8px;font-size:11px;color:#94a3b8">' + layer + '</div>'
+            + '<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">'
+            + '<span><strong style="color:#f1f5f9">Strength:</strong> ' + strength + '</span>'
+            + '<span><strong style="color:#f1f5f9">Connections:</strong> ' + connCount + '</span>'
+            + '<span><strong style="color:#f1f5f9">Depth:</strong> ' + depth + '</span>'
+            + '</div>'
+            + '<div style="font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #1e293b;padding-top:10px">' + truncNotes + '</div>';
+        popup.style.display = 'block';
+        const x = Math.min(event.clientX + 10, window.innerWidth - 300);
+        const y = Math.min(event.clientY + 10, window.innerHeight - 250);
+        popup.style.left = x + 'px';
+        popup.style.top = y + 'px';
     }
 
     function buildD3TacticalGraph() {
@@ -1367,8 +1406,8 @@ const JarvisUI = (() => {
                     const tk = typeof l.target === 'object' ? l.target.key : l.target;
                     return sk === d.key || tk === d.key;
                 }).length;
-                const rText = d.r_partial != null ? `<br><span class="jarvis-tt-dim">r_partial:</span> ${Number(d.r_partial).toFixed(3)}` : '';
-                tooltip.innerHTML = `<strong>${d.label || d.key}</strong>${rText}<br><span class="jarvis-tt-dim">connections:</span> ${connCt}`;
+                const rText = d.r_partial != null ? `<br><span class="jarvis-tt-dim">Strength:</span> ${Math.abs(Number(d.r_partial)).toFixed(3)}` : '';
+                tooltip.innerHTML = `<strong>${d.label || d.key}</strong>${rText}<br><span class="jarvis-tt-dim">Connections:</span> ${connCt}`;
             })
             .on('mouseout', () => {
                 if (tooltip) tooltip.style.display = 'none';
@@ -1380,19 +1419,34 @@ const JarvisUI = (() => {
             })
             .on('click', (event, d) => {
                 event.stopPropagation();
-                tacticalExpandedSignal = d.key;
-                const list = container?.querySelector('#jarvis-signal-list');
-                if (list) {
-                    list.innerHTML = renderSignalList();
-                    bindSignalRowClicks();
-                    const row = list.querySelector('[data-signal-key="' + d.key + '"]');
-                    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                nodeClickCount[d.key] = (nodeClickCount[d.key] || 0) + 1;
+                if (nodeClickCount[d.key] === 1) {
+                    selectedNodeKey = d.key;
+                    const label = document.getElementById('jarvis-node-label');
+                    if (label) {
+                        label.textContent = d.label || humanizeKey(d.key);
+                        label.style.display = 'block';
+                        label.style.left = (event.clientX) + 'px';
+                        label.style.top = (event.clientY - 30) + 'px';
+                    }
+                    setTimeout(() => { nodeClickCount[d.key] = 0; }, 1500);
+                } else if (nodeClickCount[d.key] >= 2) {
+                    nodeClickCount[d.key] = 0;
+                    const label = document.getElementById('jarvis-node-label');
+                    if (label) label.style.display = 'none';
+                    showNodePopup(d, event);
                 }
             });
 
-        // Click on SVG background clears selection
+        // Click on SVG background clears selection + popup
         svg.on('click', (event) => {
             if (event.target.tagName === 'svg' || event.target.tagName === 'rect') {
+                selectedNodeKey = null;
+                nodeClickCount = {};
+                const nlabel = document.getElementById('jarvis-node-label');
+                if (nlabel) nlabel.style.display = 'none';
+                const npopup = document.getElementById('jarvis-node-popup');
+                if (npopup) npopup.style.display = 'none';
                 tacticalExpandedSignal = null;
                 const list = container?.querySelector('#jarvis-signal-list');
                 if (list) {
