@@ -2242,7 +2242,8 @@ const JarvisUI = (() => {
                 </div>
                 <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
                     <div style="font-size:24px;font-weight:700;color:#f59e0b">${coveredPct}%</div>
-                    <div style="font-size:11px;color:#64748b">Video Covered</div>
+                    <div style="font-size:11px;color:#64748b">Timeline Mapped</div>
+                    <div style="font-size:9px;color:#475569;margin-top:2px">(sub-video shelves)</div>
                 </div>
             </div>
 
@@ -2319,7 +2320,7 @@ const JarvisUI = (() => {
 
     const SHELF_COLORS = {
         r0: '#64748b', r_hook: '#06b6d4', r_last5pct: '#22d3ee',
-        r_early: '#a78bfa', r_week1: '#f59e0b', default: '#3b82f6'
+        r_early: '#a78bfa', r_week1: '#f59e0b', r_week1_2: '#f59e0b', default: '#3b82f6'
     };
 
     function renderResolution() {
@@ -2334,57 +2335,217 @@ const JarvisUI = (() => {
         return `<div class="jarvis-resolution-root">${renderResolutionV2()}</div>`;
     }
 
-    function renderResolutionV2() {
-        const shelves = v2Resolutions || [];
-        const indicators = v2Indicators || [];
+    function groupResolutionsByDimension(shelves, indicators) {
+        const groups = [];
 
-        // Separate percentage-based vs time-based shelves
-        const pctShelves = shelves.filter(s => s.start_pct != null && s.end_pct != null).sort((a, b) => a.start_pct - b.start_pct);
-        const timeShelves = shelves.filter(s => s.start_pct == null || s.end_pct == null);
+        // Video percentage shelves (has start_pct and end_pct)
+        const pctShelves = shelves.filter(s => s.start_pct != null && s.end_pct != null);
+        if (pctShelves.length > 0) {
+            groups.push({
+                type: 'video_pct',
+                label: 'Video Timeline (%)',
+                description: 'Indicators measured at a percentage position or window of the video',
+                icon: '\u{1F4F9}',
+                shelves: pctShelves.sort((a, b) => a.start_pct - b.start_pct),
+                unit: '%',
+                min: 0,
+                max: 100,
+            });
+        }
 
-        // Compute gaps between percentage shelves (excluding r0 full-video)
-        const narrowShelves = pctShelves.filter(s => !(s.start_pct === 0 && s.end_pct === 100));
-        const gaps = computeResGaps(narrowShelves);
+        // Second-based shelves (has start_s or end_s)
+        const sShelves = shelves.filter(s => s.start_s != null || s.end_s != null);
+        if (sShelves.length > 0) {
+            groups.push({
+                type: 'video_s',
+                label: 'Video Timeline (seconds)',
+                description: 'Indicators measured at an absolute second position in the video',
+                icon: '\u{23F1}\uFE0F',
+                shelves: sShelves.sort((a, b) => (a.start_s || 0) - (b.start_s || 0)),
+                unit: 's',
+                min: 0,
+                max: Math.max(...sShelves.map(s => s.end_s || 60)),
+            });
+        }
 
-        // Coverage: union of narrow shelf ranges (r0 covers everything, so exclude from gap calc)
-        const coveredPct = computeCoverage(narrowShelves);
-        const gapCount = gaps.length;
+        // Day-based shelves (has start_day or end_day)
+        const dayShelves = shelves.filter(s => s.start_day != null || s.end_day != null);
+        if (dayShelves.length > 0) {
+            groups.push({
+                type: 'time_day',
+                label: 'Post-Upload Timeline (days)',
+                description: 'Indicators measured over a window of days since upload',
+                icon: '\u{1F4C5}',
+                shelves: dayShelves.sort((a, b) => (a.start_day || 0) - (b.start_day || 0)),
+                unit: 'days',
+                min: 0,
+                max: Math.max(...dayShelves.map(s => s.end_day || 30)),
+            });
+        }
 
-        // Stats
-        const shelfCount = shelves.length;
-        const indicatorCount = indicators.length;
+        // Frame-level
+        const frameShelves = shelves.filter(s => s.granularity === 'frame');
+        if (frameShelves.length > 0) {
+            groups.push({
+                type: 'frame',
+                label: 'Frame Level',
+                description: 'Indicators measured at per-frame granularity',
+                icon: '\u{1F5BC}\uFE0F',
+                shelves: frameShelves,
+                unit: 'frame',
+                min: null,
+                max: null,
+            });
+        }
 
-        // ── Section 1: Stats row ──
-        const statsHtml = `
-            <div class="jarvis-resv2-stats">
-                <span class="jarvis-resv2-stat"><strong>${shelfCount}</strong> shelves</span>
-                <span class="jarvis-resv2-stat"><strong>${indicatorCount}</strong> indicators mapped</span>
-                <span class="jarvis-resv2-stat"><strong>${coveredPct}%</strong> of video covered</span>
-                <span class="jarvis-resv2-stat">${gapCount > 0 ? `<strong style="color:#f59e0b">${gapCount}</strong> gaps detected` : '<strong style="color:#10b981">0</strong> gaps'}</span>
-            </div>
-        `;
+        // Word-level
+        const wordShelves = shelves.filter(s => s.granularity === 'word');
+        if (wordShelves.length > 0) {
+            groups.push({
+                type: 'word',
+                label: 'Word Level',
+                description: 'Indicators measured at individual word granularity',
+                icon: '\u{1F4AC}',
+                shelves: wordShelves,
+                unit: 'word',
+                min: null,
+                max: null,
+            });
+        }
 
-        // ── Section 2: Timeline SVG ──
-        const timelineHtml = renderResTimeline(pctShelves, narrowShelves, gaps);
+        return groups;
+    }
 
-        // ── Section 3: Shelf cards with indicators ──
-        const allSorted = [...narrowShelves, ...timeShelves];
-        // Add r0 at the end if it exists
-        const r0 = pctShelves.find(s => s.start_pct === 0 && s.end_pct === 100);
-        if (r0 && !allSorted.includes(r0)) allSorted.push(r0);
+    function renderResolutionDimensionBlock(group, indicators) {
+        let html = '';
 
-        let cardsHtml = '';
-        for (let i = 0; i < allSorted.length; i++) {
-            const shelf = allSorted[i];
+        // ── Block header ──
+        html += `
+            <div style="margin-bottom:16px;padding:14px;background:#0a1628;border-radius:10px;border:1px solid #1e293b">
+                <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:4px">
+                    ${group.icon} ${group.label}
+                </div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:10px">${group.description}</div>`;
+
+        // ── Visual bar (only for types with continuous axis) ──
+        if (group.min != null && group.max != null) {
+            const barH = 40;
+            const labelH = 20;
+            const totalH = barH + labelH + 10;
+
+            let rects = '';
+            let barLabels = '';
+
+            // Background
+            rects += `<rect x="0" y="0" width="100%" height="${barH}" rx="4" fill="#1e293b"/>`;
+
+            // Gaps (only for video_pct)
+            if (group.type === 'video_pct') {
+                const narrowShelves = group.shelves.filter(s => !(s.start_pct === 0 && s.end_pct === 100));
+                const gaps = computeResGaps(narrowShelves);
+                for (const g of gaps) {
+                    const x = ((g.start - group.min) / (group.max - group.min) * 100);
+                    const w = ((g.end - g.start) / (group.max - group.min) * 100);
+                    rects += `<rect x="${x}%" y="0" width="${w}%" height="${barH}" fill="#374151" opacity="0.7"/>`;
+                    const mid = x + w / 2;
+                    if (w > 8) {
+                        barLabels += `<text x="${mid}%" y="${barH + labelH - 4}" text-anchor="middle" fill="#f59e0b" font-size="10" font-family="system-ui">&#9888; ${Math.round(g.end - g.start)}${group.unit} gap</text>`;
+                    }
+                }
+            }
+
+            // Shelf rects
+            for (const s of group.shelves) {
+                const color = SHELF_COLORS[s.id] || SHELF_COLORS.default;
+                let startVal, endVal;
+                if (group.type === 'video_pct') {
+                    startVal = s.start_pct; endVal = s.end_pct;
+                } else if (group.type === 'video_s') {
+                    startVal = s.start_s || 0; endVal = s.end_s || group.max;
+                } else if (group.type === 'time_day') {
+                    startVal = s.start_day || 0; endVal = s.end_day || group.max;
+                } else {
+                    startVal = 0; endVal = group.max;
+                }
+                const xPct = ((startVal - group.min) / (group.max - group.min) * 100);
+                const wPct = ((endVal - startVal) / (group.max - group.min) * 100);
+                const isFullRange = (startVal === group.min && endVal === group.max && group.type === 'video_pct');
+
+                if (isFullRange) {
+                    rects = `<rect x="0" y="0" width="100%" height="${barH}" rx="4" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4,3"/>` + rects;
+                } else {
+                    rects += `<rect x="${xPct}%" y="2" width="${wPct}%" height="${barH - 4}" rx="3" fill="${color}" opacity="0.7"/>`;
+                    if (wPct >= 8) {
+                        const mid = xPct + wPct / 2;
+                        rects += `<text x="${mid}%" y="${barH / 2 + 4}" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold" font-family="system-ui">${s.label}</text>`;
+                    }
+                }
+
+                // Indicator dots at shelf midpoint
+                const shelfInds = indicators.filter(ind => ind.resolution_id === s.id);
+                const midPct = xPct + wPct / 2;
+                shelfInds.forEach((ind, idx) => {
+                    const r = ind.result?.primary_r;
+                    if (r != null) {
+                        const dotY = barH + 6 + idx * 10;
+                        const dotColor = r >= 0 ? '#06b6d4' : '#f87171';
+                        barLabels += `<circle cx="${midPct}%" cy="${dotY}" r="3" fill="${dotColor}"/>`;
+                    }
+                });
+            }
+
+            // Axis labels
+            let axis = '';
+            const steps = group.type === 'video_pct' ? [0, 25, 50, 75, 100] :
+                (() => {
+                    const range = group.max - group.min;
+                    const step = range <= 10 ? 1 : range <= 60 ? 10 : range <= 200 ? 50 : Math.ceil(range / 5);
+                    const ticks = [];
+                    for (let v = group.min; v <= group.max; v += step) ticks.push(v);
+                    if (ticks[ticks.length - 1] !== group.max) ticks.push(group.max);
+                    return ticks;
+                })();
+            for (const v of steps) {
+                const pct = ((v - group.min) / (group.max - group.min) * 100);
+                axis += `<text x="${pct}%" y="${barH + labelH + 8}" text-anchor="middle" fill="#64748b" font-size="9" font-family="system-ui">${v}${group.unit}</text>`;
+            }
+
+            html += `
+                <div class="jarvis-resv2-timeline" style="margin-bottom:12px">
+                    <svg width="100%" height="${totalH + 10}" viewBox="0 0 100 ${totalH + 10}" preserveAspectRatio="none" style="overflow:visible">
+                        ${rects}
+                        ${barLabels}
+                        ${axis}
+                    </svg>
+                </div>`;
+        } else {
+            // Frame/word: no continuous axis, just a granularity label
+            html += `
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px">
+                    <span style="font-size:20px">${group.icon}</span>
+                    <span style="font-size:12px;color:#94a3b8">Granularity: <strong style="color:#f1f5f9">${group.unit}-level</strong> — no continuous axis</span>
+                </div>`;
+        }
+
+        // ── Shelf cards ──
+        html += '<div class="jarvis-resv2-shelves">';
+        for (let i = 0; i < group.shelves.length; i++) {
+            const shelf = group.shelves[i];
             const shelfIndicators = indicators.filter(ind => ind.resolution_id === shelf.id);
             const color = SHELF_COLORS[shelf.id] || SHELF_COLORS.default;
-            const rangeLabel = (shelf.start_pct != null && shelf.end_pct != null)
-                ? `${shelf.start_pct}% – ${shelf.end_pct}%`
-                : (shelf.start_day != null && shelf.end_day != null)
-                    ? `Days ${shelf.start_day}–${shelf.end_day}`
-                    : shelf.granularity || '';
 
-            cardsHtml += `
+            let rangeLabel = '';
+            if (shelf.start_pct != null && shelf.end_pct != null) {
+                rangeLabel = `${shelf.start_pct}% \u2013 ${shelf.end_pct}%`;
+            } else if (shelf.start_s != null || shelf.end_s != null) {
+                rangeLabel = `${shelf.start_s || 0}s \u2013 ${shelf.end_s || '?'}s`;
+            } else if (shelf.start_day != null || shelf.end_day != null) {
+                rangeLabel = `Day ${shelf.start_day || 0} \u2013 ${shelf.end_day || '?'}`;
+            } else if (shelf.granularity) {
+                rangeLabel = shelf.granularity;
+            }
+
+            html += `
                 <div class="jarvis-resv2-shelf" style="border-left:3px solid ${color}">
                     <div class="jarvis-resv2-shelf-header">
                         <span class="jarvis-resv2-shelf-label" style="color:${color}">${shelf.label}</span>
@@ -2394,7 +2555,7 @@ const JarvisUI = (() => {
                     ${shelf.description ? `<div class="jarvis-resv2-shelf-desc">${shelf.description}</div>` : ''}
                     ${shelfIndicators.length > 0 ? `<div class="jarvis-resv2-indicators">${shelfIndicators.map(ind => {
                         const r = ind.result?.primary_r;
-                        const rVal = r != null ? (r >= 0 ? '+' : '') + r.toFixed(3) : '—';
+                        const rVal = r != null ? (r >= 0 ? '+' : '') + r.toFixed(3) : '\u2014';
                         const rColor = r != null ? (r >= 0 ? '#06b6d4' : '#f87171') : '#64748b';
                         const layer = ind.layer || '';
                         return `<div class="jarvis-resv2-ind-card">
@@ -2403,31 +2564,67 @@ const JarvisUI = (() => {
                             ${layer ? `<span class="jarvis-resv2-ind-layer">${layer}</span>` : ''}
                         </div>`;
                     }).join('')}</div>` : '<div class="jarvis-resv2-no-indicators">No indicators yet</div>'}
-                </div>
-            `;
+                </div>`;
 
-            // Insert gap warning between consecutive narrow pct shelves
-            if (shelf.start_pct != null && i < allSorted.length - 1) {
-                const next = allSorted[i + 1];
-                if (next.start_pct != null) {
-                    const gapStart = shelf.end_pct;
-                    const gapEnd = next.start_pct;
-                    if (gapEnd > gapStart) {
-                        cardsHtml += `<div class="jarvis-resv2-gap-warning">&#9888; Gap: ${gapStart}%–${gapEnd}% not yet measured (${gapEnd - gapStart}% uncovered)</div>`;
-                    }
+            // Gap warnings between consecutive shelves in this group
+            if (group.min != null && i < group.shelves.length - 1) {
+                const next = group.shelves[i + 1];
+                let gapStart, gapEnd;
+                if (group.type === 'video_pct') {
+                    gapStart = shelf.end_pct; gapEnd = next.start_pct;
+                } else if (group.type === 'video_s') {
+                    gapStart = shelf.end_s; gapEnd = next.start_s;
+                } else if (group.type === 'time_day') {
+                    gapStart = shelf.end_day; gapEnd = next.start_day;
+                }
+                if (gapStart != null && gapEnd != null && gapEnd > gapStart) {
+                    html += `<div class="jarvis-resv2-gap-warning">&#9888; Gap: ${gapStart}${group.unit} \u2013 ${gapEnd}${group.unit} not yet measured</div>`;
                 }
             }
         }
+        html += '</div>';
+
+        html += '</div>';
+        return html;
+    }
+
+    function renderResolutionV2() {
+        const shelves = v2Resolutions || [];
+        const indicators = v2Indicators || [];
+
+        // Group shelves by their dimension type
+        const dimensionGroups = groupResolutionsByDimension(shelves, indicators);
+
+        // Build one visualization block per dimension type
+        let html = '';
+        for (const group of dimensionGroups) {
+            html += renderResolutionDimensionBlock(group, indicators);
+        }
+
+        // Stats summary
+        const totalShelves = shelves.length;
+        const totalIndicators = indicators.length;
+        const pctShelves = shelves.filter(s => s.start_pct != null && !(s.start_pct === 0 && s.end_pct === 100));
+        const coveredPct = computeCoverage(pctShelves.filter(s => s.end_pct != null));
+        const gaps = computeResGaps(pctShelves.filter(s => s.end_pct != null));
+
+        const statsHtml = `
+            <div class="jarvis-resv2-stats" style="margin-bottom:16px">
+                <span class="jarvis-resv2-stat"><strong>${totalShelves}</strong> shelves discovered</span>
+                <span class="jarvis-resv2-stat"><strong>${totalIndicators}</strong> indicators mapped</span>
+                <span class="jarvis-resv2-stat"><strong>${dimensionGroups.length}</strong> dimension types</span>
+                <span class="jarvis-resv2-stat">${gaps.filter(g => g.end - g.start > 0).length > 0 ? `<strong style="color:#f59e0b">${gaps.filter(g=>g.end-g.start>0).length}</strong> gaps in video %` : '<strong style="color:#10b981">0</strong> gaps'}</span>
+            </div>`;
 
         return `
             <div class="jarvis-resv2-container">
-                <h3 class="jarvis-res-title">Resolution Shelves</h3>
-                <p class="jarvis-res-subtitle">Where indicators live on the video timeline. Gaps highlight uncovered regions.</p>
+                <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:4px">Resolution Shelves</div>
+                <div style="font-size:12px;color:#64748b;line-height:1.5;margin-bottom:12px">
+                    Resolutions are discovered, not predefined. Each experiment is measured at a specific resolution \u2014 the granularity at which the indicator observes the video. Different dimensions (video %, seconds, days, frame, word) generate separate visualization axes.
+                </div>
                 ${statsHtml}
-                ${timelineHtml}
-                <div class="jarvis-resv2-shelves">${cardsHtml}</div>
-            </div>
-        `;
+                ${html || '<div style="color:#475569;padding:20px;text-align:center">No resolution shelves yet. Run experiments to discover them.</div>'}
+            </div>`;
     }
 
     function renderResTimeline(pctShelves, narrowShelves, gaps) {
