@@ -812,7 +812,7 @@ const JarvisUI = (() => {
                 <div id="jarvis-network-tooltip" class="jarvis-network-tooltip" style="display:none;"></div>
             </div>
             <div id="jarvis-node-label" style="display:none;position:fixed;background:#1e293b;color:#e2e8f0;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;pointer-events:none;z-index:10000;border:1px solid #334155;"></div>
-            <div id="jarvis-node-popup" style="display:none;position:fixed;background:#0f172a;color:#cbd5e1;padding:16px 18px;border-radius:10px;font-size:12px;z-index:10001;border:1px solid #1e293b;max-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.6);"></div>
+            <div id="jarvis-node-popup" style="display:none;position:fixed;background:#0f172a;color:#cbd5e1;padding:16px 18px;border-radius:10px;font-size:12px;z-index:10001;border:1px solid #1e293b;max-width:440px;max-height:75vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.6);"></div>
             <div style="display:flex;align-items:center;gap:10px;padding:4px 0 10px;font-size:11px;color:var(--j-muted)">
                 <label for="jarvis-merge-slider">Merge threshold:</label>
                 <input type="range" id="jarvis-merge-slider" min="0" max="100" value="${currentMergeThreshold}" style="width:140px" />
@@ -1127,28 +1127,130 @@ const JarvisUI = (() => {
         const popup = document.getElementById('jarvis-node-popup');
         if (!popup) return;
         const label = d.label || humanizeKey(d.key);
-        const layer = d.layer === 'pre' ? 'Pre-upload (you control this before filming)' : d.layer === 'post' ? 'Post-upload (measured by YouTube after upload)' : 'Target metric';
-        const strength = d.r_partial != null ? Math.abs(d.r_partial).toFixed(2) : 'unknown';
-        const depth = d.depth || 1;
-        const notes = d.notes || 'No additional context available.';
         const reg = cachedIndicatorRegistry;
-        const connEdges = reg ? (reg.edges || []).filter(e => e.from === d.key || e.to === d.key) : [];
-        const connCount = connEdges.length;
-        const truncNotes = notes.length > 300 ? notes.slice(0, 300) + '\u2026' : notes;
-        popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
-            + '<div style="font-size:14px;font-weight:700;color:#f1f5f9;flex:1">' + label + '</div>'
-            + '<button onclick="document.getElementById(\'jarvis-node-popup\').style.display=\'none\'" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 0 0 8px">\u00d7</button>'
+
+        // ── Layer badge ──
+        const layerBadge = d.layer === 'pre'
+            ? '<span style="display:inline-block;background:#7c3aed;color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle">pre-upload</span>'
+            : d.layer === 'post'
+            ? '<span style="display:inline-block;background:#0284c7;color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle">post-upload</span>'
+            : '<span style="display:inline-block;background:#d97706;color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle">target</span>';
+
+        // ── Stats ──
+        const rPartial = d.r_partial != null ? Number(d.r_partial) : null;
+        const rDirect = d.r_direct != null ? Number(d.r_direct) : null;
+        const strengthStr = rPartial != null
+            ? '<span style="color:' + (rPartial >= 0 ? '#22d3ee' : '#f87171') + ';font-weight:700">' + (rPartial >= 0 ? '+' : '') + rPartial.toFixed(3) + '</span>'
+            : '<span style="color:#64748b">—</span>';
+        const corrStr = rDirect != null
+            ? '<span style="color:' + (rDirect >= 0 ? '#22d3ee' : '#f87171') + ';font-weight:700">' + (rDirect >= 0 ? '+' : '') + rDirect.toFixed(3) + '</span>'
+            : null;
+        const targetMap = { views: 'Views', keep: 'Keep Rate', retention: 'Retention' };
+        const targetStr = d.target ? (targetMap[d.target] || humanizeKey(d.target)) : '—';
+
+        // Connections count: real edges only (not peer)
+        const connCount = reg
+            ? (reg.edges || []).filter(e => e.from === d.key || e.to === d.key).length
+            : (d.connections || []).filter(c => c.to).length;
+
+        // ── Section header helper ──
+        const sectionHdr = (text) => '<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;margin-top:14px">' + text + '</div>';
+
+        // ── Stats row ──
+        const statPill = (lbl, val) => '<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">' + lbl + '</span><span style="font-size:12px;color:#cbd5e1">' + val + '</span></div>';
+        let statsHtml = '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;padding:8px 0;border-bottom:1px solid #1e293b">';
+        statsHtml += statPill('Strength', strengthStr);
+        if (corrStr) statsHtml += statPill('r_direct', corrStr);
+        statsHtml += statPill('Target', targetStr);
+        if (d.resolution) statsHtml += statPill('Resolution', d.resolution);
+        statsHtml += statPill('Depth', d.depth || 1);
+        statsHtml += statPill('Connections', connCount);
+        statsHtml += '</div>';
+
+        // ── Experiments section ──
+        let experimentsHtml = '';
+        const rows = cachedResultsRows;
+        let expRows = [];
+        if (rows && rows.length) {
+            // Match experiments where new_signal contains this key, or experiment_id matches a connection
+            const connExpIds = new Set((d.connections || []).map(c => c.experiment).filter(Boolean));
+            expRows = rows.filter(r => {
+                const sig = (r.new_signal || '');
+                if (sig === d.key || sig === 'discovery:' + d.key) return true;
+                if (connExpIds.has(r.experiment_id)) return true;
+                return false;
+            });
+        }
+        if (!expRows.length && d.connections && d.connections.length) {
+            // Fallback: build cards from connections data
+            expRows = d.connections.filter(c => c.experiment).map(c => ({
+                experiment_id: c.experiment,
+                status: c.status || '',
+                delta_r2: c.delta_r2 || '—',
+                r2_before: '',
+                r2_after: '',
+                n_videos: '',
+                new_signal: d.key,
+                notes: ''
+            }));
+        }
+        if (expRows.length) {
+            experimentsHtml += sectionHdr('Experiments');
+            expRows.forEach((row, idx) => {
+                const status = (row.status || '').trim().toLowerCase();
+                const statusColor = status === 'keep' ? '#16a34a' : status === 'discovery' ? '#0e7490' : '#7f1d1d';
+                const statusBg = status === 'keep' ? 'rgba(22,163,74,0.2)' : status === 'discovery' ? 'rgba(14,116,144,0.2)' : 'rgba(127,29,29,0.2)';
+                const bgColor = idx % 2 === 0 ? '#0f2020' : '#0a1628';
+                const nVid = row.n_videos ? '<span style="font-size:10px;color:#64748b;margin-left:8px">n=' + row.n_videos + '</span>' : '';
+                const hasR2 = row.delta_r2 && row.delta_r2 !== '—' && row.delta_r2 !== '\u2014';
+                const r2Line = hasR2
+                    ? '<div style="font-size:11px;color:#94a3b8;margin-top:3px">R\u00b2: ' + (row.r2_before || '?') + ' \u2192 ' + (row.r2_after || '?') + ' (delta: ' + row.delta_r2 + ')</div>'
+                    : '<div style="font-size:11px;color:#475569;margin-top:3px">R\u00b2: \u2014</div>';
+                const notes = row.notes || '';
+                experimentsHtml += '<div style="background:' + bgColor + ';border-radius:6px;padding:8px 10px;margin-bottom:4px">'
+                    + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+                    + '<span style="font-family:monospace;font-size:10px;color:#94a3b8">' + (row.experiment_id || '—') + '</span>'
+                    + '<span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:3px;background:' + statusBg + ';color:' + statusColor + '">' + (status || '—') + '</span>'
+                    + nVid
+                    + '</div>'
+                    + r2Line
+                    + (notes ? '<div style="font-size:11px;color:#94a3b8;margin-top:4px;line-height:1.5">' + notes + '</div>' : '')
+                    + '</div>';
+            });
+        }
+
+        // ── Finding section ──
+        const fullNotes = d.notes || '';
+        let findingHtml = '';
+        if (fullNotes) {
+            findingHtml += sectionHdr('Finding');
+            findingHtml += '<div style="font-size:11px;color:#94a3b8;line-height:1.6">' + fullNotes + '</div>';
+            // Parse r_partial=+X.XX (N) patterns and render highlighted
+            const rMatches = fullNotes.match(/r_partial\s*=\s*([-+]?[0-9]*\.?[0-9]+)\s*\((\d+)\)/g);
+            if (rMatches) {
+                rMatches.forEach(m => {
+                    const parts = m.match(/r_partial\s*=\s*([-+]?[0-9]*\.?[0-9]+)\s*\((\d+)\)/);
+                    if (parts) {
+                        findingHtml += '<div style="background:#0f2942;border-left:3px solid #22d3ee;padding:8px;margin-top:6px;border-radius:0 4px 4px 0;font-size:11px;color:#e2e8f0">'
+                            + 'Strength on ' + parts[2] + ' videos: <strong style="color:#22d3ee">' + parts[1] + '</strong>'
+                            + '</div>';
+                    }
+                });
+            }
+        }
+
+        // ── Assemble popup ──
+        popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+            + '<div style="font-size:15px;font-weight:700;color:#f1f5f9;flex:1">' + label + layerBadge + '</div>'
+            + '<button onclick="document.getElementById(\'jarvis-node-popup\').style.display=\'none\'" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1">\u00d7</button>'
             + '</div>'
-            + '<div style="margin-bottom:8px;font-size:11px;color:#94a3b8">' + layer + '</div>'
-            + '<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">'
-            + '<span><strong style="color:#f1f5f9">Strength:</strong> ' + strength + '</span>'
-            + '<span><strong style="color:#f1f5f9">Connections:</strong> ' + connCount + '</span>'
-            + '<span><strong style="color:#f1f5f9">Depth:</strong> ' + depth + '</span>'
-            + '</div>'
-            + '<div style="font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #1e293b;padding-top:10px">' + truncNotes + '</div>';
+            + statsHtml
+            + experimentsHtml
+            + findingHtml;
+
         popup.style.display = 'block';
-        const x = Math.min(event.clientX + 10, window.innerWidth - 300);
-        const y = Math.min(event.clientY + 10, window.innerHeight - 250);
+        const x = Math.min(event.clientX + 10, window.innerWidth - 460);
+        const y = Math.min(event.clientY + 10, window.innerHeight - 350);
         popup.style.left = x + 'px';
         popup.style.top = y + 'px';
     }
@@ -1288,6 +1390,7 @@ const JarvisUI = (() => {
             if (graphSizeBy === 'r2') return base + Math.abs(d.r_partial || 0) * 14;
             if (graphSizeBy === 'connections') {
                 const connCt = links.filter(l => {
+                    if (l.peer) return false;
                     const sk = typeof l.source === 'object' ? l.source.key : l.source;
                     const tk = typeof l.target === 'object' ? l.target.key : l.target;
                     return sk === d.key || tk === d.key;
@@ -1402,6 +1505,7 @@ const JarvisUI = (() => {
                 tooltip.style.left = (event.clientX - svgRect.left + 12) + 'px';
                 tooltip.style.top = (event.clientY - svgRect.top - 10) + 'px';
                 const connCt = links.filter(l => {
+                    if (l.peer) return false;
                     const sk = typeof l.source === 'object' ? l.source.key : l.source;
                     const tk = typeof l.target === 'object' ? l.target.key : l.target;
                     return sk === d.key || tk === d.key;
