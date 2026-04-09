@@ -1,0 +1,13 @@
+[
+  {
+    "id": "r0",
+    "label": "Full Video",
+    "description": "The entire video analyzed as a single unit. One value per video.",
+    "unit": "video",
+    "granularity": "whole",
+    "start_pct": 0,
+    "end_pct": 100,
+    "created_from": "bootstrap",
+    "indicator_count": 0
+  }
+]

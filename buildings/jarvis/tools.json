@@ -1,0 +1,53 @@
+[
+  {
+    "id": "partial_correlation",
+    "version": "1.0",
+    "name": "Partial Correlation",
+    "description": "Measures r_partial of indicator vs target after controlling for specified confounds using scipy.stats.pearsonr on residuals.",
+    "parameters": {
+      "confounds": {"type": "array of string", "description": "Other indicators to partial out. Empty = same as direct correlation."},
+      "target": {"type": "string", "description": "Target node key: views, keep, or retention"},
+      "transform_target": {"type": "string", "description": "Transform to apply to target. log10 recommended for views.", "default": "log10"}
+    },
+    "outputs": ["r_partial", "r_direct", "p_value", "n", "residual_std"],
+    "formula": "r_partial = pearsonr(residuals_indicator, residuals_target) after OLS regression of each against confounds"
+  },
+  {
+    "id": "pearson_r",
+    "version": "1.0",
+    "name": "Pearson Correlation",
+    "description": "Direct bivariate Pearson r between indicator and target. No confound control.",
+    "parameters": {
+      "target": {"type": "string"},
+      "transform_target": {"type": "string", "default": "log10"}
+    },
+    "outputs": ["r", "p_value", "n"],
+    "formula": "r = pearsonr(indicator_values, target_values)"
+  },
+  {
+    "id": "spearman_r",
+    "version": "1.0",
+    "name": "Spearman Rank Correlation",
+    "description": "Non-parametric rank-based correlation. Robust to outliers and non-normal distributions.",
+    "parameters": {
+      "target": {"type": "string"},
+      "transform_target": {"type": "string", "default": "none"}
+    },
+    "outputs": ["rho", "p_value", "n"],
+    "formula": "rho = spearmanr(indicator_values, target_values)"
+  },
+  {
+    "id": "ols_r2_delta",
+    "version": "1.0",
+    "name": "OLS R2 Delta",
+    "description": "Measures how much R2 improves when adding this indicator to a baseline OLS model.",
+    "parameters": {
+      "baseline_features": {"type": "array of string"},
+      "target": {"type": "string"},
+      "transform_target": {"type": "string", "default": "log10"},
+      "cv_folds": {"type": "integer", "default": 5}
+    },
+    "outputs": ["r2_before", "r2_after", "delta_r2", "n"],
+    "formula": "delta_r2 = cross_val_score(model_with_feature) - cross_val_score(baseline_model)"
+  }
+]

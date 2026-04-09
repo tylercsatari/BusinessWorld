@@ -1,0 +1,52 @@
+[
+  {
+    "id": "exp_hook_retention_pct_20260409_152609",
+    "indicator_key": "hook_retention_pct",
+    "tool_id": "pearson_r",
+    "r_partial": -0.04996365118112891,
+    "rho": 0.12148035871238054,
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T15:26:09.232406Z"
+  },
+  {
+    "id": "exp_final_5pct_retention_20260409_152609",
+    "indicator_key": "final_5pct_retention",
+    "tool_id": "pearson_r",
+    "r_partial": 0.4715732924173845,
+    "rho": 0.47151477454466556,
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T15:26:09.237114Z"
+  },
+  {
+    "id": "exp_mid_video_cliff_20260409_152609",
+    "indicator_key": "mid_video_cliff",
+    "tool_id": "pearson_r",
+    "r_partial": 0.17664005735272306,
+    "rho": 0.44150866781105136,
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T15:26:09.244596Z"
+  },
+  {
+    "id": "exp_retention_entropy_20260409_152609",
+    "indicator_key": "retention_entropy",
+    "tool_id": "pearson_r",
+    "r_partial": 0.4651759674555697,
+    "rho": 0.5556594001140711,
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T15:26:09.256001Z"
+  },
+  {
+    "id": "exp_hook_drop_rate_20260409_152609",
+    "indicator_key": "hook_drop_rate",
+    "tool_id": "pearson_r",
+    "r_partial": -0.4019295720284731,
+    "rho": -0.3906557665416386,
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T15:26:09.301120Z"
+  }
+]
