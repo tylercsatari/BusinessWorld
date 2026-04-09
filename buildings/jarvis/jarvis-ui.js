@@ -2156,443 +2156,161 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
-    // TAB 4: AUTORESEARCH — Engine only
+    // TAB 4: AUTORESEARCH — Pipeline Coordinator
     // ══════════════════════════════════════════════════
-    let arModel = null;
-    let arHypotheses = null;
-
-    async function loadAutoResearchData() {
-        if (!arModel) {
-            try {
-                const r = await fetch('./buildings/jarvis/prediction-model.json');
-                arModel = await r.json();
-            } catch (e) { arModel = null; }
-        }
-        if (!arHypotheses) {
-            try {
-                const r = await fetch('./buildings/jarvis/hypothesis-queue.json');
-                arHypotheses = await r.json();
-            } catch (e) { arHypotheses = []; }
-        }
-    }
 
     function renderAutoResearch() {
-        Promise.all([loadAutoResearchData(), loadIndicatorRegistry()]).then(() => {
-            const el = container?.querySelector('.jarvis-ar-root');
-            if (el) {
-                el.innerHTML = renderAutoResearchContent();
-                bindAutoResearchEvents();
-                loadLoopStatus();
-            }
-        });
-        return '<div class="jarvis-ar-root"><div style="color:var(--j-muted);padding:20px;">Loading AutoResearch data…</div></div>';
-    }
-
-    async function loadLoopStatus() {
-        const statusEl = container?.querySelector('.jarvis-loop-status-grid');
-        if (!statusEl) return;
-        try {
-            const resp = await fetch('/api/jarvis/loop-status');
-            const status = await resp.json();
-            const loops = [
-                { id: 'A', name: 'Non-Linear Architecture', purpose: 'Test non-linear model architectures and feature transforms' },
-                { id: 'B', name: 'Signal Discovery', purpose: 'Discover new signals via partial correlation screening' },
-                { id: 'C', name: 'Causal Tree', purpose: 'Map causal relationships between signals and outcomes' },
-                { id: 'D', name: 'Retention Mapping', purpose: 'Channel×timestamp retention pattern analysis' },
-            ];
-            statusEl.innerHTML = loops.map(loop => {
-                const s = status[loop.id] || {};
-                const age = s.ageMinutes || Infinity;
-                let statusLabel, statusColor;
-                if (age < 120) { statusLabel = 'active'; statusColor = '#10b981'; }
-                else if (age < 360) { statusLabel = 'stale'; statusColor = '#f59e0b'; }
-                else { statusLabel = 'dead'; statusColor = '#ef4444'; }
-                const lastMod = s.lastModified ? new Date(s.lastModified).toLocaleString() : 'never';
-                return `<div class="jarvis-loop-card">
-                    <div class="jarvis-loop-card-header">
-                        <span class="jarvis-loop-card-id">Loop ${loop.id}</span>
-                        <span class="jarvis-loop-card-status" style="background:${statusColor}20;color:${statusColor}">${statusLabel}</span>
-                    </div>
-                    <div class="jarvis-loop-card-purpose">${loop.purpose}</div>
-                    <div class="jarvis-loop-card-time">Last: ${lastMod}</div>
-                    <button class="jarvis-loop-card-log-btn" data-loop="${loop.id}">View Log</button>
-                    <div class="jarvis-loop-card-log" id="jarvis-loop-log-${loop.id}" style="display:none;"></div>
-                </div>`;
-            }).join('');
-
-            // Bind log buttons
-            statusEl.querySelectorAll('.jarvis-loop-card-log-btn').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const loopId = btn.dataset.loop;
-                    const logEl = container?.querySelector(`#jarvis-loop-log-${loopId}`);
-                    if (!logEl) return;
-                    if (logEl.style.display === 'block') {
-                        logEl.style.display = 'none';
-                        btn.textContent = 'View Log';
-                        return;
-                    }
-                    logEl.style.display = 'block';
-                    logEl.textContent = 'Loading...';
-                    btn.textContent = 'Hide Log';
-                    try {
-                        const resp = await fetch(`/api/jarvis/loop-log?loop=${loopId}`);
-                        logEl.textContent = await resp.text();
-                    } catch (e) {
-                        logEl.textContent = 'Failed to load log.';
-                    }
-                });
+        if (!v2Indicators) {
+            loadV2Data().then(() => {
+                const el = container?.querySelector('.jarvis-ar-root');
+                if (el) { el.innerHTML = renderAutoResearchV2(); bindAutoResearchV2Events(); }
             });
-        } catch (e) {
-            statusEl.innerHTML = '<div class="jarvis-error">Failed to load loop status</div>';
         }
+        setTimeout(bindAutoResearchV2Events, 50);
+        return `<div class="jarvis-ar-root">${renderAutoResearchV2()}</div>`;
     }
 
-    function renderAutoResearchContent() {
-        if (!arModel) return '<div style="color:#f87171;padding:20px;">Failed to load prediction model.</div>';
-        const m = arModel;
-        const regTotal = cachedIndicatorRegistry ? cachedIndicatorRegistry.total : '—';
-        const preR2 = m.pre_upload_model?.cv_r2_mean || '?';
-        const fullR2 = m.full_model?.cv_r2_mean || '?';
-        const preCount = cachedIndicatorRegistry ? cachedIndicatorRegistry.indicators.filter(i => i.layer === 'pre').length : '?';
-        const postCount = cachedIndicatorRegistry ? cachedIndicatorRegistry.indicators.filter(i => i.layer === 'post').length : '?';
-        // Pre-upload model inputs (6 features, CV=0.350)
-        const preUploadSignals = [
-            { key: 'keep_sq', label: 'Keep Rate²', placeholder: 'e.g. 6400 (80²)', def: 6400, derive: (v) => v, note: 'keep² — enter raw or type keep below' },
-            { key: 'max_cliff', label: 'Max Cliff', placeholder: '0–1', def: 0.20, note: 'Biggest single-point retention drop' },
-            { key: 'keep_x_tension', label: 'Keep × Tension', placeholder: 'e.g. 240', def: 240, note: 'keep rate × narrative tension count' },
-            { key: 'retention', label: 'Retention %', placeholder: '0–100', def: 60, note: 'Average percent viewed' },
-            { key: 'visual_workshop', label: 'Visual Workshop', placeholder: '0 or 1', def: 1, note: '1 if build/workshop content' },
-            { key: 'novelty', label: 'Novelty', placeholder: '1–10', def: 7, note: 'LLM-scored novelty' },
-        ];
-        // Full model additional inputs (6 more features for 12 total, CV=0.664)
-        const fullModelSignals = [
-            { key: 'indestructible_x_prev_keep', label: 'Indestructible × Prev Keep', placeholder: '0–84', def: 0, note: 'Indestructible concept × prev keep rate' },
-            { key: 'deriv_entropy', label: 'Pacing Complexity', placeholder: '0–5', def: 2.5, note: 'Entropy of retention curve derivative' },
-            { key: 'prev_views', label: 'Prev Video Views (log10)', placeholder: '5–9', def: 6.5, note: 'log10 of previous video views' },
-            { key: 'prev_keep', label: 'Prev Video Keep %', placeholder: '0–100', def: 75, note: 'Previous video keep rate' },
-            { key: 'smoothed_slope', label: 'Smoothed Slope', placeholder: '-1 to 0', def: -0.3, note: 'Slope of 5-pt moving avg retention' },
-            { key: 'pat_making_v2', label: 'Making Content', placeholder: '0 or 1', def: 1, note: '1 if title has making/build/creat' },
-            { key: 'duration_x_retention', label: 'Duration × Retention', placeholder: '10–120', def: 45, note: 'Duration(s) × retention(%)/100' },
-            { key: 'ret_mid_sq', label: 'Mid Retention²', placeholder: '0–1', def: 0.36, note: 'Midpoint retention (0-1) squared' },
-            { key: 'idea_length', label: 'Idea Length', placeholder: 'word count', def: 25, note: 'Word count of video concept' },
-            { key: 'view_accel_log', label: 'View Acceleration (log)', placeholder: '-1 to 3', def: 0.5, note: 'log10(day3-7 avg / day1 views)' },
-            { key: 'w2_w1_ratio', label: 'Week2/Week1 Ratio', placeholder: '0–25', def: 1.0, note: 'Week 2 views / Week 1 views' },
+    function renderAutoResearchV2() {
+        const indicators = v2Indicators || [];
+        const resolutions = v2Resolutions || [];
+        const tools = v2Tools || [];
+
+        // Coverage (non-r0 shelves)
+        const narrowShelves = resolutions.filter(s => s.start_pct != null && s.end_pct != null && !(s.start_pct === 0 && s.end_pct === 100));
+        const coveredPct = computeCoverage(narrowShelves);
+
+        // Sorted indicators by |r|
+        const sortedInds = [...indicators].sort((a, b) => Math.abs((b.result?.primary_r) || 0) - Math.abs((a.result?.primary_r) || 0));
+
+        // Pipeline steps
+        const steps = [
+            { id: 'theorize', label: 'Theorize', desc: 'Propose a candidate indicator from the queue' },
+            { id: 'qualify', label: 'Qualify', desc: 'Check if indicator already exists' },
+            { id: 'quantify', label: 'Quantify', desc: 'Define the measurable metric + formula' },
+            { id: 'resolve', label: 'Resolve', desc: 'Assign to a resolution shelf; create new shelf if needed' },
+            { id: 'dataset', label: 'Dataset', desc: 'Extract per-video values from 370 videos; store all data points' },
+            { id: 'experiment', label: 'Experiment', desc: 'Run tool from Analytical Brain with all parameters stored' },
+            { id: 'result', label: 'Result', desc: 'Mathematical result + English conclusion on the indicator' },
+            { id: 'graph', label: 'Graph', desc: 'Add node + edge to Tactical Brain; assign depth' },
+            { id: 'expand', label: 'Expand', desc: 'As graph grows, shift targets from views → cross-indicator' },
         ];
 
-        const statusBadge = (s) => {
-            if (s === 'complete') return '<span class="jarvis-ar-status jarvis-ar-status-complete">complete</span>';
-            if (s === 'running') return '<span class="jarvis-ar-status jarvis-ar-status-running">running</span>';
-            return '<span class="jarvis-ar-status jarvis-ar-status-queued">queued</span>';
-        };
+        const pipelineHtml = `
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px">
+                ${steps.map((s, i) => `
+                    <span style="background:#1e293b;border:1px solid #334155;padding:5px 10px;border-radius:6px;font-size:11px">
+                        <span style="font-weight:700;color:#22d3ee">${s.label}</span>
+                        <span style="color:#475569;display:block;font-size:9px;margin-top:1px">${s.desc}</span>
+                    </span>
+                    ${i < steps.length - 1 ? '<span style="color:#334155;font-size:16px">→</span>' : ''}
+                `).join('')}
+            </div>`;
 
-        const r2 = 0.664;
-        const target = 0.80;
-        const pct = Math.min(100, Math.round((r2 / target) * 100));
+        // Completed table
+        const completedRows = sortedInds.map(ind => {
+            const r = ind.result?.primary_r;
+            const rStr = r != null ? `<span style="font-family:'SF Mono',monospace;color:${r >= 0 ? '#22d3ee' : '#f87171'}">${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '—';
+            const expId = ind.experiment?.id;
+            const tool = tools.find(t => t.id === ind.experiment?.tool_id);
+            return `<tr data-ar-exp-id="${expId || ''}" style="cursor:${expId ? 'pointer' : 'default'};border-bottom:1px solid #1e293b">
+                <td style="padding:5px 8px;font-size:11px;color:#cbd5e1">${ind.label || ind.key}</td>
+                <td style="padding:5px 8px;font-size:10px;color:#64748b">${ind.resolution_id || 'r0'}</td>
+                <td style="padding:5px 8px;font-size:10px;color:#64748b">${tool ? tool.name : (ind.experiment?.tool_id || '—')}</td>
+                <td style="padding:5px 8px">${rStr}</td>
+                <td style="padding:5px 8px;font-size:10px"><span style="color:${ind.layer === 'pre' ? '#06b6d4' : '#a78bfa'}">${ind.layer || 'post'}</span></td>
+            </tr>`;
+        }).join('');
 
         return `
-            <!-- Model Status -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Model Status</h3>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-                    <div style="padding:12px;background:rgba(6,182,212,0.08);border-radius:8px;border-left:3px solid #06b6d4">
-                        <div style="font-size:11px;color:var(--j-muted);margin-bottom:4px">Pre-upload model</div>
-                        <div style="font-family:'SF Mono',monospace;font-size:18px;font-weight:700;color:#06b6d4">CV R\u00b2 = ${preR2}</div>
-                        <div style="font-size:10px;color:var(--j-muted);margin-top:2px">${m.pre_upload_model?.features?.length || '?'} features</div>
-                    </div>
-                    <div style="padding:12px;background:rgba(167,139,250,0.08);border-radius:8px;border-left:3px solid #a78bfa">
-                        <div style="font-size:11px;color:var(--j-muted);margin-bottom:4px">Full model</div>
-                        <div style="font-family:'SF Mono',monospace;font-size:18px;font-weight:700;color:#a78bfa">CV R\u00b2 = ${fullR2}</div>
-                        <div style="font-size:10px;color:var(--j-muted);margin-top:2px">${m.full_model?.features?.length || '?'} features</div>
-                    </div>
+            <div style="margin-bottom:16px">
+                <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:4px">AutoResearch — Pipeline Coordinator</div>
+                <div style="font-size:12px;color:#64748b;line-height:1.5">Coordinates the full indicator discovery pipeline. Each cycle runs one candidate through all 9 steps, stores every data point, and adds the result to the Tactical Brain graph.</div>
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+                <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
+                    <div style="font-size:24px;font-weight:700;color:#22d3ee">${indicators.length}</div>
+                    <div style="font-size:11px;color:#64748b">Completed</div>
                 </div>
-                <div style="padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:12px">
-                    <div style="font-size:11px;color:var(--j-muted);margin-bottom:6px">Total indicators in registry: <strong style="color:var(--j-text)">${regTotal}</strong></div>
-                    <div style="display:flex;align-items:center;justify-content:center;gap:0;padding:8px 0">
-                        <div style="text-align:center;padding:10px 18px;background:rgba(6,182,212,0.12);border-radius:8px 0 0 8px">
-                            <div style="font-size:10px;color:#06b6d4;text-transform:uppercase;font-weight:600">Pre-upload</div>
-                            <div style="font-size:18px;font-weight:700;color:#06b6d4">${preCount}</div>
-                        </div>
-                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u2192</div>
-                        <div style="text-align:center;padding:10px 18px;background:rgba(167,139,250,0.12)">
-                            <div style="font-size:10px;color:#a78bfa;text-transform:uppercase;font-weight:600">Post-upload</div>
-                            <div style="font-size:18px;font-weight:700;color:#a78bfa">${postCount}</div>
-                        </div>
-                        <div style="font-size:16px;color:var(--j-muted);padding:0 8px">\u2192</div>
-                        <div style="text-align:center;padding:10px 18px;background:rgba(245,158,11,0.12);border-radius:0 8px 8px 0">
-                            <div style="font-size:10px;color:#f59e0b;text-transform:uppercase;font-weight:600">Views</div>
-                            <div style="font-size:18px;font-weight:700;color:#f59e0b">1</div>
-                        </div>
-                    </div>
+                <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
+                    <div style="font-size:24px;font-weight:700;color:#a78bfa">${Math.max(0, 40 - indicators.length)}</div>
+                    <div style="font-size:11px;color:#64748b">In Queue</div>
+                </div>
+                <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
+                    <div style="font-size:24px;font-weight:700;color:#06b6d4">${resolutions.length}</div>
+                    <div style="font-size:11px;color:#64748b">Resolution Shelves</div>
+                </div>
+                <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
+                    <div style="font-size:24px;font-weight:700;color:#f59e0b">${coveredPct}%</div>
+                    <div style="font-size:11px;color:#64748b">Video Covered</div>
                 </div>
             </div>
 
-            <!-- Pipeline Architecture -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Pipeline Architecture</h3>
-                <p class="jarvis-ar-subtitle">Causal flow from raw data to prediction output.</p>
-                <div class="jarvis-pipeline-flow">
-                    <div class="jarvis-pipeline-stage" style="border-left-color:#6b7280">
-                        <div class="jarvis-pipeline-stage-num">1</div>
-                        <div class="jarvis-pipeline-stage-body">
-                            <strong>RESOLUTION</strong>
-                            <p>Defines the unit of analysis (whole video → per-second → per-frame). Determines what resolution level each indicator lives at.</p>
-                        </div>
-                    </div>
-                    <div class="jarvis-pipeline-arrow">↓</div>
-                    <div class="jarvis-pipeline-stage" style="border-left-color:#14b8a6">
-                        <div class="jarvis-pipeline-stage-num">2</div>
-                        <div class="jarvis-pipeline-stage-body">
-                            <strong>TACTICAL BRAIN</strong>
-                            <p>Stores all indicators and data points. Each indicator tagged with resolution level (R0–R5). Discovered nodes from AutoResearch loop automatically appear here.</p>
-                        </div>
-                    </div>
-                    <div class="jarvis-pipeline-arrow">↓</div>
-                    <div class="jarvis-pipeline-stage" style="border-left-color:#3b82f6">
-                        <div class="jarvis-pipeline-stage-num">3</div>
-                        <div class="jarvis-pipeline-stage-body">
-                            <strong>ANALYTICAL BRAIN</strong>
-                            <p>Measurement tools: Pearson, Bucket, log10, Ratio, Net Signal, LLM Scorer. Model tools: OLS, Cross-Validated Regression, Forward/Backward Selection, GBM, Random Forest, OLS+GBM Blend.</p>
-                        </div>
-                    </div>
-                    <div class="jarvis-pipeline-arrow">↓</div>
-                    <div class="jarvis-pipeline-stage" style="border-left-color:#10b981">
-                        <div class="jarvis-pipeline-stage-num">4</div>
-                        <div class="jarvis-pipeline-stage-body">
-                            <strong>EXPERIMENTS</strong>
-                            <p>Results of running measurement tools on indicator combinations. One unified log (results.tsv). Includes model experiments + signal discoveries. Tracks R² improvement over time.</p>
-                        </div>
-                    </div>
-                    <div class="jarvis-pipeline-arrow">↓</div>
-                    <div class="jarvis-pipeline-stage" style="border-left-color:#8b5cf6">
-                        <div class="jarvis-pipeline-stage-num">5</div>
-                        <div class="jarvis-pipeline-stage-body">
-                            <strong>PREDICTION MODEL</strong>
-                            <p>Output: which combination of indicators predicts views. Pre-upload: 6 features, CV R²=0.350. Full: 12 features, CV R²=0.664, ±2.5x. Target: R²>0.80.</p>
-                        </div>
-                    </div>
-                </div>
+            <div style="margin-bottom:16px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Pipeline Steps</div>
+                ${pipelineHtml}
             </div>
 
-            <!-- Loop Status -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Loop Status</h3>
-                <p class="jarvis-ar-subtitle">Real-time status of autonomous research loops.</p>
-                <div class="jarvis-loop-status-grid"></div>
+            <div style="background:#0a1628;border-radius:8px;padding:14px;margin-bottom:16px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:10px">Run More Experiments</div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <label style="font-size:12px;color:#94a3b8">Run next</label>
+                    <input id="ar-run-count" type="number" value="5" min="1" max="40" style="width:60px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
+                    <label style="font-size:12px;color:#94a3b8">experiments</label>
+                    <button id="ar-run-btn" style="background:#0e7490;color:#fff;border:none;padding:6px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">▶ Run Pipeline</button>
+                </div>
+                <div id="ar-run-status" style="margin-top:8px;font-size:11px;min-height:16px"></div>
+                <div style="margin-top:6px;font-size:10px;color:#475569">Runs pipeline.py --run N · processes next N candidates from queue · stores all data points</div>
             </div>
 
-            <!-- Framework -->
-            <div class="jarvis-ar-section jarvis-ar-framework">
-                <h3 class="jarvis-ar-title">AutoResearch — Karpathy-style Autonomous Research Loop</h3>
-                <p class="jarvis-ar-subtitle">Autonomous agent improves the prediction model overnight. The agent scores new signals, runs experiments, keeps improvements, discards failures — loop forever until R² > 0.80.</p>
-
-                <div class="jarvis-ar-framework-cols">
-                    <div class="jarvis-ar-framework-col">
-                        <h4 class="jarvis-ar-framework-heading">How it works</h4>
-                        <ul class="jarvis-ar-framework-list">
-                            <li>program.md defines the research rules and metric (R²)</li>
-                            <li>Agent picks the next hypothesis from the queue</li>
-                            <li>Scores new signal on 203 videos via LLM vision</li>
-                            <li>Runs regression with new signal — keep if R² improves > 0.01</li>
-                            <li>Logs result to results.tsv, updates model, repeats</li>
-                            <li>Never stops until manually interrupted</li>
-                        </ul>
-                    </div>
-                    <div class="jarvis-ar-framework-col">
-                        <h4 class="jarvis-ar-framework-heading">Current stats</h4>
-                        <div class="jarvis-ar-framework-stats">
-                            <div class="jarvis-ar-fstat"><span>Model version</span><strong>v20 (clean)</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Pre-upload R²</span><strong>0.350 (6 features)</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Full model R²</span><strong>0.664 (12 features)</strong></div>
-                            <div class="jarvis-ar-fstat jarvis-ar-fstat-bar">
-                                <span>Progress</span>
-                                <div class="jarvis-ar-progress-track">
-                                    <div class="jarvis-ar-progress-fill" style="width:${pct}%"></div>
-                                    <div class="jarvis-ar-progress-label">${pct}%</div>
-                                </div>
-                            </div>
-                            <div class="jarvis-ar-fstat"><span>Videos</span><strong>203</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Active signals</span><strong>12 (full) / 6 (pre-upload)</strong></div>
-                            <div class="jarvis-ar-fstat"><span>Hypotheses queued</span><strong>${(arHypotheses || []).filter(h => h.status === 'queued').length || 6}</strong></div>
-                        </div>
-                    </div>
+            ${indicators.length > 0 ? `
+            <div>
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Completed Experiments (${indicators.length}) — click to inspect</div>
+                <div style="border-radius:8px;overflow:hidden;border:1px solid #1e293b">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="background:#1e293b">
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Indicator</th>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Resolution</th>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Tool</th>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">r</th>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Layer</th>
+                        </tr></thead>
+                        <tbody>${completedRows}</tbody>
+                    </table>
                 </div>
-
-                <div class="jarvis-ar-framework-actions">
-                    <a href="./buildings/jarvis/program.md" target="_blank" class="jarvis-ar-framework-btn">Read program.md →</a>
-                    <a href="./buildings/jarvis/results.tsv" target="_blank" class="jarvis-ar-framework-btn jarvis-ar-framework-btn-alt">View results.tsv →</a>
-                </div>
-                <p class="jarvis-ar-framework-note">To run autonomously: point Claude Code or Codex at program.md in this directory with full file access. The agent will run the loop overnight.</p>
-            </div>
-
-            <!-- Video Scorer -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Video Success Predictor</h3>
-                <p class="jarvis-ar-subtitle">Two models: pre-upload (before shooting) and full (with early signals).</p>
-
-                <div class="jarvis-ar-stats-card">
-                    <div class="jarvis-ar-stat">Training data: <strong>203 videos</strong></div>
-                    <div class="jarvis-ar-stat">Pre-upload: R² = <strong>0.350</strong> (6 features, ±4.6x accuracy)</div>
-                    <div class="jarvis-ar-stat">Full model: R² = <strong>0.664</strong> (12 features, ±2.5x accuracy)</div>
-                    <div class="jarvis-ar-stat jarvis-ar-note">v20 clean models — circular outcome features removed</div>
-                </div>
-
-                <div class="jarvis-ar-scorer">
-                    <h4 class="jarvis-ar-scorer-title">Pre-Upload Prediction</h4>
-                    <p style="color:var(--j-muted);font-size:11px;margin:0 0 8px">What you can know before shooting (CV R²=0.350)</p>
-                    <div class="jarvis-ar-inputs">
-                        ${preUploadSignals.map(s => `
-                            <div class="jarvis-ar-input-group">
-                                <label title="${s.note}">${s.label}</label>
-                                <input type="number" id="ar-input-${s.key}" value="${s.def}" placeholder="${s.placeholder}" step="any" />
-                            </div>
-                        `).join('')}
-                    </div>
-
-                    <h4 class="jarvis-ar-scorer-title" style="margin-top:12px">With Early Signals</h4>
-                    <p style="color:var(--j-muted);font-size:11px;margin:0 0 8px">Additional inputs after upload (CV R²=0.664)</p>
-                    <div class="jarvis-ar-inputs">
-                        ${fullModelSignals.map(s => `
-                            <div class="jarvis-ar-input-group">
-                                <label title="${s.note}">${s.label}</label>
-                                <input type="number" id="ar-input-${s.key}" value="${s.def}" placeholder="${s.placeholder}" step="any" />
-                            </div>
-                        `).join('')}
-                    </div>
-                    <button class="jarvis-ar-predict-btn" id="ar-predict-btn">Predict Views →</button>
-                    <div id="ar-prediction-result" class="jarvis-ar-result"></div>
-                </div>
-            </div>
-
-            <!-- Hypothesis Queue -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">Research Hypotheses</h3>
-                <p class="jarvis-ar-subtitle">Experiments queued to increase model accuracy. Run each to unlock a new signal.</p>
-
-                <div class="jarvis-ar-hypotheses">
-                    ${(arHypotheses || []).map(h => `
-                        <div class="jarvis-ar-hyp-card">
-                            <div class="jarvis-ar-hyp-top">
-                                <span class="jarvis-ar-hyp-id">${h.id}</span>
-                                ${statusBadge(h.status)}
-                                <span class="jarvis-ar-res-badge">${h.resolution}</span>
-                            </div>
-                            <div class="jarvis-ar-hyp-signal">${h.signal}</div>
-                            <div class="jarvis-ar-hyp-text">${h.hypothesis}</div>
-                            <div class="jarvis-ar-hyp-expected">Expected: ${h.expected_signal}</div>
-                            <div class="jarvis-ar-hyp-method">Method: ${h.method}</div>
-                            <button class="jarvis-ar-run-hyp-btn" data-hyp="${h.id}">Run Hypothesis →</button>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-
-            <!-- R² History -->
-            <div class="jarvis-ar-section">
-                <h3 class="jarvis-ar-title">R² Improvement Over Time</h3>
-                <div class="jarvis-ar-history">
-                    ${[
-                        { v: 'v1', r2: 0.147, desc: 'Baseline: keep + retention + LLM scores', tag: '' },
-                        { v: 'v6', r2: 0.361, desc: 'Backward elim + retention curve signals', tag: '' },
-                        { v: 'v9', r2: 0.405, desc: 'Concept categories (indestructible, superhero)', tag: '' },
-                        { v: 'v13', r2: 0.506, desc: 'Channel momentum + concept interactions', tag: '' },
-                        { v: 'v17', r2: 0.500, desc: 'Rebased n=203. Pacing + hook signals', tag: '' },
-                        { v: 'v20', r2: 0.664, desc: 'Forward selection. Trajectory signals', tag: 'current' },
-                        { v: 'v22', r2: 0.700, desc: 'n=210, deriv_std replaces entropy+slope', tag: '' },
-                        { v: '—', r2: 0.80, desc: 'Target: higher-resolution signals', tag: 'target' },
-                    ].map(h => `
-                        <div class="jarvis-ar-history-row${h.tag === 'current' ? ' jarvis-ar-history-current' : ''}">
-                            <div class="jarvis-ar-history-label">${h.v} ${h.tag ? '<span class="jarvis-ar-history-tag' + (h.tag === 'current' ? ' jarvis-ar-history-tag-current' : '') + '">' + h.tag + '</span>' : ''}</div>
-                            <div class="jarvis-ar-history-bar-track">
-                                <div class="jarvis-ar-history-bar${h.tag === 'current' ? ' jarvis-ar-history-bar-current' : h.tag === 'target' ? ' jarvis-ar-history-bar-pending' : ''}" style="width:${(h.r2 * 100).toFixed(1)}%"></div>
-                            </div>
-                            <div class="jarvis-ar-history-val">R²=${h.r2.toFixed(3)}</div>
-                            <div class="jarvis-ar-history-desc">${h.desc}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
+            </div>` : '<div style="color:#475569;font-size:12px;padding:20px;text-align:center">No experiments run yet. Use the Run Pipeline button above.</div>'}
         `;
     }
 
-    function runPrediction() {
-        if (!arModel) return;
-        const m = arModel;
-        const inputs = {};
-        // Read all inputs (both pre-upload and full model)
-        const allFeatures = [...(m.pre_upload_model?.features || []), ...(m.full_model?.features || [])];
-        const uniqueFeatures = [...new Set(allFeatures)];
-        uniqueFeatures.forEach(f => {
-            const el = container?.querySelector('#ar-input-' + f);
-            inputs[f] = el ? parseFloat(el.value) : 0;
-        });
-
-        const resultEl = container?.querySelector('#ar-prediction-result');
-        if (!resultEl) return;
-
-        // Show both model results as informational summaries (no weights — models need retraining)
-        const preModel = m.pre_upload_model;
-        const fullModel = m.full_model;
-
-        const preFeatureList = (preModel?.features || []).map(f => {
-            const val = inputs[f];
-            const desc = preModel.feature_descriptions?.[f] || f;
-            return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--j-muted)">${f}</span><strong>${isNaN(val) ? '—' : val}</strong></div>`;
-        }).join('');
-
-        const fullFeatureList = (fullModel?.features || []).map(f => {
-            const val = inputs[f];
-            return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--j-muted)">${f}</span><strong>${isNaN(val) ? '—' : val}</strong></div>`;
-        }).join('');
-
-        resultEl.innerHTML = `
-            <div class="jarvis-ar-result-card jarvis-ar-result-yellow" style="margin-bottom:8px">
-                <div class="jarvis-ar-result-views">Pre-Upload Model</div>
-                <div class="jarvis-ar-result-range">CV R² = ${preModel?.cv_r2_mean || '?'} · ±${preModel?.prediction_range_multiplier || '?'}x · ${preModel?.features?.length || '?'} features</div>
-                <div style="margin-top:6px">${preFeatureList}</div>
-                <div class="jarvis-ar-result-badge">Weights not stored — run regression to get prediction</div>
-            </div>
-            <div class="jarvis-ar-result-card jarvis-ar-result-green">
-                <div class="jarvis-ar-result-views">Full Model (with early signals)</div>
-                <div class="jarvis-ar-result-range">CV R² = ${fullModel?.cv_r2_mean || '?'} · ±${fullModel?.prediction_range_multiplier || '?'}x · ${fullModel?.features?.length || '?'} features</div>
-                <div style="margin-top:6px">${fullFeatureList}</div>
-                <div class="jarvis-ar-result-badge">Weights not stored — run regression to get prediction</div>
-            </div>
-        `;
-    }
-
-    async function runHypothesis(hypId) {
-        if (hypId === 'h5') {
-            const btn = container?.querySelector(`.jarvis-ar-run-hyp-btn[data-hyp="${hypId}"]`);
-            if (btn) { btn.textContent = 'Running…'; btn.disabled = true; }
-            try {
-                const resp = await fetch('/api/jarvis/run-hypothesis', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: 'h5' })
-                });
-                const data = await resp.json();
-                if (btn) {
-                    btn.textContent = data.correlation !== undefined
-                        ? `Done! r=${data.correlation.toFixed(3)} (n=${data.n})`
-                        : (data.message || 'Complete');
+    function bindAutoResearchV2Events() {
+        const runBtn = container?.querySelector('#ar-run-btn');
+        if (runBtn) {
+            runBtn.addEventListener('click', async () => {
+                const n = parseInt(container.querySelector('#ar-run-count')?.value || '5');
+                const statusEl = container.querySelector('#ar-run-status');
+                if (statusEl) statusEl.innerHTML = '<span style="color:#22d3ee">Starting pipeline…</span>';
+                runBtn.disabled = true;
+                try {
+                    const resp = await fetch('/api/jarvis/v2/run-pipeline', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ n })
+                    });
+                    const data = await resp.json();
+                    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✓ Pipeline started (PID ${data.pid}). Running ${n} experiments. Refresh in ~60s to see results.</span>`;
+                } catch (e) {
+                    if (statusEl) statusEl.innerHTML = `<span style="color:#f87171">Error: ${e.message}</span>`;
                 }
-            } catch (e) {
-                if (btn) { btn.textContent = 'Error — retry'; btn.disabled = false; }
-            }
-        } else {
-            alert('This hypothesis requires LLM scoring — feature in progress');
+                setTimeout(() => { if (runBtn) runBtn.disabled = false; }, 5000);
+            });
         }
-    }
-
-    function bindAutoResearchEvents() {
-        const predictBtn = container?.querySelector('#ar-predict-btn');
-        if (predictBtn) predictBtn.addEventListener('click', runPrediction);
-
-        container?.querySelectorAll('.jarvis-ar-run-hyp-btn').forEach(btn => {
-            btn.addEventListener('click', () => runHypothesis(btn.dataset.hyp));
+        container?.querySelectorAll('[data-ar-exp-id]').forEach(row => {
+            if (row.dataset.arExpId) {
+                row.addEventListener('click', () => JarvisUI.openExperimentInstance(row.dataset.arExpId));
+                row.addEventListener('mouseenter', () => row.style.background = '#0f2942');
+                row.addEventListener('mouseleave', () => row.style.background = '');
+            }
         });
-
-        // (arSummaryOpen toggle removed — replaced by Model Status section)
     }
 
     // ══════════════════════════════════════════════════
