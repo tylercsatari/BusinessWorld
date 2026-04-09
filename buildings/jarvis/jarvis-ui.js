@@ -2222,8 +2222,8 @@ const JarvisUI = (() => {
 
         return `
             <div style="margin-bottom:16px">
-                <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:4px">AutoResearch — Pipeline Coordinator</div>
-                <div style="font-size:12px;color:#64748b;line-height:1.5">Coordinates the full indicator discovery pipeline. Each cycle runs one candidate through all 9 steps, stores every data point, and adds the result to the Tactical Brain graph.</div>
+                <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:4px">AutoResearch — Hybrid Autonomous Discovery</div>
+                <div style="font-size:12px;color:#64748b;line-height:1.5">Autonomous indicator discovery. Claude proposes novel candidates (upstream LLM), then every downstream step is deterministic: canonicalize, validate, extract, correlate, graph. Gracefully falls back to template-generated candidates if the LLM step fails.</div>
             </div>
 
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
@@ -2232,8 +2232,9 @@ const JarvisUI = (() => {
                     <div style="font-size:11px;color:#64748b">Completed</div>
                 </div>
                 <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
-                    <div style="font-size:24px;font-weight:700;color:#a78bfa">${Math.max(0, 40 - indicators.length)}</div>
-                    <div style="font-size:11px;color:#64748b">In Queue</div>
+                    <div style="font-size:24px;font-weight:700;color:#a78bfa">100+</div>
+                    <div style="font-size:11px;color:#64748b">Candidate Space</div>
+                    <div style="font-size:9px;color:#475569;margin-top:2px">(LLM + templates)</div>
                 </div>
                 <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
                     <div style="font-size:24px;font-weight:700;color:#06b6d4">${resolutions.length}</div>
@@ -2252,15 +2253,30 @@ const JarvisUI = (() => {
             </div>
 
             <div style="background:#0a1628;border-radius:8px;padding:14px;margin-bottom:16px">
-                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:10px">Run More Experiments</div>
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:10px">Autonomous Run</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                    <label style="font-size:12px;color:#94a3b8">Iterations</label>
+                    <input id="ar-run-count" type="number" value="10" min="1" max="200" style="width:55px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
+                    <label style="font-size:12px;color:#94a3b8">Max min</label>
+                    <input id="ar-max-minutes" type="number" value="30" min="1" max="120" style="width:50px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
+                    <label style="font-size:12px;color:#94a3b8">Fail cutoff</label>
+                    <input id="ar-max-failures" type="number" value="5" min="1" max="50" style="width:45px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
+                    <label style="font-size:12px;color:#94a3b8">No-signal cutoff</label>
+                    <input id="ar-max-nosignal" type="number" value="10" min="1" max="50" style="width:45px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
+                </div>
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                    <label style="font-size:12px;color:#94a3b8">Run next</label>
-                    <input id="ar-run-count" type="number" value="5" min="1" max="40" style="width:60px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
-                    <label style="font-size:12px;color:#94a3b8">experiments</label>
-                    <button id="ar-run-btn" style="background:#0e7490;color:#fff;border:none;padding:6px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">▶ Run Pipeline</button>
+                    <label style="font-size:12px;color:#94a3b8">LLM proposals</label>
+                    <input id="ar-llm-candidates" type="number" value="25" min="0" max="100" style="width:50px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
+                    <button id="ar-auto-btn" style="background:#7c3aed;color:#fff;border:none;padding:6px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">▶ Start Autonomous Run</button>
+                    <button id="ar-run-btn" style="background:#0e7490;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:11px;cursor:pointer">Queue-only (legacy)</button>
                 </div>
                 <div id="ar-run-status" style="margin-top:8px;font-size:11px;min-height:16px"></div>
-                <div style="margin-top:6px;font-size:10px;color:#475569">Runs pipeline.py --run N · processes next N candidates from queue · stores all data points</div>
+                <div style="margin-top:6px;font-size:10px;color:#475569">Hybrid: Claude proposes candidates → deterministic pipeline validates, extracts, correlates, graphs. Falls back to templates if LLM fails.</div>
+            </div>
+
+            <div id="ar-latest-run" style="background:#0a1628;border-radius:8px;padding:14px;margin-bottom:16px;display:none">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Latest Autonomous Run</div>
+                <div id="ar-latest-run-body" style="font-size:12px;color:#cbd5e1"></div>
             </div>
 
             ${indicators.length > 0 ? `
@@ -2283,12 +2299,40 @@ const JarvisUI = (() => {
     }
 
     function bindAutoResearchV2Events() {
+        // Autonomous run button
+        const autoBtn = container?.querySelector('#ar-auto-btn');
+        if (autoBtn) {
+            autoBtn.addEventListener('click', async () => {
+                const n = parseInt(container.querySelector('#ar-run-count')?.value || '10');
+                const maxMin = parseInt(container.querySelector('#ar-max-minutes')?.value || '30');
+                const maxFail = parseInt(container.querySelector('#ar-max-failures')?.value || '5');
+                const maxNs = parseInt(container.querySelector('#ar-max-nosignal')?.value || '10');
+                const llmN = parseInt(container.querySelector('#ar-llm-candidates')?.value || '25');
+                const statusEl = container.querySelector('#ar-run-status');
+                if (statusEl) statusEl.innerHTML = '<span style="color:#a78bfa">Starting autonomous run (LLM proposal + deterministic pipeline)…</span>';
+                autoBtn.disabled = true;
+                try {
+                    const resp = await fetch('/api/jarvis/v2/auto-run', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ n, maxMinutes: maxMin, maxFailures: maxFail, maxNoSignal: maxNs, llmCandidates: llmN })
+                    });
+                    const data = await resp.json();
+                    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✓ Autonomous run started (PID ${data.pid}). Processing up to ${n} candidates. Refresh to see progress.</span>`;
+                } catch (e) {
+                    if (statusEl) statusEl.innerHTML = `<span style="color:#f87171">Error: ${e.message}</span>`;
+                }
+                setTimeout(() => { if (autoBtn) autoBtn.disabled = false; }, 5000);
+            });
+        }
+
+        // Legacy queue-only button
         const runBtn = container?.querySelector('#ar-run-btn');
         if (runBtn) {
             runBtn.addEventListener('click', async () => {
                 const n = parseInt(container.querySelector('#ar-run-count')?.value || '5');
                 const statusEl = container.querySelector('#ar-run-status');
-                if (statusEl) statusEl.innerHTML = '<span style="color:#22d3ee">Starting pipeline…</span>';
+                if (statusEl) statusEl.innerHTML = '<span style="color:#22d3ee">Starting queue pipeline…</span>';
                 runBtn.disabled = true;
                 try {
                     const resp = await fetch('/api/jarvis/v2/run-pipeline', {
@@ -2297,13 +2341,48 @@ const JarvisUI = (() => {
                         body: JSON.stringify({ n })
                     });
                     const data = await resp.json();
-                    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✓ Pipeline started (PID ${data.pid}). Running ${n} experiments. Refresh in ~60s to see results.</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✓ Pipeline started (PID ${data.pid}). Running ${n} from queue. Refresh in ~60s.</span>`;
                 } catch (e) {
                     if (statusEl) statusEl.innerHTML = `<span style="color:#f87171">Error: ${e.message}</span>`;
                 }
                 setTimeout(() => { if (runBtn) runBtn.disabled = false; }, 5000);
             });
         }
+
+        // Load latest autonomous run status
+        (async () => {
+            try {
+                const resp = await fetch('/api/jarvis/v2/auto-run-status');
+                const runs = await resp.json();
+                if (runs && runs.length > 0) {
+                    const latest = runs[runs.length - 1];
+                    const card = container?.querySelector('#ar-latest-run');
+                    const body = container?.querySelector('#ar-latest-run-body');
+                    if (card && body) {
+                        card.style.display = 'block';
+                        const modeLabel = latest.mode === 'hybrid_auto' ? 'Hybrid (LLM + deterministic)' : latest.mode;
+                        body.innerHTML = `
+                            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
+                                <span><b style="color:#a78bfa">${latest.id}</b></span>
+                                <span style="color:#64748b">Mode: ${modeLabel}</span>
+                                <span style="color:#64748b">Stop: ${latest.stop_reason}</span>
+                            </div>
+                            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px">
+                                <span>Attempted: <b>${latest.attempted}</b></span>
+                                <span>Completed: <b style="color:#22c55e">${latest.completed}</b></span>
+                                <span>Failures: <b style="color:#f87171">${latest.failures}</b></span>
+                                ${latest.llm_proposed != null ? `<span>LLM proposed: <b style="color:#a78bfa">${latest.llm_proposed}</b></span>` : ''}
+                                ${latest.llm_completed != null ? `<span>LLM completed: <b style="color:#a78bfa">${latest.llm_completed}</b></span>` : ''}
+                                <span>Top |r|: <b style="color:#22d3ee">${latest.top_new_r_abs?.toFixed(4) || '—'}</b></span>
+                                <span>Elapsed: <b>${latest.elapsed_minutes?.toFixed(1) || '?'}m</b></span>
+                                <span>Total indicators: <b>${latest.total_indicators_after}</b></span>
+                            </div>
+                        `;
+                    }
+                }
+            } catch {}
+        })();
+
         container?.querySelectorAll('[data-ar-exp-id]').forEach(row => {
             if (row.dataset.arExpId) {
                 row.addEventListener('click', () => JarvisUI.openExperimentInstance(row.dataset.arExpId));

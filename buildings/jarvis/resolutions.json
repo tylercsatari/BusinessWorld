@@ -29,7 +29,9 @@
     "indicator_keys": [
       "hook_retention_pct",
       "mid_video_cliff",
-      "retention_entropy"
+      "retention_entropy",
+      "retention_pct_5",
+      "retention_pct_10"
     ],
     "depth_in_hierarchy": 0
   },

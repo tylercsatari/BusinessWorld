@@ -91,6 +91,38 @@
       "experiment_id": "exp_hook_drop_rate_20260409_174639",
       "status": "discovery",
       "strength_label": "moderate"
+    },
+    {
+      "key": "retention_pct_5",
+      "label": "Retention Pct 5",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.039108977129901794,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Retention at 5% into the video.",
+      "experiment_id": "exp_retention_pct_5_20260409_221556",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_pct_10",
+      "label": "Retention Pct 10",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.04996365118112891,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Retention at 10% into the video.",
+      "experiment_id": "exp_retention_pct_10_20260409_221556",
+      "status": "discovery",
+      "strength_label": "none"
     }
   ],
   "edges": [
@@ -128,7 +160,21 @@
       "r": -0.4019295720284731,
       "experiment_id": "exp_hook_drop_rate_20260409_174639",
       "added_at": "2026-04-09T17:46:39.804560Z"
+    },
+    {
+      "from": "retention_pct_5",
+      "to": "views",
+      "r": -0.039108977129901794,
+      "experiment_id": "exp_retention_pct_5_20260409_221556",
+      "added_at": "2026-04-09T22:15:56.727303Z"
+    },
+    {
+      "from": "retention_pct_10",
+      "to": "views",
+      "r": -0.04996365118112891,
+      "experiment_id": "exp_retention_pct_10_20260409_221556",
+      "added_at": "2026-04-09T22:15:56.738863Z"
     }
   ],
-  "updated_at": "2026-04-09T17:46:39.804563Z"
+  "updated_at": "2026-04-09T22:15:56.738866Z"
 }

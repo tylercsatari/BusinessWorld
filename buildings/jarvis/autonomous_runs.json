@@ -1,0 +1,22 @@
+[
+  {
+    "id": "auto_20260409_221555",
+    "started_at": "2026-04-09T22:15:55.795666Z",
+    "finished_at": "2026-04-09T22:15:56.748254Z",
+    "mode": "hybrid_auto",
+    "llm_proposed": 0,
+    "llm_completed": 0,
+    "attempted": 2,
+    "completed": 2,
+    "failures": 0,
+    "no_signal_streak_end": 2,
+    "stop_reason": "max_iterations",
+    "candidate_keys_processed": [
+      "retention_pct_5",
+      "retention_pct_10"
+    ],
+    "top_new_r_abs": 0.05,
+    "elapsed_minutes": 0.02,
+    "total_indicators_after": 7
+  }
+]

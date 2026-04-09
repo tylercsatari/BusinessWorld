@@ -10,6 +10,9 @@ import os
 import math
 import datetime
 import sys
+import re
+import time
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -369,6 +372,372 @@ METRIC_DEFINITIONS = {
     },
 }
 
+AUTONOMOUS_RUNS_FILE = JARVIS_DIR / "autonomous_runs.json"
+
+# ── Autonomous candidate generation ───────────────────────────────────────
+# Candidate families: each produces a list of (key, definition) pairs.
+# Keys follow patterns that extract_metric can parse via regex.
+
+RETENTION_POINTS = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 80, 85, 90, 95]
+RETENTION_WINDOWS = [
+    (0, 5), (0, 10), (5, 15), (10, 20), (20, 30), (30, 40), (40, 50),
+    (50, 60), (60, 70), (70, 80), (80, 90), (90, 100), (95, 100),
+]
+DAILY_VIEWS_WINDOWS = [(0, 1), (0, 3), (0, 7), (7, 14), (14, 30)]
+DAILY_VIEWS_RATIOS = [
+    ("week2", "week1", 7, 14, 0, 7),
+    ("month1", "week1", 0, 30, 0, 7),
+    ("week3", "week2", 14, 21, 7, 14),
+]
+
+
+def generate_autonomous_candidates():
+    """Generate all template-based candidate keys deterministically."""
+    candidates = []
+
+    # 1. Retention point: retention at a specific percentile
+    for pct in RETENTION_POINTS:
+        candidates.append(f"retention_pct_{pct}")
+
+    # 2. Retention window mean
+    for lo, hi in RETENTION_WINDOWS:
+        candidates.append(f"retention_mean_{lo}_{hi}")
+
+    # 3. Retention window slope
+    for lo, hi in RETENTION_WINDOWS:
+        if hi - lo >= 5:  # need at least 5 points for slope
+            candidates.append(f"retention_slope_{lo}_{hi}")
+
+    # 4. Retention window volatility (std dev)
+    for lo, hi in RETENTION_WINDOWS:
+        if hi - lo >= 3:
+            candidates.append(f"retention_volatility_{lo}_{hi}")
+
+    # 5. Daily views log windows
+    for d0, d1 in DAILY_VIEWS_WINDOWS:
+        candidates.append(f"views_log_days_{d0}_{d1}")
+
+    # 6. Daily views ratios
+    for name_num, name_den, n0, n1, d0, d1 in DAILY_VIEWS_RATIOS:
+        candidates.append(f"views_ratio_{name_num}_vs_{name_den}")
+
+    # 7. Transcript features (static — already in METRIC_DEFINITIONS but ensure coverage)
+    for k in ["transcript_word_count", "question_count", "speech_rate_wps"]:
+        candidates.append(k)
+
+    # 8. Frame features
+    for k in ["face_frame_pct", "text_overlay_frame_pct", "scene_change_count"]:
+        candidates.append(k)
+
+    # 9. Interaction terms (pairs of strong base indicators)
+    interaction_bases = [
+        "retention_pct_50", "retention_pct_25", "speech_rate_wps",
+        "face_frame_pct", "retention_entropy", "hook_drop_rate",
+        "non_sub_view_share", "swipe_away_rate", "like_rate",
+    ]
+    seen_pairs = set()
+    for i, a in enumerate(interaction_bases):
+        for b in interaction_bases[i + 1:]:
+            pair_key = f"{a}_x_{b}"
+            if pair_key not in seen_pairs:
+                seen_pairs.add(pair_key)
+                candidates.append(pair_key)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
+
+
+# ── LLM candidate proposal (upstream, non-deterministic) ─────────────────
+# Only this step may use an LLM.  Everything downstream stays deterministic.
+
+VALID_KEY_PATTERNS = [
+    re.compile(r'^retention_pct_(\d+)$'),
+    re.compile(r'^retention_mean_(\d+)_(\d+)$'),
+    re.compile(r'^retention_slope_(\d+)_(\d+)$'),
+    re.compile(r'^retention_volatility_(\d+)_(\d+)$'),
+    re.compile(r'^views_log_days_(\d+)_(\d+)$'),
+    re.compile(r'^views_ratio_(\w+)_vs_(\w+)$'),
+    re.compile(r'^(.+)_x_(.+)$'),
+]
+
+# Static keys that are always valid
+STATIC_VALID_KEYS = set(METRIC_DEFINITIONS.keys())
+
+
+def canonicalize_key(raw_key):
+    """Normalise an LLM-proposed key to snake_case, strip whitespace."""
+    k = raw_key.strip().lower()
+    k = re.sub(r'[^a-z0-9_]', '_', k)
+    k = re.sub(r'_+', '_', k).strip('_')
+    return k
+
+
+def validate_candidate(key):
+    """Return True if key is implementable: either in METRIC_DEFINITIONS or
+    matches one of the generated patterns with sensible parameters."""
+    if key in STATIC_VALID_KEYS:
+        return True
+    # retention_pct_N — pct must be 1-99
+    m = re.match(r'^retention_pct_(\d+)$', key)
+    if m:
+        pct = int(m.group(1))
+        return 1 <= pct <= 99
+    # retention_mean/slope/volatility — valid window
+    m = re.match(r'^retention_(?:mean|slope|volatility)_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        return 0 <= lo < hi <= 100
+    # views_log_days
+    m = re.match(r'^views_log_days_(\d+)_(\d+)$', key)
+    if m:
+        d0, d1 = int(m.group(1)), int(m.group(2))
+        return 0 <= d0 < d1 <= 365
+    # views_ratio
+    m = re.match(r'^views_ratio_(\w+)_vs_(\w+)$', key)
+    if m:
+        return any(r[0] == m.group(1) and r[1] == m.group(2) for r in DAILY_VIEWS_RATIOS)
+    # Interaction terms
+    m = re.match(r'^(.+)_x_(.+)$', key)
+    if m:
+        a, b = m.group(1), m.group(2)
+        return get_metric_definition(a) is not None and get_metric_definition(b) is not None
+    return False
+
+
+def llm_propose_candidates(n_candidates, existing_keys, indicators, graph):
+    """Ask Claude (via CLI) to propose new candidate indicator keys.
+    Returns a list of canonicalized, validated keys.  Falls back to [] on error."""
+    # Build context for the prompt
+    n_ind = len(indicators)
+    n_nodes = len(graph.get("nodes", []))
+    n_edges = len(graph.get("edges", []))
+
+    # Top indicators by |r|
+    sorted_inds = sorted(indicators, key=lambda i: abs(i.get("result", {}).get("primary_r", 0)), reverse=True)
+    top_lines = []
+    for ind in sorted_inds[:15]:
+        r = ind["result"]["primary_r"]
+        top_lines.append(f"  {ind['key']}  r={r:+.3f}")
+    top_str = "\n".join(top_lines) if top_lines else "  (none yet)"
+
+    existing_str = ", ".join(sorted(existing_keys)[:80])
+
+    prompt = f"""You are a research assistant for a YouTube analytics pipeline.
+The pipeline discovers which measurable indicators predict video views (log10 viewCount).
+The corpus is 370 YouTube Shorts with full retention curves (100 points), daily view history, transcripts, and frame analysis.
+
+Current state:
+- {n_ind} indicators tested, {n_nodes} graph nodes, {n_edges} edges
+- Existing keys: {existing_str}
+
+Top indicators by |r|:
+{top_str}
+
+Propose exactly {n_candidates} NEW candidate indicator keys (not already tested).
+Each key must follow one of these patterns:
+- retention_pct_<N>  (N = 1-99, retention at that percentile)
+- retention_mean_<lo>_<hi>  (mean retention in pct window)
+- retention_slope_<lo>_<hi>  (slope in pct window)
+- retention_volatility_<lo>_<hi>  (std dev in pct window)
+- views_log_days_<d0>_<d1>  (log10 views in day window)
+- views_ratio_<name>_vs_<name>  (ratio of view windows, must use: week2/week1, month1/week1, week3/week2)
+- <keyA>_x_<keyB>  (interaction of two valid keys)
+- Any key from the static set: hook_retention_pct, final_5pct_retention, retention_entropy, etc.
+
+Focus on unexplored regions: mid-video retention windows, tail retention, early-vs-late slopes, and interaction terms with the strongest known indicators.
+
+Respond ONLY with a JSON array of strings. No explanation, no markdown fences.
+Example: ["retention_slope_40_60", "retention_pct_33", "retention_entropy_x_face_frame_pct"]"""
+
+    try:
+        result = subprocess.run(
+            ["env", "-u", "ANTHROPIC_API_KEY",
+             "claude", "--permission-mode", "bypassPermissions", "--print", "-p", prompt],
+            capture_output=True, text=True, timeout=120
+        )
+        if result.returncode != 0:
+            print(f"  [LLM] Claude CLI returned code {result.returncode}")
+            return []
+        raw = result.stdout.strip()
+        # Try to parse JSON from the output — handle markdown fences
+        json_match = re.search(r'\[.*\]', raw, re.DOTALL)
+        if not json_match:
+            print(f"  [LLM] No JSON array found in response")
+            return []
+        proposals = json.loads(json_match.group())
+        if not isinstance(proposals, list):
+            return []
+
+        # Canonicalize, validate, deduplicate
+        accepted = []
+        seen = set(existing_keys)
+        for raw_key in proposals:
+            if not isinstance(raw_key, str):
+                continue
+            key = canonicalize_key(raw_key)
+            if not key or key in seen:
+                continue
+            if validate_candidate(key):
+                accepted.append(key)
+                seen.add(key)
+        print(f"  [LLM] Proposed {len(proposals)} keys, accepted {len(accepted)} after validation")
+        return accepted
+
+    except subprocess.TimeoutExpired:
+        print(f"  [LLM] Claude CLI timed out")
+        return []
+    except Exception as e:
+        print(f"  [LLM] Error calling Claude CLI: {e}")
+        return []
+
+
+def get_metric_definition(key):
+    """Look up metric definition — checks static METRIC_DEFINITIONS first,
+    then generates definitions for pattern-based autonomous keys."""
+    if key in METRIC_DEFINITIONS:
+        return METRIC_DEFINITIONS[key]
+
+    # retention_pct_N
+    m = re.match(r'^retention_pct_(\d+)$', key)
+    if m:
+        pct = int(m.group(1))
+        return {
+            "description": f"Retention at {pct}% into the video.",
+            "formula": f"retentionCurve[{pct}].retention",
+            "expected_range": "0 to 2.0",
+            "data_sources": ["analytics.retentionCurve"],
+            "layer": "post",
+        }
+
+    # retention_mean_LO_HI
+    m = re.match(r'^retention_mean_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        return {
+            "description": f"Mean retention in the {lo}-{hi}% window of the video.",
+            "formula": f"mean(retentionCurve[{lo}:{hi}].retention)",
+            "expected_range": "0 to 2.0",
+            "data_sources": ["analytics.retentionCurve"],
+            "layer": "post",
+        }
+
+    # retention_slope_LO_HI
+    m = re.match(r'^retention_slope_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        return {
+            "description": f"Linear regression slope of retention in the {lo}-{hi}% window.",
+            "formula": f"linregress(retentionCurve[{lo}:{hi}].retention).slope",
+            "expected_range": "-0.05 to 0.05",
+            "data_sources": ["analytics.retentionCurve"],
+            "layer": "post",
+        }
+
+    # retention_volatility_LO_HI
+    m = re.match(r'^retention_volatility_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        return {
+            "description": f"Std deviation of retention in the {lo}-{hi}% window (volatility).",
+            "formula": f"std(retentionCurve[{lo}:{hi}].retention)",
+            "expected_range": "0 to 0.5",
+            "data_sources": ["analytics.retentionCurve"],
+            "layer": "post",
+        }
+
+    # views_log_days_D0_D1
+    m = re.match(r'^views_log_days_(\d+)_(\d+)$', key)
+    if m:
+        d0, d1 = int(m.group(1)), int(m.group(2))
+        return {
+            "description": f"Log10 of total views in days {d0}-{d1} after upload.",
+            "formula": f"log10(sum(dailyViews[{d0}:{d1}].views) + 1)",
+            "expected_range": "0 to 8",
+            "data_sources": ["analytics.dailyViews"],
+            "layer": "post",
+        }
+
+    # views_ratio_X_vs_Y
+    m = re.match(r'^views_ratio_(\w+)_vs_(\w+)$', key)
+    if m:
+        num_name, den_name = m.group(1), m.group(2)
+        ratio_info = next(
+            (r for r in DAILY_VIEWS_RATIOS if r[0] == num_name and r[1] == den_name), None
+        )
+        if ratio_info:
+            _, _, n0, n1, d0, d1 = ratio_info
+            return {
+                "description": f"View ratio: days {n0}-{n1} / days {d0}-{d1} — sustained vs early virality.",
+                "formula": f"sum(dailyViews[{n0}:{n1}].views) / (sum(dailyViews[{d0}:{d1}].views) + 1)",
+                "expected_range": "0 to 5",
+                "data_sources": ["analytics.dailyViews"],
+                "layer": "post",
+            }
+
+    # Interaction terms: keyA_x_keyB
+    m = re.match(r'^(.+)_x_(.+)$', key)
+    if m:
+        a, b = m.group(1), m.group(2)
+        def_a = get_metric_definition(a)
+        def_b = get_metric_definition(b)
+        if def_a and def_b:
+            return {
+                "description": f"Interaction: {a} multiplied by {b}.",
+                "formula": f"{a} * {b}",
+                "expected_range": "varies",
+                "data_sources": list(set(def_a.get("data_sources", []) + def_b.get("data_sources", []))),
+                "layer": "post",
+            }
+
+    return None
+
+
+def get_resolution_for_key(key):
+    """Determine resolution info for any key (static or generated).
+    Returns (resolution_id, start_pct, end_pct, start_day, end_day)."""
+    if key in INDICATOR_RESOLUTION_MAP:
+        return INDICATOR_RESOLUTION_MAP[key]
+
+    # retention_pct_N → r0 (single point, whole-video scalar)
+    if re.match(r'^retention_pct_\d+$', key):
+        return ('r0', 0, 100, None, None)
+
+    # retention_mean/slope/volatility windows
+    m = re.match(r'^retention_(?:mean|slope|volatility)_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        if lo == 0 and hi == 100:
+            return ('r0', 0, 100, None, None)
+        res_id = f"r_pct_{lo}_{hi}"
+        return (res_id, lo, hi, None, None)
+
+    # views_log_days_D0_D1
+    m = re.match(r'^views_log_days_(\d+)_(\d+)$', key)
+    if m:
+        d0, d1 = int(m.group(1)), int(m.group(2))
+        res_id = f"r_days_{d0}_{d1}"
+        return (res_id, None, None, d0, d1)
+
+    # views_ratio
+    m = re.match(r'^views_ratio_(\w+)_vs_(\w+)$', key)
+    if m:
+        ratio_info = next(
+            (r for r in DAILY_VIEWS_RATIOS if r[0] == m.group(1) and r[1] == m.group(2)), None
+        )
+        if ratio_info:
+            _, _, n0, n1, d0, d1 = ratio_info
+            end_day = max(n1, d1)
+            return (f"r_days_0_{end_day}", None, None, 0, end_day)
+
+    # Interaction or other → r0
+    return ('r0', 0, 100, None, None)
+
 
 # ── JSON helpers ───────────────────────────────────────────────────────────
 def load_json(path, default=None):
@@ -651,6 +1020,83 @@ def extract_metric(key, analysis):
             return (None, "missing data")
         return (float(keep * (non_sub / total)), None)
 
+    # ── Pattern-based autonomous keys ─────────────────────────────────────
+
+    # retention_pct_N
+    m = re.match(r'^retention_pct_(\d+)$', key)
+    if m:
+        idx = int(m.group(1))
+        v = curve_val(idx)
+        return (v, None) if v is not None else (None, "no curve")
+
+    # retention_mean_LO_HI
+    m = re.match(r'^retention_mean_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        if len(curve) < hi:
+            return (None, "curve too short")
+        vals = [p["retention"] for p in curve[lo:hi]]
+        if not vals:
+            return (None, "empty window")
+        return (float(np.mean(vals)), None)
+
+    # retention_slope_LO_HI
+    m = re.match(r'^retention_slope_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        if len(curve) < hi:
+            return (None, "curve too short")
+        vals = [p["retention"] for p in curve[lo:hi]]
+        if len(vals) < 2:
+            return (None, "window too small")
+        slope, _, _, _, _ = stats.linregress(range(len(vals)), vals)
+        return (float(slope), None)
+
+    # retention_volatility_LO_HI
+    m = re.match(r'^retention_volatility_(\d+)_(\d+)$', key)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        if len(curve) < hi:
+            return (None, "curve too short")
+        vals = [p["retention"] for p in curve[lo:hi]]
+        if len(vals) < 2:
+            return (None, "window too small")
+        return (float(np.std(vals)), None)
+
+    # views_log_days_D0_D1
+    m = re.match(r'^views_log_days_(\d+)_(\d+)$', key)
+    if m:
+        d0, d1 = int(m.group(1)), int(m.group(2))
+        if not daily:
+            return (None, "no daily views")
+        total_v = sum(d.get("views", 0) for d in daily[d0:d1])
+        return (float(math.log10(total_v + 1)), None)
+
+    # views_ratio_X_vs_Y
+    m = re.match(r'^views_ratio_(\w+)_vs_(\w+)$', key)
+    if m:
+        ratio_info = next(
+            (r for r in DAILY_VIEWS_RATIOS if r[0] == m.group(1) and r[1] == m.group(2)), None
+        )
+        if ratio_info and daily:
+            _, _, n0, n1, d0, d1 = ratio_info
+            num = sum(d.get("views", 0) for d in daily[n0:n1])
+            den = sum(d.get("views", 0) for d in daily[d0:d1])
+            return (float(num / (den + 1)), None)
+        return (None, "no daily views or unknown ratio")
+
+    # Interaction terms: keyA_x_keyB
+    m = re.match(r'^(.+)_x_(.+)$', key)
+    if m:
+        a_key, b_key = m.group(1), m.group(2)
+        # Verify both are real keys
+        if get_metric_definition(a_key) and get_metric_definition(b_key):
+            va, skip_a = extract_metric(a_key, analysis)
+            vb, skip_b = extract_metric(b_key, analysis)
+            if va is not None and vb is not None:
+                return (float(va * vb), None)
+            return (None, skip_a or skip_b or "missing component")
+
     return (None, f"unknown key: {key}")
 
 
@@ -670,8 +1116,8 @@ def step_qualify(key, existing_keys):
 
 
 def step_quantify(key):
-    """Step 3: Look up metric definition."""
-    return METRIC_DEFINITIONS.get(key)
+    """Step 3: Look up metric definition (static or generated)."""
+    return get_metric_definition(key)
 
 
 # ── Resolution map: what each indicator actually measures ─────────────────
@@ -733,13 +1179,32 @@ DEFAULT_RESOLUTION_DEFS = {
 
 def step_resolve(key, resolutions):
     """Step 4: Assign resolution based on what the indicator actually measures."""
-    # Look up the correct resolution for this indicator
-    res_info = INDICATOR_RESOLUTION_MAP.get(key, ('r0', 0, 100, None, None))
+    # Look up the correct resolution for this indicator (static or generated)
+    res_info = get_resolution_for_key(key)
     resolution_id = res_info[0]
     exists = any(r["id"] == resolution_id for r in resolutions)
     if not exists:
-        # Create the shelf from the definition map
-        defn = DEFAULT_RESOLUTION_DEFS.get(resolution_id, DEFAULT_RESOLUTION_DEFS['r0'])
+        # Create the shelf from static map or generate dynamically
+        defn = DEFAULT_RESOLUTION_DEFS.get(resolution_id)
+        if not defn:
+            _, sp, ep, sd, ed = res_info
+            if sp is not None and ep is not None:
+                label = f"{sp}-{ep}% of Video"
+                desc = f"Retention window from {sp}% to {ep}% of video."
+                gran = "whole" if (sp == 0 and ep == 100) else "video_window"
+            elif sd is not None and ed is not None:
+                label = f"Days {sd}-{ed}"
+                desc = f"View data from day {sd} to day {ed} after upload."
+                gran = "time_window"
+            else:
+                label = resolution_id
+                desc = "Auto-generated resolution shelf."
+                gran = "whole"
+            defn = {
+                "id": resolution_id, "label": label, "description": desc,
+                "start_pct": sp, "end_pct": ep, "start_day": sd, "end_day": ed,
+                "granularity": gran,
+            }
         new_shelf = {
             **defn,
             "created_from": "pipeline",
@@ -858,7 +1323,7 @@ def step_build_result(key, exp):
                       "moderate" if abs_r >= 0.3 else
                       "weak" if abs_r >= 0.1 else "none")
 
-    defn = METRIC_DEFINITIONS.get(key, {})
+    defn = get_metric_definition(key) or {}
     desc = defn.get("description", key)
     short_desc = desc.split("—")[0].strip()
 
@@ -944,35 +1409,10 @@ def step_update_graph(indicator, graph):
 
 
 def step_get_comparison_target(graph):
-    """Step 9 (EXPAND): Choose comparison target based on graph size."""
-    import random
+    """Step 9 (EXPAND): views is the only graph root — all indicators correlate to views."""
     n_ind = sum(1 for n in graph["nodes"] if n["type"] == "indicator")
-    if n_ind < 10:
-        target = "views"
-        phase = "1"
-    elif n_ind < 30:
-        if random.random() < 0.8:
-            target = "views"
-        else:
-            cands = [n["key"] for n in graph["nodes"] if n["type"] == "indicator"]
-            target = random.choice(cands) if cands else "views"
-        phase = "2"
-    else:
-        cands = [n for n in graph["nodes"] if n["type"] == "indicator"]
-        if not cands or random.random() < 0.5:
-            target = "views"
-        else:
-            weights = [abs(n.get("r_partial", 0.1)) for n in cands]
-            total_w = sum(weights)
-            rv = random.random() * total_w
-            cumsum, target = 0, "views"
-            for n, w in zip(cands, weights):
-                cumsum += w
-                if cumsum >= rv:
-                    target = n["key"]
-                    break
-        phase = "3"
-    print(f"  [EXPAND]    target='{target}' (Phase {phase}, {n_ind} indicator nodes in graph)")
+    target = "views"
+    print(f"  [EXPAND]    target='views' ({n_ind} indicator nodes in graph)")
     return target
 
 
@@ -1168,6 +1608,162 @@ def cmd_single(key):
         print("Saved.")
 
 
+def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
+                  max_no_signal=None, llm_candidates=25):
+    """Hybrid autonomous run: LLM proposes candidates upstream (may fail gracefully),
+    then everything downstream is deterministic template generation + pipeline."""
+    start_time = time.time()
+    run_id = f"auto_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    print(f"\n{'=' * 60}")
+    print(f"AUTONOMOUS RUN: {run_id}")
+    print(f"  max_iterations={max_iterations}, max_minutes={max_minutes}, "
+          f"max_failures={max_failures}, max_no_signal={max_no_signal}, "
+          f"llm_candidates={llm_candidates}")
+    print(f"{'=' * 60}")
+
+    indicators = load_json(INDICATORS_FILE, [])
+    tools = load_json(TOOLS_FILE, [])
+    resolutions = load_json(RESOLUTIONS_FILE, [])
+    graph = load_json(GRAPH_FILE, {"nodes": [], "edges": []})
+    existing_keys = {i["key"] for i in indicators}
+
+    # ── Phase 1: LLM-proposed candidates (upstream, non-deterministic) ────
+    llm_keys = []
+    if llm_candidates > 0:
+        print(f"\n[PHASE 1] Asking Claude for {llm_candidates} candidate proposals...")
+        llm_keys = llm_propose_candidates(llm_candidates, existing_keys, indicators, graph)
+        if llm_keys:
+            print(f"  LLM contributed {len(llm_keys)} validated keys")
+        else:
+            print(f"  LLM proposal failed or returned 0 valid keys — falling back to deterministic only")
+
+    # ── Phase 2: Deterministic candidate pool ─────────────────────────────
+    auto_candidates = generate_autonomous_candidates()
+    queue_candidates = load_json(QUEUE_FILE, DEFAULT_CANDIDATES)
+    # Merge: LLM first (novel ideas), then auto-generated, then legacy queue
+    seen = set()
+    merged = []
+    for k in llm_keys + auto_candidates:
+        if k not in seen:
+            seen.add(k)
+            merged.append(k)
+    for k in queue_candidates:
+        if k not in seen:
+            seen.add(k)
+            merged.append(k)
+
+    pool = [k for k in merged if k not in existing_keys]
+    print(f"Candidate pool: {len(pool)} unrun ({len(llm_keys)} LLM + "
+          f"{len(auto_candidates)} generated + {len(queue_candidates)} legacy, "
+          f"{len(existing_keys)} already done)")
+
+    # ── Phase 3: Deterministic pipeline execution ─────────────────────────
+    videos = load_videos()
+    if not videos:
+        print("ERROR: No videos loaded")
+        return
+
+    attempted = 0
+    completed = 0
+    failures = 0
+    consecutive_failures = 0
+    no_signal_streak = 0
+    stop_reason = "exhausted_candidates"
+    processed_keys = []
+    top_r_abs = 0.0
+    llm_accepted_count = 0
+
+    for key in pool:
+        # Check cutoffs
+        if attempted >= max_iterations:
+            stop_reason = "max_iterations"
+            break
+        if max_minutes and (time.time() - start_time) / 60 >= max_minutes:
+            stop_reason = "max_minutes"
+            break
+        if max_failures and consecutive_failures >= max_failures:
+            stop_reason = "max_failures"
+            break
+        if max_no_signal and no_signal_streak >= max_no_signal:
+            stop_reason = "max_no_signal"
+            break
+
+        attempted += 1
+        is_llm = key in llm_keys
+        result = process_indicator(key, videos, existing_keys, resolutions, graph, tools)
+
+        if result:
+            indicators.append(result)
+            exp_log = load_json(EXPERIMENTS_FILE, [])
+            exp_log.append({
+                "id": result["experiment"]["id"],
+                "indicator_key": key,
+                "tool_id": result["experiment"]["tool_id"],
+                "tool_name": result["experiment"]["tool_name"],
+                "target": result["target"],
+                "parameters": result["experiment"]["parameters"],
+                "outputs": result["experiment"]["outputs"],
+                "n_videos": result["experiment"]["n_videos"],
+                "status": result["result"]["status"],
+                "ran_at": result["experiment"]["ran_at"],
+                "source": "llm" if is_llm else "deterministic",
+            })
+            save_json(EXPERIMENTS_FILE, exp_log)
+            save_json(INDICATORS_FILE, indicators)
+            existing_keys.add(key)
+            completed += 1
+            consecutive_failures = 0
+            processed_keys.append(key)
+            if is_llm:
+                llm_accepted_count += 1
+
+            r_abs = abs(result["result"]["primary_r"])
+            if r_abs > top_r_abs:
+                top_r_abs = r_abs
+            if r_abs < 0.05:
+                no_signal_streak += 1
+            else:
+                no_signal_streak = 0
+        else:
+            failures += 1
+            consecutive_failures += 1
+            processed_keys.append(f"FAIL:{key}")
+
+    elapsed = (time.time() - start_time) / 60
+
+    # Save run log
+    run_record = {
+        "id": run_id,
+        "started_at": datetime.datetime.utcfromtimestamp(start_time).isoformat() + "Z",
+        "finished_at": now_iso(),
+        "mode": "hybrid_auto",
+        "llm_proposed": len(llm_keys),
+        "llm_completed": llm_accepted_count,
+        "attempted": attempted,
+        "completed": completed,
+        "failures": failures,
+        "no_signal_streak_end": no_signal_streak,
+        "stop_reason": stop_reason,
+        "candidate_keys_processed": processed_keys[:200],
+        "top_new_r_abs": round(top_r_abs, 4),
+        "elapsed_minutes": round(elapsed, 2),
+        "total_indicators_after": len(indicators),
+    }
+    runs = load_json(AUTONOMOUS_RUNS_FILE, [])
+    runs.append(run_record)
+    save_json(AUTONOMOUS_RUNS_FILE, runs)
+
+    print(f"\n{'=' * 60}")
+    print(f"AUTONOMOUS RUN COMPLETE: {run_id}")
+    print(f"  Attempted: {attempted}, Completed: {completed}, Failures: {failures}")
+    print(f"  LLM proposed: {len(llm_keys)}, LLM completed: {llm_accepted_count}")
+    print(f"  Stop reason: {stop_reason}")
+    print(f"  Top |r|: {top_r_abs:.4f}")
+    print(f"  Elapsed: {elapsed:.1f} minutes")
+    print(f"  Total indicators now: {len(indicators)}")
+    print(f"{'=' * 60}")
+
+
 # ── Entry point ────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Jarvis Pipeline")
@@ -1175,6 +1771,11 @@ if __name__ == "__main__":
     parser.add_argument("--single", type=str, metavar="KEY", help="Run one indicator by key")
     parser.add_argument("--status", action="store_true", help="Show current status")
     parser.add_argument("--graph", action="store_true", help="Print graph nodes and edges")
+    parser.add_argument("--auto-run", type=int, metavar="N", help="Autonomous run: process up to N candidates")
+    parser.add_argument("--max-minutes", type=float, metavar="M", help="Autonomous: max runtime in minutes")
+    parser.add_argument("--max-failures", type=int, metavar="K", help="Autonomous: stop after K consecutive failures")
+    parser.add_argument("--max-no-signal", type=int, metavar="K", help="Autonomous: stop after K consecutive |r|<0.05")
+    parser.add_argument("--llm-candidates", type=int, metavar="N", default=25, help="Autonomous: ask Claude for N candidate proposals (0 to disable)")
     args = parser.parse_args()
 
     if args.status:
@@ -1185,5 +1786,8 @@ if __name__ == "__main__":
         cmd_single(args.single)
     elif args.graph:
         cmd_graph()
+    elif args.auto_run:
+        cmd_auto_run(args.auto_run, args.max_minutes, args.max_failures,
+                     args.max_no_signal, args.llm_candidates)
     else:
         parser.print_help()

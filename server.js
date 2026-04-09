@@ -3585,6 +3585,46 @@ Respond ONLY as valid JSON (no markdown):
     }
 
     // =========================================
+    // API: Jarvis Autonomous Run
+    // =========================================
+    if (pathname === '/api/jarvis/v2/auto-run' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', () => {
+            try {
+                const opts = JSON.parse(body || '{}');
+                const n = parseInt(opts.n) || 10;
+                const args = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--auto-run', String(n)];
+                if (opts.maxMinutes) args.push('--max-minutes', String(opts.maxMinutes));
+                if (opts.maxFailures) args.push('--max-failures', String(opts.maxFailures));
+                if (opts.maxNoSignal) args.push('--max-no-signal', String(opts.maxNoSignal));
+                if (opts.llmCandidates != null) args.push('--llm-candidates', String(opts.llmCandidates));
+                const { spawn } = require('child_process');
+                const proc = spawn('python3', args, { cwd: __dirname, detached: true });
+                proc.unref();
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ started: true, n, pid: proc.pid }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/auto-run-status' && req.method === 'GET') {
+        try {
+            const runsPath = path.join(__dirname, 'buildings/jarvis/autonomous_runs.json');
+            const data = JSON.parse(fs.readFileSync(runsPath, 'utf8'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end('[]');
+        }
+        return;
+    }
+
+    // =========================================
     // API: Jarvis Run Hypothesis
     // =========================================
     if (pathname === '/api/jarvis/run-hypothesis' && req.method === 'POST') {

@@ -147,6 +147,60 @@ As the graph grows, indicators can connect to other indicator nodes (not just th
 
 ---
 
+## Autonomous Candidate Generation (Hybrid Architecture)
+
+The pipeline supports **hybrid autonomous discovery**:
+
+### Phase 1: LLM Proposal (Upstream, Non-Deterministic)
+- Claude CLI is invoked via `env -u ANTHROPIC_API_KEY claude --permission-mode bypassPermissions --print`
+- The LLM receives current graph state, existing indicators, and top correlations
+- It proposes novel candidate indicator keys following the valid pattern schema
+- If the LLM call fails (timeout, bad output, etc.), the pipeline falls back gracefully to Phase 2
+
+### Phase 2: Deterministic Template Generation
+- `generate_autonomous_candidates()` produces all template-based keys:
+  - `retention_pct_<N>` — retention at percentile N (1-99)
+  - `retention_mean_<lo>_<hi>` — mean retention in a pct window
+  - `retention_slope_<lo>_<hi>` — linear slope in a pct window
+  - `retention_volatility_<lo>_<hi>` — std dev in a pct window
+  - `views_log_days_<d0>_<d1>` — log10 views in a day window
+  - `views_ratio_<name>_vs_<name>` — ratio of view windows
+  - `<keyA>_x_<keyB>` — interaction (product) of two valid indicators
+
+### Phase 3: Deterministic Pipeline Execution
+Every step after candidate selection is fully deterministic:
+Canonicalize → Validate → Quantify → Resolve → Dataset → Experiment → Result → Graph
+
+### Canonicalization & Validation
+All LLM-proposed keys are:
+1. Lowercased and converted to snake_case
+2. Validated against known patterns with range checks (e.g., pct 1-99, window lo < hi)
+3. Rejected if not implementable by `extract_metric()`
+
+### `autonomous_runs.json`
+**Location:** `buildings/jarvis/autonomous_runs.json`
+
+Each entry records one autonomous run:
+```json
+{
+  "id": "auto_20260409_153000",
+  "started_at": "2026-04-09T15:30:00Z",
+  "finished_at": "2026-04-09T15:35:42Z",
+  "mode": "hybrid_auto",
+  "llm_proposed": 25,
+  "llm_completed": 12,
+  "attempted": 30,
+  "completed": 28,
+  "failures": 2,
+  "stop_reason": "max_iterations",
+  "top_new_r_abs": 0.4231,
+  "elapsed_minutes": 5.7,
+  "total_indicators_after": 58
+}
+```
+
+---
+
 ## Resolution System (Emergent)
 
 Resolution describes WHERE in the video something is measured.

@@ -123,5 +123,57 @@
     "n_videos": 370,
     "status": "discovery",
     "ran_at": "2026-04-09T17:46:39.804537Z"
+  },
+  {
+    "id": "exp_retention_pct_5_20260409_221556",
+    "indicator_key": "retention_pct_5",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.039108977129901794,
+      "p_value": 0.4532440177709072,
+      "n": 370,
+      "ci_low": -0.14050440469823686,
+      "ci_high": 0.06309829218644945,
+      "rho": 0.15871179270420574,
+      "p_rho": 0.0021987605975137504
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:15:56.727267Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_retention_pct_10_20260409_221556",
+    "indicator_key": "retention_pct_10",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.04996365118112891,
+      "p_value": 0.33785262041648817,
+      "n": 370,
+      "ci_low": -0.1511493569300314,
+      "ci_high": 0.05225822861249729,
+      "rho": 0.12148035871238054,
+      "p_rho": 0.019414347603201102
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:15:56.738842Z",
+    "source": "deterministic"
   }
 ]

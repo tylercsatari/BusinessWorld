@@ -9553,5 +9553,3825 @@
     ],
     "created_at": "2026-04-09T17:46:39.804554Z",
     "updated_at": "2026-04-09T17:46:39.804555Z"
+  },
+  {
+    "key": "retention_pct_5",
+    "label": "Retention Pct 5",
+    "layer": "post",
+    "status": "discovery",
+    "resolution_id": "r0",
+    "depth": 1,
+    "target": "views",
+    "metric_definition": {
+      "description": "Retention at 5% into the video.",
+      "formula": "retentionCurve[5].retention",
+      "expected_range": "0 to 2.0",
+      "data_sources": [
+        "analytics.retentionCurve"
+      ],
+      "layer": "post"
+    },
+    "dataset": [
+      {
+        "ytId": "X_0yKoN3srA",
+        "value": 1.2017,
+        "target_value": 5.693344355146334
+      },
+      {
+        "ytId": "1WriLmap9dI",
+        "value": 1.2335,
+        "target_value": 7.090364161641354
+      },
+      {
+        "ytId": "K25wicGFxIA",
+        "value": 4.474,
+        "target_value": 4.778541939633554
+      },
+      {
+        "ytId": "5VwE7o1WBHs",
+        "value": 1.1357,
+        "target_value": 6.733708163605438
+      },
+      {
+        "ytId": "4JZemHo8ED0",
+        "value": 1.171,
+        "target_value": 6.03819837765136
+      },
+      {
+        "ytId": "lBvkUzbsH4Y",
+        "value": 1.1456,
+        "target_value": 5.3430480092767
+      },
+      {
+        "ytId": "GuxoGIpWe_Y",
+        "value": 1.2394,
+        "target_value": 7.446171948344116
+      },
+      {
+        "ytId": "XfdXalkAdqc",
+        "value": 1.2072,
+        "target_value": 5.622089624870662
+      },
+      {
+        "ytId": "uw8FiiU0G_M",
+        "value": 1.3,
+        "target_value": 6.545970424450062
+      },
+      {
+        "ytId": "H30G5fvk5dk",
+        "value": 1.1772,
+        "target_value": 5.781682866545967
+      },
+      {
+        "ytId": "a1CoSXBAhiY",
+        "value": 1.2561,
+        "target_value": 7.4877594956338545
+      },
+      {
+        "ytId": "HUIwE621e4g",
+        "value": 1.1906999999999999,
+        "target_value": 6.151111096720602
+      },
+      {
+        "ytId": "vr0jlvXY-dA",
+        "value": 1.146,
+        "target_value": 5.973855841408147
+      },
+      {
+        "ytId": "KaHHPqRs_7g",
+        "value": 1.1618000000000002,
+        "target_value": 6.428608532328514
+      },
+      {
+        "ytId": "Sn1WY3b0xlo",
+        "value": 1.1404,
+        "target_value": 5.521009869420797
+      },
+      {
+        "ytId": "suB9BB0ITHs",
+        "value": 1.156,
+        "target_value": 6.462708033370848
+      },
+      {
+        "ytId": "Fi91LZ1Wd3U",
+        "value": 1.1637,
+        "target_value": 6.090974347676903
+      },
+      {
+        "ytId": "NUYHM9Nb7nw",
+        "value": 1.0865,
+        "target_value": 5.750707368760151
+      },
+      {
+        "ytId": "B7PFdB8vX6A",
+        "value": 1.1387,
+        "target_value": 6.994292643160783
+      },
+      {
+        "ytId": "vUEvjasrfOI",
+        "value": 1.1351,
+        "target_value": 5.637641806019675
+      },
+      {
+        "ytId": "j2XlTf0O6Ns",
+        "value": 1.1612,
+        "target_value": 6.663559591825922
+      },
+      {
+        "ytId": "K81HHQOy3Pw",
+        "value": 1.1421,
+        "target_value": 7.126657666283309
+      },
+      {
+        "ytId": "6R6uuNPB6Yg",
+        "value": 1.1673,
+        "target_value": 5.9757014928655705
+      },
+      {
+        "ytId": "5ResUlvn8nI",
+        "value": 1.1425,
+        "target_value": 4.886174759729732
+      },
+      {
+        "ytId": "Y8giuNlsJUI",
+        "value": 1.2246,
+        "target_value": 5.484416584793236
+      },
+      {
+        "ytId": "FogW1ZnoUIw",
+        "value": 1.2628,
+        "target_value": 7.795594234002932
+      },
+      {
+        "ytId": "6dpDL1w1wok",
+        "value": 1.1320999999999999,
+        "target_value": 6.841927248946547
+      },
+      {
+        "ytId": "A1hNcdAUfy8",
+        "value": 1.2028,
+        "target_value": 6.580800254838673
+      },
+      {
+        "ytId": "IqyLmv-6E5g",
+        "value": 1.0828,
+        "target_value": 6.494192593123173
+      },
+      {
+        "ytId": "k0ziXE9FfpY",
+        "value": 1.2274,
+        "target_value": 6.52475392680356
+      },
+      {
+        "ytId": "WQQbufLOpXc",
+        "value": 1.183,
+        "target_value": 5.540382037512617
+      },
+      {
+        "ytId": "c6jqIImqDOw",
+        "value": 1.1411,
+        "target_value": 6.427213859412915
+      },
+      {
+        "ytId": "cmAs3QYNIgI",
+        "value": 1.1869,
+        "target_value": 6.044276281665296
+      },
+      {
+        "ytId": "Wd9SKCFMrkg",
+        "value": 1.1959,
+        "target_value": 6.455611284534393
+      },
+      {
+        "ytId": "8IfnIIpbm2E",
+        "value": 1.1001,
+        "target_value": 5.104166051776575
+      },
+      {
+        "ytId": "NQTGIuEietA",
+        "value": 1.0893000000000002,
+        "target_value": 6.0083808402513315
+      },
+      {
+        "ytId": "auQoo8y8tV4",
+        "value": 1.166,
+        "target_value": 5.737538508792171
+      },
+      {
+        "ytId": "2DplvqP9YKs",
+        "value": 1.1223999999999998,
+        "target_value": 6.577862744859876
+      },
+      {
+        "ytId": "sMTvPiMe2wI",
+        "value": 1.2122,
+        "target_value": 6.6651202820283615
+      },
+      {
+        "ytId": "Hc1xBWmCSNw",
+        "value": 1.2833,
+        "target_value": 5.813733065075356
+      },
+      {
+        "ytId": "ABk9vNwR940",
+        "value": 1.2933000000000001,
+        "target_value": 7.227174263086307
+      },
+      {
+        "ytId": "VUKNtccgdRE",
+        "value": 1.1682,
+        "target_value": 5.379923426267949
+      },
+      {
+        "ytId": "wCV5PS1MbVQ",
+        "value": 1.1528,
+        "target_value": 5.948808932206875
+      },
+      {
+        "ytId": "FEKwtYFIeH4",
+        "value": 1.1955,
+        "target_value": 6.516933658049826
+      },
+      {
+        "ytId": "ytS625TBqd4",
+        "value": 1.1404,
+        "target_value": 5.791576272085256
+      },
+      {
+        "ytId": "7fi5BPutCAM",
+        "value": 1.0754000000000001,
+        "target_value": 5.164117797224704
+      },
+      {
+        "ytId": "5QcF10qhmTo",
+        "value": 1.1481999999999999,
+        "target_value": 6.40684918596156
+      },
+      {
+        "ytId": "KwLGygg4ZLQ",
+        "value": 1.2198,
+        "target_value": 7.017347921799921
+      },
+      {
+        "ytId": "BFMMGY9Bk70",
+        "value": 1.1328,
+        "target_value": 5.74024580907086
+      },
+      {
+        "ytId": "0B4RW7hTluE",
+        "value": 1.0901,
+        "target_value": 7.275461384855608
+      },
+      {
+        "ytId": "72aTtqsJzc0",
+        "value": 1.2159,
+        "target_value": 5.947691477095366
+      },
+      {
+        "ytId": "ye73Uv5Bqrk",
+        "value": 1.1594,
+        "target_value": 6.9439645163497605
+      },
+      {
+        "ytId": "b7j7e0v2poI",
+        "value": 1.1517,
+        "target_value": 6.765657231667795
+      },
+      {
+        "ytId": "nCKxsEbRTLQ",
+        "value": 1.2092,
+        "target_value": 6.589430258781051
+      },
+      {
+        "ytId": "EEXkcEy90y0",
+        "value": 1.16,
+        "target_value": 7.1074786401659376
+      },
+      {
+        "ytId": "IDdmtvRHrhk",
+        "value": 1.2279,
+        "target_value": 5.398419205312158
+      },
+      {
+        "ytId": "0e-Qt1CCD6c",
+        "value": 1.1842,
+        "target_value": 6.291154981038164
+      },
+      {
+        "ytId": "5TC89ikfvWg",
+        "value": 1.395,
+        "target_value": 6.382509444287556
+      },
+      {
+        "ytId": "ZmJFjzVdUXs",
+        "value": 1.1889,
+        "target_value": 6.948195421712088
+      },
+      {
+        "ytId": "6Ws9yPAJm1E",
+        "value": 1.2482,
+        "target_value": 5.970894281525271
+      },
+      {
+        "ytId": "_CRTAcrv_KU",
+        "value": 1.2055,
+        "target_value": 6.210184973142267
+      },
+      {
+        "ytId": "LiCXUC5AyGM",
+        "value": 1.31,
+        "target_value": 6.055352716420425
+      },
+      {
+        "ytId": "NNYEvXdXkG4",
+        "value": 1.3037999999999998,
+        "target_value": 7.592614796193226
+      },
+      {
+        "ytId": "RS0vtNpoyzE",
+        "value": 1.1794,
+        "target_value": 5.180123006630922
+      },
+      {
+        "ytId": "2T52xaJRLdQ",
+        "value": 1.2629000000000001,
+        "target_value": 6.338293104398671
+      },
+      {
+        "ytId": "wNxjV4cVvG0",
+        "value": 1.2124,
+        "target_value": 4.758609142659743
+      },
+      {
+        "ytId": "jcQzW17iOHQ",
+        "value": 1.0842,
+        "target_value": 4.732112181396643
+      },
+      {
+        "ytId": "8v2ZKGNYrbI",
+        "value": 1.2307,
+        "target_value": 5.971092069885954
+      },
+      {
+        "ytId": "gGwtd7HruTQ",
+        "value": 1.1116,
+        "target_value": 5.661251240805236
+      },
+      {
+        "ytId": "95nL_vGLsh4",
+        "value": 1.3391,
+        "target_value": 7.379034774527054
+      },
+      {
+        "ytId": "FqxgvykrRvA",
+        "value": 1.1759,
+        "target_value": 6.064579649518078
+      },
+      {
+        "ytId": "uRrUc9Dtk7E",
+        "value": 0.9643,
+        "target_value": 6.3545832131498425
+      },
+      {
+        "ytId": "Tw0wfRTyouU",
+        "value": 1.1137000000000001,
+        "target_value": 7.227019692086883
+      },
+      {
+        "ytId": "ykChFKNfwAE",
+        "value": 1.1614,
+        "target_value": 4.785742574558299
+      },
+      {
+        "ytId": "wuc8hXPUmJg",
+        "value": 1.1775,
+        "target_value": 5.8451042441768255
+      },
+      {
+        "ytId": "NDrttrTvydU",
+        "value": 1.1669,
+        "target_value": 5.669606003971189
+      },
+      {
+        "ytId": "Hj9Ey4yITIM",
+        "value": 1.5269,
+        "target_value": 6.223707714961476
+      },
+      {
+        "ytId": "VswpIsVMjMI",
+        "value": 1.1063,
+        "target_value": 5.523565689871884
+      },
+      {
+        "ytId": "eDhf8qQyqV0",
+        "value": 1.1686,
+        "target_value": 6.709411931706237
+      },
+      {
+        "ytId": "ZQ010CYapMo",
+        "value": 1.1066,
+        "target_value": 4.750377238171413
+      },
+      {
+        "ytId": "dBePGNYRK_4",
+        "value": 1.1465,
+        "target_value": 5.847891477100614
+      },
+      {
+        "ytId": "yV6VEhsNIFk",
+        "value": 1.173,
+        "target_value": 5.314463438780691
+      },
+      {
+        "ytId": "DSBRvHryvX8",
+        "value": 1.212,
+        "target_value": 5.162220777728795
+      },
+      {
+        "ytId": "20063g-KX8w",
+        "value": 1.158,
+        "target_value": 5.813807749824395
+      },
+      {
+        "ytId": "MlUxzGmbdf8",
+        "value": 1.2003,
+        "target_value": 5.532963197682444
+      },
+      {
+        "ytId": "4T27oxLkGKg",
+        "value": 1.2095,
+        "target_value": 6.626880281640686
+      },
+      {
+        "ytId": "1nyPaqv9vJo",
+        "value": 1.1706999999999999,
+        "target_value": 6.491750563483085
+      },
+      {
+        "ytId": "FdtKbz0usN8",
+        "value": 1.1964,
+        "target_value": 6.5322601994040035
+      },
+      {
+        "ytId": "r6gdosSpV1w",
+        "value": 1.0415,
+        "target_value": 6.646130613247498
+      },
+      {
+        "ytId": "jYSmtVw8D5k",
+        "value": 1.2726,
+        "target_value": 5.246171013040205
+      },
+      {
+        "ytId": "wUaTrRDmDEk",
+        "value": 1.0653,
+        "target_value": 5.445495226828908
+      },
+      {
+        "ytId": "Kw2f_ozAkqk",
+        "value": 1.1662000000000001,
+        "target_value": 7.2460833159600195
+      },
+      {
+        "ytId": "BlYsm0nShHA",
+        "value": 1.1268,
+        "target_value": 6.351047043893525
+      },
+      {
+        "ytId": "OXiGtocDN1E",
+        "value": 1.3946,
+        "target_value": 5.900847591272198
+      },
+      {
+        "ytId": "vw0yBKVy9cs",
+        "value": 1.1086,
+        "target_value": 5.170141387417961
+      },
+      {
+        "ytId": "vwli8lumtSs",
+        "value": 1.1883,
+        "target_value": 7.621245877603487
+      },
+      {
+        "ytId": "DibL2SzHFfs",
+        "value": 1.1956,
+        "target_value": 6.214576833763095
+      },
+      {
+        "ytId": "qSrNei3qVy8",
+        "value": 0.9264,
+        "target_value": 5.331530543075028
+      },
+      {
+        "ytId": "dZ2ojGE2Yx8",
+        "value": 1.0766,
+        "target_value": 4.610074322140055
+      },
+      {
+        "ytId": "9E2_McWPvNM",
+        "value": 1.1725,
+        "target_value": 4.763427993562937
+      },
+      {
+        "ytId": "r10C2HhuDrc",
+        "value": 1.0592,
+        "target_value": 5.828233124678286
+      },
+      {
+        "ytId": "YJf5esh2gYE",
+        "value": 1.2173,
+        "target_value": 6.553979458426807
+      },
+      {
+        "ytId": "UBjvkiW7fjc",
+        "value": 0.9828,
+        "target_value": 6.37960642761013
+      },
+      {
+        "ytId": "YfQcNK_q-_4",
+        "value": 1.2885,
+        "target_value": 6.6064928268896335
+      },
+      {
+        "ytId": "NsEhvjPigvE",
+        "value": 1.1005,
+        "target_value": 4.8299466959416355
+      },
+      {
+        "ytId": "LNzPcGXB5YE",
+        "value": 1.217,
+        "target_value": 6.830708035149755
+      },
+      {
+        "ytId": "rGjlx47Bly4",
+        "value": 1.2325,
+        "target_value": 6.547699527796928
+      },
+      {
+        "ytId": "wcEbNGgC3RU",
+        "value": 1.1443,
+        "target_value": 6.44285714336754
+      },
+      {
+        "ytId": "HXBtVglQxIY",
+        "value": 1.168,
+        "target_value": 6.096439678069631
+      },
+      {
+        "ytId": "UmCT36lJy0c",
+        "value": 1.2829,
+        "target_value": 7.139638458373343
+      },
+      {
+        "ytId": "_9rBMihjT4g",
+        "value": 1.0781,
+        "target_value": 5.847271509715804
+      },
+      {
+        "ytId": "9vgP1J5T2GE",
+        "value": 1.1328,
+        "target_value": 7.239612708985939
+      },
+      {
+        "ytId": "FFhAxjCpKs4",
+        "value": 1.1274,
+        "target_value": 5.95688509730814
+      },
+      {
+        "ytId": "gx-qYIkelpI",
+        "value": 1.1786,
+        "target_value": 6.462518086182165
+      },
+      {
+        "ytId": "zZt5vqzpySA",
+        "value": 1.1631,
+        "target_value": 7.31001177437523
+      },
+      {
+        "ytId": "qO7TyiaCU4k",
+        "value": 1.1268,
+        "target_value": 5.2430653463386685
+      },
+      {
+        "ytId": "cGgMpHL6uNE",
+        "value": 1.1169,
+        "target_value": 5.992646728719506
+      },
+      {
+        "ytId": "86pxvYM5RTU",
+        "value": 1.2037,
+        "target_value": 6.711675149704876
+      },
+      {
+        "ytId": "k9bi9GByKOI",
+        "value": 1.1994,
+        "target_value": 4.982994454658664
+      },
+      {
+        "ytId": "QR-xRVflnDY",
+        "value": 1.1001,
+        "target_value": 6.1501154210253715
+      },
+      {
+        "ytId": "PKf0A9GSKFA",
+        "value": 1.2461,
+        "target_value": 6.495459967995595
+      },
+      {
+        "ytId": "U5uj516tvFs",
+        "value": 1.2348000000000001,
+        "target_value": 6.362632303119127
+      },
+      {
+        "ytId": "DbUKvfz5Vzs",
+        "value": 1.2343000000000002,
+        "target_value": 6.52842790826934
+      },
+      {
+        "ytId": "cmJGjuadtWg",
+        "value": 1.179,
+        "target_value": 4.588630202023933
+      },
+      {
+        "ytId": "Mr4Bfr3ZkIo",
+        "value": 1.1166,
+        "target_value": 6.907329492848803
+      },
+      {
+        "ytId": "q6Iiv0BUS2k",
+        "value": 1.1474,
+        "target_value": 5.8668742738789215
+      },
+      {
+        "ytId": "h_l5s9Eua4w",
+        "value": 1.2528,
+        "target_value": 5.419486523110052
+      },
+      {
+        "ytId": "ysmqwAfdYNE",
+        "value": 1.2721,
+        "target_value": 6.111399973669908
+      },
+      {
+        "ytId": "5dKJC3Qo_WQ",
+        "value": 1.1843000000000001,
+        "target_value": 5.207577821958957
+      },
+      {
+        "ytId": "n666c2XIywY",
+        "value": 1.1435,
+        "target_value": 6.9044429845997275
+      },
+      {
+        "ytId": "sSD1MBB74eU",
+        "value": 1.1487,
+        "target_value": 7.011315585555564
+      },
+      {
+        "ytId": "IvVJ9RUPcaw",
+        "value": 1.1969,
+        "target_value": 7.254495968312235
+      },
+      {
+        "ytId": "qrIrkotXO30",
+        "value": 1.3698,
+        "target_value": 7.231672392237869
+      },
+      {
+        "ytId": "URrMQS-pm4E",
+        "value": 1.2834999999999999,
+        "target_value": 6.8110364954916305
+      },
+      {
+        "ytId": "wRcecg6CyIw",
+        "value": 2.0487,
+        "target_value": 6.234564101781067
+      },
+      {
+        "ytId": "KoY_nOFbjos",
+        "value": 1.1367,
+        "target_value": 5.329869549693346
+      },
+      {
+        "ytId": "9OW2dPOB1v4",
+        "value": 1.2089,
+        "target_value": 5.630918848530875
+      },
+      {
+        "ytId": "3vtOOZAUSPM",
+        "value": 1.1915,
+        "target_value": 5.766749592210677
+      },
+      {
+        "ytId": "NjpzWyJ-N18",
+        "value": 1.1394,
+        "target_value": 6.452820604247197
+      },
+      {
+        "ytId": "THugIsO-TWo",
+        "value": 1.3197999999999999,
+        "target_value": 5.494084989966382
+      },
+      {
+        "ytId": "iAlOJu99pN4",
+        "value": 1.2034,
+        "target_value": 5.365695722645059
+      },
+      {
+        "ytId": "xq2r0I8om3U",
+        "value": 1.1845,
+        "target_value": 5.782548583224651
+      },
+      {
+        "ytId": "PZzh86AusoE",
+        "value": 1.0741,
+        "target_value": 4.873111252820309
+      },
+      {
+        "ytId": "KGuY8yTz4j4",
+        "value": 1.078,
+        "target_value": 4.610649518486835
+      },
+      {
+        "ytId": "vSIUXHqC924",
+        "value": 1.1903,
+        "target_value": 4.952186816838148
+      },
+      {
+        "ytId": "QXhiaDKcPwU",
+        "value": 1.1948999999999999,
+        "target_value": 6.6720089570730865
+      },
+      {
+        "ytId": "VPkuj2ktk-Y",
+        "value": 1.155,
+        "target_value": 6.28627611251461
+      },
+      {
+        "ytId": "B5Mtg6SIkLo",
+        "value": 1.1178,
+        "target_value": 5.965340013319359
+      },
+      {
+        "ytId": "JmuGKem_EuM",
+        "value": 1.1225,
+        "target_value": 7.291200784161045
+      },
+      {
+        "ytId": "ERaUBLvZgVA",
+        "value": 1.1806999999999999,
+        "target_value": 6.357745849686632
+      },
+      {
+        "ytId": "RLOFobyQ9Aw",
+        "value": 1.2085,
+        "target_value": 7.384547557547347
+      },
+      {
+        "ytId": "iOHK3UfD-pE",
+        "value": 1.227,
+        "target_value": 5.2517063397302755
+      },
+      {
+        "ytId": "NXI6dxVb6ZQ",
+        "value": 1.1981,
+        "target_value": 7.559303757795399
+      },
+      {
+        "ytId": "gW7LHN9nTrY",
+        "value": 1.2048,
+        "target_value": 7.5325918129051965
+      },
+      {
+        "ytId": "L_e38EvxD_8",
+        "value": 1.1379000000000001,
+        "target_value": 6.07865506919189
+      },
+      {
+        "ytId": "Mq5pDLKSTFg",
+        "value": 1.2504,
+        "target_value": 7.173840219704922
+      },
+      {
+        "ytId": "SUJd5tIxV-4",
+        "value": 1.1923000000000001,
+        "target_value": 6.7168553948075855
+      },
+      {
+        "ytId": "M7sz2c9ywCc",
+        "value": 1.1436,
+        "target_value": 5.931202507770633
+      },
+      {
+        "ytId": "6yqytZtKv2w",
+        "value": 1.1405,
+        "target_value": 5.080012847107928
+      },
+      {
+        "ytId": "8sT3NXrDTy8",
+        "value": 1.2043000000000001,
+        "target_value": 6.375758325544977
+      },
+      {
+        "ytId": "iRRDeYgK-w4",
+        "value": 1.3798,
+        "target_value": 5.748687953337482
+      },
+      {
+        "ytId": "kE3Cm0q2wdY",
+        "value": 1.1453,
+        "target_value": 7.209985272348141
+      },
+      {
+        "ytId": "4vqzG97JpCg",
+        "value": 1.2018,
+        "target_value": 6.2974900047162965
+      },
+      {
+        "ytId": "ssTf-aPE_Zw",
+        "value": 1.1295,
+        "target_value": 6.91342471972718
+      },
+      {
+        "ytId": "-V-LELEKkX0",
+        "value": 1.2024,
+        "target_value": 6.140374780293263
+      },
+      {
+        "ytId": "maRtNZuDHz0",
+        "value": 1.1497,
+        "target_value": 6.833886186310632
+      },
+      {
+        "ytId": "izk6_tAOQBc",
+        "value": 1.0816,
+        "target_value": 5.80123421290632
+      },
+      {
+        "ytId": "FqzFQEX4x5s",
+        "value": 1.1565,
+        "target_value": 6.3076179655520965
+      },
+      {
+        "ytId": "dlwGxwkVUrA",
+        "value": 1.099,
+        "target_value": 6.24828280553703
+      },
+      {
+        "ytId": "EIUgCkltk2s",
+        "value": 1.2336,
+        "target_value": 6.687224313185266
+      },
+      {
+        "ytId": "sJQaRrOD7Wk",
+        "value": 1.1351,
+        "target_value": 7.152244453955349
+      },
+      {
+        "ytId": "AyRio5ZcXj0",
+        "value": 1.3059,
+        "target_value": 6.633893250360361
+      },
+      {
+        "ytId": "INgyFoyN5Po",
+        "value": 1.2133,
+        "target_value": 6.8129189022139105
+      },
+      {
+        "ytId": "CSvMsiEGcfU",
+        "value": 1.0997,
+        "target_value": 7.035142929088353
+      },
+      {
+        "ytId": "Vi8GxTLINc4",
+        "value": 1.0165,
+        "target_value": 5.862376495611665
+      },
+      {
+        "ytId": "PjQKsbylrFg",
+        "value": 1.0854000000000001,
+        "target_value": 6.18412790180206
+      },
+      {
+        "ytId": "1fhRmnDwQaY",
+        "value": 1.3275,
+        "target_value": 5.9479294952528425
+      },
+      {
+        "ytId": "Cj4zrmEaZJs",
+        "value": 1.2412,
+        "target_value": 5.937585588536585
+      },
+      {
+        "ytId": "KyI2AFROT8E",
+        "value": 1.1892,
+        "target_value": 5.74435479721722
+      },
+      {
+        "ytId": "UqQnA58UDMM",
+        "value": 1.1569,
+        "target_value": 6.851583275149352
+      },
+      {
+        "ytId": "Ydv0KKW4w1o",
+        "value": 1.1434,
+        "target_value": 7.350324749839172
+      },
+      {
+        "ytId": "M1aiYur7Qns",
+        "value": 1.0584,
+        "target_value": 7.454188961260453
+      },
+      {
+        "ytId": "O3ckYjBqf2g",
+        "value": 1.2204000000000002,
+        "target_value": 5.6632550973065205
+      },
+      {
+        "ytId": "cCFHw_gvu5Y",
+        "value": 1.265,
+        "target_value": 6.498259676313125
+      },
+      {
+        "ytId": "RlRfZ37JRyM",
+        "value": 0.9944,
+        "target_value": 6.987433730030919
+      },
+      {
+        "ytId": "71WirGaf7oM",
+        "value": 1.0590000000000002,
+        "target_value": 5.740880375699312
+      },
+      {
+        "ytId": "fM4mv_6SzaI",
+        "value": 1.1205,
+        "target_value": 6.34404391236777
+      },
+      {
+        "ytId": "sPluyQvNBz0",
+        "value": 1.0981999999999998,
+        "target_value": 6.539545661110188
+      },
+      {
+        "ytId": "AGZwuLa8Vwg",
+        "value": 1.1897,
+        "target_value": 4.6756225541115155
+      },
+      {
+        "ytId": "FYcYns8jWA4",
+        "value": 1.1856,
+        "target_value": 6.2594041620863425
+      },
+      {
+        "ytId": "3Tyz_yT-UUw",
+        "value": 1.0323,
+        "target_value": 4.859054193401129
+      },
+      {
+        "ytId": "EV0nEy-uilM",
+        "value": 1.1676,
+        "target_value": 5.706836365228407
+      },
+      {
+        "ytId": "W9ipZ9KP6sA",
+        "value": 1.1706999999999999,
+        "target_value": 6.37679824487453
+      },
+      {
+        "ytId": "mREQAuthBXs",
+        "value": 1.1068,
+        "target_value": 6.261539301448733
+      },
+      {
+        "ytId": "tk7zjZ6eoFc",
+        "value": 1.131,
+        "target_value": 6.001426483564586
+      },
+      {
+        "ytId": "y3luO47HcNw",
+        "value": 1.1774,
+        "target_value": 6.126127509313465
+      },
+      {
+        "ytId": "E0zB3sM6lmo",
+        "value": 1.1436,
+        "target_value": 5.615708125373245
+      },
+      {
+        "ytId": "AruyXSqIxek",
+        "value": 1.1793,
+        "target_value": 6.676236491343508
+      },
+      {
+        "ytId": "JqCCTiwqFbE",
+        "value": 1.1325,
+        "target_value": 5.726794018423197
+      },
+      {
+        "ytId": "iYF9MC1gQ_A",
+        "value": 1.1435,
+        "target_value": 6.512112607949444
+      },
+      {
+        "ytId": "ge3qqbgVzAo",
+        "value": 1.0337,
+        "target_value": 7.4811346288908664
+      },
+      {
+        "ytId": "AX6DmstS20s",
+        "value": 1.1168,
+        "target_value": 6.946034227393304
+      },
+      {
+        "ytId": "j1U6gMrPuHc",
+        "value": 1.1365,
+        "target_value": 4.784488910758195
+      },
+      {
+        "ytId": "n81s7VccNTA",
+        "value": 1.1504,
+        "target_value": 6.420223508382795
+      },
+      {
+        "ytId": "YzoGoSUdv7k",
+        "value": 1.1196,
+        "target_value": 7.023711539924836
+      },
+      {
+        "ytId": "vCCISOzJaxQ",
+        "value": 1.1534,
+        "target_value": 5.761957892362059
+      },
+      {
+        "ytId": "Q-7hKw1TVMM",
+        "value": 1.1264,
+        "target_value": 4.705649932076844
+      },
+      {
+        "ytId": "HCYBn5AuBrE",
+        "value": 1.175,
+        "target_value": 6.822126348465634
+      },
+      {
+        "ytId": "C24VKpDZVC4",
+        "value": 1.1936,
+        "target_value": 5.2631458794770944
+      },
+      {
+        "ytId": "SwPfEj7ErJI",
+        "value": 1.2435,
+        "target_value": 6.12063775464431
+      },
+      {
+        "ytId": "1d_UGNUXwjk",
+        "value": 1.1338,
+        "target_value": 6.941316751536345
+      },
+      {
+        "ytId": "CysDxfwsJfE",
+        "value": 1.3184,
+        "target_value": 5.388355235732711
+      },
+      {
+        "ytId": "Me-8Hr-srFI",
+        "value": 1.1815,
+        "target_value": 7.103065442906897
+      },
+      {
+        "ytId": "twQzO9jRnmQ",
+        "value": 1.2254,
+        "target_value": 7.143303900392045
+      },
+      {
+        "ytId": "AEoHchOQLD8",
+        "value": 1.1489,
+        "target_value": 6.072693526534078
+      },
+      {
+        "ytId": "Gmrkjemp-ws",
+        "value": 1.1458,
+        "target_value": 6.444422062032031
+      },
+      {
+        "ytId": "mQ9H3MnZtMk",
+        "value": 1.3161,
+        "target_value": 6.930196127926033
+      },
+      {
+        "ytId": "GFCJd_djkIU",
+        "value": 1.0536,
+        "target_value": 7.118206309056849
+      },
+      {
+        "ytId": "wQtsE8fH1MU",
+        "value": 1.3918000000000001,
+        "target_value": 4.616412491978971
+      },
+      {
+        "ytId": "63qC8qioJFk",
+        "value": 1.2056,
+        "target_value": 7.257762762252334
+      },
+      {
+        "ytId": "PaffT8WDjK4",
+        "value": 1.1968,
+        "target_value": 6.506581061107485
+      },
+      {
+        "ytId": "DRnaH1F1D4A",
+        "value": 1.1517,
+        "target_value": 6.651986944285752
+      },
+      {
+        "ytId": "5mlkXeO-sAA",
+        "value": 1.1249,
+        "target_value": 6.2513291166408065
+      },
+      {
+        "ytId": "7cK8O7nl0ms",
+        "value": 1.1032,
+        "target_value": 5.609728838306607
+      },
+      {
+        "ytId": "XSM3_ctSlLM",
+        "value": 1.1706999999999999,
+        "target_value": 6.441856101049135
+      },
+      {
+        "ytId": "92Fiptae1XM",
+        "value": 1.1016,
+        "target_value": 5.627007210742902
+      },
+      {
+        "ytId": "aE9jKLck_cI",
+        "value": 1.1608,
+        "target_value": 8.454885756432367
+      },
+      {
+        "ytId": "ra6mcC1iNNg",
+        "value": 1.1787999999999998,
+        "target_value": 6.90774909762408
+      },
+      {
+        "ytId": "hl8EGBlRFp8",
+        "value": 1.1464,
+        "target_value": 5.9403416362500545
+      },
+      {
+        "ytId": "4sKESQfYAw0",
+        "value": 1.2381,
+        "target_value": 7.319084916881527
+      },
+      {
+        "ytId": "XOaEowMhZXk",
+        "value": 1.1523999999999999,
+        "target_value": 6.019696485868081
+      },
+      {
+        "ytId": "T6B5fygr7Ms",
+        "value": 1.1619,
+        "target_value": 5.753697936418217
+      },
+      {
+        "ytId": "BZ55AxiTZ3o",
+        "value": 1.0957999999999999,
+        "target_value": 5.2598541864392105
+      },
+      {
+        "ytId": "Kt3OXDs_bus",
+        "value": 1.1876,
+        "target_value": 4.763637602376833
+      },
+      {
+        "ytId": "MhBOL4WsLjc",
+        "value": 1.1917,
+        "target_value": 7.339772283280566
+      },
+      {
+        "ytId": "2RrNqRd96yM",
+        "value": 1.276,
+        "target_value": 5.5412933641385775
+      },
+      {
+        "ytId": "wCOju9gEvY0",
+        "value": 1.2213,
+        "target_value": 6.411794735130721
+      },
+      {
+        "ytId": "qKSXjpUPfGo",
+        "value": 1.2616,
+        "target_value": 6.806524490685309
+      },
+      {
+        "ytId": "CnWGnMcFibA",
+        "value": 1.2339,
+        "target_value": 6.54554350134037
+      },
+      {
+        "ytId": "ikGj7hkLUoQ",
+        "value": 1.2044,
+        "target_value": 6.826837712666905
+      },
+      {
+        "ytId": "OGBOMK2X-jo",
+        "value": 1.178,
+        "target_value": 7.2385837681508125
+      },
+      {
+        "ytId": "ISr4LKMBRT0",
+        "value": 1.1932,
+        "target_value": 7.518388463289738
+      },
+      {
+        "ytId": "OIaH0uZXgkQ",
+        "value": 1.2479,
+        "target_value": 5.70990990397326
+      },
+      {
+        "ytId": "YFNOSHumPZc",
+        "value": 0.8576,
+        "target_value": 7.903335370040101
+      },
+      {
+        "ytId": "BkSE_Y0rQH8",
+        "value": 1.1503,
+        "target_value": 7.032460323243102
+      },
+      {
+        "ytId": "IGQ9Ggmnhb8",
+        "value": 1.216,
+        "target_value": 6.9001649571307615
+      },
+      {
+        "ytId": "CgkdvZsamXk",
+        "value": 1.1187,
+        "target_value": 7.363142330790373
+      },
+      {
+        "ytId": "lzPzQvZn8sc",
+        "value": 1.1243,
+        "target_value": 4.731580707700456
+      },
+      {
+        "ytId": "v3hwQvOZ9ZM",
+        "value": 1.1777,
+        "target_value": 6.714724804766032
+      },
+      {
+        "ytId": "F2naRHJWBM0",
+        "value": 1.3525999999999998,
+        "target_value": 7.337890007505532
+      },
+      {
+        "ytId": "K80tQmd9gCc",
+        "value": 1.281,
+        "target_value": 6.216879196006322
+      },
+      {
+        "ytId": "y3J3B5TvV9Y",
+        "value": 1.1825,
+        "target_value": 4.921676073095982
+      },
+      {
+        "ytId": "BnslSAg7ZeI",
+        "value": 1.1001,
+        "target_value": 6.565808872041638
+      },
+      {
+        "ytId": "R7XbVRAFuU0",
+        "value": 1.4312,
+        "target_value": 6.24264924317841
+      },
+      {
+        "ytId": "zIytI6ptWR8",
+        "value": 1.1453,
+        "target_value": 5.972747910787582
+      },
+      {
+        "ytId": "GsmKo1dAQ8c",
+        "value": 1.2266,
+        "target_value": 5.602356296209319
+      },
+      {
+        "ytId": "puPHTwODio0",
+        "value": 1.2568000000000001,
+        "target_value": 7.208523423891209
+      },
+      {
+        "ytId": "pn3cLMKMyos",
+        "value": 1.2115,
+        "target_value": 5.9588657300206735
+      },
+      {
+        "ytId": "7cI1co-3ORE",
+        "value": 1.0895000000000001,
+        "target_value": 5.77747467189983
+      },
+      {
+        "ytId": "ggHmecIgFFU",
+        "value": 1.0526,
+        "target_value": 6.253324918130025
+      },
+      {
+        "ytId": "CiTC9FKmnAo",
+        "value": 1.1882,
+        "target_value": 6.2147069177760645
+      },
+      {
+        "ytId": "pSFSTonEYqM",
+        "value": 1.1728,
+        "target_value": 7.151566571429288
+      },
+      {
+        "ytId": "iQG4dWvrjx0",
+        "value": 1.1387,
+        "target_value": 5.54830832587851
+      },
+      {
+        "ytId": "OJ1USrYYioQ",
+        "value": 1.1158,
+        "target_value": 5.898138597750106
+      },
+      {
+        "ytId": "va-_PBS-mqE",
+        "value": 1.151,
+        "target_value": 5.752285899698971
+      },
+      {
+        "ytId": "_t5ykfz0oGY",
+        "value": 1.1622,
+        "target_value": 5.081516527242366
+      },
+      {
+        "ytId": "ulq-tJdiLog",
+        "value": 1.242,
+        "target_value": 5.432364704118971
+      },
+      {
+        "ytId": "dRXJVlwEUjY",
+        "value": 1.2066,
+        "target_value": 5.179890592502388
+      },
+      {
+        "ytId": "d8J74Wk3a7w",
+        "value": 1.1528,
+        "target_value": 7.235370582474901
+      },
+      {
+        "ytId": "kiRxGIId41g",
+        "value": 1.213,
+        "target_value": 5.490326560144885
+      },
+      {
+        "ytId": "S9k_7EJLTe4",
+        "value": 1.1947,
+        "target_value": 5.867793233844108
+      },
+      {
+        "ytId": "3ZniDRt0XF8",
+        "value": 1.1484999999999999,
+        "target_value": 6.005193386655308
+      },
+      {
+        "ytId": "wTJNP6ZJMmY",
+        "value": 1.1404,
+        "target_value": 7.1606564646275945
+      },
+      {
+        "ytId": "H-prxfgs590",
+        "value": 1.194,
+        "target_value": 5.964366186670813
+      },
+      {
+        "ytId": "fGgEJGfXmeI",
+        "value": 1.2293,
+        "target_value": 6.822951195941338
+      },
+      {
+        "ytId": "X1qvBnWgtVE",
+        "value": 1.0752,
+        "target_value": 4.76259604743806
+      },
+      {
+        "ytId": "FyGnGRyEsOU",
+        "value": 1.1493,
+        "target_value": 7.314964471636181
+      },
+      {
+        "ytId": "2Wl2rdYegus",
+        "value": 1.1998,
+        "target_value": 6.8246535683571
+      },
+      {
+        "ytId": "kgNd1uShpWM",
+        "value": 1.177,
+        "target_value": 5.80110378548395
+      },
+      {
+        "ytId": "0zjf_3P9VrA",
+        "value": 1.1903,
+        "target_value": 4.794641382004472
+      },
+      {
+        "ytId": "Kzc04OPQek0",
+        "value": 1.19,
+        "target_value": 6.379206860951492
+      },
+      {
+        "ytId": "hxgHUglfa9c",
+        "value": 1.1142,
+        "target_value": 6.628764917363979
+      },
+      {
+        "ytId": "DLWgd-YMFJ8",
+        "value": 1.1883,
+        "target_value": 6.259020174070812
+      },
+      {
+        "ytId": "L4nObY4c9fU",
+        "value": 1.244,
+        "target_value": 6.632765643133274
+      },
+      {
+        "ytId": "mqqtTY48PRg",
+        "value": 1.4124,
+        "target_value": 6.188436004223549
+      },
+      {
+        "ytId": "nu7HGTTkZBg",
+        "value": 1.3581,
+        "target_value": 7.606608686717972
+      },
+      {
+        "ytId": "FYOA_pSBNSc",
+        "value": 1.1931,
+        "target_value": 6.947589716366232
+      },
+      {
+        "ytId": "uzAJMmF1gVY",
+        "value": 1.1494,
+        "target_value": 5.697500474139897
+      },
+      {
+        "ytId": "QL1h_e09IUU",
+        "value": 1.1865999999999999,
+        "target_value": 7.742040417019324
+      },
+      {
+        "ytId": "q7pvG7fhJMI",
+        "value": 1.2501,
+        "target_value": 7.176745074726351
+      },
+      {
+        "ytId": "B-hJTvrdj2Y",
+        "value": 1.0684,
+        "target_value": 6.541948860912103
+      },
+      {
+        "ytId": "eoQJOjv5gqM",
+        "value": 1.185,
+        "target_value": 6.485443445838558
+      },
+      {
+        "ytId": "_4uNCXnSjCs",
+        "value": 1.1722,
+        "target_value": 5.232297121390443
+      },
+      {
+        "ytId": "QIilz5sB8q4",
+        "value": 1.1533,
+        "target_value": 7.027965461287226
+      },
+      {
+        "ytId": "E6jUDBSTXLs",
+        "value": 1.2231999999999998,
+        "target_value": 7.1111902372786195
+      },
+      {
+        "ytId": "lUSh4blyWRk",
+        "value": 1.1879,
+        "target_value": 7.3947034285987225
+      },
+      {
+        "ytId": "xThfoBcbBow",
+        "value": 1.1219,
+        "target_value": 5.020572576836755
+      },
+      {
+        "ytId": "wg5Xt3yydCk",
+        "value": 1.1541,
+        "target_value": 7.23110887940497
+      },
+      {
+        "ytId": "rBKP_bGrTl0",
+        "value": 1.198,
+        "target_value": 6.100787061216678
+      },
+      {
+        "ytId": "zoJECFeZ5O8",
+        "value": 1.2187999999999999,
+        "target_value": 7.150568317384409
+      },
+      {
+        "ytId": "sZGbhhKgr34",
+        "value": 1.1635,
+        "target_value": 6.39963842280581
+      },
+      {
+        "ytId": "5YB7G0W6Gno",
+        "value": 1.1711,
+        "target_value": 6.57359107545486
+      },
+      {
+        "ytId": "0ApFSNYQJ_w",
+        "value": 1.2418,
+        "target_value": 6.494894352198216
+      },
+      {
+        "ytId": "mhV_8X-7jfU",
+        "value": 1.1547,
+        "target_value": 5.310958692419998
+      },
+      {
+        "ytId": "aTraR5yPYvw",
+        "value": 1.1211,
+        "target_value": 6.03365370982261
+      },
+      {
+        "ytId": "1k4VQ23I6s0",
+        "value": 1.22,
+        "target_value": 7.17475226488371
+      },
+      {
+        "ytId": "1vjSBPxRSeg",
+        "value": 1.1272,
+        "target_value": 4.64053112457209
+      },
+      {
+        "ytId": "KTopfMtwdvw",
+        "value": 1.1468,
+        "target_value": 5.092678546248093
+      },
+      {
+        "ytId": "ncPwIkvxPe4",
+        "value": 1.1155,
+        "target_value": 6.544440261295546
+      },
+      {
+        "ytId": "pWeSGrP6Xf4",
+        "value": 1.1993,
+        "target_value": 6.140176381929706
+      },
+      {
+        "ytId": "H_UEtzwerP4",
+        "value": 1.1301999999999999,
+        "target_value": 5.415268901700658
+      },
+      {
+        "ytId": "fAQrJWYvYJ4",
+        "value": 1.2401,
+        "target_value": 4.97771446215088
+      },
+      {
+        "ytId": "baNK3QlE0qo",
+        "value": 1.1769,
+        "target_value": 6.7149714209036455
+      },
+      {
+        "ytId": "ScAX7E8JqhY",
+        "value": 1.1911,
+        "target_value": 5.150744162810968
+      },
+      {
+        "ytId": "FbmU5SmWAdg",
+        "value": 1.1757,
+        "target_value": 7.264437412751089
+      },
+      {
+        "ytId": "MJIuPbskMrw",
+        "value": 1.1107,
+        "target_value": 4.678955185194013
+      },
+      {
+        "ytId": "LEoMSp_-siU",
+        "value": 1.1887,
+        "target_value": 4.494029298691737
+      },
+      {
+        "ytId": "pxWXdGFno50",
+        "value": 1.186,
+        "target_value": 6.272172194768195
+      },
+      {
+        "ytId": "o5A9tC2e_mU",
+        "value": 1.1256,
+        "target_value": 5.221839195032653
+      },
+      {
+        "ytId": "o1hVZCzcOYM",
+        "value": 1.2063,
+        "target_value": 5.651511578346709
+      },
+      {
+        "ytId": "z5ffGZE9fDU",
+        "value": 1.1905,
+        "target_value": 7.010949766870595
+      },
+      {
+        "ytId": "6HGMQthn7Xc",
+        "value": 1.2268999999999999,
+        "target_value": 7.236603106019962
+      },
+      {
+        "ytId": "vvLnmLTEh64",
+        "value": 1.2092,
+        "target_value": 7.680773938535966
+      },
+      {
+        "ytId": "qIZSBfvNRec",
+        "value": 1.1601000000000001,
+        "target_value": 5.429606952703283
+      },
+      {
+        "ytId": "Mdz0XPa1bTs",
+        "value": 1.2035,
+        "target_value": 5.777781943096183
+      },
+      {
+        "ytId": "ve_FNfdAPxY",
+        "value": 1.301,
+        "target_value": 4.787757931653051
+      },
+      {
+        "ytId": "4idFKNMRXvg",
+        "value": 1.2144,
+        "target_value": 7.641668458411964
+      },
+      {
+        "ytId": "9XbWlZdQqvY",
+        "value": 1.1821,
+        "target_value": 6.37109558231144
+      },
+      {
+        "ytId": "9YJu4fhgNVE",
+        "value": 1.1416,
+        "target_value": 6.280281227702153
+      },
+      {
+        "ytId": "y5NOrC41ncQ",
+        "value": 1.1722,
+        "target_value": 5.567766037347574
+      },
+      {
+        "ytId": "PRhRAofJH5E",
+        "value": 1.2385,
+        "target_value": 6.565548429957589
+      },
+      {
+        "ytId": "pZ8bNGzeeU4",
+        "value": 1.1701000000000001,
+        "target_value": 6.526088710268173
+      },
+      {
+        "ytId": "UAxWpvsOC50",
+        "value": 1.1513,
+        "target_value": 6.517292778374267
+      },
+      {
+        "ytId": "lsyv6xFVDzc",
+        "value": 1.1103,
+        "target_value": 6.221104513281741
+      },
+      {
+        "ytId": "KtOXHbdLLyg",
+        "value": 1.2129,
+        "target_value": 6.797497995151881
+      },
+      {
+        "ytId": "-6PJX_waaBI",
+        "value": 1.1539,
+        "target_value": 5.92115459427728
+      },
+      {
+        "ytId": "5KrWKlecAYk",
+        "value": 1.0981,
+        "target_value": 5.271841606536499
+      },
+      {
+        "ytId": "TtRS6sjkZ4A",
+        "value": 1.1784000000000001,
+        "target_value": 7.873458031074777
+      },
+      {
+        "ytId": "ObVdOvcrph0",
+        "value": 1.1313,
+        "target_value": 7.301469452981682
+      },
+      {
+        "ytId": "KZ_xWCzEv08",
+        "value": 1.1586,
+        "target_value": 5.820917684427303
+      },
+      {
+        "ytId": "5nLv1Z0DxkI",
+        "value": 1.2475,
+        "target_value": 6.623552983520431
+      },
+      {
+        "ytId": "aw0xPqf11iY",
+        "value": 1.1947,
+        "target_value": 6.012882759991758
+      },
+      {
+        "ytId": "DF7w8AusSH4",
+        "value": 1.1554,
+        "target_value": 5.3295768491047415
+      },
+      {
+        "ytId": "kCOh7czQ5fo",
+        "value": 1.0194,
+        "target_value": 6.328064472714575
+      },
+      {
+        "ytId": "ZqqOca_H99w",
+        "value": 1.2135,
+        "target_value": 7.23179992616761
+      },
+      {
+        "ytId": "8TVp2FwJJzQ",
+        "value": 1.1948,
+        "target_value": 7.035587176417684
+      },
+      {
+        "ytId": "1qMsfMG-Rdg",
+        "value": 1.1434,
+        "target_value": 6.037360352643197
+      },
+      {
+        "ytId": "PfoSGjTgoWA",
+        "value": 1.1415,
+        "target_value": 5.291428794939208
+      },
+      {
+        "ytId": "oOce-8y8Ijg",
+        "value": 1.3840999999999999,
+        "target_value": 6.992839624958742
+      },
+      {
+        "ytId": "r_TA0gHtp_M",
+        "value": 1.0894,
+        "target_value": 6.647842843945816
+      },
+      {
+        "ytId": "6U6hbEpFwHQ",
+        "value": 1.167,
+        "target_value": 5.202605457237768
+      },
+      {
+        "ytId": "rj_F70nFTBg",
+        "value": 1.1686,
+        "target_value": 6.127548589032997
+      },
+      {
+        "ytId": "fYjswbeyjoA",
+        "value": 1.171,
+        "target_value": 7.321921266483952
+      },
+      {
+        "ytId": "F0Gqbm9vbPo",
+        "value": 1.1453,
+        "target_value": 5.897168916395729
+      },
+      {
+        "ytId": "MMUUKNkJT6w",
+        "value": 1.033,
+        "target_value": 5.568901899363022
+      },
+      {
+        "ytId": "cj0TdYb3Ggw",
+        "value": 1.2843,
+        "target_value": 6.519732464725364
+      },
+      {
+        "ytId": "cFueNhx1FVk",
+        "value": 1.1848,
+        "target_value": 5.870283901681014
+      },
+      {
+        "ytId": "kzXgd9X7_To",
+        "value": 1.1227,
+        "target_value": 5.439144722090365
+      },
+      {
+        "ytId": "hcrXJ-FgMqU",
+        "value": 1.1979,
+        "target_value": 5.6939993964225195
+      },
+      {
+        "ytId": "8H_bQRjFUis",
+        "value": 1.1611,
+        "target_value": 7.048393943059859
+      },
+      {
+        "ytId": "wSDVGGqLmfA",
+        "value": 1.1923000000000001,
+        "target_value": 5.339175074521483
+      },
+      {
+        "ytId": "IxPZMFGak6A",
+        "value": 1.129,
+        "target_value": 6.376240339650642
+      },
+      {
+        "ytId": "5w4ST0VBUj8",
+        "value": 1.1771,
+        "target_value": 6.8224815869729385
+      },
+      {
+        "ytId": "CjXX24k3u2w",
+        "value": 1.2764,
+        "target_value": 6.871922856904707
+      },
+      {
+        "ytId": "ETbatz38OTA",
+        "value": 1.1215000000000002,
+        "target_value": 5.988354246250306
+      },
+      {
+        "ytId": "3m5V703Iywg",
+        "value": 1.165,
+        "target_value": 6.937428315811921
+      },
+      {
+        "ytId": "8lDFzVul1YA",
+        "value": 1.2311,
+        "target_value": 7.1550948003740595
+      },
+      {
+        "ytId": "uKWqHSzuHJM",
+        "value": 1.1156,
+        "target_value": 6.984640980111298
+      },
+      {
+        "ytId": "mpY3-UUFmuk",
+        "value": 1.1181999999999999,
+        "target_value": 6.849472422745271
+      },
+      {
+        "ytId": "EXYyNkXb5VY",
+        "value": 1.2002,
+        "target_value": 5.620302658785872
+      }
+    ],
+    "experiment": {
+      "id": "exp_retention_pct_5_20260409_221556",
+      "tool_id": "pearson_r",
+      "tool_version": "1.0",
+      "tool_name": "Pearson Correlation",
+      "parameters": {
+        "target": "views",
+        "transform_target": "log10",
+        "confounds": [],
+        "min_n": 50
+      },
+      "ran_at": "2026-04-09T22:15:56.727267Z",
+      "n_videos": 370,
+      "outputs": {
+        "r": -0.039108977129901794,
+        "p_value": 0.4532440177709072,
+        "n": 370,
+        "ci_low": -0.14050440469823686,
+        "ci_high": 0.06309829218644945,
+        "rho": 0.15871179270420574,
+        "p_rho": 0.0021987605975137504
+      }
+    },
+    "result": {
+      "primary_r": -0.039108977129901794,
+      "rho": 0.15871179270420574,
+      "p_value": 0.4532440177709072,
+      "ci_low": -0.14050440469823686,
+      "ci_high": 0.06309829218644945,
+      "direction": "negative",
+      "strength_label": "none",
+      "status": "discovery",
+      "conclusion": "No meaningful linear relationship found between retention_pct_5 and views (r=-0.039, 95% CI [-0.141, +0.063], p=0.4532, n=370). Spearman rho=+0.159 also confirms no rank-order relationship. This indicator does not predict view count in Tyler's corpus of 370 videos.",
+      "practical_insight": "Retention at 5% into the video. does not meaningfully predict views. Safe to deprioritize."
+    },
+    "connections": [
+      "views"
+    ],
+    "created_at": "2026-04-09T22:15:56.727291Z",
+    "updated_at": "2026-04-09T22:15:56.727293Z"
+  },
+  {
+    "key": "retention_pct_10",
+    "label": "Retention Pct 10",
+    "layer": "post",
+    "status": "discovery",
+    "resolution_id": "r0",
+    "depth": 1,
+    "target": "views",
+    "metric_definition": {
+      "description": "Retention at 10% into the video.",
+      "formula": "retentionCurve[10].retention",
+      "expected_range": "0 to 2.0",
+      "data_sources": [
+        "analytics.retentionCurve"
+      ],
+      "layer": "post"
+    },
+    "dataset": [
+      {
+        "ytId": "X_0yKoN3srA",
+        "value": 1.0959999999999999,
+        "target_value": 5.693344355146334
+      },
+      {
+        "ytId": "1WriLmap9dI",
+        "value": 1.1132,
+        "target_value": 7.090364161641354
+      },
+      {
+        "ytId": "K25wicGFxIA",
+        "value": 4.427,
+        "target_value": 4.778541939633554
+      },
+      {
+        "ytId": "5VwE7o1WBHs",
+        "value": 1.0528,
+        "target_value": 6.733708163605438
+      },
+      {
+        "ytId": "4JZemHo8ED0",
+        "value": 1.0825,
+        "target_value": 6.03819837765136
+      },
+      {
+        "ytId": "lBvkUzbsH4Y",
+        "value": 1.0270000000000001,
+        "target_value": 5.3430480092767
+      },
+      {
+        "ytId": "GuxoGIpWe_Y",
+        "value": 1.1144,
+        "target_value": 7.446171948344116
+      },
+      {
+        "ytId": "XfdXalkAdqc",
+        "value": 1.1537,
+        "target_value": 5.622089624870662
+      },
+      {
+        "ytId": "uw8FiiU0G_M",
+        "value": 1.1978,
+        "target_value": 6.545970424450062
+      },
+      {
+        "ytId": "H30G5fvk5dk",
+        "value": 1.093,
+        "target_value": 5.781682866545967
+      },
+      {
+        "ytId": "a1CoSXBAhiY",
+        "value": 1.1754,
+        "target_value": 7.4877594956338545
+      },
+      {
+        "ytId": "HUIwE621e4g",
+        "value": 1.1340999999999999,
+        "target_value": 6.151111096720602
+      },
+      {
+        "ytId": "vr0jlvXY-dA",
+        "value": 1.0935,
+        "target_value": 5.973855841408147
+      },
+      {
+        "ytId": "KaHHPqRs_7g",
+        "value": 1.1043,
+        "target_value": 6.428608532328514
+      },
+      {
+        "ytId": "Sn1WY3b0xlo",
+        "value": 1.0632,
+        "target_value": 5.521009869420797
+      },
+      {
+        "ytId": "suB9BB0ITHs",
+        "value": 1.0892,
+        "target_value": 6.462708033370848
+      },
+      {
+        "ytId": "Fi91LZ1Wd3U",
+        "value": 1.0792,
+        "target_value": 6.090974347676903
+      },
+      {
+        "ytId": "NUYHM9Nb7nw",
+        "value": 1.0182,
+        "target_value": 5.750707368760151
+      },
+      {
+        "ytId": "B7PFdB8vX6A",
+        "value": 1.0820999999999998,
+        "target_value": 6.994292643160783
+      },
+      {
+        "ytId": "vUEvjasrfOI",
+        "value": 1.0751,
+        "target_value": 5.637641806019675
+      },
+      {
+        "ytId": "j2XlTf0O6Ns",
+        "value": 1.0522,
+        "target_value": 6.663559591825922
+      },
+      {
+        "ytId": "K81HHQOy3Pw",
+        "value": 1.0836,
+        "target_value": 7.126657666283309
+      },
+      {
+        "ytId": "6R6uuNPB6Yg",
+        "value": 1.1057,
+        "target_value": 5.9757014928655705
+      },
+      {
+        "ytId": "5ResUlvn8nI",
+        "value": 1.09,
+        "target_value": 4.886174759729732
+      },
+      {
+        "ytId": "Y8giuNlsJUI",
+        "value": 1.1336,
+        "target_value": 5.484416584793236
+      },
+      {
+        "ytId": "FogW1ZnoUIw",
+        "value": 1.2078,
+        "target_value": 7.795594234002932
+      },
+      {
+        "ytId": "6dpDL1w1wok",
+        "value": 1.0731,
+        "target_value": 6.841927248946547
+      },
+      {
+        "ytId": "A1hNcdAUfy8",
+        "value": 1.1374,
+        "target_value": 6.580800254838673
+      },
+      {
+        "ytId": "IqyLmv-6E5g",
+        "value": 1.0201,
+        "target_value": 6.494192593123173
+      },
+      {
+        "ytId": "k0ziXE9FfpY",
+        "value": 1.1548,
+        "target_value": 6.52475392680356
+      },
+      {
+        "ytId": "WQQbufLOpXc",
+        "value": 1.0726,
+        "target_value": 5.540382037512617
+      },
+      {
+        "ytId": "c6jqIImqDOw",
+        "value": 1.0869,
+        "target_value": 6.427213859412915
+      },
+      {
+        "ytId": "cmAs3QYNIgI",
+        "value": 1.1014,
+        "target_value": 6.044276281665296
+      },
+      {
+        "ytId": "Wd9SKCFMrkg",
+        "value": 1.1413,
+        "target_value": 6.455611284534393
+      },
+      {
+        "ytId": "8IfnIIpbm2E",
+        "value": 0.9954999999999999,
+        "target_value": 5.104166051776575
+      },
+      {
+        "ytId": "NQTGIuEietA",
+        "value": 1.0118,
+        "target_value": 6.0083808402513315
+      },
+      {
+        "ytId": "auQoo8y8tV4",
+        "value": 1.1242,
+        "target_value": 5.737538508792171
+      },
+      {
+        "ytId": "2DplvqP9YKs",
+        "value": 0.9901000000000001,
+        "target_value": 6.577862744859876
+      },
+      {
+        "ytId": "sMTvPiMe2wI",
+        "value": 1.1229,
+        "target_value": 6.6651202820283615
+      },
+      {
+        "ytId": "Hc1xBWmCSNw",
+        "value": 1.193,
+        "target_value": 5.813733065075356
+      },
+      {
+        "ytId": "ABk9vNwR940",
+        "value": 1.1911,
+        "target_value": 7.227174263086307
+      },
+      {
+        "ytId": "VUKNtccgdRE",
+        "value": 1.0503,
+        "target_value": 5.379923426267949
+      },
+      {
+        "ytId": "wCV5PS1MbVQ",
+        "value": 1.1045,
+        "target_value": 5.948808932206875
+      },
+      {
+        "ytId": "FEKwtYFIeH4",
+        "value": 1.1,
+        "target_value": 6.516933658049826
+      },
+      {
+        "ytId": "ytS625TBqd4",
+        "value": 1.0693000000000001,
+        "target_value": 5.791576272085256
+      },
+      {
+        "ytId": "7fi5BPutCAM",
+        "value": 1.0097,
+        "target_value": 5.164117797224704
+      },
+      {
+        "ytId": "5QcF10qhmTo",
+        "value": 1.0955,
+        "target_value": 6.40684918596156
+      },
+      {
+        "ytId": "KwLGygg4ZLQ",
+        "value": 1.1652,
+        "target_value": 7.017347921799921
+      },
+      {
+        "ytId": "BFMMGY9Bk70",
+        "value": 1.0781,
+        "target_value": 5.74024580907086
+      },
+      {
+        "ytId": "0B4RW7hTluE",
+        "value": 1.0256,
+        "target_value": 7.275461384855608
+      },
+      {
+        "ytId": "72aTtqsJzc0",
+        "value": 1.1354,
+        "target_value": 5.947691477095366
+      },
+      {
+        "ytId": "ye73Uv5Bqrk",
+        "value": 1.0774,
+        "target_value": 6.9439645163497605
+      },
+      {
+        "ytId": "b7j7e0v2poI",
+        "value": 1.0969,
+        "target_value": 6.765657231667795
+      },
+      {
+        "ytId": "nCKxsEbRTLQ",
+        "value": 1.1161,
+        "target_value": 6.589430258781051
+      },
+      {
+        "ytId": "EEXkcEy90y0",
+        "value": 1.065,
+        "target_value": 7.1074786401659376
+      },
+      {
+        "ytId": "IDdmtvRHrhk",
+        "value": 1.1353,
+        "target_value": 5.398419205312158
+      },
+      {
+        "ytId": "0e-Qt1CCD6c",
+        "value": 1.1354,
+        "target_value": 6.291154981038164
+      },
+      {
+        "ytId": "5TC89ikfvWg",
+        "value": 1.1973,
+        "target_value": 6.382509444287556
+      },
+      {
+        "ytId": "ZmJFjzVdUXs",
+        "value": 1.1027,
+        "target_value": 6.948195421712088
+      },
+      {
+        "ytId": "6Ws9yPAJm1E",
+        "value": 1.1322,
+        "target_value": 5.970894281525271
+      },
+      {
+        "ytId": "_CRTAcrv_KU",
+        "value": 1.103,
+        "target_value": 6.210184973142267
+      },
+      {
+        "ytId": "LiCXUC5AyGM",
+        "value": 1.1611,
+        "target_value": 6.055352716420425
+      },
+      {
+        "ytId": "NNYEvXdXkG4",
+        "value": 1.2494,
+        "target_value": 7.592614796193226
+      },
+      {
+        "ytId": "RS0vtNpoyzE",
+        "value": 1.1320000000000001,
+        "target_value": 5.180123006630922
+      },
+      {
+        "ytId": "2T52xaJRLdQ",
+        "value": 1.1368,
+        "target_value": 6.338293104398671
+      },
+      {
+        "ytId": "wNxjV4cVvG0",
+        "value": 1.1134,
+        "target_value": 4.758609142659743
+      },
+      {
+        "ytId": "jcQzW17iOHQ",
+        "value": 1.0193,
+        "target_value": 4.732112181396643
+      },
+      {
+        "ytId": "8v2ZKGNYrbI",
+        "value": 1.1668,
+        "target_value": 5.971092069885954
+      },
+      {
+        "ytId": "gGwtd7HruTQ",
+        "value": 1.0681,
+        "target_value": 5.661251240805236
+      },
+      {
+        "ytId": "95nL_vGLsh4",
+        "value": 1.2691,
+        "target_value": 7.379034774527054
+      },
+      {
+        "ytId": "FqxgvykrRvA",
+        "value": 1.083,
+        "target_value": 6.064579649518078
+      },
+      {
+        "ytId": "uRrUc9Dtk7E",
+        "value": 0.7967,
+        "target_value": 6.3545832131498425
+      },
+      {
+        "ytId": "Tw0wfRTyouU",
+        "value": 1.0729,
+        "target_value": 7.227019692086883
+      },
+      {
+        "ytId": "ykChFKNfwAE",
+        "value": 1.0177,
+        "target_value": 4.785742574558299
+      },
+      {
+        "ytId": "wuc8hXPUmJg",
+        "value": 1.1194,
+        "target_value": 5.8451042441768255
+      },
+      {
+        "ytId": "NDrttrTvydU",
+        "value": 1.095,
+        "target_value": 5.669606003971189
+      },
+      {
+        "ytId": "Hj9Ey4yITIM",
+        "value": 1.2788,
+        "target_value": 6.223707714961476
+      },
+      {
+        "ytId": "VswpIsVMjMI",
+        "value": 1.0171,
+        "target_value": 5.523565689871884
+      },
+      {
+        "ytId": "eDhf8qQyqV0",
+        "value": 1.1098999999999999,
+        "target_value": 6.709411931706237
+      },
+      {
+        "ytId": "ZQ010CYapMo",
+        "value": 1.0556,
+        "target_value": 4.750377238171413
+      },
+      {
+        "ytId": "dBePGNYRK_4",
+        "value": 1.069,
+        "target_value": 5.847891477100614
+      },
+      {
+        "ytId": "yV6VEhsNIFk",
+        "value": 1.1113,
+        "target_value": 5.314463438780691
+      },
+      {
+        "ytId": "DSBRvHryvX8",
+        "value": 1.1389,
+        "target_value": 5.162220777728795
+      },
+      {
+        "ytId": "20063g-KX8w",
+        "value": 1.0944,
+        "target_value": 5.813807749824395
+      },
+      {
+        "ytId": "MlUxzGmbdf8",
+        "value": 1.0988,
+        "target_value": 5.532963197682444
+      },
+      {
+        "ytId": "4T27oxLkGKg",
+        "value": 1.1317,
+        "target_value": 6.626880281640686
+      },
+      {
+        "ytId": "1nyPaqv9vJo",
+        "value": 1.0291,
+        "target_value": 6.491750563483085
+      },
+      {
+        "ytId": "FdtKbz0usN8",
+        "value": 1.1037000000000001,
+        "target_value": 6.5322601994040035
+      },
+      {
+        "ytId": "r6gdosSpV1w",
+        "value": 0.7939,
+        "target_value": 6.646130613247498
+      },
+      {
+        "ytId": "jYSmtVw8D5k",
+        "value": 1.2014,
+        "target_value": 5.246171013040205
+      },
+      {
+        "ytId": "wUaTrRDmDEk",
+        "value": 1.0070000000000001,
+        "target_value": 5.445495226828908
+      },
+      {
+        "ytId": "Kw2f_ozAkqk",
+        "value": 1.0735,
+        "target_value": 7.2460833159600195
+      },
+      {
+        "ytId": "BlYsm0nShHA",
+        "value": 1.0722,
+        "target_value": 6.351047043893525
+      },
+      {
+        "ytId": "OXiGtocDN1E",
+        "value": 1.2083,
+        "target_value": 5.900847591272198
+      },
+      {
+        "ytId": "vw0yBKVy9cs",
+        "value": 0.9201999999999999,
+        "target_value": 5.170141387417961
+      },
+      {
+        "ytId": "vwli8lumtSs",
+        "value": 1.0475,
+        "target_value": 7.621245877603487
+      },
+      {
+        "ytId": "DibL2SzHFfs",
+        "value": 1.1328,
+        "target_value": 6.214576833763095
+      },
+      {
+        "ytId": "qSrNei3qVy8",
+        "value": 0.769,
+        "target_value": 5.331530543075028
+      },
+      {
+        "ytId": "dZ2ojGE2Yx8",
+        "value": 1.0312999999999999,
+        "target_value": 4.610074322140055
+      },
+      {
+        "ytId": "9E2_McWPvNM",
+        "value": 1.0957,
+        "target_value": 4.763427993562937
+      },
+      {
+        "ytId": "r10C2HhuDrc",
+        "value": 0.9747,
+        "target_value": 5.828233124678286
+      },
+      {
+        "ytId": "YJf5esh2gYE",
+        "value": 1.1545999999999998,
+        "target_value": 6.553979458426807
+      },
+      {
+        "ytId": "UBjvkiW7fjc",
+        "value": 0.7983,
+        "target_value": 6.37960642761013
+      },
+      {
+        "ytId": "YfQcNK_q-_4",
+        "value": 1.1441,
+        "target_value": 6.6064928268896335
+      },
+      {
+        "ytId": "NsEhvjPigvE",
+        "value": 1.0290000000000001,
+        "target_value": 4.8299466959416355
+      },
+      {
+        "ytId": "LNzPcGXB5YE",
+        "value": 1.1253,
+        "target_value": 6.830708035149755
+      },
+      {
+        "ytId": "rGjlx47Bly4",
+        "value": 1.145,
+        "target_value": 6.547699527796928
+      },
+      {
+        "ytId": "wcEbNGgC3RU",
+        "value": 1.0881999999999998,
+        "target_value": 6.44285714336754
+      },
+      {
+        "ytId": "HXBtVglQxIY",
+        "value": 1.0953,
+        "target_value": 6.096439678069631
+      },
+      {
+        "ytId": "UmCT36lJy0c",
+        "value": 1.1868,
+        "target_value": 7.139638458373343
+      },
+      {
+        "ytId": "_9rBMihjT4g",
+        "value": 0.9605,
+        "target_value": 5.847271509715804
+      },
+      {
+        "ytId": "9vgP1J5T2GE",
+        "value": 1.0201,
+        "target_value": 7.239612708985939
+      },
+      {
+        "ytId": "FFhAxjCpKs4",
+        "value": 1.0442,
+        "target_value": 5.95688509730814
+      },
+      {
+        "ytId": "gx-qYIkelpI",
+        "value": 1.0952,
+        "target_value": 6.462518086182165
+      },
+      {
+        "ytId": "zZt5vqzpySA",
+        "value": 1.0767,
+        "target_value": 7.31001177437523
+      },
+      {
+        "ytId": "qO7TyiaCU4k",
+        "value": 1.0694,
+        "target_value": 5.2430653463386685
+      },
+      {
+        "ytId": "cGgMpHL6uNE",
+        "value": 1.0236,
+        "target_value": 5.992646728719506
+      },
+      {
+        "ytId": "86pxvYM5RTU",
+        "value": 1.1104,
+        "target_value": 6.711675149704876
+      },
+      {
+        "ytId": "k9bi9GByKOI",
+        "value": 1.1203,
+        "target_value": 4.982994454658664
+      },
+      {
+        "ytId": "QR-xRVflnDY",
+        "value": 1.0066,
+        "target_value": 6.1501154210253715
+      },
+      {
+        "ytId": "PKf0A9GSKFA",
+        "value": 1.1597,
+        "target_value": 6.495459967995595
+      },
+      {
+        "ytId": "U5uj516tvFs",
+        "value": 1.1322,
+        "target_value": 6.362632303119127
+      },
+      {
+        "ytId": "DbUKvfz5Vzs",
+        "value": 1.1654,
+        "target_value": 6.52842790826934
+      },
+      {
+        "ytId": "cmJGjuadtWg",
+        "value": 1.1054000000000002,
+        "target_value": 4.588630202023933
+      },
+      {
+        "ytId": "Mr4Bfr3ZkIo",
+        "value": 1.0666,
+        "target_value": 6.907329492848803
+      },
+      {
+        "ytId": "q6Iiv0BUS2k",
+        "value": 1.0906,
+        "target_value": 5.8668742738789215
+      },
+      {
+        "ytId": "h_l5s9Eua4w",
+        "value": 1.1687,
+        "target_value": 5.419486523110052
+      },
+      {
+        "ytId": "ysmqwAfdYNE",
+        "value": 1.1541,
+        "target_value": 6.111399973669908
+      },
+      {
+        "ytId": "5dKJC3Qo_WQ",
+        "value": 1.1223,
+        "target_value": 5.207577821958957
+      },
+      {
+        "ytId": "n666c2XIywY",
+        "value": 1.0448,
+        "target_value": 6.9044429845997275
+      },
+      {
+        "ytId": "sSD1MBB74eU",
+        "value": 1.0729,
+        "target_value": 7.011315585555564
+      },
+      {
+        "ytId": "IvVJ9RUPcaw",
+        "value": 1.0488,
+        "target_value": 7.254495968312235
+      },
+      {
+        "ytId": "qrIrkotXO30",
+        "value": 1.1906,
+        "target_value": 7.231672392237869
+      },
+      {
+        "ytId": "URrMQS-pm4E",
+        "value": 1.1756,
+        "target_value": 6.8110364954916305
+      },
+      {
+        "ytId": "wRcecg6CyIw",
+        "value": 1.8326,
+        "target_value": 6.234564101781067
+      },
+      {
+        "ytId": "KoY_nOFbjos",
+        "value": 0.9527,
+        "target_value": 5.329869549693346
+      },
+      {
+        "ytId": "9OW2dPOB1v4",
+        "value": 1.1184,
+        "target_value": 5.630918848530875
+      },
+      {
+        "ytId": "3vtOOZAUSPM",
+        "value": 1.0846,
+        "target_value": 5.766749592210677
+      },
+      {
+        "ytId": "NjpzWyJ-N18",
+        "value": 0.9793000000000001,
+        "target_value": 6.452820604247197
+      },
+      {
+        "ytId": "THugIsO-TWo",
+        "value": 1.2127,
+        "target_value": 5.494084989966382
+      },
+      {
+        "ytId": "iAlOJu99pN4",
+        "value": 1.0884,
+        "target_value": 5.365695722645059
+      },
+      {
+        "ytId": "xq2r0I8om3U",
+        "value": 1.1262,
+        "target_value": 5.782548583224651
+      },
+      {
+        "ytId": "PZzh86AusoE",
+        "value": 1.0092,
+        "target_value": 4.873111252820309
+      },
+      {
+        "ytId": "KGuY8yTz4j4",
+        "value": 1.0366,
+        "target_value": 4.610649518486835
+      },
+      {
+        "ytId": "vSIUXHqC924",
+        "value": 1.1334,
+        "target_value": 4.952186816838148
+      },
+      {
+        "ytId": "QXhiaDKcPwU",
+        "value": 1.1105,
+        "target_value": 6.6720089570730865
+      },
+      {
+        "ytId": "VPkuj2ktk-Y",
+        "value": 1.0718,
+        "target_value": 6.28627611251461
+      },
+      {
+        "ytId": "B5Mtg6SIkLo",
+        "value": 1.0547,
+        "target_value": 5.965340013319359
+      },
+      {
+        "ytId": "JmuGKem_EuM",
+        "value": 1.0492,
+        "target_value": 7.291200784161045
+      },
+      {
+        "ytId": "ERaUBLvZgVA",
+        "value": 1.0796,
+        "target_value": 6.357745849686632
+      },
+      {
+        "ytId": "RLOFobyQ9Aw",
+        "value": 1.1503,
+        "target_value": 7.384547557547347
+      },
+      {
+        "ytId": "iOHK3UfD-pE",
+        "value": 1.1565,
+        "target_value": 5.2517063397302755
+      },
+      {
+        "ytId": "NXI6dxVb6ZQ",
+        "value": 1.1026,
+        "target_value": 7.559303757795399
+      },
+      {
+        "ytId": "gW7LHN9nTrY",
+        "value": 1.1484,
+        "target_value": 7.5325918129051965
+      },
+      {
+        "ytId": "L_e38EvxD_8",
+        "value": 1.0884,
+        "target_value": 6.07865506919189
+      },
+      {
+        "ytId": "Mq5pDLKSTFg",
+        "value": 1.16,
+        "target_value": 7.173840219704922
+      },
+      {
+        "ytId": "SUJd5tIxV-4",
+        "value": 1.1086,
+        "target_value": 6.7168553948075855
+      },
+      {
+        "ytId": "M7sz2c9ywCc",
+        "value": 1.0815000000000001,
+        "target_value": 5.931202507770633
+      },
+      {
+        "ytId": "6yqytZtKv2w",
+        "value": 1.0604,
+        "target_value": 5.080012847107928
+      },
+      {
+        "ytId": "8sT3NXrDTy8",
+        "value": 1.1095,
+        "target_value": 6.375758325544977
+      },
+      {
+        "ytId": "iRRDeYgK-w4",
+        "value": 1.2572,
+        "target_value": 5.748687953337482
+      },
+      {
+        "ytId": "kE3Cm0q2wdY",
+        "value": 1.0594,
+        "target_value": 7.209985272348141
+      },
+      {
+        "ytId": "4vqzG97JpCg",
+        "value": 1.129,
+        "target_value": 6.2974900047162965
+      },
+      {
+        "ytId": "ssTf-aPE_Zw",
+        "value": 0.9971,
+        "target_value": 6.91342471972718
+      },
+      {
+        "ytId": "-V-LELEKkX0",
+        "value": 1.1406999999999998,
+        "target_value": 6.140374780293263
+      },
+      {
+        "ytId": "maRtNZuDHz0",
+        "value": 1.0745,
+        "target_value": 6.833886186310632
+      },
+      {
+        "ytId": "izk6_tAOQBc",
+        "value": 1.0197,
+        "target_value": 5.80123421290632
+      },
+      {
+        "ytId": "FqzFQEX4x5s",
+        "value": 1.097,
+        "target_value": 6.3076179655520965
+      },
+      {
+        "ytId": "dlwGxwkVUrA",
+        "value": 1.0136,
+        "target_value": 6.24828280553703
+      },
+      {
+        "ytId": "EIUgCkltk2s",
+        "value": 1.1335,
+        "target_value": 6.687224313185266
+      },
+      {
+        "ytId": "sJQaRrOD7Wk",
+        "value": 1.0412000000000001,
+        "target_value": 7.152244453955349
+      },
+      {
+        "ytId": "AyRio5ZcXj0",
+        "value": 1.1497,
+        "target_value": 6.633893250360361
+      },
+      {
+        "ytId": "INgyFoyN5Po",
+        "value": 1.156,
+        "target_value": 6.8129189022139105
+      },
+      {
+        "ytId": "CSvMsiEGcfU",
+        "value": 1.0405,
+        "target_value": 7.035142929088353
+      },
+      {
+        "ytId": "Vi8GxTLINc4",
+        "value": 0.8965000000000001,
+        "target_value": 5.862376495611665
+      },
+      {
+        "ytId": "PjQKsbylrFg",
+        "value": 1.0304,
+        "target_value": 6.18412790180206
+      },
+      {
+        "ytId": "1fhRmnDwQaY",
+        "value": 1.1796,
+        "target_value": 5.9479294952528425
+      },
+      {
+        "ytId": "Cj4zrmEaZJs",
+        "value": 1.1584999999999999,
+        "target_value": 5.937585588536585
+      },
+      {
+        "ytId": "KyI2AFROT8E",
+        "value": 1.0977,
+        "target_value": 5.74435479721722
+      },
+      {
+        "ytId": "UqQnA58UDMM",
+        "value": 1.0774,
+        "target_value": 6.851583275149352
+      },
+      {
+        "ytId": "Ydv0KKW4w1o",
+        "value": 1.0627,
+        "target_value": 7.350324749839172
+      },
+      {
+        "ytId": "M1aiYur7Qns",
+        "value": 0.9041,
+        "target_value": 7.454188961260453
+      },
+      {
+        "ytId": "O3ckYjBqf2g",
+        "value": 1.137,
+        "target_value": 5.6632550973065205
+      },
+      {
+        "ytId": "cCFHw_gvu5Y",
+        "value": 1.1738,
+        "target_value": 6.498259676313125
+      },
+      {
+        "ytId": "RlRfZ37JRyM",
+        "value": 0.8243,
+        "target_value": 6.987433730030919
+      },
+      {
+        "ytId": "71WirGaf7oM",
+        "value": 0.9795999999999999,
+        "target_value": 5.740880375699312
+      },
+      {
+        "ytId": "fM4mv_6SzaI",
+        "value": 1.0561,
+        "target_value": 6.34404391236777
+      },
+      {
+        "ytId": "sPluyQvNBz0",
+        "value": 1.0615,
+        "target_value": 6.539545661110188
+      },
+      {
+        "ytId": "AGZwuLa8Vwg",
+        "value": 1.0823,
+        "target_value": 4.6756225541115155
+      },
+      {
+        "ytId": "FYcYns8jWA4",
+        "value": 1.1042,
+        "target_value": 6.2594041620863425
+      },
+      {
+        "ytId": "3Tyz_yT-UUw",
+        "value": 0.9632,
+        "target_value": 4.859054193401129
+      },
+      {
+        "ytId": "EV0nEy-uilM",
+        "value": 1.1101,
+        "target_value": 5.706836365228407
+      },
+      {
+        "ytId": "W9ipZ9KP6sA",
+        "value": 1.088,
+        "target_value": 6.37679824487453
+      },
+      {
+        "ytId": "mREQAuthBXs",
+        "value": 1.0311,
+        "target_value": 6.261539301448733
+      },
+      {
+        "ytId": "tk7zjZ6eoFc",
+        "value": 1.0722,
+        "target_value": 6.001426483564586
+      },
+      {
+        "ytId": "y3luO47HcNw",
+        "value": 1.1312,
+        "target_value": 6.126127509313465
+      },
+      {
+        "ytId": "E0zB3sM6lmo",
+        "value": 0.9953,
+        "target_value": 5.615708125373245
+      },
+      {
+        "ytId": "AruyXSqIxek",
+        "value": 1.1144,
+        "target_value": 6.676236491343508
+      },
+      {
+        "ytId": "JqCCTiwqFbE",
+        "value": 1.0772,
+        "target_value": 5.726794018423197
+      },
+      {
+        "ytId": "iYF9MC1gQ_A",
+        "value": 1.0295,
+        "target_value": 6.512112607949444
+      },
+      {
+        "ytId": "ge3qqbgVzAo",
+        "value": 0.9144,
+        "target_value": 7.4811346288908664
+      },
+      {
+        "ytId": "AX6DmstS20s",
+        "value": 1.035,
+        "target_value": 6.946034227393304
+      },
+      {
+        "ytId": "j1U6gMrPuHc",
+        "value": 0.9618000000000001,
+        "target_value": 4.784488910758195
+      },
+      {
+        "ytId": "n81s7VccNTA",
+        "value": 1.0803,
+        "target_value": 6.420223508382795
+      },
+      {
+        "ytId": "YzoGoSUdv7k",
+        "value": 1.0503,
+        "target_value": 7.023711539924836
+      },
+      {
+        "ytId": "vCCISOzJaxQ",
+        "value": 1.1048,
+        "target_value": 5.761957892362059
+      },
+      {
+        "ytId": "Q-7hKw1TVMM",
+        "value": 1.0605,
+        "target_value": 4.705649932076844
+      },
+      {
+        "ytId": "HCYBn5AuBrE",
+        "value": 1.0881,
+        "target_value": 6.822126348465634
+      },
+      {
+        "ytId": "C24VKpDZVC4",
+        "value": 1.0932,
+        "target_value": 5.2631458794770944
+      },
+      {
+        "ytId": "SwPfEj7ErJI",
+        "value": 1.1604,
+        "target_value": 6.12063775464431
+      },
+      {
+        "ytId": "1d_UGNUXwjk",
+        "value": 1.0497,
+        "target_value": 6.941316751536345
+      },
+      {
+        "ytId": "CysDxfwsJfE",
+        "value": 1.2377,
+        "target_value": 5.388355235732711
+      },
+      {
+        "ytId": "Me-8Hr-srFI",
+        "value": 1.0976000000000001,
+        "target_value": 7.103065442906897
+      },
+      {
+        "ytId": "twQzO9jRnmQ",
+        "value": 1.1734,
+        "target_value": 7.143303900392045
+      },
+      {
+        "ytId": "AEoHchOQLD8",
+        "value": 1.0841,
+        "target_value": 6.072693526534078
+      },
+      {
+        "ytId": "Gmrkjemp-ws",
+        "value": 1.0659999999999998,
+        "target_value": 6.444422062032031
+      },
+      {
+        "ytId": "mQ9H3MnZtMk",
+        "value": 1.2456,
+        "target_value": 6.930196127926033
+      },
+      {
+        "ytId": "GFCJd_djkIU",
+        "value": 0.9528,
+        "target_value": 7.118206309056849
+      },
+      {
+        "ytId": "wQtsE8fH1MU",
+        "value": 1.2342,
+        "target_value": 4.616412491978971
+      },
+      {
+        "ytId": "63qC8qioJFk",
+        "value": 1.1017000000000001,
+        "target_value": 7.257762762252334
+      },
+      {
+        "ytId": "PaffT8WDjK4",
+        "value": 1.1117,
+        "target_value": 6.506581061107485
+      },
+      {
+        "ytId": "DRnaH1F1D4A",
+        "value": 1.0768,
+        "target_value": 6.651986944285752
+      },
+      {
+        "ytId": "5mlkXeO-sAA",
+        "value": 0.9967,
+        "target_value": 6.2513291166408065
+      },
+      {
+        "ytId": "7cK8O7nl0ms",
+        "value": 1.044,
+        "target_value": 5.609728838306607
+      },
+      {
+        "ytId": "XSM3_ctSlLM",
+        "value": 1.0784,
+        "target_value": 6.441856101049135
+      },
+      {
+        "ytId": "92Fiptae1XM",
+        "value": 1.0556,
+        "target_value": 5.627007210742902
+      },
+      {
+        "ytId": "aE9jKLck_cI",
+        "value": 1.1129,
+        "target_value": 8.454885756432367
+      },
+      {
+        "ytId": "ra6mcC1iNNg",
+        "value": 1.0287,
+        "target_value": 6.90774909762408
+      },
+      {
+        "ytId": "hl8EGBlRFp8",
+        "value": 1.0708,
+        "target_value": 5.9403416362500545
+      },
+      {
+        "ytId": "4sKESQfYAw0",
+        "value": 1.1498,
+        "target_value": 7.319084916881527
+      },
+      {
+        "ytId": "XOaEowMhZXk",
+        "value": 1.0558,
+        "target_value": 6.019696485868081
+      },
+      {
+        "ytId": "T6B5fygr7Ms",
+        "value": 1.0542,
+        "target_value": 5.753697936418217
+      },
+      {
+        "ytId": "BZ55AxiTZ3o",
+        "value": 1.0468000000000002,
+        "target_value": 5.2598541864392105
+      },
+      {
+        "ytId": "Kt3OXDs_bus",
+        "value": 1.0859,
+        "target_value": 4.763637602376833
+      },
+      {
+        "ytId": "MhBOL4WsLjc",
+        "value": 1.1040999999999999,
+        "target_value": 7.339772283280566
+      },
+      {
+        "ytId": "2RrNqRd96yM",
+        "value": 1.1545999999999998,
+        "target_value": 5.5412933641385775
+      },
+      {
+        "ytId": "wCOju9gEvY0",
+        "value": 1.1165,
+        "target_value": 6.411794735130721
+      },
+      {
+        "ytId": "qKSXjpUPfGo",
+        "value": 1.1333,
+        "target_value": 6.806524490685309
+      },
+      {
+        "ytId": "CnWGnMcFibA",
+        "value": 1.1434,
+        "target_value": 6.54554350134037
+      },
+      {
+        "ytId": "ikGj7hkLUoQ",
+        "value": 1.1368,
+        "target_value": 6.826837712666905
+      },
+      {
+        "ytId": "OGBOMK2X-jo",
+        "value": 1.1087,
+        "target_value": 7.2385837681508125
+      },
+      {
+        "ytId": "ISr4LKMBRT0",
+        "value": 1.0776999999999999,
+        "target_value": 7.518388463289738
+      },
+      {
+        "ytId": "OIaH0uZXgkQ",
+        "value": 1.1440000000000001,
+        "target_value": 5.70990990397326
+      },
+      {
+        "ytId": "YFNOSHumPZc",
+        "value": 0.8019,
+        "target_value": 7.903335370040101
+      },
+      {
+        "ytId": "BkSE_Y0rQH8",
+        "value": 1.0868,
+        "target_value": 7.032460323243102
+      },
+      {
+        "ytId": "IGQ9Ggmnhb8",
+        "value": 1.1332,
+        "target_value": 6.9001649571307615
+      },
+      {
+        "ytId": "CgkdvZsamXk",
+        "value": 1.0527,
+        "target_value": 7.363142330790373
+      },
+      {
+        "ytId": "lzPzQvZn8sc",
+        "value": 1.0408,
+        "target_value": 4.731580707700456
+      },
+      {
+        "ytId": "v3hwQvOZ9ZM",
+        "value": 1.1177,
+        "target_value": 6.714724804766032
+      },
+      {
+        "ytId": "F2naRHJWBM0",
+        "value": 1.2248,
+        "target_value": 7.337890007505532
+      },
+      {
+        "ytId": "K80tQmd9gCc",
+        "value": 1.1804000000000001,
+        "target_value": 6.216879196006322
+      },
+      {
+        "ytId": "y3J3B5TvV9Y",
+        "value": 1.0893000000000002,
+        "target_value": 4.921676073095982
+      },
+      {
+        "ytId": "BnslSAg7ZeI",
+        "value": 1.0537,
+        "target_value": 6.565808872041638
+      },
+      {
+        "ytId": "R7XbVRAFuU0",
+        "value": 1.3187,
+        "target_value": 6.24264924317841
+      },
+      {
+        "ytId": "zIytI6ptWR8",
+        "value": 1.0706,
+        "target_value": 5.972747910787582
+      },
+      {
+        "ytId": "GsmKo1dAQ8c",
+        "value": 1.1445,
+        "target_value": 5.602356296209319
+      },
+      {
+        "ytId": "puPHTwODio0",
+        "value": 1.1105,
+        "target_value": 7.208523423891209
+      },
+      {
+        "ytId": "pn3cLMKMyos",
+        "value": 1.1093000000000002,
+        "target_value": 5.9588657300206735
+      },
+      {
+        "ytId": "7cI1co-3ORE",
+        "value": 0.9336,
+        "target_value": 5.77747467189983
+      },
+      {
+        "ytId": "ggHmecIgFFU",
+        "value": 0.9427,
+        "target_value": 6.253324918130025
+      },
+      {
+        "ytId": "CiTC9FKmnAo",
+        "value": 1.1065,
+        "target_value": 6.2147069177760645
+      },
+      {
+        "ytId": "pSFSTonEYqM",
+        "value": 1.0972,
+        "target_value": 7.151566571429288
+      },
+      {
+        "ytId": "iQG4dWvrjx0",
+        "value": 1.0166,
+        "target_value": 5.54830832587851
+      },
+      {
+        "ytId": "OJ1USrYYioQ",
+        "value": 1.0366,
+        "target_value": 5.898138597750106
+      },
+      {
+        "ytId": "va-_PBS-mqE",
+        "value": 1.0343,
+        "target_value": 5.752285899698971
+      },
+      {
+        "ytId": "_t5ykfz0oGY",
+        "value": 1.0944,
+        "target_value": 5.081516527242366
+      },
+      {
+        "ytId": "ulq-tJdiLog",
+        "value": 1.1822,
+        "target_value": 5.432364704118971
+      },
+      {
+        "ytId": "dRXJVlwEUjY",
+        "value": 1.081,
+        "target_value": 5.179890592502388
+      },
+      {
+        "ytId": "d8J74Wk3a7w",
+        "value": 1.0390000000000001,
+        "target_value": 7.235370582474901
+      },
+      {
+        "ytId": "kiRxGIId41g",
+        "value": 1.0977,
+        "target_value": 5.490326560144885
+      },
+      {
+        "ytId": "S9k_7EJLTe4",
+        "value": 1.1222,
+        "target_value": 5.867793233844108
+      },
+      {
+        "ytId": "3ZniDRt0XF8",
+        "value": 1.103,
+        "target_value": 6.005193386655308
+      },
+      {
+        "ytId": "wTJNP6ZJMmY",
+        "value": 1.0732,
+        "target_value": 7.1606564646275945
+      },
+      {
+        "ytId": "H-prxfgs590",
+        "value": 1.1001,
+        "target_value": 5.964366186670813
+      },
+      {
+        "ytId": "fGgEJGfXmeI",
+        "value": 1.1299,
+        "target_value": 6.822951195941338
+      },
+      {
+        "ytId": "X1qvBnWgtVE",
+        "value": 1.0295999999999998,
+        "target_value": 4.76259604743806
+      },
+      {
+        "ytId": "FyGnGRyEsOU",
+        "value": 1.0698999999999999,
+        "target_value": 7.314964471636181
+      },
+      {
+        "ytId": "2Wl2rdYegus",
+        "value": 1.1517,
+        "target_value": 6.8246535683571
+      },
+      {
+        "ytId": "kgNd1uShpWM",
+        "value": 1.0853,
+        "target_value": 5.80110378548395
+      },
+      {
+        "ytId": "0zjf_3P9VrA",
+        "value": 1.1184,
+        "target_value": 4.794641382004472
+      },
+      {
+        "ytId": "Kzc04OPQek0",
+        "value": 1.1266,
+        "target_value": 6.379206860951492
+      },
+      {
+        "ytId": "hxgHUglfa9c",
+        "value": 1.0392000000000001,
+        "target_value": 6.628764917363979
+      },
+      {
+        "ytId": "DLWgd-YMFJ8",
+        "value": 1.0933,
+        "target_value": 6.259020174070812
+      },
+      {
+        "ytId": "L4nObY4c9fU",
+        "value": 1.1329,
+        "target_value": 6.632765643133274
+      },
+      {
+        "ytId": "mqqtTY48PRg",
+        "value": 1.2517,
+        "target_value": 6.188436004223549
+      },
+      {
+        "ytId": "nu7HGTTkZBg",
+        "value": 1.1909,
+        "target_value": 7.606608686717972
+      },
+      {
+        "ytId": "FYOA_pSBNSc",
+        "value": 1.1320999999999999,
+        "target_value": 6.947589716366232
+      },
+      {
+        "ytId": "uzAJMmF1gVY",
+        "value": 1.0171,
+        "target_value": 5.697500474139897
+      },
+      {
+        "ytId": "QL1h_e09IUU",
+        "value": 1.0849,
+        "target_value": 7.742040417019324
+      },
+      {
+        "ytId": "q7pvG7fhJMI",
+        "value": 1.173,
+        "target_value": 7.176745074726351
+      },
+      {
+        "ytId": "B-hJTvrdj2Y",
+        "value": 0.9995999999999999,
+        "target_value": 6.541948860912103
+      },
+      {
+        "ytId": "eoQJOjv5gqM",
+        "value": 1.1108,
+        "target_value": 6.485443445838558
+      },
+      {
+        "ytId": "_4uNCXnSjCs",
+        "value": 1.0748,
+        "target_value": 5.232297121390443
+      },
+      {
+        "ytId": "QIilz5sB8q4",
+        "value": 1.0994,
+        "target_value": 7.027965461287226
+      },
+      {
+        "ytId": "E6jUDBSTXLs",
+        "value": 1.1582,
+        "target_value": 7.1111902372786195
+      },
+      {
+        "ytId": "lUSh4blyWRk",
+        "value": 1.0863,
+        "target_value": 7.3947034285987225
+      },
+      {
+        "ytId": "xThfoBcbBow",
+        "value": 1.0605,
+        "target_value": 5.020572576836755
+      },
+      {
+        "ytId": "wg5Xt3yydCk",
+        "value": 1.0746,
+        "target_value": 7.23110887940497
+      },
+      {
+        "ytId": "rBKP_bGrTl0",
+        "value": 1.1031,
+        "target_value": 6.100787061216678
+      },
+      {
+        "ytId": "zoJECFeZ5O8",
+        "value": 1.0984,
+        "target_value": 7.150568317384409
+      },
+      {
+        "ytId": "sZGbhhKgr34",
+        "value": 1.0892,
+        "target_value": 6.39963842280581
+      },
+      {
+        "ytId": "5YB7G0W6Gno",
+        "value": 1.0786,
+        "target_value": 6.57359107545486
+      },
+      {
+        "ytId": "0ApFSNYQJ_w",
+        "value": 1.1409,
+        "target_value": 6.494894352198216
+      },
+      {
+        "ytId": "mhV_8X-7jfU",
+        "value": 1.0927,
+        "target_value": 5.310958692419998
+      },
+      {
+        "ytId": "aTraR5yPYvw",
+        "value": 1.0867,
+        "target_value": 6.03365370982261
+      },
+      {
+        "ytId": "1k4VQ23I6s0",
+        "value": 1.1197,
+        "target_value": 7.17475226488371
+      },
+      {
+        "ytId": "1vjSBPxRSeg",
+        "value": 1.0467,
+        "target_value": 4.64053112457209
+      },
+      {
+        "ytId": "KTopfMtwdvw",
+        "value": 1.0175,
+        "target_value": 5.092678546248093
+      },
+      {
+        "ytId": "ncPwIkvxPe4",
+        "value": 1.0888,
+        "target_value": 6.544440261295546
+      },
+      {
+        "ytId": "pWeSGrP6Xf4",
+        "value": 1.1268,
+        "target_value": 6.140176381929706
+      },
+      {
+        "ytId": "H_UEtzwerP4",
+        "value": 1.0959,
+        "target_value": 5.415268901700658
+      },
+      {
+        "ytId": "fAQrJWYvYJ4",
+        "value": 1.1651,
+        "target_value": 4.97771446215088
+      },
+      {
+        "ytId": "baNK3QlE0qo",
+        "value": 1.075,
+        "target_value": 6.7149714209036455
+      },
+      {
+        "ytId": "ScAX7E8JqhY",
+        "value": 1.1231,
+        "target_value": 5.150744162810968
+      },
+      {
+        "ytId": "FbmU5SmWAdg",
+        "value": 1.0798,
+        "target_value": 7.264437412751089
+      },
+      {
+        "ytId": "MJIuPbskMrw",
+        "value": 1.0454,
+        "target_value": 4.678955185194013
+      },
+      {
+        "ytId": "LEoMSp_-siU",
+        "value": 1.0979999999999999,
+        "target_value": 4.494029298691737
+      },
+      {
+        "ytId": "pxWXdGFno50",
+        "value": 1.1149,
+        "target_value": 6.272172194768195
+      },
+      {
+        "ytId": "o5A9tC2e_mU",
+        "value": 1.0625,
+        "target_value": 5.221839195032653
+      },
+      {
+        "ytId": "o1hVZCzcOYM",
+        "value": 1.1337000000000002,
+        "target_value": 5.651511578346709
+      },
+      {
+        "ytId": "z5ffGZE9fDU",
+        "value": 1.1079999999999999,
+        "target_value": 7.010949766870595
+      },
+      {
+        "ytId": "6HGMQthn7Xc",
+        "value": 1.1305,
+        "target_value": 7.236603106019962
+      },
+      {
+        "ytId": "vvLnmLTEh64",
+        "value": 1.0707,
+        "target_value": 7.680773938535966
+      },
+      {
+        "ytId": "qIZSBfvNRec",
+        "value": 1.0735,
+        "target_value": 5.429606952703283
+      },
+      {
+        "ytId": "Mdz0XPa1bTs",
+        "value": 1.1144,
+        "target_value": 5.777781943096183
+      },
+      {
+        "ytId": "ve_FNfdAPxY",
+        "value": 1.1889,
+        "target_value": 4.787757931653051
+      },
+      {
+        "ytId": "4idFKNMRXvg",
+        "value": 1.1211,
+        "target_value": 7.641668458411964
+      },
+      {
+        "ytId": "9XbWlZdQqvY",
+        "value": 1.1128,
+        "target_value": 6.37109558231144
+      },
+      {
+        "ytId": "9YJu4fhgNVE",
+        "value": 1.0923,
+        "target_value": 6.280281227702153
+      },
+      {
+        "ytId": "y5NOrC41ncQ",
+        "value": 1.0794,
+        "target_value": 5.567766037347574
+      },
+      {
+        "ytId": "PRhRAofJH5E",
+        "value": 1.1357,
+        "target_value": 6.565548429957589
+      },
+      {
+        "ytId": "pZ8bNGzeeU4",
+        "value": 1.1201,
+        "target_value": 6.526088710268173
+      },
+      {
+        "ytId": "UAxWpvsOC50",
+        "value": 1.0651000000000002,
+        "target_value": 6.517292778374267
+      },
+      {
+        "ytId": "lsyv6xFVDzc",
+        "value": 1.0456,
+        "target_value": 6.221104513281741
+      },
+      {
+        "ytId": "KtOXHbdLLyg",
+        "value": 1.1123,
+        "target_value": 6.797497995151881
+      },
+      {
+        "ytId": "-6PJX_waaBI",
+        "value": 1.0917000000000001,
+        "target_value": 5.92115459427728
+      },
+      {
+        "ytId": "5KrWKlecAYk",
+        "value": 1.0315,
+        "target_value": 5.271841606536499
+      },
+      {
+        "ytId": "TtRS6sjkZ4A",
+        "value": 1.0704,
+        "target_value": 7.873458031074777
+      },
+      {
+        "ytId": "ObVdOvcrph0",
+        "value": 1.0397,
+        "target_value": 7.301469452981682
+      },
+      {
+        "ytId": "KZ_xWCzEv08",
+        "value": 1.0727,
+        "target_value": 5.820917684427303
+      },
+      {
+        "ytId": "5nLv1Z0DxkI",
+        "value": 1.1218000000000001,
+        "target_value": 6.623552983520431
+      },
+      {
+        "ytId": "aw0xPqf11iY",
+        "value": 1.0817,
+        "target_value": 6.012882759991758
+      },
+      {
+        "ytId": "DF7w8AusSH4",
+        "value": 1.0785,
+        "target_value": 5.3295768491047415
+      },
+      {
+        "ytId": "kCOh7czQ5fo",
+        "value": 0.8075,
+        "target_value": 6.328064472714575
+      },
+      {
+        "ytId": "ZqqOca_H99w",
+        "value": 1.1519,
+        "target_value": 7.23179992616761
+      },
+      {
+        "ytId": "8TVp2FwJJzQ",
+        "value": 1.1269,
+        "target_value": 7.035587176417684
+      },
+      {
+        "ytId": "1qMsfMG-Rdg",
+        "value": 1.0523,
+        "target_value": 6.037360352643197
+      },
+      {
+        "ytId": "PfoSGjTgoWA",
+        "value": 1.0698999999999999,
+        "target_value": 5.291428794939208
+      },
+      {
+        "ytId": "oOce-8y8Ijg",
+        "value": 1.199,
+        "target_value": 6.992839624958742
+      },
+      {
+        "ytId": "r_TA0gHtp_M",
+        "value": 1.0412000000000001,
+        "target_value": 6.647842843945816
+      },
+      {
+        "ytId": "6U6hbEpFwHQ",
+        "value": 1.051,
+        "target_value": 5.202605457237768
+      },
+      {
+        "ytId": "rj_F70nFTBg",
+        "value": 1.1043,
+        "target_value": 6.127548589032997
+      },
+      {
+        "ytId": "fYjswbeyjoA",
+        "value": 1.0915000000000001,
+        "target_value": 7.321921266483952
+      },
+      {
+        "ytId": "F0Gqbm9vbPo",
+        "value": 1.0897,
+        "target_value": 5.897168916395729
+      },
+      {
+        "ytId": "MMUUKNkJT6w",
+        "value": 0.7853,
+        "target_value": 5.568901899363022
+      },
+      {
+        "ytId": "cj0TdYb3Ggw",
+        "value": 1.1965999999999999,
+        "target_value": 6.519732464725364
+      },
+      {
+        "ytId": "cFueNhx1FVk",
+        "value": 1.1288,
+        "target_value": 5.870283901681014
+      },
+      {
+        "ytId": "kzXgd9X7_To",
+        "value": 1.0531,
+        "target_value": 5.439144722090365
+      },
+      {
+        "ytId": "hcrXJ-FgMqU",
+        "value": 1.141,
+        "target_value": 5.6939993964225195
+      },
+      {
+        "ytId": "8H_bQRjFUis",
+        "value": 1.088,
+        "target_value": 7.048393943059859
+      },
+      {
+        "ytId": "wSDVGGqLmfA",
+        "value": 1.1024,
+        "target_value": 5.339175074521483
+      },
+      {
+        "ytId": "IxPZMFGak6A",
+        "value": 1.074,
+        "target_value": 6.376240339650642
+      },
+      {
+        "ytId": "5w4ST0VBUj8",
+        "value": 1.1105,
+        "target_value": 6.8224815869729385
+      },
+      {
+        "ytId": "CjXX24k3u2w",
+        "value": 1.1275,
+        "target_value": 6.871922856904707
+      },
+      {
+        "ytId": "ETbatz38OTA",
+        "value": 1.0253,
+        "target_value": 5.988354246250306
+      },
+      {
+        "ytId": "3m5V703Iywg",
+        "value": 1.0556999999999999,
+        "target_value": 6.937428315811921
+      },
+      {
+        "ytId": "8lDFzVul1YA",
+        "value": 1.1347,
+        "target_value": 7.1550948003740595
+      },
+      {
+        "ytId": "uKWqHSzuHJM",
+        "value": 1.0628,
+        "target_value": 6.984640980111298
+      },
+      {
+        "ytId": "mpY3-UUFmuk",
+        "value": 1.0564,
+        "target_value": 6.849472422745271
+      },
+      {
+        "ytId": "EXYyNkXb5VY",
+        "value": 1.1172,
+        "target_value": 5.620302658785872
+      }
+    ],
+    "experiment": {
+      "id": "exp_retention_pct_10_20260409_221556",
+      "tool_id": "pearson_r",
+      "tool_version": "1.0",
+      "tool_name": "Pearson Correlation",
+      "parameters": {
+        "target": "views",
+        "transform_target": "log10",
+        "confounds": [],
+        "min_n": 50
+      },
+      "ran_at": "2026-04-09T22:15:56.738842Z",
+      "n_videos": 370,
+      "outputs": {
+        "r": -0.04996365118112891,
+        "p_value": 0.33785262041648817,
+        "n": 370,
+        "ci_low": -0.1511493569300314,
+        "ci_high": 0.05225822861249729,
+        "rho": 0.12148035871238054,
+        "p_rho": 0.019414347603201102
+      }
+    },
+    "result": {
+      "primary_r": -0.04996365118112891,
+      "rho": 0.12148035871238054,
+      "p_value": 0.33785262041648817,
+      "ci_low": -0.1511493569300314,
+      "ci_high": 0.05225822861249729,
+      "direction": "negative",
+      "strength_label": "none",
+      "status": "discovery",
+      "conclusion": "No meaningful linear relationship found between retention_pct_10 and views (r=-0.050, 95% CI [-0.151, +0.052], p=0.3379, n=370). Spearman rho=+0.121 also confirms no rank-order relationship. This indicator does not predict view count in Tyler's corpus of 370 videos.",
+      "practical_insight": "Retention at 10% into the video. does not meaningfully predict views. Safe to deprioritize."
+    },
+    "connections": [
+      "views"
+    ],
+    "created_at": "2026-04-09T22:15:56.738857Z",
+    "updated_at": "2026-04-09T22:15:56.738858Z"
   }
 ]
