@@ -209,6 +209,7 @@ const JarvisUI = (() => {
     // ── Analytical Brain: active selections ──
     let analyticalSelectedTool = null;   // tool id from v2Tools
     let analyticalSelectedExpId = null;  // experiment instance id
+    let experimentsSelectedExpId = null; // experiment id for Experiments tab
 
     function renderAnalytical() {
         // Load v2 tools if not loaded yet
@@ -262,13 +263,6 @@ const JarvisUI = (() => {
             if (tool) toolDetail = renderToolDefinitionCard(tool, toolColors[tool.id] || '#64748b');
         }
 
-        // Selected experiment instance panel
-        let expDetail = '';
-        if (analyticalSelectedExpId) {
-            const ind = experiments.find(i => i.experiment && i.experiment.id === analyticalSelectedExpId);
-            if (ind) expDetail = renderExperimentInstanceCard(ind);
-        }
-
         return `
             <div style="margin-bottom:12px">
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Experiment Tools &mdash; click to inspect</div>
@@ -277,26 +271,6 @@ const JarvisUI = (() => {
                 </div>
             </div>
             ${toolDetail}
-            ${expDetail}
-            ${!analyticalSelectedTool && !analyticalSelectedExpId ? `
-            <div style="margin-top:12px">
-                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Experiment Instances (${experiments.length} run)</div>
-                <div style="display:flex;flex-direction:column;gap:4px" id="jarvis-exp-instances">
-                    ${experiments.map(ind => {
-                        const exp = ind.experiment;
-                        if (!exp) return '';
-                        const r = ind.result ? ind.result.primary_r : null;
-                        const rStr = r != null ? `<span style="font-family:'SF Mono',monospace;color:${r >= 0 ? '#22d3ee' : '#f87171'}">r=${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '';
-                        const tool = tools.find(t => t.id === exp.tool_id);
-                        return `<div class="jarvis-exp-instance-row" data-exp-id="${exp.id}" style="display:flex;align-items:center;gap:8px;background:#0a1628;padding:8px 10px;border-radius:6px;cursor:pointer">
-                            <code style="font-size:10px;color:#94a3b8;flex:1">${exp.id}</code>
-                            <span style="font-size:10px;color:#64748b">${tool ? tool.name : exp.tool_id}</span>
-                            <span style="font-size:11px;color:#94a3b8">${ind.key}</span>
-                            ${rStr}
-                        </div>`;
-                    }).join('')}
-                </div>
-            </div>` : ''}
         `;
     }
 
@@ -430,22 +404,14 @@ const JarvisUI = (() => {
                 bindAnalyticalEvents();
             });
         });
-        container?.querySelectorAll('[data-exp-id]').forEach(row => {
-            row.addEventListener('click', () => {
-                analyticalSelectedExpId = row.dataset.expId;
-                analyticalSelectedTool = null;
-                const p = container?.querySelector('#jarvis-analytical-content');
-                if (p) p.innerHTML = renderAnalyticalContent();
-                bindAnalyticalEvents();
-            });
-        });
     }
 
     // Global functions accessible from inline onclick handlers
     function openExperimentInstance(expId) {
-        activeTab = 'analytical';
-        analyticalSelectedExpId = expId;
+        activeTab = 'experiments';
+        experimentsSelectedExpId = expId;
         analyticalSelectedTool = null;
+        analyticalSelectedExpId = null;
         render();
     }
 
@@ -1337,7 +1303,7 @@ const JarvisUI = (() => {
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Experiment</div>
                 <div style="background:#0a1628;border-radius:6px;padding:10px;font-size:11px">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-                        <code style="color:#22d3ee;font-size:10px;cursor:pointer;text-decoration:underline" onclick="JarvisUI.openExperimentInstance('${exp.id}')" title="Open in Analytical Brain">${exp.id} &#x2197;&#xfe0f;</code>
+                        <code style="color:#22d3ee;font-size:10px;cursor:pointer;text-decoration:underline" onclick="JarvisUI.openExperimentInstance('${exp.id}')" title="Open in Experiments">${exp.id} &#x2197;&#xfe0f;</code>
                         <span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(14,116,144,0.2);color:#0e7490">${result ? result.status : 'discovery'}</span>
                     </div>
                     <div style="color:#94a3b8"><span style="color:#64748b">Tool:</span> <strong style="color:#cbd5e1">${tool ? tool.name : exp.tool_id}</strong> v${tool ? tool.version || '1.0' : '1.0'}</div>
@@ -1512,7 +1478,7 @@ const JarvisUI = (() => {
             expHtml = sectionHdr('Experiment')
                 + '<div style="background:#0a1628;border-radius:6px;padding:10px;font-size:11px">'
                 + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
-                + '<code style="color:#22d3ee;font-size:10px;cursor:pointer;text-decoration:underline" onclick="JarvisUI.openExperimentInstance(\'' + exp.id + '\')" title="Open in Analytical Brain">' + exp.id + ' \u2197\ufe0f</code>'
+                + '<code style="color:#22d3ee;font-size:10px;cursor:pointer;text-decoration:underline" onclick="JarvisUI.openExperimentInstance(\'' + exp.id + '\')" title="Open in Experiments">' + exp.id + ' \u2197\ufe0f</code>'
                 + '<span style="font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(14,116,144,0.2);color:#0e7490">' + (result ? result.status : 'discovery') + '</span>'
                 + '</div>'
                 + '<div><span style="color:#64748b">Tool: </span><strong style="color:#cbd5e1">' + (tool ? tool.name : exp.tool_id) + '</strong></div>'
@@ -1870,15 +1836,84 @@ const JarvisUI = (() => {
     let expExplainOpen = false;
 
     function renderExperiments() {
-        loadResultsTSV().then(rows => {
-            const el = container?.querySelector('.jarvis-exp-root');
-            if (!el) return;
-            el.innerHTML = renderExperimentsContent(rows);
-            bindExperimentEvents();
+        if (!v2Indicators) {
+            loadV2Data().then(() => {
+                const el = container?.querySelector('.jarvis-exp-root');
+                if (el) {
+                    el.innerHTML = renderExperimentsV2Content();
+                    bindExperimentsV2Events();
+                }
+            });
+            return '<div class="jarvis-exp-root"><div class="jarvis-loading">Loading v2 experiments...</div></div>';
+        }
+        setTimeout(bindExperimentsV2Events, 50);
+        return `<div class="jarvis-exp-root">${renderExperimentsV2Content()}</div>`;
+    }
+
+    function renderExperimentsV2Content() {
+        const experiments = v2Indicators || [];
+        const tools = v2Tools || [];
+
+        // Selected experiment detail
+        let selectedCard = '';
+        if (experimentsSelectedExpId) {
+            const ind = experiments.find(i => i.experiment && i.experiment.id === experimentsSelectedExpId);
+            if (ind) {
+                selectedCard = `
+                    <div style="margin-bottom:12px">
+                        <button id="jarvis-exp-back-btn" style="background:none;border:1px solid #334155;color:#94a3b8;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:8px">&larr; Back</button>
+                        ${renderExperimentInstanceCard(ind)}
+                    </div>`;
+            }
+        }
+
+        // Experiment list rows
+        const rows = experiments.map(ind => {
+            const exp = ind.experiment;
+            if (!exp) return '';
+            const r = ind.result ? ind.result.primary_r : null;
+            const rStr = r != null ? `<span style="font-family:'SF Mono',monospace;color:${r >= 0 ? '#22d3ee' : '#f87171'}">r=${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '';
+            const tool = tools.find(t => t.id === exp.tool_id);
+            const isSelected = experimentsSelectedExpId === exp.id;
+            return `<div class="jarvis-exp-v2-row" data-exp-v2-id="${exp.id}" style="display:flex;align-items:center;gap:8px;background:${isSelected ? '#1e293b' : '#0a1628'};padding:8px 10px;border-radius:6px;cursor:pointer${isSelected ? ';border-left:3px solid #22d3ee' : ''}">
+                <code style="font-size:10px;color:#94a3b8;flex:1">${exp.id}</code>
+                <span style="font-size:10px;color:#64748b">${tool ? tool.name : exp.tool_id}</span>
+                <span style="font-size:11px;color:#94a3b8">${ind.key}</span>
+                ${rStr}
+            </div>`;
+        }).join('');
+
+        return `
+            <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:10px">Experiments (${experiments.length} run)</div>
+            ${selectedCard}
+            <div style="display:flex;flex-direction:column;gap:4px">
+                ${rows}
+            </div>
+        `;
+    }
+
+    function bindExperimentsV2Events() {
+        container?.querySelectorAll('[data-exp-v2-id]').forEach(row => {
+            row.addEventListener('click', () => {
+                experimentsSelectedExpId = row.dataset.expV2Id;
+                const el = container?.querySelector('.jarvis-exp-root');
+                if (el) {
+                    el.innerHTML = renderExperimentsV2Content();
+                    bindExperimentsV2Events();
+                }
+            });
         });
-        // Also load prediction model for R²
-        loadAutoResearchData();
-        return '<div class="jarvis-exp-root"><div class="jarvis-loading">Loading experiments from results.tsv...</div></div>';
+        const backBtn = container?.querySelector('#jarvis-exp-back-btn');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                experimentsSelectedExpId = null;
+                const el = container?.querySelector('.jarvis-exp-root');
+                if (el) {
+                    el.innerHTML = renderExperimentsV2Content();
+                    bindExperimentsV2Events();
+                }
+            });
+        }
     }
 
     function categorizeExperiment(expId) {
