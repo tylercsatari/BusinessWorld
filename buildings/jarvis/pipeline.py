@@ -373,6 +373,59 @@ METRIC_DEFINITIONS = {
 }
 
 AUTONOMOUS_RUNS_FILE = JARVIS_DIR / "autonomous_runs.json"
+AUTONOMOUS_PROGRESS_FILE = JARVIS_DIR / "autonomous_progress.json"
+
+
+def _init_progress(run_id, requested_iterations, llm_candidates):
+    """Initialize the live progress snapshot file."""
+    prog = {
+        "active": True,
+        "run_id": run_id,
+        "mode": "hybrid_auto",
+        "started_at": now_iso(),
+        "updated_at": now_iso(),
+        "finished_at": None,
+        "requested_iterations": requested_iterations,
+        "attempted": 0,
+        "completed": 0,
+        "failures": 0,
+        "llm_proposed": 0,
+        "llm_completed": 0,
+        "no_signal_streak": 0,
+        "stop_reason": None,
+        "current_candidate": None,
+        "last_completed_candidate": None,
+        "last_completed_r": None,
+        "recent_events": [],
+    }
+    save_json(AUTONOMOUS_PROGRESS_FILE, prog)
+    return prog
+
+
+def _update_progress(prog, **kwargs):
+    """Update progress snapshot fields and write to disk."""
+    prog.update(kwargs)
+    prog["updated_at"] = now_iso()
+    try:
+        save_json(AUTONOMOUS_PROGRESS_FILE, prog)
+    except Exception:
+        pass  # best-effort, don't crash the run
+
+
+def _append_progress_event(prog, event):
+    """Append an event to recent_events, keeping last 20."""
+    event["ts"] = now_iso()
+    prog.setdefault("recent_events", []).append(event)
+    prog["recent_events"] = prog["recent_events"][-20:]
+
+
+def _finish_progress(prog, stop_reason):
+    """Mark the progress file as finished."""
+    _update_progress(prog,
+                     active=False,
+                     finished_at=now_iso(),
+                     stop_reason=stop_reason,
+                     current_candidate=None)
 
 # ── Autonomous candidate generation ───────────────────────────────────────
 # Candidate families: each produces a list of (key, definition) pairs.
@@ -1636,6 +1689,9 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
           f"llm_candidates={llm_candidates}")
     print(f"{'=' * 60}")
 
+    # Initialize live progress tracking
+    prog = _init_progress(run_id, max_iterations, llm_candidates)
+
     indicators = load_json(INDICATORS_FILE, [])
     tools = load_json(TOOLS_FILE, [])
     resolutions = load_json(RESOLUTIONS_FILE, [])
@@ -1651,6 +1707,8 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
             print(f"  LLM contributed {len(llm_keys)} validated keys")
         else:
             print(f"  LLM proposal failed or returned 0 valid keys — falling back to deterministic only")
+
+    _update_progress(prog, llm_proposed=len(llm_keys))
 
     # ── Phase 2: Deterministic candidate pool ─────────────────────────────
     auto_candidates = generate_autonomous_candidates()
@@ -1688,61 +1746,98 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
     top_r_abs = 0.0
     llm_accepted_count = 0
 
-    for key in pool:
-        # Check cutoffs
-        if attempted >= max_iterations:
-            stop_reason = "max_iterations"
-            break
-        if max_minutes and (time.time() - start_time) / 60 >= max_minutes:
-            stop_reason = "max_minutes"
-            break
-        if max_failures and consecutive_failures >= max_failures:
-            stop_reason = "max_failures"
-            break
-        if max_no_signal and no_signal_streak >= max_no_signal:
-            stop_reason = "max_no_signal"
-            break
+    try:
+        for key in pool:
+            # Check cutoffs
+            if attempted >= max_iterations:
+                stop_reason = "max_iterations"
+                break
+            if max_minutes and (time.time() - start_time) / 60 >= max_minutes:
+                stop_reason = "max_minutes"
+                break
+            if max_failures and consecutive_failures >= max_failures:
+                stop_reason = "max_failures"
+                break
+            if max_no_signal and no_signal_streak >= max_no_signal:
+                stop_reason = "max_no_signal"
+                break
 
-        attempted += 1
-        is_llm = key in llm_keys
-        result = process_indicator(key, videos, existing_keys, resolutions, graph, tools)
+            attempted += 1
+            is_llm = key in llm_keys
+            _update_progress(prog,
+                             current_candidate=key,
+                             attempted=attempted,
+                             completed=completed,
+                             failures=failures,
+                             no_signal_streak=no_signal_streak,
+                             llm_completed=llm_accepted_count)
+            result = process_indicator(key, videos, existing_keys, resolutions, graph, tools)
 
-        if result:
-            indicators.append(result)
-            exp_log = load_json(EXPERIMENTS_FILE, [])
-            exp_log.append({
-                "id": result["experiment"]["id"],
-                "indicator_key": key,
-                "tool_id": result["experiment"]["tool_id"],
-                "tool_name": result["experiment"]["tool_name"],
-                "target": result["target"],
-                "parameters": result["experiment"]["parameters"],
-                "outputs": result["experiment"]["outputs"],
-                "n_videos": result["experiment"]["n_videos"],
-                "status": result["result"]["status"],
-                "ran_at": result["experiment"]["ran_at"],
-                "source": "llm" if is_llm else "deterministic",
-            })
-            save_json(EXPERIMENTS_FILE, exp_log)
-            save_json(INDICATORS_FILE, indicators)
-            existing_keys.add(key)
-            completed += 1
-            consecutive_failures = 0
-            processed_keys.append(key)
-            if is_llm:
-                llm_accepted_count += 1
+            if result:
+                indicators.append(result)
+                exp_log = load_json(EXPERIMENTS_FILE, [])
+                exp_log.append({
+                    "id": result["experiment"]["id"],
+                    "indicator_key": key,
+                    "tool_id": result["experiment"]["tool_id"],
+                    "tool_name": result["experiment"]["tool_name"],
+                    "target": result["target"],
+                    "parameters": result["experiment"]["parameters"],
+                    "outputs": result["experiment"]["outputs"],
+                    "n_videos": result["experiment"]["n_videos"],
+                    "status": result["result"]["status"],
+                    "ran_at": result["experiment"]["ran_at"],
+                    "source": "llm" if is_llm else "deterministic",
+                })
+                save_json(EXPERIMENTS_FILE, exp_log)
+                save_json(INDICATORS_FILE, indicators)
+                existing_keys.add(key)
+                completed += 1
+                consecutive_failures = 0
+                processed_keys.append(key)
+                if is_llm:
+                    llm_accepted_count += 1
 
-            r_abs = abs(result["result"]["primary_r"])
-            if r_abs > top_r_abs:
-                top_r_abs = r_abs
-            if r_abs < 0.05:
-                no_signal_streak += 1
+                r_val = result["result"]["primary_r"]
+                r_abs = abs(r_val)
+                if r_abs > top_r_abs:
+                    top_r_abs = r_abs
+                if r_abs < 0.05:
+                    no_signal_streak += 1
+                else:
+                    no_signal_streak = 0
+
+                _append_progress_event(prog, {
+                    "type": "completed",
+                    "key": key,
+                    "r": round(r_val, 4),
+                    "resolution_id": result.get("resolution_id", "r0"),
+                    "target": result.get("target", "views"),
+                })
+                _update_progress(prog,
+                                 completed=completed,
+                                 failures=failures,
+                                 no_signal_streak=no_signal_streak,
+                                 llm_completed=llm_accepted_count,
+                                 last_completed_candidate=key,
+                                 last_completed_r=round(r_val, 4))
             else:
-                no_signal_streak = 0
-        else:
-            failures += 1
-            consecutive_failures += 1
-            processed_keys.append(f"FAIL:{key}")
+                failures += 1
+                consecutive_failures += 1
+                processed_keys.append(f"FAIL:{key}")
+                _append_progress_event(prog, {
+                    "type": "failed",
+                    "key": key,
+                    "reason": "process_indicator returned None",
+                })
+                _update_progress(prog,
+                                 failures=failures,
+                                 no_signal_streak=no_signal_streak)
+    except Exception as exc:
+        _finish_progress(prog, f"crashed: {str(exc)[:200]}")
+        raise
+
+    _finish_progress(prog, stop_reason)
 
     elapsed = (time.time() - start_time) / 60
 

@@ -3611,6 +3611,18 @@ Respond ONLY as valid JSON (no markdown):
         });
         return;
     }
+    if (pathname === '/api/jarvis/v2/auto-run-progress' && req.method === 'GET') {
+        try {
+            const progressPath = path.join(__dirname, 'buildings/jarvis/autonomous_progress.json');
+            const data = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ active: false, run_id: null, recent_events: [] }));
+        }
+        return;
+    }
     if (pathname === '/api/jarvis/v2/auto-run-status' && req.method === 'GET') {
         try {
             const runsPath = path.join(__dirname, 'buildings/jarvis/autonomous_runs.json');

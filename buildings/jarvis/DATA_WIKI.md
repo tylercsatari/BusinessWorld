@@ -177,10 +177,19 @@ All LLM-proposed keys are:
 2. Validated against known patterns with range checks (e.g., pct 1-99, window lo < hi)
 3. Rejected if not implementable by `extract_metric()`
 
-### `autonomous_runs.json`
+### `autonomous_progress.json` (Live Progress Snapshot)
+**Location:** `buildings/jarvis/autonomous_progress.json`
+
+Updated continuously during an autonomous run. Represents the **current in-flight or last-finished** run state. The UI polls this file every 3 seconds for live progress.
+
+Key fields: `active` (bool), `run_id`, `attempted`/`completed`/`failures`, `current_candidate`, `last_completed_candidate`, `last_completed_r`, `no_signal_streak`, `stop_reason`, `recent_events` (last 20 events with type, key, r value or failure reason).
+
+When `active=true`, a run is in progress. When `active=false`, the file reflects the final state of the last run (with `finished_at` and `stop_reason` populated).
+
+### `autonomous_runs.json` (Completed History Log)
 **Location:** `buildings/jarvis/autonomous_runs.json`
 
-Each entry records one autonomous run:
+Each entry records one completed autonomous run:
 ```json
 {
   "id": "auto_20260409_153000",

@@ -2274,6 +2274,16 @@ const JarvisUI = (() => {
                 <div style="margin-top:6px;font-size:10px;color:#475569">Hybrid: Claude proposes candidates → deterministic pipeline validates, extracts, correlates, graphs. Falls back to templates if LLM fails.</div>
             </div>
 
+            <div id="ar-live-progress" style="background:#0a1628;border:1px solid #1e293b;border-radius:8px;padding:14px;margin-bottom:16px;display:none">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                    <span id="ar-live-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e"></span>
+                    <span style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b">Live Autonomous Progress</span>
+                    <span id="ar-live-status" style="font-size:11px;font-weight:600;color:#22c55e;margin-left:auto"></span>
+                </div>
+                <div id="ar-live-body" style="font-size:12px;color:#cbd5e1"></div>
+                <div id="ar-live-events" style="margin-top:10px"></div>
+            </div>
+
             <div id="ar-latest-run" style="background:#0a1628;border-radius:8px;padding:14px;margin-bottom:16px;display:none">
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Latest Autonomous Run</div>
                 <div id="ar-latest-run-body" style="font-size:12px;color:#cbd5e1"></div>
@@ -2318,7 +2328,8 @@ const JarvisUI = (() => {
                         body: JSON.stringify({ n, maxMinutes: maxMin, maxFailures: maxFail, maxNoSignal: maxNs, llmCandidates: llmN })
                     });
                     const data = await resp.json();
-                    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✓ Autonomous run started (PID ${data.pid}). Processing up to ${n} candidates. Refresh to see progress.</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✓ Autonomous run started (PID ${data.pid}). Live progress updating below.</span>`;
+                    pollProgress();
                 } catch (e) {
                     if (statusEl) statusEl.innerHTML = `<span style="color:#f87171">Error: ${e.message}</span>`;
                 }
@@ -2390,6 +2401,91 @@ const JarvisUI = (() => {
                 row.addEventListener('mouseleave', () => row.style.background = '');
             }
         });
+
+        // ── Live progress polling ────────────────────────────────────
+        if (window._arProgressInterval) { clearInterval(window._arProgressInterval); window._arProgressInterval = null; }
+        function renderLiveProgress(d) {
+            const card = container?.querySelector('#ar-live-progress');
+            if (!card) return;
+            if (!d || !d.run_id) { card.style.display = 'none'; return; }
+            card.style.display = 'block';
+
+            const dot = container.querySelector('#ar-live-dot');
+            const statusEl = container.querySelector('#ar-live-status');
+            if (d.active) {
+                card.style.borderColor = '#22c55e';
+                if (dot) { dot.style.background = '#22c55e'; dot.style.animation = 'ar-pulse 1.5s ease-in-out infinite'; }
+                if (statusEl) { statusEl.textContent = '● Running'; statusEl.style.color = '#22c55e'; }
+            } else {
+                card.style.borderColor = '#1e293b';
+                if (dot) { dot.style.background = '#64748b'; dot.style.animation = 'none'; }
+                if (statusEl) {
+                    statusEl.textContent = d.stop_reason ? `Finished — ${d.stop_reason}` : 'Idle';
+                    statusEl.style.color = '#94a3b8';
+                }
+            }
+
+            const pct = d.requested_iterations ? Math.round((d.attempted / d.requested_iterations) * 100) : 0;
+            const body = container.querySelector('#ar-live-body');
+            if (body) body.innerHTML = `
+                <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+                    <span style="color:#64748b;font-size:10px">Run: <b style="color:#a78bfa">${d.run_id}</b></span>
+                    <span style="color:#64748b;font-size:10px">Started: <b style="color:#cbd5e1">${d.started_at ? new Date(d.started_at).toLocaleTimeString() : '—'}</b></span>
+                    ${d.updated_at ? `<span style="color:#64748b;font-size:10px">Updated: <b style="color:#cbd5e1">${new Date(d.updated_at).toLocaleTimeString()}</b></span>` : ''}
+                </div>
+                <div style="background:#1e293b;border-radius:4px;height:6px;margin-bottom:8px;overflow:hidden">
+                    <div style="background:${d.active ? '#7c3aed' : '#475569'};height:100%;width:${pct}%;transition:width 0.3s"></div>
+                </div>
+                <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px">
+                    <span>Attempted: <b>${d.attempted || 0}</b> / ${d.requested_iterations || '?'}</span>
+                    <span>Completed: <b style="color:#22c55e">${d.completed || 0}</b></span>
+                    <span>Failures: <b style="color:#f87171">${d.failures || 0}</b></span>
+                    <span>No-signal: <b style="color:#f59e0b">${d.no_signal_streak || 0}</b></span>
+                </div>
+                <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;margin-top:4px">
+                    <span>LLM proposed: <b style="color:#a78bfa">${d.llm_proposed || 0}</b></span>
+                    <span>LLM completed: <b style="color:#a78bfa">${d.llm_completed || 0}</b></span>
+                    ${d.current_candidate ? `<span>Current: <b style="color:#22d3ee">${d.current_candidate}</b></span>` : ''}
+                </div>
+                ${d.last_completed_candidate ? `<div style="font-size:11px;margin-top:4px;color:#64748b">Last completed: <b style="color:#cbd5e1">${d.last_completed_candidate}</b> r=<span style="color:${(d.last_completed_r||0) >= 0 ? '#22d3ee' : '#f87171'}">${d.last_completed_r != null ? d.last_completed_r.toFixed(4) : '—'}</span></div>` : ''}
+            `;
+
+            const eventsEl = container.querySelector('#ar-live-events');
+            if (eventsEl && d.recent_events && d.recent_events.length > 0) {
+                const last6 = d.recent_events.slice(-6).reverse();
+                eventsEl.innerHTML = `
+                    <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#475569;margin-bottom:4px">Recent Events</div>
+                    ${last6.map(e => {
+                        if (e.type === 'completed') {
+                            const rColor = (e.r || 0) >= 0 ? '#22d3ee' : '#f87171';
+                            return `<div style="font-size:11px;padding:2px 0;color:#cbd5e1"><span style="color:#22c55e">✓</span> ${e.key} <span style="color:${rColor};font-family:'SF Mono',monospace;font-size:10px">r=${e.r != null ? e.r.toFixed(4) : '?'}</span></div>`;
+                        } else {
+                            return `<div style="font-size:11px;padding:2px 0;color:#cbd5e1"><span style="color:#f87171">✗</span> ${e.key} <span style="color:#64748b;font-size:10px">${e.reason || 'failed'}</span></div>`;
+                        }
+                    }).join('')}
+                `;
+            } else if (eventsEl) {
+                eventsEl.innerHTML = '';
+            }
+        }
+
+        // Inject pulse animation if not already present
+        if (!document.querySelector('#ar-pulse-style')) {
+            const style = document.createElement('style');
+            style.id = 'ar-pulse-style';
+            style.textContent = '@keyframes ar-pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }';
+            document.head.appendChild(style);
+        }
+
+        async function pollProgress() {
+            try {
+                const resp = await fetch('/api/jarvis/v2/auto-run-progress');
+                const data = await resp.json();
+                renderLiveProgress(data);
+            } catch {}
+        }
+        pollProgress();
+        window._arProgressInterval = setInterval(pollProgress, 3000);
     }
 
     // ══════════════════════════════════════════════════
