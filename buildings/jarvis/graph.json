@@ -1,0 +1,156 @@
+{
+  "version": "2.0",
+  "nodes": [
+    {
+      "key": "views",
+      "label": "Views",
+      "type": "target",
+      "layer": "target",
+      "depth": 0,
+      "r_partial": null,
+      "resolution_id": "r0",
+      "connections": [],
+      "description": "Log10 of total view count. Primary outcome metric. All indicators ultimately trace back to this."
+    },
+    {
+      "key": "keep",
+      "label": "Keep Rate",
+      "type": "target",
+      "layer": "target",
+      "depth": 0,
+      "r_partial": null,
+      "resolution_id": "r0",
+      "connections": [],
+      "description": "Average retention rate (0-1). Fraction of the video an average viewer watches."
+    },
+    {
+      "key": "retention",
+      "label": "Avg Percent Viewed",
+      "type": "target",
+      "layer": "target",
+      "depth": 0,
+      "r_partial": null,
+      "resolution_id": "r0",
+      "connections": [],
+      "description": "Average percent of video viewed across all viewers."
+    },
+    {
+      "key": "hook_retention_pct",
+      "label": "Hook Retention Pct",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.04996365118112891,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Retention at 10% into the video \u2014 measures hook strength. How many people are still watching 1/10 of the way through?",
+      "experiment_id": "exp_hook_retention_pct_20260409_161059",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "final_5pct_retention",
+      "label": "Final 5Pct Retention",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.4715732924173845,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Average retention in the final 5% of the video \u2014 end-completion signal. Videos that hold viewers to the very end.",
+      "experiment_id": "exp_final_5pct_retention_20260409_161059",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "mid_video_cliff",
+      "label": "Mid Video Cliff",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.17664005735272306,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Largest single-step drop in retention anywhere in the video \u2014 the worst moment of viewer loss.",
+      "experiment_id": "exp_mid_video_cliff_20260409_161059",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_entropy",
+      "label": "Retention Entropy",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.4651759674555697,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Shannon entropy of the retention curve \u2014 information richness. High entropy means many peaks/valleys vs monotonic decline.",
+      "experiment_id": "exp_retention_entropy_20260409_161059",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "hook_drop_rate",
+      "label": "Hook Drop Rate",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.4019295720284731,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Slope of retention in the first 10% of video. More negative = viewers dropping faster right after start.",
+      "experiment_id": "exp_hook_drop_rate_20260409_161059",
+      "status": "discovery",
+      "strength_label": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "from": "hook_retention_pct",
+      "to": "views",
+      "r": -0.04996365118112891,
+      "experiment_id": "exp_hook_retention_pct_20260409_161059",
+      "added_at": "2026-04-09T16:10:59.905383Z"
+    },
+    {
+      "from": "final_5pct_retention",
+      "to": "views",
+      "r": 0.4715732924173845,
+      "experiment_id": "exp_final_5pct_retention_20260409_161059",
+      "added_at": "2026-04-09T16:10:59.910457Z"
+    },
+    {
+      "from": "mid_video_cliff",
+      "to": "views",
+      "r": 0.17664005735272306,
+      "experiment_id": "exp_mid_video_cliff_20260409_161059",
+      "added_at": "2026-04-09T16:10:59.918108Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "views",
+      "r": 0.4651759674555697,
+      "experiment_id": "exp_retention_entropy_20260409_161059",
+      "added_at": "2026-04-09T16:10:59.928284Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "views",
+      "r": -0.4019295720284731,
+      "experiment_id": "exp_hook_drop_rate_20260409_161059",
+      "added_at": "2026-04-09T16:10:59.975061Z"
+    }
+  ],
+  "updated_at": "2026-04-09T16:10:59.975063Z"
+}

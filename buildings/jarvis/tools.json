@@ -1,53 +1,91 @@
 [
   {
-    "id": "partial_correlation",
-    "version": "1.0",
-    "name": "Partial Correlation",
-    "description": "Measures r_partial of indicator vs target after controlling for specified confounds using scipy.stats.pearsonr on residuals.",
-    "parameters": {
-      "confounds": {"type": "array of string", "description": "Other indicators to partial out. Empty = same as direct correlation."},
-      "target": {"type": "string", "description": "Target node key: views, keep, or retention"},
-      "transform_target": {"type": "string", "description": "Transform to apply to target. log10 recommended for views.", "default": "log10"}
-    },
-    "outputs": ["r_partial", "r_direct", "p_value", "n", "residual_std"],
-    "formula": "r_partial = pearsonr(residuals_indicator, residuals_target) after OLS regression of each against confounds"
-  },
-  {
     "id": "pearson_r",
     "version": "1.0",
     "name": "Pearson Correlation",
-    "description": "Direct bivariate Pearson r between indicator and target. No confound control.",
+    "analytical_brain_tab": "correlation",
+    "description": "Direct bivariate Pearson r between indicator and target. Measures linear relationship. No confound control. Use as a first pass on any indicator.",
+    "when_to_use": "First pass. Always run this. Shows raw linear relationship.",
     "parameters": {
-      "target": {"type": "string"},
-      "transform_target": {"type": "string", "default": "log10"}
+      "target": {"type": "string", "required": true, "description": "Target node key: views, keep, or another indicator key"},
+      "transform_target": {"type": "string", "default": "log10", "options": ["log10", "none", "sqrt"], "description": "Transform applied to target values before correlation. log10 recommended for views."},
+      "min_n": {"type": "integer", "default": 50, "description": "Minimum number of valid video pairs required to run"}
     },
-    "outputs": ["r", "p_value", "n"],
-    "formula": "r = pearsonr(indicator_values, target_values)"
+    "outputs": {
+      "r": "Pearson correlation coefficient (-1 to 1)",
+      "p_value": "Two-tailed p-value for significance",
+      "n": "Number of video pairs used",
+      "ci_low": "95% confidence interval lower bound",
+      "ci_high": "95% confidence interval upper bound"
+    },
+    "formula": "r = sum((x_i - x_mean)(y_i - y_mean)) / sqrt(sum((x_i-x_mean)^2) * sum((y_i-y_mean)^2))",
+    "interpretation": "r > 0.5: strong positive. r 0.3-0.5: moderate. r 0.1-0.3: weak. r < 0.1: no signal."
   },
   {
-    "id": "spearman_r",
+    "id": "spearman_rho",
     "version": "1.0",
     "name": "Spearman Rank Correlation",
+    "analytical_brain_tab": "correlation",
     "description": "Non-parametric rank-based correlation. Robust to outliers and non-normal distributions.",
+    "when_to_use": "Run alongside Pearson. If rho >> r, relationship is monotonic but not linear.",
     "parameters": {
-      "target": {"type": "string"},
-      "transform_target": {"type": "string", "default": "none"}
+      "target": {"type": "string", "required": true},
+      "transform_target": {"type": "string", "default": "none"},
+      "min_n": {"type": "integer", "default": 50}
     },
-    "outputs": ["rho", "p_value", "n"],
-    "formula": "rho = spearmanr(indicator_values, target_values)"
+    "outputs": {
+      "rho": "Spearman rank correlation coefficient (-1 to 1)",
+      "p_value": "Two-tailed p-value",
+      "n": "Number of pairs used"
+    },
+    "formula": "rho = 1 - (6 * sum(d_i^2)) / (n * (n^2 - 1)) where d_i = rank(x_i) - rank(y_i)",
+    "interpretation": "Same scale as Pearson r. If |rho| >> |r|, nonlinear but monotonic."
+  },
+  {
+    "id": "partial_correlation",
+    "version": "1.0",
+    "name": "Partial Correlation",
+    "analytical_brain_tab": "correlation",
+    "description": "Pearson r between indicator and target AFTER controlling for one or more confounds.",
+    "when_to_use": "When you suspect a confound is inflating the correlation.",
+    "parameters": {
+      "target": {"type": "string", "required": true},
+      "confounds": {"type": "array of string", "required": true, "description": "Indicator keys to control for"},
+      "transform_target": {"type": "string", "default": "log10"},
+      "min_n": {"type": "integer", "default": 50}
+    },
+    "outputs": {
+      "r_partial": "Partial correlation after removing confound variance",
+      "r_direct": "Direct Pearson r without confound control",
+      "p_value": "Two-tailed p-value on r_partial",
+      "n": "Number of pairs used",
+      "confounds_used": "List of confounds applied"
+    },
+    "formula": "r_partial(X,Y|Z) = (r_XY - r_XZ * r_YZ) / sqrt((1 - r_XZ^2)(1 - r_YZ^2))",
+    "interpretation": "Compare r_partial to r_direct. If r_partial << r_direct, confound was driving the relationship."
   },
   {
     "id": "ols_r2_delta",
     "version": "1.0",
-    "name": "OLS R2 Delta",
-    "description": "Measures how much R2 improves when adding this indicator to a baseline OLS model.",
+    "name": "OLS R2 Contribution",
+    "analytical_brain_tab": "model",
+    "description": "Measures how much R2 improves in cross-validated OLS when adding this indicator to a baseline.",
+    "when_to_use": "After Pearson/Spearman confirm correlation. Tests if signal adds unique predictive power.",
     "parameters": {
-      "baseline_features": {"type": "array of string"},
-      "target": {"type": "string"},
+      "target": {"type": "string", "required": true},
+      "baseline_features": {"type": "array of string", "default": []},
       "transform_target": {"type": "string", "default": "log10"},
-      "cv_folds": {"type": "integer", "default": 5}
+      "cv_folds": {"type": "integer", "default": 5},
+      "min_n": {"type": "integer", "default": 50}
     },
-    "outputs": ["r2_before", "r2_after", "delta_r2", "n"],
-    "formula": "delta_r2 = cross_val_score(model_with_feature) - cross_val_score(baseline_model)"
+    "outputs": {
+      "r2_before": "Cross-validated R2 of baseline model",
+      "r2_after": "Cross-validated R2 after adding this indicator",
+      "delta_r2": "Improvement: r2_after - r2_before",
+      "n": "Number of videos used",
+      "cv_folds": "Folds used"
+    },
+    "formula": "delta_R2 = mean(CV R2 with feature) - mean(CV R2 without feature), 5-fold CV",
+    "interpretation": "delta_R2 > 0.02: meaningful. > 0.05: significant. Negative = indicator hurts model."
   }
 ]

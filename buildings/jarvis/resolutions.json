@@ -2,12 +2,22 @@
   {
     "id": "r0",
     "label": "Full Video",
-    "description": "The entire video analyzed as a single unit. One value per video.",
+    "description": "The entire video analyzed as a single unit. One scalar value per video.",
     "unit": "video",
     "granularity": "whole",
     "start_pct": 0,
     "end_pct": 100,
+    "start_s": null,
+    "end_s": null,
     "created_from": "bootstrap",
-    "indicator_count": 0
+    "created_at": "2026-04-09T00:00:00Z",
+    "indicator_keys": [
+      "hook_retention_pct",
+      "final_5pct_retention",
+      "mid_video_cliff",
+      "retention_entropy",
+      "hook_drop_rate"
+    ],
+    "depth_in_hierarchy": 0
   }
 ]

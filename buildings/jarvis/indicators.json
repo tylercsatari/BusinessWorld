@@ -8,10 +8,14 @@
     "depth": 1,
     "target": "views",
     "metric_definition": {
-      "description": "Retention at 10% into the video \u2014 measures hook strength",
-      "what_to_extract": "retentionCurve[index 10].retention",
+      "description": "Retention at 10% into the video \u2014 measures hook strength. How many people are still watching 1/10 of the way through?",
+      "what_to_extract": "retentionCurve[10].retention \u2014 the retention value at index 10 (= 10% through video)",
       "formula": "retentionCurve[10].retention",
-      "expected_range": "0 to 2.0 (>1 means rewatches)"
+      "expected_range": "0 to 2.0 (>1.0 means re-watches)",
+      "data_sources": [
+        "analytics.retentionCurve"
+      ],
+      "layer": "post"
     },
     "dataset": [
       {
@@ -1866,37 +1870,45 @@
       }
     ],
     "experiment": {
-      "id": "exp_hook_retention_pct_20260409_152609",
+      "id": "exp_hook_retention_pct_20260409_161059",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
+      "tool_name": "Pearson Correlation",
       "parameters": {
         "target": "views",
         "transform_target": "log10",
-        "confounds": []
+        "confounds": [],
+        "min_n": 50
       },
-      "ran_at": "2026-04-09T15:26:09.232406Z",
+      "ran_at": "2026-04-09T16:10:59.905358Z",
       "n_videos": 370,
-      "r_partial": -0.04996365118112891,
-      "r_direct": -0.04996365118112891,
-      "rho": 0.12148035871238054,
-      "p_value": 0.33785262041648817,
-      "p_rho": 0.019414347603201102,
-      "r2_before": null,
-      "r2_after": null,
-      "delta_r2": null
+      "outputs": {
+        "r": -0.04996365118112891,
+        "p_value": 0.33785262041648817,
+        "n": 370,
+        "ci_low": -0.1511493569300314,
+        "ci_high": 0.05225822861249729,
+        "rho": 0.12148035871238054,
+        "p_rho": 0.019414347603201102
+      }
     },
     "result": {
-      "strength": 0.05,
+      "primary_r": -0.04996365118112891,
+      "rho": 0.12148035871238054,
+      "p_value": 0.33785262041648817,
+      "ci_low": -0.1511493569300314,
+      "ci_high": 0.05225822861249729,
       "direction": "negative",
+      "strength_label": "none",
       "status": "discovery",
-      "conclusion": "No meaningful relationship found between hook_retention_pct and views (r=-0.050, n=370).",
-      "practical_insight": "hook_retention_pct does not appear to meaningfully affect views. Consider deprioritizing."
+      "conclusion": "No meaningful linear relationship found between hook_retention_pct and views (r=-0.050, 95% CI [-0.151, +0.052], p=0.3379, n=370). Spearman rho=+0.121 also confirms no rank-order relationship. This indicator does not predict view count in Tyler's corpus of 370 videos.",
+      "practical_insight": "Retention at 10% into the video does not meaningfully predict views. Safe to deprioritize."
     },
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T15:26:09.234000Z",
-    "updated_at": "2026-04-09T15:26:09.234002Z"
+    "created_at": "2026-04-09T16:10:59.905375Z",
+    "updated_at": "2026-04-09T16:10:59.905377Z"
   },
   {
     "key": "final_5pct_retention",
@@ -1907,10 +1919,14 @@
     "depth": 1,
     "target": "views",
     "metric_definition": {
-      "description": "Average retention in the final 5% of the video \u2014 end-completion signal",
-      "what_to_extract": "mean of last 5 retentionCurve values",
-      "formula": "mean(retentionCurve[-5:])",
-      "expected_range": "0 to 1.5"
+      "description": "Average retention in the final 5% of the video \u2014 end-completion signal. Videos that hold viewers to the very end.",
+      "what_to_extract": "mean of retentionCurve[-5:].retention",
+      "formula": "mean(retentionCurve[95:100].retention)",
+      "expected_range": "0 to 1.5",
+      "data_sources": [
+        "analytics.retentionCurve"
+      ],
+      "layer": "post"
     },
     "dataset": [
       {
@@ -3765,37 +3781,45 @@
       }
     ],
     "experiment": {
-      "id": "exp_final_5pct_retention_20260409_152609",
+      "id": "exp_final_5pct_retention_20260409_161059",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
+      "tool_name": "Pearson Correlation",
       "parameters": {
         "target": "views",
         "transform_target": "log10",
-        "confounds": []
+        "confounds": [],
+        "min_n": 50
       },
-      "ran_at": "2026-04-09T15:26:09.237114Z",
+      "ran_at": "2026-04-09T16:10:59.910440Z",
       "n_videos": 370,
-      "r_partial": 0.4715732924173845,
-      "r_direct": 0.4715732924173845,
-      "rho": 0.47151477454466556,
-      "p_value": 6.953837184165362e-22,
-      "p_rho": 7.046089840690292e-22,
-      "r2_before": null,
-      "r2_after": null,
-      "delta_r2": null
+      "outputs": {
+        "r": 0.4715732924173845,
+        "p_value": 6.953837184165362e-22,
+        "n": 370,
+        "ci_low": 0.38828625713942294,
+        "ci_high": 0.5472189134956179,
+        "rho": 0.47151477454466556,
+        "p_rho": 7.046089840690292e-22
+      }
     },
     "result": {
-      "strength": 0.4716,
+      "primary_r": 0.4715732924173845,
+      "rho": 0.47151477454466556,
+      "p_value": 6.953837184165362e-22,
+      "ci_low": 0.38828625713942294,
+      "ci_high": 0.5472189134956179,
       "direction": "positive",
+      "strength_label": "moderate",
       "status": "discovery",
-      "conclusion": "Average retention in the final 5% of the video \u2014 end-completion signal is moderately positively correlated with views (r=0.472, n=370). Higher final_5pct_retention predicts more views.",
+      "conclusion": "Average retention in the final 5% of the video \u2014 end-completion signal. Videos that hold viewers to the very end. Is moderately positively correlated with views (r=+0.472, 95% CI [+0.388, +0.547], p=0.0000, n=370). Spearman rho=+0.472 confirms a linear relationship. Higher final_5pct_retention values predict more views.",
       "practical_insight": "Maximize average retention in the final 5% of the video to increase views."
     },
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T15:26:09.237587Z",
-    "updated_at": "2026-04-09T15:26:09.237588Z"
+    "created_at": "2026-04-09T16:10:59.910452Z",
+    "updated_at": "2026-04-09T16:10:59.910453Z"
   },
   {
     "key": "mid_video_cliff",
@@ -3806,10 +3830,14 @@
     "depth": 1,
     "target": "views",
     "metric_definition": {
-      "description": "Largest single-step drop in retention anywhere in the video",
-      "what_to_extract": "max absolute diff between consecutive retentionCurve values",
-      "formula": "max(|curve[i] - curve[i-1]|) for all i",
-      "expected_range": "0 to 1.0 (higher = steeper cliff)"
+      "description": "Largest single-step drop in retention anywhere in the video \u2014 the worst moment of viewer loss.",
+      "what_to_extract": "max(|curve[i] - curve[i-1]|) for all consecutive pairs",
+      "formula": "max(abs(diff(retentionCurve.retention)))",
+      "expected_range": "0 to 1.0 (higher = steeper cliff)",
+      "data_sources": [
+        "analytics.retentionCurve"
+      ],
+      "layer": "post"
     },
     "dataset": [
       {
@@ -5664,37 +5692,45 @@
       }
     ],
     "experiment": {
-      "id": "exp_mid_video_cliff_20260409_152609",
+      "id": "exp_mid_video_cliff_20260409_161059",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
+      "tool_name": "Pearson Correlation",
       "parameters": {
         "target": "views",
         "transform_target": "log10",
-        "confounds": []
+        "confounds": [],
+        "min_n": 50
       },
-      "ran_at": "2026-04-09T15:26:09.244596Z",
+      "ran_at": "2026-04-09T16:10:59.918095Z",
       "n_videos": 370,
-      "r_partial": 0.17664005735272306,
-      "r_direct": 0.17664005735272306,
-      "rho": 0.44150866781105136,
-      "p_value": 0.0006422391456777828,
-      "p_rho": 4.389971733039257e-19,
-      "r2_before": null,
-      "r2_after": null,
-      "delta_r2": null
+      "outputs": {
+        "r": 0.17664005735272306,
+        "p_value": 0.0006422391456777828,
+        "n": 370,
+        "ci_low": 0.07605407756931436,
+        "ci_high": 0.2736671335038069,
+        "rho": 0.44150866781105136,
+        "p_rho": 4.389971733039257e-19
+      }
     },
     "result": {
-      "strength": 0.1766,
+      "primary_r": 0.17664005735272306,
+      "rho": 0.44150866781105136,
+      "p_value": 0.0006422391456777828,
+      "ci_low": 0.07605407756931436,
+      "ci_high": 0.2736671335038069,
       "direction": "positive",
+      "strength_label": "weak",
       "status": "discovery",
-      "conclusion": "Largest single-step drop in retention anywhere in the video is weakly positively correlated with views (r=0.177, n=370). Higher mid_video_cliff predicts more views.",
+      "conclusion": "Largest single-step drop in retention anywhere in the video \u2014 the worst moment of viewer loss. Is weakly positively correlated with views (r=+0.177, 95% CI [+0.076, +0.274], p=0.0006, n=370). Spearman rho=+0.442 confirms a partially non-linear relationship. Higher mid_video_cliff values predict more views.",
       "practical_insight": "Maximize largest single-step drop in retention anywhere in the video to increase views."
     },
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T15:26:09.245144Z",
-    "updated_at": "2026-04-09T15:26:09.245146Z"
+    "created_at": "2026-04-09T16:10:59.918104Z",
+    "updated_at": "2026-04-09T16:10:59.918105Z"
   },
   {
     "key": "retention_entropy",
@@ -5705,10 +5741,14 @@
     "depth": 1,
     "target": "views",
     "metric_definition": {
-      "description": "Shannon entropy of the retention curve \u2014 information richness. High entropy = many peaks/valleys, not monotonic.",
-      "what_to_extract": "Shannon entropy of normalized retentionCurve values",
-      "formula": "H = -sum(p * log2(p)) where p = |curve[i]| / sum(|curve|)",
-      "expected_range": "0 to ~6 bits"
+      "description": "Shannon entropy of the retention curve \u2014 information richness. High entropy means many peaks/valleys vs monotonic decline.",
+      "what_to_extract": "Shannon entropy H = -sum(p*log2(p)) where p = |val|/sum(|vals|)",
+      "formula": "H = -sum(p_i * log2(p_i)) where p_i = |curve[i].retention| / sum(|curve[*].retention|)",
+      "expected_range": "0 to ~6 bits",
+      "data_sources": [
+        "analytics.retentionCurve"
+      ],
+      "layer": "post"
     },
     "dataset": [
       {
@@ -7563,37 +7603,45 @@
       }
     ],
     "experiment": {
-      "id": "exp_retention_entropy_20260409_152609",
+      "id": "exp_retention_entropy_20260409_161059",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
+      "tool_name": "Pearson Correlation",
       "parameters": {
         "target": "views",
         "transform_target": "log10",
-        "confounds": []
+        "confounds": [],
+        "min_n": 50
       },
-      "ran_at": "2026-04-09T15:26:09.256001Z",
+      "ran_at": "2026-04-09T16:10:59.928268Z",
       "n_videos": 370,
-      "r_partial": 0.4651759674555697,
-      "r_direct": 0.4651759674555697,
-      "rho": 0.5556594001140711,
-      "p_value": 2.893882663662914e-21,
-      "p_rho": 2.308541506976829e-31,
-      "r2_before": null,
-      "r2_after": null,
-      "delta_r2": null
+      "outputs": {
+        "r": 0.4651759674555697,
+        "p_value": 2.893882663662914e-21,
+        "n": 370,
+        "ci_low": 0.3813045513087749,
+        "ci_high": 0.5414520170432291,
+        "rho": 0.5556594001140711,
+        "p_rho": 2.308541506976829e-31
+      }
     },
     "result": {
-      "strength": 0.4652,
+      "primary_r": 0.4651759674555697,
+      "rho": 0.5556594001140711,
+      "p_value": 2.893882663662914e-21,
+      "ci_low": 0.3813045513087749,
+      "ci_high": 0.5414520170432291,
       "direction": "positive",
+      "strength_label": "moderate",
       "status": "discovery",
-      "conclusion": "Shannon entropy of the retention curve \u2014 information richness. High entropy = many peaks/valleys, not monotonic. is moderately positively correlated with views (r=0.465, n=370). Higher retention_entropy predicts more views.",
+      "conclusion": "Shannon entropy of the retention curve \u2014 information richness. High entropy means many peaks/valleys vs monotonic decline. Is moderately positively correlated with views (r=+0.465, 95% CI [+0.381, +0.541], p=0.0000, n=370). Spearman rho=+0.556 confirms a linear relationship. Higher retention_entropy values predict more views.",
       "practical_insight": "Maximize shannon entropy of the retention curve to increase views."
     },
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T15:26:09.256477Z",
-    "updated_at": "2026-04-09T15:26:09.256478Z"
+    "created_at": "2026-04-09T16:10:59.928279Z",
+    "updated_at": "2026-04-09T16:10:59.928280Z"
   },
   {
     "key": "hook_drop_rate",
@@ -7604,10 +7652,14 @@
     "depth": 1,
     "target": "views",
     "metric_definition": {
-      "description": "Slope of retention in first 10% of video. Negative = dropping. More negative = worse hook hold.",
-      "what_to_extract": "linear regression slope of retentionCurve[:10]",
-      "formula": "linregress(range(10), retentionCurve[:10]).slope",
-      "expected_range": "-0.05 to 0.02"
+      "description": "Slope of retention in the first 10% of video. More negative = viewers dropping faster right after start.",
+      "what_to_extract": "linear regression slope of retentionCurve[0:10].retention",
+      "formula": "linregress(range(10), retentionCurve[:10].retention).slope",
+      "expected_range": "-0.05 to 0.02",
+      "data_sources": [
+        "analytics.retentionCurve"
+      ],
+      "layer": "post"
     },
     "dataset": [
       {
@@ -9462,36 +9514,44 @@
       }
     ],
     "experiment": {
-      "id": "exp_hook_drop_rate_20260409_152609",
+      "id": "exp_hook_drop_rate_20260409_161059",
       "tool_id": "pearson_r",
       "tool_version": "1.0",
+      "tool_name": "Pearson Correlation",
       "parameters": {
         "target": "views",
         "transform_target": "log10",
-        "confounds": []
+        "confounds": [],
+        "min_n": 50
       },
-      "ran_at": "2026-04-09T15:26:09.301120Z",
+      "ran_at": "2026-04-09T16:10:59.975044Z",
       "n_videos": 370,
-      "r_partial": -0.4019295720284731,
-      "r_direct": -0.4019295720284731,
-      "rho": -0.3906557665416386,
-      "p_value": 8.486466158819269e-16,
-      "p_rho": 6.134625121496267e-15,
-      "r2_before": null,
-      "r2_after": null,
-      "delta_r2": null
+      "outputs": {
+        "r": -0.4019295720284731,
+        "p_value": 8.486466158819269e-16,
+        "n": 370,
+        "ci_low": -0.4840493846954565,
+        "ci_high": -0.31279179453946787,
+        "rho": -0.3906557665416386,
+        "p_rho": 6.134625121496267e-15
+      }
     },
     "result": {
-      "strength": 0.4019,
+      "primary_r": -0.4019295720284731,
+      "rho": -0.3906557665416386,
+      "p_value": 8.486466158819269e-16,
+      "ci_low": -0.4840493846954565,
+      "ci_high": -0.31279179453946787,
       "direction": "negative",
+      "strength_label": "moderate",
       "status": "discovery",
-      "conclusion": "Slope of retention in first 10% of video. Negative = dropping. More negative = worse hook hold. is moderately negatively correlated with views (r=-0.402, n=370). Lower hook_drop_rate predicts more views.",
-      "practical_insight": "Minimize or avoid high slope of retention in first 10% of video. negative = dropping. more negative = worse hook hold. to increase views."
+      "conclusion": "Slope of retention in the first 10% of video. More negative = viewers dropping faster right after start. Is moderately negatively correlated with views (r=-0.402, 95% CI [-0.484, -0.313], p=0.0000, n=370). Spearman rho=-0.391 confirms a linear relationship. Lower hook_drop_rate values predict more views.",
+      "practical_insight": "Minimize slope of retention in the first 10% of video. more negative = viewers dropping faster right after start. to increase views."
     },
     "connections": [
       "views"
     ],
-    "created_at": "2026-04-09T15:26:09.301577Z",
-    "updated_at": "2026-04-09T15:26:09.301579Z"
+    "created_at": "2026-04-09T16:10:59.975056Z",
+    "updated_at": "2026-04-09T16:10:59.975057Z"
   }
 ]

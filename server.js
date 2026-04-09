@@ -3521,6 +3521,70 @@ Respond ONLY as valid JSON (no markdown):
     }
 
     // =========================================
+    // API: Jarvis v2 (new unified architecture)
+    // =========================================
+    if (pathname === '/api/jarvis/v2/indicators' && req.method === 'GET') {
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/indicators.json'), 'utf8'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/graph' && req.method === 'GET') {
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/graph.json'), 'utf8'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"nodes":[],"edges":[]}'); }
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/tools' && req.method === 'GET') {
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/tools.json'), 'utf8'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/resolutions' && req.method === 'GET') {
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/resolutions.json'), 'utf8'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/experiments' && req.method === 'GET') {
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings/jarvis/experiments_log.json'), 'utf8'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/run-pipeline' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', () => {
+            try {
+                const { n = 5 } = JSON.parse(body || '{}');
+                const { spawn } = require('child_process');
+                const proc = spawn('python3', [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--run', String(n)], {
+                    cwd: __dirname, detached: true
+                });
+                proc.unref();
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ started: true, n, pid: proc.pid }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // =========================================
     // API: Jarvis Run Hypothesis
     // =========================================
     if (pathname === '/api/jarvis/run-hypothesis' && req.method === 'POST') {
