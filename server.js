@@ -3657,6 +3657,7 @@ Respond ONLY as valid JSON (no markdown):
                 if (opts.maxFailures) args.push('--max-failures', String(opts.maxFailures));
                 if (opts.maxNoSignal) args.push('--max-no-signal', String(opts.maxNoSignal));
                 if (opts.llmCandidates != null) args.push('--llm-candidates', String(opts.llmCandidates));
+                if (opts.preUploadRatio != null) args.push('--preupload-ratio', String(opts.preUploadRatio));
                 const { spawn } = require('child_process');
                 const proc = spawn('python3', args, {
                     cwd: __dirname, detached: true,

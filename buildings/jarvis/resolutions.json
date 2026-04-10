@@ -1,5 +1,264 @@
 [
   {
+    "id": "r_pct_20_20",
+    "label": "20% Point",
+    "description": "Single-point measurement at 20% through the video.",
+    "start_pct": 20,
+    "end_pct": 20,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:18:55.621627Z",
+    "indicator_keys": [
+      "retention_pct_20"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_25_25",
+    "label": "25% Point",
+    "description": "Single-point measurement at 25% through the video.",
+    "start_pct": 25,
+    "end_pct": 25,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:25:35.470190Z",
+    "indicator_keys": [
+      "retention_pct_25"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_25_50",
+    "label": "25-50% of Video",
+    "description": "Retention window from 25% to 50% of video.",
+    "start_pct": 25,
+    "end_pct": 50,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.563777Z",
+    "indicator_keys": [
+      "retention_mean_25_50",
+      "retention_slope_25_50"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_25_75",
+    "label": "25-75% of Video",
+    "description": "Retention window from 25% to 75% of video.",
+    "start_pct": 25,
+    "end_pct": 75,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:07.224900Z",
+    "indicator_keys": [
+      "retention_volatility_25_75"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_30_30",
+    "label": "30% Point",
+    "description": "Single-point measurement at 30% through the video.",
+    "start_pct": 30,
+    "end_pct": 30,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.318987Z",
+    "indicator_keys": [
+      "retention_pct_30"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_35_35",
+    "label": "35% Point",
+    "description": "Single-point measurement at 35% through the video.",
+    "start_pct": 35,
+    "end_pct": 35,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.338374Z",
+    "indicator_keys": [
+      "retention_pct_35"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_40_40",
+    "label": "40% Point",
+    "description": "Single-point measurement at 40% through the video.",
+    "start_pct": 40,
+    "end_pct": 40,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.357786Z",
+    "indicator_keys": [
+      "retention_pct_40"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_40_60",
+    "label": "40-60% of Video",
+    "description": "Retention window from 40% to 60% of video.",
+    "start_pct": 40,
+    "end_pct": 60,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.669114Z",
+    "indicator_keys": [
+      "retention_mean_40_60"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_50_100",
+    "label": "50-100% of Video",
+    "description": "Retention window from 50% to 100% of video.",
+    "start_pct": 50,
+    "end_pct": 100,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:07.176431Z",
+    "indicator_keys": [
+      "retention_volatility_50_100"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_50_50",
+    "label": "50% Point",
+    "description": "Single-point measurement at 50% through the video.",
+    "start_pct": 50,
+    "end_pct": 50,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.378498Z",
+    "indicator_keys": [
+      "retention_pct_50"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_50_75",
+    "label": "50-75% of Video",
+    "description": "Retention window from 50% to 75% of video.",
+    "start_pct": 50,
+    "end_pct": 75,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.597176Z",
+    "indicator_keys": [
+      "retention_mean_50_75",
+      "retention_slope_50_75"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_60_60",
+    "label": "60% Point",
+    "description": "Single-point measurement at 60% through the video.",
+    "start_pct": 60,
+    "end_pct": 60,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.400998Z",
+    "indicator_keys": [
+      "retention_pct_60"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_70_70",
+    "label": "70% Point",
+    "description": "Single-point measurement at 70% through the video.",
+    "start_pct": 70,
+    "end_pct": 70,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.423848Z",
+    "indicator_keys": [
+      "retention_pct_70"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_75_100",
+    "label": "75-100% of Video",
+    "description": "Retention window from 75% to 100% of video.",
+    "start_pct": 75,
+    "end_pct": 100,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.632666Z",
+    "indicator_keys": [
+      "retention_mean_75_100",
+      "retention_slope_75_100"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_80_80",
+    "label": "80% Point",
+    "description": "Single-point measurement at 80% through the video.",
+    "start_pct": 80,
+    "end_pct": 80,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.448036Z",
+    "indicator_keys": [
+      "retention_pct_80"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_90_90",
+    "label": "90% Point",
+    "description": "Single-point measurement at 90% through the video.",
+    "start_pct": 90,
+    "end_pct": 90,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.474208Z",
+    "indicator_keys": [
+      "retention_pct_90"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
     "id": "r_last5pct",
     "label": "Last 5% of Video",
     "description": "Final 5 percent of video. Measures end-completion signals.",
@@ -11,7 +270,8 @@
     "created_from": "pipeline",
     "created_at": "2026-04-09T17:46:39.731629Z",
     "indicator_keys": [
-      "final_5pct_retention"
+      "final_5pct_retention",
+      "retention_pct_95"
     ],
     "depth_in_hierarchy": 1
   },
@@ -31,7 +291,16 @@
       "mid_video_cliff",
       "retention_entropy",
       "retention_pct_5",
-      "retention_pct_10"
+      "retention_pct_10",
+      "retention_pct_15",
+      "final_5pct_retention_x_retention_entropy",
+      "hook_drop_rate_x_final_5pct_retention",
+      "retention_slope_0_25_x_retention_slope_75_100",
+      "transcript_word_count",
+      "question_count",
+      "speech_rate_wps",
+      "transcript_char_count",
+      "avg_word_length"
     ],
     "depth_in_hierarchy": 0
   },
@@ -48,6 +317,40 @@
     "created_at": "2026-04-09T17:46:39.759961Z",
     "indicator_keys": [
       "hook_drop_rate"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_0_25",
+    "label": "0-25% of Video",
+    "description": "Retention window from 0% to 25% of video.",
+    "start_pct": 0,
+    "end_pct": 25,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.531878Z",
+    "indicator_keys": [
+      "retention_mean_0_25",
+      "retention_slope_0_25"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_0_50",
+    "label": "0-50% of Video",
+    "description": "Retention window from 0% to 50% of video.",
+    "start_pct": 0,
+    "end_pct": 50,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:07.042203Z",
+    "indicator_keys": [
+      "retention_slope_0_50",
+      "retention_volatility_0_50"
     ],
     "depth_in_hierarchy": 1
   }

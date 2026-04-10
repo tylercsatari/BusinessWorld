@@ -2267,6 +2267,8 @@ const JarvisUI = (() => {
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                     <label style="font-size:12px;color:#94a3b8">LLM proposals</label>
                     <input id="ar-llm-candidates" type="number" value="25" min="0" max="100" style="width:50px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
+                    <label style="font-size:12px;color:#94a3b8">Pre-upload ratio</label>
+                    <input id="ar-preupload-ratio" type="number" value="0.8" min="0" max="1" step="0.1" style="width:50px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f1f5f9;padding:4px 8px;font-size:13px" />
                     <button id="ar-auto-btn" style="background:#7c3aed;color:#fff;border:none;padding:6px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">▶ Start Autonomous Run</button>
                     <button id="ar-run-btn" style="background:#0e7490;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:11px;cursor:pointer">Queue-only (legacy)</button>
                 </div>
@@ -2318,14 +2320,17 @@ const JarvisUI = (() => {
                 const maxFail = parseInt(container.querySelector('#ar-max-failures')?.value || '5');
                 const maxNs = parseInt(container.querySelector('#ar-max-nosignal')?.value || '10');
                 const llmN = parseInt(container.querySelector('#ar-llm-candidates')?.value || '25');
+                const preRatio = parseFloat(container.querySelector('#ar-preupload-ratio')?.value);
                 const statusEl = container.querySelector('#ar-run-status');
                 if (statusEl) statusEl.innerHTML = '<span style="color:#a78bfa">Starting autonomous run (LLM proposal + deterministic pipeline)…</span>';
                 autoBtn.disabled = true;
                 try {
+                    const body = { n, maxMinutes: maxMin, maxFailures: maxFail, maxNoSignal: maxNs, llmCandidates: llmN };
+                    if (!isNaN(preRatio)) body.preUploadRatio = preRatio;
                     const resp = await fetch('/api/jarvis/v2/auto-run', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ n, maxMinutes: maxMin, maxFailures: maxFail, maxNoSignal: maxNs, llmCandidates: llmN })
+                        body: JSON.stringify(body)
                     });
                     const data = await resp.json();
                     if (statusEl) statusEl.innerHTML = `<span style="color:#22c55e">✓ Autonomous run started (PID ${data.pid}). Live progress updating below.</span>`;
@@ -2388,6 +2393,11 @@ const JarvisUI = (() => {
                                 <span>Elapsed: <b>${latest.elapsed_minutes?.toFixed(1) || '?'}m</b></span>
                                 <span>Total indicators: <b>${latest.total_indicators_after}</b></span>
                             </div>
+                            ${latest.pre_attempted != null ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-top:4px">
+                                <span>Pre-upload: <b style="color:#06b6d4">${latest.pre_completed}</b>/${latest.pre_attempted}</span>
+                                <span>Post-upload: <b style="color:#a78bfa">${latest.post_completed}</b>/${latest.post_attempted}</span>
+                                ${latest.preupload_ratio_requested != null ? `<span>Requested ratio: <b>${latest.preupload_ratio_requested}</b></span>` : ''}
+                            </div>` : ''}
                         `;
                     }
                 }
@@ -2446,6 +2456,10 @@ const JarvisUI = (() => {
                     <span>LLM proposed: <b style="color:#a78bfa">${d.llm_proposed || 0}</b></span>
                     <span>LLM completed: <b style="color:#a78bfa">${d.llm_completed || 0}</b></span>
                     ${d.current_candidate ? `<span>Current: <b style="color:#22d3ee">${d.current_candidate}</b></span>` : ''}
+                </div>
+                <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;margin-top:4px">
+                    <span>Pre-upload: <b style="color:#06b6d4">${d.pre_completed || 0}</b>/<b>${d.pre_attempted || 0}</b></span>
+                    <span>Post-upload: <b style="color:#a78bfa">${d.post_completed || 0}</b>/<b>${d.post_attempted || 0}</b></span>
                 </div>
                 ${d.last_completed_candidate ? `<div style="font-size:11px;margin-top:4px;color:#64748b">Last completed: <b style="color:#cbd5e1">${d.last_completed_candidate}</b> r=<span style="color:${(d.last_completed_r||0) >= 0 ? '#22d3ee' : '#f87171'}">${d.last_completed_r != null ? d.last_completed_r.toFixed(4) : '—'}</span></div>` : ''}
             `;

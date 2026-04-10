@@ -373,6 +373,220 @@ METRIC_DEFINITIONS = {
         "data_sources": ["analytics.avgRetention", "analytics.nonSubscriberViews", "analytics.totalViews"],
         "layer": "post",
     },
+    # ── NEW PRE-UPLOAD: Transcript / language ────────────────────────────
+    "transcript_char_count": {
+        "description": "Total character count of the transcript — raw verbosity signal.",
+        "formula": "len(transcript)",
+        "expected_range": "0 to 5000",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "avg_word_length": {
+        "description": "Average word length in the transcript — vocabulary complexity proxy.",
+        "formula": "mean(len(word) for word in transcript.split())",
+        "expected_range": "2 to 10",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "unique_word_ratio": {
+        "description": "Ratio of unique words to total words — lexical diversity.",
+        "formula": "len(set(words)) / len(words)",
+        "expected_range": "0 to 1",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "sentence_count": {
+        "description": "Approximate sentence count — number of sentence-ending punctuation marks.",
+        "formula": "count('.') + count('!') + count('?') in transcript",
+        "expected_range": "0 to 100",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "exclamation_count": {
+        "description": "Number of exclamation marks in the transcript — excitement / emphasis signal.",
+        "formula": "transcript.count('!')",
+        "expected_range": "0 to 30",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "uppercase_word_ratio": {
+        "description": "Fraction of all-uppercase words (len>=2) in transcript — shouting / emphasis.",
+        "formula": "count(uppercase words len>=2) / total words",
+        "expected_range": "0 to 0.5",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "hook_question_count": {
+        "description": "Number of questions in the hook segment — curiosity-gap opening.",
+        "formula": "hook_transcript.count('?')",
+        "expected_range": "0 to 5",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "hook_word_ratio": {
+        "description": "Fraction of total transcript words spoken in the hook — front-loading signal.",
+        "formula": "hook_word_count / total_word_count",
+        "expected_range": "0 to 1",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "hook_char_count": {
+        "description": "Character count of hook segment transcript — hook verbosity.",
+        "formula": "len(hook_transcript)",
+        "expected_range": "0 to 200",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "transcript_number_count": {
+        "description": "Count of numeric tokens in transcript — data / specificity signal.",
+        "formula": "count(re.findall(r'\\d+', transcript))",
+        "expected_range": "0 to 30",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    # ── NEW PRE-UPLOAD: Structure / AI segments ──────────────────────────
+    "hook_duration_pct": {
+        "description": "Hook duration as percentage of total video duration.",
+        "formula": "(hook_end - hook_start) / duration * 100",
+        "expected_range": "0 to 50",
+        "data_sources": ["aiAnalysis.segments", "metadata.duration"],
+        "layer": "pre",
+    },
+    "avg_segment_duration_s": {
+        "description": "Average segment duration in seconds — pacing uniformity.",
+        "formula": "mean(seg.endTime - seg.startTime for seg in segments)",
+        "expected_range": "0 to 60",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "longest_segment_duration_s": {
+        "description": "Duration of the longest narrative segment — identifies dragging sections.",
+        "formula": "max(seg.endTime - seg.startTime)",
+        "expected_range": "0 to 60",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "shortest_segment_duration_s": {
+        "description": "Duration of the shortest narrative segment — identifies rapid transitions.",
+        "formula": "min(seg.endTime - seg.startTime)",
+        "expected_range": "0 to 30",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "hook_position_s": {
+        "description": "Start time of the hook segment in seconds — 0 means immediate hook.",
+        "formula": "hook_segment.startTime",
+        "expected_range": "0 to 10",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "climax_position_pct": {
+        "description": "Position of climax segment as percentage of video duration — story arc shape.",
+        "formula": "climax_segment.startTime / duration * 100",
+        "expected_range": "0 to 100",
+        "data_sources": ["aiAnalysis.segments", "metadata.duration"],
+        "layer": "pre",
+    },
+    "has_climax_segment": {
+        "description": "Whether AI identified a Climax segment (1=yes, 0=no) — presence of peak moment.",
+        "formula": "int(any(label.lower() in ('climax', 'peak', 'payoff', 'reveal') for s in segments))",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "hook_to_climax_gap_s": {
+        "description": "Time gap from hook end to climax start — tension-building duration.",
+        "formula": "climax.startTime - hook.endTime",
+        "expected_range": "0 to 60",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    # ── NEW PRE-UPLOAD: Metadata ─────────────────────────────────────────
+    "duration_s": {
+        "description": "Raw video duration in seconds — untransformed length signal.",
+        "formula": "metadata.duration",
+        "expected_range": "1 to 600",
+        "data_sources": ["metadata.duration"],
+        "layer": "pre",
+    },
+    "title_char_count": {
+        "description": "Character count of the video title — title length signal.",
+        "formula": "len(metadata.title)",
+        "expected_range": "0 to 200",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_word_count": {
+        "description": "Word count of the video title.",
+        "formula": "len(metadata.title.split())",
+        "expected_range": "0 to 30",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_question_flag": {
+        "description": "Whether the title contains a question mark (1=yes, 0=no).",
+        "formula": "int('?' in title)",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_exclamation_flag": {
+        "description": "Whether the title contains an exclamation mark (1=yes, 0=no).",
+        "formula": "int('!' in title)",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_number_flag": {
+        "description": "Whether the title contains a digit (1=yes, 0=no) — specificity / listicle signal.",
+        "formula": "int(any(c.isdigit() for c in title))",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    # ── NEW PRE-UPLOAD: Visual / frame-derived ───────────────────────────
+    "scene_change_rate": {
+        "description": "Scene changes per second — edit pace normalized by duration.",
+        "formula": "scene_change_count / duration_s",
+        "expected_range": "0 to 2",
+        "data_sources": ["frames[*].analysis.sceneDescription", "metadata.duration"],
+        "layer": "pre",
+    },
+    "unique_scene_ratio": {
+        "description": "Ratio of unique scene descriptions to total frames — visual variety.",
+        "formula": "len(set(scene_descriptions)) / len(frames)",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "visual_technique_count_mean": {
+        "description": "Average number of visual techniques mentioned per frame.",
+        "formula": "mean(count_techniques(frame) for frame in frames)",
+        "expected_range": "0 to 10",
+        "data_sources": ["frames[*].analysis.visualTechniques"],
+        "layer": "pre",
+    },
+    "close_up_frame_pct": {
+        "description": "Percentage of frames with close-up shots — intimacy / focus signal.",
+        "formula": "count(frames with 'close' in description or techniques) / total",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription", "frames[*].analysis.visualTechniques"],
+        "layer": "pre",
+    },
+    "hand_presence_frame_pct": {
+        "description": "Percentage of frames mentioning hands — gestural / demo content signal.",
+        "formula": "count(frames with 'hand' in sceneDescription) / total",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "motion_word_frame_pct": {
+        "description": "Percentage of frames with motion-related keywords — dynamism signal.",
+        "formula": "count(frames with motion keywords in description) / total",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
 }
 
 AUTONOMOUS_RUNS_FILE = JARVIS_DIR / "autonomous_runs.json"
@@ -500,15 +714,41 @@ def generate_autonomous_candidates():
     for k in ["transcript_word_count", "question_count", "speech_rate_wps"]:
         candidates.append(k)
 
+    # 7b. NEW pre-upload: transcript / language
+    for k in ["transcript_char_count", "avg_word_length", "unique_word_ratio",
+              "sentence_count", "exclamation_count", "uppercase_word_ratio",
+              "hook_question_count", "hook_word_ratio", "hook_char_count",
+              "transcript_number_count"]:
+        candidates.append(k)
+
     # 8. Frame features
     for k in ["face_frame_pct", "text_overlay_frame_pct", "scene_change_count"]:
         candidates.append(k)
 
-    # 9. Interaction terms (pairs of strong base indicators)
+    # 8b. NEW pre-upload: visual / frame-derived
+    for k in ["scene_change_rate", "unique_scene_ratio", "visual_technique_count_mean",
+              "close_up_frame_pct", "hand_presence_frame_pct", "motion_word_frame_pct"]:
+        candidates.append(k)
+
+    # 8c. NEW pre-upload: structure / AI segments
+    for k in ["hook_duration_pct", "avg_segment_duration_s", "longest_segment_duration_s",
+              "shortest_segment_duration_s", "hook_position_s", "climax_position_pct",
+              "has_climax_segment", "hook_to_climax_gap_s"]:
+        candidates.append(k)
+
+    # 8d. NEW pre-upload: metadata
+    for k in ["duration_s", "title_char_count", "title_word_count",
+              "title_question_flag", "title_exclamation_flag", "title_number_flag"]:
+        candidates.append(k)
+
+    # 9. Interaction terms (pairs of strong base indicators — now includes pre-upload)
     interaction_bases = [
         "retention_pct_50", "retention_pct_25", "speech_rate_wps",
         "face_frame_pct", "retention_entropy", "hook_drop_rate",
         "non_sub_view_share", "swipe_away_rate", "like_rate",
+        # pre-upload additions for richer interactions
+        "unique_word_ratio", "scene_change_rate", "hook_duration_pct",
+        "title_word_count", "avg_segment_duration_s", "close_up_frame_pct",
     ]
     seen_pairs = set()
     for i, a in enumerate(interaction_bases):
@@ -585,7 +825,8 @@ def validate_candidate(key):
     return False
 
 
-def llm_propose_candidates(n_candidates, existing_keys, indicators, graph):
+def llm_propose_candidates(n_candidates, existing_keys, indicators, graph,
+                            preupload_ratio=None):
     """Ask Claude (via CLI) to propose new candidate indicator keys.
     Returns a list of canonicalized, validated keys.  Falls back to [] on error."""
     # Build context for the prompt
@@ -603,6 +844,17 @@ def llm_propose_candidates(n_candidates, existing_keys, indicators, graph):
 
     existing_str = ", ".join(sorted(existing_keys)[:80])
 
+    # Pre-upload bias instruction
+    pre_upload_focus = ""
+    if preupload_ratio is not None and preupload_ratio > 0.5:
+        n_pre = max(1, round(n_candidates * preupload_ratio))
+        pre_upload_focus = f"""
+IMPORTANT: Strongly favor PRE-UPLOAD indicators (at least {n_pre} of {n_candidates}).
+Pre-upload indicators use ONLY data available before publishing: transcript text, AI segments, video metadata (title, duration), and frame analysis (sceneDescription, visualTechniques).
+Pre-upload static keys include: transcript_word_count, transcript_char_count, avg_word_length, unique_word_ratio, sentence_count, exclamation_count, uppercase_word_ratio, question_count, hook_question_count, hook_word_count, hook_word_ratio, hook_char_count, transcript_number_count, speech_rate_wps, segment_count, has_hook_segment, hook_duration_s, hook_duration_pct, avg_segment_duration_s, longest_segment_duration_s, shortest_segment_duration_s, hook_position_s, climax_position_pct, has_climax_segment, hook_to_climax_gap_s, duration_log, duration_s, title_char_count, title_word_count, title_question_flag, title_exclamation_flag, title_number_flag, face_frame_pct, text_overlay_frame_pct, scene_change_count, scene_change_rate, unique_scene_ratio, visual_technique_count_mean, close_up_frame_pct, hand_presence_frame_pct, motion_word_frame_pct.
+Propose interaction terms (<preA>_x_<preB>) combining these pre-upload keys, as well as novel pre-upload static keys.
+"""
+
     prompt = f"""You are a research assistant for a YouTube analytics pipeline.
 The pipeline discovers which measurable indicators predict video views (log10 viewCount).
 The corpus is 370 YouTube Shorts with full retention curves (100 points), daily view history, transcripts, and frame analysis.
@@ -613,7 +865,7 @@ Current state:
 
 Top indicators by |r|:
 {top_str}
-
+{pre_upload_focus}
 Propose exactly {n_candidates} NEW candidate indicator keys (not already tested).
 Each key must follow one of these patterns:
 - retention_pct_<N>  (N = 1-99, retention at that percentile)
@@ -762,12 +1014,16 @@ def get_metric_definition(key):
         def_a = get_metric_definition(a)
         def_b = get_metric_definition(b)
         if def_a and def_b:
+            # Inherit 'pre' layer if both components are pre-upload
+            layer_a = def_a.get("layer", "post")
+            layer_b = def_b.get("layer", "post")
+            interaction_layer = "pre" if (layer_a == "pre" and layer_b == "pre") else "post"
             return {
                 "description": f"Interaction: {a} multiplied by {b}.",
                 "formula": f"{a} * {b}",
                 "expected_range": "varies",
                 "data_sources": list(set(def_a.get("data_sources", []) + def_b.get("data_sources", []))),
-                "layer": "post",
+                "layer": interaction_layer,
             }
 
     return None
@@ -1133,6 +1389,239 @@ def extract_metric(key, analysis):
             return (None, "missing data")
         return (float(keep * (non_sub / total)), None)
 
+    # ── NEW PRE-UPLOAD: Transcript / language ────────────────────────────
+    if key == "transcript_char_count":
+        if not transcript:
+            return (None, "no transcript")
+        return (float(len(transcript)), None)
+
+    if key == "avg_word_length":
+        if not transcript:
+            return (None, "no transcript")
+        words = transcript.split()
+        if not words:
+            return (None, "empty transcript")
+        return (float(sum(len(w) for w in words) / len(words)), None)
+
+    if key == "unique_word_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words = transcript.lower().split()
+        if not words:
+            return (None, "empty transcript")
+        return (float(len(set(words)) / len(words)), None)
+
+    if key == "sentence_count":
+        if not transcript:
+            return (None, "no transcript")
+        count = transcript.count('.') + transcript.count('!') + transcript.count('?')
+        return (float(count), None)
+
+    if key == "exclamation_count":
+        if not transcript:
+            return (None, "no transcript")
+        return (float(transcript.count('!')), None)
+
+    if key == "uppercase_word_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words = transcript.split()
+        if not words:
+            return (None, "empty transcript")
+        upper_ct = sum(1 for w in words if w.isupper() and len(w) >= 2)
+        return (float(upper_ct / len(words)), None)
+
+    if key == "hook_question_count":
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        hook_text = ""
+        if hook_seg and hook_seg.get("transcript"):
+            hook_text = hook_seg["transcript"]
+        elif transcript:
+            dur = meta.get("duration", 1)
+            words = transcript.split()
+            hook_est = max(1, int(len(words) * 5 / dur))
+            hook_text = " ".join(words[:hook_est])
+        if not hook_text:
+            return (None, "no hook text")
+        return (float(hook_text.count("?")), None)
+
+    if key == "hook_word_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        total_words = len(transcript.split())
+        if total_words == 0:
+            return (None, "empty transcript")
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        if hook_seg and hook_seg.get("transcript"):
+            hw = len(hook_seg["transcript"].split())
+        else:
+            dur = meta.get("duration", 1)
+            words = transcript.split()
+            hook_est = max(1, int(len(words) * 5 / dur))
+            hw = len(words[:hook_est])
+        return (float(hw / total_words), None)
+
+    if key == "hook_char_count":
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        if hook_seg and hook_seg.get("transcript"):
+            return (float(len(hook_seg["transcript"])), None)
+        if transcript:
+            dur = meta.get("duration", 1)
+            chars_per_sec = len(transcript) / dur
+            return (float(chars_per_sec * 5), None)  # estimate first 5s
+        return (None, "no hook text")
+
+    if key == "transcript_number_count":
+        if not transcript:
+            return (None, "no transcript")
+        return (float(len(re.findall(r'\d+', transcript))), None)
+
+    # ── NEW PRE-UPLOAD: Structure / AI segments ──────────────────────────
+    if key == "hook_duration_pct":
+        dur = meta.get("duration", 0)
+        if not dur:
+            return (None, "no duration")
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        if not hook_seg:
+            return (0.0, None)
+        hook_dur = hook_seg.get("endTime", 0) - hook_seg.get("startTime", 0)
+        return (float(hook_dur / dur * 100), None)
+
+    if key == "avg_segment_duration_s":
+        if not segments:
+            return (None, "no segments")
+        durs = [s.get("endTime", 0) - s.get("startTime", 0) for s in segments]
+        return (float(np.mean(durs)), None)
+
+    if key == "longest_segment_duration_s":
+        if not segments:
+            return (None, "no segments")
+        durs = [s.get("endTime", 0) - s.get("startTime", 0) for s in segments]
+        return (float(max(durs)), None)
+
+    if key == "shortest_segment_duration_s":
+        if not segments:
+            return (None, "no segments")
+        durs = [s.get("endTime", 0) - s.get("startTime", 0) for s in segments]
+        return (float(min(durs)), None)
+
+    if key == "hook_position_s":
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        if not hook_seg:
+            return (None, "no hook segment")
+        return (float(hook_seg.get("startTime", 0)), None)
+
+    if key == "climax_position_pct":
+        dur = meta.get("duration", 0)
+        if not dur:
+            return (None, "no duration")
+        climax_labels = {"climax", "peak", "payoff", "reveal"}
+        climax_seg = next((s for s in segments if s.get("label", "").lower() in climax_labels), None)
+        if not climax_seg:
+            return (None, "no climax segment")
+        return (float(climax_seg.get("startTime", 0) / dur * 100), None)
+
+    if key == "has_climax_segment":
+        climax_labels = {"climax", "peak", "payoff", "reveal"}
+        has = any(s.get("label", "").lower() in climax_labels for s in segments)
+        return (float(int(has)), None)
+
+    if key == "hook_to_climax_gap_s":
+        climax_labels = {"climax", "peak", "payoff", "reveal"}
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        climax_seg = next((s for s in segments if s.get("label", "").lower() in climax_labels), None)
+        if not hook_seg or not climax_seg:
+            return (None, "missing hook or climax segment")
+        gap = climax_seg.get("startTime", 0) - hook_seg.get("endTime", 0)
+        return (float(max(0, gap)), None)
+
+    # ── NEW PRE-UPLOAD: Metadata ─────────────────────────────────────────
+    if key == "duration_s":
+        dur = meta.get("duration", 0)
+        if not dur:
+            return (None, "no duration")
+        return (float(dur), None)
+
+    if key == "title_char_count":
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        return (float(len(title)), None)
+
+    if key == "title_word_count":
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        return (float(len(title.split())), None)
+
+    if key == "title_question_flag":
+        title = meta.get("title", "")
+        return (float(int("?" in title)), None)
+
+    if key == "title_exclamation_flag":
+        title = meta.get("title", "")
+        return (float(int("!" in title)), None)
+
+    if key == "title_number_flag":
+        title = meta.get("title", "")
+        return (float(int(any(c.isdigit() for c in title))), None)
+
+    # ── NEW PRE-UPLOAD: Visual / frame-derived ───────────────────────────
+    if key == "scene_change_rate":
+        if not frames:
+            return (None, "no frames")
+        dur = meta.get("duration", 0)
+        if not dur:
+            return (None, "no duration")
+        changes, prev = 0, ""
+        for frame in frames:
+            desc = str(frame.get("analysis", {}).get("sceneDescription", ""))
+            if prev and desc[:60] != prev[:60]:
+                changes += 1
+            prev = desc
+        return (float(changes / dur), None)
+
+    if key == "unique_scene_ratio":
+        if not frames:
+            return (None, "no frames")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:60] for f in frames]
+        return (float(len(set(descs)) / len(descs)), None)
+
+    if key == "visual_technique_count_mean":
+        if not frames:
+            return (None, "no frames")
+        counts = []
+        for f in frames:
+            vt = str(f.get("analysis", {}).get("visualTechniques", ""))
+            # Count sentences as proxy for technique count
+            ct = len([s for s in re.split(r'[.;]', vt) if s.strip()])
+            counts.append(ct)
+        return (float(np.mean(counts)), None)
+
+    if key == "close_up_frame_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if
+                 "close" in str(f.get("analysis", {}).get("sceneDescription", "")).lower() or
+                 "close" in str(f.get("analysis", {}).get("visualTechniques", "")).lower() or
+                 "close" in str(f.get("analysis", {}).get("cinematography", "")).lower())
+        return (float(ct / len(frames)), None)
+
+    if key == "hand_presence_frame_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if "hand" in str(f.get("analysis", {}).get("sceneDescription", "")).lower())
+        return (float(ct / len(frames)), None)
+
+    if key == "motion_word_frame_pct":
+        if not frames:
+            return (None, "no frames")
+        motion_kw = {"moving", "motion", "walking", "running", "jumping", "dancing",
+                      "gesture", "action", "dynamic", "swinging", "waving", "shaking"}
+        ct = sum(1 for f in frames if
+                 any(kw in str(f.get("analysis", {}).get("sceneDescription", "")).lower() for kw in motion_kw))
+        return (float(ct / len(frames)), None)
+
     # ── Pattern-based autonomous keys ─────────────────────────────────────
 
     # retention_pct_N
@@ -1262,6 +1751,41 @@ INDICATOR_RESOLUTION_MAP = {
     'keep_x_non_sub_share':   ('r0',         0,   100,  None,  None),
     'face_frame_pct':         ('r0',         0,   100,  None,  None),
     'text_overlay_frame_pct': ('r0',         0,   100,  None,  None),
+    # New pre-upload: transcript / language → r0
+    'transcript_char_count':  ('r0',         0,   100,  None,  None),
+    'avg_word_length':        ('r0',         0,   100,  None,  None),
+    'unique_word_ratio':      ('r0',         0,   100,  None,  None),
+    'sentence_count':         ('r0',         0,   100,  None,  None),
+    'exclamation_count':      ('r0',         0,   100,  None,  None),
+    'uppercase_word_ratio':   ('r0',         0,   100,  None,  None),
+    'transcript_number_count':('r0',         0,   100,  None,  None),
+    # New pre-upload: hook-specific → r_hook
+    'hook_question_count':    ('r_hook',     0,   10,   None,  None),
+    'hook_word_ratio':        ('r_hook',     0,   10,   None,  None),
+    'hook_char_count':        ('r_hook',     0,   10,   None,  None),
+    'hook_duration_pct':      ('r_hook',     0,   10,   None,  None),
+    'hook_position_s':        ('r_hook',     0,   10,   None,  None),
+    # New pre-upload: structure → r0
+    'avg_segment_duration_s': ('r0',         0,   100,  None,  None),
+    'longest_segment_duration_s': ('r0',     0,   100,  None,  None),
+    'shortest_segment_duration_s': ('r0',    0,   100,  None,  None),
+    'climax_position_pct':    ('r0',         0,   100,  None,  None),
+    'has_climax_segment':     ('r0',         0,   100,  None,  None),
+    'hook_to_climax_gap_s':   ('r0',         0,   100,  None,  None),
+    # New pre-upload: metadata → r0
+    'duration_s':             ('r0',         0,   100,  None,  None),
+    'title_char_count':       ('r0',         0,   100,  None,  None),
+    'title_word_count':       ('r0',         0,   100,  None,  None),
+    'title_question_flag':    ('r0',         0,   100,  None,  None),
+    'title_exclamation_flag': ('r0',         0,   100,  None,  None),
+    'title_number_flag':      ('r0',         0,   100,  None,  None),
+    # New pre-upload: visual → r0
+    'scene_change_rate':      ('r0',         0,   100,  None,  None),
+    'unique_scene_ratio':     ('r0',         0,   100,  None,  None),
+    'visual_technique_count_mean': ('r0',    0,   100,  None,  None),
+    'close_up_frame_pct':     ('r0',         0,   100,  None,  None),
+    'hand_presence_frame_pct':('r0',         0,   100,  None,  None),
+    'motion_word_frame_pct':  ('r0',         0,   100,  None,  None),
     # Single-point measurements (a point on the curve, not a window) → r0
     'hook_retention_pct':     ('r0',         0,   100,  None,  None),
     'retention_25pct':        ('r0',         0,   100,  None,  None),
@@ -1726,8 +2250,51 @@ def cmd_single(key):
         print("Saved.")
 
 
+def _get_candidate_layer(key):
+    """Determine whether a candidate key is pre-upload or post-upload."""
+    defn = get_metric_definition(key)
+    if defn:
+        return defn.get("layer", "post")
+    return "post"
+
+
+def _bias_pool(pool, preupload_ratio):
+    """Reorder pool to interleave pre/post candidates at the desired ratio.
+    If not enough pre candidates exist, include all pre and fill remainder with post."""
+    if preupload_ratio is None:
+        return pool
+    pre = [k for k in pool if _get_candidate_layer(k) == "pre"]
+    post = [k for k in pool if _get_candidate_layer(k) != "pre"]
+    if not pre:
+        return pool
+    if not post or preupload_ratio >= 1.0:
+        return pre + post
+    if preupload_ratio <= 0.0:
+        return post + pre
+
+    # Interleave: for every batch of N, pick ceil(N*ratio) pre and rest post
+    result = []
+    pi, qi = 0, 0
+    batch = 10
+    while pi < len(pre) or qi < len(post):
+        n_pre_batch = round(batch * preupload_ratio)
+        n_post_batch = batch - n_pre_batch
+        added = 0
+        while added < n_pre_batch and pi < len(pre):
+            result.append(pre[pi]); pi += 1; added += 1
+        added = 0
+        while added < n_post_batch and qi < len(post):
+            result.append(post[qi]); qi += 1; added += 1
+        # If one side is exhausted, drain the other
+        if pi >= len(pre) and qi < len(post):
+            result.extend(post[qi:]); break
+        if qi >= len(post) and pi < len(pre):
+            result.extend(pre[pi:]); break
+    return result
+
+
 def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
-                  max_no_signal=None, llm_candidates=25):
+                  max_no_signal=None, llm_candidates=25, preupload_ratio=None):
     """Hybrid autonomous run: LLM proposes candidates upstream (may fail gracefully),
     then everything downstream is deterministic template generation + pipeline."""
     start_time = time.time()
@@ -1736,7 +2303,7 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
     print(f"AUTONOMOUS RUN: {run_id}")
     print(f"  max_iterations={max_iterations}, max_minutes={max_minutes}, "
           f"max_failures={max_failures}, max_no_signal={max_no_signal}, "
-          f"llm_candidates={llm_candidates}")
+          f"llm_candidates={llm_candidates}, preupload_ratio={preupload_ratio}")
     print(f"{'=' * 60}")
 
     # Initialize live progress tracking
@@ -1752,7 +2319,8 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
     llm_keys = []
     if llm_candidates > 0:
         print(f"\n[PHASE 1] Asking Claude for {llm_candidates} candidate proposals...")
-        llm_keys = llm_propose_candidates(llm_candidates, existing_keys, indicators, graph)
+        llm_keys = llm_propose_candidates(llm_candidates, existing_keys, indicators, graph,
+                                           preupload_ratio=preupload_ratio)
         if llm_keys:
             print(f"  LLM contributed {len(llm_keys)} validated keys")
         else:
@@ -1776,6 +2344,14 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
             merged.append(k)
 
     pool = [k for k in merged if k not in existing_keys]
+
+    # Apply pre-upload bias if requested
+    if preupload_ratio is not None:
+        pre_ct = sum(1 for k in pool if _get_candidate_layer(k) == "pre")
+        post_ct = len(pool) - pre_ct
+        print(f"Pool before bias: {pre_ct} pre-upload, {post_ct} post-upload")
+        pool = _bias_pool(pool, preupload_ratio)
+
     print(f"Candidate pool: {len(pool)} unrun ({len(llm_keys)} LLM + "
           f"{len(auto_candidates)} generated + {len(queue_candidates)} legacy, "
           f"{len(existing_keys)} already done)")
@@ -1795,6 +2371,11 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
     processed_keys = []
     top_r_abs = 0.0
     llm_accepted_count = 0
+    # Pre/post tracking
+    pre_attempted = 0
+    pre_completed = 0
+    post_attempted = 0
+    post_completed = 0
 
     try:
         for key in pool:
@@ -1814,13 +2395,23 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
 
             attempted += 1
             is_llm = key in llm_keys
+            key_layer = _get_candidate_layer(key)
+            is_pre = key_layer == "pre"
+            if is_pre:
+                pre_attempted += 1
+            else:
+                post_attempted += 1
             _update_progress(prog,
                              current_candidate=key,
                              attempted=attempted,
                              completed=completed,
                              failures=failures,
                              no_signal_streak=no_signal_streak,
-                             llm_completed=llm_accepted_count)
+                             llm_completed=llm_accepted_count,
+                             pre_attempted=pre_attempted,
+                             pre_completed=pre_completed,
+                             post_attempted=post_attempted,
+                             post_completed=post_completed)
             result = process_indicator(key, videos, existing_keys, resolutions, graph, tools)
 
             if result:
@@ -1843,6 +2434,10 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
                 save_json(INDICATORS_FILE, indicators)
                 existing_keys.add(key)
                 completed += 1
+                if is_pre:
+                    pre_completed += 1
+                else:
+                    post_completed += 1
                 consecutive_failures = 0
                 processed_keys.append(key)
                 if is_llm:
@@ -1863,6 +2458,7 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
                     "r": round(r_val, 4),
                     "resolution_id": result.get("resolution_id", "r0"),
                     "target": result.get("target", "views"),
+                    "layer": key_layer,
                 })
                 _update_progress(prog,
                                  completed=completed,
@@ -1870,7 +2466,11 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
                                  no_signal_streak=no_signal_streak,
                                  llm_completed=llm_accepted_count,
                                  last_completed_candidate=key,
-                                 last_completed_r=round(r_val, 4))
+                                 last_completed_r=round(r_val, 4),
+                                 pre_attempted=pre_attempted,
+                                 pre_completed=pre_completed,
+                                 post_attempted=post_attempted,
+                                 post_completed=post_completed)
             else:
                 failures += 1
                 consecutive_failures += 1
@@ -1879,10 +2479,15 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
                     "type": "failed",
                     "key": key,
                     "reason": "process_indicator returned None",
+                    "layer": key_layer,
                 })
                 _update_progress(prog,
                                  failures=failures,
-                                 no_signal_streak=no_signal_streak)
+                                 no_signal_streak=no_signal_streak,
+                                 pre_attempted=pre_attempted,
+                                 pre_completed=pre_completed,
+                                 post_attempted=post_attempted,
+                                 post_completed=post_completed)
     except Exception as exc:
         _finish_progress(prog, f"crashed: {str(exc)[:200]}")
         raise
@@ -1902,6 +2507,11 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
         "attempted": attempted,
         "completed": completed,
         "failures": failures,
+        "pre_attempted": pre_attempted,
+        "pre_completed": pre_completed,
+        "post_attempted": post_attempted,
+        "post_completed": post_completed,
+        "preupload_ratio_requested": preupload_ratio,
         "no_signal_streak_end": no_signal_streak,
         "stop_reason": stop_reason,
         "candidate_keys_processed": processed_keys[:200],
@@ -1916,6 +2526,8 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
     print(f"\n{'=' * 60}")
     print(f"AUTONOMOUS RUN COMPLETE: {run_id}")
     print(f"  Attempted: {attempted}, Completed: {completed}, Failures: {failures}")
+    print(f"  Pre-upload:  attempted={pre_attempted}, completed={pre_completed}")
+    print(f"  Post-upload: attempted={post_attempted}, completed={post_completed}")
     print(f"  LLM proposed: {len(llm_keys)}, LLM completed: {llm_accepted_count}")
     print(f"  Stop reason: {stop_reason}")
     print(f"  Top |r|: {top_r_abs:.4f}")
@@ -1936,6 +2548,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-failures", type=int, metavar="K", help="Autonomous: stop after K consecutive failures")
     parser.add_argument("--max-no-signal", type=int, metavar="K", help="Autonomous: stop after K consecutive |r|<0.05")
     parser.add_argument("--llm-candidates", type=int, metavar="N", default=25, help="Autonomous: ask Claude for N candidate proposals (0 to disable)")
+    parser.add_argument("--preupload-ratio", type=float, metavar="R", default=None, help="Autonomous: target fraction of pre-upload candidates (0.0-1.0, e.g. 0.8)")
     args = parser.parse_args()
 
     if args.status:
@@ -1948,6 +2561,6 @@ if __name__ == "__main__":
         cmd_graph()
     elif args.auto_run:
         cmd_auto_run(args.auto_run, args.max_minutes, args.max_failures,
-                     args.max_no_signal, args.llm_candidates)
+                     args.max_no_signal, args.llm_candidates, args.preupload_ratio)
     else:
         parser.print_help()

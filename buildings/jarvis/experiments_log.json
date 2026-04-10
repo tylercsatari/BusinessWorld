@@ -175,5 +175,863 @@
     "status": "discovery",
     "ran_at": "2026-04-09T22:15:56.738842Z",
     "source": "deterministic"
+  },
+  {
+    "id": "exp_retention_pct_15_20260409_221713",
+    "indicator_key": "retention_pct_15",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.023383128380887384,
+      "p_value": 0.6539202089289617,
+      "n": 370,
+      "ci_low": -0.12504069834451806,
+      "ci_high": 0.07876031187253368,
+      "rho": 0.14281063270093683,
+      "p_rho": 0.005926130592463551
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:17:13.909475Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_retention_pct_20_20260409_221855",
+    "indicator_key": "retention_pct_20",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.03301426728008107,
+      "p_value": 0.5266905767422335,
+      "n": 370,
+      "ci_low": -0.06917424498009928,
+      "ci_high": 0.13451715594511982,
+      "rho": 0.2818617039803182,
+      "p_rho": 3.475943006129405e-08
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:18:55.624987Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_retention_pct_25_20260409_222535",
+    "indicator_key": "retention_pct_25",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.07181473371059978,
+      "p_value": 0.16805196084789156,
+      "n": 370,
+      "ci_low": -0.03036325592529926,
+      "ci_high": 0.17250732130549545,
+      "rho": 0.352764923872817,
+      "p_rho": 2.7775451350203262e-12
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:25:35.473819Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_retention_pct_30_20260409_223606",
+    "indicator_key": "retention_pct_30",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.10048867884927418,
+      "p_value": 0.05344731913951539,
+      "n": 370,
+      "ci_low": -0.0014821789780427093,
+      "ci_high": 0.20039126433537752,
+      "rho": 0.40903105212656604,
+      "p_rho": 2.3474046261535366e-16
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.322060Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_35_20260409_223606",
+    "indicator_key": "retention_pct_35",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.11965940177371455,
+      "p_value": 0.02132480491130851,
+      "n": 370,
+      "ci_low": 0.01792238169312693,
+      "ci_high": 0.21894396757772822,
+      "rho": 0.4424396751948227,
+      "p_rho": 3.6294680511553073e-19
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.340745Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_40_20260409_223606",
+    "indicator_key": "retention_pct_40",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.13916563211788752,
+      "p_value": 0.007342356322693649,
+      "n": 370,
+      "ci_low": 0.03774552062374872,
+      "ci_high": 0.2377479638017675,
+      "rho": 0.4687122298179435,
+      "p_rho": 1.3206336932282369e-21
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.359660Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_50_20260409_223606",
+    "indicator_key": "retention_pct_50",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.17406251474191367,
+      "p_value": 0.0007723053822850211,
+      "n": 370,
+      "ci_low": 0.0734096179937621,
+      "ci_high": 0.2712052003642997,
+      "rho": 0.4997943932716956,
+      "p_rho": 8.905220895421878e-25
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.381156Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_60_20260409_223606",
+    "indicator_key": "retention_pct_60",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1917720427067658,
+      "p_value": 0.00020658385857815007,
+      "n": 370,
+      "ci_low": 0.09160750294766021,
+      "ci_high": 0.28809481388495045,
+      "rho": 0.5135752809101484,
+      "p_rho": 2.7322340285851823e-26
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.402925Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_70_20260409_223606",
+    "indicator_key": "retention_pct_70",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.20159296829942203,
+      "p_value": 9.431921723792368e-05,
+      "n": 370,
+      "ci_low": 0.10172817066262566,
+      "ci_high": 0.2974352904857733,
+      "rho": 0.5103150972537503,
+      "p_rho": 6.320010347321967e-26
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.425913Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_80_20260409_223606",
+    "indicator_key": "retention_pct_80",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.5038825505585511,
+      "p_value": 3.220459685242681e-25,
+      "n": 370,
+      "ci_low": 0.4236935782840354,
+      "ci_high": 0.5762349124050186,
+      "rho": 0.5229940216867028,
+      "p_rho": 2.3015074846631155e-27
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.450300Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_90_20260409_223606",
+    "indicator_key": "retention_pct_90",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.5053267378501012,
+      "p_value": 2.241019540029119e-25,
+      "n": 370,
+      "ci_low": 0.42528198785978955,
+      "ci_high": 0.5775276500474394,
+      "rho": 0.5117466392085633,
+      "p_rho": 4.378051256873459e-26
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.476459Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_pct_95_20260409_223606",
+    "indicator_key": "retention_pct_95",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.5006187993284075,
+      "p_value": 7.2618176141088765e-25,
+      "n": 370,
+      "ci_low": 0.42010571160892546,
+      "ci_high": 0.5733120914145204,
+      "rho": 0.5067685213211888,
+      "p_rho": 1.5577081325807588e-25
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.504949Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_mean_0_25_20260409_223606",
+    "indicator_key": "retention_mean_0_25",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.00783841030688767,
+      "p_value": 0.8805539887154481,
+      "n": 370,
+      "ci_low": -0.09419253789577571,
+      "ci_high": 0.10970640850692882,
+      "rho": 0.258623530505721,
+      "p_rho": 4.5599582909594905e-07
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.535963Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_mean_25_50_20260409_223606",
+    "indicator_key": "retention_mean_25_50",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.126653217832415,
+      "p_value": 0.014776760374671502,
+      "n": 370,
+      "ci_low": 0.02502063734502811,
+      "ci_high": 0.22569449397961394,
+      "rho": 0.4523825515081843,
+      "p_rho": 4.586634292828542e-20
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.568497Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_mean_50_75_20260409_223606",
+    "indicator_key": "retention_mean_50_75",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1921785079837551,
+      "p_value": 0.0002001388392283653,
+      "n": 370,
+      "ci_low": 0.09202596376255838,
+      "ci_high": 0.28848175842678037,
+      "rho": 0.5143065926274673,
+      "p_rho": 2.2609037509101267e-26
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.601564Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_mean_75_100_20260409_223606",
+    "indicator_key": "retention_mean_75_100",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.5114563499752958,
+      "p_value": 4.717072239369835e-26,
+      "n": 370,
+      "ci_low": 0.4320292197374744,
+      "ci_high": 0.5830104325089048,
+      "rho": 0.5294930031660391,
+      "p_rho": 3.9883856710840166e-28
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.636419Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_mean_40_60_20260409_223606",
+    "indicator_key": "retention_mean_40_60",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.16872267698854534,
+      "p_value": 0.001122595524629962,
+      "n": 370,
+      "ci_low": 0.06793564959622796,
+      "ci_high": 0.2661008207098421,
+      "rho": 0.4976849968106296,
+      "p_rho": 1.4971012701248196e-24
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.672813Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_slope_0_25_20260409_223606",
+    "indicator_key": "retention_slope_0_25",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.029476942647841578,
+      "p_value": 0.5719345945222635,
+      "n": 370,
+      "ci_low": -0.13103879861900755,
+      "ci_high": 0.07269720961084294,
+      "rho": -0.003401876664647028,
+      "p_rho": 0.9480026754031723
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.752296Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_slope_25_50_20260409_223606",
+    "indicator_key": "retention_slope_25_50",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.41717742313433426,
+      "p_value": 5.1730406260726437e-17,
+      "n": 370,
+      "ci_low": 0.32922487129338474,
+      "ci_high": 0.49795334471101516,
+      "rho": 0.440267800507101,
+      "p_rho": 5.651759529764033e-19
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.836495Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_slope_50_75_20260409_223606",
+    "indicator_key": "retention_slope_50_75",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.15820445499307628,
+      "p_value": 0.0022726941844939384,
+      "n": 370,
+      "ci_low": 0.05717094088171907,
+      "ci_high": 0.2560303975420975,
+      "rho": 0.1632011210474165,
+      "p_rho": 0.001634060883293443
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:06.918585Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_slope_75_100_20260409_223607",
+    "indicator_key": "retention_slope_75_100",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1102378103753897,
+      "p_value": 0.03402661275572691,
+      "n": 370,
+      "ci_low": 0.00837628218527222,
+      "ci_high": 0.20983506868806834,
+      "rho": 0.09064552028196758,
+      "p_rho": 0.08163311473799023
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.002720Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_slope_0_50_20260409_223607",
+    "indicator_key": "retention_slope_0_50",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.3847879426540283,
+      "p_value": 1.6675600093190138e-14,
+      "n": 370,
+      "ci_low": 0.294381232696581,
+      "ci_high": 0.46836888829223,
+      "rho": 0.37699993070448656,
+      "p_rho": 6.098346911265625e-14
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.087953Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_volatility_0_50_20260409_223607",
+    "indicator_key": "retention_volatility_0_50",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.23515095869917602,
+      "p_value": 4.826641324038756e-06,
+      "n": 370,
+      "ci_low": -0.32921374010196874,
+      "ci_high": -0.1364670810942586,
+      "rho": -0.22736616045405736,
+      "p_rho": 1.0023968712071236e-05
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.134296Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_volatility_50_100_20260409_223607",
+    "indicator_key": "retention_volatility_50_100",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.11879887583683935,
+      "p_value": 0.0222829919203134,
+      "n": 370,
+      "ci_low": -0.21811271906375704,
+      "ci_high": -0.017049713377232108,
+      "rho": -0.098232016777806,
+      "p_rho": 0.059065584015228025
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.182117Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_volatility_25_75_20260409_223607",
+    "indicator_key": "retention_volatility_25_75",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.3741335836559661,
+      "p_value": 9.74337208406408e-14,
+      "n": 370,
+      "ci_low": -0.45859608928048834,
+      "ci_high": -0.2829718854932123,
+      "rho": -0.37263395799981164,
+      "p_rho": 1.2427320475102773e-13
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.230670Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_final_5pct_retention_x_retention_entropy_20260409_223607",
+    "indicator_key": "final_5pct_retention_x_retention_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.4733002572919024,
+      "p_value": 4.707747442452623e-22,
+      "n": 370,
+      "ci_low": 0.3901726165684324,
+      "ci_high": 0.5487744633575856,
+      "rho": 0.47297694117758543,
+      "p_rho": 5.065273285127253e-22
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.285139Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_final_5pct_retention_20260409_223607",
+    "indicator_key": "hook_drop_rate_x_final_5pct_retention",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.4732568357942079,
+      "p_value": 4.7542771221931785e-22,
+      "n": 370,
+      "ci_low": -0.5487353581935831,
+      "ci_high": -0.3901251788209024,
+      "rho": -0.4716151954992268,
+      "p_rho": 6.888509847430136e-22
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.379222Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_retention_slope_0_25_x_retention_slope_75_100_20260409_223607",
+    "indicator_key": "retention_slope_0_25_x_retention_slope_75_100",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.086159300269017,
+      "p_value": 0.09796955885316135,
+      "n": 370,
+      "ci_low": -0.18647687959420842,
+      "ci_high": 0.015936363917458597,
+      "rho": -0.08998052026123816,
+      "p_rho": 0.0839055833237285
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-09T22:36:07.520013Z",
+    "source": "llm"
+  },
+  {
+    "id": "exp_transcript_word_count_20260410_002652",
+    "indicator_key": "transcript_word_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.26394872328199426,
+      "p_value": 2.582486408118656e-07,
+      "n": 370,
+      "ci_low": 0.16647301790184574,
+      "ci_high": 0.3563155626857724,
+      "rho": 0.2794343530809102,
+      "p_rho": 4.600315902819585e-08
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-10T00:26:52.148476Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_question_count_20260410_002652",
+    "indicator_key": "question_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.03564594925379227,
+      "p_value": 0.49425257537413997,
+      "n": 370,
+      "ci_low": -0.06655159196212575,
+      "ci_high": 0.1371033459529328,
+      "rho": 0.09889774724690026,
+      "p_rho": 0.05735954545097913
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-10T00:26:52.195908Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_speech_rate_wps_20260410_002652",
+    "indicator_key": "speech_rate_wps",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.09544755027574514,
+      "p_value": 0.06666185544987645,
+      "n": 370,
+      "ci_low": -0.006572077690936154,
+      "ci_high": 0.19550072309839422,
+      "rho": 0.02127957979878882,
+      "p_rho": 0.6832868190691566
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-10T00:26:52.245330Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_transcript_char_count_20260410_002652",
+    "indicator_key": "transcript_char_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.2557257793620241,
+      "p_value": 6.180912868433701e-07,
+      "n": 370,
+      "ci_low": 0.15788663695628108,
+      "ci_high": 0.3485927009128376,
+      "rho": 0.2799341512044668,
+      "p_rho": 4.343319685007035e-08
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-10T00:26:52.294422Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_avg_word_length_20260410_002652",
+    "indicator_key": "avg_word_length",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.08513870226173509,
+      "p_value": 0.10202717608686958,
+      "n": 370,
+      "ci_low": -0.18548430152817677,
+      "ci_high": 0.01696422588011743,
+      "rho": -0.021691113955603577,
+      "p_rho": 0.6775021602892431
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-10T00:26:52.347521Z",
+    "source": "deterministic"
   }
 ]
