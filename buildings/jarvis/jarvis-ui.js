@@ -2176,7 +2176,6 @@ const JarvisUI = (() => {
 
         // Coverage (non-r0 shelves)
         const narrowShelves = resolutions.filter(s => s.start_pct != null && s.end_pct != null && !(s.start_pct === 0 && s.end_pct === 100));
-        const coveredPct = computeCoverage(narrowShelves);
 
         // Sorted indicators by |r|
         const sortedInds = [...indicators].sort((a, b) => Math.abs((b.result?.primary_r) || 0) - Math.abs((a.result?.primary_r) || 0));
@@ -2241,9 +2240,9 @@ const JarvisUI = (() => {
                     <div style="font-size:11px;color:#64748b">Resolution Shelves</div>
                 </div>
                 <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
-                    <div style="font-size:24px;font-weight:700;color:#f59e0b">${coveredPct}%</div>
-                    <div style="font-size:11px;color:#64748b">Timeline Mapped</div>
-                    <div style="font-size:9px;color:#475569;margin-top:2px">(sub-video shelves)</div>
+                    <div style="font-size:24px;font-weight:700;color:#f59e0b">∞</div>
+                    <div style="font-size:11px;color:#64748b">Open Resolution Space</div>
+                    <div style="font-size:9px;color:#475569;margin-top:2px">(never complete)</div>
                 </div>
             </div>
 
