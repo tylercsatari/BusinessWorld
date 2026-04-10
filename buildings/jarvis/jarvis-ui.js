@@ -1593,37 +1593,48 @@ const JarvisUI = (() => {
                     let borderColor = '#a78bfa'; // default purple
                     let kindLabel = kind;
                     let metricStr = '';
+                    const fmtR = (val, prefix) => {
+                        if (val == null) return '';
+                        const rc = val >= 0 ? '#22d3ee' : '#f87171';
+                        return ' <span style="color:' + rc + ';font-weight:700">' + prefix + '=' + (val >= 0 ? '+' : '') + Number(val).toFixed(3) + '</span>';
+                    };
                     if (kind === 'pair_correlation') {
                         borderColor = '#60a5fa'; // blue
                         kindLabel = 'corr';
-                        const rVal = de.primary_r != null ? de.primary_r : de.interaction_r;
-                        if (rVal != null) {
-                            const rc = rVal >= 0 ? '#22d3ee' : '#f87171';
-                            metricStr = ' <span style="color:' + rc + ';font-weight:700">r=' + (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3) + '</span>';
+                        metricStr = fmtR(de.primary_r != null ? de.primary_r : de.interaction_r, 'r');
+                    } else if (kind === 'rank_pair_correlation') {
+                        borderColor = '#38bdf8'; // sky blue
+                        kindLabel = 'rank';
+                        metricStr = fmtR(de.primary_r, 'ρ');
+                        if (de.nonlinearity_gap != null && Math.abs(de.nonlinearity_gap) >= 0.02) {
+                            metricStr += ' <span style="color:#fbbf24;font-size:9px">gap=' + (de.nonlinearity_gap >= 0 ? '+' : '') + Number(de.nonlinearity_gap).toFixed(3) + '</span>';
                         }
                     } else if (kind === 'conditional_delta_to_views') {
                         borderColor = '#f59e0b'; // amber
                         kindLabel = 'cond Δ';
-                        if (de.delta_r != null) {
-                            const dc = de.delta_r >= 0 ? '#22d3ee' : '#f87171';
-                            metricStr = ' <span style="color:' + dc + ';font-weight:700">Δr=' + (de.delta_r >= 0 ? '+' : '') + Number(de.delta_r).toFixed(3) + '</span>';
+                        metricStr = fmtR(de.delta_r, 'Δr');
+                    } else if (kind === 'bucketed_curve_to_views') {
+                        borderColor = '#4ade80'; // green
+                        kindLabel = 'curve';
+                        metricStr = fmtR(de.primary_r, 'r');
+                        if (de.monotonic_score != null) {
+                            metricStr += ' <span style="color:#a3e635;font-size:9px">mono=' + Number(de.monotonic_score).toFixed(2) + '</span>';
+                        }
+                    } else if (kind === 'piecewise_to_views') {
+                        borderColor = '#fb923c'; // orange
+                        kindLabel = 'piece';
+                        if (de.nonlinearity_delta != null) {
+                            metricStr = fmtR(de.nonlinearity_delta, 'Δslope');
+                            metricStr += ' <span style="color:#94a3b8;font-size:9px">lo=' + Number(de.r_lower_half || 0).toFixed(2) + ' hi=' + Number(de.r_upper_half || 0).toFixed(2) + '</span>';
                         }
                     } else if (kind === 'depth3_interaction_to_views') {
                         borderColor = '#ec4899'; // pink
                         kindLabel = '3-way';
-                        const rVal = de.primary_r || de.interaction_r;
-                        if (rVal != null) {
-                            const rc = rVal >= 0 ? '#22d3ee' : '#f87171';
-                            metricStr = ' <span style="color:' + rc + ';font-weight:700">r=' + (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3) + '</span>';
-                        }
+                        metricStr = fmtR(de.primary_r || de.interaction_r, 'r');
                     } else {
                         // interaction_to_views or legacy
-                        const rVal = de.interaction_r;
                         kindLabel = '×';
-                        if (rVal != null) {
-                            const rc = rVal >= 0 ? '#22d3ee' : '#f87171';
-                            metricStr = ' <span style="color:' + rc + ';font-weight:700">r=' + (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3) + '</span>';
-                        }
+                        metricStr = fmtR(de.interaction_r, 'r');
                     }
 
                     const strength = de.strength_label || '';
@@ -1803,7 +1814,10 @@ const JarvisUI = (() => {
             .attr('stroke', d => {
                 if (d.interaction) {
                     if (d.kind === 'pair_correlation') return '#60a5fa';
+                    if (d.kind === 'rank_pair_correlation') return '#38bdf8';
                     if (d.kind === 'conditional_delta_to_views') return '#f59e0b';
+                    if (d.kind === 'bucketed_curve_to_views') return '#4ade80';
+                    if (d.kind === 'piecewise_to_views') return '#fb923c';
                     if (d.kind === 'depth3_interaction_to_views') return '#ec4899';
                     return '#a78bfa';
                 }
@@ -1824,6 +1838,9 @@ const JarvisUI = (() => {
             .attr('stroke-dasharray', d => {
                 if (d.interaction) {
                     if (d.kind === 'pair_correlation') return '4,2';
+                    if (d.kind === 'rank_pair_correlation') return '4,2';
+                    if (d.kind === 'bucketed_curve_to_views') return '6,2';
+                    if (d.kind === 'piecewise_to_views') return '5,3';
                     if (d.kind === 'depth3_interaction_to_views') return '2,2';
                     return '3,3';
                 }

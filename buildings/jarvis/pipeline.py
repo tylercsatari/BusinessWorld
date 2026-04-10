@@ -4412,6 +4412,289 @@ def run_depth3_interaction(key_a, key_b, key_c, videos, tools):
     }
 
 
+# ── Non-linear experiment families ───────────────────────────────────────
+
+def run_rank_pair_correlation(key_a, key_b, videos):
+    """Rank-based (Spearman) pair correlation between A and B.
+    Captures monotonic non-linear relationships that Pearson misses.
+    Primary metric is rho (Spearman), with Pearson for comparison."""
+    xa, xb, _, n = _extract_two_vectors(key_a, key_b, videos)
+    if n < 50:
+        return None
+    mask = ~(np.isnan(xa) | np.isnan(xb) | np.isinf(xa) | np.isinf(xb))
+    xa, xb = xa[mask], xb[mask]
+    n = len(xa)
+    if n < 50:
+        return None
+
+    rho, p_rho = spearmanr(xa, xb)
+    r, p_r = pearsonr(xa, xb)
+
+    # Fisher z-transform for Spearman CI
+    z = 0.5 * math.log((1 + rho + 1e-10) / (1 - rho + 1e-10))
+    se = 1.0 / math.sqrt(max(n - 3, 1))
+    ci_low = math.tanh(z - 1.96 * se)
+    ci_high = math.tanh(z + 1.96 * se)
+
+    # Nonlinearity gap: how much rank-based exceeds linear
+    nonlinearity_gap = abs(rho) - abs(r)
+
+    abs_rho = abs(rho)
+    direction = "positive" if rho >= 0 else "negative"
+    strength = ("strong" if abs_rho >= 0.5 else "moderate" if abs_rho >= 0.3
+                else "weak" if abs_rho >= 0.1 else "none")
+
+    exp_id = f"exp_rank_pair_{key_a}__{key_b}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer_a = (get_metric_definition(key_a) or {}).get("layer", "post")
+    layer_b = (get_metric_definition(key_b) or {}).get("layer", "post")
+    bridge = (layer_a != layer_b)
+
+    print(f"  [RANK_PAIR] {key_a} <-> {key_b}: rho={rho:+.3f}, r={r:+.3f}, "
+          f"gap={nonlinearity_gap:+.3f}, n={n}, bridge={bridge}")
+
+    return {
+        "id": exp_id,
+        "key": f"rank_pair__{key_a}__{key_b}",
+        "kind": "rank_pair_correlation",
+        "component_keys": [key_a, key_b],
+        "target": None,
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "spearman_rho",
+            "tool_name": "Rank Pair Correlation",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "rho": float(rho), "p_rho": float(p_rho),
+                "r": float(r), "p_value": float(p_r),
+                "ci_low": float(ci_low), "ci_high": float(ci_high),
+                "nonlinearity_gap": float(nonlinearity_gap),
+                "n": int(n),
+            },
+        },
+        "result": {
+            "primary_r": float(rho),  # primary metric is rho for rank-based
+            "rho": float(rho),
+            "pearson_r": float(r),
+            "nonlinearity_gap": float(nonlinearity_gap),
+            "p_value": float(p_rho),
+            "ci_low": float(ci_low),
+            "ci_high": float(ci_high),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "bridge": bridge,
+        "layer_a": layer_a,
+        "layer_b": layer_b,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_bucketed_curve(key_a, videos):
+    """Bucketed curve analysis: split indicator A into quantile buckets,
+    compute mean views per bucket, derive monotonicity score and bucket span.
+    Captures non-linear staircase/threshold relationships with views."""
+    vals = []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        if va is None:
+            continue
+        fv = float(va)
+        if math.isnan(fv) or math.isinf(fv):
+            continue
+        vals.append((fv, math.log10(vc)))
+    n = len(vals)
+    if n < 60:
+        print(f"  [BUCKET] SKIP: n={n} < 60 for {key_a}")
+        return None
+
+    vals.sort(key=lambda x: x[0])
+    N_BUCKETS = 5
+    bucket_size = n // N_BUCKETS
+    if bucket_size < 10:
+        return None
+
+    bucket_means = []
+    bucket_ranges = []
+    for i in range(N_BUCKETS):
+        start = i * bucket_size
+        end = start + bucket_size if i < N_BUCKETS - 1 else n
+        bucket = vals[start:end]
+        mean_views = sum(v for _, v in bucket) / len(bucket)
+        bucket_means.append(mean_views)
+        bucket_ranges.append((bucket[0][0], bucket[-1][0]))
+
+    # Monotonicity score: fraction of consecutive bucket pairs that are monotonic
+    mono_up = sum(1 for i in range(len(bucket_means) - 1)
+                  if bucket_means[i + 1] > bucket_means[i])
+    mono_down = sum(1 for i in range(len(bucket_means) - 1)
+                    if bucket_means[i + 1] < bucket_means[i])
+    mono_score = max(mono_up, mono_down) / (N_BUCKETS - 1)
+    mono_direction = "positive" if mono_up >= mono_down else "negative"
+
+    # Bucket span: range of mean views across buckets
+    bucket_span = max(bucket_means) - min(bucket_means)
+
+    # Effect size via correlation of bucket index vs mean views (for strength)
+    from scipy.stats import pearsonr as _pr
+    idx = np.arange(N_BUCKETS, dtype=float)
+    bm = np.array(bucket_means, dtype=float)
+    r_bucket, p_bucket = _pr(idx, bm)
+
+    abs_r = abs(r_bucket)
+    strength = ("strong" if abs_r >= 0.9 else "moderate" if abs_r >= 0.7
+                else "weak" if abs_r >= 0.4 else "none")
+
+    exp_id = f"exp_bucket_{key_a}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer = (get_metric_definition(key_a) or {}).get("layer", "post")
+
+    print(f"  [BUCKET] {key_a}: mono={mono_score:.2f} ({mono_direction}), "
+          f"span={bucket_span:.3f}, r_bucket={r_bucket:+.3f}, n={n}")
+
+    return {
+        "id": exp_id,
+        "key": f"bucket_curve__{key_a}",
+        "kind": "bucketed_curve_to_views",
+        "component_keys": [key_a],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "bucketed_curve",
+            "tool_name": "Bucketed Curve to Views",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "n_buckets": N_BUCKETS,
+                "bucket_means": [round(m, 4) for m in bucket_means],
+                "bucket_ranges": [[round(lo, 4), round(hi, 4)] for lo, hi in bucket_ranges],
+                "monotonic_score": round(mono_score, 4),
+                "mono_direction": mono_direction,
+                "bucket_span": round(bucket_span, 4),
+                "r_bucket": float(r_bucket),
+                "p_bucket": float(p_bucket),
+                "n": int(n),
+            },
+        },
+        "result": {
+            "primary_r": float(r_bucket),
+            "monotonic_score": round(mono_score, 4),
+            "bucket_span": round(bucket_span, 4),
+            "direction": mono_direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "layer": layer,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_piecewise_to_views(key_a, videos):
+    """Piecewise linearity test: compare slope of A→views in lower half vs upper half.
+    Detects threshold/saturation effects where the relationship changes shape."""
+    vals = []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        if va is None:
+            continue
+        fv = float(va)
+        if math.isnan(fv) or math.isinf(fv):
+            continue
+        vals.append((fv, math.log10(vc)))
+    n = len(vals)
+    if n < 60:
+        print(f"  [PIECEWISE] SKIP: n={n} < 60 for {key_a}")
+        return None
+
+    vals.sort(key=lambda x: x[0])
+    mid = n // 2
+    lo_x = np.array([v[0] for v in vals[:mid]])
+    lo_y = np.array([v[1] for v in vals[:mid]])
+    hi_x = np.array([v[0] for v in vals[mid:]])
+    hi_y = np.array([v[1] for v in vals[mid:]])
+
+    if len(lo_x) < 20 or len(hi_x) < 20:
+        return None
+
+    r_lo, p_lo = pearsonr(lo_x, lo_y)
+    r_hi, p_hi = pearsonr(hi_x, hi_y)
+    nonlinearity_delta = float(r_hi - r_lo)
+
+    # Full correlation for reference
+    all_x = np.array([v[0] for v in vals])
+    all_y = np.array([v[1] for v in vals])
+    r_full, p_full = pearsonr(all_x, all_y)
+
+    abs_delta = abs(nonlinearity_delta)
+    if nonlinearity_delta > 0:
+        direction = "stronger_high"  # relationship strengthens for higher values
+    else:
+        direction = "stronger_low"   # relationship strengthens for lower values
+
+    strength = ("strong" if abs_delta >= 0.3 else "moderate" if abs_delta >= 0.15
+                else "weak" if abs_delta >= 0.05 else "none")
+
+    exp_id = f"exp_piecewise_{key_a}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer = (get_metric_definition(key_a) or {}).get("layer", "post")
+
+    print(f"  [PIECEWISE] {key_a}: r_lo={r_lo:+.3f}, r_hi={r_hi:+.3f}, "
+          f"delta={nonlinearity_delta:+.3f}, r_full={r_full:+.3f}, n={n}")
+
+    return {
+        "id": exp_id,
+        "key": f"piecewise__{key_a}",
+        "kind": "piecewise_to_views",
+        "component_keys": [key_a],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "piecewise_split",
+            "tool_name": "Piecewise to Views",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "r_lower_half": float(r_lo),
+                "r_upper_half": float(r_hi),
+                "p_lower": float(p_lo),
+                "p_upper": float(p_hi),
+                "nonlinearity_delta": float(nonlinearity_delta),
+                "r_full": float(r_full),
+                "p_full": float(p_full),
+                "split_point": float(vals[mid][0]),
+                "n_lower": len(lo_x),
+                "n_upper": len(hi_x),
+                "n": int(n),
+            },
+        },
+        "result": {
+            "primary_r": float(r_full),
+            "r_lower_half": float(r_lo),
+            "r_upper_half": float(r_hi),
+            "nonlinearity_delta": float(nonlinearity_delta),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "layer": layer,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
 def _add_derived_edge(graph, derived_exp):
     """Add a derived_edge to graph from a derived experiment result."""
     if "derived_edges" not in graph:
@@ -4425,12 +4708,19 @@ def _add_derived_edge(graph, derived_exp):
                                and e.get("interaction_key") != exp_key]
 
     ck = derived_exp["component_keys"]
+    # For single-component families (bucketed_curve, piecewise), edge goes A → views
+    target = derived_exp.get("target")
+    if len(ck) == 1:
+        edge_from, edge_to = ck[0], target or "views"
+    else:
+        edge_from, edge_to = ck[0], ck[1]
+
     base_edge = {
-        "from": ck[0],
-        "to": ck[1],
+        "from": edge_from,
+        "to": edge_to,
         "kind": kind,
         "depth": derived_exp["depth"],
-        "target": derived_exp.get("target"),
+        "target": target,
         "experiment_key": exp_key,
         "experiment_id": derived_exp["experiment"]["id"],
         "component_keys": ck,
@@ -4443,6 +4733,14 @@ def _add_derived_edge(graph, derived_exp):
         base_edge["strength_label"] = derived_exp["result"]["strength_label"]
         base_edge["direction"] = derived_exp["result"]["direction"]
         base_edge["bridge"] = derived_exp.get("bridge", False)
+    elif kind == "rank_pair_correlation":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["rho"] = derived_exp["result"]["rho"]
+        base_edge["pearson_r"] = derived_exp["result"].get("pearson_r")
+        base_edge["nonlinearity_gap"] = derived_exp["result"].get("nonlinearity_gap", 0)
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+        base_edge["bridge"] = derived_exp.get("bridge", False)
     elif kind == "interaction_to_views":
         base_edge["interaction_key"] = exp_key
         base_edge["interaction_r"] = derived_exp["result"]["primary_r"]
@@ -4452,6 +4750,19 @@ def _add_derived_edge(graph, derived_exp):
         base_edge["delta_r"] = derived_exp["result"]["delta_r"]
         base_edge["r_high_bucket"] = derived_exp["result"]["r_high_bucket"]
         base_edge["r_low_bucket"] = derived_exp["result"]["r_low_bucket"]
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "bucketed_curve_to_views":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["monotonic_score"] = derived_exp["result"].get("monotonic_score")
+        base_edge["bucket_span"] = derived_exp["result"].get("bucket_span")
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "piecewise_to_views":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["r_lower_half"] = derived_exp["result"].get("r_lower_half")
+        base_edge["r_upper_half"] = derived_exp["result"].get("r_upper_half")
+        base_edge["nonlinearity_delta"] = derived_exp["result"].get("nonlinearity_delta")
         base_edge["strength_label"] = derived_exp["result"]["strength_label"]
         base_edge["direction"] = derived_exp["result"]["direction"]
     elif kind == "depth3_interaction_to_views":
@@ -4498,21 +4809,56 @@ def _get_bridge_pairs(indicators, max_pairs=60):
     return pairs
 
 
+def _get_resolution_diverse_top(indicators, n=30):
+    """Return top indicators with resolution diversity: mix of R0, R1, R2, R3.
+    Ensures we don't over-represent one resolution shelf."""
+    atomic = [i for i in indicators if "_x_" not in i["key"]
+              and abs(i.get("result", {}).get("primary_r") or 0) >= 0.05]
+    atomic.sort(key=lambda i: abs(i["result"].get("primary_r") or 0), reverse=True)
+    # Group by resolution
+    by_res = {}
+    for i in atomic:
+        res = i.get("resolution_id", "r0")
+        by_res.setdefault(res, []).append(i)
+    # Round-robin from each resolution shelf
+    result = []
+    seen = set()
+    round_idx = 0
+    while len(result) < n:
+        added_this_round = False
+        for res in sorted(by_res.keys()):
+            if round_idx < len(by_res[res]):
+                ind = by_res[res][round_idx]
+                if ind["key"] not in seen:
+                    result.append(ind)
+                    seen.add(ind["key"])
+                    added_this_round = True
+                if len(result) >= n:
+                    break
+        round_idx += 1
+        if not added_this_round:
+            break
+    return result
+
+
 def generate_derived_candidates(indicators, existing_derived_keys):
-    """Generate bounded deterministic candidates for all new experiment families.
+    """Generate bounded deterministic candidates for all experiment families.
     Returns dict: {kind: [(key_a, key_b, ...), ...]}"""
     candidates = {
         "pair_correlation": [],
         "conditional_delta_to_views": [],
         "depth3_interaction_to_views": [],
+        "rank_pair_correlation": [],
+        "bucketed_curve_to_views": [],
+        "piecewise_to_views": [],
     }
 
     top = _get_top_indicators(indicators, n=25)
     top_keys = [i["key"] for i in top]
+    top_diverse = _get_resolution_diverse_top(indicators, n=30)
 
     # ── pair_correlation: among top indicators + cross-layer bridge pairs ──
     bridge_pairs = _get_bridge_pairs(indicators, max_pairs=60)
-    # Also add top-indicator same-layer pairs (limited)
     seen_pc = set()
     for a, b in bridge_pairs:
         pk = f"pair_corr__{a}__{b}"
@@ -4542,7 +4888,6 @@ def generate_derived_candidates(indicators, existing_derived_keys):
         if ck not in existing_derived_keys and (a, b) not in seen_cd:
             candidates["conditional_delta_to_views"].append((a, b))
             seen_cd.add((a, b))
-        # Also reverse direction
         ck2 = f"cond_delta__{b}__given__{a}"
         if ck2 not in existing_derived_keys and (b, a) not in seen_cd:
             candidates["conditional_delta_to_views"].append((b, a))
@@ -4551,28 +4896,100 @@ def generate_derived_candidates(indicators, existing_derived_keys):
             break
 
     # ── depth3: only from top 15 strongest, bounded to 40 triples ──
+    # Prefer triples with at least one bridge (cross-layer) indicator
     d3_keys = [i["key"] for i in top[:15]]
+    d3_layers = {i["key"]: i.get("layer", "post") for i in top[:15]}
     seen_d3 = set()
+    # First pass: triples with cross-layer members
     for i, a in enumerate(d3_keys):
         for j, b in enumerate(d3_keys[i + 1:], start=i + 1):
             for c in d3_keys[j + 1:]:
+                layers = {d3_layers.get(a), d3_layers.get(b), d3_layers.get(c)}
+                if len(layers) < 2:
+                    continue  # skip same-layer triples in first pass
                 triple = tuple(sorted([a, b, c]))
                 tk = f"{triple[0]}_x_{triple[1]}_x_{triple[2]}"
                 if tk not in existing_derived_keys and triple not in seen_d3:
                     candidates["depth3_interaction_to_views"].append((a, b, c))
                     seen_d3.add(triple)
+                if len(candidates["depth3_interaction_to_views"]) >= 30:
+                    break
+            if len(candidates["depth3_interaction_to_views"]) >= 30:
+                break
+        if len(candidates["depth3_interaction_to_views"]) >= 30:
+            break
+    # Second pass: fill remaining with any triples
+    if len(candidates["depth3_interaction_to_views"]) < 40:
+        for i, a in enumerate(d3_keys):
+            for j, b in enumerate(d3_keys[i + 1:], start=i + 1):
+                for c in d3_keys[j + 1:]:
+                    triple = tuple(sorted([a, b, c]))
+                    tk = f"{triple[0]}_x_{triple[1]}_x_{triple[2]}"
+                    if tk not in existing_derived_keys and triple not in seen_d3:
+                        candidates["depth3_interaction_to_views"].append((a, b, c))
+                        seen_d3.add(triple)
+                    if len(candidates["depth3_interaction_to_views"]) >= 40:
+                        break
                 if len(candidates["depth3_interaction_to_views"]) >= 40:
                     break
             if len(candidates["depth3_interaction_to_views"]) >= 40:
                 break
-        if len(candidates["depth3_interaction_to_views"]) >= 40:
+
+    # ── rank_pair_correlation: bridge pairs where non-linear signal likely ──
+    # Prioritize pairs where existing Pearson pair_corr has |r| < 0.3
+    # (monotonic non-linear relationships are most interesting when Pearson is weak)
+    seen_rpc = set()
+    for a, b in bridge_pairs:
+        pk = f"rank_pair__{a}__{b}"
+        rpk = f"rank_pair__{b}__{a}"
+        if pk not in existing_derived_keys and rpk not in existing_derived_keys:
+            if (a, b) not in seen_rpc and (b, a) not in seen_rpc:
+                candidates["rank_pair_correlation"].append((a, b))
+                seen_rpc.add((a, b))
+        if len(candidates["rank_pair_correlation"]) >= 60:
+            break
+    # Also add top-indicator same-layer pairs
+    for i, a in enumerate(top_keys):
+        for b in top_keys[i + 1:]:
+            pk = f"rank_pair__{a}__{b}"
+            rpk = f"rank_pair__{b}__{a}"
+            if pk not in existing_derived_keys and rpk not in existing_derived_keys:
+                if (a, b) not in seen_rpc and (b, a) not in seen_rpc:
+                    candidates["rank_pair_correlation"].append((a, b))
+                    seen_rpc.add((a, b))
+            if len(candidates["rank_pair_correlation"]) >= 80:
+                break
+        if len(candidates["rank_pair_correlation"]) >= 80:
+            break
+
+    # ── bucketed_curve_to_views: top indicators + resolution-diverse set ──
+    seen_bc = set()
+    for ind in top_diverse:
+        k = ind["key"]
+        bk = f"bucket_curve__{k}"
+        if bk not in existing_derived_keys and k not in seen_bc:
+            candidates["bucketed_curve_to_views"].append((k,))
+            seen_bc.add(k)
+        if len(candidates["bucketed_curve_to_views"]) >= 50:
+            break
+
+    # ── piecewise_to_views: top indicators, prioritize those with |r| 0.1-0.4 ──
+    # (piecewise is most interesting for moderate correlations that might be non-linear)
+    piecewise_pool = [i for i in top_diverse
+                      if 0.05 <= abs(i.get("result", {}).get("primary_r") or 0) <= 0.5]
+    seen_pw = set()
+    for ind in piecewise_pool:
+        k = ind["key"]
+        pk = f"piecewise__{k}"
+        if pk not in existing_derived_keys and k not in seen_pw:
+            candidates["piecewise_to_views"].append((k,))
+            seen_pw.add(k)
+        if len(candidates["piecewise_to_views"]) >= 40:
             break
 
     total = sum(len(v) for v in candidates.values())
-    print(f"  [DERIVED CANDIDATES] pair_corr={len(candidates['pair_correlation'])}, "
-          f"cond_delta={len(candidates['conditional_delta_to_views'])}, "
-          f"depth3={len(candidates['depth3_interaction_to_views'])} "
-          f"(total={total})")
+    parts = ", ".join(f"{k}={len(v)}" for k, v in candidates.items())
+    print(f"  [DERIVED CANDIDATES] {parts} (total={total})")
     return candidates
 
 
@@ -4592,7 +5009,9 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
 
     existing_derived_keys = {d["key"] for d in derived}
     all_kinds = kinds or ["pair_correlation", "conditional_delta_to_views",
-                          "depth3_interaction_to_views"]
+                          "depth3_interaction_to_views",
+                          "rank_pair_correlation", "bucketed_curve_to_views",
+                          "piecewise_to_views"]
     limit = max_per_kind or 25
 
     print(f"\n{'=' * 60}")
@@ -4601,37 +5020,67 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
     print(f"  existing derived: {len(derived)}")
     print(f"{'=' * 60}")
 
-    # ── Step 0: retroactively upgrade existing interaction_to_views entries ──
+    # ── Step 0: normalize depth + kind for all derived experiments ──
+    # Depth rules:
+    #   atomic → views = depth 1
+    #   pair_correlation A↔B = depth 2
+    #   interaction_to_views A×B→views = depth 2
+    #   conditional_delta_to_views A|B→views = depth 2
+    #   rank_pair_correlation A↔B = depth 2
+    #   bucketed_curve_to_views A→views = depth 2
+    #   piecewise_to_views A→views = depth 2
+    #   depth3_interaction_to_views A×B×C→views = depth 3
+    DEPTH_BY_KIND = {
+        "interaction_to_views": 2,
+        "pair_correlation": 2,
+        "conditional_delta_to_views": 2,
+        "rank_pair_correlation": 2,
+        "bucketed_curve_to_views": 2,
+        "piecewise_to_views": 2,
+        "depth3_interaction_to_views": 3,
+    }
     upgraded = 0
+    depth_fixed = 0
     for d in derived:
+        changed = False
+        # Legacy kind migration
         if d.get("kind") == "interaction" or (not d.get("kind") and "_x_" in d.get("key", "")):
             d["kind"] = "interaction_to_views"
-            d["depth"] = d.get("depth", 2)
-            if "component_keys" not in d:
-                m = re.match(r'^(.+)_x_(.+)$', d["key"])
-                if m:
-                    d["component_keys"] = [m.group(1), m.group(2)]
+            changed = True
+        if "component_keys" not in d:
+            m = re.match(r'^(.+)_x_(.+)$', d.get("key", ""))
+            if m:
+                d["component_keys"] = [m.group(1), m.group(2)]
+                changed = True
+        # Enforce correct depth for all kinds
+        correct_depth = DEPTH_BY_KIND.get(d.get("kind"), 2)
+        if d.get("depth") != correct_depth:
+            d["depth"] = correct_depth
+            depth_fixed += 1
+            changed = True
+        if changed:
             upgraded += 1
-    # Also upgrade graph derived_edges
+    # Also normalize graph derived_edges
     for de in graph.get("derived_edges", []):
         if de.get("kind") == "interaction":
             de["kind"] = "interaction_to_views"
-            de["depth"] = de.get("depth", 2)
+        correct_depth = DEPTH_BY_KIND.get(de.get("kind"), 2)
+        if de.get("depth") != correct_depth:
+            de["depth"] = correct_depth
     if upgraded:
-        print(f"  Upgraded {upgraded} existing interaction → interaction_to_views")
+        print(f"  Normalized {upgraded} derived experiments ({depth_fixed} depth fixes)")
         save_json(DERIVED_EXPERIMENTS_FILE, derived)
         save_json(GRAPH_FILE, graph)
         existing_derived_keys = {d["key"] for d in derived}
 
     candidates = generate_derived_candidates(indicators, existing_derived_keys)
 
-    completed = {"pair_correlation": 0, "conditional_delta_to_views": 0,
-                 "depth3_interaction_to_views": 0}
+    completed = {k: 0 for k in all_kinds}
 
     # ── pair_correlation ──
     if "pair_correlation" in all_kinds:
-        print(f"\n--- pair_correlation ({len(candidates['pair_correlation'])} candidates) ---")
-        for key_a, key_b in candidates["pair_correlation"]:
+        print(f"\n--- pair_correlation ({len(candidates.get('pair_correlation', []))} candidates) ---")
+        for key_a, key_b in candidates.get("pair_correlation", []):
             if completed["pair_correlation"] >= limit:
                 break
             result = run_pair_correlation(key_a, key_b, videos)
@@ -4642,8 +5091,8 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
 
     # ── conditional_delta_to_views ──
     if "conditional_delta_to_views" in all_kinds:
-        print(f"\n--- conditional_delta_to_views ({len(candidates['conditional_delta_to_views'])} candidates) ---")
-        for key_a, key_b in candidates["conditional_delta_to_views"]:
+        print(f"\n--- conditional_delta_to_views ({len(candidates.get('conditional_delta_to_views', []))} candidates) ---")
+        for key_a, key_b in candidates.get("conditional_delta_to_views", []):
             if completed["conditional_delta_to_views"] >= limit:
                 break
             result = run_conditional_delta(key_a, key_b, videos)
@@ -4654,8 +5103,8 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
 
     # ── depth3_interaction_to_views ──
     if "depth3_interaction_to_views" in all_kinds:
-        print(f"\n--- depth3_interaction_to_views ({len(candidates['depth3_interaction_to_views'])} candidates) ---")
-        for key_a, key_b, key_c in candidates["depth3_interaction_to_views"]:
+        print(f"\n--- depth3_interaction_to_views ({len(candidates.get('depth3_interaction_to_views', []))} candidates) ---")
+        for key_a, key_b, key_c in candidates.get("depth3_interaction_to_views", []):
             if completed["depth3_interaction_to_views"] >= limit:
                 break
             result = run_depth3_interaction(key_a, key_b, key_c, videos, tools)
@@ -4663,6 +5112,42 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
                 derived.append(result)
                 _add_derived_edge(graph, result)
                 completed["depth3_interaction_to_views"] += 1
+
+    # ── rank_pair_correlation ──
+    if "rank_pair_correlation" in all_kinds:
+        print(f"\n--- rank_pair_correlation ({len(candidates.get('rank_pair_correlation', []))} candidates) ---")
+        for key_a, key_b in candidates.get("rank_pair_correlation", []):
+            if completed["rank_pair_correlation"] >= limit:
+                break
+            result = run_rank_pair_correlation(key_a, key_b, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["rank_pair_correlation"] += 1
+
+    # ── bucketed_curve_to_views ──
+    if "bucketed_curve_to_views" in all_kinds:
+        print(f"\n--- bucketed_curve_to_views ({len(candidates.get('bucketed_curve_to_views', []))} candidates) ---")
+        for (key_a,) in candidates.get("bucketed_curve_to_views", []):
+            if completed["bucketed_curve_to_views"] >= limit:
+                break
+            result = run_bucketed_curve(key_a, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["bucketed_curve_to_views"] += 1
+
+    # ── piecewise_to_views ──
+    if "piecewise_to_views" in all_kinds:
+        print(f"\n--- piecewise_to_views ({len(candidates.get('piecewise_to_views', []))} candidates) ---")
+        for (key_a,) in candidates.get("piecewise_to_views", []):
+            if completed["piecewise_to_views"] >= limit:
+                break
+            result = run_piecewise_to_views(key_a, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["piecewise_to_views"] += 1
 
     # ── Save all ──
     save_json(DERIVED_EXPERIMENTS_FILE, derived)
@@ -4672,7 +5157,8 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
     print(f"\n{'=' * 60}")
     print(f"DERIVED RUN COMPLETE")
     for k, v in completed.items():
-        print(f"  {k}: {v}")
+        if v > 0:
+            print(f"  {k}: {v}")
     print(f"  total new: {total}")
     print(f"  derived experiments now: {len(derived)}")
     print(f"  graph derived_edges now: {len(graph.get('derived_edges', []))}")
