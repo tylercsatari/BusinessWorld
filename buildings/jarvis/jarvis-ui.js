@@ -1498,8 +1498,10 @@ const JarvisUI = (() => {
         const ciHigh = exp && exp.outputs ? exp.outputs.ci_high : null;
         const nVid = exp ? exp.n_videos : (dataset ? dataset.length : null);
 
-        // Real connection count from v2 graph edges
-        const graphEdgeCount = v2Graph ? (v2Graph.edges || []).filter(e => e.from === d.key || e.to === d.key).length : connTargets.length;
+        // Real connection count from v2 graph edges + derived edges
+        const directEdgeCount = v2Graph ? (v2Graph.edges || []).filter(e => e.from === d.key || e.to === d.key).length : connTargets.length;
+        const derivedEdgeCount = v2Graph ? (v2Graph.derived_edges || []).filter(de => de.from === d.key || de.to === d.key).length : 0;
+        const graphEdgeCount = directEdgeCount + derivedEdgeCount;
 
         let statsHtml = '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;padding:8px 0;border-bottom:1px solid #1e293b">';
         statsHtml += statPill('Pearson r', rStr);
@@ -1573,11 +1575,36 @@ const JarvisUI = (() => {
                 + '</div>';
         }
 
+        // Derived Relationships — show interaction experiments this node participates in
+        let derivedHtml = '';
+        if (v2Graph && v2Graph.derived_edges) {
+            const related = (v2Graph.derived_edges || []).filter(de => de.from === d.key || de.to === d.key);
+            if (related.length) {
+                derivedHtml = sectionHdr('Derived Relationships');
+                derivedHtml += '<div style="display:flex;flex-direction:column;gap:4px">';
+                related.forEach(de => {
+                    const partner = de.from === d.key ? de.to : de.from;
+                    const rVal = de.interaction_r;
+                    const rColor = rVal >= 0 ? '#22d3ee' : '#f87171';
+                    const rStr = (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3);
+                    const strength = de.strength_label || '';
+                    derivedHtml += '<div style="background:#1a1040;border-left:3px solid #a78bfa;padding:6px 8px;border-radius:0 6px 6px 0;font-size:11px;color:#e2e8f0">'
+                        + '<span style="color:#a78bfa;font-weight:600">' + humanizeKey(partner) + '</span>'
+                        + ' &nbsp;×&nbsp; ' + humanizeKey(d.key)
+                        + ' → ' + (de.target || 'views')
+                        + ' &nbsp; <span style="color:' + rColor + ';font-weight:700">r=' + rStr + '</span>'
+                        + (strength ? ' &nbsp;<span style="color:#94a3b8">(' + strength + ')</span>' : '')
+                        + '</div>';
+                });
+                derivedHtml += '</div>';
+            }
+        }
+
         popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
             + '<div style="font-size:15px;font-weight:700;color:#f1f5f9;flex:1">' + label + layerBadge + '</div>'
             + '<button onclick="document.getElementById(\'jarvis-node-popup\').style.display=\'none\'" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:0 0 0 8px;line-height:1">\u00d7</button>'
             + '</div>'
-            + statsHtml + metricHtml + expHtml + dataHtml + findingHtml + connHtml;
+            + statsHtml + metricHtml + expHtml + dataHtml + findingHtml + connHtml + derivedHtml;
 
         popup.style.display = 'block';
         const x = Math.min(event.clientX + 10, window.innerWidth - 460);

@@ -213,6 +213,35 @@ function stepResolve(key, resolutions) {
     return resolutionId;
 }
 
+/**
+ * Rebuild node.connections from graph.edges + graph.derived_edges
+ * so atomic nodes reflect all their real connections (not just "views").
+ */
+function rebuildConnections(graph) {
+    const connMap = {};  // key → Set of connected keys
+    for (const e of (graph.edges || [])) {
+        if (!connMap[e.from]) connMap[e.from] = new Set();
+        if (!connMap[e.to]) connMap[e.to] = new Set();
+        connMap[e.from].add(e.to);
+        connMap[e.to].add(e.from);
+    }
+    for (const de of (graph.derived_edges || [])) {
+        if (!connMap[de.from]) connMap[de.from] = new Set();
+        if (!connMap[de.to]) connMap[de.to] = new Set();
+        connMap[de.from].add(de.to);
+        connMap[de.to].add(de.from);
+        // Also connect both to the target (e.g. "views")
+        if (de.target) {
+            connMap[de.from].add(de.target);
+            connMap[de.to].add(de.target);
+        }
+    }
+    for (const node of (graph.nodes || [])) {
+        const set = connMap[node.key] || new Set();
+        node.connections = [...set];
+    }
+}
+
 function stepUpdateGraph(indicator, graph) {
     const key = indicator.key;
     const target = indicator.target;
@@ -266,6 +295,9 @@ function stepUpdateGraph(indicator, graph) {
         graph.updated_at = nowIso();
         log(`  [GRAPH]     Node added, depth=${depth}, → '${target}'`);
     }
+
+    // Sync all node.connections from edges + derived_edges
+    rebuildConnections(graph);
 }
 
 
@@ -366,6 +398,7 @@ async function runQueue(nToRun) {
     const tools = await jarvisStore.loadJson('tools', []);
     const resolutions = await jarvisStore.loadJson('resolutions', []);
     const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
+    rebuildConnections(graph);  // migrate existing node.connections
     const queue = await jarvisStore.loadJson('candidate_queue', metrics.DEFAULT_CANDIDATES);
     const existingKeys = new Set([...indicators.map(i => i.key), ...derivedExperiments.map(d => d.key)]);
 
@@ -438,6 +471,7 @@ async function autoRun(opts = {}) {
     const tools = await jarvisStore.loadJson('tools', []);
     const resolutions = await jarvisStore.loadJson('resolutions', []);
     const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
+    rebuildConnections(graph);  // migrate existing node.connections
     const existingKeys = new Set([...indicators.map(i => i.key), ...derivedExperiments.map(d => d.key)]);
 
     // No LLM on hosted path — deterministic only (llm_proposed = 0)
