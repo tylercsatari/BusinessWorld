@@ -216,33 +216,56 @@ function stepResolve(key, resolutions) {
 function stepUpdateGraph(indicator, graph) {
     const key = indicator.key;
     const target = indicator.target;
-    const depth = 1; // all connect to 'views'
+    const isComposite = metrics.isCompositeKey(key);
 
-    const node = {
-        key, label: indicator.label, type: 'indicator',
-        layer: indicator.layer, depth,
-        r_partial: indicator.result.primary_r,
-        resolution_id: indicator.resolution_id,
-        connections: [target],
-        description: (indicator.metric_definition || {}).description || key,
-        experiment_id: indicator.experiment.id,
-        status: indicator.result.status,
-        strength_label: indicator.result.strength_label,
-    };
+    if (isComposite) {
+        // Composite: add a derived edge referencing component keys, no atomic node
+        const parsed = metrics.parseCompositeKey(key);
+        if (!graph.derived_edges) graph.derived_edges = [];
+        graph.derived_edges = graph.derived_edges.filter(e => e.interaction_key !== key);
+        graph.derived_edges.push({
+            from: parsed.a,
+            to: parsed.b,
+            kind: 'interaction',
+            target,
+            interaction_key: key,
+            interaction_r: indicator.result.primary_r,
+            experiment_id: indicator.experiment.id,
+            strength_label: indicator.result.strength_label,
+            direction: indicator.result.direction,
+            added_at: nowIso(),
+        });
+        graph.updated_at = nowIso();
+        log(`  [GRAPH]     Derived edge added: ${parsed.a} × ${parsed.b} → '${target}'`);
+    } else {
+        // Atomic: add node + edge as before
+        const depth = 1;
+        const node = {
+            key, label: indicator.label, type: 'indicator',
+            layer: indicator.layer, depth,
+            r_partial: indicator.result.primary_r,
+            resolution_id: indicator.resolution_id,
+            connections: [target],
+            description: (indicator.metric_definition || {}).description || key,
+            experiment_id: indicator.experiment.id,
+            status: indicator.result.status,
+            strength_label: indicator.result.strength_label,
+        };
 
-    graph.nodes = (graph.nodes || []).filter(n => n.key !== key);
-    graph.nodes.push(node);
+        graph.nodes = (graph.nodes || []).filter(n => n.key !== key);
+        graph.nodes.push(node);
 
-    const edge = {
-        from: key, to: target,
-        r: indicator.result.primary_r,
-        experiment_id: indicator.experiment.id,
-        added_at: nowIso(),
-    };
-    graph.edges = (graph.edges || []).filter(e => !(e.from === key && e.to === target));
-    graph.edges.push(edge);
-    graph.updated_at = nowIso();
-    log(`  [GRAPH]     Node added, depth=${depth}, → '${target}'`);
+        const edge = {
+            from: key, to: target,
+            r: indicator.result.primary_r,
+            experiment_id: indicator.experiment.id,
+            added_at: nowIso(),
+        };
+        graph.edges = (graph.edges || []).filter(e => !(e.from === key && e.to === target));
+        graph.edges.push(edge);
+        graph.updated_at = nowIso();
+        log(`  [GRAPH]     Node added, depth=${depth}, → '${target}'`);
+    }
 }
 
 
@@ -268,6 +291,9 @@ function processIndicator(key, videos, existingKeys, resolutions, graph, tools) 
 
     const result = stepBuildResult(key, exp);
 
+    const isComposite = metrics.isCompositeKey(key);
+    const parsed = isComposite ? metrics.parseCompositeKey(key) : null;
+
     const indicator = {
         key,
         label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
@@ -284,6 +310,13 @@ function processIndicator(key, videos, existingKeys, resolutions, graph, tools) 
         created_at: nowIso(),
         updated_at: nowIso(),
     };
+
+    // Add composite-specific fields
+    if (isComposite && parsed) {
+        indicator.kind = 'interaction';
+        indicator.component_keys = [parsed.a, parsed.b];
+        indicator.derived_formula = `${parsed.a} * ${parsed.b}`;
+    }
 
     stepUpdateGraph(indicator, graph);
     log(`  [DONE]      r=${result.primary_r.toFixed(3)} (${result.strength_label} ${result.direction})`);
@@ -329,11 +362,12 @@ async function finishProgress(prog, stopReason) {
 async function runQueue(nToRun) {
     log(`Queue run: ${nToRun} indicators`);
     const indicators = await jarvisStore.loadJson('indicators', []);
+    const derivedExperiments = await jarvisStore.loadJson('derived_experiments', []);
     const tools = await jarvisStore.loadJson('tools', []);
     const resolutions = await jarvisStore.loadJson('resolutions', []);
-    const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [] });
+    const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
     const queue = await jarvisStore.loadJson('candidate_queue', metrics.DEFAULT_CANDIDATES);
-    const existingKeys = new Set(indicators.map(i => i.key));
+    const existingKeys = new Set([...indicators.map(i => i.key), ...derivedExperiments.map(d => d.key)]);
 
     const videos = loadVideos();
     if (!videos.length) { log('ERROR: No videos loaded'); return; }
@@ -345,7 +379,12 @@ async function runQueue(nToRun) {
 
         const result = processIndicator(key, videos, existingKeys, resolutions, graph, tools);
         if (result) {
-            indicators.push(result);
+            const isComposite = metrics.isCompositeKey(key);
+            if (isComposite) {
+                derivedExperiments.push(result);
+            } else {
+                indicators.push(result);
+            }
             const expLog = await jarvisStore.loadJson('experiments_log', []);
             expLog.push({
                 id: result.experiment.id,
@@ -358,9 +397,11 @@ async function runQueue(nToRun) {
                 n_videos: result.experiment.n_videos,
                 status: result.result.status,
                 ran_at: result.experiment.ran_at,
+                kind: isComposite ? 'interaction' : 'atomic',
             });
             await jarvisStore.saveJson('experiments_log', expLog);
             await jarvisStore.saveJson('indicators', indicators);
+            await jarvisStore.saveJson('derived_experiments', derivedExperiments);
             await jarvisStore.saveJson('resolutions', resolutions);
             await jarvisStore.saveJson('graph', graph);
             existingKeys.add(key);
@@ -393,10 +434,11 @@ async function autoRun(opts = {}) {
     await updateProgress(prog, {});
 
     const indicators = await jarvisStore.loadJson('indicators', []);
+    const derivedExperiments = await jarvisStore.loadJson('derived_experiments', []);
     const tools = await jarvisStore.loadJson('tools', []);
     const resolutions = await jarvisStore.loadJson('resolutions', []);
-    const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [] });
-    const existingKeys = new Set(indicators.map(i => i.key));
+    const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
+    const existingKeys = new Set([...indicators.map(i => i.key), ...derivedExperiments.map(d => d.key)]);
 
     // No LLM on hosted path — deterministic only (llm_proposed = 0)
     await updateProgress(prog, { llm_proposed: 0 });
@@ -457,7 +499,12 @@ async function autoRun(opts = {}) {
             const result = processIndicator(key, videos, existingKeys, resolutions, graph, tools);
 
             if (result) {
-                indicators.push(result);
+                const isComposite = metrics.isCompositeKey(key);
+                if (isComposite) {
+                    derivedExperiments.push(result);
+                } else {
+                    indicators.push(result);
+                }
                 const expLog = await jarvisStore.loadJson('experiments_log', []);
                 expLog.push({
                     id: result.experiment.id,
@@ -471,9 +518,11 @@ async function autoRun(opts = {}) {
                     status: result.result.status,
                     ran_at: result.experiment.ran_at,
                     source: 'deterministic',
+                    kind: isComposite ? 'interaction' : 'atomic',
                 });
                 await jarvisStore.saveJson('experiments_log', expLog);
                 await jarvisStore.saveJson('indicators', indicators);
+                await jarvisStore.saveJson('derived_experiments', derivedExperiments);
                 await jarvisStore.saveJson('resolutions', resolutions);
                 await jarvisStore.saveJson('graph', graph);
                 existingKeys.add(key);
@@ -542,6 +591,7 @@ async function autoRun(opts = {}) {
         top_new_r_abs: Math.round(topRAbs * 10000) / 10000,
         elapsed_minutes: Math.round(elapsedMin * 100) / 100,
         total_indicators_after: indicators.length,
+        total_derived_after: derivedExperiments.length,
     };
 
     const runs = await jarvisStore.loadJson('autonomous_runs', []);

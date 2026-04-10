@@ -992,6 +992,27 @@ function getCandidateLayer(key) {
     return defn ? (defn.layer || 'post') : 'post';
 }
 
+/**
+ * Returns true if key is an interaction composite (a_x_b pattern),
+ * excluding hardcoded static keys like keep_x_non_sub_share.
+ */
+function isCompositeKey(key) {
+    if (STATIC_KEYS.has(key)) return false;
+    return /^(.+)_x_(.+)$/.test(key);
+}
+
+/**
+ * Parse a composite key into its component keys.
+ * Returns { a, b } or null if not composite.
+ */
+function parseCompositeKey(key) {
+    if (STATIC_KEYS.has(key)) return null;
+    const m = key.match(/^(.+)_x_(.+)$/);
+    if (!m) return null;
+    if (getMetricDefinition(m[1]) && getMetricDefinition(m[2])) return { a: m[1], b: m[2] };
+    return null;
+}
+
 function biasPool(pool, preuploadRatio) {
     if (preuploadRatio == null) return pool;
     const pre = pool.filter(k => getCandidateLayer(k) === 'pre');
@@ -1140,6 +1161,8 @@ module.exports = {
     // Candidates
     DEFAULT_CANDIDATES, generateAutonomousCandidates,
     canonicalizeKey, validateCandidate, biasPool,
+    // Composite helpers
+    isCompositeKey, parseCompositeKey,
     // Resolution
     INDICATOR_RESOLUTION_MAP, DEFAULT_RESOLUTION_DEFS, getResolutionForKey,
     // Constants

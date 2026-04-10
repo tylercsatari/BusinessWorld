@@ -20,6 +20,7 @@ const TTL_MS = 30 * 1000; // 30 seconds
 // Canonical Jarvis data files that should be persisted to R2
 const CANONICAL_FILES = [
     'indicators',
+    'derived_experiments',
     'experiments_log',
     'graph',
     'resolutions',
@@ -32,8 +33,9 @@ const CANONICAL_FILES = [
 // Default fallback values per file (matches existing behavior)
 const DEFAULTS = {
     indicators: [],
+    derived_experiments: [],
     experiments_log: [],
-    graph: { nodes: [], edges: [] },
+    graph: { nodes: [], edges: [], derived_edges: [] },
     resolutions: [],
     tools: [],
     autonomous_runs: [],

@@ -956,20 +956,23 @@ const JarvisUI = (() => {
     let nodeClickCount = {};
 
     // ── v2 data cache ──
-    let v2Indicators = null;   // array from /api/jarvis/v2/indicators
-    let v2Graph = null;        // {nodes, edges} from /api/jarvis/v2/graph
+    let v2Indicators = null;   // array from /api/jarvis/v2/indicators (atomic only)
+    let v2DerivedExperiments = null; // array from /api/jarvis/v2/derived-experiments (interactions)
+    let v2Graph = null;        // {nodes, edges, derived_edges} from /api/jarvis/v2/graph
     let v2Tools = null;        // array from /api/jarvis/v2/tools
     let v2Resolutions = null;  // array from /api/jarvis/v2/resolutions
 
     async function loadV2Data() {
         try {
-            const [iRes, gRes, tRes, rRes] = await Promise.all([
+            const [iRes, dRes, gRes, tRes, rRes] = await Promise.all([
                 fetch('/api/jarvis/v2/indicators'),
+                fetch('/api/jarvis/v2/derived-experiments'),
                 fetch('/api/jarvis/v2/graph'),
                 fetch('/api/jarvis/v2/tools'),
                 fetch('/api/jarvis/v2/resolutions'),
             ]);
             v2Indicators = await iRes.json();
+            v2DerivedExperiments = await dRes.json();
             v2Graph = await gRes.json();
             v2Tools = await tRes.json();
             v2Resolutions = await rRes.json();
@@ -978,6 +981,14 @@ const JarvisUI = (() => {
             console.error('Jarvis v2 load failed:', e);
             return false;
         }
+    }
+
+    // Composite keys have kind:'interaction' set by the runner, or match _x_ pattern
+    // but exclude hardcoded static keys like keep_x_non_sub_share
+    const UI_STATIC_COMPOSITE_KEYS = new Set(['keep_x_non_sub_share']);
+    function isCompositeKeyUI(key) {
+        if (UI_STATIC_COMPOSITE_KEYS.has(key)) return false;
+        return /^(.+)_x_(.+)$/.test(key);
     }
 
     function isSignalKept(key) {
@@ -1041,7 +1052,8 @@ const JarvisUI = (() => {
                 <div class="jarvis-signal-list" id="jarvis-signal-list">
                     ${renderSignalList()}
                 </div>
-            </div>`;
+            </div>
+            ${renderInteractionsList()}`;
     }
 
     // Pre-upload pattern matching (case-insensitive)
@@ -1148,14 +1160,16 @@ const JarvisUI = (() => {
 
     function getRegistrySignals() {
         if (!v2Indicators || !v2Indicators.length) return [];
-        // Normalize v2 schema to what the UI expects
-        return v2Indicators.map(ind => ({
-            ...ind,
-            // UI compatibility shims
-            r_partial: ind.result ? ind.result.primary_r : null,
-            resolution: ind.resolution_id || 'r0',
-            notes: ind.result ? ind.result.conclusion : (ind.metric_definition ? ind.metric_definition.description : ''),
-        }));
+        // Normalize v2 schema to what the UI expects — exclude composites (they live in derived_experiments)
+        return v2Indicators
+            .filter(ind => !isCompositeKeyUI(ind.key))
+            .map(ind => ({
+                ...ind,
+                // UI compatibility shims
+                r_partial: ind.result ? ind.result.primary_r : null,
+                resolution: ind.resolution_id || 'r0',
+                notes: ind.result ? ind.result.conclusion : (ind.metric_definition ? ind.metric_definition.description : ''),
+            }));
     }
 
     function humanizeKey(key) {
@@ -1211,6 +1225,46 @@ const JarvisUI = (() => {
                 ${isExpanded ? renderSignalDetail(sig) : ''}
             </div>`;
         }).join('');
+    }
+
+    function renderInteractionsList() {
+        const derived = v2DerivedExperiments || [];
+        if (!derived.length) return '';
+
+        // Sort by |r| descending
+        const sorted = [...derived].sort((a, b) => Math.abs((b.result?.primary_r) || 0) - Math.abs((a.result?.primary_r) || 0));
+        const top = sorted.slice(0, 50);
+
+        const rows = top.map(d => {
+            const r = d.result?.primary_r;
+            const rSign = r != null ? (r >= 0 ? '+' : '') : '';
+            const rDisplay = r != null ? `${rSign}${r.toFixed(3)}` : '';
+            const rColor = r != null ? (r >= 0 ? '#22d3ee' : '#f87171') : 'var(--j-muted)';
+            const strength = d.result?.strength_label || '';
+            const components = d.component_keys || [];
+            const compA = components[0] || '?';
+            const compB = components[1] || '?';
+            const labelA = humanizeKey(compA);
+            const labelB = humanizeKey(compB);
+            const strengthColor = strength === 'strong' ? '#22c55e' : strength === 'moderate' ? '#f59e0b' : strength === 'weak' ? '#94a3b8' : '#475569';
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px">
+                <span style="color:#a78bfa;min-width:12px">&times;</span>
+                <span style="flex:1;color:#cbd5e1" title="${d.key}">${labelA} <span style="color:#64748b">&times;</span> ${labelB}</span>
+                <span style="font-family:'SF Mono',monospace;font-size:10px;color:${rColor};white-space:nowrap">r=${rDisplay}</span>
+                <span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,0.06);color:${strengthColor}">${strength}</span>
+            </div>`;
+        }).join('');
+
+        return `<div style="margin-top:14px;border-top:1px solid #1e293b;padding-top:10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span style="font-size:12px;font-weight:600;color:#a78bfa">Interaction Experiments</span>
+                <span style="font-size:10px;color:#64748b">(${derived.length} total, top ${top.length} by |r|)</span>
+            </div>
+            <div style="font-size:10px;color:#64748b;margin-bottom:6px">Derived relationships between base indicators. These are not standalone signals.</div>
+            <div style="max-height:300px;overflow-y:auto;border:1px solid #1e293b;border-radius:6px;background:rgba(15,23,42,0.5)">
+                ${rows}
+            </div>
+        </div>`;
     }
 
     function applyMergeThreshold(signals, threshold) {
@@ -1564,12 +1618,14 @@ const JarvisUI = (() => {
 
         const coreKeys = new Set(['views', 'keep', 'retention']);
 
-        // All graph nodes from v2Graph, normalized for D3
-        let allNodes = v2Graph.nodes.map(n => ({
-            ...n,
-            r_partial: n.r_partial,
-            _clusterCount: 1,
-        }));
+        // All graph nodes from v2Graph, normalized for D3 — exclude composites
+        let allNodes = v2Graph.nodes
+            .filter(n => !isCompositeKeyUI(n.key))
+            .map(n => ({
+                ...n,
+                r_partial: n.r_partial,
+                _clusterCount: 1,
+            }));
 
         // Apply graphFilter
         let candidates = allNodes.filter(n => !coreKeys.has(n.key));
@@ -1585,6 +1641,18 @@ const JarvisUI = (() => {
         // Edges from v2Graph — only include edges where both endpoints are in the visible node set
         const links = (v2Graph.edges || []).filter(e => nodeKeySet.has(e.from) && nodeKeySet.has(e.to))
             .map(e => ({ source: e.from, target: e.to, r: Math.abs(e.r || 0), peer: false }));
+
+        // Derived interaction edges — show as peer-style dashed edges between component nodes
+        (v2Graph.derived_edges || []).forEach(de => {
+            if (nodeKeySet.has(de.from) && nodeKeySet.has(de.to)) {
+                links.push({
+                    source: de.from, target: de.to,
+                    r: Math.abs(de.interaction_r || 0),
+                    peer: false, interaction: true,
+                    interaction_key: de.interaction_key,
+                });
+            }
+        });
 
         // Core chain: keep→views, retention→views (always add if both visible)
         const hasViews = nodeKeySet.has('views');
@@ -1655,19 +1723,23 @@ const JarvisUI = (() => {
             .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x).attr('y2', d => d.target.y)
             .attr('stroke', d => {
+                if (d.interaction) return '#a78bfa';
                 if (d.peer) return 'rgba(255,255,255,0.15)';
                 return nodeColor(d.source);
             })
             .attr('stroke-opacity', d => {
+                if (d.interaction) { const absR = Math.abs(d.r || 0); return Math.min(0.1 + absR * 0.3, 0.4); }
                 if (d.peer) return 0.04;
                 const absR = Math.abs(d.r || 0);
                 return Math.min(0.08 + absR * 0.4, 0.55);
             })
             .attr('stroke-width', d => {
+                if (d.interaction) return Math.min(0.5 + Math.abs(d.r || 0) * 1.5, 2);
                 if (d.peer) return 0.5;
                 return Math.min(0.5 + Math.abs(d.r || 0) * 2.0, 3);
             })
             .attr('stroke-dasharray', d => {
+                if (d.interaction) return '3,3';
                 if (d.peer) return '2,4';
                 const tk = typeof d.target === 'object' ? d.target.key : d.target;
                 if (tk === 'keep' || tk === 'retention') return '4,3';

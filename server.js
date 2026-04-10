@@ -3764,6 +3764,14 @@ Respond ONLY as valid JSON (no markdown):
         } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
         return;
     }
+    if (pathname === '/api/jarvis/v2/derived-experiments' && req.method === 'GET') {
+        try {
+            const data = await jarvisStore.loadJson('derived_experiments', []);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+        return;
+    }
     if (pathname === '/api/jarvis/v2/experiments' && req.method === 'GET') {
         try {
             const data = await jarvisStore.loadJson('experiments_log', []);

@@ -23,7 +23,7 @@
       "connections": [
         "views"
       ],
-      "description": "Retention at 10% into the video \u2014 measures hook strength. How many people are still watching 1/10 of the way through?",
+      "description": "Retention at 10% into the video — measures hook strength. How many people are still watching 1/10 of the way through?",
       "experiment_id": "exp_hook_retention_pct_20260409_174639",
       "status": "discovery",
       "strength_label": "none"
@@ -39,7 +39,7 @@
       "connections": [
         "views"
       ],
-      "description": "Average retention in the final 5% of the video \u2014 end-completion signal. Videos that hold viewers to the very end.",
+      "description": "Average retention in the final 5% of the video — end-completion signal. Videos that hold viewers to the very end.",
       "experiment_id": "exp_final_5pct_retention_20260409_174639",
       "status": "discovery",
       "strength_label": "moderate"
@@ -55,7 +55,7 @@
       "connections": [
         "views"
       ],
-      "description": "Largest single-step drop in retention anywhere in the video \u2014 the worst moment of viewer loss.",
+      "description": "Largest single-step drop in retention anywhere in the video — the worst moment of viewer loss.",
       "experiment_id": "exp_mid_video_cliff_20260409_174639",
       "status": "discovery",
       "strength_label": "weak"
@@ -71,7 +71,7 @@
       "connections": [
         "views"
       ],
-      "description": "Shannon entropy of the retention curve \u2014 information richness. High entropy means many peaks/valleys vs monotonic decline.",
+      "description": "Shannon entropy of the retention curve — information richness. High entropy means many peaks/valleys vs monotonic decline.",
       "experiment_id": "exp_retention_entropy_20260409_174639",
       "status": "discovery",
       "strength_label": "moderate"
@@ -525,50 +525,50 @@
       "strength_label": "moderate"
     },
     {
-      "key": "final_5pct_retention_x_retention_entropy",
-      "label": "Final 5Pct Retention X Retention Entropy",
+      "key": "retention_pct_75",
+      "label": "Retention Pct 75",
       "type": "indicator",
       "layer": "post",
       "depth": 1,
-      "r_partial": 0.4733002572919024,
-      "resolution_id": "r0",
+      "r_partial": 0.3658321542237083,
+      "resolution_id": "r_pct_75_75",
       "connections": [
         "views"
       ],
-      "description": "Interaction: final_5pct_retention multiplied by retention_entropy.",
-      "experiment_id": "exp_final_5pct_retention_x_retention_entropy_20260409_223607",
+      "description": "Retention at 75% into the video.",
+      "experiment_id": "exp_retention_pct_75_20260410_021338",
       "status": "discovery",
       "strength_label": "moderate"
     },
     {
-      "key": "hook_drop_rate_x_final_5pct_retention",
-      "label": "Hook Drop Rate X Final 5Pct Retention",
+      "key": "retention_pct_85",
+      "label": "Retention Pct 85",
       "type": "indicator",
       "layer": "post",
       "depth": 1,
-      "r_partial": -0.4732568357942079,
-      "resolution_id": "r0",
+      "r_partial": 0.5043421605393453,
+      "resolution_id": "r_pct_85_85",
       "connections": [
         "views"
       ],
-      "description": "Interaction: hook_drop_rate multiplied by final_5pct_retention.",
-      "experiment_id": "exp_hook_drop_rate_x_final_5pct_retention_20260409_223607",
+      "description": "Retention at 85% into the video.",
+      "experiment_id": "exp_retention_pct_85_20260410024726.",
       "status": "discovery",
-      "strength_label": "moderate"
+      "strength_label": "strong"
     },
     {
-      "key": "retention_slope_0_25_x_retention_slope_75_100",
-      "label": "Retention Slope 0 25 X Retention Slope 75 100",
+      "key": "retention_mean_0_5",
+      "label": "Retention Mean 0 5",
       "type": "indicator",
       "layer": "post",
       "depth": 1,
-      "r_partial": -0.086159300269017,
-      "resolution_id": "r0",
+      "r_partial": 0.07686326589491645,
+      "resolution_id": "r_hook",
       "connections": [
         "views"
       ],
-      "description": "Interaction: retention_slope_0_25 multiplied by retention_slope_75_100.",
-      "experiment_id": "exp_retention_slope_0_25_x_retention_slope_75_100_20260409_223607",
+      "description": "Mean retention in the 0-5% window.",
+      "experiment_id": "exp_retention_mean_0_5_20260410024726.",
       "status": "discovery",
       "strength_label": "none"
     },
@@ -578,13 +578,13 @@
       "type": "indicator",
       "layer": "pre",
       "depth": 1,
-      "r_partial": 0.26394872328199426,
+      "r_partial": 0.2639487232819939,
       "resolution_id": "r0",
       "connections": [
         "views"
       ],
-      "description": "Total word count of the video transcript \u2014 proxy for how much was said.",
-      "experiment_id": "exp_transcript_word_count_20260410_002652",
+      "description": "transcript word count",
+      "experiment_id": "exp_transcript_word_count_20260410034427.",
       "status": "discovery",
       "strength_label": "weak"
     },
@@ -594,13 +594,13 @@
       "type": "indicator",
       "layer": "pre",
       "depth": 1,
-      "r_partial": 0.03564594925379227,
+      "r_partial": 0.03564594925379229,
       "resolution_id": "r0",
       "connections": [
         "views"
       ],
-      "description": "Number of questions asked in the transcript \u2014 curiosity-gap and engagement signal.",
-      "experiment_id": "exp_question_count_20260410_002652",
+      "description": "question count",
+      "experiment_id": "exp_question_count_20260410034427.",
       "status": "discovery",
       "strength_label": "none"
     },
@@ -615,8 +615,8 @@
       "connections": [
         "views"
       ],
-      "description": "Words spoken per second \u2014 pacing signal. Fast = dense info, slow = deliberate.",
-      "experiment_id": "exp_speech_rate_wps_20260410_002652",
+      "description": "speech rate wps",
+      "experiment_id": "exp_speech_rate_wps_20260410034427.",
       "status": "discovery",
       "strength_label": "none"
     },
@@ -626,13 +626,13 @@
       "type": "indicator",
       "layer": "pre",
       "depth": 1,
-      "r_partial": 0.2557257793620241,
+      "r_partial": 0.255725779362024,
       "resolution_id": "r0",
       "connections": [
         "views"
       ],
-      "description": "Total character count of the transcript \u2014 raw verbosity signal.",
-      "experiment_id": "exp_transcript_char_count_20260410_002652",
+      "description": "transcript char count",
+      "experiment_id": "exp_transcript_char_count_20260410034427.",
       "status": "discovery",
       "strength_label": "weak"
     },
@@ -642,13 +642,2861 @@
       "type": "indicator",
       "layer": "pre",
       "depth": 1,
-      "r_partial": -0.08513870226173509,
+      "r_partial": -0.08513870226173505,
       "resolution_id": "r0",
       "connections": [
         "views"
       ],
-      "description": "Average word length in the transcript \u2014 vocabulary complexity proxy.",
-      "experiment_id": "exp_avg_word_length_20260410_002652",
+      "description": "avg word length",
+      "experiment_id": "exp_avg_word_length_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "unique_word_ratio",
+      "label": "Unique Word Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.20320144654621736,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "unique word ratio",
+      "experiment_id": "exp_unique_word_ratio_20260410034427.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "sentence_count",
+      "label": "Sentence Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.09208029530926626,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "sentence count",
+      "experiment_id": "exp_sentence_count_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "exclamation_count",
+      "label": "Exclamation Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.1424297272074225,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "exclamation count",
+      "experiment_id": "exp_exclamation_count_20260410034427.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_mean_0_10",
+      "label": "Retention Mean 0 10",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.0168069204822241,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 0-10% window.",
+      "experiment_id": "exp_retention_mean_0_10_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_mean_5_15",
+      "label": "Retention Mean 5 15",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.044392409315624465,
+      "resolution_id": "r_pct_5_15",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 5-15% window.",
+      "experiment_id": "exp_retention_mean_5_15_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "uppercase_word_ratio",
+      "label": "Uppercase Word Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.03838969804530345,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "uppercase word ratio",
+      "experiment_id": "exp_uppercase_word_ratio_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_question_count",
+      "label": "Hook Question Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.12601121670279633,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "hook question count",
+      "experiment_id": "exp_hook_question_count_20260410034427.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hook_word_ratio",
+      "label": "Hook Word Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.26930848822621745,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "hook word ratio",
+      "experiment_id": "exp_hook_word_ratio_20260410034427.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hook_char_count",
+      "label": "Hook Char Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.03350219751735534,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "hook char count",
+      "experiment_id": "exp_hook_char_count_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "transcript_number_count",
+      "label": "Transcript Number Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.09169510477949207,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "transcript number count",
+      "experiment_id": "exp_transcript_number_count_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "face_frame_pct",
+      "label": "Face Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.08467752640362441,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "face frame pct",
+      "experiment_id": "exp_face_frame_pct_20260410034427.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "text_overlay_frame_pct",
+      "label": "Text Overlay Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.07602954580164065,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "text overlay frame pct",
+      "experiment_id": "exp_text_overlay_frame_pct_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "scene_change_count",
+      "label": "Scene Change Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.2266730070364844,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "scene change count",
+      "experiment_id": "exp_scene_change_count_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_mean_10_20",
+      "label": "Retention Mean 10 20",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.02192761162901878,
+      "resolution_id": "r_pct_10_20",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 10-20% window.",
+      "experiment_id": "exp_retention_mean_10_20_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_mean_20_30",
+      "label": "Retention Mean 20 30",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.06716820335811714,
+      "resolution_id": "r_pct_20_30",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 20-30% window.",
+      "experiment_id": "exp_retention_mean_20_30_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "scene_change_rate",
+      "label": "Scene Change Rate",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.13389118956034934,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "scene change rate",
+      "experiment_id": "exp_scene_change_rate_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "unique_scene_ratio",
+      "label": "Unique Scene Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.14958911561403815,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "unique scene ratio",
+      "experiment_id": "exp_unique_scene_ratio_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "visual_technique_count_mean",
+      "label": "Visual Technique Count Mean",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.033297187466797475,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "visual technique count mean",
+      "experiment_id": "exp_visual_technique_count_mean_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "close_up_frame_pct",
+      "label": "Close Up Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.14002305656384814,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "close up frame pct",
+      "experiment_id": "exp_close_up_frame_pct_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hand_presence_frame_pct",
+      "label": "Hand Presence Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.12709048532598824,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "hand presence frame pct",
+      "experiment_id": "exp_hand_presence_frame_pct_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "motion_word_frame_pct",
+      "label": "Motion Word Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.09186028597945707,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "motion word frame pct",
+      "experiment_id": "exp_motion_word_frame_pct_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_duration_pct",
+      "label": "Hook Duration Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.02639117732347095,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "hook duration pct",
+      "experiment_id": "exp_hook_duration_pct_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "avg_segment_duration_s",
+      "label": "Avg Segment Duration S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.1634398018443738,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "avg segment duration s",
+      "experiment_id": "exp_avg_segment_duration_s_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_mean_30_40",
+      "label": "Retention Mean 30 40",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.11773116413793978,
+      "resolution_id": "r_pct_30_40",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 30-40% window.",
+      "experiment_id": "exp_retention_mean_30_40_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_mean_40_50",
+      "label": "Retention Mean 40 50",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.15556080188854432,
+      "resolution_id": "r_pct_40_50",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 40-50% window.",
+      "experiment_id": "exp_retention_mean_40_50_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "longest_segment_duration_s",
+      "label": "Longest Segment Duration S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.14722497459929054,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "longest segment duration s",
+      "experiment_id": "exp_longest_segment_duration_s_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "shortest_segment_duration_s",
+      "label": "Shortest Segment Duration S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.09510733778927166,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "shortest segment duration s",
+      "experiment_id": "exp_shortest_segment_duration_s_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_position_s",
+      "label": "Hook Position S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "hook position s",
+      "experiment_id": "exp_hook_position_s_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "has_climax_segment",
+      "label": "Has Climax Segment",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.05117331661365707,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "has climax segment",
+      "experiment_id": "exp_has_climax_segment_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "duration_s",
+      "label": "Duration S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.22042658081867852,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "duration s",
+      "experiment_id": "exp_duration_s_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "title_char_count",
+      "label": "Title Char Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.014964880792313437,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "title char count",
+      "experiment_id": "exp_title_char_count_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_mean_50_60",
+      "label": "Retention Mean 50 60",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.18178708399664256,
+      "resolution_id": "r_pct_50_60",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 50-60% window.",
+      "experiment_id": "exp_retention_mean_50_60_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_mean_60_70",
+      "label": "Retention Mean 60 70",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.19631562060966018,
+      "resolution_id": "r_pct_60_70",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 60-70% window.",
+      "experiment_id": "exp_retention_mean_60_70_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "title_word_count",
+      "label": "Title Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.05256746506532953,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "title word count",
+      "experiment_id": "exp_title_word_count_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_question_flag",
+      "label": "Title Question Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.04584690934986323,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "title question flag",
+      "experiment_id": "exp_title_question_flag_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_exclamation_flag",
+      "label": "Title Exclamation Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.0025716179174021495,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "title exclamation flag",
+      "experiment_id": "exp_title_exclamation_flag_20260410034428.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_number_flag",
+      "label": "Title Number Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.17687402188857684,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "title number flag",
+      "experiment_id": "exp_title_number_flag_20260410034428.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_mean_70_80",
+      "label": "Retention Mean 70 80",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.3031778277442427,
+      "resolution_id": "r_pct_70_80",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 70-80% window.",
+      "experiment_id": "exp_retention_mean_70_80_20260410034428.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_mean_80_90",
+      "label": "Retention Mean 80 90",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.5046946829366817,
+      "resolution_id": "r_pct_80_90",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 80-90% window.",
+      "experiment_id": "exp_retention_mean_80_90_20260410034428.",
+      "status": "discovery",
+      "strength_label": "strong"
+    },
+    {
+      "key": "retention_mean_90_100",
+      "label": "Retention Mean 90 100",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.5028065672441739,
+      "resolution_id": "r_pct_90_100",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 90-100% window.",
+      "experiment_id": "exp_retention_mean_90_100_20260410034428.",
+      "status": "discovery",
+      "strength_label": "strong"
+    },
+    {
+      "key": "retention_mean_95_100",
+      "label": "Retention Mean 95 100",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.4715732924173847,
+      "resolution_id": "r_last5pct",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean retention in the 95-100% window.",
+      "experiment_id": "exp_retention_mean_95_100_20260410034428.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_slope_0_5",
+      "label": "Retention Slope 0 5",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.4705965403235691,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 0-5% window.",
+      "experiment_id": "exp_retention_slope_0_5_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_slope_0_10",
+      "label": "Retention Slope 0 10",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.401929572028473,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 0-10% window.",
+      "experiment_id": "exp_retention_slope_0_10_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_slope_5_15",
+      "label": "Retention Slope 5 15",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.0010991019854728128,
+      "resolution_id": "r_pct_5_15",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 5-15% window.",
+      "experiment_id": "exp_retention_slope_5_15_20260410034429.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_slope_10_20",
+      "label": "Retention Slope 10 20",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.29342404300603675,
+      "resolution_id": "r_pct_10_20",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 10-20% window.",
+      "experiment_id": "exp_retention_slope_10_20_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_slope_20_30",
+      "label": "Retention Slope 20 30",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.3991752884580995,
+      "resolution_id": "r_pct_20_30",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 20-30% window.",
+      "experiment_id": "exp_retention_slope_20_30_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_slope_30_40",
+      "label": "Retention Slope 30 40",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.3363908512903841,
+      "resolution_id": "r_pct_30_40",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 30-40% window.",
+      "experiment_id": "exp_retention_slope_30_40_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_slope_40_50",
+      "label": "Retention Slope 40 50",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.36364893702711376,
+      "resolution_id": "r_pct_40_50",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 40-50% window.",
+      "experiment_id": "exp_retention_slope_40_50_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_slope_50_60",
+      "label": "Retention Slope 50 60",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.1819196410364562,
+      "resolution_id": "r_pct_50_60",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 50-60% window.",
+      "experiment_id": "exp_retention_slope_50_60_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_slope_60_70",
+      "label": "Retention Slope 60 70",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.11061919271018696,
+      "resolution_id": "r_pct_60_70",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 60-70% window.",
+      "experiment_id": "exp_retention_slope_60_70_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_slope_70_80",
+      "label": "Retention Slope 70 80",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.10390816558515686,
+      "resolution_id": "r_pct_70_80",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 70-80% window.",
+      "experiment_id": "exp_retention_slope_70_80_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_slope_80_90",
+      "label": "Retention Slope 80 90",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.06735964310480956,
+      "resolution_id": "r_pct_80_90",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 80-90% window.",
+      "experiment_id": "exp_retention_slope_80_90_20260410034429.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_slope_90_100",
+      "label": "Retention Slope 90 100",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.0354280379436733,
+      "resolution_id": "r_pct_90_100",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 90-100% window.",
+      "experiment_id": "exp_retention_slope_90_100_20260410034429.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_slope_95_100",
+      "label": "Retention Slope 95 100",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.00016894735928470452,
+      "resolution_id": "r_last5pct",
+      "connections": [
+        "views"
+      ],
+      "description": "Linear regression slope of retention in 95-100% window.",
+      "experiment_id": "exp_retention_slope_95_100_20260410034429.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_volatility_0_5",
+      "label": "Retention Volatility 0 5",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.4917672898909969,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 0-5% window.",
+      "experiment_id": "exp_retention_volatility_0_5_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_volatility_0_10",
+      "label": "Retention Volatility 0 10",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.4432018306348659,
+      "resolution_id": "r_hook",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 0-10% window.",
+      "experiment_id": "exp_retention_volatility_0_10_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_volatility_5_15",
+      "label": "Retention Volatility 5 15",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.010619601948787598,
+      "resolution_id": "r_pct_5_15",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 5-15% window.",
+      "experiment_id": "exp_retention_volatility_5_15_20260410034429.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_volatility_10_20",
+      "label": "Retention Volatility 10 20",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.2937402554064877,
+      "resolution_id": "r_pct_10_20",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 10-20% window.",
+      "experiment_id": "exp_retention_volatility_10_20_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_volatility_20_30",
+      "label": "Retention Volatility 20 30",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.3972305293049845,
+      "resolution_id": "r_pct_20_30",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 20-30% window.",
+      "experiment_id": "exp_retention_volatility_20_30_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_volatility_30_40",
+      "label": "Retention Volatility 30 40",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.3349735843132986,
+      "resolution_id": "r_pct_30_40",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 30-40% window.",
+      "experiment_id": "exp_retention_volatility_30_40_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_volatility_40_50",
+      "label": "Retention Volatility 40 50",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.3597553387114376,
+      "resolution_id": "r_pct_40_50",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 40-50% window.",
+      "experiment_id": "exp_retention_volatility_40_50_20260410034429.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "retention_volatility_50_60",
+      "label": "Retention Volatility 50 60",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.18080830924175512,
+      "resolution_id": "r_pct_50_60",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 50-60% window.",
+      "experiment_id": "exp_retention_volatility_50_60_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_volatility_60_70",
+      "label": "Retention Volatility 60 70",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.11106314833218274,
+      "resolution_id": "r_pct_60_70",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 60-70% window.",
+      "experiment_id": "exp_retention_volatility_60_70_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_volatility_70_80",
+      "label": "Retention Volatility 70 80",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.10295471291176249,
+      "resolution_id": "r_pct_70_80",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 70-80% window.",
+      "experiment_id": "exp_retention_volatility_70_80_20260410034429.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_volatility_80_90",
+      "label": "Retention Volatility 80 90",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.0654581987094523,
+      "resolution_id": "r_pct_80_90",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 80-90% window.",
+      "experiment_id": "exp_retention_volatility_80_90_20260410034430.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "opening_speech_rate_3s",
+      "label": "Opening Speech Rate 3S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.03106493480564338,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Words per second in the first 3 seconds. Optimal ~7.5 words in first 3s.",
+      "experiment_id": "exp_opening_speech_rate_3s_20260410_065006",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "opening_speech_rate_5s",
+      "label": "Opening Speech Rate 5S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.04417983013553005,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Words per second in the first 5 seconds — wider hook window.",
+      "experiment_id": "exp_opening_speech_rate_5s_20260410_065006",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "closing_speech_rate_5s",
+      "label": "Closing Speech Rate 5S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.02064777357597314,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Words per second in the final 5 seconds — deliberate delivery at climax.",
+      "experiment_id": "exp_closing_speech_rate_5s_20260410_065006",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "speech_rate_q1",
+      "label": "Speech Rate Q1",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.11206118859160402,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Words per second in the first quarter of the video.",
+      "experiment_id": "exp_speech_rate_q1_20260410_065006",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "speech_rate_q4",
+      "label": "Speech Rate Q4",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.07159446354109322,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Words per second in the final quarter of the video.",
+      "experiment_id": "exp_speech_rate_q4_20260410_065006",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "speech_rate_ratio_q4_q1",
+      "label": "Speech Rate Ratio Q4 Q1",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.025907180309537203,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Ending pace / opening pace. <1 means slowing down (good for climax).",
+      "experiment_id": "exp_speech_rate_ratio_q4_q1_20260410_065007",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "speech_acceleration",
+      "label": "Speech Acceleration",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.053323934265937914,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Slope of speech rate over video — positive=speeding up, negative=slowing down.",
+      "experiment_id": "exp_speech_acceleration_20260410_065007",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "max_silence_gap_s",
+      "label": "Max Silence Gap S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.008241332599638815,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Longest gap between consecutive words. Gaps >1.5s predict retention drops r=-0.73.",
+      "experiment_id": "exp_max_silence_gap_s_20260410_065007",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "silence_gap_count",
+      "label": "Silence Gap Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.023802100125982443,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of inter-word gaps exceeding 1 second — dead air frequency.",
+      "experiment_id": "exp_silence_gap_count_20260410_065007",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "silence_total_pct",
+      "label": "Silence Total Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.06004735822555717,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Total silence time (gaps >0.5s) as fraction of video duration.",
+      "experiment_id": "exp_silence_total_pct_20260410_065007",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "opening_word_latency_s",
+      "label": "Opening Word Latency S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.12392969218699505,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Seconds before the first word is spoken. Immediate speech = strong hook.",
+      "experiment_id": "exp_opening_word_latency_s_20260410_065008",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "peak_speech_rate_3s",
+      "label": "Peak Speech Rate 3S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.1323424740267701,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Maximum words/sec in any 3-second sliding window — burst intensity.",
+      "experiment_id": "exp_peak_speech_rate_3s_20260410_065008",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "speech_tempo_range",
+      "label": "Speech Tempo Range",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.13251965912422412,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Max speech rate minus min speech rate across 5s windows — dynamic range.",
+      "experiment_id": "exp_speech_tempo_range_20260410_065008",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "avg_word_gap_s",
+      "label": "Avg Word Gap S",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.07474966638062093,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Mean time between consecutive words — overall delivery pace.",
+      "experiment_id": "exp_avg_word_gap_s_20260410_065008",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "word_density_variance",
+      "label": "Word Density Variance",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.05335896261276436,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Variance in words-per-second across 5s windows — pacing consistency.",
+      "experiment_id": "exp_word_density_variance_20260410_065009",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "sensory_word_density",
+      "label": "Sensory Word Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.1069572863554209,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of transcript words that are sensory/body words. Strongest positive language signal.",
+      "experiment_id": "exp_sensory_word_density_20260410_065009",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "technical_word_density",
+      "label": "Technical Word Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.1162615908854105,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of transcript words that are technical/material words. Strongest negative language signal.",
+      "experiment_id": "exp_technical_word_density_20260410_065009",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "sensory_technical_ratio",
+      "label": "Sensory Technical Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.12614406110678117,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Ratio of sensory words to technical words. Higher = more engaging language.",
+      "experiment_id": "exp_sensory_technical_ratio_20260410_065009",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hook_sensory_word_count",
+      "label": "Hook Sensory Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.002330175139757477,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of sensory/body words in the hook segment.",
+      "experiment_id": "exp_hook_sensory_word_count_20260410_065010",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "body_sensation_word_pct",
+      "label": "Body Sensation Word Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.06385403052982366,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Percentage of words related to body sensations.",
+      "experiment_id": "exp_body_sensation_word_pct_20260410_065010",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "pivot_word_count",
+      "label": "Pivot Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.24124891275806962,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Count of pivot/transition words (but, however, wait, instead, etc). r=+0.26 vs keep.",
+      "experiment_id": "exp_pivot_word_count_20260410_065010",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "pivot_word_density",
+      "label": "Pivot Word Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.15377637530476818,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Pivot words per 100 transcript words — normalized for length.",
+      "experiment_id": "exp_pivot_word_density_20260410_065010",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hook_pivot_word_flag",
+      "label": "Hook Pivot Word Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.09980849053555521,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the hook contains at least one pivot word (1=yes, 0=no).",
+      "experiment_id": "exp_hook_pivot_word_flag_20260410_065010",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "short_word_ratio",
+      "label": "Short Word Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.10115550871466314,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of words with 1-3 characters — simplicity signal. Vocab universality r=+0.323.",
+      "experiment_id": "exp_short_word_ratio_20260410_065011",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "long_word_ratio",
+      "label": "Long Word Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.08932826154323918,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of words with 8+ characters — complexity/jargon signal.",
+      "experiment_id": "exp_long_word_ratio_20260410_065011",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hapax_legomena_ratio",
+      "label": "Hapax Legomena Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.18453520835473142,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of words appearing exactly once — vocabulary uniqueness.",
+      "experiment_id": "exp_hapax_legomena_ratio_20260410_065011",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "first_person_ratio",
+      "label": "First Person Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.030634593740335784,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of first-person pronouns (I, me, my, mine, myself).",
+      "experiment_id": "exp_first_person_ratio_20260410_065011",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "second_person_ratio",
+      "label": "Second Person Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.13789567312534906,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of second-person pronouns (you, your, yours). Research shows 'you' may hurt keep.",
+      "experiment_id": "exp_second_person_ratio_20260410_065011",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "action_verb_density",
+      "label": "Action Verb Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.005757604614768886,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of words that are action/physical verbs.",
+      "experiment_id": "exp_action_verb_density_20260410_065012",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "superlative_count",
+      "label": "Superlative Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.051615728516502875,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of superlative words — intensity signal.",
+      "experiment_id": "exp_superlative_count_20260410_065012",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "comparison_word_count",
+      "label": "Comparison Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.15293075604117992,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Count of comparison words (vs, than, better, worse, more, less).",
+      "experiment_id": "exp_comparison_word_count_20260410_065012",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hook_speech_rate_wps",
+      "label": "Hook Speech Rate Wps",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.06682011986175147,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Words per second within the hook segment — hook delivery pace.",
+      "experiment_id": "exp_hook_speech_rate_wps_20260410_065012",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_unique_word_ratio",
+      "label": "Hook Unique Word Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.09521605127661638,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Lexical diversity within the hook segment.",
+      "experiment_id": "exp_hook_unique_word_ratio_20260410_065013",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_action_verb_count",
+      "label": "Hook Action Verb Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.055528975022435305,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of action verbs in the hook — immediate activity signal.",
+      "experiment_id": "exp_hook_action_verb_count_20260410_065013",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_sentence_count",
+      "label": "Hook Sentence Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.001939193182460342,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of sentences in the hook segment.",
+      "experiment_id": "exp_hook_sentence_count_20260410_065013",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_avg_word_length",
+      "label": "Hook Avg Word Length",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.010767465660018448,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Average word length in hook — vocabulary complexity.",
+      "experiment_id": "exp_hook_avg_word_length_20260410_065013",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_number_count",
+      "label": "Hook Number Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.09464213346345905,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of numeric tokens in the hook — specificity in opening.",
+      "experiment_id": "exp_hook_number_count_20260410_065013",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "segment_duration_variance",
+      "label": "Segment Duration Variance",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.13784645228475548,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Variance in segment durations — pacing uniformity.",
+      "experiment_id": "exp_segment_duration_variance_20260410_065014",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "segment_count_per_minute",
+      "label": "Segment Count Per Minute",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.15293433064396958,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Segments per minute — structural density normalized by length.",
+      "experiment_id": "exp_segment_count_per_minute_20260410_065014",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "has_setup_segment",
+      "label": "Has Setup Segment",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.08810049152396077,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether AI identified a Setup segment (1=yes, 0=no).",
+      "experiment_id": "exp_has_setup_segment_20260410_065014",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "has_conclusion_segment",
+      "label": "Has Conclusion Segment",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.035682643678548426,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether AI identified a Conclusion segment (1=yes, 0=no).",
+      "experiment_id": "exp_has_conclusion_segment_20260410_065014",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "segment_type_count",
+      "label": "Segment Type Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.12858994875115864,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of unique segment labels — narrative complexity.",
+      "experiment_id": "exp_segment_type_count_20260410_065014",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "narrative_arc_completeness",
+      "label": "Narrative Arc Completeness",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.05730155873372782,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Count of canonical arc elements present (hook, setup, main, climax, conclusion). 3/4=13M avg.",
+      "experiment_id": "exp_narrative_arc_completeness_20260410_065015",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "climax_late_flag",
+      "label": "Climax Late Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.05732835149069151,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether climax starts in the last 30% of the video (1=yes, 0=no).",
+      "experiment_id": "exp_climax_late_flag_20260410_065015",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "last_segment_duration_pct",
+      "label": "Last Segment Duration Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.07765827438655233,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Final segment as percentage of total duration — ending weight.",
+      "experiment_id": "exp_last_segment_duration_pct_20260410_065015",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "first_segment_duration_pct",
+      "label": "First Segment Duration Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.15620910307044927,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "First segment as percentage of total duration — opening weight.",
+      "experiment_id": "exp_first_segment_duration_pct_20260410_065015",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "segment_length_ratio_max_min",
+      "label": "Segment Length Ratio Max Min",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.04044902623452615,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Longest segment / shortest — pacing imbalance.",
+      "experiment_id": "exp_segment_length_ratio_max_min_20260410_065016",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "body_segment_count",
+      "label": "Body Segment Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.12455599930904628,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Segments that are not Hook or Conclusion — middle content density.",
+      "experiment_id": "exp_body_segment_count_20260410_065016",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hook_conclusion_combined_pct",
+      "label": "Hook Conclusion Combined Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.059804536141123625,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Hook and conclusion combined as percentage of total duration.",
+      "experiment_id": "exp_hook_conclusion_combined_pct_20260410_065016",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_all_caps_word_count",
+      "label": "Title All Caps Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.02419269317324612,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of ALL CAPS words in the title.",
+      "experiment_id": "exp_title_all_caps_word_count_20260410_065016",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_emoji_flag",
+      "label": "Title Emoji Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.044388166061686954,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the title contains any emoji character (1=yes, 0=no).",
+      "experiment_id": "exp_title_emoji_flag_20260410_065016",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_contains_making",
+      "label": "Title Contains Making",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.08976263082486753,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the title contains 'making' or 'made'. Strongest concept keyword ($24M avg).",
+      "experiment_id": "exp_title_contains_making_20260410_065017",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_avg_word_length",
+      "label": "Title Avg Word Length",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.14470279066893438,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Average word length in the title.",
+      "experiment_id": "exp_title_avg_word_length_20260410_065017",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "title_starts_with_action",
+      "label": "Title Starts With Action",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.185971472133698,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the title starts with an action/gerund word (1=yes, 0=no).",
+      "experiment_id": "exp_title_starts_with_action_20260410_065017",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "duration_optimal_flag",
+      "label": "Duration Optimal Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.17625488860508445,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether duration falls in the 40-55 second sweet spot.",
+      "experiment_id": "exp_duration_optimal_flag_20260410_065017",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "duration_sweetspot_distance",
+      "label": "Duration Sweetspot Distance",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.063339056676578,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Absolute seconds away from 52s sweet spot. Lower = better.",
+      "experiment_id": "exp_duration_sweetspot_distance_20260410_065018",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "description_word_count",
+      "label": "Description Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.06475973308093254,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Word count of video description.",
+      "experiment_id": "exp_description_word_count_20260410_065018",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "is_vertical",
+      "label": "Is Vertical",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": null,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the video is vertical format (1=yes, 0=no).",
+      "experiment_id": "exp_is_vertical_20260410_065018",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "upload_month",
+      "label": "Upload Month",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.06649045321248853,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Month of upload (1-12) — seasonal effects.",
+      "experiment_id": "exp_upload_month_20260410_065018",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "opening_frame_has_text",
+      "label": "Opening Frame Has Text",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.020674565558897767,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the first frame has a text overlay (1=yes, 0=no).",
+      "experiment_id": "exp_opening_frame_has_text_20260410_065019",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "opening_frame_has_face",
+      "label": "Opening Frame Has Face",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.033932628415768565,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the first frame shows a face (1=yes, 0=no).",
+      "experiment_id": "exp_opening_frame_has_face_20260410_065019",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "action_frame_pct",
+      "label": "Action Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.14747975568023206,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Percentage of frames with action/physical activity. Action frames enriched 1.9x at peaks.",
+      "experiment_id": "exp_action_frame_pct_20260410_065019",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "workshop_frame_pct",
+      "label": "Workshop Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.11014048038023146,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Percentage of frames showing workshop/tools setting.",
+      "experiment_id": "exp_workshop_frame_pct_20260410_065019",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "outdoor_frame_pct",
+      "label": "Outdoor Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.04097024902122656,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Percentage of frames showing outdoor scenes. Outdoor 0.68x at peaks.",
+      "experiment_id": "exp_outdoor_frame_pct_20260410_065020",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "face_alone_pct",
+      "label": "Face Alone Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.07244016476740828,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Frames with face but NO action — talking head trap signal.",
+      "experiment_id": "exp_face_alone_pct_20260410_065020",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "face_with_action_pct",
+      "label": "Face With Action Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.07209690870069993,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Frames with BOTH face AND action — positive signal.",
+      "experiment_id": "exp_face_with_action_pct_20260410_065020",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "object_focus_pct",
+      "label": "Object Focus Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.08467752640362439,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Frames focused on objects rather than people.",
+      "experiment_id": "exp_object_focus_pct_20260410_065021",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "text_overlay_early_pct",
+      "label": "Text Overlay Early Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.11925436412563215,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Text overlay presence in first 25% of frames.",
+      "experiment_id": "exp_text_overlay_early_pct_20260410_065021",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "dramatic_frame_pct",
+      "label": "Dramatic Frame Pct",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.11090676969727878,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Frames with dramatic/intense descriptions. Dramatic enriched 1.8x at peaks.",
+      "experiment_id": "exp_dramatic_frame_pct_20260410_065021",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "idea_word_count",
+      "label": "Idea Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.002457225361140903,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Word count of the AI-generated video idea.",
+      "experiment_id": "exp_idea_word_count_20260410_065021",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "idea_char_count",
+      "label": "Idea Char Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.017071481162708943,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Character count of the video idea.",
+      "experiment_id": "exp_idea_char_count_20260410_065022",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "summary_word_count",
+      "label": "Summary Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.1328561216225163,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Word count of the AI-generated video summary.",
+      "experiment_id": "exp_summary_word_count_20260410_065022",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "idea_question_flag",
+      "label": "Idea Question Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": null,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the video idea contains a question mark (1=yes, 0=no).",
+      "experiment_id": "exp_idea_question_flag_20260410_065022",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "idea_number_flag",
+      "label": "Idea Number Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.07158483714883929,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the video idea contains a digit.",
+      "experiment_id": "exp_idea_number_flag_20260410_065022",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "idea_contains_making",
+      "label": "Idea Contains Making",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.04974679407296231,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the idea contains 'making'/'build' concept keywords.",
+      "experiment_id": "exp_idea_contains_making_20260410_065023",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "idea_contains_indestructible",
+      "label": "Idea Contains Indestructible",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.11529203541140844,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether the idea contains indestructible/unbreakable keywords.",
+      "experiment_id": "exp_idea_contains_indestructible_20260410_065023",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "tension_word_density",
+      "label": "Tension Word Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.03892416342649876,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Density of tension/conflict words (but, suddenly, impossible) per 100 words.",
+      "experiment_id": "exp_tension_word_density_20260410_065023",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "resolution_word_density",
+      "label": "Resolution Word Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.0977732879155535,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Density of resolution/payoff words (finally, turns out, worked) per 100 words.",
+      "experiment_id": "exp_resolution_word_density_20260410_065024",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "tension_resolution_ratio",
+      "label": "Tension Resolution Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.011128900575089834,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Ratio of tension to resolution words — narrative arc quality.",
+      "experiment_id": "exp_tension_resolution_ratio_20260410_065024",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "emotional_arc_swing",
+      "label": "Emotional Arc Swing",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.1518165617650365,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Max tension-resolution swing across transcript quarters — emotional range.",
+      "experiment_id": "exp_emotional_arc_swing_20260410_065024",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "hook_tension_density",
+      "label": "Hook Tension Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.061811129150322684,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Tension word density specifically in the hook — immediate conflict signal.",
+      "experiment_id": "exp_hook_tension_density_20260410_065024",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "repeated_phrase_count",
+      "label": "Repeated Phrase Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.216869804298255,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of bigrams repeated 3+ times — verbal callbacks and catchphrases.",
+      "experiment_id": "exp_repeated_phrase_count_20260410_065025",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "vocabulary_richness_yule_k",
+      "label": "Vocabulary Richness Yule K",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.03411038976375907,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Yule's K vocabulary richness measure. Lower = richer, more diverse vocabulary.",
+      "experiment_id": "exp_vocabulary_richness_yule_k_20260410_065025",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "question_early_ratio",
+      "label": "Question Early Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": null,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of questions appearing in first 25% of transcript — front-loaded curiosity.",
+      "experiment_id": "exp_question_early_ratio_20260410_065025",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "open_loop_count",
+      "label": "Open Loop Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.08512793118694194,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Count of open loops: questions + suspense phrases (but first, what if, wait).",
+      "experiment_id": "exp_open_loop_count_20260410_065025",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "cliffhanger_density",
+      "label": "Cliffhanger Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.017009697817878654,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Suspense/cliffhanger phrases per 100 words.",
+      "experiment_id": "exp_cliffhanger_density_20260410_065026",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "visual_monotony_score",
+      "label": "Visual Monotony Score",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.10792111601989769,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Fraction of consecutive frames with same scene — visual repetitiveness.",
+      "experiment_id": "exp_visual_monotony_score_20260410_065026",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "visual_variety_entropy",
+      "label": "Visual Variety Entropy",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.2692146071228003,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Shannon entropy of scene descriptions — visual information richness.",
+      "experiment_id": "exp_visual_variety_entropy_20260410_065026",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "face_intro_delay_frames",
+      "label": "Face Intro Delay Frames",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.04156993809611541,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of frames before first face appears — immediate vs slow face reveal.",
+      "experiment_id": "exp_face_intro_delay_frames_20260410_065027",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "visual_pacing_variance",
+      "label": "Visual Pacing Variance",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.059059428082172266,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Variance of scene run lengths — chaotic vs steady visual pacing.",
+      "experiment_id": "exp_visual_pacing_variance_20260410_065027",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "golden_ratio_segment_flag",
+      "label": "Golden Ratio Segment Flag",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.057099538620470375,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Whether any segment boundary falls at the golden ratio (61.8%) of video.",
+      "experiment_id": "exp_golden_ratio_segment_flag_20260410_065027",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "hook_to_body_word_overlap",
+      "label": "Hook To Body Word Overlap",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": null,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Word overlap between hook and body — semantic coherence/foreshadowing.",
+      "experiment_id": "exp_hook_to_body_word_overlap_20260410_065027",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_uniqueness_score",
+      "label": "Title Uniqueness Score",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.03280080079193147,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of uncommon (>6 char) words in title.",
+      "experiment_id": "exp_title_uniqueness_score_20260410_065028",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "title_curiosity_gap_score",
+      "label": "Title Curiosity Gap Score",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.1815868188487992,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Curiosity triggers in title: this, what, numbers, ellipsis, how.",
+      "experiment_id": "exp_title_curiosity_gap_score_20260410_065028",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "title_power_word_count",
+      "label": "Title Power Word Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.09308245424433306,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Count of proven viral power words in title (insane, impossible, extreme, etc).",
+      "experiment_id": "exp_title_power_word_count_20260410_065028",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "words_per_scene",
+      "label": "Words Per Scene",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.05751627334732614,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Average transcript words per visual scene — information-per-scene density.",
+      "experiment_id": "exp_words_per_scene_20260410_065029",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "speech_silence_ratio",
+      "label": "Speech Silence Ratio",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.07047371198023727,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Ratio of speaking time to silence time — pacing.",
+      "experiment_id": "exp_speech_silence_ratio_20260410_065029",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "transcript_readability",
+      "label": "Transcript Readability",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.08307763561144692,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Flesch reading ease score — how accessible is the language?",
+      "experiment_id": "exp_transcript_readability_20260410_065029",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "energy_word_density",
+      "label": "Energy Word Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.02910452836341748,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "High-energy/intensity words per 100 words (insane, epic, destroy, etc).",
+      "experiment_id": "exp_energy_word_density_20260410_065029",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "concept_density",
+      "label": "Concept Density",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.020492787909807787,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Unique capitalized words (nouns/names) per sentence — information density.",
+      "experiment_id": "exp_concept_density_20260410_065030",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "frame_text_variety",
+      "label": "Frame Text Variety",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.2044220200720966,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of unique visual techniques mentioned across all frames.",
+      "experiment_id": "exp_frame_text_variety_20260410_065030",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "description_link_count",
+      "label": "Description Link Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": 0.08791353165526619,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of URLs in video description — promotion effort proxy.",
+      "experiment_id": "exp_description_link_count_20260410_065030",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "description_hashtag_count",
+      "label": "Description Hashtag Count",
+      "type": "indicator",
+      "layer": "pre",
+      "depth": 1,
+      "r_partial": -0.11611578120122767,
+      "resolution_id": "r0",
+      "connections": [
+        "views"
+      ],
+      "description": "Number of hashtags in video description.",
+      "experiment_id": "exp_description_hashtag_count_20260410_065031",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "retention_volatility_90_100",
+      "label": "Retention Volatility 90 100",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": -0.016496195030137058,
+      "resolution_id": "r_pct_90_100",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 90-100% window.",
+      "experiment_id": "exp_retention_volatility_90_100_20260410074638.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "retention_volatility_95_100",
+      "label": "Retention Volatility 95 100",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.0080981925369449,
+      "resolution_id": "r_last5pct",
+      "connections": [
+        "views"
+      ],
+      "description": "Std deviation of retention in 95-100% window.",
+      "experiment_id": "exp_retention_volatility_95_100_20260410074644.",
+      "status": "discovery",
+      "strength_label": "none"
+    },
+    {
+      "key": "views_log_days_0_1",
+      "label": "Views Log Days 0 1",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.2733744064219602,
+      "resolution_id": "r_days_0_1",
+      "connections": [
+        "views"
+      ],
+      "description": "Log10 of total views in days 0-1.",
+      "experiment_id": "exp_views_log_days_0_1_20260410074648.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "views_log_days_0_3",
+      "label": "Views Log Days 0 3",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.3399312288040505,
+      "resolution_id": "r_days_0_3",
+      "connections": [
+        "views"
+      ],
+      "description": "Log10 of total views in days 0-3.",
+      "experiment_id": "exp_views_log_days_0_3_20260410074652.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "views_log_days_0_7",
+      "label": "Views Log Days 0 7",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.41924310358499245,
+      "resolution_id": "r_days_0_7",
+      "connections": [
+        "views"
+      ],
+      "description": "Log10 of total views in days 0-7.",
+      "experiment_id": "exp_views_log_days_0_7_20260410074656.",
+      "status": "discovery",
+      "strength_label": "moderate"
+    },
+    {
+      "key": "views_log_days_7_14",
+      "label": "Views Log Days 7 14",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.5525664391359384,
+      "resolution_id": "r_days_7_14",
+      "connections": [
+        "views"
+      ],
+      "description": "Log10 of total views in days 7-14.",
+      "experiment_id": "exp_views_log_days_7_14_20260410074700.",
+      "status": "discovery",
+      "strength_label": "strong"
+    },
+    {
+      "key": "views_log_days_14_30",
+      "label": "Views Log Days 14 30",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.7129991669594664,
+      "resolution_id": "r_days_14_30",
+      "connections": [
+        "views"
+      ],
+      "description": "Log10 of total views in days 14-30.",
+      "experiment_id": "exp_views_log_days_14_30_20260410074704.",
+      "status": "discovery",
+      "strength_label": "strong"
+    },
+    {
+      "key": "views_ratio_week2_vs_week1",
+      "label": "Views Ratio Week2 Vs Week1",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.13974477096199603,
+      "resolution_id": "r_days_0_14",
+      "connections": [
+        "views"
+      ],
+      "description": "View ratio: days 7-14 / days 0-7.",
+      "experiment_id": "exp_views_ratio_week2_vs_week1_20260410074708.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "views_ratio_month1_vs_week1",
+      "label": "Views Ratio Month1 Vs Week1",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.1796597415863799,
+      "resolution_id": "r_days_0_30",
+      "connections": [
+        "views"
+      ],
+      "description": "View ratio: days 0-30 / days 0-7.",
+      "experiment_id": "exp_views_ratio_month1_vs_week1_20260410074712.",
+      "status": "discovery",
+      "strength_label": "weak"
+    },
+    {
+      "key": "views_ratio_week3_vs_week2",
+      "label": "Views Ratio Week3 Vs Week2",
+      "type": "indicator",
+      "layer": "post",
+      "depth": 1,
+      "r_partial": 0.09214678349157812,
+      "resolution_id": "r_days_0_21",
+      "connections": [
+        "views"
+      ],
+      "description": "View ratio: days 14-21 / days 7-14.",
+      "experiment_id": "exp_views_ratio_week3_vs_week2_20260410074716.",
       "status": "discovery",
       "strength_label": "none"
     }
@@ -879,61 +3727,2797 @@
       "added_at": "2026-04-09T22:36:07.230703Z"
     },
     {
-      "from": "final_5pct_retention_x_retention_entropy",
+      "from": "retention_pct_75",
       "to": "views",
-      "r": 0.4733002572919024,
-      "experiment_id": "exp_final_5pct_retention_x_retention_entropy_20260409_223607",
-      "added_at": "2026-04-09T22:36:07.285162Z"
+      "r": 0.3658321542237083,
+      "experiment_id": "exp_retention_pct_75_20260410_021338",
+      "added_at": "2026-04-10T02:13:38.936488Z"
     },
     {
-      "from": "hook_drop_rate_x_final_5pct_retention",
+      "from": "retention_pct_85",
       "to": "views",
-      "r": -0.4732568357942079,
-      "experiment_id": "exp_hook_drop_rate_x_final_5pct_retention_20260409_223607",
-      "added_at": "2026-04-09T22:36:07.379247Z"
+      "r": 0.5043421605393453,
+      "experiment_id": "exp_retention_pct_85_20260410024726.",
+      "added_at": "2026-04-10T02:47:26.151Z"
     },
     {
-      "from": "retention_slope_0_25_x_retention_slope_75_100",
+      "from": "retention_mean_0_5",
       "to": "views",
-      "r": -0.086159300269017,
-      "experiment_id": "exp_retention_slope_0_25_x_retention_slope_75_100_20260409_223607",
-      "added_at": "2026-04-09T22:36:07.520046Z"
+      "r": 0.07686326589491645,
+      "experiment_id": "exp_retention_mean_0_5_20260410024726.",
+      "added_at": "2026-04-10T02:47:26.175Z"
     },
     {
       "from": "transcript_word_count",
       "to": "views",
-      "r": 0.26394872328199426,
-      "experiment_id": "exp_transcript_word_count_20260410_002652",
-      "added_at": "2026-04-10T00:26:52.148495Z"
+      "r": 0.2639487232819939,
+      "experiment_id": "exp_transcript_word_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.797Z"
     },
     {
       "from": "question_count",
       "to": "views",
-      "r": 0.03564594925379227,
-      "experiment_id": "exp_question_count_20260410_002652",
-      "added_at": "2026-04-10T00:26:52.195925Z"
+      "r": 0.03564594925379229,
+      "experiment_id": "exp_question_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.806Z"
     },
     {
       "from": "speech_rate_wps",
       "to": "views",
       "r": 0.09544755027574514,
-      "experiment_id": "exp_speech_rate_wps_20260410_002652",
-      "added_at": "2026-04-10T00:26:52.245344Z"
+      "experiment_id": "exp_speech_rate_wps_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.817Z"
     },
     {
       "from": "transcript_char_count",
       "to": "views",
-      "r": 0.2557257793620241,
-      "experiment_id": "exp_transcript_char_count_20260410_002652",
-      "added_at": "2026-04-10T00:26:52.294440Z"
+      "r": 0.255725779362024,
+      "experiment_id": "exp_transcript_char_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.828Z"
     },
     {
       "from": "avg_word_length",
       "to": "views",
-      "r": -0.08513870226173509,
-      "experiment_id": "exp_avg_word_length_20260410_002652",
-      "added_at": "2026-04-10T00:26:52.347534Z"
+      "r": -0.08513870226173505,
+      "experiment_id": "exp_avg_word_length_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.840Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "views",
+      "r": -0.20320144654621736,
+      "experiment_id": "exp_unique_word_ratio_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.855Z"
+    },
+    {
+      "from": "sentence_count",
+      "to": "views",
+      "r": 0.09208029530926626,
+      "experiment_id": "exp_sentence_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.864Z"
+    },
+    {
+      "from": "exclamation_count",
+      "to": "views",
+      "r": -0.1424297272074225,
+      "experiment_id": "exp_exclamation_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.874Z"
+    },
+    {
+      "from": "retention_mean_0_10",
+      "to": "views",
+      "r": 0.0168069204822241,
+      "experiment_id": "exp_retention_mean_0_10_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.885Z"
+    },
+    {
+      "from": "retention_mean_5_15",
+      "to": "views",
+      "r": -0.044392409315624465,
+      "experiment_id": "exp_retention_mean_5_15_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.902Z"
+    },
+    {
+      "from": "uppercase_word_ratio",
+      "to": "views",
+      "r": -0.03838969804530345,
+      "experiment_id": "exp_uppercase_word_ratio_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.916Z"
+    },
+    {
+      "from": "hook_question_count",
+      "to": "views",
+      "r": 0.12601121670279633,
+      "experiment_id": "exp_hook_question_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.929Z"
+    },
+    {
+      "from": "hook_word_ratio",
+      "to": "views",
+      "r": -0.26930848822621745,
+      "experiment_id": "exp_hook_word_ratio_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.943Z"
+    },
+    {
+      "from": "hook_char_count",
+      "to": "views",
+      "r": -0.03350219751735534,
+      "experiment_id": "exp_hook_char_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.954Z"
+    },
+    {
+      "from": "transcript_number_count",
+      "to": "views",
+      "r": 0.09169510477949207,
+      "experiment_id": "exp_transcript_number_count_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.965Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "views",
+      "r": 0.08467752640362441,
+      "experiment_id": "exp_face_frame_pct_20260410034427.",
+      "added_at": "2026-04-10T03:44:27.984Z"
+    },
+    {
+      "from": "text_overlay_frame_pct",
+      "to": "views",
+      "r": 0.07602954580164065,
+      "experiment_id": "exp_text_overlay_frame_pct_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.000Z"
+    },
+    {
+      "from": "scene_change_count",
+      "to": "views",
+      "r": 0.2266730070364844,
+      "experiment_id": "exp_scene_change_count_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.015Z"
+    },
+    {
+      "from": "retention_mean_10_20",
+      "to": "views",
+      "r": -0.02192761162901878,
+      "experiment_id": "exp_retention_mean_10_20_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.030Z"
+    },
+    {
+      "from": "retention_mean_20_30",
+      "to": "views",
+      "r": 0.06716820335811714,
+      "experiment_id": "exp_retention_mean_20_30_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.044Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "views",
+      "r": 0.13389118956034934,
+      "experiment_id": "exp_scene_change_rate_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.060Z"
+    },
+    {
+      "from": "unique_scene_ratio",
+      "to": "views",
+      "r": 0.14958911561403815,
+      "experiment_id": "exp_unique_scene_ratio_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.079Z"
+    },
+    {
+      "from": "visual_technique_count_mean",
+      "to": "views",
+      "r": -0.033297187466797475,
+      "experiment_id": "exp_visual_technique_count_mean_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.099Z"
+    },
+    {
+      "from": "close_up_frame_pct",
+      "to": "views",
+      "r": 0.14002305656384814,
+      "experiment_id": "exp_close_up_frame_pct_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.121Z"
+    },
+    {
+      "from": "hand_presence_frame_pct",
+      "to": "views",
+      "r": 0.12709048532598824,
+      "experiment_id": "exp_hand_presence_frame_pct_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.139Z"
+    },
+    {
+      "from": "motion_word_frame_pct",
+      "to": "views",
+      "r": 0.09186028597945707,
+      "experiment_id": "exp_motion_word_frame_pct_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.175Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "views",
+      "r": 0.02639117732347095,
+      "experiment_id": "exp_hook_duration_pct_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.190Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "views",
+      "r": 0.1634398018443738,
+      "experiment_id": "exp_avg_segment_duration_s_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.206Z"
+    },
+    {
+      "from": "retention_mean_30_40",
+      "to": "views",
+      "r": 0.11773116413793978,
+      "experiment_id": "exp_retention_mean_30_40_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.222Z"
+    },
+    {
+      "from": "retention_mean_40_50",
+      "to": "views",
+      "r": 0.15556080188854432,
+      "experiment_id": "exp_retention_mean_40_50_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.239Z"
+    },
+    {
+      "from": "longest_segment_duration_s",
+      "to": "views",
+      "r": 0.14722497459929054,
+      "experiment_id": "exp_longest_segment_duration_s_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.256Z"
+    },
+    {
+      "from": "shortest_segment_duration_s",
+      "to": "views",
+      "r": 0.09510733778927166,
+      "experiment_id": "exp_shortest_segment_duration_s_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.274Z"
+    },
+    {
+      "from": "hook_position_s",
+      "to": "views",
+      "r": 0,
+      "experiment_id": "exp_hook_position_s_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.292Z"
+    },
+    {
+      "from": "has_climax_segment",
+      "to": "views",
+      "r": 0.05117331661365707,
+      "experiment_id": "exp_has_climax_segment_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.310Z"
+    },
+    {
+      "from": "duration_s",
+      "to": "views",
+      "r": 0.22042658081867852,
+      "experiment_id": "exp_duration_s_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.329Z"
+    },
+    {
+      "from": "title_char_count",
+      "to": "views",
+      "r": 0.014964880792313437,
+      "experiment_id": "exp_title_char_count_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.347Z"
+    },
+    {
+      "from": "retention_mean_50_60",
+      "to": "views",
+      "r": 0.18178708399664256,
+      "experiment_id": "exp_retention_mean_50_60_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.365Z"
+    },
+    {
+      "from": "retention_mean_60_70",
+      "to": "views",
+      "r": 0.19631562060966018,
+      "experiment_id": "exp_retention_mean_60_70_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.383Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "views",
+      "r": -0.05256746506532953,
+      "experiment_id": "exp_title_word_count_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.401Z"
+    },
+    {
+      "from": "title_question_flag",
+      "to": "views",
+      "r": 0.04584690934986323,
+      "experiment_id": "exp_title_question_flag_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.420Z"
+    },
+    {
+      "from": "title_exclamation_flag",
+      "to": "views",
+      "r": -0.0025716179174021495,
+      "experiment_id": "exp_title_exclamation_flag_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.438Z"
+    },
+    {
+      "from": "title_number_flag",
+      "to": "views",
+      "r": -0.17687402188857684,
+      "experiment_id": "exp_title_number_flag_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.456Z"
+    },
+    {
+      "from": "retention_mean_70_80",
+      "to": "views",
+      "r": 0.3031778277442427,
+      "experiment_id": "exp_retention_mean_70_80_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.574Z"
+    },
+    {
+      "from": "retention_mean_80_90",
+      "to": "views",
+      "r": 0.5046946829366817,
+      "experiment_id": "exp_retention_mean_80_90_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.594Z"
+    },
+    {
+      "from": "retention_mean_90_100",
+      "to": "views",
+      "r": 0.5028065672441739,
+      "experiment_id": "exp_retention_mean_90_100_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.822Z"
+    },
+    {
+      "from": "retention_mean_95_100",
+      "to": "views",
+      "r": 0.4715732924173847,
+      "experiment_id": "exp_retention_mean_95_100_20260410034428.",
+      "added_at": "2026-04-10T03:44:28.845Z"
+    },
+    {
+      "from": "retention_slope_0_5",
+      "to": "views",
+      "r": -0.4705965403235691,
+      "experiment_id": "exp_retention_slope_0_5_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.105Z"
+    },
+    {
+      "from": "retention_slope_0_10",
+      "to": "views",
+      "r": -0.401929572028473,
+      "experiment_id": "exp_retention_slope_0_10_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.129Z"
+    },
+    {
+      "from": "retention_slope_5_15",
+      "to": "views",
+      "r": 0.0010991019854728128,
+      "experiment_id": "exp_retention_slope_5_15_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.389Z"
+    },
+    {
+      "from": "retention_slope_10_20",
+      "to": "views",
+      "r": 0.29342404300603675,
+      "experiment_id": "exp_retention_slope_10_20_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.416Z"
+    },
+    {
+      "from": "retention_slope_20_30",
+      "to": "views",
+      "r": 0.3991752884580995,
+      "experiment_id": "exp_retention_slope_20_30_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.443Z"
+    },
+    {
+      "from": "retention_slope_30_40",
+      "to": "views",
+      "r": 0.3363908512903841,
+      "experiment_id": "exp_retention_slope_30_40_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.470Z"
+    },
+    {
+      "from": "retention_slope_40_50",
+      "to": "views",
+      "r": 0.36364893702711376,
+      "experiment_id": "exp_retention_slope_40_50_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.498Z"
+    },
+    {
+      "from": "retention_slope_50_60",
+      "to": "views",
+      "r": 0.1819196410364562,
+      "experiment_id": "exp_retention_slope_50_60_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.524Z"
+    },
+    {
+      "from": "retention_slope_60_70",
+      "to": "views",
+      "r": 0.11061919271018696,
+      "experiment_id": "exp_retention_slope_60_70_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.554Z"
+    },
+    {
+      "from": "retention_slope_70_80",
+      "to": "views",
+      "r": 0.10390816558515686,
+      "experiment_id": "exp_retention_slope_70_80_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.581Z"
+    },
+    {
+      "from": "retention_slope_80_90",
+      "to": "views",
+      "r": 0.06735964310480956,
+      "experiment_id": "exp_retention_slope_80_90_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.612Z"
+    },
+    {
+      "from": "retention_slope_90_100",
+      "to": "views",
+      "r": 0.0354280379436733,
+      "experiment_id": "exp_retention_slope_90_100_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.653Z"
+    },
+    {
+      "from": "retention_slope_95_100",
+      "to": "views",
+      "r": 0.00016894735928470452,
+      "experiment_id": "exp_retention_slope_95_100_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.681Z"
+    },
+    {
+      "from": "retention_volatility_0_5",
+      "to": "views",
+      "r": 0.4917672898909969,
+      "experiment_id": "exp_retention_volatility_0_5_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.710Z"
+    },
+    {
+      "from": "retention_volatility_0_10",
+      "to": "views",
+      "r": 0.4432018306348659,
+      "experiment_id": "exp_retention_volatility_0_10_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.742Z"
+    },
+    {
+      "from": "retention_volatility_5_15",
+      "to": "views",
+      "r": -0.010619601948787598,
+      "experiment_id": "exp_retention_volatility_5_15_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.777Z"
+    },
+    {
+      "from": "retention_volatility_10_20",
+      "to": "views",
+      "r": -0.2937402554064877,
+      "experiment_id": "exp_retention_volatility_10_20_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.809Z"
+    },
+    {
+      "from": "retention_volatility_20_30",
+      "to": "views",
+      "r": -0.3972305293049845,
+      "experiment_id": "exp_retention_volatility_20_30_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.838Z"
+    },
+    {
+      "from": "retention_volatility_30_40",
+      "to": "views",
+      "r": -0.3349735843132986,
+      "experiment_id": "exp_retention_volatility_30_40_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.868Z"
+    },
+    {
+      "from": "retention_volatility_40_50",
+      "to": "views",
+      "r": -0.3597553387114376,
+      "experiment_id": "exp_retention_volatility_40_50_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.901Z"
+    },
+    {
+      "from": "retention_volatility_50_60",
+      "to": "views",
+      "r": -0.18080830924175512,
+      "experiment_id": "exp_retention_volatility_50_60_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.934Z"
+    },
+    {
+      "from": "retention_volatility_60_70",
+      "to": "views",
+      "r": -0.11106314833218274,
+      "experiment_id": "exp_retention_volatility_60_70_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.967Z"
+    },
+    {
+      "from": "retention_volatility_70_80",
+      "to": "views",
+      "r": -0.10295471291176249,
+      "experiment_id": "exp_retention_volatility_70_80_20260410034429.",
+      "added_at": "2026-04-10T03:44:29.997Z"
+    },
+    {
+      "from": "retention_volatility_80_90",
+      "to": "views",
+      "r": -0.0654581987094523,
+      "experiment_id": "exp_retention_volatility_80_90_20260410034430.",
+      "added_at": "2026-04-10T03:44:30.028Z"
+    },
+    {
+      "from": "opening_speech_rate_3s",
+      "to": "views",
+      "r": -0.03106493480564338,
+      "experiment_id": "exp_opening_speech_rate_3s_20260410_065006",
+      "added_at": "2026-04-10T06:50:06.199926Z"
+    },
+    {
+      "from": "opening_speech_rate_5s",
+      "to": "views",
+      "r": 0.04417983013553005,
+      "experiment_id": "exp_opening_speech_rate_5s_20260410_065006",
+      "added_at": "2026-04-10T06:50:06.376365Z"
+    },
+    {
+      "from": "closing_speech_rate_5s",
+      "to": "views",
+      "r": 0.02064777357597314,
+      "experiment_id": "exp_closing_speech_rate_5s_20260410_065006",
+      "added_at": "2026-04-10T06:50:06.547493Z"
+    },
+    {
+      "from": "speech_rate_q1",
+      "to": "views",
+      "r": 0.11206118859160402,
+      "experiment_id": "exp_speech_rate_q1_20260410_065006",
+      "added_at": "2026-04-10T06:50:06.724574Z"
+    },
+    {
+      "from": "speech_rate_q4",
+      "to": "views",
+      "r": 0.07159446354109322,
+      "experiment_id": "exp_speech_rate_q4_20260410_065006",
+      "added_at": "2026-04-10T06:50:06.905552Z"
+    },
+    {
+      "from": "speech_rate_ratio_q4_q1",
+      "to": "views",
+      "r": 0.025907180309537203,
+      "experiment_id": "exp_speech_rate_ratio_q4_q1_20260410_065007",
+      "added_at": "2026-04-10T06:50:07.090680Z"
+    },
+    {
+      "from": "speech_acceleration",
+      "to": "views",
+      "r": -0.053323934265937914,
+      "experiment_id": "exp_speech_acceleration_20260410_065007",
+      "added_at": "2026-04-10T06:50:07.337186Z"
+    },
+    {
+      "from": "max_silence_gap_s",
+      "to": "views",
+      "r": 0.008241332599638815,
+      "experiment_id": "exp_max_silence_gap_s_20260410_065007",
+      "added_at": "2026-04-10T06:50:07.530135Z"
+    },
+    {
+      "from": "silence_gap_count",
+      "to": "views",
+      "r": -0.023802100125982443,
+      "experiment_id": "exp_silence_gap_count_20260410_065007",
+      "added_at": "2026-04-10T06:50:07.723391Z"
+    },
+    {
+      "from": "silence_total_pct",
+      "to": "views",
+      "r": -0.06004735822555717,
+      "experiment_id": "exp_silence_total_pct_20260410_065007",
+      "added_at": "2026-04-10T06:50:07.918234Z"
+    },
+    {
+      "from": "opening_word_latency_s",
+      "to": "views",
+      "r": -0.12392969218699505,
+      "experiment_id": "exp_opening_word_latency_s_20260410_065008",
+      "added_at": "2026-04-10T06:50:08.109656Z"
+    },
+    {
+      "from": "peak_speech_rate_3s",
+      "to": "views",
+      "r": 0.1323424740267701,
+      "experiment_id": "exp_peak_speech_rate_3s_20260410_065008",
+      "added_at": "2026-04-10T06:50:08.501941Z"
+    },
+    {
+      "from": "speech_tempo_range",
+      "to": "views",
+      "r": 0.13251965912422412,
+      "experiment_id": "exp_speech_tempo_range_20260410_065008",
+      "added_at": "2026-04-10T06:50:08.787187Z"
+    },
+    {
+      "from": "avg_word_gap_s",
+      "to": "views",
+      "r": -0.07474966638062093,
+      "experiment_id": "exp_avg_word_gap_s_20260410_065008",
+      "added_at": "2026-04-10T06:50:08.992736Z"
+    },
+    {
+      "from": "word_density_variance",
+      "to": "views",
+      "r": 0.05335896261276436,
+      "experiment_id": "exp_word_density_variance_20260410_065009",
+      "added_at": "2026-04-10T06:50:09.232308Z"
+    },
+    {
+      "from": "sensory_word_density",
+      "to": "views",
+      "r": 0.1069572863554209,
+      "experiment_id": "exp_sensory_word_density_20260410_065009",
+      "added_at": "2026-04-10T06:50:09.429754Z"
+    },
+    {
+      "from": "technical_word_density",
+      "to": "views",
+      "r": 0.1162615908854105,
+      "experiment_id": "exp_technical_word_density_20260410_065009",
+      "added_at": "2026-04-10T06:50:09.625397Z"
+    },
+    {
+      "from": "sensory_technical_ratio",
+      "to": "views",
+      "r": 0.12614406110678117,
+      "experiment_id": "exp_sensory_technical_ratio_20260410_065009",
+      "added_at": "2026-04-10T06:50:09.826407Z"
+    },
+    {
+      "from": "hook_sensory_word_count",
+      "to": "views",
+      "r": -0.002330175139757477,
+      "experiment_id": "exp_hook_sensory_word_count_20260410_065010",
+      "added_at": "2026-04-10T06:50:10.026073Z"
+    },
+    {
+      "from": "body_sensation_word_pct",
+      "to": "views",
+      "r": 0.06385403052982366,
+      "experiment_id": "exp_body_sensation_word_pct_20260410_065010",
+      "added_at": "2026-04-10T06:50:10.230525Z"
+    },
+    {
+      "from": "pivot_word_count",
+      "to": "views",
+      "r": 0.24124891275806962,
+      "experiment_id": "exp_pivot_word_count_20260410_065010",
+      "added_at": "2026-04-10T06:50:10.444943Z"
+    },
+    {
+      "from": "pivot_word_density",
+      "to": "views",
+      "r": 0.15377637530476818,
+      "experiment_id": "exp_pivot_word_density_20260410_065010",
+      "added_at": "2026-04-10T06:50:10.651280Z"
+    },
+    {
+      "from": "hook_pivot_word_flag",
+      "to": "views",
+      "r": 0.09980849053555521,
+      "experiment_id": "exp_hook_pivot_word_flag_20260410_065010",
+      "added_at": "2026-04-10T06:50:10.856529Z"
+    },
+    {
+      "from": "short_word_ratio",
+      "to": "views",
+      "r": 0.10115550871466314,
+      "experiment_id": "exp_short_word_ratio_20260410_065011",
+      "added_at": "2026-04-10T06:50:11.067038Z"
+    },
+    {
+      "from": "long_word_ratio",
+      "to": "views",
+      "r": -0.08932826154323918,
+      "experiment_id": "exp_long_word_ratio_20260410_065011",
+      "added_at": "2026-04-10T06:50:11.278903Z"
+    },
+    {
+      "from": "hapax_legomena_ratio",
+      "to": "views",
+      "r": -0.18453520835473142,
+      "experiment_id": "exp_hapax_legomena_ratio_20260410_065011",
+      "added_at": "2026-04-10T06:50:11.491565Z"
+    },
+    {
+      "from": "first_person_ratio",
+      "to": "views",
+      "r": 0.030634593740335784,
+      "experiment_id": "exp_first_person_ratio_20260410_065011",
+      "added_at": "2026-04-10T06:50:11.702989Z"
+    },
+    {
+      "from": "second_person_ratio",
+      "to": "views",
+      "r": -0.13789567312534906,
+      "experiment_id": "exp_second_person_ratio_20260410_065011",
+      "added_at": "2026-04-10T06:50:11.917222Z"
+    },
+    {
+      "from": "action_verb_density",
+      "to": "views",
+      "r": -0.005757604614768886,
+      "experiment_id": "exp_action_verb_density_20260410_065012",
+      "added_at": "2026-04-10T06:50:12.138286Z"
+    },
+    {
+      "from": "superlative_count",
+      "to": "views",
+      "r": 0.051615728516502875,
+      "experiment_id": "exp_superlative_count_20260410_065012",
+      "added_at": "2026-04-10T06:50:12.361743Z"
+    },
+    {
+      "from": "comparison_word_count",
+      "to": "views",
+      "r": 0.15293075604117992,
+      "experiment_id": "exp_comparison_word_count_20260410_065012",
+      "added_at": "2026-04-10T06:50:12.580471Z"
+    },
+    {
+      "from": "hook_speech_rate_wps",
+      "to": "views",
+      "r": -0.06682011986175147,
+      "experiment_id": "exp_hook_speech_rate_wps_20260410_065012",
+      "added_at": "2026-04-10T06:50:12.796512Z"
+    },
+    {
+      "from": "hook_unique_word_ratio",
+      "to": "views",
+      "r": 0.09521605127661638,
+      "experiment_id": "exp_hook_unique_word_ratio_20260410_065013",
+      "added_at": "2026-04-10T06:50:13.006137Z"
+    },
+    {
+      "from": "hook_action_verb_count",
+      "to": "views",
+      "r": -0.055528975022435305,
+      "experiment_id": "exp_hook_action_verb_count_20260410_065013",
+      "added_at": "2026-04-10T06:50:13.218685Z"
+    },
+    {
+      "from": "hook_sentence_count",
+      "to": "views",
+      "r": 0.001939193182460342,
+      "experiment_id": "exp_hook_sentence_count_20260410_065013",
+      "added_at": "2026-04-10T06:50:13.427571Z"
+    },
+    {
+      "from": "hook_avg_word_length",
+      "to": "views",
+      "r": -0.010767465660018448,
+      "experiment_id": "exp_hook_avg_word_length_20260410_065013",
+      "added_at": "2026-04-10T06:50:13.636311Z"
+    },
+    {
+      "from": "hook_number_count",
+      "to": "views",
+      "r": -0.09464213346345905,
+      "experiment_id": "exp_hook_number_count_20260410_065013",
+      "added_at": "2026-04-10T06:50:13.850714Z"
+    },
+    {
+      "from": "segment_duration_variance",
+      "to": "views",
+      "r": 0.13784645228475548,
+      "experiment_id": "exp_segment_duration_variance_20260410_065014",
+      "added_at": "2026-04-10T06:50:14.066672Z"
+    },
+    {
+      "from": "segment_count_per_minute",
+      "to": "views",
+      "r": -0.15293433064396958,
+      "experiment_id": "exp_segment_count_per_minute_20260410_065014",
+      "added_at": "2026-04-10T06:50:14.282627Z"
+    },
+    {
+      "from": "has_setup_segment",
+      "to": "views",
+      "r": 0.08810049152396077,
+      "experiment_id": "exp_has_setup_segment_20260410_065014",
+      "added_at": "2026-04-10T06:50:14.496915Z"
+    },
+    {
+      "from": "has_conclusion_segment",
+      "to": "views",
+      "r": 0.035682643678548426,
+      "experiment_id": "exp_has_conclusion_segment_20260410_065014",
+      "added_at": "2026-04-10T06:50:14.712813Z"
+    },
+    {
+      "from": "segment_type_count",
+      "to": "views",
+      "r": 0.12858994875115864,
+      "experiment_id": "exp_segment_type_count_20260410_065014",
+      "added_at": "2026-04-10T06:50:14.931389Z"
+    },
+    {
+      "from": "narrative_arc_completeness",
+      "to": "views",
+      "r": 0.05730155873372782,
+      "experiment_id": "exp_narrative_arc_completeness_20260410_065015",
+      "added_at": "2026-04-10T06:50:15.152011Z"
+    },
+    {
+      "from": "climax_late_flag",
+      "to": "views",
+      "r": 0.05732835149069151,
+      "experiment_id": "exp_climax_late_flag_20260410_065015",
+      "added_at": "2026-04-10T06:50:15.374116Z"
+    },
+    {
+      "from": "last_segment_duration_pct",
+      "to": "views",
+      "r": -0.07765827438655233,
+      "experiment_id": "exp_last_segment_duration_pct_20260410_065015",
+      "added_at": "2026-04-10T06:50:15.591734Z"
+    },
+    {
+      "from": "first_segment_duration_pct",
+      "to": "views",
+      "r": -0.15620910307044927,
+      "experiment_id": "exp_first_segment_duration_pct_20260410_065015",
+      "added_at": "2026-04-10T06:50:15.812435Z"
+    },
+    {
+      "from": "segment_length_ratio_max_min",
+      "to": "views",
+      "r": 0.04044902623452615,
+      "experiment_id": "exp_segment_length_ratio_max_min_20260410_065016",
+      "added_at": "2026-04-10T06:50:16.036343Z"
+    },
+    {
+      "from": "body_segment_count",
+      "to": "views",
+      "r": 0.12455599930904628,
+      "experiment_id": "exp_body_segment_count_20260410_065016",
+      "added_at": "2026-04-10T06:50:16.264046Z"
+    },
+    {
+      "from": "hook_conclusion_combined_pct",
+      "to": "views",
+      "r": -0.059804536141123625,
+      "experiment_id": "exp_hook_conclusion_combined_pct_20260410_065016",
+      "added_at": "2026-04-10T06:50:16.488843Z"
+    },
+    {
+      "from": "title_all_caps_word_count",
+      "to": "views",
+      "r": 0.02419269317324612,
+      "experiment_id": "exp_title_all_caps_word_count_20260410_065016",
+      "added_at": "2026-04-10T06:50:16.714760Z"
+    },
+    {
+      "from": "title_emoji_flag",
+      "to": "views",
+      "r": 0.044388166061686954,
+      "experiment_id": "exp_title_emoji_flag_20260410_065016",
+      "added_at": "2026-04-10T06:50:16.947889Z"
+    },
+    {
+      "from": "title_contains_making",
+      "to": "views",
+      "r": 0.08976263082486753,
+      "experiment_id": "exp_title_contains_making_20260410_065017",
+      "added_at": "2026-04-10T06:50:17.176480Z"
+    },
+    {
+      "from": "title_avg_word_length",
+      "to": "views",
+      "r": 0.14470279066893438,
+      "experiment_id": "exp_title_avg_word_length_20260410_065017",
+      "added_at": "2026-04-10T06:50:17.407086Z"
+    },
+    {
+      "from": "title_starts_with_action",
+      "to": "views",
+      "r": 0.185971472133698,
+      "experiment_id": "exp_title_starts_with_action_20260410_065017",
+      "added_at": "2026-04-10T06:50:17.640440Z"
+    },
+    {
+      "from": "duration_optimal_flag",
+      "to": "views",
+      "r": 0.17625488860508445,
+      "experiment_id": "exp_duration_optimal_flag_20260410_065017",
+      "added_at": "2026-04-10T06:50:17.874783Z"
+    },
+    {
+      "from": "duration_sweetspot_distance",
+      "to": "views",
+      "r": -0.063339056676578,
+      "experiment_id": "exp_duration_sweetspot_distance_20260410_065018",
+      "added_at": "2026-04-10T06:50:18.108003Z"
+    },
+    {
+      "from": "description_word_count",
+      "to": "views",
+      "r": 0.06475973308093254,
+      "experiment_id": "exp_description_word_count_20260410_065018",
+      "added_at": "2026-04-10T06:50:18.343208Z"
+    },
+    {
+      "from": "is_vertical",
+      "to": "views",
+      "r": null,
+      "experiment_id": "exp_is_vertical_20260410_065018",
+      "added_at": "2026-04-10T06:50:18.574927Z"
+    },
+    {
+      "from": "upload_month",
+      "to": "views",
+      "r": 0.06649045321248853,
+      "experiment_id": "exp_upload_month_20260410_065018",
+      "added_at": "2026-04-10T06:50:18.816053Z"
+    },
+    {
+      "from": "opening_frame_has_text",
+      "to": "views",
+      "r": -0.020674565558897767,
+      "experiment_id": "exp_opening_frame_has_text_20260410_065019",
+      "added_at": "2026-04-10T06:50:19.066393Z"
+    },
+    {
+      "from": "opening_frame_has_face",
+      "to": "views",
+      "r": 0.033932628415768565,
+      "experiment_id": "exp_opening_frame_has_face_20260410_065019",
+      "added_at": "2026-04-10T06:50:19.315915Z"
+    },
+    {
+      "from": "action_frame_pct",
+      "to": "views",
+      "r": 0.14747975568023206,
+      "experiment_id": "exp_action_frame_pct_20260410_065019",
+      "added_at": "2026-04-10T06:50:19.617981Z"
+    },
+    {
+      "from": "workshop_frame_pct",
+      "to": "views",
+      "r": 0.11014048038023146,
+      "experiment_id": "exp_workshop_frame_pct_20260410_065019",
+      "added_at": "2026-04-10T06:50:19.923200Z"
+    },
+    {
+      "from": "outdoor_frame_pct",
+      "to": "views",
+      "r": 0.04097024902122656,
+      "experiment_id": "exp_outdoor_frame_pct_20260410_065020",
+      "added_at": "2026-04-10T06:50:20.233111Z"
+    },
+    {
+      "from": "face_alone_pct",
+      "to": "views",
+      "r": 0.07244016476740828,
+      "experiment_id": "exp_face_alone_pct_20260410_065020",
+      "added_at": "2026-04-10T06:50:20.498220Z"
+    },
+    {
+      "from": "face_with_action_pct",
+      "to": "views",
+      "r": 0.07209690870069993,
+      "experiment_id": "exp_face_with_action_pct_20260410_065020",
+      "added_at": "2026-04-10T06:50:20.764365Z"
+    },
+    {
+      "from": "object_focus_pct",
+      "to": "views",
+      "r": -0.08467752640362439,
+      "experiment_id": "exp_object_focus_pct_20260410_065021",
+      "added_at": "2026-04-10T06:50:21.029132Z"
+    },
+    {
+      "from": "text_overlay_early_pct",
+      "to": "views",
+      "r": 0.11925436412563215,
+      "experiment_id": "exp_text_overlay_early_pct_20260410_065021",
+      "added_at": "2026-04-10T06:50:21.296814Z"
+    },
+    {
+      "from": "dramatic_frame_pct",
+      "to": "views",
+      "r": 0.11090676969727878,
+      "experiment_id": "exp_dramatic_frame_pct_20260410_065021",
+      "added_at": "2026-04-10T06:50:21.621297Z"
+    },
+    {
+      "from": "idea_word_count",
+      "to": "views",
+      "r": -0.002457225361140903,
+      "experiment_id": "exp_idea_word_count_20260410_065021",
+      "added_at": "2026-04-10T06:50:21.882788Z"
+    },
+    {
+      "from": "idea_char_count",
+      "to": "views",
+      "r": 0.017071481162708943,
+      "experiment_id": "exp_idea_char_count_20260410_065022",
+      "added_at": "2026-04-10T06:50:22.146019Z"
+    },
+    {
+      "from": "summary_word_count",
+      "to": "views",
+      "r": 0.1328561216225163,
+      "experiment_id": "exp_summary_word_count_20260410_065022",
+      "added_at": "2026-04-10T06:50:22.408401Z"
+    },
+    {
+      "from": "idea_question_flag",
+      "to": "views",
+      "r": null,
+      "experiment_id": "exp_idea_question_flag_20260410_065022",
+      "added_at": "2026-04-10T06:50:22.667008Z"
+    },
+    {
+      "from": "idea_number_flag",
+      "to": "views",
+      "r": 0.07158483714883929,
+      "experiment_id": "exp_idea_number_flag_20260410_065022",
+      "added_at": "2026-04-10T06:50:22.936533Z"
+    },
+    {
+      "from": "idea_contains_making",
+      "to": "views",
+      "r": 0.04974679407296231,
+      "experiment_id": "exp_idea_contains_making_20260410_065023",
+      "added_at": "2026-04-10T06:50:23.207712Z"
+    },
+    {
+      "from": "idea_contains_indestructible",
+      "to": "views",
+      "r": 0.11529203541140844,
+      "experiment_id": "exp_idea_contains_indestructible_20260410_065023",
+      "added_at": "2026-04-10T06:50:23.473268Z"
+    },
+    {
+      "from": "tension_word_density",
+      "to": "views",
+      "r": 0.03892416342649876,
+      "experiment_id": "exp_tension_word_density_20260410_065023",
+      "added_at": "2026-04-10T06:50:23.740915Z"
+    },
+    {
+      "from": "resolution_word_density",
+      "to": "views",
+      "r": 0.0977732879155535,
+      "experiment_id": "exp_resolution_word_density_20260410_065024",
+      "added_at": "2026-04-10T06:50:24.018337Z"
+    },
+    {
+      "from": "tension_resolution_ratio",
+      "to": "views",
+      "r": -0.011128900575089834,
+      "experiment_id": "exp_tension_resolution_ratio_20260410_065024",
+      "added_at": "2026-04-10T06:50:24.294720Z"
+    },
+    {
+      "from": "emotional_arc_swing",
+      "to": "views",
+      "r": 0.1518165617650365,
+      "experiment_id": "exp_emotional_arc_swing_20260410_065024",
+      "added_at": "2026-04-10T06:50:24.573119Z"
+    },
+    {
+      "from": "hook_tension_density",
+      "to": "views",
+      "r": 0.061811129150322684,
+      "experiment_id": "exp_hook_tension_density_20260410_065024",
+      "added_at": "2026-04-10T06:50:24.847876Z"
+    },
+    {
+      "from": "repeated_phrase_count",
+      "to": "views",
+      "r": 0.216869804298255,
+      "experiment_id": "exp_repeated_phrase_count_20260410_065025",
+      "added_at": "2026-04-10T06:50:25.136823Z"
+    },
+    {
+      "from": "vocabulary_richness_yule_k",
+      "to": "views",
+      "r": 0.03411038976375907,
+      "experiment_id": "exp_vocabulary_richness_yule_k_20260410_065025",
+      "added_at": "2026-04-10T06:50:25.419707Z"
+    },
+    {
+      "from": "question_early_ratio",
+      "to": "views",
+      "r": null,
+      "experiment_id": "exp_question_early_ratio_20260410_065025",
+      "added_at": "2026-04-10T06:50:25.705570Z"
+    },
+    {
+      "from": "open_loop_count",
+      "to": "views",
+      "r": 0.08512793118694194,
+      "experiment_id": "exp_open_loop_count_20260410_065025",
+      "added_at": "2026-04-10T06:50:25.974932Z"
+    },
+    {
+      "from": "cliffhanger_density",
+      "to": "views",
+      "r": 0.017009697817878654,
+      "experiment_id": "exp_cliffhanger_density_20260410_065026",
+      "added_at": "2026-04-10T06:50:26.249557Z"
+    },
+    {
+      "from": "visual_monotony_score",
+      "to": "views",
+      "r": -0.10792111601989769,
+      "experiment_id": "exp_visual_monotony_score_20260410_065026",
+      "added_at": "2026-04-10T06:50:26.519725Z"
+    },
+    {
+      "from": "visual_variety_entropy",
+      "to": "views",
+      "r": 0.2692146071228003,
+      "experiment_id": "exp_visual_variety_entropy_20260410_065026",
+      "added_at": "2026-04-10T06:50:26.794264Z"
+    },
+    {
+      "from": "face_intro_delay_frames",
+      "to": "views",
+      "r": -0.04156993809611541,
+      "experiment_id": "exp_face_intro_delay_frames_20260410_065027",
+      "added_at": "2026-04-10T06:50:27.070271Z"
+    },
+    {
+      "from": "visual_pacing_variance",
+      "to": "views",
+      "r": -0.059059428082172266,
+      "experiment_id": "exp_visual_pacing_variance_20260410_065027",
+      "added_at": "2026-04-10T06:50:27.351054Z"
+    },
+    {
+      "from": "golden_ratio_segment_flag",
+      "to": "views",
+      "r": -0.057099538620470375,
+      "experiment_id": "exp_golden_ratio_segment_flag_20260410_065027",
+      "added_at": "2026-04-10T06:50:27.623161Z"
+    },
+    {
+      "from": "hook_to_body_word_overlap",
+      "to": "views",
+      "r": null,
+      "experiment_id": "exp_hook_to_body_word_overlap_20260410_065027",
+      "added_at": "2026-04-10T06:50:27.904047Z"
+    },
+    {
+      "from": "title_uniqueness_score",
+      "to": "views",
+      "r": 0.03280080079193147,
+      "experiment_id": "exp_title_uniqueness_score_20260410_065028",
+      "added_at": "2026-04-10T06:50:28.182255Z"
+    },
+    {
+      "from": "title_curiosity_gap_score",
+      "to": "views",
+      "r": -0.1815868188487992,
+      "experiment_id": "exp_title_curiosity_gap_score_20260410_065028",
+      "added_at": "2026-04-10T06:50:28.477018Z"
+    },
+    {
+      "from": "title_power_word_count",
+      "to": "views",
+      "r": 0.09308245424433306,
+      "experiment_id": "exp_title_power_word_count_20260410_065028",
+      "added_at": "2026-04-10T06:50:28.764575Z"
+    },
+    {
+      "from": "words_per_scene",
+      "to": "views",
+      "r": 0.05751627334732614,
+      "experiment_id": "exp_words_per_scene_20260410_065029",
+      "added_at": "2026-04-10T06:50:29.060352Z"
+    },
+    {
+      "from": "speech_silence_ratio",
+      "to": "views",
+      "r": -0.07047371198023727,
+      "experiment_id": "exp_speech_silence_ratio_20260410_065029",
+      "added_at": "2026-04-10T06:50:29.371503Z"
+    },
+    {
+      "from": "transcript_readability",
+      "to": "views",
+      "r": -0.08307763561144692,
+      "experiment_id": "exp_transcript_readability_20260410_065029",
+      "added_at": "2026-04-10T06:50:29.690413Z"
+    },
+    {
+      "from": "energy_word_density",
+      "to": "views",
+      "r": 0.02910452836341748,
+      "experiment_id": "exp_energy_word_density_20260410_065029",
+      "added_at": "2026-04-10T06:50:29.977130Z"
+    },
+    {
+      "from": "concept_density",
+      "to": "views",
+      "r": 0.020492787909807787,
+      "experiment_id": "exp_concept_density_20260410_065030",
+      "added_at": "2026-04-10T06:50:30.266757Z"
+    },
+    {
+      "from": "frame_text_variety",
+      "to": "views",
+      "r": 0.2044220200720966,
+      "experiment_id": "exp_frame_text_variety_20260410_065030",
+      "added_at": "2026-04-10T06:50:30.579348Z"
+    },
+    {
+      "from": "description_link_count",
+      "to": "views",
+      "r": 0.08791353165526619,
+      "experiment_id": "exp_description_link_count_20260410_065030",
+      "added_at": "2026-04-10T06:50:30.865106Z"
+    },
+    {
+      "from": "description_hashtag_count",
+      "to": "views",
+      "r": -0.11611578120122767,
+      "experiment_id": "exp_description_hashtag_count_20260410_065031",
+      "added_at": "2026-04-10T06:50:31.154178Z"
+    },
+    {
+      "from": "retention_volatility_90_100",
+      "to": "views",
+      "r": -0.016496195030137058,
+      "experiment_id": "exp_retention_volatility_90_100_20260410074638.",
+      "added_at": "2026-04-10T07:46:38.660Z"
+    },
+    {
+      "from": "retention_volatility_95_100",
+      "to": "views",
+      "r": 0.0080981925369449,
+      "experiment_id": "exp_retention_volatility_95_100_20260410074644.",
+      "added_at": "2026-04-10T07:46:44.203Z"
+    },
+    {
+      "from": "views_log_days_0_1",
+      "to": "views",
+      "r": 0.2733744064219602,
+      "experiment_id": "exp_views_log_days_0_1_20260410074648.",
+      "added_at": "2026-04-10T07:46:48.036Z"
+    },
+    {
+      "from": "views_log_days_0_3",
+      "to": "views",
+      "r": 0.3399312288040505,
+      "experiment_id": "exp_views_log_days_0_3_20260410074652.",
+      "added_at": "2026-04-10T07:46:52.073Z"
+    },
+    {
+      "from": "views_log_days_0_7",
+      "to": "views",
+      "r": 0.41924310358499245,
+      "experiment_id": "exp_views_log_days_0_7_20260410074656.",
+      "added_at": "2026-04-10T07:46:56.414Z"
+    },
+    {
+      "from": "views_log_days_7_14",
+      "to": "views",
+      "r": 0.5525664391359384,
+      "experiment_id": "exp_views_log_days_7_14_20260410074700.",
+      "added_at": "2026-04-10T07:47:00.461Z"
+    },
+    {
+      "from": "views_log_days_14_30",
+      "to": "views",
+      "r": 0.7129991669594664,
+      "experiment_id": "exp_views_log_days_14_30_20260410074704.",
+      "added_at": "2026-04-10T07:47:04.372Z"
+    },
+    {
+      "from": "views_ratio_week2_vs_week1",
+      "to": "views",
+      "r": 0.13974477096199603,
+      "experiment_id": "exp_views_ratio_week2_vs_week1_20260410074708.",
+      "added_at": "2026-04-10T07:47:08.196Z"
+    },
+    {
+      "from": "views_ratio_month1_vs_week1",
+      "to": "views",
+      "r": 0.1796597415863799,
+      "experiment_id": "exp_views_ratio_month1_vs_week1_20260410074712.",
+      "added_at": "2026-04-10T07:47:12.043Z"
+    },
+    {
+      "from": "views_ratio_week3_vs_week2",
+      "to": "views",
+      "r": 0.09214678349157812,
+      "experiment_id": "exp_views_ratio_week3_vs_week2_20260410074716.",
+      "added_at": "2026-04-10T07:47:16.240Z"
     }
   ],
-  "updated_at": "2026-04-10T00:26:52.347537Z"
+  "updated_at": "2026-04-10T13:39:11.969Z",
+  "derived_edges": [
+    {
+      "from": "final_5pct_retention",
+      "to": "retention_entropy",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "final_5pct_retention_x_retention_entropy",
+      "interaction_r": 0.4733002572919024,
+      "experiment_id": "exp_final_5pct_retention_x_retention_entropy_20260409_223607",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-09T22:36:07.285162Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "final_5pct_retention",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_final_5pct_retention",
+      "interaction_r": -0.4732568357942079,
+      "experiment_id": "exp_hook_drop_rate_x_final_5pct_retention_20260409_223607",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-09T22:36:07.379247Z"
+    },
+    {
+      "from": "retention_slope_0_25",
+      "to": "retention_slope_75_100",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_slope_0_25_x_retention_slope_75_100",
+      "interaction_r": -0.086159300269017,
+      "experiment_id": "exp_retention_slope_0_25_x_retention_slope_75_100_20260409_223607",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-09T22:36:07.520046Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "face_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_face_frame_pct",
+      "interaction_r": 0.07733280614949506,
+      "experiment_id": "exp_speech_rate_wps_x_face_frame_pct_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.479Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_unique_word_ratio",
+      "interaction_r": 0.0012894673167555444,
+      "experiment_id": "exp_speech_rate_wps_x_unique_word_ratio_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.506Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_scene_change_rate",
+      "interaction_r": 0.12482294645472686,
+      "experiment_id": "exp_speech_rate_wps_x_scene_change_rate_20260410034428.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.533Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_hook_duration_pct",
+      "interaction_r": 0.03930072308176214,
+      "experiment_id": "exp_speech_rate_wps_x_hook_duration_pct_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.555Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_title_word_count",
+      "interaction_r": 0.00013666298466443624,
+      "experiment_id": "exp_speech_rate_wps_x_title_word_count_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.616Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_avg_segment_duration_s",
+      "interaction_r": 0.1737036573059622,
+      "experiment_id": "exp_speech_rate_wps_x_avg_segment_duration_s_20260410034428.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.640Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_close_up_frame_pct",
+      "interaction_r": 0.198716860204477,
+      "experiment_id": "exp_speech_rate_wps_x_close_up_frame_pct_20260410034428.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.670Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_unique_word_ratio",
+      "interaction_r": 0.06497097635272754,
+      "experiment_id": "exp_face_frame_pct_x_unique_word_ratio_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.699Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_scene_change_rate",
+      "interaction_r": 0.08326737594748372,
+      "experiment_id": "exp_face_frame_pct_x_scene_change_rate_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.728Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_hook_duration_pct",
+      "interaction_r": 0.05496044811103952,
+      "experiment_id": "exp_face_frame_pct_x_hook_duration_pct_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.751Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_title_word_count",
+      "interaction_r": 0.023159018667166447,
+      "experiment_id": "exp_face_frame_pct_x_title_word_count_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.777Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_avg_segment_duration_s",
+      "interaction_r": 0.12126844669331112,
+      "experiment_id": "exp_face_frame_pct_x_avg_segment_duration_s_20260410034428.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.801Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_close_up_frame_pct",
+      "interaction_r": 0.08984916837038688,
+      "experiment_id": "exp_face_frame_pct_x_close_up_frame_pct_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.878Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_scene_change_rate",
+      "interaction_r": -0.15276434183093204,
+      "experiment_id": "exp_unique_word_ratio_x_scene_change_rate_20260410034428.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T03:44:28.908Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_hook_duration_pct",
+      "interaction_r": 0.008423917500269008,
+      "experiment_id": "exp_unique_word_ratio_x_hook_duration_pct_20260410034428.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.937Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_title_word_count",
+      "interaction_r": -0.1336122089127777,
+      "experiment_id": "exp_unique_word_ratio_x_title_word_count_20260410034428.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T03:44:28.967Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_avg_segment_duration_s",
+      "interaction_r": 0.13577964203470463,
+      "experiment_id": "exp_unique_word_ratio_x_avg_segment_duration_s_20260410034428.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:28.996Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_close_up_frame_pct",
+      "interaction_r": 0.08355524432870001,
+      "experiment_id": "exp_unique_word_ratio_x_close_up_frame_pct_20260410034429.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.028Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_hook_duration_pct",
+      "interaction_r": 0.034411904533955026,
+      "experiment_id": "exp_scene_change_rate_x_hook_duration_pct_20260410034429.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.053Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_title_word_count",
+      "interaction_r": -0.03277494050382563,
+      "experiment_id": "exp_scene_change_rate_x_title_word_count_20260410034429.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T03:44:29.081Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_avg_segment_duration_s",
+      "interaction_r": 0.1837849968795848,
+      "experiment_id": "exp_scene_change_rate_x_avg_segment_duration_s_20260410034429.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.155Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_close_up_frame_pct",
+      "interaction_r": 0.15742538047320878,
+      "experiment_id": "exp_scene_change_rate_x_close_up_frame_pct_20260410034429.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.188Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_title_word_count",
+      "interaction_r": 0.0027308144544127507,
+      "experiment_id": "exp_hook_duration_pct_x_title_word_count_20260410034429.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.213Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_avg_segment_duration_s",
+      "interaction_r": -0.005426731520534919,
+      "experiment_id": "exp_hook_duration_pct_x_avg_segment_duration_s_20260410034429.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T03:44:29.239Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_close_up_frame_pct",
+      "interaction_r": 0.07468176146019319,
+      "experiment_id": "exp_hook_duration_pct_x_close_up_frame_pct_20260410034429.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.273Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "title_word_count_x_avg_segment_duration_s",
+      "interaction_r": 0.10676294942055058,
+      "experiment_id": "exp_title_word_count_x_avg_segment_duration_s_20260410034429.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.298Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "title_word_count_x_close_up_frame_pct",
+      "interaction_r": 0.1272954871388634,
+      "experiment_id": "exp_title_word_count_x_close_up_frame_pct_20260410034429.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.329Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "avg_segment_duration_s_x_close_up_frame_pct",
+      "interaction_r": 0.1897842819466187,
+      "experiment_id": "exp_avg_segment_duration_s_x_close_up_frame_pct_20260410034429.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T03:44:29.361Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "sensory_word_density",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_sensory_word_density",
+      "interaction_r": 0.11374912310301703,
+      "experiment_id": "exp_speech_rate_wps_x_sensory_word_density_20260410_065031",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:31.452059Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "pivot_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_pivot_word_count",
+      "interaction_r": 0.2277161497419388,
+      "experiment_id": "exp_speech_rate_wps_x_pivot_word_count_20260410_065031",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:31.748811Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "max_silence_gap_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_max_silence_gap_s",
+      "interaction_r": 0.07681043149527005,
+      "experiment_id": "exp_speech_rate_wps_x_max_silence_gap_s_20260410_065032",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:32.054598Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "opening_speech_rate_3s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_opening_speech_rate_3s",
+      "interaction_r": -0.01896626141727642,
+      "experiment_id": "exp_speech_rate_wps_x_opening_speech_rate_3s_20260410_065032",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T06:50:32.359310Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "action_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_action_frame_pct",
+      "interaction_r": 0.16194951774610428,
+      "experiment_id": "exp_speech_rate_wps_x_action_frame_pct_20260410_065032",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:32.707005Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "narrative_arc_completeness",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_narrative_arc_completeness",
+      "interaction_r": 0.06673011730630406,
+      "experiment_id": "exp_speech_rate_wps_x_narrative_arc_completeness_20260410_065033",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:33.032004Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "sensory_word_density",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_sensory_word_density",
+      "interaction_r": 0.17367874648779338,
+      "experiment_id": "exp_face_frame_pct_x_sensory_word_density_20260410_065033",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:33.355041Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "pivot_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_pivot_word_count",
+      "interaction_r": 0.14454523918236753,
+      "experiment_id": "exp_face_frame_pct_x_pivot_word_count_20260410_065033",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:33.664212Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "max_silence_gap_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_max_silence_gap_s",
+      "interaction_r": 0.06549571825784326,
+      "experiment_id": "exp_face_frame_pct_x_max_silence_gap_s_20260410_065033",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:33.989634Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "opening_speech_rate_3s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_opening_speech_rate_3s",
+      "interaction_r": 0.049577607819571434,
+      "experiment_id": "exp_face_frame_pct_x_opening_speech_rate_3s_20260410_065034",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:34.303608Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "action_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_action_frame_pct",
+      "interaction_r": 0.1330261095595501,
+      "experiment_id": "exp_face_frame_pct_x_action_frame_pct_20260410_065034",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:34.659418Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "narrative_arc_completeness",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_narrative_arc_completeness",
+      "interaction_r": 0.053047365193472924,
+      "experiment_id": "exp_face_frame_pct_x_narrative_arc_completeness_20260410_065034",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:34.972088Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "sensory_word_density",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_sensory_word_density",
+      "interaction_r": 0.09324049672229512,
+      "experiment_id": "exp_unique_word_ratio_x_sensory_word_density_20260410_065035",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:35.289108Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "pivot_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_pivot_word_count",
+      "interaction_r": 0.2271160617595311,
+      "experiment_id": "exp_unique_word_ratio_x_pivot_word_count_20260410_065035",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T06:50:35.603577Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "max_silence_gap_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_max_silence_gap_s",
+      "interaction_r": -0.0074776786217712115,
+      "experiment_id": "exp_unique_word_ratio_x_max_silence_gap_s_20260410_065035",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T06:50:35.926519Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "retention_pct_25",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_retention_pct_25",
+      "interaction_r": -0.01547231022099461,
+      "experiment_id": "exp_retention_pct_50_x_retention_pct_25_20260410074720.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:47:20.335Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "speech_rate_wps",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_speech_rate_wps",
+      "interaction_r": 0.27986194118961516,
+      "experiment_id": "exp_retention_pct_50_x_speech_rate_wps_20260410074725.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:47:25.000Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "face_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_face_frame_pct",
+      "interaction_r": 0.14208302445367177,
+      "experiment_id": "exp_retention_pct_50_x_face_frame_pct_20260410074729.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:47:29.763Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "retention_entropy",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_retention_entropy",
+      "interaction_r": 0.18847291582299572,
+      "experiment_id": "exp_retention_pct_50_x_retention_entropy_20260410074733.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:47:33.802Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "hook_drop_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_hook_drop_rate",
+      "interaction_r": -0.48085379094022224,
+      "experiment_id": "exp_retention_pct_50_x_hook_drop_rate_20260410074737.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:47:37.644Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "non_sub_view_share",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_non_sub_view_share",
+      "interaction_r": 0.47025536273432017,
+      "experiment_id": "exp_retention_pct_50_x_non_sub_view_share_20260410074742.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:47:42.704Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "swipe_away_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_swipe_away_rate",
+      "interaction_r": 0.04157325356194169,
+      "experiment_id": "exp_retention_pct_50_x_swipe_away_rate_20260410074749.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:47:49.113Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_like_rate",
+      "interaction_r": -0.22053984037524502,
+      "experiment_id": "exp_retention_pct_50_x_like_rate_20260410074753.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:47:53.170Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_unique_word_ratio",
+      "interaction_r": 0.17473686738569813,
+      "experiment_id": "exp_retention_pct_50_x_unique_word_ratio_20260410074757.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:47:57.723Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_scene_change_rate",
+      "interaction_r": 0.2878474559002417,
+      "experiment_id": "exp_retention_pct_50_x_scene_change_rate_20260410074801.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:01.614Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_hook_duration_pct",
+      "interaction_r": 0.10939356403204337,
+      "experiment_id": "exp_retention_pct_50_x_hook_duration_pct_20260410074806.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:06.413Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_title_word_count",
+      "interaction_r": 0.13891203055466392,
+      "experiment_id": "exp_retention_pct_50_x_title_word_count_20260410074810.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:10.044Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_avg_segment_duration_s",
+      "interaction_r": 0.37880061082432487,
+      "experiment_id": "exp_retention_pct_50_x_avg_segment_duration_s_20260410074813.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:13.418Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_close_up_frame_pct",
+      "interaction_r": 0.1217888494768609,
+      "experiment_id": "exp_retention_pct_50_x_close_up_frame_pct_20260410074816.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:16.523Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "speech_rate_wps",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_speech_rate_wps",
+      "interaction_r": 0.1938851464448612,
+      "experiment_id": "exp_retention_pct_25_x_speech_rate_wps_20260410074820.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:20.123Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "face_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_face_frame_pct",
+      "interaction_r": 0.11764079782177564,
+      "experiment_id": "exp_retention_pct_25_x_face_frame_pct_20260410074824.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:24.554Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "retention_entropy",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_retention_entropy",
+      "interaction_r": 0.08520508288538854,
+      "experiment_id": "exp_retention_pct_25_x_retention_entropy_20260410074828.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:28.979Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "hook_drop_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_hook_drop_rate",
+      "interaction_r": -0.4400193867284288,
+      "experiment_id": "exp_retention_pct_25_x_hook_drop_rate_20260410074832.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:48:32.798Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "non_sub_view_share",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_non_sub_view_share",
+      "interaction_r": 0.4182159150486897,
+      "experiment_id": "exp_retention_pct_25_x_non_sub_view_share_20260410074838.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:38.203Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "swipe_away_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_swipe_away_rate",
+      "interaction_r": 0.03272885785753475,
+      "experiment_id": "exp_retention_pct_25_x_swipe_away_rate_20260410074842.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:42.256Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_like_rate",
+      "interaction_r": -0.29134200223765816,
+      "experiment_id": "exp_retention_pct_25_x_like_rate_20260410074846.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:48:46.791Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_unique_word_ratio",
+      "interaction_r": 0.014523748149960361,
+      "experiment_id": "exp_retention_pct_25_x_unique_word_ratio_20260410074851.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:51.278Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_scene_change_rate",
+      "interaction_r": 0.17000444130694345,
+      "experiment_id": "exp_retention_pct_25_x_scene_change_rate_20260410074855.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:48:55.676Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_hook_duration_pct",
+      "interaction_r": 0.07732268577156866,
+      "experiment_id": "exp_retention_pct_25_x_hook_duration_pct_20260410074900.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:00.281Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_title_word_count",
+      "interaction_r": 0.04759693679318638,
+      "experiment_id": "exp_retention_pct_25_x_title_word_count_20260410074904.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:04.787Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_avg_segment_duration_s",
+      "interaction_r": 0.304220341740504,
+      "experiment_id": "exp_retention_pct_25_x_avg_segment_duration_s_20260410074908.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:08.827Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_close_up_frame_pct",
+      "interaction_r": 0.09033402747380266,
+      "experiment_id": "exp_retention_pct_25_x_close_up_frame_pct_20260410074912.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:12.371Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "retention_entropy",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_retention_entropy",
+      "interaction_r": 0.1034866188688293,
+      "experiment_id": "exp_speech_rate_wps_x_retention_entropy_20260410074917.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:17.145Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "hook_drop_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_hook_drop_rate",
+      "interaction_r": -0.32859188798097394,
+      "experiment_id": "exp_speech_rate_wps_x_hook_drop_rate_20260410074921.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:49:21.073Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "non_sub_view_share",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_non_sub_view_share",
+      "interaction_r": 0.45453801563786345,
+      "experiment_id": "exp_speech_rate_wps_x_non_sub_view_share_20260410074924.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:24.863Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "swipe_away_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_swipe_away_rate",
+      "interaction_r": 0.029323339459848947,
+      "experiment_id": "exp_speech_rate_wps_x_swipe_away_rate_20260410074929.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:29.761Z"
+    },
+    {
+      "from": "speech_rate_wps",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "speech_rate_wps_x_like_rate",
+      "interaction_r": -0.2634892391124758,
+      "experiment_id": "exp_speech_rate_wps_x_like_rate_20260410074933.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:49:33.459Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "retention_entropy",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_retention_entropy",
+      "interaction_r": 0.08631200103830405,
+      "experiment_id": "exp_face_frame_pct_x_retention_entropy_20260410074936.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:36.846Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "hook_drop_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_hook_drop_rate",
+      "interaction_r": -0.16691214992780923,
+      "experiment_id": "exp_face_frame_pct_x_hook_drop_rate_20260410074942.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:49:42.174Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "non_sub_view_share",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_non_sub_view_share",
+      "interaction_r": 0.16488241149711994,
+      "experiment_id": "exp_face_frame_pct_x_non_sub_view_share_20260410074945.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:45.851Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "swipe_away_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_swipe_away_rate",
+      "interaction_r": 0.08523541520957949,
+      "experiment_id": "exp_face_frame_pct_x_swipe_away_rate_20260410074950.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:49:50.070Z"
+    },
+    {
+      "from": "face_frame_pct",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "face_frame_pct_x_like_rate",
+      "interaction_r": -0.08094166703619585,
+      "experiment_id": "exp_face_frame_pct_x_like_rate_20260410074954.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:49:54.456Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "hook_drop_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_hook_drop_rate",
+      "interaction_r": -0.4047432714867066,
+      "experiment_id": "exp_retention_entropy_x_hook_drop_rate_20260410075000.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:50:00.307Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "non_sub_view_share",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_non_sub_view_share",
+      "interaction_r": 0.762929211797504,
+      "experiment_id": "exp_retention_entropy_x_non_sub_view_share_20260410075006.",
+      "strength_label": "strong",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:50:06.431Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "swipe_away_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_swipe_away_rate",
+      "interaction_r": 0.034834502575727594,
+      "experiment_id": "exp_retention_entropy_x_swipe_away_rate_20260410075010.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:50:10.843Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_like_rate",
+      "interaction_r": -0.3608361485586182,
+      "experiment_id": "exp_retention_entropy_x_like_rate_20260410075014.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:50:14.876Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_unique_word_ratio",
+      "interaction_r": -0.19086624954626846,
+      "experiment_id": "exp_retention_entropy_x_unique_word_ratio_20260410075020.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:50:20.437Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_scene_change_rate",
+      "interaction_r": 0.16511254151424737,
+      "experiment_id": "exp_retention_entropy_x_scene_change_rate_20260410075023.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:50:23.938Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_hook_duration_pct",
+      "interaction_r": 0.028348848946182264,
+      "experiment_id": "exp_retention_entropy_x_hook_duration_pct_20260410075027.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:50:27.428Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_title_word_count",
+      "interaction_r": -0.04654389404280347,
+      "experiment_id": "exp_retention_entropy_x_title_word_count_20260410075032.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:50:32.350Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_avg_segment_duration_s",
+      "interaction_r": 0.16715147553845028,
+      "experiment_id": "exp_retention_entropy_x_avg_segment_duration_s_20260410075037.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:50:37.015Z"
+    },
+    {
+      "from": "retention_entropy",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_entropy_x_close_up_frame_pct",
+      "interaction_r": 0.1443500071599487,
+      "experiment_id": "exp_retention_entropy_x_close_up_frame_pct_20260410075042.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:50:42.997Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "non_sub_view_share",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_non_sub_view_share",
+      "interaction_r": -0.5975476576241493,
+      "experiment_id": "exp_hook_drop_rate_x_non_sub_view_share_20260410075046.",
+      "strength_label": "strong",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:50:46.580Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "swipe_away_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_swipe_away_rate",
+      "interaction_r": -0.06047818413071596,
+      "experiment_id": "exp_hook_drop_rate_x_swipe_away_rate_20260410075051.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:50:51.352Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_like_rate",
+      "interaction_r": 0.06970934046645988,
+      "experiment_id": "exp_hook_drop_rate_x_like_rate_20260410075056.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:50:56.198Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_unique_word_ratio",
+      "interaction_r": -0.2979501802651912,
+      "experiment_id": "exp_hook_drop_rate_x_unique_word_ratio_20260410075101.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:51:01.122Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_scene_change_rate",
+      "interaction_r": -0.40851744218794733,
+      "experiment_id": "exp_hook_drop_rate_x_scene_change_rate_20260410075106.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:51:06.908Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_hook_duration_pct",
+      "interaction_r": -0.14743247703284376,
+      "experiment_id": "exp_hook_drop_rate_x_hook_duration_pct_20260410075110.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:51:10.933Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_title_word_count",
+      "interaction_r": -0.22385093384812613,
+      "experiment_id": "exp_hook_drop_rate_x_title_word_count_20260410075114.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:51:14.938Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_avg_segment_duration_s",
+      "interaction_r": -0.33079383808650276,
+      "experiment_id": "exp_hook_drop_rate_x_avg_segment_duration_s_20260410075118.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:51:18.725Z"
+    },
+    {
+      "from": "hook_drop_rate",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "hook_drop_rate_x_close_up_frame_pct",
+      "interaction_r": -0.3329038677593463,
+      "experiment_id": "exp_hook_drop_rate_x_close_up_frame_pct_20260410075124.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:51:24.306Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "swipe_away_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_swipe_away_rate",
+      "interaction_r": 0.07285791863219819,
+      "experiment_id": "exp_non_sub_view_share_x_swipe_away_rate_20260410075128.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:51:28.152Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_like_rate",
+      "interaction_r": -0.18566754717280445,
+      "experiment_id": "exp_non_sub_view_share_x_like_rate_20260410075132.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:51:32.137Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_unique_word_ratio",
+      "interaction_r": 0.36559457715406407,
+      "experiment_id": "exp_non_sub_view_share_x_unique_word_ratio_20260410075135.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:51:35.673Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_scene_change_rate",
+      "interaction_r": 0.7214174793385822,
+      "experiment_id": "exp_non_sub_view_share_x_scene_change_rate_20260410075139.",
+      "strength_label": "strong",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:51:39.445Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_hook_duration_pct",
+      "interaction_r": 0.12883599558506115,
+      "experiment_id": "exp_non_sub_view_share_x_hook_duration_pct_20260410075144.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:51:44.350Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_title_word_count",
+      "interaction_r": 0.20926245084242126,
+      "experiment_id": "exp_non_sub_view_share_x_title_word_count_20260410075148.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:51:48.991Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_avg_segment_duration_s",
+      "interaction_r": 0.36113417793502606,
+      "experiment_id": "exp_non_sub_view_share_x_avg_segment_duration_s_20260410075155.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:51:55.165Z"
+    },
+    {
+      "from": "non_sub_view_share",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "non_sub_view_share_x_close_up_frame_pct",
+      "interaction_r": 0.3297761976290391,
+      "experiment_id": "exp_non_sub_view_share_x_close_up_frame_pct_20260410075158.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:51:58.716Z"
+    },
+    {
+      "from": "swipe_away_rate",
+      "to": "like_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "swipe_away_rate_x_like_rate",
+      "interaction_r": -0.06552751414302589,
+      "experiment_id": "exp_swipe_away_rate_x_like_rate_20260410075202.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:02.550Z"
+    },
+    {
+      "from": "swipe_away_rate",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "swipe_away_rate_x_unique_word_ratio",
+      "interaction_r": 0.028557598643145308,
+      "experiment_id": "exp_swipe_away_rate_x_unique_word_ratio_20260410075207.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:52:07.788Z"
+    },
+    {
+      "from": "swipe_away_rate",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "swipe_away_rate_x_scene_change_rate",
+      "interaction_r": 0.036031368261883114,
+      "experiment_id": "exp_swipe_away_rate_x_scene_change_rate_20260410075211.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:52:11.567Z"
+    },
+    {
+      "from": "swipe_away_rate",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "swipe_away_rate_x_hook_duration_pct",
+      "interaction_r": -0.007260754196775068,
+      "experiment_id": "exp_swipe_away_rate_x_hook_duration_pct_20260410075215.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:15.346Z"
+    },
+    {
+      "from": "swipe_away_rate",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "swipe_away_rate_x_title_word_count",
+      "interaction_r": 0.02113874942811762,
+      "experiment_id": "exp_swipe_away_rate_x_title_word_count_20260410075221.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:52:21.209Z"
+    },
+    {
+      "from": "swipe_away_rate",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "swipe_away_rate_x_avg_segment_duration_s",
+      "interaction_r": 0.06692012159666685,
+      "experiment_id": "exp_swipe_away_rate_x_avg_segment_duration_s_20260410075226.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:52:26.753Z"
+    },
+    {
+      "from": "swipe_away_rate",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "swipe_away_rate_x_close_up_frame_pct",
+      "interaction_r": 0.047213659005985384,
+      "experiment_id": "exp_swipe_away_rate_x_close_up_frame_pct_20260410075231.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:52:31.218Z"
+    },
+    {
+      "from": "like_rate",
+      "to": "unique_word_ratio",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "like_rate_x_unique_word_ratio",
+      "interaction_r": -0.39520198647710875,
+      "experiment_id": "exp_like_rate_x_unique_word_ratio_20260410075235.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:35.640Z"
+    },
+    {
+      "from": "like_rate",
+      "to": "scene_change_rate",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "like_rate_x_scene_change_rate",
+      "interaction_r": -0.35174104806014933,
+      "experiment_id": "exp_like_rate_x_scene_change_rate_20260410075239.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:39.511Z"
+    },
+    {
+      "from": "like_rate",
+      "to": "hook_duration_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "like_rate_x_hook_duration_pct",
+      "interaction_r": -0.13050147965285386,
+      "experiment_id": "exp_like_rate_x_hook_duration_pct_20260410075244.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:44.375Z"
+    },
+    {
+      "from": "like_rate",
+      "to": "title_word_count",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "like_rate_x_title_word_count",
+      "interaction_r": -0.3019914410067523,
+      "experiment_id": "exp_like_rate_x_title_word_count_20260410075248.",
+      "strength_label": "moderate",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:48.114Z"
+    },
+    {
+      "from": "like_rate",
+      "to": "avg_segment_duration_s",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "like_rate_x_avg_segment_duration_s",
+      "interaction_r": -0.18732736786063278,
+      "experiment_id": "exp_like_rate_x_avg_segment_duration_s_20260410075252.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:52.626Z"
+    },
+    {
+      "from": "like_rate",
+      "to": "close_up_frame_pct",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "like_rate_x_close_up_frame_pct",
+      "interaction_r": -0.1168715558855929,
+      "experiment_id": "exp_like_rate_x_close_up_frame_pct_20260410075256.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-10T07:52:56.631Z"
+    },
+    {
+      "from": "retention_pct_50",
+      "to": "final_5pct_retention",
+      "kind": "interaction",
+      "target": "views",
+      "interaction_key": "retention_pct_50_x_final_5pct_retention",
+      "interaction_r": 0.46898826747978,
+      "experiment_id": "exp_retention_pct_50_x_final_5pct_retention_20260410075329.",
+      "strength_label": "moderate",
+      "direction": "positive",
+      "added_at": "2026-04-10T07:53:29.983Z"
+    }
+  ]
 }
