@@ -1,0 +1,1157 @@
+{
+  "_meta": {
+    "generated_at": "2026-04-09T12:00:00Z",
+    "generator": "claude-auto-research-karpathy-style",
+    "purpose": "Top-of-funnel indicator candidates for Jarvis pipeline. Deterministic downstream execution.",
+    "total_candidates": 147,
+    "pre_upload_candidates": 97,
+    "post_upload_candidates": 30,
+    "interaction_candidates": 20,
+    "existing_indicators_excluded": 38,
+    "notes": "All candidates are implementable with existing video_data. Families ordered by expected signal strength based on prior research."
+  },
+  "families": [
+    {
+      "family_id": "F01",
+      "name": "Speech Pacing (Timed Words)",
+      "layer": "pre",
+      "data_source": "transcript.words",
+      "coverage": "372/372 videos",
+      "research_basis": "Opening pace r=-0.370 vs keep (causal tree). Silence gaps >1.5s predict drops r=-0.73. Speech acceleration r=+0.176 vs retention.",
+      "candidates": [
+        {
+          "key": "opening_speech_rate_3s",
+          "label": "Opening Speech Rate (0-3s)",
+          "description": "Words per second in the first 3 seconds — hook density. Research shows optimal ~7.5 words in first 3s.",
+          "formula": "count(words where timestamp < 3.0) / 3.0",
+          "expected_range": "0 to 5",
+          "priority": "high",
+          "research_signal": "r=-0.370 vs keep for opening pace"
+        },
+        {
+          "key": "opening_speech_rate_5s",
+          "label": "Opening Speech Rate (0-5s)",
+          "description": "Words per second in the first 5 seconds — slightly wider hook window.",
+          "formula": "count(words where timestamp < 5.0) / 5.0",
+          "expected_range": "0 to 5",
+          "priority": "high",
+          "research_signal": "r=-0.370 vs keep for opening pace"
+        },
+        {
+          "key": "closing_speech_rate_5s",
+          "label": "Closing Speech Rate (last 5s)",
+          "description": "Words per second in the final 5 seconds — deliberate delivery at climax (slower = better per research).",
+          "formula": "count(words where timestamp > duration - 5.0) / 5.0",
+          "expected_range": "0 to 5",
+          "priority": "high",
+          "research_signal": "Slower pace at climax 3.86 w/s vs 4.26 at drops"
+        },
+        {
+          "key": "speech_rate_q1",
+          "label": "Speech Rate Q1 (0-25%)",
+          "description": "Words per second in the first quarter of the video.",
+          "formula": "count(words where timestamp < duration*0.25) / (duration*0.25)",
+          "expected_range": "0 to 5",
+          "priority": "medium"
+        },
+        {
+          "key": "speech_rate_q4",
+          "label": "Speech Rate Q4 (75-100%)",
+          "description": "Words per second in the final quarter of the video.",
+          "formula": "count(words where timestamp >= duration*0.75) / (duration*0.25)",
+          "expected_range": "0 to 5",
+          "priority": "medium"
+        },
+        {
+          "key": "speech_rate_ratio_q4_q1",
+          "label": "Speech Rate Ratio Q4/Q1",
+          "description": "Ending pace divided by opening pace — deceleration signal. <1 means slowing down (good for climax).",
+          "formula": "speech_rate_q4 / (speech_rate_q1 + 0.01)",
+          "expected_range": "0 to 3",
+          "priority": "high",
+          "research_signal": "Speech acceleration r=+0.176"
+        },
+        {
+          "key": "speech_acceleration",
+          "label": "Speech Acceleration",
+          "description": "Slope of speech rate over video timeline — positive = speeding up, negative = slowing down.",
+          "formula": "linregress(word_timestamps, cumulative_word_rate).slope",
+          "expected_range": "-0.1 to 0.1",
+          "priority": "high",
+          "research_signal": "Speech acceleration r=+0.176"
+        },
+        {
+          "key": "max_silence_gap_s",
+          "label": "Max Silence Gap (seconds)",
+          "description": "Longest gap between consecutive words — dead air signal. Gaps >1.5s predict retention drops at r=-0.73.",
+          "formula": "max(words[i+1].timestamp - words[i].timestamp for i in range(len-1))",
+          "expected_range": "0 to 10",
+          "priority": "high",
+          "research_signal": "Silence >1.5s predicts drops r=-0.73 (STRONGEST local signal)"
+        },
+        {
+          "key": "silence_gap_count",
+          "label": "Silence Gap Count (>1s)",
+          "description": "Number of gaps between words exceeding 1 second — dead air frequency.",
+          "formula": "count(gaps > 1.0)",
+          "expected_range": "0 to 20",
+          "priority": "high",
+          "research_signal": "Silence gaps predict retention drops"
+        },
+        {
+          "key": "silence_total_pct",
+          "label": "Total Silence Percentage",
+          "description": "Total silence time (gaps > 0.5s) as fraction of video duration.",
+          "formula": "sum(gaps where gap > 0.5) / duration",
+          "expected_range": "0 to 0.5",
+          "priority": "medium"
+        },
+        {
+          "key": "opening_word_latency_s",
+          "label": "Opening Word Latency",
+          "description": "Time in seconds before the first word is spoken. Immediate speech = strong hook.",
+          "formula": "words[0].timestamp",
+          "expected_range": "0 to 5",
+          "priority": "medium"
+        },
+        {
+          "key": "peak_speech_rate_3s",
+          "label": "Peak Speech Rate (3s window)",
+          "description": "Maximum words/sec in any 3-second sliding window — burst intensity.",
+          "formula": "max(count(words in [t, t+3]) / 3 for all t)",
+          "expected_range": "0 to 8",
+          "priority": "medium"
+        },
+        {
+          "key": "speech_tempo_range",
+          "label": "Speech Tempo Range",
+          "description": "Max speech rate minus min speech rate across 5s windows — dynamic range of delivery.",
+          "formula": "max(rate_per_5s_window) - min(rate_per_5s_window)",
+          "expected_range": "0 to 6",
+          "priority": "medium"
+        },
+        {
+          "key": "avg_word_gap_s",
+          "label": "Average Word Gap",
+          "description": "Mean time between consecutive words — overall delivery pace.",
+          "formula": "mean(words[i+1].timestamp - words[i].timestamp)",
+          "expected_range": "0 to 2",
+          "priority": "low"
+        },
+        {
+          "key": "word_density_variance",
+          "label": "Word Density Variance",
+          "description": "Variance in words-per-second across 5s windows — pacing consistency.",
+          "formula": "var(words_per_5s_windows)",
+          "expected_range": "0 to 5",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "family_id": "F02",
+      "name": "Sensory & Technical Language",
+      "layer": "pre",
+      "data_source": "transcript.fullText",
+      "coverage": "372/372 videos",
+      "research_basis": "Sensory/body words drive retention peaks (+0.06). Technical/material words kill retention (-0.171). 662 words scored in word impact dictionary. Physical language has weight +1.59 in regression.",
+      "candidates": [
+        {
+          "key": "sensory_word_density",
+          "label": "Sensory Word Density",
+          "description": "Fraction of transcript words that are sensory/body words (curious, painful, bigger, stomach, etc). Strongest positive language signal.",
+          "formula": "count(sensory_words) / total_words",
+          "expected_range": "0 to 0.15",
+          "priority": "high",
+          "research_signal": "Physical/sensory words +0.06 retention, weight +1.59 in regression"
+        },
+        {
+          "key": "technical_word_density",
+          "label": "Technical Word Density",
+          "description": "Fraction of transcript words that are technical/material words (plastic, solid, fiber, carbon, etc). Strongest negative language signal.",
+          "formula": "count(technical_words) / total_words",
+          "expected_range": "0 to 0.15",
+          "priority": "high",
+          "research_signal": "Technical words -0.171 retention (3x larger negative effect)"
+        },
+        {
+          "key": "sensory_technical_ratio",
+          "label": "Sensory-to-Technical Ratio",
+          "description": "Ratio of sensory words to technical words. Higher = more engaging language balance.",
+          "formula": "count(sensory_words) / (count(technical_words) + 1)",
+          "expected_range": "0 to 20",
+          "priority": "high",
+          "research_signal": "Combined sensory vs technical gap"
+        },
+        {
+          "key": "hook_sensory_word_count",
+          "label": "Hook Sensory Word Count",
+          "description": "Number of sensory/body words in the hook segment. Sensory opening grabs attention.",
+          "formula": "count(sensory_words in hook_transcript)",
+          "expected_range": "0 to 10",
+          "priority": "high"
+        },
+        {
+          "key": "body_sensation_word_pct",
+          "label": "Body Sensation Word Percentage",
+          "description": "Percentage of words related to body sensations (feel, touch, hurt, taste, smell, burn, etc).",
+          "formula": "count(body_words) / total_words * 100",
+          "expected_range": "0 to 10",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "family_id": "F03",
+      "name": "Pivot & Transition Words",
+      "layer": "pre",
+      "data_source": "transcript.fullText",
+      "coverage": "372/372 videos",
+      "research_basis": "Pivot/connector words r=+0.26 vs keep (causal tree). 'But', 'however', 'wait' predict keep at r=0.23.",
+      "candidates": [
+        {
+          "key": "pivot_word_count",
+          "label": "Pivot Word Count",
+          "description": "Count of pivot/transition words (but, however, wait, instead, actually, turns out, except, surprisingly). Signals narrative tension.",
+          "formula": "count(pivot_words in transcript)",
+          "expected_range": "0 to 15",
+          "priority": "high",
+          "research_signal": "Pivot words r=+0.26 vs keep"
+        },
+        {
+          "key": "pivot_word_density",
+          "label": "Pivot Word Density",
+          "description": "Pivot words per 100 transcript words — normalized for video length.",
+          "formula": "count(pivot_words) / total_words * 100",
+          "expected_range": "0 to 8",
+          "priority": "high",
+          "research_signal": "Pivot words r=+0.26 vs keep"
+        },
+        {
+          "key": "hook_pivot_word_flag",
+          "label": "Hook Contains Pivot Word",
+          "description": "Whether the hook segment contains at least one pivot word (1=yes, 0=no).",
+          "formula": "int(any(pivot_word in hook_transcript))",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "family_id": "F04",
+      "name": "Transcript Vocabulary Features",
+      "layer": "pre",
+      "data_source": "transcript.fullText",
+      "coverage": "372/372 videos",
+      "research_basis": "Vocab universality r=+0.323 vs retention (causal tree). Simple, common words retain better.",
+      "candidates": [
+        {
+          "key": "short_word_ratio",
+          "label": "Short Word Ratio (1-3 chars)",
+          "description": "Fraction of words with 1-3 characters — simplicity/accessibility signal.",
+          "formula": "count(words where len <= 3) / total_words",
+          "expected_range": "0 to 0.8",
+          "priority": "medium",
+          "research_signal": "Vocab universality r=+0.323"
+        },
+        {
+          "key": "long_word_ratio",
+          "label": "Long Word Ratio (8+ chars)",
+          "description": "Fraction of words with 8+ characters — complexity/jargon signal.",
+          "formula": "count(words where len >= 8) / total_words",
+          "expected_range": "0 to 0.3",
+          "priority": "medium",
+          "research_signal": "Inverse of vocab universality"
+        },
+        {
+          "key": "hapax_legomena_ratio",
+          "label": "Hapax Legomena Ratio",
+          "description": "Fraction of words appearing exactly once — vocabulary uniqueness.",
+          "formula": "count(words appearing once) / total_words",
+          "expected_range": "0 to 1",
+          "priority": "low"
+        },
+        {
+          "key": "first_person_ratio",
+          "label": "First Person Pronoun Ratio",
+          "description": "Fraction of words that are first-person pronouns (I, me, my, mine, myself).",
+          "formula": "count(first_person_words) / total_words",
+          "expected_range": "0 to 0.15",
+          "priority": "medium"
+        },
+        {
+          "key": "second_person_ratio",
+          "label": "Second Person Pronoun Ratio",
+          "description": "Fraction of words that are second-person pronouns (you, your, yours). Research shows 'you' hurts keep rate.",
+          "formula": "count(second_person_words) / total_words",
+          "expected_range": "0 to 0.1",
+          "priority": "medium",
+          "research_signal": "Direct address hurts keep rate (debunked as positive)"
+        },
+        {
+          "key": "action_verb_density",
+          "label": "Action Verb Density",
+          "description": "Fraction of words that are action/physical verbs (making, building, testing, breaking, etc).",
+          "formula": "count(action_verbs) / total_words",
+          "expected_range": "0 to 0.1",
+          "priority": "medium"
+        },
+        {
+          "key": "superlative_count",
+          "label": "Superlative Count",
+          "description": "Number of superlative words (biggest, most, fastest, strongest, etc) — intensity signal.",
+          "formula": "count(superlatives in transcript)",
+          "expected_range": "0 to 10",
+          "priority": "low"
+        },
+        {
+          "key": "comparison_word_count",
+          "label": "Comparison Word Count",
+          "description": "Count of comparison words (vs, than, better, worse, more, less) — competitive framing.",
+          "formula": "count(comparison_words)",
+          "expected_range": "0 to 15",
+          "priority": "low"
+        }
+      ]
+    },
+    {
+      "family_id": "F05",
+      "name": "Hook-Specific Features",
+      "layer": "pre",
+      "data_source": "aiAnalysis.segments + transcript",
+      "coverage": "285/372 videos (segments), fallback to first-5s estimate",
+      "research_basis": "Hook word density r=-0.350 (inverted U, optimal 7.5 words in first 3s). Hook-payoff gap r=-0.520.",
+      "candidates": [
+        {
+          "key": "hook_speech_rate_wps",
+          "label": "Hook Speech Rate (words/sec)",
+          "description": "Words per second within the hook segment — hook delivery pace.",
+          "formula": "hook_word_count / hook_duration_s",
+          "expected_range": "0 to 6",
+          "priority": "high",
+          "research_signal": "Hook word density r=-0.350 with inverted-U"
+        },
+        {
+          "key": "hook_unique_word_ratio",
+          "label": "Hook Unique Word Ratio",
+          "description": "Lexical diversity within the hook segment only.",
+          "formula": "len(set(hook_words)) / len(hook_words)",
+          "expected_range": "0 to 1",
+          "priority": "medium"
+        },
+        {
+          "key": "hook_action_verb_count",
+          "label": "Hook Action Verb Count",
+          "description": "Number of action verbs in the hook — immediate activity signal.",
+          "formula": "count(action_verbs in hook_transcript)",
+          "expected_range": "0 to 5",
+          "priority": "medium"
+        },
+        {
+          "key": "hook_sentence_count",
+          "label": "Hook Sentence Count",
+          "description": "Number of sentences in the hook segment — hook complexity.",
+          "formula": "count(sentence_endings in hook_transcript)",
+          "expected_range": "0 to 5",
+          "priority": "low"
+        },
+        {
+          "key": "hook_avg_word_length",
+          "label": "Hook Average Word Length",
+          "description": "Average word length in hook — hook vocabulary complexity.",
+          "formula": "mean(len(word) for word in hook_words)",
+          "expected_range": "2 to 10",
+          "priority": "low"
+        },
+        {
+          "key": "hook_number_count",
+          "label": "Hook Number Count",
+          "description": "Number of numeric tokens in the hook — specificity in opening.",
+          "formula": "count(re.findall(r'\\d+', hook_transcript))",
+          "expected_range": "0 to 5",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "family_id": "F06",
+      "name": "Narrative Structure Advanced",
+      "layer": "pre",
+      "data_source": "aiAnalysis.segments",
+      "coverage": "285/372 videos",
+      "research_basis": "3/4 arc elements = 13M avg vs 0/4 = 1.4M. Segment type and placement matter. Climax position signals story shape.",
+      "candidates": [
+        {
+          "key": "segment_duration_variance",
+          "label": "Segment Duration Variance",
+          "description": "Variance in segment durations — pacing uniformity. Low variance = even pacing.",
+          "formula": "var(segment_durations)",
+          "expected_range": "0 to 500",
+          "priority": "medium"
+        },
+        {
+          "key": "segment_count_per_minute",
+          "label": "Segment Count Per Minute",
+          "description": "Segments per minute of video — structural density normalized by length.",
+          "formula": "segment_count / (duration / 60)",
+          "expected_range": "0 to 20",
+          "priority": "medium"
+        },
+        {
+          "key": "has_setup_segment",
+          "label": "Has Setup Segment",
+          "description": "Whether AI identified a Setup segment (1=yes, 0=no).",
+          "formula": "int(any(label.lower() == 'setup' for s in segments))",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "has_conclusion_segment",
+          "label": "Has Conclusion Segment",
+          "description": "Whether AI identified a Conclusion segment (1=yes, 0=no).",
+          "formula": "int(any(label.lower() == 'conclusion' for s in segments))",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "segment_type_count",
+          "label": "Unique Segment Type Count",
+          "description": "Number of unique segment labels — narrative complexity.",
+          "formula": "len(set(s['label'].lower() for s in segments))",
+          "expected_range": "1 to 8",
+          "priority": "medium"
+        },
+        {
+          "key": "narrative_arc_completeness",
+          "label": "Narrative Arc Completeness",
+          "description": "Count of canonical arc elements present: hook, setup, main_point/body, climax/payoff, conclusion. Score 0-5.",
+          "formula": "count(canonical_labels present in segments)",
+          "expected_range": "0 to 5",
+          "priority": "high",
+          "research_signal": "3/4 elements = 13M avg vs 0/4 = 1.4M"
+        },
+        {
+          "key": "climax_late_flag",
+          "label": "Climax in Last 30%",
+          "description": "Whether climax starts in the last 30% of the video (1=yes, 0=no). Late climax = better payoff timing.",
+          "formula": "int(climax_start > duration * 0.7)",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "last_segment_duration_pct",
+          "label": "Last Segment Duration %",
+          "description": "Final segment as percentage of total duration — ending weight.",
+          "formula": "last_segment_duration / duration * 100",
+          "expected_range": "0 to 50",
+          "priority": "medium"
+        },
+        {
+          "key": "first_segment_duration_pct",
+          "label": "First Segment Duration %",
+          "description": "First segment as percentage of total duration — opening weight.",
+          "formula": "first_segment_duration / duration * 100",
+          "expected_range": "0 to 50",
+          "priority": "medium"
+        },
+        {
+          "key": "segment_length_ratio_max_min",
+          "label": "Segment Length Ratio (Max/Min)",
+          "description": "Longest segment divided by shortest — pacing imbalance.",
+          "formula": "max(durations) / (min(durations) + 0.1)",
+          "expected_range": "1 to 20",
+          "priority": "low"
+        },
+        {
+          "key": "body_segment_count",
+          "label": "Body Segment Count",
+          "description": "Number of segments that are not Hook or Conclusion — middle content density.",
+          "formula": "count(segments where label not in ('hook', 'conclusion'))",
+          "expected_range": "0 to 8",
+          "priority": "low"
+        },
+        {
+          "key": "hook_conclusion_combined_pct",
+          "label": "Hook+Conclusion Combined %",
+          "description": "Hook and conclusion combined as percentage of total duration — bookend weight.",
+          "formula": "(hook_duration + conclusion_duration) / duration * 100",
+          "expected_range": "0 to 60",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "family_id": "F07",
+      "name": "Title & Metadata Advanced",
+      "layer": "pre",
+      "data_source": "metadata.title + metadata",
+      "coverage": "372/372 videos",
+      "research_basis": "Title structure largely null in prior research, but specific keywords matter. 'Making' = $24M avg. Duration sweet spot 50-55s.",
+      "candidates": [
+        {
+          "key": "title_all_caps_word_count",
+          "label": "Title All-Caps Word Count",
+          "description": "Number of ALL CAPS words in the title — emphasis/shouting.",
+          "formula": "count(words where word.isupper() and len >= 2 in title)",
+          "expected_range": "0 to 10",
+          "priority": "low"
+        },
+        {
+          "key": "title_emoji_flag",
+          "label": "Title Contains Emoji",
+          "description": "Whether the title contains any emoji character (1=yes, 0=no).",
+          "formula": "int(has_emoji(title))",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "title_contains_making",
+          "label": "Title Contains 'Making'",
+          "description": "Whether the title contains 'making' or 'made' (1=yes, 0=no). Strongest concept keyword.",
+          "formula": "int('making' in title.lower() or 'made' in title.lower())",
+          "expected_range": "0 or 1",
+          "priority": "high",
+          "research_signal": "'Making' = $24M avg (strongest concept)"
+        },
+        {
+          "key": "title_unique_word_ratio",
+          "label": "Title Unique Word Ratio",
+          "description": "Lexical diversity in the title.",
+          "formula": "len(set(title_words)) / len(title_words)",
+          "expected_range": "0 to 1",
+          "priority": "low"
+        },
+        {
+          "key": "title_avg_word_length",
+          "label": "Title Average Word Length",
+          "description": "Average word length in the title — title complexity.",
+          "formula": "mean(len(word) for word in title_words)",
+          "expected_range": "2 to 12",
+          "priority": "low"
+        },
+        {
+          "key": "title_starts_with_action",
+          "label": "Title Starts With Action Verb",
+          "description": "Whether the title begins with an action/gerund word (1=yes, 0=no).",
+          "formula": "int(title_words[0] ends with 'ing' or is action verb)",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "title_length_optimal_flag",
+          "label": "Title Length Optimal (3-7 words)",
+          "description": "Whether title word count is in the 3-7 word sweet spot.",
+          "formula": "int(3 <= title_word_count <= 7)",
+          "expected_range": "0 or 1",
+          "priority": "low"
+        },
+        {
+          "key": "description_word_count",
+          "label": "Description Word Count",
+          "description": "Word count of video description — metadata effort signal.",
+          "formula": "len(metadata.description.split())",
+          "expected_range": "0 to 500",
+          "priority": "low"
+        },
+        {
+          "key": "duration_optimal_flag",
+          "label": "Duration in Sweet Spot (40-55s)",
+          "description": "Whether duration falls in the 40-55 second optimal range. 50-55s = 2.88M avg.",
+          "formula": "int(40 <= duration_s <= 55)",
+          "expected_range": "0 or 1",
+          "priority": "medium",
+          "research_signal": "50-55s = 2.88M avg; 40-55s safe range"
+        },
+        {
+          "key": "duration_sweetspot_distance",
+          "label": "Distance from Duration Sweet Spot",
+          "description": "Absolute seconds away from 52s sweet spot center. Lower = better.",
+          "formula": "abs(duration_s - 52)",
+          "expected_range": "0 to 60",
+          "priority": "medium",
+          "research_signal": "50-55s optimal window"
+        },
+        {
+          "key": "is_vertical",
+          "label": "Is Vertical Video",
+          "description": "Whether the video is in vertical format (1=yes, 0=no).",
+          "formula": "int(metadata.isVertical or metadata.height > metadata.width)",
+          "expected_range": "0 or 1",
+          "priority": "low"
+        },
+        {
+          "key": "upload_month",
+          "label": "Upload Month",
+          "description": "Month of upload (1-12) — seasonal effects on algorithm/audience.",
+          "formula": "int(metadata.uploadDate[4:6])",
+          "expected_range": "1 to 12",
+          "priority": "low"
+        }
+      ]
+    },
+    {
+      "family_id": "F08",
+      "name": "Visual Frame Advanced",
+      "layer": "pre",
+      "data_source": "frames[*].analysis",
+      "coverage": "372/372 videos",
+      "research_basis": "Action frames 28% at peaks vs 8% at worst. Face MORE visible at drops (talking head trap). Workshop settings win. Frame variety paradox: more variety = less retention r=-0.28.",
+      "candidates": [
+        {
+          "key": "opening_frame_has_text",
+          "label": "Opening Frame Has Text",
+          "description": "Whether the first frame has a text overlay (1=yes, 0=no).",
+          "formula": "int('text' in frames[0].analysis.visualTechniques.lower())",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "opening_frame_has_face",
+          "label": "Opening Frame Has Face",
+          "description": "Whether the first frame shows a face (1=yes, 0=no).",
+          "formula": "int('face' in frames[0].analysis.sceneDescription.lower())",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "action_frame_pct",
+          "label": "Action Frame Percentage",
+          "description": "Percentage of frames with action/motion/physical activity. Action enriched 1.9x at retention peaks.",
+          "formula": "count(frames with action keywords) / total_frames",
+          "expected_range": "0 to 1",
+          "priority": "high",
+          "research_signal": "Action frames 28% at peaks vs 8% at drops"
+        },
+        {
+          "key": "workshop_frame_pct",
+          "label": "Workshop/Tools Frame Percentage",
+          "description": "Percentage of frames showing workshop, workbench, or tools — familiar production setting.",
+          "formula": "count(frames with workshop keywords) / total_frames",
+          "expected_range": "0 to 1",
+          "priority": "medium",
+          "research_signal": "Familiar workshop settings win over exotic"
+        },
+        {
+          "key": "outdoor_frame_pct",
+          "label": "Outdoor Frame Percentage",
+          "description": "Percentage of frames showing outdoor scenes — outdoor 0.68x at peaks (underrepresented).",
+          "formula": "count(frames with outdoor keywords) / total_frames",
+          "expected_range": "0 to 1",
+          "priority": "medium",
+          "research_signal": "Outdoor 0.68x enrichment at peaks"
+        },
+        {
+          "key": "face_alone_pct",
+          "label": "Face Without Action Percentage",
+          "description": "Frames with face but NO action keywords — talking head trap signal. Face at drops 3.51 vs peaks 3.20.",
+          "formula": "count(frames with face AND NOT action) / total_frames",
+          "expected_range": "0 to 1",
+          "priority": "high",
+          "research_signal": "Talking head trap: face visibility higher at drops"
+        },
+        {
+          "key": "face_with_action_pct",
+          "label": "Face With Action Percentage",
+          "description": "Frames with BOTH face AND action — person doing something (positive signal).",
+          "formula": "count(frames with face AND action keywords) / total_frames",
+          "expected_range": "0 to 1",
+          "priority": "high"
+        },
+        {
+          "key": "object_focus_pct",
+          "label": "Object Focus Percentage",
+          "description": "Frames focused on objects/products rather than people.",
+          "formula": "count(frames without face mention) / total_frames",
+          "expected_range": "0 to 1",
+          "priority": "medium"
+        },
+        {
+          "key": "text_overlay_early_pct",
+          "label": "Text Overlay in First 25%",
+          "description": "Text overlay presence in first quarter of frames — early hook text usage.",
+          "formula": "count(first_25pct_frames with text) / count(first_25pct_frames)",
+          "expected_range": "0 to 1",
+          "priority": "medium"
+        },
+        {
+          "key": "cinematography_variety",
+          "label": "Cinematography Variety",
+          "description": "Number of unique cinematography types across frames (close-up, wide, medium, etc).",
+          "formula": "len(set(cinematography_types))",
+          "expected_range": "1 to 10",
+          "priority": "low"
+        },
+        {
+          "key": "dramatic_frame_pct",
+          "label": "Dramatic Frame Percentage",
+          "description": "Frames with dramatic/intense visual descriptions. Dramatic enriched 1.8x at peaks.",
+          "formula": "count(frames with dramatic keywords) / total_frames",
+          "expected_range": "0 to 1",
+          "priority": "medium",
+          "research_signal": "Dramatic 1.8x enriched at retention peaks"
+        }
+      ]
+    },
+    {
+      "family_id": "F09",
+      "name": "AI Analysis Features",
+      "layer": "pre",
+      "data_source": "aiAnalysis.videoIdea + aiAnalysis.summary",
+      "coverage": "285/372 videos",
+      "research_basis": "Idea length r=+0.012 in CV model. Concept type matters strongly (indestructible + making = 143.8M).",
+      "candidates": [
+        {
+          "key": "idea_word_count",
+          "label": "Video Idea Word Count",
+          "description": "Word count of the AI-generated video idea — concept complexity.",
+          "formula": "len(aiAnalysis.videoIdea.split())",
+          "expected_range": "1 to 30",
+          "priority": "medium",
+          "research_signal": "idea_length Δ+0.012 in CV model"
+        },
+        {
+          "key": "idea_char_count",
+          "label": "Video Idea Character Count",
+          "description": "Character count of the video idea.",
+          "formula": "len(aiAnalysis.videoIdea)",
+          "expected_range": "1 to 200",
+          "priority": "low"
+        },
+        {
+          "key": "summary_word_count",
+          "label": "Summary Word Count",
+          "description": "Word count of the AI-generated video summary — content depth.",
+          "formula": "len(aiAnalysis.summary.split())",
+          "expected_range": "10 to 300",
+          "priority": "low"
+        },
+        {
+          "key": "idea_question_flag",
+          "label": "Video Idea Contains Question",
+          "description": "Whether the video idea contains a question mark (1=yes, 0=no).",
+          "formula": "int('?' in videoIdea)",
+          "expected_range": "0 or 1",
+          "priority": "medium"
+        },
+        {
+          "key": "idea_number_flag",
+          "label": "Video Idea Contains Number",
+          "description": "Whether the video idea contains a digit — specificity signal.",
+          "formula": "int(any(c.isdigit() for c in videoIdea))",
+          "expected_range": "0 or 1",
+          "priority": "low"
+        },
+        {
+          "key": "idea_contains_making",
+          "label": "Video Idea Contains 'Making'",
+          "description": "Whether the idea description contains 'making' or 'build' concept keywords.",
+          "formula": "int(any(w in idea.lower() for w in ['making', 'made', 'build', 'built', 'creating']))",
+          "expected_range": "0 or 1",
+          "priority": "high",
+          "research_signal": "Making content = $24M avg"
+        },
+        {
+          "key": "idea_contains_indestructible",
+          "label": "Video Idea Contains 'Indestructible'",
+          "description": "Whether the idea contains indestructible/unbreakable concept keywords.",
+          "formula": "int(any(w in idea.lower() for w in ['indestructible', 'unbreakable', 'bulletproof', 'strongest']))",
+          "expected_range": "0 or 1",
+          "priority": "high",
+          "research_signal": "Indestructible = 60.9M avg (+668% lift)"
+        }
+      ]
+    },
+    {
+      "family_id": "F10",
+      "name": "Retention Curve Advanced",
+      "layer": "post",
+      "data_source": "analytics.retentionCurve",
+      "coverage": "370/370 videos",
+      "research_basis": "Retention at 20s is strongest single predictor r=+0.600. Hook-payoff gap r=-0.520. End recovery 8.5x more important than hook.",
+      "candidates": [
+        {
+          "key": "hook_payoff_gap",
+          "label": "Hook-Payoff Gap",
+          "description": "Final 5% retention minus hook retention (first 10%). NEGATIVE = over-delivery (ending exceeds hook). Videos where ending exceeds hook get 9x views.",
+          "formula": "mean(curve[95:100]) - curve[10].retention",
+          "expected_range": "-1 to 0.5",
+          "priority": "critical",
+          "research_signal": "r=-0.520 (NEGATIVE = good, over-delivery wins)"
+        },
+        {
+          "key": "end_recovery_score",
+          "label": "End Recovery Score",
+          "description": "Average retention above linear baseline in the 80-95% region. The ending is 8.5x more important than the hook.",
+          "formula": "mean(curve[80:95].retention - linear_baseline[80:95])",
+          "expected_range": "-0.3 to 0.5",
+          "priority": "critical",
+          "research_signal": "End recovery r=+0.506, 8.5x more important than hook"
+        },
+        {
+          "key": "momentum_zone_length",
+          "label": "Momentum Zone Length",
+          "description": "Longest consecutive run of above-baseline retention — sustained engagement. Consistency beats spikes.",
+          "formula": "max(consecutive_run_lengths where curve[i] > baseline[i])",
+          "expected_range": "0 to 100",
+          "priority": "high",
+          "research_signal": "Momentum zones r=+0.468"
+        },
+        {
+          "key": "retention_recovery_count",
+          "label": "Retention Recovery Count",
+          "description": "Number of times the retention curve rises after a drop — resilience signal.",
+          "formula": "count(i where curve[i] > curve[i-1] and curve[i-1] < curve[i-2])",
+          "expected_range": "0 to 20",
+          "priority": "medium"
+        },
+        {
+          "key": "above_baseline_area",
+          "label": "Above-Baseline Area",
+          "description": "Total area between the retention curve and linear decay — total over-performance.",
+          "formula": "sum(max(0, curve[i] - baseline[i]) for i in range(100))",
+          "expected_range": "0 to 50",
+          "priority": "high"
+        },
+        {
+          "key": "below_baseline_area",
+          "label": "Below-Baseline Area",
+          "description": "Total area below the linear decay baseline — total under-performance.",
+          "formula": "sum(max(0, baseline[i] - curve[i]) for i in range(100))",
+          "expected_range": "0 to 50",
+          "priority": "medium"
+        },
+        {
+          "key": "retention_kurtosis",
+          "label": "Retention Kurtosis",
+          "description": "Kurtosis of retention distribution — tail heaviness / peakedness.",
+          "formula": "kurtosis(retentionCurve.retention)",
+          "expected_range": "-3 to 10",
+          "priority": "low",
+          "research_signal": "Prior CV Δ=-0.01 but different context"
+        },
+        {
+          "key": "late_drop_severity",
+          "label": "Late Drop Severity (after 60%)",
+          "description": "Average drop magnitude in the last 40% of the video — fatal late drops signal.",
+          "formula": "mean(abs(drops) in curve[60:100])",
+          "expected_range": "0 to 0.1",
+          "priority": "high",
+          "research_signal": "Late drops are fatal: only 3/472 recovered"
+        },
+        {
+          "key": "retention_concavity",
+          "label": "Retention Concavity",
+          "description": "Mean second derivative of retention curve — concave up (decelerating loss) vs concave down.",
+          "formula": "mean(curve[i+1] + curve[i-1] - 2*curve[i] for i in range(1,99))",
+          "expected_range": "-0.01 to 0.01",
+          "priority": "medium"
+        },
+        {
+          "key": "retention_quartile_spread",
+          "label": "Retention Quartile Spread",
+          "description": "Ratio of mean retention in Q4 (75-100%) vs Q1 (0-25%) — how much retention degrades.",
+          "formula": "mean(curve[75:100]) / (mean(curve[0:25]) + 0.01)",
+          "expected_range": "0 to 1.5",
+          "priority": "medium"
+        },
+        {
+          "key": "early_late_drop_ratio",
+          "label": "Early vs Late Drop Ratio",
+          "description": "Drop magnitude in first 30% vs last 30% — where the bleeding happens. Later drops are 2.15x steeper.",
+          "formula": "mean_drop_30_100 / (mean_drop_0_30 + 0.001)",
+          "expected_range": "0 to 5",
+          "priority": "medium",
+          "research_signal": "Later drops 2.15x steeper than early"
+        }
+      ]
+    },
+    {
+      "family_id": "F11",
+      "name": "Post-Upload Analytics Advanced",
+      "layer": "post",
+      "data_source": "analytics.*",
+      "coverage": "370/370 videos",
+      "research_basis": "view_accel_log strongest single predictor Δ+0.048. w2_w1_ratio Δ+0.026. Engagement rates may be circular — test carefully.",
+      "candidates": [
+        {
+          "key": "engagement_rate",
+          "label": "Engagement Rate",
+          "description": "Total engagements (likes + comments + shares) per 1000 views. WARNING: may be partially circular with views.",
+          "formula": "(likes + comments + shares) / totalViews * 1000",
+          "expected_range": "0 to 500",
+          "priority": "low",
+          "research_signal": "WARNING: potentially circular outcome variable"
+        },
+        {
+          "key": "like_to_comment_ratio",
+          "label": "Like-to-Comment Ratio",
+          "description": "Likes divided by comments — passive vs active engagement balance.",
+          "formula": "likes / (comments + 1)",
+          "expected_range": "0 to 1000",
+          "priority": "medium"
+        },
+        {
+          "key": "sub_nonsub_retention_gap",
+          "label": "Subscriber vs Non-Sub Retention Gap",
+          "description": "Subscriber average percent viewed minus non-subscriber — how much better subs retain.",
+          "formula": "subscriberAvgPercent - nonSubscriberAvgPercent",
+          "expected_range": "-20 to 20",
+          "priority": "medium"
+        },
+        {
+          "key": "retention_variation_raw",
+          "label": "Retention Variation (raw)",
+          "description": "Direct analytics.retentionVariation value — algorithmic retention variability metric.",
+          "formula": "analytics.retentionVariation",
+          "expected_range": "0 to 1",
+          "priority": "medium"
+        },
+        {
+          "key": "avg_percent_viewed",
+          "label": "Average Percent Viewed",
+          "description": "Direct analytics.avgPercentViewed — overall completion proxy.",
+          "formula": "analytics.avgPercentViewed",
+          "expected_range": "0 to 100",
+          "priority": "medium"
+        },
+        {
+          "key": "engaged_view_rate",
+          "label": "Engaged View Rate",
+          "description": "Fraction of total views that were 'engaged views' — quality viewer signal.",
+          "formula": "engagedViews / totalViews",
+          "expected_range": "0 to 1",
+          "priority": "medium",
+          "research_signal": "WARNING: possibly circular"
+        },
+        {
+          "key": "sub_view_fraction",
+          "label": "Subscriber View Fraction",
+          "description": "Fraction of views from subscribers — base audience dependence.",
+          "formula": "subscriberViews / totalViews",
+          "expected_range": "0 to 1",
+          "priority": "medium"
+        },
+        {
+          "key": "view_day1_share",
+          "label": "Day 1 View Share",
+          "description": "Day 1 views as fraction of first 7 days — initial push strength.",
+          "formula": "dailyViews[0].views / sum(dailyViews[0:7].views)",
+          "expected_range": "0 to 1",
+          "priority": "medium"
+        },
+        {
+          "key": "view_week3_week1_ratio",
+          "label": "Week 3 / Week 1 Ratio",
+          "description": "Sustained performance after initial push — long-tail signal.",
+          "formula": "sum(dailyViews[14:21]) / (sum(dailyViews[0:7]) + 1)",
+          "expected_range": "0 to 2",
+          "priority": "medium"
+        },
+        {
+          "key": "daily_views_entropy",
+          "label": "Daily Views Entropy",
+          "description": "Shannon entropy of daily views distribution — concentrated vs spread views.",
+          "formula": "entropy(daily_views_distribution)",
+          "expected_range": "0 to 8",
+          "priority": "low"
+        },
+        {
+          "key": "daily_views_gini",
+          "label": "Daily Views Gini Coefficient",
+          "description": "Gini coefficient of daily views — inequality of view distribution over time.",
+          "formula": "gini(daily_views)",
+          "expected_range": "0 to 1",
+          "priority": "low"
+        },
+        {
+          "key": "stayed_to_watch_rate",
+          "label": "Stayed to Watch Rate",
+          "description": "Direct swipeRatio.stayedToWatch percentage — initial hook conversion.",
+          "formula": "analytics.swipeRatio.stayedToWatch",
+          "expected_range": "0 to 100",
+          "priority": "high"
+        },
+        {
+          "key": "avg_view_duration_s",
+          "label": "Average View Duration (seconds)",
+          "description": "Direct analytics.avgViewDuration — raw watch time.",
+          "formula": "analytics.avgViewDuration",
+          "expected_range": "0 to 300",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "family_id": "F12",
+      "name": "Cross-Layer Interaction Terms",
+      "layer": "interaction",
+      "data_source": "multiple",
+      "coverage": "varies",
+      "research_basis": "Interactions found in model: indestructible_x_prev_keep Δ+0.026. Cross-layer interactions can capture non-additive effects between pre-upload content and post-upload performance.",
+      "candidates": [
+        {
+          "key": "sensory_density_x_final_5pct",
+          "label": "Sensory Density × Final 5% Retention",
+          "description": "Language quality × ending retention — do sensory videos end stronger?",
+          "priority": "high"
+        },
+        {
+          "key": "pivot_count_x_segment_count",
+          "label": "Pivot Count × Segment Count",
+          "description": "Transition words × structural complexity — narrative density.",
+          "priority": "medium"
+        },
+        {
+          "key": "hook_speech_rate_wps_x_hook_duration_s",
+          "label": "Hook Speech Rate × Hook Duration",
+          "description": "Hook pace × hook length — hook information density.",
+          "priority": "high"
+        },
+        {
+          "key": "duration_s_x_speech_rate_wps",
+          "label": "Duration × Speech Rate",
+          "description": "Length × pace — total word count proxy but as interaction.",
+          "priority": "medium"
+        },
+        {
+          "key": "face_frame_pct_x_hand_presence_frame_pct",
+          "label": "Face % × Hand %",
+          "description": "Face presence × hand activity — doing vs just talking.",
+          "priority": "high",
+          "research_signal": "Face+action at peaks, face-alone at drops"
+        },
+        {
+          "key": "scene_change_rate_x_segment_count",
+          "label": "Scene Change Rate × Segment Count",
+          "description": "Visual pace × narrative pace — editorial density.",
+          "priority": "medium"
+        },
+        {
+          "key": "sensory_word_density_x_speech_rate_wps",
+          "label": "Sensory Density × Speech Rate",
+          "description": "Sensory language × delivery pace — engaging content delivered well.",
+          "priority": "high"
+        },
+        {
+          "key": "speech_rate_wps_x_retention_entropy",
+          "label": "Speech Rate × Retention Entropy",
+          "description": "Delivery pace × retention complexity — pace drives complex curves?",
+          "priority": "medium"
+        },
+        {
+          "key": "hook_payoff_gap_x_retention_entropy",
+          "label": "Hook-Payoff Gap × Retention Entropy",
+          "description": "Over-delivery × curve complexity — best endings with rich retention.",
+          "priority": "high"
+        },
+        {
+          "key": "opening_speech_rate_3s_x_max_silence_gap_s",
+          "label": "Opening Rate × Max Silence",
+          "description": "Fast start × worst dead air — delivery consistency.",
+          "priority": "medium"
+        },
+        {
+          "key": "narrative_arc_completeness_x_duration_s",
+          "label": "Arc Completeness × Duration",
+          "description": "Story fullness × video length — do longer videos need more arc elements?",
+          "priority": "medium"
+        },
+        {
+          "key": "sensory_technical_ratio_x_retention_entropy",
+          "label": "Sensory/Technical Ratio × Retention Entropy",
+          "description": "Language balance × curve complexity — good language + rich retention.",
+          "priority": "high"
+        },
+        {
+          "key": "action_frame_pct_x_speech_rate_wps",
+          "label": "Action Frames × Speech Rate",
+          "description": "Visual action × verbal pace — audiovisual alignment.",
+          "priority": "high"
+        },
+        {
+          "key": "idea_contains_making_x_hook_duration_pct",
+          "label": "Making Concept × Hook Duration %",
+          "description": "Strongest concept × hook weight — do making videos benefit from longer hooks?",
+          "priority": "medium"
+        },
+        {
+          "key": "silence_gap_count_x_segment_count",
+          "label": "Silence Gaps × Segment Count",
+          "description": "Dead air frequency × structural pieces — pacing breakdown indicator.",
+          "priority": "medium"
+        },
+        {
+          "key": "technical_word_density_x_face_alone_pct",
+          "label": "Technical Words × Face Alone",
+          "description": "Technical language × talking head — double penalty signal.",
+          "priority": "high",
+          "research_signal": "Both are independently negative signals"
+        },
+        {
+          "key": "pivot_word_density_x_hook_speech_rate_wps",
+          "label": "Pivot Density × Hook Speech Rate",
+          "description": "Transition language × hook pace — engaging opening setup.",
+          "priority": "medium"
+        },
+        {
+          "key": "closing_speech_rate_5s_x_end_recovery_score",
+          "label": "Closing Speech Rate × End Recovery",
+          "description": "Ending pace × ending retention — deliberate ending delivery.",
+          "priority": "high",
+          "research_signal": "Slower pace at climax + end recovery both strong signals"
+        },
+        {
+          "key": "title_contains_making_x_duration_optimal_flag",
+          "label": "Making Title × Optimal Duration",
+          "description": "Best concept keyword × sweet spot duration.",
+          "priority": "medium"
+        },
+        {
+          "key": "unique_word_ratio_x_segment_type_count",
+          "label": "Vocabulary Diversity × Segment Type Count",
+          "description": "Lexical richness × narrative variety.",
+          "priority": "low"
+        }
+      ]
+    }
+  ],
+  "already_coded_not_tested": {
+    "description": "These candidates already have METRIC_DEFINITIONS and extract_metric code in pipeline.py but have NOT been run through the pipeline as indicators. They should be tested first since they require no code changes.",
+    "candidates": [
+      "early_momentum", "retention_25pct", "retention_50pct", "retention_75pct", "retention_90pct",
+      "above_baseline_mean", "peak_count", "drop_count", "max_peak_delta", "max_drop_delta",
+      "retention_variance", "retention_skew",
+      "view_accel_7day", "week1_week2_ratio",
+      "non_sub_view_share", "swipe_away_rate", "daily_view_peak_day",
+      "like_rate", "comment_rate", "share_rate", "subs_gained_per_view", "subs_per_like", "revenue_per_view",
+      "duration_log",
+      "transcript_char_count", "avg_word_length", "unique_word_ratio", "sentence_count",
+      "exclamation_count", "uppercase_word_ratio", "hook_question_count", "hook_word_ratio",
+      "hook_char_count", "transcript_number_count",
+      "hook_duration_pct", "avg_segment_duration_s", "longest_segment_duration_s",
+      "shortest_segment_duration_s", "hook_position_s", "climax_position_pct",
+      "has_climax_segment", "hook_to_climax_gap_s",
+      "duration_s", "title_char_count", "title_word_count",
+      "title_question_flag", "title_exclamation_flag", "title_number_flag",
+      "scene_change_rate", "unique_scene_ratio", "visual_technique_count_mean",
+      "close_up_frame_pct", "hand_presence_frame_pct", "motion_word_frame_pct",
+      "keep_x_non_sub_share"
+    ]
+  },
+  "excluded_null_signals": {
+    "description": "These were tested in prior research and confirmed as null or dead signals. Not proposed.",
+    "signals": [
+      {"key": "hook_clarity", "reason": "LLM vision too noisy"},
+      {"key": "visual_surprise", "reason": "r=+0.30 but regression noise"},
+      {"key": "face_presence_binary", "reason": "80% have faces, no variance"},
+      {"key": "audio_energy", "reason": "Not feasible without audio tools"},
+      {"key": "transcript_tension_arc", "reason": "LLM scores too noisy at n=203"},
+      {"key": "narrative_arc_quality", "reason": "r=-0.008 vs retention (DEAD)"},
+      {"key": "emotional_resonance", "reason": "r=0.08 vs shares (DEAD)"},
+      {"key": "hook_callbacks", "reason": "r=-0.034 vs retention (DEAD)"},
+      {"key": "title_syllables", "reason": "Noise in prior research"},
+      {"key": "title_readability", "reason": "Noise in prior research"},
+      {"key": "title_alliteration", "reason": "Noise in prior research"}
+    ]
+  }
+}

@@ -587,7 +587,762 @@ METRIC_DEFINITIONS = {
         "data_sources": ["frames[*].analysis.sceneDescription"],
         "layer": "pre",
     },
+    # ── NEW: Speech Pacing (timed words) ─────────────────────────────────
+    "opening_speech_rate_3s": {
+        "description": "Words per second in the first 3 seconds. Optimal ~7.5 words in first 3s.",
+        "formula": "count(words where timestamp < 3.0) / 3.0",
+        "expected_range": "0 to 5",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "opening_speech_rate_5s": {
+        "description": "Words per second in the first 5 seconds — wider hook window.",
+        "formula": "count(words where timestamp < 5.0) / 5.0",
+        "expected_range": "0 to 5",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "closing_speech_rate_5s": {
+        "description": "Words per second in the final 5 seconds — deliberate delivery at climax.",
+        "formula": "count(words where timestamp > duration - 5.0) / 5.0",
+        "expected_range": "0 to 5",
+        "data_sources": ["transcript.words", "metadata.duration"],
+        "layer": "pre",
+    },
+    "speech_rate_q1": {
+        "description": "Words per second in the first quarter of the video.",
+        "formula": "count(words where timestamp < duration*0.25) / (duration*0.25)",
+        "expected_range": "0 to 5",
+        "data_sources": ["transcript.words", "metadata.duration"],
+        "layer": "pre",
+    },
+    "speech_rate_q4": {
+        "description": "Words per second in the final quarter of the video.",
+        "formula": "count(words in last 25%) / (duration*0.25)",
+        "expected_range": "0 to 5",
+        "data_sources": ["transcript.words", "metadata.duration"],
+        "layer": "pre",
+    },
+    "speech_rate_ratio_q4_q1": {
+        "description": "Ending pace / opening pace. <1 means slowing down (good for climax).",
+        "formula": "speech_rate_q4 / (speech_rate_q1 + 0.01)",
+        "expected_range": "0 to 3",
+        "data_sources": ["transcript.words", "metadata.duration"],
+        "layer": "pre",
+    },
+    "speech_acceleration": {
+        "description": "Slope of speech rate over video — positive=speeding up, negative=slowing down.",
+        "formula": "linregress of windowed speech rates over time",
+        "expected_range": "-0.1 to 0.1",
+        "data_sources": ["transcript.words", "metadata.duration"],
+        "layer": "pre",
+    },
+    "max_silence_gap_s": {
+        "description": "Longest gap between consecutive words. Gaps >1.5s predict retention drops r=-0.73.",
+        "formula": "max(words[i+1].timestamp - words[i].timestamp)",
+        "expected_range": "0 to 10",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "silence_gap_count": {
+        "description": "Number of inter-word gaps exceeding 1 second — dead air frequency.",
+        "formula": "count(gaps > 1.0)",
+        "expected_range": "0 to 20",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "silence_total_pct": {
+        "description": "Total silence time (gaps >0.5s) as fraction of video duration.",
+        "formula": "sum(gaps where gap > 0.5) / duration",
+        "expected_range": "0 to 0.5",
+        "data_sources": ["transcript.words", "metadata.duration"],
+        "layer": "pre",
+    },
+    "opening_word_latency_s": {
+        "description": "Seconds before the first word is spoken. Immediate speech = strong hook.",
+        "formula": "words[0].timestamp",
+        "expected_range": "0 to 5",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "peak_speech_rate_3s": {
+        "description": "Maximum words/sec in any 3-second sliding window — burst intensity.",
+        "formula": "max(count(words in [t, t+3]) / 3 for all t)",
+        "expected_range": "0 to 8",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "speech_tempo_range": {
+        "description": "Max speech rate minus min speech rate across 5s windows — dynamic range.",
+        "formula": "max(rate) - min(rate) across 5s windows",
+        "expected_range": "0 to 6",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "avg_word_gap_s": {
+        "description": "Mean time between consecutive words — overall delivery pace.",
+        "formula": "mean(words[i+1].timestamp - words[i].timestamp)",
+        "expected_range": "0 to 2",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    "word_density_variance": {
+        "description": "Variance in words-per-second across 5s windows — pacing consistency.",
+        "formula": "var(words_per_5s_windows)",
+        "expected_range": "0 to 5",
+        "data_sources": ["transcript.words"],
+        "layer": "pre",
+    },
+    # ── NEW: Sensory & Technical Language ─────────────────────────────────
+    "sensory_word_density": {
+        "description": "Fraction of transcript words that are sensory/body words. Strongest positive language signal.",
+        "formula": "count(sensory_words) / total_words",
+        "expected_range": "0 to 0.15",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "technical_word_density": {
+        "description": "Fraction of transcript words that are technical/material words. Strongest negative language signal.",
+        "formula": "count(technical_words) / total_words",
+        "expected_range": "0 to 0.15",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "sensory_technical_ratio": {
+        "description": "Ratio of sensory words to technical words. Higher = more engaging language.",
+        "formula": "count(sensory_words) / (count(technical_words) + 1)",
+        "expected_range": "0 to 20",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "hook_sensory_word_count": {
+        "description": "Number of sensory/body words in the hook segment.",
+        "formula": "count(sensory_words in hook_transcript)",
+        "expected_range": "0 to 10",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "body_sensation_word_pct": {
+        "description": "Percentage of words related to body sensations.",
+        "formula": "count(body_words) / total_words * 100",
+        "expected_range": "0 to 10",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    # ── NEW: Pivot & Transition Words ────────────────────────────────────
+    "pivot_word_count": {
+        "description": "Count of pivot/transition words (but, however, wait, instead, etc). r=+0.26 vs keep.",
+        "formula": "count(pivot_words in transcript)",
+        "expected_range": "0 to 15",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "pivot_word_density": {
+        "description": "Pivot words per 100 transcript words — normalized for length.",
+        "formula": "count(pivot_words) / total_words * 100",
+        "expected_range": "0 to 8",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "hook_pivot_word_flag": {
+        "description": "Whether the hook contains at least one pivot word (1=yes, 0=no).",
+        "formula": "int(any(pivot_word in hook_transcript))",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    # ── NEW: Vocabulary Features ─────────────────────────────────────────
+    "short_word_ratio": {
+        "description": "Fraction of words with 1-3 characters — simplicity signal. Vocab universality r=+0.323.",
+        "formula": "count(words where len <= 3) / total_words",
+        "expected_range": "0 to 0.8",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "long_word_ratio": {
+        "description": "Fraction of words with 8+ characters — complexity/jargon signal.",
+        "formula": "count(words where len >= 8) / total_words",
+        "expected_range": "0 to 0.3",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "hapax_legomena_ratio": {
+        "description": "Fraction of words appearing exactly once — vocabulary uniqueness.",
+        "formula": "count(words appearing once) / total_words",
+        "expected_range": "0 to 1",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "first_person_ratio": {
+        "description": "Fraction of first-person pronouns (I, me, my, mine, myself).",
+        "formula": "count(first_person_words) / total_words",
+        "expected_range": "0 to 0.15",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "second_person_ratio": {
+        "description": "Fraction of second-person pronouns (you, your, yours). Research shows 'you' may hurt keep.",
+        "formula": "count(second_person_words) / total_words",
+        "expected_range": "0 to 0.1",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "action_verb_density": {
+        "description": "Fraction of words that are action/physical verbs.",
+        "formula": "count(action_verbs) / total_words",
+        "expected_range": "0 to 0.1",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "superlative_count": {
+        "description": "Number of superlative words — intensity signal.",
+        "formula": "count(superlatives in transcript)",
+        "expected_range": "0 to 10",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    "comparison_word_count": {
+        "description": "Count of comparison words (vs, than, better, worse, more, less).",
+        "formula": "count(comparison_words)",
+        "expected_range": "0 to 15",
+        "data_sources": ["transcript"],
+        "layer": "pre",
+    },
+    # ── NEW: Hook Advanced ───────────────────────────────────────────────
+    "hook_speech_rate_wps": {
+        "description": "Words per second within the hook segment — hook delivery pace.",
+        "formula": "hook_word_count / hook_duration_s",
+        "expected_range": "0 to 6",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "hook_unique_word_ratio": {
+        "description": "Lexical diversity within the hook segment.",
+        "formula": "len(set(hook_words)) / len(hook_words)",
+        "expected_range": "0 to 1",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "hook_action_verb_count": {
+        "description": "Number of action verbs in the hook — immediate activity signal.",
+        "formula": "count(action_verbs in hook_transcript)",
+        "expected_range": "0 to 5",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "hook_sentence_count": {
+        "description": "Number of sentences in the hook segment.",
+        "formula": "count(sentence_endings in hook_transcript)",
+        "expected_range": "0 to 5",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "hook_avg_word_length": {
+        "description": "Average word length in hook — vocabulary complexity.",
+        "formula": "mean(len(word) for word in hook_words)",
+        "expected_range": "2 to 10",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    "hook_number_count": {
+        "description": "Number of numeric tokens in the hook — specificity in opening.",
+        "formula": "count(re.findall(r'\\d+', hook_transcript))",
+        "expected_range": "0 to 5",
+        "data_sources": ["aiAnalysis.segments", "transcript"],
+        "layer": "pre",
+    },
+    # ── NEW: Narrative Structure Advanced ─────────────────────────────────
+    "segment_duration_variance": {
+        "description": "Variance in segment durations — pacing uniformity.",
+        "formula": "var(segment_durations)",
+        "expected_range": "0 to 500",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "segment_count_per_minute": {
+        "description": "Segments per minute — structural density normalized by length.",
+        "formula": "segment_count / (duration / 60)",
+        "expected_range": "0 to 20",
+        "data_sources": ["aiAnalysis.segments", "metadata.duration"],
+        "layer": "pre",
+    },
+    "has_setup_segment": {
+        "description": "Whether AI identified a Setup segment (1=yes, 0=no).",
+        "formula": "int(any(label.lower() == 'setup'))",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "has_conclusion_segment": {
+        "description": "Whether AI identified a Conclusion segment (1=yes, 0=no).",
+        "formula": "int(any(label.lower() == 'conclusion'))",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "segment_type_count": {
+        "description": "Number of unique segment labels — narrative complexity.",
+        "formula": "len(set(labels))",
+        "expected_range": "1 to 8",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "narrative_arc_completeness": {
+        "description": "Count of canonical arc elements present (hook, setup, main, climax, conclusion). 3/4=13M avg.",
+        "formula": "count(canonical_labels present)",
+        "expected_range": "0 to 5",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "climax_late_flag": {
+        "description": "Whether climax starts in the last 30% of the video (1=yes, 0=no).",
+        "formula": "int(climax_start > duration * 0.7)",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.segments", "metadata.duration"],
+        "layer": "pre",
+    },
+    "last_segment_duration_pct": {
+        "description": "Final segment as percentage of total duration — ending weight.",
+        "formula": "last_segment_duration / duration * 100",
+        "expected_range": "0 to 50",
+        "data_sources": ["aiAnalysis.segments", "metadata.duration"],
+        "layer": "pre",
+    },
+    "first_segment_duration_pct": {
+        "description": "First segment as percentage of total duration — opening weight.",
+        "formula": "first_segment_duration / duration * 100",
+        "expected_range": "0 to 50",
+        "data_sources": ["aiAnalysis.segments", "metadata.duration"],
+        "layer": "pre",
+    },
+    "segment_length_ratio_max_min": {
+        "description": "Longest segment / shortest — pacing imbalance.",
+        "formula": "max(durations) / (min(durations) + 0.1)",
+        "expected_range": "1 to 20",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "body_segment_count": {
+        "description": "Segments that are not Hook or Conclusion — middle content density.",
+        "formula": "count(segments not hook/conclusion)",
+        "expected_range": "0 to 8",
+        "data_sources": ["aiAnalysis.segments"],
+        "layer": "pre",
+    },
+    "hook_conclusion_combined_pct": {
+        "description": "Hook and conclusion combined as percentage of total duration.",
+        "formula": "(hook_dur + conclusion_dur) / duration * 100",
+        "expected_range": "0 to 60",
+        "data_sources": ["aiAnalysis.segments", "metadata.duration"],
+        "layer": "pre",
+    },
+    # ── NEW: Title & Metadata Advanced ───────────────────────────────────
+    "title_all_caps_word_count": {
+        "description": "Number of ALL CAPS words in the title.",
+        "formula": "count(title words where isupper and len>=2)",
+        "expected_range": "0 to 10",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_emoji_flag": {
+        "description": "Whether the title contains any emoji character (1=yes, 0=no).",
+        "formula": "int(has_emoji(title))",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_contains_making": {
+        "description": "Whether the title contains 'making' or 'made'. Strongest concept keyword ($24M avg).",
+        "formula": "int('making' in title.lower() or 'made' in title.lower())",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_avg_word_length": {
+        "description": "Average word length in the title.",
+        "formula": "mean(len(word) for word in title_words)",
+        "expected_range": "2 to 12",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "title_starts_with_action": {
+        "description": "Whether the title starts with an action/gerund word (1=yes, 0=no).",
+        "formula": "int(title_words[0] ends with 'ing' or is action verb)",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.title"],
+        "layer": "pre",
+    },
+    "duration_optimal_flag": {
+        "description": "Whether duration falls in the 40-55 second sweet spot.",
+        "formula": "int(40 <= duration_s <= 55)",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.duration"],
+        "layer": "pre",
+    },
+    "duration_sweetspot_distance": {
+        "description": "Absolute seconds away from 52s sweet spot. Lower = better.",
+        "formula": "abs(duration_s - 52)",
+        "expected_range": "0 to 60",
+        "data_sources": ["metadata.duration"],
+        "layer": "pre",
+    },
+    "description_word_count": {
+        "description": "Word count of video description.",
+        "formula": "len(description.split())",
+        "expected_range": "0 to 500",
+        "data_sources": ["metadata.description"],
+        "layer": "pre",
+    },
+    "is_vertical": {
+        "description": "Whether the video is vertical format (1=yes, 0=no).",
+        "formula": "int(metadata.isVertical)",
+        "expected_range": "0 or 1",
+        "data_sources": ["metadata.isVertical"],
+        "layer": "pre",
+    },
+    "upload_month": {
+        "description": "Month of upload (1-12) — seasonal effects.",
+        "formula": "int(uploadDate[4:6])",
+        "expected_range": "1 to 12",
+        "data_sources": ["metadata.uploadDate"],
+        "layer": "pre",
+    },
+    # ── NEW: Visual Frame Advanced ───────────────────────────────────────
+    "opening_frame_has_text": {
+        "description": "Whether the first frame has a text overlay (1=yes, 0=no).",
+        "formula": "int('text' in frames[0].visualTechniques.lower())",
+        "expected_range": "0 or 1",
+        "data_sources": ["frames[0].analysis.visualTechniques"],
+        "layer": "pre",
+    },
+    "opening_frame_has_face": {
+        "description": "Whether the first frame shows a face (1=yes, 0=no).",
+        "formula": "int('face' in frames[0].sceneDescription.lower())",
+        "expected_range": "0 or 1",
+        "data_sources": ["frames[0].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "action_frame_pct": {
+        "description": "Percentage of frames with action/physical activity. Action frames enriched 1.9x at peaks.",
+        "formula": "count(frames with action keywords) / total_frames",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "workshop_frame_pct": {
+        "description": "Percentage of frames showing workshop/tools setting.",
+        "formula": "count(frames with workshop keywords) / total_frames",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "outdoor_frame_pct": {
+        "description": "Percentage of frames showing outdoor scenes. Outdoor 0.68x at peaks.",
+        "formula": "count(frames with outdoor keywords) / total_frames",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "face_alone_pct": {
+        "description": "Frames with face but NO action — talking head trap signal.",
+        "formula": "count(face AND NOT action frames) / total_frames",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "face_with_action_pct": {
+        "description": "Frames with BOTH face AND action — positive signal.",
+        "formula": "count(face AND action frames) / total_frames",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "object_focus_pct": {
+        "description": "Frames focused on objects rather than people.",
+        "formula": "count(frames without face) / total_frames",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    "text_overlay_early_pct": {
+        "description": "Text overlay presence in first 25% of frames.",
+        "formula": "count(first_25pct with text) / count(first_25pct)",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.visualTechniques"],
+        "layer": "pre",
+    },
+    "dramatic_frame_pct": {
+        "description": "Frames with dramatic/intense descriptions. Dramatic enriched 1.8x at peaks.",
+        "formula": "count(dramatic frames) / total_frames",
+        "expected_range": "0 to 1",
+        "data_sources": ["frames[*].analysis.sceneDescription"],
+        "layer": "pre",
+    },
+    # ── NEW: AI Analysis Features ────────────────────────────────────────
+    "idea_word_count": {
+        "description": "Word count of the AI-generated video idea.",
+        "formula": "len(videoIdea.split())",
+        "expected_range": "1 to 30",
+        "data_sources": ["aiAnalysis.videoIdea"],
+        "layer": "pre",
+    },
+    "idea_char_count": {
+        "description": "Character count of the video idea.",
+        "formula": "len(videoIdea)",
+        "expected_range": "1 to 200",
+        "data_sources": ["aiAnalysis.videoIdea"],
+        "layer": "pre",
+    },
+    "summary_word_count": {
+        "description": "Word count of the AI-generated video summary.",
+        "formula": "len(summary.split())",
+        "expected_range": "10 to 300",
+        "data_sources": ["aiAnalysis.summary"],
+        "layer": "pre",
+    },
+    "idea_question_flag": {
+        "description": "Whether the video idea contains a question mark (1=yes, 0=no).",
+        "formula": "int('?' in videoIdea)",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.videoIdea"],
+        "layer": "pre",
+    },
+    "idea_number_flag": {
+        "description": "Whether the video idea contains a digit.",
+        "formula": "int(any(c.isdigit() for c in videoIdea))",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.videoIdea"],
+        "layer": "pre",
+    },
+    "idea_contains_making": {
+        "description": "Whether the idea contains 'making'/'build' concept keywords.",
+        "formula": "int(any(w in idea.lower() for w in making_words))",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.videoIdea"],
+        "layer": "pre",
+    },
+    "idea_contains_indestructible": {
+        "description": "Whether the idea contains indestructible/unbreakable keywords.",
+        "formula": "int(any(w in idea.lower() for w in indestructible_words))",
+        "expected_range": "0 or 1",
+        "data_sources": ["aiAnalysis.videoIdea"],
+        "layer": "pre",
+    },
+    # ── NEW: Retention Curve Advanced ────────────────────────────────────
+    "hook_payoff_gap": {
+        "description": "Final 5% retention minus hook retention. NEGATIVE = over-delivery = 9x views.",
+        "formula": "mean(curve[95:100]) - curve[10].retention",
+        "expected_range": "-1 to 0.5",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "end_recovery_score": {
+        "description": "Mean retention above linear baseline at 80-95%. Ending is 8.5x more important than hook.",
+        "formula": "mean(curve[80:95] - baseline[80:95])",
+        "expected_range": "-0.3 to 0.5",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "momentum_zone_length": {
+        "description": "Longest consecutive run above baseline — sustained engagement. Consistency beats spikes.",
+        "formula": "max(consecutive_above_baseline_runs)",
+        "expected_range": "0 to 100",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "retention_recovery_count": {
+        "description": "Number of times retention rises after a drop — resilience signal.",
+        "formula": "count(rises after drops)",
+        "expected_range": "0 to 20",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "above_baseline_area": {
+        "description": "Total area between retention curve and linear decay above baseline.",
+        "formula": "sum(max(0, curve[i] - baseline[i]))",
+        "expected_range": "0 to 50",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "below_baseline_area": {
+        "description": "Total area below the linear decay baseline.",
+        "formula": "sum(max(0, baseline[i] - curve[i]))",
+        "expected_range": "0 to 50",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "late_drop_severity": {
+        "description": "Average drop magnitude in the last 40%. Late drops are fatal.",
+        "formula": "mean(drops in curve[60:100])",
+        "expected_range": "0 to 0.1",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "retention_concavity": {
+        "description": "Mean second derivative — concave up (decelerating loss) vs concave down.",
+        "formula": "mean(curve[i+1]+curve[i-1]-2*curve[i])",
+        "expected_range": "-0.01 to 0.01",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "retention_quartile_spread": {
+        "description": "Mean retention Q4 / mean retention Q1 — how much retention degrades.",
+        "formula": "mean(curve[75:100]) / (mean(curve[0:25]) + 0.01)",
+        "expected_range": "0 to 1.5",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    "early_late_drop_ratio": {
+        "description": "Drop magnitude first 30% vs last 30%. Later drops 2.15x steeper.",
+        "formula": "mean_drop_late / (mean_drop_early + 0.001)",
+        "expected_range": "0 to 5",
+        "data_sources": ["analytics.retentionCurve"],
+        "layer": "post",
+    },
+    # ── NEW: Post-Upload Analytics Advanced ──────────────────────────────
+    "engagement_rate": {
+        "description": "Total engagements per 1000 views. WARNING: may be partially circular.",
+        "formula": "(likes + comments + shares) / totalViews * 1000",
+        "expected_range": "0 to 500",
+        "data_sources": ["analytics.likes", "analytics.comments", "analytics.shares", "analytics.totalViews"],
+        "layer": "post",
+    },
+    "like_to_comment_ratio": {
+        "description": "Likes / comments — passive vs active engagement balance.",
+        "formula": "likes / (comments + 1)",
+        "expected_range": "0 to 1000",
+        "data_sources": ["analytics.likes", "analytics.comments"],
+        "layer": "post",
+    },
+    "sub_nonsub_retention_gap": {
+        "description": "Subscriber avg% viewed minus non-subscriber — subscriber advantage.",
+        "formula": "subscriberAvgPercent - nonSubscriberAvgPercent",
+        "expected_range": "-20 to 20",
+        "data_sources": ["analytics.subscriberAvgPercent", "analytics.nonSubscriberAvgPercent"],
+        "layer": "post",
+    },
+    "retention_variation_raw": {
+        "description": "Direct analytics.retentionVariation value.",
+        "formula": "analytics.retentionVariation",
+        "expected_range": "0 to 1",
+        "data_sources": ["analytics.retentionVariation"],
+        "layer": "post",
+    },
+    "avg_percent_viewed": {
+        "description": "Direct analytics.avgPercentViewed — completion proxy.",
+        "formula": "analytics.avgPercentViewed",
+        "expected_range": "0 to 100",
+        "data_sources": ["analytics.avgPercentViewed"],
+        "layer": "post",
+    },
+    "engaged_view_rate": {
+        "description": "Engaged views / total views — quality viewer signal.",
+        "formula": "engagedViews / totalViews",
+        "expected_range": "0 to 1",
+        "data_sources": ["analytics.engagedViews", "analytics.totalViews"],
+        "layer": "post",
+    },
+    "sub_view_fraction": {
+        "description": "Subscriber views / total views — base audience dependence.",
+        "formula": "subscriberViews / totalViews",
+        "expected_range": "0 to 1",
+        "data_sources": ["analytics.subscriberViews", "analytics.totalViews"],
+        "layer": "post",
+    },
+    "view_day1_share": {
+        "description": "Day 1 views as fraction of first 7 days — initial push strength.",
+        "formula": "dailyViews[0] / sum(dailyViews[0:7])",
+        "expected_range": "0 to 1",
+        "data_sources": ["analytics.dailyViews"],
+        "layer": "post",
+    },
+    "view_week3_week1_ratio": {
+        "description": "Week 3 / Week 1 views — long tail signal.",
+        "formula": "sum(dailyViews[14:21]) / (sum(dailyViews[0:7]) + 1)",
+        "expected_range": "0 to 2",
+        "data_sources": ["analytics.dailyViews"],
+        "layer": "post",
+    },
+    "daily_views_entropy": {
+        "description": "Shannon entropy of daily views distribution — concentrated vs spread.",
+        "formula": "entropy(daily_views_normalized)",
+        "expected_range": "0 to 8",
+        "data_sources": ["analytics.dailyViews"],
+        "layer": "post",
+    },
+    "daily_views_gini": {
+        "description": "Gini coefficient of daily views — inequality of distribution over time.",
+        "formula": "gini(daily_views)",
+        "expected_range": "0 to 1",
+        "data_sources": ["analytics.dailyViews"],
+        "layer": "post",
+    },
+    "stayed_to_watch_rate": {
+        "description": "Direct swipeRatio.stayedToWatch — initial hook conversion.",
+        "formula": "analytics.swipeRatio.stayedToWatch",
+        "expected_range": "0 to 100",
+        "data_sources": ["analytics.swipeRatio"],
+        "layer": "post",
+    },
+    "avg_view_duration_s": {
+        "description": "Direct analytics.avgViewDuration — raw watch time.",
+        "formula": "analytics.avgViewDuration",
+        "expected_range": "0 to 300",
+        "data_sources": ["analytics.avgViewDuration"],
+        "layer": "post",
+    },
 }
+
+# ── Word lists for language-based indicators ─────────────────────────────
+SENSORY_WORDS = {
+    "curious", "painful", "bigger", "stomach", "numb", "skin", "impact", "foot",
+    "sleep", "feel", "touch", "hot", "cold", "heavy", "loud", "sharp", "soft",
+    "hard", "wet", "taste", "smell", "burn", "sting", "freeze", "warm", "squeeze",
+    "pull", "push", "press", "crush", "stretch", "bend", "twist", "crack", "snap",
+    "pop", "rip", "tear", "bite", "chew", "swallow", "grab", "hold", "lift",
+    "drop", "throw", "hit", "punch", "kick", "slap", "hurt", "pain", "ache",
+    "tingle", "scratch", "poke", "stab", "smash", "slam", "bang", "explode",
+    "shatter", "melt", "boil", "sizzle", "crunch", "squish", "sticky",
+}
+TECHNICAL_WORDS = {
+    "plastic", "solid", "fiber", "materials", "carbon", "bulletproof", "structure",
+    "engineering", "design", "mechanism", "component", "assembly", "specification",
+    "measurement", "calibration", "dimensional", "tolerance", "composite", "polymer",
+    "alloy", "tensile", "modulus", "density", "coefficient", "thermal", "conductivity",
+    "molecular", "chemical", "substrate", "laminate", "resin", "epoxy", "filament",
+    "hydraulic", "pneumatic", "electrode", "circuit", "voltage", "amperage",
+}
+PIVOT_WORDS = {
+    "but", "however", "wait", "instead", "actually", "except", "although",
+    "surprisingly", "unfortunately", "problem", "twist", "unless", "though",
+    "yet", "suddenly", "imagine", "honestly", "crazy", "insane",
+}
+ACTION_VERBS = {
+    "making", "building", "testing", "breaking", "cutting", "crushing", "shooting",
+    "hitting", "throwing", "dropping", "smashing", "creating", "crafting",
+    "assembling", "installing", "removing", "destroying", "eating", "drinking",
+    "cooking", "baking", "mixing", "pouring", "filling", "emptying", "opening",
+    "closing", "turning", "spinning", "rolling", "flipping", "jumping", "running",
+    "climbing", "lifting", "carrying", "pulling", "pushing", "digging", "drilling",
+}
+BODY_SENSATION_WORDS = {
+    "feel", "touch", "hurt", "pain", "taste", "smell", "burn", "sting", "itch",
+    "tingle", "numb", "ache", "sore", "warm", "cold", "hot", "freeze", "sweat",
+    "shiver", "pulse", "throb", "cramp", "dizzy", "sick", "stomach", "skin",
+    "muscle", "bone", "blood", "breath", "heartbeat",
+}
+FIRST_PERSON = {"i", "me", "my", "mine", "myself"}
+SECOND_PERSON = {"you", "your", "yours", "yourself", "yourselves"}
+SUPERLATIVES = {
+    "biggest", "smallest", "fastest", "slowest", "strongest", "weakest",
+    "hardest", "softest", "heaviest", "lightest", "longest", "shortest",
+    "tallest", "thickest", "thinnest", "loudest", "quietest", "hottest",
+    "coldest", "best", "worst", "most", "least", "maximum", "minimum",
+    "ultimate", "extreme", "insane", "impossible", "unbelievable",
+}
+COMPARISON_WORDS = {"vs", "versus", "than", "better", "worse", "more", "less", "compared", "difference", "between"}
+MAKING_CONCEPT_WORDS = {"making", "made", "build", "built", "creating", "created", "craft", "crafted", "construct"}
+INDESTRUCTIBLE_CONCEPT_WORDS = {"indestructible", "unbreakable", "bulletproof", "strongest", "invincible", "impenetrable"}
 
 AUTONOMOUS_RUNS_FILE = JARVIS_DIR / "autonomous_runs.json"
 AUTONOMOUS_PROGRESS_FILE = JARVIS_DIR / "autonomous_progress.json"
@@ -741,7 +1496,79 @@ def generate_autonomous_candidates():
               "title_question_flag", "title_exclamation_flag", "title_number_flag"]:
         candidates.append(k)
 
-    # 9. Interaction terms (pairs of strong base indicators — now includes pre-upload)
+    # 9. NEW: Speech pacing (timed words)
+    for k in ["opening_speech_rate_3s", "opening_speech_rate_5s", "closing_speech_rate_5s",
+              "speech_rate_q1", "speech_rate_q4", "speech_rate_ratio_q4_q1",
+              "speech_acceleration", "max_silence_gap_s", "silence_gap_count",
+              "silence_total_pct", "opening_word_latency_s", "peak_speech_rate_3s",
+              "speech_tempo_range", "avg_word_gap_s", "word_density_variance"]:
+        candidates.append(k)
+
+    # 10. NEW: Sensory & technical language
+    for k in ["sensory_word_density", "technical_word_density", "sensory_technical_ratio",
+              "hook_sensory_word_count", "body_sensation_word_pct"]:
+        candidates.append(k)
+
+    # 11. NEW: Pivot & transition words
+    for k in ["pivot_word_count", "pivot_word_density", "hook_pivot_word_flag"]:
+        candidates.append(k)
+
+    # 12. NEW: Vocabulary features
+    for k in ["short_word_ratio", "long_word_ratio", "hapax_legomena_ratio",
+              "first_person_ratio", "second_person_ratio", "action_verb_density",
+              "superlative_count", "comparison_word_count"]:
+        candidates.append(k)
+
+    # 13. NEW: Hook advanced
+    for k in ["hook_speech_rate_wps", "hook_unique_word_ratio", "hook_action_verb_count",
+              "hook_sentence_count", "hook_avg_word_length", "hook_number_count"]:
+        candidates.append(k)
+
+    # 14. NEW: Narrative structure advanced
+    for k in ["segment_duration_variance", "segment_count_per_minute",
+              "has_setup_segment", "has_conclusion_segment", "segment_type_count",
+              "narrative_arc_completeness", "climax_late_flag",
+              "last_segment_duration_pct", "first_segment_duration_pct",
+              "segment_length_ratio_max_min", "body_segment_count",
+              "hook_conclusion_combined_pct"]:
+        candidates.append(k)
+
+    # 15. NEW: Title & metadata advanced
+    for k in ["title_all_caps_word_count", "title_emoji_flag", "title_contains_making",
+              "title_avg_word_length", "title_starts_with_action",
+              "duration_optimal_flag", "duration_sweetspot_distance",
+              "description_word_count", "is_vertical", "upload_month"]:
+        candidates.append(k)
+
+    # 16. NEW: Visual frame advanced
+    for k in ["opening_frame_has_text", "opening_frame_has_face",
+              "action_frame_pct", "workshop_frame_pct", "outdoor_frame_pct",
+              "face_alone_pct", "face_with_action_pct", "object_focus_pct",
+              "text_overlay_early_pct", "dramatic_frame_pct"]:
+        candidates.append(k)
+
+    # 17. NEW: AI analysis features
+    for k in ["idea_word_count", "idea_char_count", "summary_word_count",
+              "idea_question_flag", "idea_number_flag",
+              "idea_contains_making", "idea_contains_indestructible"]:
+        candidates.append(k)
+
+    # 18. NEW: Retention curve advanced
+    for k in ["hook_payoff_gap", "end_recovery_score", "momentum_zone_length",
+              "retention_recovery_count", "above_baseline_area", "below_baseline_area",
+              "late_drop_severity", "retention_concavity", "retention_quartile_spread",
+              "early_late_drop_ratio"]:
+        candidates.append(k)
+
+    # 19. NEW: Post-upload analytics advanced
+    for k in ["engagement_rate", "like_to_comment_ratio", "sub_nonsub_retention_gap",
+              "retention_variation_raw", "avg_percent_viewed", "engaged_view_rate",
+              "sub_view_fraction", "view_day1_share", "view_week3_week1_ratio",
+              "daily_views_entropy", "daily_views_gini", "stayed_to_watch_rate",
+              "avg_view_duration_s"]:
+        candidates.append(k)
+
+    # 20. Interaction terms (expanded with new indicator families)
     interaction_bases = [
         "retention_pct_50", "retention_pct_25", "speech_rate_wps",
         "face_frame_pct", "retention_entropy", "hook_drop_rate",
@@ -749,6 +1576,10 @@ def generate_autonomous_candidates():
         # pre-upload additions for richer interactions
         "unique_word_ratio", "scene_change_rate", "hook_duration_pct",
         "title_word_count", "avg_segment_duration_s", "close_up_frame_pct",
+        # NEW: high-signal indicators for cross-family interactions
+        "sensory_word_density", "pivot_word_count", "max_silence_gap_s",
+        "opening_speech_rate_3s", "action_frame_pct", "final_5pct_retention",
+        "hook_payoff_gap", "end_recovery_score", "narrative_arc_completeness",
     ]
     seen_pairs = set()
     for i, a in enumerate(interaction_bases):
@@ -1686,6 +2517,815 @@ def extract_metric(key, analysis):
             den = sum(d.get("views", 0) for d in daily[d0:d1])
             return (float(num / (den + 1)), None)
         return (None, "no daily views or unknown ratio")
+
+    # ── NEW: Speech Pacing (timed words) ────────────────────────────────
+    _tw = analysis.get("transcript", {})
+    timed_words = (_tw.get("words", []) if isinstance(_tw, dict) else []) or []
+    dur_s = (meta.get("duration", 0) or 0)
+
+    def _words_in_window(t0, t1):
+        return [w for w in timed_words if t0 <= w.get("timestamp", -1) < t1]
+
+    def _rate_in_window(t0, t1):
+        span = t1 - t0
+        if span <= 0:
+            return None
+        return len(_words_in_window(t0, t1)) / span
+
+    def _get_hook_text():
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        if hook_seg and hook_seg.get("transcript"):
+            return hook_seg["transcript"]
+        if transcript and dur_s:
+            words_list = transcript.split()
+            hook_est = max(1, int(len(words_list) * 5 / dur_s))
+            return " ".join(words_list[:hook_est])
+        return ""
+
+    if key == "opening_speech_rate_3s":
+        if not timed_words:
+            return (None, "no timed words")
+        r = _rate_in_window(0, 3.0)
+        return (float(r), None) if r is not None else (None, "no duration")
+
+    if key == "opening_speech_rate_5s":
+        if not timed_words:
+            return (None, "no timed words")
+        r = _rate_in_window(0, 5.0)
+        return (float(r), None) if r is not None else (None, "no duration")
+
+    if key == "closing_speech_rate_5s":
+        if not timed_words or not dur_s:
+            return (None, "no timed words or duration")
+        r = _rate_in_window(max(0, dur_s - 5.0), dur_s)
+        return (float(r), None) if r is not None else (None, "bad window")
+
+    if key == "speech_rate_q1":
+        if not timed_words or not dur_s:
+            return (None, "no timed words or duration")
+        r = _rate_in_window(0, dur_s * 0.25)
+        return (float(r), None) if r is not None else (None, "bad window")
+
+    if key == "speech_rate_q4":
+        if not timed_words or not dur_s:
+            return (None, "no timed words or duration")
+        r = _rate_in_window(dur_s * 0.75, dur_s)
+        return (float(r), None) if r is not None else (None, "bad window")
+
+    if key == "speech_rate_ratio_q4_q1":
+        if not timed_words or not dur_s:
+            return (None, "no timed words or duration")
+        q1 = _rate_in_window(0, dur_s * 0.25)
+        q4 = _rate_in_window(dur_s * 0.75, dur_s)
+        if q1 is None or q4 is None:
+            return (None, "bad windows")
+        return (float(q4 / (q1 + 0.01)), None)
+
+    if key == "speech_acceleration":
+        if not timed_words or not dur_s or dur_s < 5:
+            return (None, "insufficient data")
+        n_wins = max(2, int(dur_s / 5))
+        rates = []
+        for i in range(n_wins):
+            t0 = dur_s * i / n_wins
+            t1 = dur_s * (i + 1) / n_wins
+            r = _rate_in_window(t0, t1)
+            if r is not None:
+                rates.append(r)
+        if len(rates) < 2:
+            return (None, "not enough windows")
+        slope, _, _, _, _ = stats.linregress(range(len(rates)), rates)
+        return (float(slope), None)
+
+    if key == "max_silence_gap_s":
+        if len(timed_words) < 2:
+            return (None, "need 2+ timed words")
+        gaps = [timed_words[i+1]["timestamp"] - timed_words[i]["timestamp"]
+                for i in range(len(timed_words)-1)
+                if "timestamp" in timed_words[i] and "timestamp" in timed_words[i+1]]
+        return (float(max(gaps)), None) if gaps else (None, "no gaps")
+
+    if key == "silence_gap_count":
+        if len(timed_words) < 2:
+            return (None, "need 2+ timed words")
+        gaps = [timed_words[i+1]["timestamp"] - timed_words[i]["timestamp"]
+                for i in range(len(timed_words)-1)
+                if "timestamp" in timed_words[i] and "timestamp" in timed_words[i+1]]
+        return (float(sum(1 for g in gaps if g > 1.0)), None)
+
+    if key == "silence_total_pct":
+        if len(timed_words) < 2 or not dur_s:
+            return (None, "need timed words + duration")
+        gaps = [timed_words[i+1]["timestamp"] - timed_words[i]["timestamp"]
+                for i in range(len(timed_words)-1)
+                if "timestamp" in timed_words[i] and "timestamp" in timed_words[i+1]]
+        silence = sum(g for g in gaps if g > 0.5)
+        return (float(silence / dur_s), None)
+
+    if key == "opening_word_latency_s":
+        if not timed_words:
+            return (None, "no timed words")
+        return (float(timed_words[0].get("timestamp", 0)), None)
+
+    if key == "peak_speech_rate_3s":
+        if not timed_words or not dur_s:
+            return (None, "no timed words")
+        max_rate = 0
+        for t in range(0, int(dur_s)):
+            r = len(_words_in_window(t, t + 3)) / 3.0
+            if r > max_rate:
+                max_rate = r
+        return (float(max_rate), None)
+
+    if key == "speech_tempo_range":
+        if not timed_words or not dur_s or dur_s < 10:
+            return (None, "insufficient data")
+        rates = []
+        for t in range(0, int(dur_s) - 4, 2):
+            r = len(_words_in_window(t, t + 5)) / 5.0
+            rates.append(r)
+        if len(rates) < 2:
+            return (None, "not enough windows")
+        return (float(max(rates) - min(rates)), None)
+
+    if key == "avg_word_gap_s":
+        if len(timed_words) < 2:
+            return (None, "need 2+ timed words")
+        gaps = [timed_words[i+1]["timestamp"] - timed_words[i]["timestamp"]
+                for i in range(len(timed_words)-1)
+                if "timestamp" in timed_words[i] and "timestamp" in timed_words[i+1]]
+        return (float(np.mean(gaps)), None) if gaps else (None, "no gaps")
+
+    if key == "word_density_variance":
+        if not timed_words or not dur_s or dur_s < 10:
+            return (None, "insufficient data")
+        rates = []
+        for t in range(0, int(dur_s) - 4, 5):
+            rates.append(len(_words_in_window(t, t + 5)) / 5.0)
+        if len(rates) < 2:
+            return (None, "not enough windows")
+        return (float(np.var(rates)), None)
+
+    # ── NEW: Sensory & Technical Language ─────────────────────────────────
+    if key == "sensory_word_density":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in SENSORY_WORDS)
+        return (float(ct / len(words_lower)), None)
+
+    if key == "technical_word_density":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in TECHNICAL_WORDS)
+        return (float(ct / len(words_lower)), None)
+
+    if key == "sensory_technical_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        s_ct = sum(1 for w in words_lower if w in SENSORY_WORDS)
+        t_ct = sum(1 for w in words_lower if w in TECHNICAL_WORDS)
+        return (float(s_ct / (t_ct + 1)), None)
+
+    if key == "hook_sensory_word_count":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        words_lower = hook_text.lower().split()
+        return (float(sum(1 for w in words_lower if w in SENSORY_WORDS)), None)
+
+    if key == "body_sensation_word_pct":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in BODY_SENSATION_WORDS)
+        return (float(ct / len(words_lower) * 100), None)
+
+    # ── NEW: Pivot & Transition Words ────────────────────────────────────
+    if key == "pivot_word_count":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        return (float(sum(1 for w in words_lower if w in PIVOT_WORDS)), None)
+
+    if key == "pivot_word_density":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in PIVOT_WORDS)
+        return (float(ct / len(words_lower) * 100), None)
+
+    if key == "hook_pivot_word_flag":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        words_lower = hook_text.lower().split()
+        has = any(w in PIVOT_WORDS for w in words_lower)
+        return (float(int(has)), None)
+
+    # ── NEW: Vocabulary Features ─────────────────────────────────────────
+    if key == "short_word_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words_list = transcript.split()
+        if not words_list:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_list if len(w) <= 3)
+        return (float(ct / len(words_list)), None)
+
+    if key == "long_word_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words_list = transcript.split()
+        if not words_list:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_list if len(w) >= 8)
+        return (float(ct / len(words_list)), None)
+
+    if key == "hapax_legomena_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        from collections import Counter
+        freq = Counter(words_lower)
+        hapax = sum(1 for v in freq.values() if v == 1)
+        return (float(hapax / len(words_lower)), None)
+
+    if key == "first_person_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in FIRST_PERSON)
+        return (float(ct / len(words_lower)), None)
+
+    if key == "second_person_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in SECOND_PERSON)
+        return (float(ct / len(words_lower)), None)
+
+    if key == "action_verb_density":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in ACTION_VERBS)
+        return (float(ct / len(words_lower)), None)
+
+    if key == "superlative_count":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        return (float(sum(1 for w in words_lower if w in SUPERLATIVES)), None)
+
+    if key == "comparison_word_count":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        return (float(sum(1 for w in words_lower if w in COMPARISON_WORDS)), None)
+
+    # ── NEW: Hook Advanced ───────────────────────────────────────────────
+    if key == "hook_speech_rate_wps":
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        if hook_seg:
+            h_dur = hook_seg.get("endTime", 0) - hook_seg.get("startTime", 0)
+            h_text = hook_seg.get("transcript", "")
+            if h_dur > 0 and h_text:
+                return (float(len(h_text.split()) / h_dur), None)
+        if transcript and dur_s:
+            words_list = transcript.split()
+            hook_est = max(1, int(len(words_list) * 5 / dur_s))
+            h_words = len(words_list[:hook_est])
+            return (float(h_words / 5.0), None) if 5.0 > 0 else (None, "no duration")
+        return (None, "no hook data")
+
+    if key == "hook_unique_word_ratio":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        words_lower = hook_text.lower().split()
+        if not words_lower:
+            return (None, "empty hook")
+        return (float(len(set(words_lower)) / len(words_lower)), None)
+
+    if key == "hook_action_verb_count":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        words_lower = hook_text.lower().split()
+        return (float(sum(1 for w in words_lower if w in ACTION_VERBS)), None)
+
+    if key == "hook_sentence_count":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        ct = hook_text.count('.') + hook_text.count('!') + hook_text.count('?')
+        return (float(max(ct, 1)), None)
+
+    if key == "hook_avg_word_length":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        words_list = hook_text.split()
+        if not words_list:
+            return (None, "empty hook")
+        return (float(sum(len(w) for w in words_list) / len(words_list)), None)
+
+    if key == "hook_number_count":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        return (float(len(re.findall(r'\d+', hook_text))), None)
+
+    # ── NEW: Narrative Structure Advanced ─────────────────────────────────
+    if key == "segment_duration_variance":
+        if not segments or len(segments) < 2:
+            return (None, "need 2+ segments")
+        durs = [s.get("endTime", 0) - s.get("startTime", 0) for s in segments]
+        return (float(np.var(durs)), None)
+
+    if key == "segment_count_per_minute":
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        return (float(len(segments) / (dur_s / 60)), None)
+
+    if key == "has_setup_segment":
+        has = any(s.get("label", "").lower() == "setup" for s in segments)
+        return (float(int(has)), None)
+
+    if key == "has_conclusion_segment":
+        has = any(s.get("label", "").lower() == "conclusion" for s in segments)
+        return (float(int(has)), None)
+
+    if key == "segment_type_count":
+        if not segments:
+            return (0.0, None)
+        labels = set(s.get("label", "").lower() for s in segments)
+        return (float(len(labels)), None)
+
+    if key == "narrative_arc_completeness":
+        if not segments:
+            return (0.0, None)
+        labels = set(s.get("label", "").lower() for s in segments)
+        canonical = {"hook", "setup", "main point", "climax", "conclusion",
+                     "payoff", "reveal", "peak", "body", "main"}
+        # Map similar labels
+        found = set()
+        for lbl in labels:
+            if lbl == "hook": found.add("hook")
+            elif lbl == "setup": found.add("setup")
+            elif lbl in ("main point", "main", "body"): found.add("main")
+            elif lbl in ("climax", "peak", "payoff", "reveal"): found.add("climax")
+            elif lbl == "conclusion": found.add("conclusion")
+        return (float(len(found)), None)
+
+    if key == "climax_late_flag":
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        climax_labels = {"climax", "peak", "payoff", "reveal"}
+        climax_seg = next((s for s in segments if s.get("label", "").lower() in climax_labels), None)
+        if not climax_seg:
+            return (0.0, None)
+        return (float(int(climax_seg.get("startTime", 0) > dur_s * 0.7)), None)
+
+    if key == "last_segment_duration_pct":
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        last = segments[-1]
+        d = last.get("endTime", 0) - last.get("startTime", 0)
+        return (float(d / dur_s * 100), None)
+
+    if key == "first_segment_duration_pct":
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        first = segments[0]
+        d = first.get("endTime", 0) - first.get("startTime", 0)
+        return (float(d / dur_s * 100), None)
+
+    if key == "segment_length_ratio_max_min":
+        if not segments or len(segments) < 2:
+            return (None, "need 2+ segments")
+        durs = [s.get("endTime", 0) - s.get("startTime", 0) for s in segments]
+        mn = min(durs)
+        return (float(max(durs) / (mn + 0.1)), None)
+
+    if key == "body_segment_count":
+        if not segments:
+            return (0.0, None)
+        bookends = {"hook", "conclusion"}
+        ct = sum(1 for s in segments if s.get("label", "").lower() not in bookends)
+        return (float(ct), None)
+
+    if key == "hook_conclusion_combined_pct":
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        total = 0
+        for s in segments:
+            if s.get("label", "").lower() in ("hook", "conclusion"):
+                total += s.get("endTime", 0) - s.get("startTime", 0)
+        return (float(total / dur_s * 100), None)
+
+    # ── NEW: Title & Metadata Advanced ───────────────────────────────────
+    if key == "title_all_caps_word_count":
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        return (float(sum(1 for w in title.split() if w.isupper() and len(w) >= 2)), None)
+
+    if key == "title_emoji_flag":
+        title = meta.get("title", "")
+        import unicodedata
+        has_emoji = any(unicodedata.category(c).startswith(('So',)) for c in title) if title else False
+        return (float(int(has_emoji)), None)
+
+    if key == "title_contains_making":
+        title = meta.get("title", "").lower()
+        has = "making" in title or "made" in title
+        return (float(int(has)), None)
+
+    if key == "title_avg_word_length":
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        words_list = title.split()
+        if not words_list:
+            return (None, "empty title")
+        return (float(sum(len(w) for w in words_list) / len(words_list)), None)
+
+    if key == "title_starts_with_action":
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        first = title.split()[0].lower() if title.split() else ""
+        is_action = first.endswith("ing") or first in ACTION_VERBS
+        return (float(int(is_action)), None)
+
+    if key == "duration_optimal_flag":
+        dur = meta.get("duration", 0)
+        if not dur:
+            return (None, "no duration")
+        return (float(int(40 <= dur <= 55)), None)
+
+    if key == "duration_sweetspot_distance":
+        dur = meta.get("duration", 0)
+        if not dur:
+            return (None, "no duration")
+        return (float(abs(dur - 52)), None)
+
+    if key == "description_word_count":
+        desc = meta.get("description", "")
+        return (float(len(desc.split())), None)
+
+    if key == "is_vertical":
+        vert = meta.get("isVertical")
+        if vert is not None:
+            return (float(int(vert)), None)
+        w = meta.get("width", 0)
+        h = meta.get("height", 0)
+        if w and h:
+            return (float(int(h > w)), None)
+        return (None, "no size data")
+
+    if key == "upload_month":
+        date_str = meta.get("uploadDate", "")
+        if len(date_str) >= 6:
+            try:
+                return (float(int(date_str[4:6])), None)
+            except ValueError:
+                pass
+        return (None, "no upload date")
+
+    # ── NEW: Visual Frame Advanced ───────────────────────────────────────
+    _action_kw = {"action", "doing", "building", "making", "cutting", "testing",
+                  "breaking", "hitting", "throwing", "pouring", "mixing", "crafting",
+                  "pressing", "crushing", "drilling", "hammering", "welding",
+                  "assembling", "pulling", "pushing", "lifting", "physical"}
+    _workshop_kw = {"workshop", "workbench", "tools", "tool", "bench", "garage",
+                    "lab", "laboratory", "studio", "workspace", "machinery"}
+    _outdoor_kw = {"outdoor", "outside", "nature", "sky", "forest", "field",
+                   "garden", "street", "road", "park", "beach", "mountain"}
+    _dramatic_kw = {"dramatic", "intense", "powerful", "explosive", "impact",
+                    "destruction", "fire", "explosion", "crash", "collision",
+                    "shatter", "break", "smash", "burst"}
+
+    def _frame_desc(f):
+        return str(f.get("analysis", {}).get("sceneDescription", "")).lower()
+    def _frame_vt(f):
+        return str(f.get("analysis", {}).get("visualTechniques", "")).lower()
+    def _has_face(f):
+        return "face" in _frame_desc(f)
+    def _has_action(f):
+        desc = _frame_desc(f)
+        return any(kw in desc for kw in _action_kw)
+    def _has_text(f):
+        return "text overlay" in _frame_vt(f) or "text overlay" in _frame_desc(f) or "text" in _frame_vt(f)
+
+    if key == "opening_frame_has_text":
+        if not frames:
+            return (None, "no frames")
+        return (float(int(_has_text(frames[0]))), None)
+
+    if key == "opening_frame_has_face":
+        if not frames:
+            return (None, "no frames")
+        return (float(int(_has_face(frames[0]))), None)
+
+    if key == "action_frame_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if _has_action(f))
+        return (float(ct / len(frames)), None)
+
+    if key == "workshop_frame_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if any(kw in _frame_desc(f) for kw in _workshop_kw))
+        return (float(ct / len(frames)), None)
+
+    if key == "outdoor_frame_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if any(kw in _frame_desc(f) for kw in _outdoor_kw))
+        return (float(ct / len(frames)), None)
+
+    if key == "face_alone_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if _has_face(f) and not _has_action(f))
+        return (float(ct / len(frames)), None)
+
+    if key == "face_with_action_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if _has_face(f) and _has_action(f))
+        return (float(ct / len(frames)), None)
+
+    if key == "object_focus_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if not _has_face(f))
+        return (float(ct / len(frames)), None)
+
+    if key == "text_overlay_early_pct":
+        if not frames:
+            return (None, "no frames")
+        quarter = max(1, len(frames) // 4)
+        early = frames[:quarter]
+        ct = sum(1 for f in early if _has_text(f))
+        return (float(ct / len(early)), None)
+
+    if key == "dramatic_frame_pct":
+        if not frames:
+            return (None, "no frames")
+        ct = sum(1 for f in frames if any(kw in _frame_desc(f) for kw in _dramatic_kw))
+        return (float(ct / len(frames)), None)
+
+    # ── NEW: AI Analysis Features ────────────────────────────────────────
+    if key == "idea_word_count":
+        idea = (ai.get("videoIdea", "") if isinstance(ai, dict) else "") or ""
+        if not idea:
+            return (None, "no video idea")
+        return (float(len(idea.split())), None)
+
+    if key == "idea_char_count":
+        idea = (ai.get("videoIdea", "") if isinstance(ai, dict) else "") or ""
+        if not idea:
+            return (None, "no video idea")
+        return (float(len(idea)), None)
+
+    if key == "summary_word_count":
+        summary = (ai.get("summary", "") if isinstance(ai, dict) else "") or ""
+        if not summary:
+            return (None, "no summary")
+        return (float(len(summary.split())), None)
+
+    if key == "idea_question_flag":
+        idea = (ai.get("videoIdea", "") if isinstance(ai, dict) else "") or ""
+        return (float(int("?" in idea)), None)
+
+    if key == "idea_number_flag":
+        idea = (ai.get("videoIdea", "") if isinstance(ai, dict) else "") or ""
+        return (float(int(any(c.isdigit() for c in idea))), None)
+
+    if key == "idea_contains_making":
+        idea = ((ai.get("videoIdea", "") if isinstance(ai, dict) else "") or "").lower()
+        has = any(w in idea for w in MAKING_CONCEPT_WORDS)
+        return (float(int(has)), None)
+
+    if key == "idea_contains_indestructible":
+        idea = ((ai.get("videoIdea", "") if isinstance(ai, dict) else "") or "").lower()
+        has = any(w in idea for w in INDESTRUCTIBLE_CONCEPT_WORDS)
+        return (float(int(has)), None)
+
+    # ── NEW: Retention Curve Advanced ────────────────────────────────────
+    if key == "hook_payoff_gap":
+        if len(curve) < 95:
+            return (None, "curve too short")
+        hook_val = curve[10]["retention"] if len(curve) > 10 else None
+        end_val = float(np.mean([p["retention"] for p in curve[95:]]))
+        if hook_val is None:
+            return (None, "no hook value")
+        return (float(end_val - hook_val), None)
+
+    if key == "end_recovery_score":
+        if len(curve) < 95:
+            return (None, "curve too short")
+        n = len(curve)
+        vals = [curve[i]["retention"] for i in range(80, min(95, n))]
+        baseline = [1.0 - i / max(n - 1, 1) for i in range(80, min(95, n))]
+        above = [vals[j] - baseline[j] for j in range(len(vals))]
+        return (float(np.mean(above)), None)
+
+    if key == "momentum_zone_length":
+        if not curve:
+            return (None, "no curve")
+        n = len(curve)
+        vals = [curve[i]["retention"] for i in range(n)]
+        baseline = [1.0 - i / max(n - 1, 1) for i in range(n)]
+        max_run, cur_run = 0, 0
+        for i in range(n):
+            if vals[i] >= baseline[i]:
+                cur_run += 1
+                max_run = max(max_run, cur_run)
+            else:
+                cur_run = 0
+        return (float(max_run), None)
+
+    if key == "retention_recovery_count":
+        if len(curve) < 3:
+            return (None, "curve too short")
+        vals = [p["retention"] for p in curve]
+        ct = sum(1 for i in range(2, len(vals))
+                 if vals[i] > vals[i-1] and vals[i-1] < vals[i-2])
+        return (float(ct), None)
+
+    if key == "above_baseline_area":
+        if not curve:
+            return (None, "no curve")
+        n = len(curve)
+        vals = [curve[i]["retention"] for i in range(n)]
+        baseline = [1.0 - i / max(n - 1, 1) for i in range(n)]
+        area = sum(max(0, vals[i] - baseline[i]) for i in range(n))
+        return (float(area), None)
+
+    if key == "below_baseline_area":
+        if not curve:
+            return (None, "no curve")
+        n = len(curve)
+        vals = [curve[i]["retention"] for i in range(n)]
+        baseline = [1.0 - i / max(n - 1, 1) for i in range(n)]
+        area = sum(max(0, baseline[i] - vals[i]) for i in range(n))
+        return (float(area), None)
+
+    if key == "late_drop_severity":
+        if len(curve) < 60:
+            return (None, "curve too short")
+        vals = [p["retention"] for p in curve[60:]]
+        drops = [vals[i-1] - vals[i] for i in range(1, len(vals)) if vals[i] < vals[i-1]]
+        return (float(np.mean(drops) if drops else 0.0), None)
+
+    if key == "retention_concavity":
+        if len(curve) < 3:
+            return (None, "curve too short")
+        vals = [p["retention"] for p in curve]
+        second_deriv = [vals[i+1] + vals[i-1] - 2*vals[i] for i in range(1, len(vals)-1)]
+        return (float(np.mean(second_deriv)), None)
+
+    if key == "retention_quartile_spread":
+        if len(curve) < 100:
+            return (None, "curve too short")
+        q1_mean = np.mean([p["retention"] for p in curve[:25]])
+        q4_mean = np.mean([p["retention"] for p in curve[75:]])
+        return (float(q4_mean / (q1_mean + 0.01)), None)
+
+    if key == "early_late_drop_ratio":
+        if len(curve) < 60:
+            return (None, "curve too short")
+        vals = [p["retention"] for p in curve]
+        early_drops = [vals[i-1] - vals[i] for i in range(1, 30) if vals[i] < vals[i-1]]
+        late_drops = [vals[i-1] - vals[i] for i in range(70, len(vals)) if vals[i] < vals[i-1]]
+        early_mean = np.mean(early_drops) if early_drops else 0.001
+        late_mean = np.mean(late_drops) if late_drops else 0.0
+        return (float(late_mean / (early_mean + 0.001)), None)
+
+    # ── NEW: Post-Upload Analytics Advanced ──────────────────────────────
+    if key == "engagement_rate":
+        total = analytics.get("totalViews", 0)
+        if not total:
+            return (None, "no views")
+        likes = analytics.get("likes", 0)
+        comments = analytics.get("comments", 0)
+        shares = analytics.get("shares", 0)
+        return (float((likes + comments + shares) / total * 1000), None)
+
+    if key == "like_to_comment_ratio":
+        likes = analytics.get("likes", 0)
+        comments = analytics.get("comments", 0)
+        return (float(likes / (comments + 1)), None)
+
+    if key == "sub_nonsub_retention_gap":
+        sub_pct = analytics.get("subscriberAvgPercent")
+        nonsub_pct = analytics.get("nonSubscriberAvgPercent")
+        if sub_pct is None or nonsub_pct is None:
+            return (None, "missing sub/nonsub retention")
+        return (float(sub_pct - nonsub_pct), None)
+
+    if key == "retention_variation_raw":
+        v = analytics.get("retentionVariation")
+        return (float(v), None) if v is not None else (None, "no retentionVariation")
+
+    if key == "avg_percent_viewed":
+        v = analytics.get("avgPercentViewed")
+        return (float(v), None) if v is not None else (None, "no avgPercentViewed")
+
+    if key == "engaged_view_rate":
+        total = analytics.get("totalViews", 0)
+        engaged = analytics.get("engagedViews", 0)
+        if not total:
+            return (None, "no views")
+        return (float(engaged / total), None)
+
+    if key == "sub_view_fraction":
+        total = analytics.get("totalViews", 0)
+        sub_v = analytics.get("subscriberViews", 0)
+        if not total:
+            return (None, "no views")
+        return (float(sub_v / total), None)
+
+    if key == "view_day1_share":
+        if not daily or len(daily) < 7:
+            return (None, "insufficient daily views")
+        w1 = sum(d.get("views", 0) for d in daily[:7])
+        d1 = daily[0].get("views", 0)
+        if w1 == 0:
+            return (None, "no week 1 views")
+        return (float(d1 / w1), None)
+
+    if key == "view_week3_week1_ratio":
+        if len(daily) < 21:
+            return (None, "insufficient daily views")
+        w1 = sum(d.get("views", 0) for d in daily[:7])
+        w3 = sum(d.get("views", 0) for d in daily[14:21])
+        return (float(w3 / (w1 + 1)), None)
+
+    if key == "daily_views_entropy":
+        if not daily or len(daily) < 7:
+            return (None, "insufficient daily views")
+        views_30 = [d.get("views", 0) for d in daily[:30]]
+        total_v = sum(views_30)
+        if total_v == 0:
+            return (0.0, None)
+        probs = [v / total_v for v in views_30 if v > 0]
+        entropy = -sum(p * math.log2(p) for p in probs)
+        return (float(entropy), None)
+
+    if key == "daily_views_gini":
+        if not daily or len(daily) < 7:
+            return (None, "insufficient daily views")
+        views_30 = sorted([d.get("views", 0) for d in daily[:30]])
+        n = len(views_30)
+        total_v = sum(views_30)
+        if total_v == 0:
+            return (0.0, None)
+        cumulative = 0
+        gini_sum = 0
+        for i, v in enumerate(views_30):
+            cumulative += v
+            gini_sum += (2 * (i + 1) - n - 1) * v
+        gini = gini_sum / (n * total_v)
+        return (float(gini), None)
+
+    if key == "stayed_to_watch_rate":
+        sr = analytics.get("swipeRatio", {})
+        if isinstance(sr, dict):
+            v = sr.get("stayedToWatch")
+            if v is not None:
+                return (float(v), None)
+        return (None, "no swipeRatio data")
+
+    if key == "avg_view_duration_s":
+        v = analytics.get("avgViewDuration")
+        return (float(v), None) if v is not None else (None, "no avgViewDuration")
 
     # Interaction terms: keyA_x_keyB
     m = re.match(r'^(.+)_x_(.+)$', key)
