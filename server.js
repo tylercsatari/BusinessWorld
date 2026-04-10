@@ -21,11 +21,104 @@ const shortsCrawler = require('./shorts-crawler');
 const financeService = require('./buildings/finance/finance-service');
 const jarvisStore = require('./buildings/jarvis/jarvis-store');
 const PDFDocument = require('pdfkit');
+const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
 const BUILD_TS = Date.now();
+
+// ── Jarvis Runner State (in-memory, survives across requests) ──────────
+const LOG_TAIL_MAX = 32 * 1024; // keep last 32 KB of output
+const _runner = {
+    active: false,
+    pid: null,
+    startedAt: null,
+    mode: null,     // 'auto' | 'queue'
+    args: [],
+    exitCode: null,
+    signal: null,
+    error: null,
+    logTail: '',
+    _proc: null,    // live reference so GC can't collect it
+};
+
+function _launchPipeline(mode, args) {
+    // Refuse if already running
+    if (_runner.active && _runner._proc && _runner._proc.exitCode === null) {
+        return { started: false, error: 'A run is already active', pid: _runner.pid };
+    }
+    // Reset state
+    _runner.active = true;
+    _runner.mode = mode;
+    _runner.args = args;
+    _runner.exitCode = null;
+    _runner.signal = null;
+    _runner.error = null;
+    _runner.logTail = '';
+    _runner.startedAt = new Date().toISOString();
+
+    const proc = spawn('python3', ['-u', ...args], {
+        cwd: __dirname,
+        env: { ...process.env, JARVIS_API_URL: `http://localhost:${PORT}` },
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    _runner._proc = proc;
+    _runner.pid = proc.pid;
+
+    function appendLog(chunk) {
+        _runner.logTail += chunk.toString();
+        if (_runner.logTail.length > LOG_TAIL_MAX) {
+            _runner.logTail = _runner.logTail.slice(-LOG_TAIL_MAX);
+        }
+    }
+    proc.stdout.on('data', appendLog);
+    proc.stderr.on('data', appendLog);
+
+    proc.on('error', (err) => {
+        _runner.active = false;
+        _runner.error = err.message;
+        _runner.logTail += `\n[SPAWN ERROR] ${err.message}\n`;
+        _runner._proc = null;
+        // Write failed progress so UI sees the failure
+        if (mode === 'auto') {
+            jarvisStore.saveJson('autonomous_progress', {
+                active: false, run_id: `server_error_${Date.now()}`,
+                mode: 'hybrid_auto', started_at: _runner.startedAt,
+                finished_at: new Date().toISOString(),
+                stop_reason: `spawn_error: ${err.message}`,
+                attempted: 0, completed: 0, failures: 0,
+                recent_events: [{ type: 'error', msg: err.message, ts: new Date().toISOString() }],
+            }).catch(() => {});
+        }
+    });
+
+    proc.on('close', (code, signal) => {
+        _runner.active = false;
+        _runner.exitCode = code;
+        _runner.signal = signal;
+        // If auto mode exited with error before Python could init progress, surface it
+        if (mode === 'auto' && code !== 0) {
+            const elapsed = Date.now() - new Date(_runner.startedAt).getTime();
+            if (elapsed < 10000) { // crashed within 10s — likely never initialized progress
+                jarvisStore.saveJson('autonomous_progress', {
+                    active: false, run_id: `crash_${Date.now()}`,
+                    mode: 'hybrid_auto', started_at: _runner.startedAt,
+                    finished_at: new Date().toISOString(),
+                    stop_reason: `process_exit: code=${code} signal=${signal}`,
+                    attempted: 0, completed: 0, failures: 0,
+                    recent_events: [{
+                        type: 'error', ts: new Date().toISOString(),
+                        msg: `Process exited (code=${code}). Last output: ${_runner.logTail.slice(-500)}`,
+                    }],
+                }).catch(() => {});
+            }
+        }
+        _runner._proc = null;
+    });
+
+    return { started: true, pid: proc.pid };
+}
 
 
 const MIME_TYPES = {
@@ -3626,14 +3719,10 @@ Respond ONLY as valid JSON (no markdown):
         req.on('end', () => {
             try {
                 const { n = 5 } = JSON.parse(body || '{}');
-                const { spawn } = require('child_process');
-                const proc = spawn('python3', [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--run', String(n)], {
-                    cwd: __dirname, detached: true,
-                    env: { ...process.env, JARVIS_API_URL: `http://localhost:${PORT}` }
-                });
-                proc.unref();
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ started: true, n, pid: proc.pid }));
+                const pipelineArgs = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--run', String(n)];
+                const result = _launchPipeline('queue', pipelineArgs);
+                res.writeHead(result.started ? 200 : 409, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ...result, n }));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: e.message }));
@@ -3652,20 +3741,15 @@ Respond ONLY as valid JSON (no markdown):
             try {
                 const opts = JSON.parse(body || '{}');
                 const n = parseInt(opts.n) || 10;
-                const args = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--auto-run', String(n)];
-                if (opts.maxMinutes) args.push('--max-minutes', String(opts.maxMinutes));
-                if (opts.maxFailures) args.push('--max-failures', String(opts.maxFailures));
-                if (opts.maxNoSignal) args.push('--max-no-signal', String(opts.maxNoSignal));
-                if (opts.llmCandidates != null) args.push('--llm-candidates', String(opts.llmCandidates));
-                if (opts.preUploadRatio != null) args.push('--preupload-ratio', String(opts.preUploadRatio));
-                const { spawn } = require('child_process');
-                const proc = spawn('python3', args, {
-                    cwd: __dirname, detached: true,
-                    env: { ...process.env, JARVIS_API_URL: `http://localhost:${PORT}` }
-                });
-                proc.unref();
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ started: true, n, pid: proc.pid }));
+                const pipelineArgs = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--auto-run', String(n)];
+                if (opts.maxMinutes) pipelineArgs.push('--max-minutes', String(opts.maxMinutes));
+                if (opts.maxFailures) pipelineArgs.push('--max-failures', String(opts.maxFailures));
+                if (opts.maxNoSignal) pipelineArgs.push('--max-no-signal', String(opts.maxNoSignal));
+                if (opts.llmCandidates != null) pipelineArgs.push('--llm-candidates', String(opts.llmCandidates));
+                if (opts.preUploadRatio != null) pipelineArgs.push('--preupload-ratio', String(opts.preUploadRatio));
+                const result = _launchPipeline('auto', pipelineArgs);
+                res.writeHead(result.started ? 200 : 409, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ...result, n }));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: e.message }));
@@ -3693,6 +3777,25 @@ Respond ONLY as valid JSON (no markdown):
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end('[]');
         }
+        return;
+    }
+
+    // =========================================
+    // API: Jarvis Runner Status (debug)
+    // =========================================
+    if (pathname === '/api/jarvis/v2/runner-status' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            active: _runner.active,
+            pid: _runner.pid,
+            startedAt: _runner.startedAt,
+            mode: _runner.mode,
+            args: _runner.args.map(a => a.replace(__dirname, '.')),
+            exitCode: _runner.exitCode,
+            signal: _runner.signal,
+            error: _runner.error,
+            logTail: _runner.logTail.slice(-4096),
+        }));
         return;
     }
 

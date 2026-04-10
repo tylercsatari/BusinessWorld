@@ -2272,6 +2272,7 @@ const JarvisUI = (() => {
                     <button id="ar-run-btn" style="background:#0e7490;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:11px;cursor:pointer">Queue-only (legacy)</button>
                 </div>
                 <div id="ar-run-status" style="margin-top:8px;font-size:11px;min-height:16px"></div>
+                <div id="ar-server-status" style="margin-top:4px;font-size:10px;color:#64748b;min-height:14px"></div>
                 <div style="margin-top:6px;font-size:10px;color:#475569">Hybrid: Claude proposes candidates → deterministic pipeline validates, extracts, correlates, graphs. Falls back to templates if LLM fails.</div>
             </div>
 
@@ -2499,6 +2500,29 @@ const JarvisUI = (() => {
         }
         pollProgress();
         window._arProgressInterval = setInterval(pollProgress, 3000);
+
+        // Server runner debug status
+        async function pollRunnerStatus() {
+            const el = container?.querySelector('#ar-server-status');
+            if (!el) return;
+            try {
+                const resp = await fetch('/api/jarvis/v2/runner-status');
+                const d = await resp.json();
+                if (d.active) {
+                    el.innerHTML = `<span style="color:#22d3ee">⚙ Server runner active (PID ${d.pid}, ${d.mode}) since ${d.startedAt ? new Date(d.startedAt).toLocaleTimeString() : '?'}</span>`;
+                } else if (d.pid) {
+                    const parts = [`exit=${d.exitCode}`];
+                    if (d.signal) parts.push(`signal=${d.signal}`);
+                    if (d.error) parts.push(d.error);
+                    const color = d.exitCode === 0 ? '#22c55e' : '#f87171';
+                    el.innerHTML = `<span style="color:${color}">Last run: PID ${d.pid} (${d.mode}) — ${parts.join(', ')}</span>`;
+                } else {
+                    el.textContent = '';
+                }
+            } catch { if (el) el.textContent = ''; }
+        }
+        pollRunnerStatus();
+        setInterval(pollRunnerStatus, 5000);
     }
 
     // ══════════════════════════════════════════════════
