@@ -20,9 +20,11 @@ const dataStore = require('./data-store');
 const shortsCrawler = require('./shorts-crawler');
 const financeService = require('./buildings/finance/finance-service');
 const jarvisStore = require('./buildings/jarvis/jarvis-store');
+const jarvisRunner = require('./buildings/jarvis/jarvis-runner');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
+const IS_RENDER = !!process.env.RENDER;  // Render sets this env var automatically
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
@@ -120,6 +122,63 @@ function _launchPipeline(mode, args) {
     return { started: true, pid: proc.pid };
 }
 
+/**
+ * Node-native Jarvis runner — used on Render (no Python/numpy available).
+ * Runs the pipeline in-process via jarvis-runner.js.
+ * mode: 'auto' | 'queue'
+ */
+function _launchNodeRunner(mode, opts) {
+    // Duplicate-run protection (same as Python path)
+    if (_runner.active) {
+        return { started: false, error: 'A run is already active', pid: _runner.pid };
+    }
+
+    _runner.active = true;
+    _runner.mode = mode;
+    _runner.args = [mode, JSON.stringify(opts)];
+    _runner.exitCode = null;
+    _runner.signal = null;
+    _runner.error = null;
+    _runner.logTail = '';
+    _runner.startedAt = new Date().toISOString();
+    _runner._proc = null;
+    _runner.pid = process.pid;  // in-process, use Node's own PID
+
+    // Reset the runner's log buffer so server can read it
+    jarvisRunner._logBuffer = '';
+
+    const runnerPromise = mode === 'auto'
+        ? jarvisRunner.autoRun(opts)
+        : jarvisRunner.runQueue(opts.n || 5);
+
+    runnerPromise
+        .then(() => {
+            _runner.active = false;
+            _runner.exitCode = 0;
+            _runner.logTail = jarvisRunner._logBuffer.slice(-LOG_TAIL_MAX);
+            console.log(`[jarvis] Node runner completed (${mode})`);
+        })
+        .catch((err) => {
+            _runner.active = false;
+            _runner.exitCode = 1;
+            _runner.error = err.message;
+            _runner.logTail = jarvisRunner._logBuffer.slice(-LOG_TAIL_MAX) +
+                `\n[NODE RUNNER ERROR] ${err.message}\n`;
+            console.error(`[jarvis] Node runner failed:`, err.message);
+            if (mode === 'auto') {
+                jarvisStore.saveJson('autonomous_progress', {
+                    active: false, run_id: `node_error_${Date.now()}`,
+                    mode: 'hybrid_auto', started_at: _runner.startedAt,
+                    finished_at: new Date().toISOString(),
+                    stop_reason: `node_error: ${err.message}`,
+                    attempted: 0, completed: 0, failures: 0,
+                    recent_events: [{ type: 'error', msg: err.message, ts: new Date().toISOString() }],
+                }).catch(() => {});
+            }
+        });
+
+    return { started: true, pid: process.pid, engine: 'node' };
+}
 
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -3719,8 +3778,13 @@ Respond ONLY as valid JSON (no markdown):
         req.on('end', () => {
             try {
                 const { n = 5 } = JSON.parse(body || '{}');
-                const pipelineArgs = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--run', String(n)];
-                const result = _launchPipeline('queue', pipelineArgs);
+                let result;
+                if (IS_RENDER) {
+                    result = _launchNodeRunner('queue', { n });
+                } else {
+                    const pipelineArgs = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--run', String(n)];
+                    result = _launchPipeline('queue', pipelineArgs);
+                }
                 res.writeHead(result.started ? 200 : 409, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ ...result, n }));
             } catch (e) {
@@ -3741,13 +3805,25 @@ Respond ONLY as valid JSON (no markdown):
             try {
                 const opts = JSON.parse(body || '{}');
                 const n = parseInt(opts.n) || 10;
-                const pipelineArgs = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--auto-run', String(n)];
-                if (opts.maxMinutes) pipelineArgs.push('--max-minutes', String(opts.maxMinutes));
-                if (opts.maxFailures) pipelineArgs.push('--max-failures', String(opts.maxFailures));
-                if (opts.maxNoSignal) pipelineArgs.push('--max-no-signal', String(opts.maxNoSignal));
-                if (opts.llmCandidates != null) pipelineArgs.push('--llm-candidates', String(opts.llmCandidates));
-                if (opts.preUploadRatio != null) pipelineArgs.push('--preupload-ratio', String(opts.preUploadRatio));
-                const result = _launchPipeline('auto', pipelineArgs);
+                let result;
+                if (IS_RENDER) {
+                    // Node-native runner on Render — no Python dependency
+                    result = _launchNodeRunner('auto', {
+                        maxIterations: n,
+                        maxMinutes: opts.maxMinutes || null,
+                        maxFailures: opts.maxFailures || null,
+                        maxNoSignal: opts.maxNoSignal || null,
+                        preuploadRatio: opts.preUploadRatio != null ? parseFloat(opts.preUploadRatio) : null,
+                    });
+                } else {
+                    const pipelineArgs = [path.join(__dirname, 'buildings/jarvis/pipeline.py'), '--auto-run', String(n)];
+                    if (opts.maxMinutes) pipelineArgs.push('--max-minutes', String(opts.maxMinutes));
+                    if (opts.maxFailures) pipelineArgs.push('--max-failures', String(opts.maxFailures));
+                    if (opts.maxNoSignal) pipelineArgs.push('--max-no-signal', String(opts.maxNoSignal));
+                    if (opts.llmCandidates != null) pipelineArgs.push('--llm-candidates', String(opts.llmCandidates));
+                    if (opts.preUploadRatio != null) pipelineArgs.push('--preupload-ratio', String(opts.preUploadRatio));
+                    result = _launchPipeline('auto', pipelineArgs);
+                }
                 res.writeHead(result.started ? 200 : 409, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ ...result, n }));
             } catch (e) {
@@ -3784,17 +3860,22 @@ Respond ONLY as valid JSON (no markdown):
     // API: Jarvis Runner Status (debug)
     // =========================================
     if (pathname === '/api/jarvis/v2/runner-status' && req.method === 'GET') {
+        // If Node runner is active, pull live log from its buffer
+        const logTail = _runner.active && !_runner._proc
+            ? (jarvisRunner._logBuffer || '').slice(-4096)
+            : _runner.logTail.slice(-4096);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             active: _runner.active,
             pid: _runner.pid,
             startedAt: _runner.startedAt,
             mode: _runner.mode,
-            args: _runner.args.map(a => a.replace(__dirname, '.')),
+            args: (_runner.args || []).map(a => typeof a === 'string' ? a.replace(__dirname, '.') : String(a)),
             exitCode: _runner.exitCode,
             signal: _runner.signal,
             error: _runner.error,
-            logTail: _runner.logTail.slice(-4096),
+            logTail,
+            engine: _runner._proc ? 'python' : 'node',
         }));
         return;
     }
