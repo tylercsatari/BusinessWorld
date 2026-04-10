@@ -3687,6 +3687,7 @@ Respond ONLY as valid JSON (no markdown):
         }
         if (req.method === 'GET') {
             try {
+                if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache(name);
                 const data = await jarvisStore.loadJson(name);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(data));
@@ -3734,6 +3735,7 @@ Respond ONLY as valid JSON (no markdown):
 
     if (pathname === '/api/jarvis/v2/indicators' && req.method === 'GET') {
         try {
+            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('indicators');
             const data = await jarvisStore.loadJson('indicators', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
@@ -3742,14 +3744,16 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/graph' && req.method === 'GET') {
         try {
-            const data = await jarvisStore.loadJson('graph', { nodes: [], edges: [] });
+            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('graph');
+            const data = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
-        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"nodes":[],"edges":[]}'); }
+        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"nodes":[],"edges":[],"derived_edges":[]}'); }
         return;
     }
     if (pathname === '/api/jarvis/v2/tools' && req.method === 'GET') {
         try {
+            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('tools');
             const data = await jarvisStore.loadJson('tools', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
@@ -3758,6 +3762,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/resolutions' && req.method === 'GET') {
         try {
+            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('resolutions');
             const data = await jarvisStore.loadJson('resolutions', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
@@ -3766,6 +3771,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/derived-experiments' && req.method === 'GET') {
         try {
+            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('derived_experiments');
             const data = await jarvisStore.loadJson('derived_experiments', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
@@ -3774,10 +3780,26 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/experiments' && req.method === 'GET') {
         try {
-            const data = await jarvisStore.loadJson('experiments_log', []);
+            if (url.searchParams.get('fresh') === '1') {
+                jarvisStore.invalidateCache('experiments_log');
+                jarvisStore.invalidateCache('derived_experiments');
+            }
+            const [atomic, derived] = await Promise.all([
+                jarvisStore.loadJson('experiments_log', []),
+                jarvisStore.loadJson('derived_experiments', []),
+            ]);
+            // Tag atomic experiments with kind if missing
+            const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
-        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+            res.end(JSON.stringify({
+                atomic: taggedAtomic,
+                derived,
+                count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
+            }));
+        } catch (e) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ atomic: [], derived: [], count: { atomic: 0, derived: 0, total: 0 } }));
+        }
         return;
     }
     if (pathname === '/api/jarvis/v2/run-pipeline' && req.method === 'POST') {
@@ -3843,6 +3865,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/auto-run-progress' && req.method === 'GET') {
         try {
+            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('autonomous_progress');
             const data = await jarvisStore.loadJson('autonomous_progress', { active: false, run_id: null, recent_events: [] });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
@@ -3854,6 +3877,7 @@ Respond ONLY as valid JSON (no markdown):
     }
     if (pathname === '/api/jarvis/v2/auto-run-status' && req.method === 'GET') {
         try {
+            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('autonomous_runs');
             const data = await jarvisStore.loadJson('autonomous_runs', []);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(data));
