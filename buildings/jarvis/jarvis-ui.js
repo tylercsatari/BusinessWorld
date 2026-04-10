@@ -1575,25 +1575,67 @@ const JarvisUI = (() => {
                 + '</div>';
         }
 
-        // Derived Relationships — show interaction experiments this node participates in
+        // Derived Relationships — show all relationship experiments this node participates in
         let derivedHtml = '';
         if (v2Graph && v2Graph.derived_edges) {
-            const related = (v2Graph.derived_edges || []).filter(de => de.from === d.key || de.to === d.key);
+            const related = (v2Graph.derived_edges || []).filter(de =>
+                de.from === d.key || de.to === d.key ||
+                (de.component_keys || []).includes(d.key));
             if (related.length) {
-                derivedHtml = sectionHdr('Derived Relationships');
+                derivedHtml = sectionHdr('Derived Relationships (' + related.length + ')');
                 derivedHtml += '<div style="display:flex;flex-direction:column;gap:4px">';
                 related.forEach(de => {
                     const partner = de.from === d.key ? de.to : de.from;
-                    const rVal = de.interaction_r;
-                    const rColor = rVal >= 0 ? '#22d3ee' : '#f87171';
-                    const rStr = (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3);
+                    const kind = de.kind || 'interaction';
+                    const depthStr = de.depth ? ' d' + de.depth : '';
+
+                    // Kind-specific color and display
+                    let borderColor = '#a78bfa'; // default purple
+                    let kindLabel = kind;
+                    let metricStr = '';
+                    if (kind === 'pair_correlation') {
+                        borderColor = '#60a5fa'; // blue
+                        kindLabel = 'corr';
+                        const rVal = de.primary_r != null ? de.primary_r : de.interaction_r;
+                        if (rVal != null) {
+                            const rc = rVal >= 0 ? '#22d3ee' : '#f87171';
+                            metricStr = ' <span style="color:' + rc + ';font-weight:700">r=' + (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3) + '</span>';
+                        }
+                    } else if (kind === 'conditional_delta_to_views') {
+                        borderColor = '#f59e0b'; // amber
+                        kindLabel = 'cond Δ';
+                        if (de.delta_r != null) {
+                            const dc = de.delta_r >= 0 ? '#22d3ee' : '#f87171';
+                            metricStr = ' <span style="color:' + dc + ';font-weight:700">Δr=' + (de.delta_r >= 0 ? '+' : '') + Number(de.delta_r).toFixed(3) + '</span>';
+                        }
+                    } else if (kind === 'depth3_interaction_to_views') {
+                        borderColor = '#ec4899'; // pink
+                        kindLabel = '3-way';
+                        const rVal = de.primary_r || de.interaction_r;
+                        if (rVal != null) {
+                            const rc = rVal >= 0 ? '#22d3ee' : '#f87171';
+                            metricStr = ' <span style="color:' + rc + ';font-weight:700">r=' + (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3) + '</span>';
+                        }
+                    } else {
+                        // interaction_to_views or legacy
+                        const rVal = de.interaction_r;
+                        kindLabel = '×';
+                        if (rVal != null) {
+                            const rc = rVal >= 0 ? '#22d3ee' : '#f87171';
+                            metricStr = ' <span style="color:' + rc + ';font-weight:700">r=' + (rVal >= 0 ? '+' : '') + Number(rVal).toFixed(3) + '</span>';
+                        }
+                    }
+
                     const strength = de.strength_label || '';
-                    derivedHtml += '<div style="background:#1a1040;border-left:3px solid #a78bfa;padding:6px 8px;border-radius:0 6px 6px 0;font-size:11px;color:#e2e8f0">'
+                    const target = de.target ? ' → ' + de.target : '';
+                    const bridgeTag = de.bridge ? ' <span style="color:#34d399;font-size:9px;font-weight:600">BRIDGE</span>' : '';
+
+                    derivedHtml += '<div style="background:#1a1040;border-left:3px solid ' + borderColor + ';padding:6px 8px;border-radius:0 6px 6px 0;font-size:11px;color:#e2e8f0">'
+                        + '<span style="color:' + borderColor + ';font-weight:600;font-size:9px;text-transform:uppercase">' + kindLabel + depthStr + '</span> '
                         + '<span style="color:#a78bfa;font-weight:600">' + humanizeKey(partner) + '</span>'
-                        + ' &nbsp;×&nbsp; ' + humanizeKey(d.key)
-                        + ' → ' + (de.target || 'views')
-                        + ' &nbsp; <span style="color:' + rColor + ';font-weight:700">r=' + rStr + '</span>'
-                        + (strength ? ' &nbsp;<span style="color:#94a3b8">(' + strength + ')</span>' : '')
+                        + target + metricStr
+                        + (strength ? ' <span style="color:#94a3b8">(' + strength + ')</span>' : '')
+                        + bridgeTag
                         + '</div>';
                 });
                 derivedHtml += '</div>';
@@ -1669,14 +1711,17 @@ const JarvisUI = (() => {
         const links = (v2Graph.edges || []).filter(e => nodeKeySet.has(e.from) && nodeKeySet.has(e.to))
             .map(e => ({ source: e.from, target: e.to, r: Math.abs(e.r || 0), peer: false }));
 
-        // Derived interaction edges — show as peer-style dashed edges between component nodes
+        // Derived edges — show as styled edges between component nodes
         (v2Graph.derived_edges || []).forEach(de => {
             if (nodeKeySet.has(de.from) && nodeKeySet.has(de.to)) {
+                const rVal = de.interaction_r || de.primary_r || de.delta_r || 0;
                 links.push({
                     source: de.from, target: de.to,
-                    r: Math.abs(de.interaction_r || 0),
+                    r: Math.abs(rVal),
                     peer: false, interaction: true,
-                    interaction_key: de.interaction_key,
+                    interaction_key: de.interaction_key || de.experiment_key,
+                    kind: de.kind || 'interaction_to_views',
+                    depth: de.depth || 2,
                 });
             }
         });
@@ -1756,7 +1801,12 @@ const JarvisUI = (() => {
             .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x).attr('y2', d => d.target.y)
             .attr('stroke', d => {
-                if (d.interaction) return '#a78bfa';
+                if (d.interaction) {
+                    if (d.kind === 'pair_correlation') return '#60a5fa';
+                    if (d.kind === 'conditional_delta_to_views') return '#f59e0b';
+                    if (d.kind === 'depth3_interaction_to_views') return '#ec4899';
+                    return '#a78bfa';
+                }
                 if (d.peer) return 'rgba(255,255,255,0.15)';
                 return nodeColor(d.source);
             })
@@ -1772,7 +1822,11 @@ const JarvisUI = (() => {
                 return Math.min(0.5 + Math.abs(d.r || 0) * 2.0, 3);
             })
             .attr('stroke-dasharray', d => {
-                if (d.interaction) return '3,3';
+                if (d.interaction) {
+                    if (d.kind === 'pair_correlation') return '4,2';
+                    if (d.kind === 'depth3_interaction_to_views') return '2,2';
+                    return '3,3';
+                }
                 if (d.peer) return '2,4';
                 const tk = typeof d.target === 'object' ? d.target.key : d.target;
                 if (tk === 'keep' || tk === 'retention') return '4,3';

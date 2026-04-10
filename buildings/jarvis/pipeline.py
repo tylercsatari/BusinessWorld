@@ -1128,6 +1128,142 @@ METRIC_DEFINITIONS = {
         "data_sources": ["aiAnalysis.videoIdea"],
         "layer": "pre",
     },
+    # ── CRAZY Pre-Upload Indicators ────────────────────────────────────
+    "tension_word_density": {
+        "description": "Density of tension/conflict words (but, suddenly, impossible) per 100 words.",
+        "formula": "count(tension_words) / word_count * 100",
+        "expected_range": "0 to 5", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "resolution_word_density": {
+        "description": "Density of resolution/payoff words (finally, turns out, worked) per 100 words.",
+        "formula": "count(resolution_words) / word_count * 100",
+        "expected_range": "0 to 5", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "tension_resolution_ratio": {
+        "description": "Ratio of tension to resolution words — narrative arc quality.",
+        "formula": "tension_count / (resolution_count + 1)",
+        "expected_range": "0 to 10", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "emotional_arc_swing": {
+        "description": "Max tension-resolution swing across transcript quarters — emotional range.",
+        "formula": "max(quarter_tension_scores) - min(quarter_tension_scores)",
+        "expected_range": "0 to 20", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "hook_tension_density": {
+        "description": "Tension word density specifically in the hook — immediate conflict signal.",
+        "formula": "count(hook_tension_words) / hook_word_count * 100",
+        "expected_range": "0 to 15", "data_sources": ["transcript", "aiAnalysis.segments"], "layer": "pre",
+    },
+    "repeated_phrase_count": {
+        "description": "Number of bigrams repeated 3+ times — verbal callbacks and catchphrases.",
+        "formula": "count(bigrams with freq >= 3)",
+        "expected_range": "0 to 20", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "vocabulary_richness_yule_k": {
+        "description": "Yule's K vocabulary richness measure. Lower = richer, more diverse vocabulary.",
+        "formula": "10000 * (M2 - N) / N^2",
+        "expected_range": "0 to 500", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "question_early_ratio": {
+        "description": "Fraction of questions appearing in first 25% of transcript — front-loaded curiosity.",
+        "formula": "early_questions / (total_questions + 1)",
+        "expected_range": "0 to 1", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "open_loop_count": {
+        "description": "Count of open loops: questions + suspense phrases (but first, what if, wait).",
+        "formula": "question_marks + suspense_phrase_count",
+        "expected_range": "0 to 30", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "cliffhanger_density": {
+        "description": "Suspense/cliffhanger phrases per 100 words.",
+        "formula": "cliffhanger_phrases / word_count * 100",
+        "expected_range": "0 to 3", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "visual_monotony_score": {
+        "description": "Fraction of consecutive frames with same scene — visual repetitiveness.",
+        "formula": "consecutive_same_frames / (total_frames - 1)",
+        "expected_range": "0 to 1", "data_sources": ["frames"], "layer": "pre",
+    },
+    "visual_variety_entropy": {
+        "description": "Shannon entropy of scene descriptions — visual information richness.",
+        "formula": "H = -sum(p_i * log2(p_i)) for scene types",
+        "expected_range": "0 to 6", "data_sources": ["frames"], "layer": "pre",
+    },
+    "face_intro_delay_frames": {
+        "description": "Number of frames before first face appears — immediate vs slow face reveal.",
+        "formula": "index of first face frame",
+        "expected_range": "0 to 600", "data_sources": ["frames"], "layer": "pre",
+    },
+    "visual_pacing_variance": {
+        "description": "Variance of scene run lengths — chaotic vs steady visual pacing.",
+        "formula": "var(consecutive_same_scene_runs)",
+        "expected_range": "0 to 100", "data_sources": ["frames"], "layer": "pre",
+    },
+    "golden_ratio_segment_flag": {
+        "description": "Whether any segment boundary falls at the golden ratio (61.8%) of video.",
+        "formula": "int(any segment start within 5% of 61.8% mark)",
+        "expected_range": "0 or 1", "data_sources": ["aiAnalysis.segments", "metadata.duration"], "layer": "pre",
+    },
+    "hook_to_body_word_overlap": {
+        "description": "Word overlap between hook and body — semantic coherence/foreshadowing.",
+        "formula": "len(hook_words & body_words) / len(hook_words)",
+        "expected_range": "0 to 1", "data_sources": ["transcript", "aiAnalysis.segments"], "layer": "pre",
+    },
+    "title_uniqueness_score": {
+        "description": "Number of uncommon (>6 char) words in title.",
+        "formula": "count(title words with len > 6)",
+        "expected_range": "0 to 10", "data_sources": ["metadata.title"], "layer": "pre",
+    },
+    "title_curiosity_gap_score": {
+        "description": "Curiosity triggers in title: this, what, numbers, ellipsis, how.",
+        "formula": "count(curiosity_triggers) + count(digits)",
+        "expected_range": "0 to 10", "data_sources": ["metadata.title"], "layer": "pre",
+    },
+    "title_power_word_count": {
+        "description": "Count of proven viral power words in title (insane, impossible, extreme, etc).",
+        "formula": "count(power_words in title)",
+        "expected_range": "0 to 5", "data_sources": ["metadata.title"], "layer": "pre",
+    },
+    "words_per_scene": {
+        "description": "Average transcript words per visual scene — information-per-scene density.",
+        "formula": "word_count / scene_count",
+        "expected_range": "10 to 500", "data_sources": ["transcript", "frames"], "layer": "pre",
+    },
+    "speech_silence_ratio": {
+        "description": "Ratio of speaking time to silence time — pacing.",
+        "formula": "speech_time / (silence_time + 0.1)",
+        "expected_range": "0 to 50", "data_sources": ["transcript.words", "metadata.duration"], "layer": "pre",
+    },
+    "transcript_readability": {
+        "description": "Flesch reading ease score — how accessible is the language?",
+        "formula": "206.835 - 1.015*(words/sentences) - 84.6*(syllables/words)",
+        "expected_range": "-50 to 120", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "energy_word_density": {
+        "description": "High-energy/intensity words per 100 words (insane, epic, destroy, etc).",
+        "formula": "count(energy_words) / word_count * 100",
+        "expected_range": "0 to 5", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "concept_density": {
+        "description": "Unique capitalized words (nouns/names) per sentence — information density.",
+        "formula": "unique_capitalized_words / sentence_count",
+        "expected_range": "0 to 20", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "frame_text_variety": {
+        "description": "Number of unique visual techniques mentioned across all frames.",
+        "formula": "len(unique_techniques_set)",
+        "expected_range": "0 to 50", "data_sources": ["frames"], "layer": "pre",
+    },
+    "description_link_count": {
+        "description": "Number of URLs in video description — promotion effort proxy.",
+        "formula": "count(urls in description)",
+        "expected_range": "0 to 20", "data_sources": ["metadata.description"], "layer": "pre",
+    },
+    "description_hashtag_count": {
+        "description": "Number of hashtags in video description.",
+        "formula": "count(#tags in description)",
+        "expected_range": "0 to 30", "data_sources": ["metadata.description"], "layer": "pre",
+    },
     # ── NEW: Retention Curve Advanced ────────────────────────────────────
     "hook_payoff_gap": {
         "description": "Final 5% retention minus hook retention. NEGATIVE = over-delivery = 9x views.",
@@ -1346,6 +1482,7 @@ INDESTRUCTIBLE_CONCEPT_WORDS = {"indestructible", "unbreakable", "bulletproof", 
 
 AUTONOMOUS_RUNS_FILE = JARVIS_DIR / "autonomous_runs.json"
 AUTONOMOUS_PROGRESS_FILE = JARVIS_DIR / "autonomous_progress.json"
+DERIVED_EXPERIMENTS_FILE = JARVIS_DIR / "derived_experiments.json"
 
 # Map local file paths to R2-bridged data names (used by HTTP bridge)
 _FILE_TO_R2_NAME = None  # lazily built after all paths are defined
@@ -1363,6 +1500,7 @@ def _get_r2_name(filepath):
             str(QUEUE_FILE): "candidate_queue",
             str(AUTONOMOUS_RUNS_FILE): "autonomous_runs",
             str(AUTONOMOUS_PROGRESS_FILE): "autonomous_progress",
+            str(DERIVED_EXPERIMENTS_FILE): "derived_experiments",
         }
     return _FILE_TO_R2_NAME.get(str(filepath))
 
@@ -1553,7 +1691,21 @@ def generate_autonomous_candidates():
               "idea_contains_making", "idea_contains_indestructible"]:
         candidates.append(k)
 
-    # 18. NEW: Retention curve advanced
+    # 18. CRAZY pre-upload: emotional arc, verbal patterns, visual rhythm, title power
+    for k in ["tension_word_density", "resolution_word_density", "tension_resolution_ratio",
+              "emotional_arc_swing", "hook_tension_density",
+              "repeated_phrase_count", "vocabulary_richness_yule_k",
+              "question_early_ratio", "open_loop_count", "cliffhanger_density",
+              "visual_monotony_score", "visual_variety_entropy",
+              "face_intro_delay_frames", "visual_pacing_variance",
+              "golden_ratio_segment_flag", "hook_to_body_word_overlap",
+              "title_uniqueness_score", "title_curiosity_gap_score", "title_power_word_count",
+              "words_per_scene", "speech_silence_ratio", "transcript_readability",
+              "energy_word_density", "concept_density", "frame_text_variety",
+              "description_link_count", "description_hashtag_count"]:
+        candidates.append(k)
+
+    # 19. NEW: Retention curve advanced
     for k in ["hook_payoff_gap", "end_recovery_score", "momentum_zone_length",
               "retention_recovery_count", "above_baseline_area", "below_baseline_area",
               "late_drop_severity", "retention_concavity", "retention_quartile_spread",
@@ -2089,8 +2241,8 @@ def extract_metric(key, analysis):
         return (float(w2 / (w1 + 1)), None)
 
     if key == "non_sub_view_share":
-        total = analytics.get("totalViews", 0)
-        non_sub = analytics.get("nonSubscriberViews", 0)
+        total = analytics.get("totalViews", 0) or 0
+        non_sub = analytics.get("nonSubscriberViews", 0) or 0
         if not total:
             return (None, "no views")
         return (float(non_sub / total), None)
@@ -2105,39 +2257,39 @@ def extract_metric(key, analysis):
         return (float(int(np.argmax([d.get("views", 0) for d in daily]))), None)
 
     if key == "like_rate":
-        total = analytics.get("totalViews", 0)
+        total = analytics.get("totalViews", 0) or 0
         if not total:
             return (None, "no views")
-        return (float(analytics.get("likes", 0) / total * 1000), None)
+        return (float((analytics.get("likes", 0) or 0) / total * 1000), None)
 
     if key == "comment_rate":
-        total = analytics.get("totalViews", 0)
+        total = analytics.get("totalViews", 0) or 0
         if not total:
             return (None, "no views")
-        return (float(analytics.get("comments", 0) / total * 1000), None)
+        return (float((analytics.get("comments", 0) or 0) / total * 1000), None)
 
     if key == "share_rate":
-        total = analytics.get("totalViews", 0)
+        total = analytics.get("totalViews", 0) or 0
         if not total:
             return (None, "no views")
-        return (float(analytics.get("shares", 0) / total * 1000), None)
+        return (float((analytics.get("shares", 0) or 0) / total * 1000), None)
 
     if key == "subs_gained_per_view":
-        total = analytics.get("totalViews", 0)
+        total = analytics.get("totalViews", 0) or 0
         if not total:
             return (None, "no views")
-        return (float(analytics.get("subscribersGained", 0) / total * 1000), None)
+        return (float((analytics.get("subscribersGained", 0) or 0) / total * 1000), None)
 
     if key == "subs_per_like":
-        likes = analytics.get("likes", 0)
-        subs = analytics.get("subscribersGained", 0)
+        likes = analytics.get("likes", 0) or 0
+        subs = analytics.get("subscribersGained", 0) or 0
         return (float(subs / (likes + 1)), None)
 
     if key == "revenue_per_view":
-        total = analytics.get("totalViews", 0)
+        total = analytics.get("totalViews", 0) or 0
         if not total:
             return (None, "no views")
-        return (float(analytics.get("estimatedRevenue", 0) / total * 1000), None)
+        return (float((analytics.get("estimatedRevenue", 0) or 0) / total * 1000), None)
 
     if key == "duration_log":
         dur = meta.get("duration", 0)
@@ -2214,8 +2366,8 @@ def extract_metric(key, analysis):
 
     if key == "keep_x_non_sub_share":
         keep = analytics.get("avgRetention")
-        total = analytics.get("totalViews", 0)
-        non_sub = analytics.get("nonSubscriberViews", 0)
+        total = analytics.get("totalViews", 0) or 0
+        non_sub = analytics.get("nonSubscriberViews", 0) or 0
         if keep is None or not total:
             return (None, "missing data")
         return (float(keep * (non_sub / total)), None)
@@ -3137,6 +3289,330 @@ def extract_metric(key, analysis):
         has = any(w in idea for w in INDESTRUCTIBLE_CONCEPT_WORDS)
         return (float(int(has)), None)
 
+    # ── NEW: Crazy Pre-Upload Indicators ────────────────────────────────
+    # Emotional/tension arc from transcript
+    _tension_up = {"but", "however", "suddenly", "except", "until", "although",
+                   "unfortunately", "surprisingly", "shocking", "insane", "crazy",
+                   "impossible", "never", "worst", "hardest", "dangerous"}
+    _tension_down = {"finally", "actually", "turns out", "so", "anyway",
+                     "worked", "success", "easy", "simple", "done", "finished"}
+
+    if key == "tension_word_density":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in _tension_up)
+        return (float(ct / len(words_lower) * 100), None)
+
+    if key == "resolution_word_density":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        ct = sum(1 for w in words_lower if w in _tension_down)
+        return (float(ct / len(words_lower) * 100), None)
+
+    if key == "tension_resolution_ratio":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        t_ct = sum(1 for w in words_lower if w in _tension_up)
+        r_ct = sum(1 for w in words_lower if w in _tension_down)
+        return (float(t_ct / (r_ct + 1)), None)
+
+    if key == "emotional_arc_swing":
+        """Max tension buildup then release across transcript quarters."""
+        if not transcript:
+            return (None, "no transcript")
+        words = transcript.lower().split()
+        if len(words) < 20:
+            return (None, "transcript too short")
+        q_size = len(words) // 4
+        quarters = [words[i*q_size:(i+1)*q_size] for i in range(4)]
+        scores = []
+        for q in quarters:
+            t = sum(1 for w in q if w in _tension_up)
+            r = sum(1 for w in q if w in _tension_down)
+            scores.append(t - r)
+        swing = max(scores) - min(scores)
+        return (float(swing), None)
+
+    if key == "hook_tension_density":
+        hook_text = _get_hook_text()
+        if not hook_text:
+            return (None, "no hook text")
+        words_lower = hook_text.lower().split()
+        if not words_lower:
+            return (None, "empty hook")
+        ct = sum(1 for w in words_lower if w in _tension_up)
+        return (float(ct / len(words_lower) * 100), None)
+
+    # Verbal callback / repetition patterns
+    if key == "repeated_phrase_count":
+        if not transcript:
+            return (None, "no transcript")
+        words = transcript.lower().split()
+        if len(words) < 10:
+            return (None, "transcript too short")
+        bigrams = [f"{words[i]} {words[i+1]}" for i in range(len(words)-1)]
+        from collections import Counter
+        freq = Counter(bigrams)
+        repeated = sum(1 for v in freq.values() if v >= 3)
+        return (float(repeated), None)
+
+    if key == "vocabulary_richness_yule_k":
+        """Yule's K measure — lower = richer vocabulary."""
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if len(words_lower) < 20:
+            return (None, "transcript too short")
+        from collections import Counter
+        freq = Counter(words_lower)
+        n = len(words_lower)
+        freq_of_freq = Counter(freq.values())
+        m2 = sum(i * i * fi for i, fi in freq_of_freq.items())
+        k = 10000 * (m2 - n) / (n * n) if n > 0 else 0
+        return (float(k), None)
+
+    if key == "question_early_ratio":
+        """Fraction of questions in first 25% of transcript."""
+        if not transcript:
+            return (None, "no transcript")
+        sentences = re.split(r'[.!?]+', transcript)
+        if len(sentences) < 4:
+            return (None, "too few sentences")
+        q1_end = len(sentences) // 4
+        early_q = sum(1 for s in sentences[:q1_end] if '?' in s)
+        total_q = transcript.count('?')
+        return (float(early_q / (total_q + 1)), None)
+
+    if key == "open_loop_count":
+        """Count potential open loops: questions, 'but first', 'before that'."""
+        if not transcript:
+            return (None, "no transcript")
+        t_lower = transcript.lower()
+        patterns = ['but first', 'before that', 'before we', 'but before',
+                    'first though', "here's the thing", 'the problem is',
+                    'what if', "let's see", "wait", "hold on"]
+        ct = sum(t_lower.count(p) for p in patterns)
+        ct += transcript.count('?')
+        return (float(ct), None)
+
+    if key == "cliffhanger_density":
+        """Phrases that create suspense per 100 words."""
+        if not transcript:
+            return (None, "no transcript")
+        words = transcript.split()
+        if not words:
+            return (None, "empty transcript")
+        t_lower = transcript.lower()
+        cliff_phrases = ['you won\'t believe', 'wait for it', 'what happens next',
+                        'and then', 'turns out', 'plot twist', 'but here\'s',
+                        'the crazy thing', 'this is where', 'watch what happens']
+        ct = sum(t_lower.count(p) for p in cliff_phrases)
+        return (float(ct / len(words) * 100), None)
+
+    # Visual rhythm and composition
+    if key == "visual_monotony_score":
+        """How repetitive are the frames? Lower unique scene ratio = more monotonous."""
+        if not frames or len(frames) < 5:
+            return (None, "too few frames")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:40] for f in frames]
+        consecutive_same = sum(1 for i in range(1, len(descs)) if descs[i] == descs[i-1])
+        return (float(consecutive_same / (len(descs) - 1)), None)
+
+    if key == "visual_variety_entropy":
+        """Shannon entropy of scene types across frames."""
+        if not frames or len(frames) < 5:
+            return (None, "too few frames")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:40] for f in frames]
+        from collections import Counter
+        freq = Counter(descs)
+        total = len(descs)
+        probs = [c / total for c in freq.values()]
+        entropy = -sum(p * math.log2(p) for p in probs if p > 0)
+        return (float(entropy), None)
+
+    if key == "face_intro_delay_frames":
+        """How many frames before first face appears."""
+        if not frames:
+            return (None, "no frames")
+        for i, f in enumerate(frames):
+            if "face" in str(f.get("analysis", {}).get("sceneDescription", "")).lower():
+                return (float(i), None)
+        return (float(len(frames)), None)
+
+    if key == "visual_pacing_variance":
+        """Variance of scene durations (consecutive same-scene runs)."""
+        if not frames or len(frames) < 5:
+            return (None, "too few frames")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:60] for f in frames]
+        run_lengths = []
+        cur_run = 1
+        for i in range(1, len(descs)):
+            if descs[i] == descs[i-1]:
+                cur_run += 1
+            else:
+                run_lengths.append(cur_run)
+                cur_run = 1
+        run_lengths.append(cur_run)
+        if len(run_lengths) < 2:
+            return (0.0, None)
+        return (float(np.var(run_lengths)), None)
+
+    # Golden ratio positioning
+    if key == "golden_ratio_segment_flag":
+        """Whether any segment boundary falls near 61.8% of video."""
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        golden = dur_s * 0.618
+        for s in segments:
+            if abs(s.get("startTime", 0) - golden) < dur_s * 0.05:
+                return (1.0, None)
+        return (0.0, None)
+
+    if key == "hook_to_body_word_overlap":
+        """Word overlap between hook and rest of transcript (semantic coherence)."""
+        if not transcript or not dur_s:
+            return (None, "no transcript")
+        words = transcript.lower().split()
+        if len(words) < 20:
+            return (None, "transcript too short")
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        if hook_seg and hook_seg.get("transcript"):
+            hook_words = set(hook_seg["transcript"].lower().split())
+        else:
+            est = max(1, int(len(words) * 5 / dur_s))
+            hook_words = set(words[:est])
+        body_words = set(words) - hook_words
+        if not hook_words or not body_words:
+            return (0.0, None)
+        overlap = len(hook_words & body_words) / len(hook_words)
+        return (float(overlap), None)
+
+    # Title creativity metrics
+    if key == "title_uniqueness_score":
+        """Number of uncommon words in title (>6 chars)."""
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        words = title.split()
+        long_words = sum(1 for w in words if len(w) > 6)
+        return (float(long_words), None)
+
+    if key == "title_curiosity_gap_score":
+        """Curiosity triggers: 'this', 'what', numbers, ellipsis, 'how'."""
+        title = meta.get("title", "").lower()
+        if not title:
+            return (None, "no title")
+        triggers = ['this', 'what', 'how', 'why', '...', 'secret', 'truth',
+                    'never', 'impossible', 'insane', 'crazy']
+        ct = sum(1 for t in triggers if t in title)
+        ct += sum(1 for c in title if c.isdigit())
+        return (float(ct), None)
+
+    if key == "title_power_word_count":
+        """Count of proven power words in title."""
+        title = meta.get("title", "").lower()
+        if not title:
+            return (None, "no title")
+        power_words = {"ultimate", "insane", "impossible", "indestructible",
+                      "epic", "extreme", "massive", "strongest", "biggest",
+                      "deadliest", "dangerous", "unbreakable", "world",
+                      "challenge", "experiment", "test", "survive", "destroy"}
+        words = set(title.split())
+        return (float(len(words & power_words)), None)
+
+    # Pacing and rhythm
+    if key == "words_per_scene":
+        """Average transcript words per visual scene."""
+        if not transcript or not frames or len(frames) < 3:
+            return (None, "missing data")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:60] for f in frames]
+        scene_count = 1 + sum(1 for i in range(1, len(descs)) if descs[i] != descs[i-1])
+        word_count = len(transcript.split())
+        return (float(word_count / scene_count), None)
+
+    if key == "speech_silence_ratio":
+        """Ratio of speaking time to silence time."""
+        if len(timed_words) < 2 or not dur_s:
+            return (None, "need timed words + duration")
+        gaps = [timed_words[i+1]["timestamp"] - timed_words[i]["timestamp"]
+                for i in range(len(timed_words)-1)
+                if "timestamp" in timed_words[i] and "timestamp" in timed_words[i+1]]
+        silence = sum(g for g in gaps if g > 0.5)
+        speech = dur_s - silence
+        return (float(speech / (silence + 0.1)), None)
+
+    if key == "transcript_readability":
+        """Approximate Flesch reading ease: 206.835 - 1.015*(words/sentences) - 84.6*(syllables/words)."""
+        if not transcript:
+            return (None, "no transcript")
+        words = transcript.split()
+        if len(words) < 10:
+            return (None, "transcript too short")
+        sentences = max(1, transcript.count('.') + transcript.count('!') + transcript.count('?'))
+        # Approximate syllables: count vowel groups
+        syllables = sum(max(1, len(re.findall(r'[aeiouy]+', w.lower()))) for w in words)
+        score = 206.835 - 1.015 * (len(words) / sentences) - 84.6 * (syllables / len(words))
+        return (float(score), None)
+
+    if key == "energy_word_density":
+        """Words conveying high energy/intensity per 100 words."""
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if not words_lower:
+            return (None, "empty transcript")
+        energy_words = {"insane", "crazy", "extreme", "intense", "massive",
+                       "epic", "incredible", "amazing", "unbelievable", "powerful",
+                       "explode", "destroy", "smash", "crush", "obliterate",
+                       "launch", "blast", "fire", "wild", "huge"}
+        ct = sum(1 for w in words_lower if w in energy_words)
+        return (float(ct / len(words_lower) * 100), None)
+
+    if key == "concept_density":
+        """Unique nouns (capitalized words) per sentence — information density."""
+        if not transcript:
+            return (None, "no transcript")
+        sentences = max(1, transcript.count('.') + transcript.count('!') + transcript.count('?'))
+        words = transcript.split()
+        caps = set(w for w in words if w[0].isupper() and len(w) > 1) if words else set()
+        return (float(len(caps) / sentences), None)
+
+    if key == "frame_text_variety":
+        """Number of unique visual techniques mentioned across frames."""
+        if not frames:
+            return (None, "no frames")
+        techniques = set()
+        for f in frames:
+            vt = str(f.get("analysis", {}).get("visualTechniques", ""))
+            for part in re.split(r'[,;.]', vt):
+                part = part.strip().lower()
+                if part and len(part) > 3:
+                    techniques.add(part)
+        return (float(len(techniques)), None)
+
+    if key == "description_link_count":
+        """Number of URLs in video description."""
+        desc = meta.get("description", "")
+        if not desc:
+            return (0.0, None)
+        urls = re.findall(r'https?://\S+', desc)
+        return (float(len(urls)), None)
+
+    if key == "description_hashtag_count":
+        desc = meta.get("description", "")
+        if not desc:
+            return (0.0, None)
+        return (float(len(re.findall(r'#\w+', desc))), None)
+
     # ── NEW: Retention Curve Advanced ────────────────────────────────────
     if key == "hook_payoff_gap":
         if len(curve) < 95:
@@ -3230,17 +3706,17 @@ def extract_metric(key, analysis):
 
     # ── NEW: Post-Upload Analytics Advanced ──────────────────────────────
     if key == "engagement_rate":
-        total = analytics.get("totalViews", 0)
+        total = analytics.get("totalViews", 0) or 0
         if not total:
             return (None, "no views")
-        likes = analytics.get("likes", 0)
-        comments = analytics.get("comments", 0)
-        shares = analytics.get("shares", 0)
+        likes = analytics.get("likes", 0) or 0
+        comments = analytics.get("comments", 0) or 0
+        shares = analytics.get("shares", 0) or 0
         return (float((likes + comments + shares) / total * 1000), None)
 
     if key == "like_to_comment_ratio":
-        likes = analytics.get("likes", 0)
-        comments = analytics.get("comments", 0)
+        likes = analytics.get("likes", 0) or 0
+        comments = analytics.get("comments", 0) or 0
         return (float(likes / (comments + 1)), None)
 
     if key == "sub_nonsub_retention_gap":
@@ -3259,15 +3735,15 @@ def extract_metric(key, analysis):
         return (float(v), None) if v is not None else (None, "no avgPercentViewed")
 
     if key == "engaged_view_rate":
-        total = analytics.get("totalViews", 0)
-        engaged = analytics.get("engagedViews", 0)
+        total = analytics.get("totalViews", 0) or 0
+        engaged = analytics.get("engagedViews", 0) or 0
         if not total:
             return (None, "no views")
         return (float(engaged / total), None)
 
     if key == "sub_view_fraction":
-        total = analytics.get("totalViews", 0)
-        sub_v = analytics.get("subscriberViews", 0)
+        total = analytics.get("totalViews", 0) or 0
+        sub_v = analytics.get("subscriberViews", 0) or 0
         if not total:
             return (None, "no views")
         return (float(sub_v / total), None)
@@ -3496,15 +3972,16 @@ def step_resolve(key, resolutions):
         }
         resolutions.append(new_shelf)
         # Sort by start_pct (video-position shelves first, then time-based)
-        resolutions.sort(key=lambda r: (r.get('start_pct') or 999, r['id']))
+        resolutions.sort(key=lambda r: (r.get('start_pct') if r.get('start_pct') is not None else 999, r['id']))
         print(f"  [RESOLVE]    *** New resolution shelf created: {resolution_id} ({defn['label']}) ***")
     for r in resolutions:
         if r["id"] == resolution_id:
             if key not in r.get("indicator_keys", []):
                 r.setdefault("indicator_keys", []).append(key)
             break
-    # Gap check
-    sorted_res = sorted(resolutions, key=lambda r: r.get("start_pct", 0))
+    # Gap check (skip time-based resolutions where start_pct is None)
+    video_res = [r for r in resolutions if r.get("start_pct") is not None and r.get("end_pct") is not None]
+    sorted_res = sorted(video_res, key=lambda r: r.get("start_pct", 0))
     for i in range(1, len(sorted_res)):
         gap = sorted_res[i]["start_pct"] - sorted_res[i - 1]["end_pct"]
         if gap > 25:
@@ -3647,6 +4124,562 @@ def step_build_result(key, exp):
     }
 
 
+# ── Graph helpers ─────────────────────────────────────────────────────────
+def _rebuild_connections(graph):
+    """Rebuild node.connections from edges + derived_edges (mirrors JS rebuildConnections)."""
+    conn = {}
+    for e in graph.get("edges", []):
+        conn.setdefault(e["from"], set()).add(e["to"])
+        conn.setdefault(e["to"], set()).add(e["from"])
+    for de in graph.get("derived_edges", []):
+        conn.setdefault(de["from"], set()).add(de["to"])
+        conn.setdefault(de["to"], set()).add(de["from"])
+        if de.get("target"):
+            conn.setdefault(de["from"], set()).add(de["target"])
+            conn.setdefault(de["to"], set()).add(de["target"])
+        for ck in de.get("component_keys", []):
+            conn.setdefault(ck, set())
+            for ck2 in de.get("component_keys", []):
+                if ck2 != ck:
+                    conn[ck].add(ck2)
+    for node in graph.get("nodes", []):
+        node["connections"] = list(conn.get(node["key"], set()))
+
+
+# ── New experiment families ───────────────────────────────────────────────
+
+def _extract_two_vectors(key_a, key_b, videos, target="views"):
+    """Extract paired float vectors for two indicator keys across all videos.
+    Returns (xa, xb, y_views, n) where y_views is log10(viewCount).
+    Any video missing either value is skipped."""
+    xa_list, xb_list, y_list = [], [], []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        vb, _ = extract_metric(key_b, vid)
+        if va is None or vb is None:
+            continue
+        if isinstance(va, float) and (math.isnan(va) or math.isinf(va)):
+            continue
+        if isinstance(vb, float) and (math.isnan(vb) or math.isinf(vb)):
+            continue
+        xa_list.append(float(va))
+        xb_list.append(float(vb))
+        y_list.append(float(math.log10(vc)))
+    xa = np.array(xa_list, dtype=float)
+    xb = np.array(xb_list, dtype=float)
+    y = np.array(y_list, dtype=float)
+    return xa, xb, y, len(xa)
+
+
+def run_pair_correlation(key_a, key_b, videos):
+    """Pair correlation: Pearson + Spearman between indicator A and indicator B
+    (not vs views). Returns a derived experiment dict or None."""
+    xa, xb, _, n = _extract_two_vectors(key_a, key_b, videos)
+    if n < 50:
+        print(f"  [PAIR_CORR] SKIP: n={n} < 50 for {key_a} <-> {key_b}")
+        return None
+    mask = ~(np.isnan(xa) | np.isnan(xb) | np.isinf(xa) | np.isinf(xb))
+    xa, xb = xa[mask], xb[mask]
+    n = len(xa)
+    if n < 50:
+        return None
+
+    r, p = pearsonr(xa, xb)
+    rho, p_rho = spearmanr(xa, xb)
+    z = 0.5 * math.log((1 + r + 1e-10) / (1 - r + 1e-10))
+    se = 1.0 / math.sqrt(max(n - 3, 1))
+    ci_low = math.tanh(z - 1.96 * se)
+    ci_high = math.tanh(z + 1.96 * se)
+
+    abs_r = abs(r)
+    direction = "positive" if r >= 0 else "negative"
+    strength = ("strong" if abs_r >= 0.5 else "moderate" if abs_r >= 0.3
+                else "weak" if abs_r >= 0.1 else "none")
+
+    exp_id = f"exp_pair_{key_a}__{key_b}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer_a = (get_metric_definition(key_a) or {}).get("layer", "post")
+    layer_b = (get_metric_definition(key_b) or {}).get("layer", "post")
+    bridge = (layer_a != layer_b)
+
+    print(f"  [PAIR_CORR] {key_a} <-> {key_b}: r={r:+.3f}, rho={rho:+.3f}, n={n}, bridge={bridge}")
+
+    return {
+        "id": exp_id,
+        "key": f"pair_corr__{key_a}__{key_b}",
+        "kind": "pair_correlation",
+        "component_keys": [key_a, key_b],
+        "target": None,  # symmetric pair, no target
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "pearson_r",
+            "tool_name": "Pair Correlation",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "r": float(r), "p_value": float(p), "n": int(n),
+                "ci_low": float(ci_low), "ci_high": float(ci_high),
+                "rho": float(rho), "p_rho": float(p_rho),
+            },
+        },
+        "result": {
+            "primary_r": float(r),
+            "rho": float(rho),
+            "p_value": float(p),
+            "ci_low": float(ci_low),
+            "ci_high": float(ci_high),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "bridge": bridge,
+        "layer_a": layer_a,
+        "layer_b": layer_b,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_conditional_delta(key_a, key_b, videos):
+    """Conditional delta to views: split by median(B), compute r(A, views) in
+    each bucket, store delta_r. Deterministic, no ML."""
+    xa, xb, y, n = _extract_two_vectors(key_a, key_b, videos)
+    if n < 80:  # need ~40 per bucket
+        print(f"  [COND_DELTA] SKIP: n={n} < 80 for {key_a}|{key_b}")
+        return None
+    mask = ~(np.isnan(xa) | np.isnan(xb) | np.isnan(y) | np.isinf(xa) | np.isinf(xb) | np.isinf(y))
+    xa, xb, y = xa[mask], xb[mask], y[mask]
+    n = len(xa)
+    if n < 80:
+        return None
+
+    median_b = float(np.median(xb))
+    hi_mask = xb >= median_b
+    lo_mask = ~hi_mask
+    n_hi, n_lo = int(hi_mask.sum()), int(lo_mask.sum())
+    if n_hi < 25 or n_lo < 25:
+        print(f"  [COND_DELTA] SKIP: bucket too small (hi={n_hi}, lo={n_lo})")
+        return None
+
+    r_hi, _ = pearsonr(xa[hi_mask], y[hi_mask])
+    r_lo, _ = pearsonr(xa[lo_mask], y[lo_mask])
+    delta_r = float(r_hi - r_lo)
+
+    abs_delta = abs(delta_r)
+    direction = "amplified_high" if delta_r > 0 else "amplified_low"
+    strength = ("strong" if abs_delta >= 0.3 else "moderate" if abs_delta >= 0.15
+                else "weak" if abs_delta >= 0.05 else "none")
+
+    exp_id = f"exp_cond_{key_a}_given_{key_b}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer_a = (get_metric_definition(key_a) or {}).get("layer", "post")
+    layer_b = (get_metric_definition(key_b) or {}).get("layer", "post")
+
+    print(f"  [COND_DELTA] {key_a}|{key_b}: r_hi={r_hi:+.3f}, r_lo={r_lo:+.3f}, "
+          f"delta={delta_r:+.3f} [{strength}]")
+
+    return {
+        "id": exp_id,
+        "key": f"cond_delta__{key_a}__given__{key_b}",
+        "kind": "conditional_delta_to_views",
+        "component_keys": [key_a, key_b],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "conditional_split",
+            "tool_name": "Conditional Delta",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "r_high_bucket": float(r_hi),
+                "r_low_bucket": float(r_lo),
+                "delta_r": float(delta_r),
+                "median_b": float(median_b),
+                "n_high": n_hi,
+                "n_low": n_lo,
+            },
+        },
+        "result": {
+            "delta_r": float(delta_r),
+            "r_high_bucket": float(r_hi),
+            "r_low_bucket": float(r_lo),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "layer_a": layer_a,
+        "layer_b": layer_b,
+        "bridge": (layer_a != layer_b),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_depth3_interaction(key_a, key_b, key_c, videos, tools):
+    """Depth-3 interaction: a*b*c → views. Bounded, only called for pre-selected triples."""
+    xa, xb, y, n_ab = _extract_two_vectors(key_a, key_b, videos)
+    if n_ab < 50:
+        return None
+    # Also need key_c
+    xc_list = []
+    y_list = []
+    xa_list = []
+    xb_list = []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        vb, _ = extract_metric(key_b, vid)
+        v_c, _ = extract_metric(key_c, vid)
+        if va is None or vb is None or v_c is None:
+            continue
+        vals = [float(va), float(vb), float(v_c)]
+        if any(math.isnan(v) or math.isinf(v) for v in vals):
+            continue
+        xa_list.append(vals[0])
+        xb_list.append(vals[1])
+        xc_list.append(vals[2])
+        y_list.append(float(math.log10(vc)))
+
+    n = len(xa_list)
+    if n < 50:
+        print(f"  [DEPTH3] SKIP: n={n} < 50")
+        return None
+
+    interaction_vals = np.array(xa_list) * np.array(xb_list) * np.array(xc_list)
+    y_arr = np.array(y_list)
+    mask = ~(np.isnan(interaction_vals) | np.isinf(interaction_vals))
+    interaction_vals, y_arr = interaction_vals[mask], y_arr[mask]
+    n = len(interaction_vals)
+    if n < 50:
+        return None
+
+    r, p = pearsonr(interaction_vals, y_arr)
+    rho, p_rho = spearmanr(interaction_vals, y_arr)
+    z = 0.5 * math.log((1 + r + 1e-10) / (1 - r + 1e-10))
+    se = 1.0 / math.sqrt(max(n - 3, 1))
+    ci_low = math.tanh(z - 1.96 * se)
+    ci_high = math.tanh(z + 1.96 * se)
+
+    abs_r = abs(r)
+    direction = "positive" if r >= 0 else "negative"
+    strength = ("strong" if abs_r >= 0.5 else "moderate" if abs_r >= 0.3
+                else "weak" if abs_r >= 0.1 else "none")
+
+    ikey = f"{key_a}_x_{key_b}_x_{key_c}"
+    exp_id = f"exp_d3_{key_a}__{key_b}__{key_c}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+
+    print(f"  [DEPTH3] {ikey}: r={r:+.3f}, rho={rho:+.3f}, n={n} [{strength}]")
+
+    return {
+        "id": exp_id,
+        "key": ikey,
+        "kind": "depth3_interaction_to_views",
+        "component_keys": [key_a, key_b, key_c],
+        "target": "views",
+        "depth": 3,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "pearson_r",
+            "tool_name": "Depth-3 Interaction",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "r": float(r), "p_value": float(p), "n": int(n),
+                "ci_low": float(ci_low), "ci_high": float(ci_high),
+                "rho": float(rho), "p_rho": float(p_rho),
+            },
+        },
+        "result": {
+            "primary_r": float(r),
+            "rho": float(rho),
+            "p_value": float(p),
+            "ci_low": float(ci_low),
+            "ci_high": float(ci_high),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def _add_derived_edge(graph, derived_exp):
+    """Add a derived_edge to graph from a derived experiment result."""
+    if "derived_edges" not in graph:
+        graph["derived_edges"] = []
+    kind = derived_exp["kind"]
+    exp_key = derived_exp["key"]
+
+    # Remove any prior edge with same key
+    graph["derived_edges"] = [e for e in graph["derived_edges"]
+                               if e.get("experiment_key") != exp_key
+                               and e.get("interaction_key") != exp_key]
+
+    ck = derived_exp["component_keys"]
+    base_edge = {
+        "from": ck[0],
+        "to": ck[1],
+        "kind": kind,
+        "depth": derived_exp["depth"],
+        "target": derived_exp.get("target"),
+        "experiment_key": exp_key,
+        "experiment_id": derived_exp["experiment"]["id"],
+        "component_keys": ck,
+        "added_at": now_iso(),
+    }
+
+    if kind == "pair_correlation":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["rho"] = derived_exp["result"]["rho"]
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+        base_edge["bridge"] = derived_exp.get("bridge", False)
+    elif kind == "interaction_to_views":
+        base_edge["interaction_key"] = exp_key
+        base_edge["interaction_r"] = derived_exp["result"]["primary_r"]
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "conditional_delta_to_views":
+        base_edge["delta_r"] = derived_exp["result"]["delta_r"]
+        base_edge["r_high_bucket"] = derived_exp["result"]["r_high_bucket"]
+        base_edge["r_low_bucket"] = derived_exp["result"]["r_low_bucket"]
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "depth3_interaction_to_views":
+        base_edge["to"] = ck[1]  # connect first two, third in component_keys
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+
+    graph["derived_edges"].append(base_edge)
+    _rebuild_connections(graph)
+    graph["updated_at"] = now_iso()
+
+
+# ── Bounded candidate generation for new experiment families ──────────────
+
+def _get_top_indicators(indicators, n=25):
+    """Return top-N indicators by |r|, preferring bridge (cross-layer) diversity."""
+    sorted_inds = sorted(indicators,
+                         key=lambda i: abs(i.get("result", {}).get("primary_r") or 0),
+                         reverse=True)
+    # Filter to atomic only (no _x_ keys)
+    atomic = [i for i in sorted_inds if "_x_" not in i["key"]]
+    return atomic[:n]
+
+
+def _get_bridge_pairs(indicators, max_pairs=60):
+    """Generate pre<->post indicator pairs, biased toward strongest signals."""
+    pre = [i for i in indicators if i.get("layer") == "pre"
+           and "_x_" not in i["key"]
+           and abs(i.get("result", {}).get("primary_r") or 0) >= 0.05]
+    post = [i for i in indicators if i.get("layer") == "post"
+            and "_x_" not in i["key"]
+            and abs(i.get("result", {}).get("primary_r") or 0) >= 0.05]
+    # Sort both by |r| descending
+    pre.sort(key=lambda i: abs(i["result"].get("primary_r") or 0), reverse=True)
+    post.sort(key=lambda i: abs(i["result"].get("primary_r") or 0), reverse=True)
+    pairs = []
+    # Top pre × top post, bounded
+    for p in pre[:15]:
+        for q in post[:15]:
+            pairs.append((p["key"], q["key"]))
+            if len(pairs) >= max_pairs:
+                return pairs
+    return pairs
+
+
+def generate_derived_candidates(indicators, existing_derived_keys):
+    """Generate bounded deterministic candidates for all new experiment families.
+    Returns dict: {kind: [(key_a, key_b, ...), ...]}"""
+    candidates = {
+        "pair_correlation": [],
+        "conditional_delta_to_views": [],
+        "depth3_interaction_to_views": [],
+    }
+
+    top = _get_top_indicators(indicators, n=25)
+    top_keys = [i["key"] for i in top]
+
+    # ── pair_correlation: among top indicators + cross-layer bridge pairs ──
+    bridge_pairs = _get_bridge_pairs(indicators, max_pairs=60)
+    # Also add top-indicator same-layer pairs (limited)
+    seen_pc = set()
+    for a, b in bridge_pairs:
+        pk = f"pair_corr__{a}__{b}"
+        rpk = f"pair_corr__{b}__{a}"
+        if pk not in existing_derived_keys and rpk not in existing_derived_keys:
+            if (a, b) not in seen_pc and (b, a) not in seen_pc:
+                candidates["pair_correlation"].append((a, b))
+                seen_pc.add((a, b))
+
+    for i, a in enumerate(top_keys):
+        for b in top_keys[i + 1:]:
+            pk = f"pair_corr__{a}__{b}"
+            rpk = f"pair_corr__{b}__{a}"
+            if pk not in existing_derived_keys and rpk not in existing_derived_keys:
+                if (a, b) not in seen_pc and (b, a) not in seen_pc:
+                    candidates["pair_correlation"].append((a, b))
+                    seen_pc.add((a, b))
+            if len(candidates["pair_correlation"]) >= 100:
+                break
+        if len(candidates["pair_correlation"]) >= 100:
+            break
+
+    # ── conditional_delta: bridge pairs + top cross-family ──
+    seen_cd = set()
+    for a, b in bridge_pairs[:40]:
+        ck = f"cond_delta__{a}__given__{b}"
+        if ck not in existing_derived_keys and (a, b) not in seen_cd:
+            candidates["conditional_delta_to_views"].append((a, b))
+            seen_cd.add((a, b))
+        # Also reverse direction
+        ck2 = f"cond_delta__{b}__given__{a}"
+        if ck2 not in existing_derived_keys and (b, a) not in seen_cd:
+            candidates["conditional_delta_to_views"].append((b, a))
+            seen_cd.add((b, a))
+        if len(candidates["conditional_delta_to_views"]) >= 80:
+            break
+
+    # ── depth3: only from top 15 strongest, bounded to 40 triples ──
+    d3_keys = [i["key"] for i in top[:15]]
+    seen_d3 = set()
+    for i, a in enumerate(d3_keys):
+        for j, b in enumerate(d3_keys[i + 1:], start=i + 1):
+            for c in d3_keys[j + 1:]:
+                triple = tuple(sorted([a, b, c]))
+                tk = f"{triple[0]}_x_{triple[1]}_x_{triple[2]}"
+                if tk not in existing_derived_keys and triple not in seen_d3:
+                    candidates["depth3_interaction_to_views"].append((a, b, c))
+                    seen_d3.add(triple)
+                if len(candidates["depth3_interaction_to_views"]) >= 40:
+                    break
+            if len(candidates["depth3_interaction_to_views"]) >= 40:
+                break
+        if len(candidates["depth3_interaction_to_views"]) >= 40:
+            break
+
+    total = sum(len(v) for v in candidates.values())
+    print(f"  [DERIVED CANDIDATES] pair_corr={len(candidates['pair_correlation'])}, "
+          f"cond_delta={len(candidates['conditional_delta_to_views'])}, "
+          f"depth3={len(candidates['depth3_interaction_to_views'])} "
+          f"(total={total})")
+    return candidates
+
+
+# ── Derived experiment runner ─────────────────────────────────────────────
+
+def cmd_derived_run(max_per_kind=None, kinds=None):
+    """Run new experiment families: pair_correlation, conditional_delta, depth3.
+    Also retroactively tags existing interaction_to_views experiments."""
+    indicators = load_json(INDICATORS_FILE, [])
+    derived = load_json(DERIVED_EXPERIMENTS_FILE, [])
+    tools = load_json(TOOLS_FILE, [])
+    graph = load_json(GRAPH_FILE, {"nodes": [], "edges": [], "derived_edges": []})
+    videos = load_videos()
+    if not videos:
+        print("ERROR: No videos loaded")
+        return
+
+    existing_derived_keys = {d["key"] for d in derived}
+    all_kinds = kinds or ["pair_correlation", "conditional_delta_to_views",
+                          "depth3_interaction_to_views"]
+    limit = max_per_kind or 25
+
+    print(f"\n{'=' * 60}")
+    print(f"DERIVED EXPERIMENT RUN")
+    print(f"  kinds={all_kinds}, max_per_kind={limit}")
+    print(f"  existing derived: {len(derived)}")
+    print(f"{'=' * 60}")
+
+    # ── Step 0: retroactively upgrade existing interaction_to_views entries ──
+    upgraded = 0
+    for d in derived:
+        if d.get("kind") == "interaction" or (not d.get("kind") and "_x_" in d.get("key", "")):
+            d["kind"] = "interaction_to_views"
+            d["depth"] = d.get("depth", 2)
+            if "component_keys" not in d:
+                m = re.match(r'^(.+)_x_(.+)$', d["key"])
+                if m:
+                    d["component_keys"] = [m.group(1), m.group(2)]
+            upgraded += 1
+    # Also upgrade graph derived_edges
+    for de in graph.get("derived_edges", []):
+        if de.get("kind") == "interaction":
+            de["kind"] = "interaction_to_views"
+            de["depth"] = de.get("depth", 2)
+    if upgraded:
+        print(f"  Upgraded {upgraded} existing interaction → interaction_to_views")
+        save_json(DERIVED_EXPERIMENTS_FILE, derived)
+        save_json(GRAPH_FILE, graph)
+        existing_derived_keys = {d["key"] for d in derived}
+
+    candidates = generate_derived_candidates(indicators, existing_derived_keys)
+
+    completed = {"pair_correlation": 0, "conditional_delta_to_views": 0,
+                 "depth3_interaction_to_views": 0}
+
+    # ── pair_correlation ──
+    if "pair_correlation" in all_kinds:
+        print(f"\n--- pair_correlation ({len(candidates['pair_correlation'])} candidates) ---")
+        for key_a, key_b in candidates["pair_correlation"]:
+            if completed["pair_correlation"] >= limit:
+                break
+            result = run_pair_correlation(key_a, key_b, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["pair_correlation"] += 1
+
+    # ── conditional_delta_to_views ──
+    if "conditional_delta_to_views" in all_kinds:
+        print(f"\n--- conditional_delta_to_views ({len(candidates['conditional_delta_to_views'])} candidates) ---")
+        for key_a, key_b in candidates["conditional_delta_to_views"]:
+            if completed["conditional_delta_to_views"] >= limit:
+                break
+            result = run_conditional_delta(key_a, key_b, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["conditional_delta_to_views"] += 1
+
+    # ── depth3_interaction_to_views ──
+    if "depth3_interaction_to_views" in all_kinds:
+        print(f"\n--- depth3_interaction_to_views ({len(candidates['depth3_interaction_to_views'])} candidates) ---")
+        for key_a, key_b, key_c in candidates["depth3_interaction_to_views"]:
+            if completed["depth3_interaction_to_views"] >= limit:
+                break
+            result = run_depth3_interaction(key_a, key_b, key_c, videos, tools)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["depth3_interaction_to_views"] += 1
+
+    # ── Save all ──
+    save_json(DERIVED_EXPERIMENTS_FILE, derived)
+    save_json(GRAPH_FILE, graph)
+
+    total = sum(completed.values())
+    print(f"\n{'=' * 60}")
+    print(f"DERIVED RUN COMPLETE")
+    for k, v in completed.items():
+        print(f"  {k}: {v}")
+    print(f"  total new: {total}")
+    print(f"  derived experiments now: {len(derived)}")
+    print(f"  graph derived_edges now: {len(graph.get('derived_edges', []))}")
+    print(f"{'=' * 60}")
+    return completed
+
+
 def step_update_graph(indicator, graph):
     """Step 8: Add node + edge to graph.json."""
     key = indicator["key"]
@@ -3658,6 +4691,35 @@ def step_update_graph(indicator, graph):
     else:
         t_node = next((n for n in graph["nodes"] if n["key"] == target), None)
         depth = (t_node["depth"] if t_node else 1) + 1
+
+    # Check if this is an interaction/composite key (a_x_b)
+    m = re.match(r'^(.+)_x_(.+)$', key)
+    if m:
+        # Composite: add derived edge, no fake atomic node
+        a_key, b_key = m.group(1), m.group(2)
+        if "derived_edges" not in graph:
+            graph["derived_edges"] = []
+        graph["derived_edges"] = [e for e in graph["derived_edges"]
+                                   if e.get("interaction_key") != key]
+        graph["derived_edges"].append({
+            "from": a_key,
+            "to": b_key,
+            "kind": "interaction_to_views",
+            "target": target,
+            "depth": 2,
+            "interaction_key": key,
+            "interaction_r": indicator["result"]["primary_r"],
+            "component_keys": [a_key, b_key],
+            "experiment_id": indicator["experiment"]["id"],
+            "strength_label": indicator["result"]["strength_label"],
+            "direction": indicator["result"]["direction"],
+            "added_at": now_iso(),
+        })
+        _rebuild_connections(graph)
+        graph["updated_at"] = now_iso()
+        save_json(GRAPH_FILE, graph)
+        print(f"  [GRAPH]     Derived edge: {a_key} × {b_key} → '{target}', depth=2")
+        return
 
     node = {
         "key": key,
@@ -3685,6 +4747,7 @@ def step_update_graph(indicator, graph):
     }
     graph["edges"] = [e for e in graph["edges"] if not (e["from"] == key and e["to"] == target)]
     graph["edges"].append(edge)
+    _rebuild_connections(graph)
     graph["updated_at"] = now_iso()
     save_json(GRAPH_FILE, graph)
     print(f"  [GRAPH]     Node added, depth={depth}, connected to '{target}'")
@@ -3759,13 +4822,16 @@ def process_indicator(key, videos, existing_keys, resolutions, graph, tools):
 
     result = step_build_result(key, exp)
 
+    is_interaction = bool(re.match(r'^(.+)_x_(.+)$', key))
+    depth = 2 if is_interaction else 1
+
     indicator = {
         "key": key,
         "label": key.replace("_", " ").title(),
         "layer": metric_def.get("layer", "post"),
         "status": result["status"],
         "resolution_id": resolution_id,
-        "depth": 1,
+        "depth": depth,
         "target": target,
         "metric_definition": metric_def,
         "dataset": dataset,
@@ -3775,6 +4841,12 @@ def process_indicator(key, videos, existing_keys, resolutions, graph, tools):
         "created_at": now_iso(),
         "updated_at": now_iso(),
     }
+
+    # Add interaction-specific fields
+    if is_interaction:
+        m = re.match(r'^(.+)_x_(.+)$', key)
+        indicator["kind"] = "interaction_to_views"
+        indicator["component_keys"] = [m.group(1), m.group(2)]
 
     step_update_graph(indicator, graph)
 
@@ -3793,16 +4865,24 @@ def cmd_status():
     print(f"  Queue remaining      : {len(remaining)} / {len(queue)}")
     if indicators:
         print(f"\n  Top 15 by |r|:")
-        sorted_inds = sorted(indicators, key=lambda i: abs(i.get("result", {}).get("primary_r", 0)), reverse=True)
+        sorted_inds = sorted(indicators, key=lambda i: abs(i.get("result", {}).get("primary_r") or 0), reverse=True)
         for ind in sorted_inds[:15]:
-            r = ind["result"]["primary_r"]
-            sl = ind["result"]["strength_label"]
+            r = ind["result"].get("primary_r") or 0
+            sl = ind["result"].get("strength_label", "?")
             print(f"    {ind['key']:40s} r={r:+.3f}  [{sl}]")
 
 
 def cmd_graph():
-    graph = load_json(GRAPH_FILE, {"nodes": [], "edges": []})
-    print(f"\nGraph: {len(graph['nodes'])} nodes, {len(graph['edges'])} edges")
+    graph = load_json(GRAPH_FILE, {"nodes": [], "edges": [], "derived_edges": []})
+    de = graph.get("derived_edges", [])
+    kinds = {}
+    for e in de:
+        k = e.get("kind", "unknown")
+        kinds[k] = kinds.get(k, 0) + 1
+    print(f"\nGraph: {len(graph['nodes'])} nodes, {len(graph['edges'])} edges, "
+          f"{len(de)} derived_edges")
+    if kinds:
+        print(f"  Derived edge kinds: {kinds}")
     print("\nNodes:")
     for n in sorted(graph["nodes"], key=lambda n: (n.get("depth", 0), n.get("key", ""))):
         r = n.get("r_partial")
@@ -3810,7 +4890,16 @@ def cmd_graph():
         print(f"  [{n.get('type', '?'):10s}] depth={n.get('depth', 0)}  {n['key']:40s} {r_str}")
     print("\nEdges:")
     for e in graph["edges"]:
-        print(f"  {e['from']:40s} → {e['to']}  (r={e['r']:+.3f})")
+        r = e.get('r') or 0
+        print(f"  {e['from']:40s} → {e['to']}  (r={r:+.3f})")
+    if de:
+        print(f"\nDerived Edges (showing last 10):")
+        for e in de[-10:]:
+            kind = e.get("kind", "?")
+            depth = e.get("depth", "?")
+            r = e.get("primary_r") or e.get("interaction_r") or e.get("delta_r") or 0
+            ck = e.get("component_keys", [e["from"], e["to"]])
+            print(f"  [{kind:30s}] d{depth}  {' × '.join(ck):50s} r={r:+.3f}")
 
 
 def cmd_run(n_to_run):
@@ -3854,6 +4943,10 @@ def cmd_run(n_to_run):
             })
             save_json(EXPERIMENTS_FILE, exp_log)
             save_json(INDICATORS_FILE, indicators)
+            if result.get("kind") == "interaction_to_views":
+                derived = load_json(DERIVED_EXPERIMENTS_FILE, [])
+                derived.append(result)
+                save_json(DERIVED_EXPERIMENTS_FILE, derived)
             existing_keys.add(key)
             ran += 1
 
@@ -3887,6 +4980,10 @@ def cmd_single(key):
         })
         save_json(EXPERIMENTS_FILE, exp_log)
         save_json(INDICATORS_FILE, indicators)
+        if result.get("kind") == "interaction_to_views":
+            derived = load_json(DERIVED_EXPERIMENTS_FILE, [])
+            derived.append(result)
+            save_json(DERIVED_EXPERIMENTS_FILE, derived)
         print("Saved.")
 
 
@@ -4072,6 +5169,11 @@ def cmd_auto_run(max_iterations, max_minutes=None, max_failures=None,
                 })
                 save_json(EXPERIMENTS_FILE, exp_log)
                 save_json(INDICATORS_FILE, indicators)
+                # Also persist interactions to derived_experiments.json
+                if result.get("kind") == "interaction_to_views":
+                    derived = load_json(DERIVED_EXPERIMENTS_FILE, [])
+                    derived.append(result)
+                    save_json(DERIVED_EXPERIMENTS_FILE, derived)
                 existing_keys.add(key)
                 completed += 1
                 if is_pre:
@@ -4189,6 +5291,9 @@ if __name__ == "__main__":
     parser.add_argument("--max-no-signal", type=int, metavar="K", help="Autonomous: stop after K consecutive |r|<0.05")
     parser.add_argument("--llm-candidates", type=int, metavar="N", default=25, help="Autonomous: ask Claude for N candidate proposals (0 to disable)")
     parser.add_argument("--preupload-ratio", type=float, metavar="R", default=None, help="Autonomous: target fraction of pre-upload candidates (0.0-1.0, e.g. 0.8)")
+    parser.add_argument("--derived-run", action="store_true", help="Run derived experiment families (pair_correlation, conditional_delta, depth3)")
+    parser.add_argument("--derived-max", type=int, metavar="N", default=25, help="Derived: max experiments per kind (default 25)")
+    parser.add_argument("--derived-kinds", type=str, metavar="K", default=None, help="Derived: comma-separated kinds (pair_correlation,conditional_delta_to_views,depth3_interaction_to_views)")
     args = parser.parse_args()
 
     if args.status:
@@ -4202,5 +5307,8 @@ if __name__ == "__main__":
     elif args.auto_run:
         cmd_auto_run(args.auto_run, args.max_minutes, args.max_failures,
                      args.max_no_signal, args.llm_candidates, args.preupload_ratio)
+    elif args.derived_run:
+        dk = args.derived_kinds.split(",") if args.derived_kinds else None
+        cmd_derived_run(max_per_kind=args.derived_max, kinds=dk)
     else:
         parser.print_help()

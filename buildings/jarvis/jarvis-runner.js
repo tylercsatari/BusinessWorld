@@ -251,21 +251,25 @@ function stepUpdateGraph(indicator, graph) {
         // Composite: add a derived edge referencing component keys, no atomic node
         const parsed = metrics.parseCompositeKey(key);
         if (!graph.derived_edges) graph.derived_edges = [];
-        graph.derived_edges = graph.derived_edges.filter(e => e.interaction_key !== key);
+        graph.derived_edges = graph.derived_edges.filter(e =>
+            e.interaction_key !== key && e.experiment_key !== key);
         graph.derived_edges.push({
             from: parsed.a,
             to: parsed.b,
-            kind: 'interaction',
+            kind: 'interaction_to_views',
+            depth: 2,
             target,
             interaction_key: key,
+            experiment_key: key,
             interaction_r: indicator.result.primary_r,
+            component_keys: [parsed.a, parsed.b],
             experiment_id: indicator.experiment.id,
             strength_label: indicator.result.strength_label,
             direction: indicator.result.direction,
             added_at: nowIso(),
         });
         graph.updated_at = nowIso();
-        log(`  [GRAPH]     Derived edge added: ${parsed.a} × ${parsed.b} → '${target}'`);
+        log(`  [GRAPH]     Derived edge added: ${parsed.a} × ${parsed.b} → '${target}', depth=2`);
     } else {
         // Atomic: add node + edge as before
         const depth = 1;
@@ -345,7 +349,8 @@ function processIndicator(key, videos, existingKeys, resolutions, graph, tools) 
 
     // Add composite-specific fields
     if (isComposite && parsed) {
-        indicator.kind = 'interaction';
+        indicator.kind = 'interaction_to_views';
+        indicator.depth = 2;
         indicator.component_keys = [parsed.a, parsed.b];
         indicator.derived_formula = `${parsed.a} * ${parsed.b}`;
     }

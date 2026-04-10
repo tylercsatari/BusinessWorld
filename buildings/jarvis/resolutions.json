@@ -1,5 +1,263 @@
 [
   {
+    "id": "r_hook",
+    "label": "Hook Window (0-10%)",
+    "description": "First 10 percent of video. Hook and opening retention behavior.",
+    "start_pct": 0,
+    "end_pct": 10,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T17:46:39.759961Z",
+    "indicator_keys": [
+      "hook_drop_rate",
+      "retention_mean_0_5",
+      "retention_mean_0_10",
+      "hook_question_count",
+      "hook_word_ratio",
+      "hook_char_count",
+      "hook_duration_pct",
+      "hook_position_s",
+      "retention_slope_0_5",
+      "retention_slope_0_10",
+      "retention_volatility_0_5",
+      "retention_volatility_0_10"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_0_25",
+    "label": "0-25% of Video",
+    "description": "Retention window from 0% to 25% of video.",
+    "start_pct": 0,
+    "end_pct": 25,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:06.531878Z",
+    "indicator_keys": [
+      "retention_mean_0_25",
+      "retention_slope_0_25"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_0_50",
+    "label": "0-50% of Video",
+    "description": "Retention window from 0% to 50% of video.",
+    "start_pct": 0,
+    "end_pct": 50,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-09T22:36:07.042203Z",
+    "indicator_keys": [
+      "retention_slope_0_50",
+      "retention_volatility_0_50"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r0",
+    "label": "Full Video",
+    "description": "Entire video analyzed as one unit. One scalar value per video.",
+    "start_pct": 0,
+    "end_pct": 100,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "whole",
+    "created_from": "bootstrap",
+    "created_at": "2026-04-09T00:00:00Z",
+    "indicator_keys": [
+      "hook_retention_pct",
+      "mid_video_cliff",
+      "retention_entropy",
+      "retention_pct_5",
+      "retention_pct_10",
+      "retention_pct_15",
+      "final_5pct_retention_x_retention_entropy",
+      "hook_drop_rate_x_final_5pct_retention",
+      "retention_slope_0_25_x_retention_slope_75_100",
+      "transcript_word_count",
+      "question_count",
+      "speech_rate_wps",
+      "transcript_char_count",
+      "avg_word_length",
+      "unique_word_ratio",
+      "sentence_count",
+      "exclamation_count",
+      "uppercase_word_ratio",
+      "transcript_number_count",
+      "face_frame_pct",
+      "text_overlay_frame_pct",
+      "scene_change_count",
+      "scene_change_rate",
+      "unique_scene_ratio",
+      "visual_technique_count_mean",
+      "close_up_frame_pct",
+      "hand_presence_frame_pct",
+      "motion_word_frame_pct",
+      "avg_segment_duration_s",
+      "longest_segment_duration_s",
+      "shortest_segment_duration_s",
+      "climax_position_pct",
+      "has_climax_segment",
+      "hook_to_climax_gap_s",
+      "duration_s",
+      "title_char_count",
+      "title_word_count",
+      "title_question_flag",
+      "title_exclamation_flag",
+      "title_number_flag",
+      "speech_rate_wps_x_face_frame_pct",
+      "speech_rate_wps_x_unique_word_ratio",
+      "speech_rate_wps_x_scene_change_rate",
+      "speech_rate_wps_x_hook_duration_pct",
+      "speech_rate_wps_x_title_word_count",
+      "speech_rate_wps_x_avg_segment_duration_s",
+      "speech_rate_wps_x_close_up_frame_pct",
+      "face_frame_pct_x_unique_word_ratio",
+      "face_frame_pct_x_scene_change_rate",
+      "face_frame_pct_x_hook_duration_pct",
+      "face_frame_pct_x_title_word_count",
+      "face_frame_pct_x_avg_segment_duration_s",
+      "face_frame_pct_x_close_up_frame_pct",
+      "unique_word_ratio_x_scene_change_rate",
+      "unique_word_ratio_x_hook_duration_pct",
+      "unique_word_ratio_x_title_word_count",
+      "unique_word_ratio_x_avg_segment_duration_s",
+      "unique_word_ratio_x_close_up_frame_pct",
+      "scene_change_rate_x_hook_duration_pct",
+      "scene_change_rate_x_title_word_count",
+      "scene_change_rate_x_avg_segment_duration_s",
+      "scene_change_rate_x_close_up_frame_pct",
+      "hook_duration_pct_x_title_word_count",
+      "hook_duration_pct_x_avg_segment_duration_s",
+      "hook_duration_pct_x_close_up_frame_pct",
+      "title_word_count_x_avg_segment_duration_s",
+      "title_word_count_x_close_up_frame_pct",
+      "avg_segment_duration_s_x_close_up_frame_pct",
+      "retention_pct_50_x_retention_pct_25",
+      "retention_pct_50_x_speech_rate_wps",
+      "retention_pct_50_x_face_frame_pct",
+      "retention_pct_50_x_retention_entropy",
+      "retention_pct_50_x_hook_drop_rate",
+      "retention_pct_50_x_non_sub_view_share",
+      "retention_pct_50_x_swipe_away_rate",
+      "retention_pct_50_x_like_rate",
+      "retention_pct_50_x_unique_word_ratio",
+      "retention_pct_50_x_scene_change_rate",
+      "retention_pct_50_x_hook_duration_pct",
+      "retention_pct_50_x_title_word_count",
+      "retention_pct_50_x_avg_segment_duration_s",
+      "retention_pct_50_x_close_up_frame_pct",
+      "retention_pct_25_x_speech_rate_wps",
+      "retention_pct_25_x_face_frame_pct",
+      "retention_pct_25_x_retention_entropy",
+      "retention_pct_25_x_hook_drop_rate",
+      "retention_pct_25_x_non_sub_view_share",
+      "retention_pct_25_x_swipe_away_rate",
+      "retention_pct_25_x_like_rate",
+      "retention_pct_25_x_unique_word_ratio",
+      "retention_pct_25_x_scene_change_rate",
+      "retention_pct_25_x_hook_duration_pct",
+      "retention_pct_25_x_title_word_count",
+      "retention_pct_25_x_avg_segment_duration_s",
+      "retention_pct_25_x_close_up_frame_pct",
+      "speech_rate_wps_x_retention_entropy",
+      "speech_rate_wps_x_hook_drop_rate",
+      "speech_rate_wps_x_non_sub_view_share",
+      "speech_rate_wps_x_swipe_away_rate",
+      "speech_rate_wps_x_like_rate",
+      "face_frame_pct_x_retention_entropy",
+      "face_frame_pct_x_hook_drop_rate",
+      "face_frame_pct_x_non_sub_view_share",
+      "face_frame_pct_x_swipe_away_rate",
+      "face_frame_pct_x_like_rate",
+      "retention_entropy_x_hook_drop_rate",
+      "retention_entropy_x_non_sub_view_share",
+      "retention_entropy_x_swipe_away_rate",
+      "retention_entropy_x_like_rate",
+      "retention_entropy_x_unique_word_ratio",
+      "retention_entropy_x_scene_change_rate",
+      "retention_entropy_x_hook_duration_pct",
+      "retention_entropy_x_title_word_count",
+      "retention_entropy_x_avg_segment_duration_s",
+      "retention_entropy_x_close_up_frame_pct",
+      "hook_drop_rate_x_non_sub_view_share",
+      "hook_drop_rate_x_swipe_away_rate",
+      "hook_drop_rate_x_like_rate",
+      "hook_drop_rate_x_unique_word_ratio",
+      "hook_drop_rate_x_scene_change_rate",
+      "hook_drop_rate_x_hook_duration_pct",
+      "hook_drop_rate_x_title_word_count",
+      "hook_drop_rate_x_avg_segment_duration_s",
+      "hook_drop_rate_x_close_up_frame_pct",
+      "non_sub_view_share_x_swipe_away_rate",
+      "non_sub_view_share_x_like_rate",
+      "non_sub_view_share_x_unique_word_ratio",
+      "non_sub_view_share_x_scene_change_rate",
+      "non_sub_view_share_x_hook_duration_pct",
+      "non_sub_view_share_x_title_word_count",
+      "non_sub_view_share_x_avg_segment_duration_s",
+      "non_sub_view_share_x_close_up_frame_pct",
+      "swipe_away_rate_x_like_rate",
+      "swipe_away_rate_x_unique_word_ratio",
+      "swipe_away_rate_x_scene_change_rate",
+      "swipe_away_rate_x_hook_duration_pct",
+      "swipe_away_rate_x_title_word_count",
+      "swipe_away_rate_x_avg_segment_duration_s",
+      "swipe_away_rate_x_close_up_frame_pct",
+      "like_rate_x_unique_word_ratio",
+      "like_rate_x_scene_change_rate",
+      "like_rate_x_hook_duration_pct",
+      "like_rate_x_title_word_count",
+      "like_rate_x_avg_segment_duration_s",
+      "like_rate_x_close_up_frame_pct",
+      "retention_pct_50_x_final_5pct_retention"
+    ],
+    "depth_in_hierarchy": 0
+  },
+  {
+    "id": "r_pct_5_15",
+    "label": "5-15% of Video",
+    "description": "Retention window 5%-15%.",
+    "start_pct": 5,
+    "end_pct": 15,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:27.894Z",
+    "indicator_keys": [
+      "retention_mean_5_15",
+      "retention_slope_5_15",
+      "retention_volatility_5_15"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_10_20",
+    "label": "10-20% of Video",
+    "description": "Retention window 10%-20%.",
+    "start_pct": 10,
+    "end_pct": 20,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.030Z",
+    "indicator_keys": [
+      "retention_mean_10_20",
+      "retention_slope_10_20",
+      "retention_volatility_10_20"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
     "id": "r_pct_20_20",
     "label": "20% Point",
     "description": "Single-point measurement at 20% through the video.",
@@ -12,6 +270,24 @@
     "created_at": "2026-04-09T22:18:55.621627Z",
     "indicator_keys": [
       "retention_pct_20"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_20_30",
+    "label": "20-30% of Video",
+    "description": "Retention window 20%-30%.",
+    "start_pct": 20,
+    "end_pct": 30,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.042Z",
+    "indicator_keys": [
+      "retention_mean_20_30",
+      "retention_slope_20_30",
+      "retention_volatility_20_30"
     ],
     "depth_in_hierarchy": 1
   },
@@ -81,6 +357,24 @@
     "depth_in_hierarchy": 1
   },
   {
+    "id": "r_pct_30_40",
+    "label": "30-40% of Video",
+    "description": "Retention window 30%-40%.",
+    "start_pct": 30,
+    "end_pct": 40,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.221Z",
+    "indicator_keys": [
+      "retention_mean_30_40",
+      "retention_slope_30_40",
+      "retention_volatility_30_40"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
     "id": "r_pct_35_35",
     "label": "35% Point",
     "description": "Single-point measurement at 35% through the video.",
@@ -109,6 +403,24 @@
     "created_at": "2026-04-09T22:36:06.357786Z",
     "indicator_keys": [
       "retention_pct_40"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_40_50",
+    "label": "40-50% of Video",
+    "description": "Retention window 40%-50%.",
+    "start_pct": 40,
+    "end_pct": 50,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.239Z",
+    "indicator_keys": [
+      "retention_mean_40_50",
+      "retention_slope_40_50",
+      "retention_volatility_40_50"
     ],
     "depth_in_hierarchy": 1
   },
@@ -161,6 +473,24 @@
     "depth_in_hierarchy": 1
   },
   {
+    "id": "r_pct_50_60",
+    "label": "50-60% of Video",
+    "description": "Retention window 50%-60%.",
+    "start_pct": 50,
+    "end_pct": 60,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.363Z",
+    "indicator_keys": [
+      "retention_mean_50_60",
+      "retention_slope_50_60",
+      "retention_volatility_50_60"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
     "id": "r_pct_50_75",
     "label": "50-75% of Video",
     "description": "Retention window from 50% to 75% of video.",
@@ -194,6 +524,24 @@
     "depth_in_hierarchy": 1
   },
   {
+    "id": "r_pct_60_70",
+    "label": "60-70% of Video",
+    "description": "Retention window 60%-70%.",
+    "start_pct": 60,
+    "end_pct": 70,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.382Z",
+    "indicator_keys": [
+      "retention_mean_60_70",
+      "retention_slope_60_70",
+      "retention_volatility_60_70"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
     "id": "r_pct_70_70",
     "label": "70% Point",
     "description": "Single-point measurement at 70% through the video.",
@@ -206,6 +554,24 @@
     "created_at": "2026-04-09T22:36:06.423848Z",
     "indicator_keys": [
       "retention_pct_70"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_70_80",
+    "label": "70-80% of Video",
+    "description": "Retention window 70%-80%.",
+    "start_pct": 70,
+    "end_pct": 80,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.573Z",
+    "indicator_keys": [
+      "retention_mean_70_80",
+      "retention_slope_70_80",
+      "retention_volatility_70_80"
     ],
     "depth_in_hierarchy": 1
   },
@@ -227,6 +593,22 @@
     "depth_in_hierarchy": 1
   },
   {
+    "id": "r_pct_75_75",
+    "label": "75% Point",
+    "description": "Single-point measurement at 75% through the video.",
+    "start_pct": 75,
+    "end_pct": 75,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T02:13:38.511027Z",
+    "indicator_keys": [
+      "retention_pct_75"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
     "id": "r_pct_80_80",
     "label": "80% Point",
     "description": "Single-point measurement at 80% through the video.",
@@ -239,6 +621,58 @@
     "created_at": "2026-04-09T22:36:06.448036Z",
     "indicator_keys": [
       "retention_pct_80"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_80_90",
+    "label": "80-90% of Video",
+    "description": "Retention window 80%-90%.",
+    "start_pct": 80,
+    "end_pct": 90,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.593Z",
+    "indicator_keys": [
+      "retention_mean_80_90",
+      "retention_slope_80_90",
+      "retention_volatility_80_90"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_85_85",
+    "label": "85% Point",
+    "description": "Single-point at 85%.",
+    "start_pct": 85,
+    "end_pct": 85,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T02:47:26.131Z",
+    "indicator_keys": [
+      "retention_pct_85"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_pct_90_100",
+    "label": "90-100% of Video",
+    "description": "Retention window 90%-100%.",
+    "start_pct": 90,
+    "end_pct": 100,
+    "start_day": null,
+    "end_day": null,
+    "granularity": "video_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T03:44:28.822Z",
+    "indicator_keys": [
+      "retention_mean_90_100",
+      "retention_slope_90_100",
+      "retention_volatility_90_100"
     ],
     "depth_in_hierarchy": 1
   },
@@ -271,86 +705,138 @@
     "created_at": "2026-04-09T17:46:39.731629Z",
     "indicator_keys": [
       "final_5pct_retention",
-      "retention_pct_95"
+      "retention_pct_95",
+      "retention_mean_95_100",
+      "retention_slope_95_100",
+      "retention_volatility_95_100"
     ],
     "depth_in_hierarchy": 1
   },
   {
-    "id": "r0",
-    "label": "Full Video",
-    "description": "Entire video analyzed as one unit. One scalar value per video.",
-    "start_pct": 0,
-    "end_pct": 100,
-    "start_day": null,
-    "end_day": null,
-    "granularity": "whole",
-    "created_from": "bootstrap",
-    "created_at": "2026-04-09T00:00:00Z",
-    "indicator_keys": [
-      "hook_retention_pct",
-      "mid_video_cliff",
-      "retention_entropy",
-      "retention_pct_5",
-      "retention_pct_10",
-      "retention_pct_15",
-      "final_5pct_retention_x_retention_entropy",
-      "hook_drop_rate_x_final_5pct_retention",
-      "retention_slope_0_25_x_retention_slope_75_100",
-      "transcript_word_count",
-      "question_count",
-      "speech_rate_wps",
-      "transcript_char_count",
-      "avg_word_length"
-    ],
-    "depth_in_hierarchy": 0
-  },
-  {
-    "id": "r_hook",
-    "label": "Hook Window (0-10%)",
-    "description": "First 10 percent of video. Hook and opening retention behavior.",
-    "start_pct": 0,
-    "end_pct": 10,
-    "start_day": null,
-    "end_day": null,
-    "granularity": "video_window",
+    "id": "r_days_0_1",
+    "label": "Days 0-1",
+    "description": "View data days 0-1.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 0,
+    "end_day": 1,
+    "granularity": "time_window",
     "created_from": "pipeline",
-    "created_at": "2026-04-09T17:46:39.759961Z",
+    "created_at": "2026-04-10T07:46:48.021Z",
     "indicator_keys": [
-      "hook_drop_rate"
+      "views_log_days_0_1"
     ],
     "depth_in_hierarchy": 1
   },
   {
-    "id": "r_pct_0_25",
-    "label": "0-25% of Video",
-    "description": "Retention window from 0% to 25% of video.",
-    "start_pct": 0,
-    "end_pct": 25,
-    "start_day": null,
-    "end_day": null,
-    "granularity": "video_window",
+    "id": "r_days_0_14",
+    "label": "Days 0-14",
+    "description": "View data days 0-14.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 0,
+    "end_day": 14,
+    "granularity": "time_window",
     "created_from": "pipeline",
-    "created_at": "2026-04-09T22:36:06.531878Z",
+    "created_at": "2026-04-10T07:47:08.191Z",
     "indicator_keys": [
-      "retention_mean_0_25",
-      "retention_slope_0_25"
+      "views_ratio_week2_vs_week1"
     ],
     "depth_in_hierarchy": 1
   },
   {
-    "id": "r_pct_0_50",
-    "label": "0-50% of Video",
-    "description": "Retention window from 0% to 50% of video.",
-    "start_pct": 0,
-    "end_pct": 50,
-    "start_day": null,
-    "end_day": null,
-    "granularity": "video_window",
+    "id": "r_days_0_21",
+    "label": "Days 0-21",
+    "description": "View data days 0-21.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 0,
+    "end_day": 21,
+    "granularity": "time_window",
     "created_from": "pipeline",
-    "created_at": "2026-04-09T22:36:07.042203Z",
+    "created_at": "2026-04-10T07:47:16.236Z",
     "indicator_keys": [
-      "retention_slope_0_50",
-      "retention_volatility_0_50"
+      "views_ratio_week3_vs_week2"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_days_0_3",
+    "label": "Days 0-3",
+    "description": "View data days 0-3.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 0,
+    "end_day": 3,
+    "granularity": "time_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T07:46:52.069Z",
+    "indicator_keys": [
+      "views_log_days_0_3"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_days_0_30",
+    "label": "Days 0-30",
+    "description": "View data days 0-30.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 0,
+    "end_day": 30,
+    "granularity": "time_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T07:47:12.038Z",
+    "indicator_keys": [
+      "views_ratio_month1_vs_week1"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_days_0_7",
+    "label": "Days 0-7",
+    "description": "View data days 0-7.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 0,
+    "end_day": 7,
+    "granularity": "time_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T07:46:56.410Z",
+    "indicator_keys": [
+      "views_log_days_0_7"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_days_14_30",
+    "label": "Days 14-30",
+    "description": "View data days 14-30.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 14,
+    "end_day": 30,
+    "granularity": "time_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T07:47:04.369Z",
+    "indicator_keys": [
+      "views_log_days_14_30"
+    ],
+    "depth_in_hierarchy": 1
+  },
+  {
+    "id": "r_days_7_14",
+    "label": "Days 7-14",
+    "description": "View data days 7-14.",
+    "start_pct": null,
+    "end_pct": null,
+    "start_day": 7,
+    "end_day": 14,
+    "granularity": "time_window",
+    "created_from": "pipeline",
+    "created_at": "2026-04-10T07:47:00.459Z",
+    "indicator_keys": [
+      "views_log_days_7_14"
     ],
     "depth_in_hierarchy": 1
   }

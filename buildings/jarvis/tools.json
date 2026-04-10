@@ -7,9 +7,26 @@
     "description": "Direct bivariate Pearson r between indicator and target. Measures linear relationship. No confound control. Use as a first pass on any indicator.",
     "when_to_use": "First pass. Always run this. Shows raw linear relationship.",
     "parameters": {
-      "target": {"type": "string", "required": true, "description": "Target node key: views, keep, or another indicator key"},
-      "transform_target": {"type": "string", "default": "log10", "options": ["log10", "none", "sqrt"], "description": "Transform applied to target values before correlation. log10 recommended for views."},
-      "min_n": {"type": "integer", "default": 50, "description": "Minimum number of valid video pairs required to run"}
+      "target": {
+        "type": "string",
+        "required": true,
+        "description": "Target node key: views, keep, or another indicator key"
+      },
+      "transform_target": {
+        "type": "string",
+        "default": "log10",
+        "options": [
+          "log10",
+          "none",
+          "sqrt"
+        ],
+        "description": "Transform applied to target values before correlation. log10 recommended for views."
+      },
+      "min_n": {
+        "type": "integer",
+        "default": 50,
+        "description": "Minimum number of valid video pairs required to run"
+      }
     },
     "outputs": {
       "r": "Pearson correlation coefficient (-1 to 1)",
@@ -29,9 +46,18 @@
     "description": "Non-parametric rank-based correlation. Robust to outliers and non-normal distributions.",
     "when_to_use": "Run alongside Pearson. If rho >> r, relationship is monotonic but not linear.",
     "parameters": {
-      "target": {"type": "string", "required": true},
-      "transform_target": {"type": "string", "default": "none"},
-      "min_n": {"type": "integer", "default": 50}
+      "target": {
+        "type": "string",
+        "required": true
+      },
+      "transform_target": {
+        "type": "string",
+        "default": "none"
+      },
+      "min_n": {
+        "type": "integer",
+        "default": 50
+      }
     },
     "outputs": {
       "rho": "Spearman rank correlation coefficient (-1 to 1)",
@@ -49,10 +75,23 @@
     "description": "Pearson r between indicator and target AFTER controlling for one or more confounds.",
     "when_to_use": "When you suspect a confound is inflating the correlation.",
     "parameters": {
-      "target": {"type": "string", "required": true},
-      "confounds": {"type": "array of string", "required": true, "description": "Indicator keys to control for"},
-      "transform_target": {"type": "string", "default": "log10"},
-      "min_n": {"type": "integer", "default": 50}
+      "target": {
+        "type": "string",
+        "required": true
+      },
+      "confounds": {
+        "type": "array of string",
+        "required": true,
+        "description": "Indicator keys to control for"
+      },
+      "transform_target": {
+        "type": "string",
+        "default": "log10"
+      },
+      "min_n": {
+        "type": "integer",
+        "default": 50
+      }
     },
     "outputs": {
       "r_partial": "Partial correlation after removing confound variance",
@@ -72,11 +111,26 @@
     "description": "Measures how much R2 improves in cross-validated OLS when adding this indicator to a baseline.",
     "when_to_use": "After Pearson/Spearman confirm correlation. Tests if signal adds unique predictive power.",
     "parameters": {
-      "target": {"type": "string", "required": true},
-      "baseline_features": {"type": "array of string", "default": []},
-      "transform_target": {"type": "string", "default": "log10"},
-      "cv_folds": {"type": "integer", "default": 5},
-      "min_n": {"type": "integer", "default": 50}
+      "target": {
+        "type": "string",
+        "required": true
+      },
+      "baseline_features": {
+        "type": "array of string",
+        "default": []
+      },
+      "transform_target": {
+        "type": "string",
+        "default": "log10"
+      },
+      "cv_folds": {
+        "type": "integer",
+        "default": 5
+      },
+      "min_n": {
+        "type": "integer",
+        "default": 50
+      }
     },
     "outputs": {
       "r2_before": "Cross-validated R2 of baseline model",
