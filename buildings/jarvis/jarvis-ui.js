@@ -1691,6 +1691,17 @@ const JarvisUI = (() => {
         }
 
         // ── Node helpers ──
+        // Unique-neighbor degree for a node across ALL visible edges (direct + derived/interaction)
+        function getVisibleDegree(nodeKey) {
+            const neighbors = new Set();
+            links.forEach(l => {
+                const sk = typeof l.source === 'object' ? l.source.key : l.source;
+                const tk = typeof l.target === 'object' ? l.target.key : l.target;
+                if (sk === nodeKey) neighbors.add(tk);
+                else if (tk === nodeKey) neighbors.add(sk);
+            });
+            return neighbors.size;
+        }
         function nodeColor(d) {
             if (d.key === 'views') return '#f59e0b';
             if (d.layer === 'pre') return '#06b6d4';
@@ -1701,12 +1712,7 @@ const JarvisUI = (() => {
             const base = 4;
             if (graphSizeBy === 'r2') return base + Math.abs(d.r_partial || 0) * 14;
             if (graphSizeBy === 'connections') {
-                const connCt = links.filter(l => {
-                    if (l.peer) return false;
-                    const sk = typeof l.source === 'object' ? l.source.key : l.source;
-                    const tk = typeof l.target === 'object' ? l.target.key : l.target;
-                    return sk === d.key || tk === d.key;
-                }).length;
+                const connCt = getVisibleDegree(d.key);
                 return base + Math.min(connCt * 1.5, 14);
             }
             if (graphSizeBy === 'depth') return base + Math.min((d.depth || 1) * 2, 14);
@@ -1818,12 +1824,7 @@ const JarvisUI = (() => {
                 const svgRect = graphEl.getBoundingClientRect();
                 tooltip.style.left = (event.clientX - svgRect.left + 12) + 'px';
                 tooltip.style.top = (event.clientY - svgRect.top - 10) + 'px';
-                const connCt = links.filter(l => {
-                    if (l.peer) return false;
-                    const sk = typeof l.source === 'object' ? l.source.key : l.source;
-                    const tk = typeof l.target === 'object' ? l.target.key : l.target;
-                    return sk === d.key || tk === d.key;
-                }).length;
+                const connCt = getVisibleDegree(d.key);
                 const rText = d.r_partial != null ? `<br><span class="jarvis-tt-dim">Strength:</span> ${Math.abs(Number(d.r_partial)).toFixed(3)}` : '';
                 tooltip.innerHTML = `<strong>${d.label || d.key}</strong>${rText}<br><span class="jarvis-tt-dim">Connections:</span> ${connCt}`;
             })
