@@ -2,6 +2,7 @@
   {
     "id": "pearson_r",
     "version": "1.0",
+    "category": "atomic",
     "name": "Pearson Correlation",
     "analytical_brain_tab": "correlation",
     "description": "Direct bivariate Pearson r between indicator and target. Measures linear relationship. No confound control. Use as a first pass on any indicator.",
@@ -41,6 +42,7 @@
   {
     "id": "spearman_rho",
     "version": "1.0",
+    "category": "atomic",
     "name": "Spearman Rank Correlation",
     "analytical_brain_tab": "correlation",
     "description": "Non-parametric rank-based correlation. Robust to outliers and non-normal distributions.",
@@ -70,6 +72,7 @@
   {
     "id": "partial_correlation",
     "version": "1.0",
+    "category": "atomic",
     "name": "Partial Correlation",
     "analytical_brain_tab": "correlation",
     "description": "Pearson r between indicator and target AFTER controlling for one or more confounds.",
@@ -106,9 +109,10 @@
   {
     "id": "ols_r2_delta",
     "version": "1.0",
-    "name": "OLS R2 Contribution",
+    "category": "atomic",
+    "name": "OLS R\u00b2 Contribution",
     "analytical_brain_tab": "model",
-    "description": "Measures how much R2 improves in cross-validated OLS when adding this indicator to a baseline.",
+    "description": "Measures how much R\u00b2 improves in cross-validated OLS when adding this indicator to a baseline.",
     "when_to_use": "After Pearson/Spearman confirm correlation. Tests if signal adds unique predictive power.",
     "parameters": {
       "target": {
@@ -133,13 +137,160 @@
       }
     },
     "outputs": {
-      "r2_before": "Cross-validated R2 of baseline model",
-      "r2_after": "Cross-validated R2 after adding this indicator",
+      "r2_before": "Cross-validated R\u00b2 of baseline model",
+      "r2_after": "Cross-validated R\u00b2 after adding this indicator",
       "delta_r2": "Improvement: r2_after - r2_before",
       "n": "Number of videos used",
       "cv_folds": "Folds used"
     },
-    "formula": "delta_R2 = mean(CV R2 with feature) - mean(CV R2 without feature), 5-fold CV",
-    "interpretation": "delta_R2 > 0.02: meaningful. > 0.05: significant. Negative = indicator hurts model."
+    "formula": "delta_R\u00b2 = mean(CV R\u00b2 with feature) - mean(CV R\u00b2 without feature), 5-fold CV",
+    "interpretation": "delta_R\u00b2 > 0.02: meaningful. > 0.05: significant. Negative = indicator hurts model."
+  },
+  {
+    "id": "interaction_to_views",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Interaction \u2192 Views",
+    "analytical_brain_tab": "derived",
+    "description": "Multiplicative interaction of two indicators correlated to views. Captures synergy: does A\u00d7B predict views better than either alone?",
+    "when_to_use": "When two indicators might amplify each other's effect. Tests whether combined signal is stronger than individual signals.",
+    "parameters": {
+      "component_a": { "type": "string", "required": true, "description": "First indicator key" },
+      "component_b": { "type": "string", "required": true, "description": "Second indicator key" },
+      "target": { "type": "string", "default": "views" },
+      "transform_target": { "type": "string", "default": "log10" }
+    },
+    "outputs": {
+      "r": "Pearson r of (A\u00d7B) vs target",
+      "p_value": "Two-tailed p-value",
+      "n": "Number of video pairs"
+    },
+    "formula": "interaction = A \u00d7 B; r = pearson(interaction, target)",
+    "interpretation": "If interaction r > max(r_A, r_B), synergy exists. The two indicators are more predictive together."
+  },
+  {
+    "id": "pair_correlation",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Pair Correlation",
+    "analytical_brain_tab": "derived",
+    "description": "Direct Pearson correlation between two non-target indicators. Maps the internal structure of the indicator space \u2014 which signals move together?",
+    "when_to_use": "To discover collinearity and redundancy among indicators, and to understand the structure of the measurement space.",
+    "parameters": {
+      "indicator_a": { "type": "string", "required": true },
+      "indicator_b": { "type": "string", "required": true }
+    },
+    "outputs": {
+      "r": "Pearson r between the two indicators",
+      "p_value": "Two-tailed p-value",
+      "n": "Number of video pairs"
+    },
+    "formula": "r = pearson(indicator_a, indicator_b)",
+    "interpretation": "|r| > 0.7: highly collinear, may be redundant. |r| 0.3-0.7: moderate relationship. |r| < 0.3: largely independent signals."
+  },
+  {
+    "id": "conditional_delta_to_views",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Conditional Delta \u2192 Views",
+    "analytical_brain_tab": "derived",
+    "description": "Measures how indicator A's correlation with views changes when conditioned on high vs low values of indicator B. Detects moderation effects.",
+    "when_to_use": "When you suspect one indicator gates another's effectiveness. Does B moderate A's relationship with views?",
+    "parameters": {
+      "indicator": { "type": "string", "required": true, "description": "Primary indicator" },
+      "moderator": { "type": "string", "required": true, "description": "Conditioning indicator" },
+      "target": { "type": "string", "default": "views" }
+    },
+    "outputs": {
+      "r": "Conditional delta correlation",
+      "delta": "Difference in A\u2192views correlation between high-B and low-B groups",
+      "p_value": "Two-tailed p-value"
+    },
+    "formula": "delta = r(A,views | B>median) - r(A,views | B<median)",
+    "interpretation": "Large |delta|: B moderates A's effect. Positive delta: B amplifies. Negative: B suppresses."
+  },
+  {
+    "id": "depth3_interaction_to_views",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Depth-3 Interaction \u2192 Views",
+    "analytical_brain_tab": "derived",
+    "description": "Three-way multiplicative interaction correlated to views. Tests whether a triple combination of indicators captures emergent structure not visible in pairs.",
+    "when_to_use": "After strong pair interactions are found. Tests if adding a third indicator reveals deeper structure.",
+    "parameters": {
+      "component_a": { "type": "string", "required": true },
+      "component_b": { "type": "string", "required": true },
+      "component_c": { "type": "string", "required": true },
+      "target": { "type": "string", "default": "views" }
+    },
+    "outputs": {
+      "r": "Pearson r of (A\u00d7B\u00d7C) vs target",
+      "p_value": "Two-tailed p-value",
+      "n": "Number of video pairs"
+    },
+    "formula": "interaction = A \u00d7 B \u00d7 C; r = pearson(interaction, target)",
+    "interpretation": "If 3-way r exceeds all 2-way r values, emergent triple structure exists."
+  },
+  {
+    "id": "rank_pair_correlation",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Rank Pair Correlation",
+    "analytical_brain_tab": "derived",
+    "description": "Spearman rank correlation between two indicators. Captures monotonic relationships that Pearson might miss due to outliers or non-linearity.",
+    "when_to_use": "When pair_correlation shows weak Pearson r but you suspect a non-linear monotonic relationship between indicators.",
+    "parameters": {
+      "indicator_a": { "type": "string", "required": true },
+      "indicator_b": { "type": "string", "required": true }
+    },
+    "outputs": {
+      "rho": "Spearman rank correlation coefficient",
+      "p_value": "Two-tailed p-value",
+      "n": "Number of pairs"
+    },
+    "formula": "rho = spearman(rank(A), rank(B))",
+    "interpretation": "If |rho| >> |pearson_r|, the relationship is monotonic but non-linear."
+  },
+  {
+    "id": "bucketed_curve_to_views",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Bucketed Curve \u2192 Views",
+    "analytical_brain_tab": "derived",
+    "description": "Splits an indicator into quantile buckets and measures the views curve shape across buckets. Detects non-linear dose-response patterns (U-shaped, threshold effects, saturation).",
+    "when_to_use": "When linear correlation is weak but you suspect a non-linear pattern (sweet spots, diminishing returns, optimal ranges).",
+    "parameters": {
+      "indicator": { "type": "string", "required": true },
+      "n_buckets": { "type": "integer", "default": 5 },
+      "target": { "type": "string", "default": "views" }
+    },
+    "outputs": {
+      "r": "Correlation of bucketed means with target",
+      "curve_shape": "Detected pattern: linear, U-shaped, inverted-U, threshold, saturation",
+      "bucket_means": "Mean target value per bucket"
+    },
+    "formula": "bucket(indicator, n_quantiles); r = pearson(bucket_rank, mean_target_per_bucket)",
+    "interpretation": "Non-linear curve shape suggests optimal ranges exist. Actionable for content strategy."
+  },
+  {
+    "id": "piecewise_to_views",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Piecewise \u2192 Views",
+    "analytical_brain_tab": "derived",
+    "description": "Fits piecewise-linear segments to capture breakpoints where the indicator\u2192views relationship changes slope. Reveals regime transitions.",
+    "when_to_use": "When bucketed analysis suggests threshold effects. Identifies exact breakpoint values for actionable decision boundaries.",
+    "parameters": {
+      "indicator": { "type": "string", "required": true },
+      "max_segments": { "type": "integer", "default": 3 },
+      "target": { "type": "string", "default": "views" }
+    },
+    "outputs": {
+      "r": "Overall fit correlation",
+      "breakpoints": "Detected breakpoint values",
+      "segment_slopes": "Slope per segment"
+    },
+    "formula": "piecewise_fit(indicator, target, max_segments); breakpoints via optimal segmentation",
+    "interpretation": "Breakpoints define actionable thresholds. Steep slopes = high-leverage zones."
   }
 ]

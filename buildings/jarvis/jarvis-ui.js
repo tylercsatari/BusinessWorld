@@ -225,6 +225,9 @@ const JarvisUI = (() => {
     function renderAnalyticalContent() {
         const tools = v2Tools || [];
         const experiments = v2Indicators || [];
+        const derived = v2DerivedExperiments || [];
+        const atomicTools = tools.filter(t => t.category !== 'derived');
+        const derivedTools = tools.filter(t => t.category === 'derived');
         const toolColors = {
             pearson_r: '#3b82f6', spearman_rho: '#06b6d4',
             partial_correlation: '#a78bfa', ols_r2_delta: '#10b981',
@@ -233,15 +236,44 @@ const JarvisUI = (() => {
             pearson_r: '\uD83D\uDCCF', spearman_rho: '\uD83D\uDCCA',
             partial_correlation: '\uD83E\uDDF9', ols_r2_delta: '\uD83D\uDCC8',
         };
+        const derivedColors = {
+            interaction_to_views: '#a78bfa', pair_correlation: '#f59e0b',
+            conditional_delta_to_views: '#22d3ee', depth3_interaction_to_views: '#ef4444',
+            rank_pair_correlation: '#f97316', bucketed_curve_to_views: '#ec4899',
+            piecewise_to_views: '#14b8a6',
+        };
+        const derivedIcons = {
+            interaction_to_views: '\u00d7', pair_correlation: '\u2194',
+            conditional_delta_to_views: '\u25b8', depth3_interaction_to_views: '\u25b3',
+            rank_pair_correlation: '\u2197', bucketed_curve_to_views: '\u223f',
+            piecewise_to_views: '\u2310',
+        };
 
         if (!tools.length) {
             return '<div style="color:#475569;padding:20px;text-align:center">Loading tools...</div>';
         }
 
-        const toolRows = tools.map(tool => {
-            const color = toolColors[tool.id] || '#64748b';
-            const icon = toolIcons[tool.id] || '⚙️';
-            const usageCount = experiments.filter(i => i.experiment && i.experiment.tool_id === tool.id).length;
+        // Count totals for summary
+        const atomicCount = experiments.length;
+        const derivedCount = derived.length;
+        const totalCount = atomicCount + derivedCount;
+
+        const summaryHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+            <div style="background:#1e293b;border-radius:6px;padding:6px 12px;font-size:11px">
+                <span style="color:#64748b">Total:</span> <span style="color:#f1f5f9;font-weight:700">${totalCount}</span>
+            </div>
+            <div style="background:#3b82f622;border-radius:6px;padding:6px 12px;font-size:11px">
+                <span style="color:#64748b">Atomic:</span> <span style="color:#3b82f6;font-weight:700">${atomicCount}</span>
+            </div>
+            <div style="background:#a78bfa22;border-radius:6px;padding:6px 12px;font-size:11px">
+                <span style="color:#64748b">Derived:</span> <span style="color:#a78bfa;font-weight:700">${derivedCount}</span>
+            </div>
+            <div style="background:#10b98122;border-radius:6px;padding:6px 12px;font-size:11px">
+                <span style="color:#64748b">Methods:</span> <span style="color:#10b981;font-weight:700">${tools.length}</span>
+            </div>
+        </div>`;
+
+        const makeToolRow = (tool, color, icon, usageCount) => {
             const isExpanded = analyticalSelectedTool === tool.id;
             const detail = isExpanded ? `<div class="jarvis-tool-list-detail">${renderToolDefinitionCard(tool, color)}</div>` : '';
             return `<div class="jarvis-tool-list-item">
@@ -252,16 +284,35 @@ const JarvisUI = (() => {
                     <div class="jarvis-tool-list-name">${tool.name}</div>
                     <div class="jarvis-tool-list-desc">${tool.description}</div>
                 </div>
-                <span class="jarvis-tool-list-badge">${usageCount} used</span>
+                <span class="jarvis-tool-list-badge">${usageCount} exp</span>
                 <span class="jarvis-tool-list-chevron">${isExpanded ? '\u25BE' : '\u25B8'}</span>
             </div>
             ${detail}
         </div>`;
+        };
+
+        const atomicRows = atomicTools.map(tool => {
+            const color = toolColors[tool.id] || '#64748b';
+            const icon = toolIcons[tool.id] || '\u2699\ufe0f';
+            const usageCount = experiments.filter(i => i.experiment && i.experiment.tool_id === tool.id).length;
+            return makeToolRow(tool, color, icon, usageCount);
         }).join('');
 
-        return `<div style="margin-bottom:12px">
-        <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Experiment Tools \u2014 click to inspect</div>
-        <div class="jarvis-tool-list">${toolRows}</div>
+        const derivedRows = derivedTools.map(tool => {
+            const color = derivedColors[tool.id] || '#64748b';
+            const icon = derivedIcons[tool.id] || '\u2699\ufe0f';
+            const usageCount = derived.filter(d => d.kind === tool.id).length;
+            return makeToolRow(tool, color, icon, usageCount);
+        }).join('');
+
+        return `${summaryHtml}
+    <div style="margin-bottom:14px">
+        <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Atomic Tools \u2014 single indicator \u2192 target</div>
+        <div class="jarvis-tool-list">${atomicRows}</div>
+    </div>
+    <div style="margin-bottom:12px">
+        <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Derived Analysis Methods \u2014 multi-indicator relationships</div>
+        <div class="jarvis-tool-list">${derivedRows}</div>
     </div>`;
     }
 
@@ -1095,11 +1146,12 @@ const JarvisUI = (() => {
         const gsBtn = (val, label) => `<button data-sizeby="${val}" class="jarvis-graph-btn${graphSizeBy === val ? ' active' : ''}">${label}</button>`;
         return `
             <div class="jarvis-network-legend" style="margin-bottom:4px">
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload (you control before filming)</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload (measured by YouTube)</span>
-                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views (target)</span>
-                <span class="jarvis-legend-item"><span style="font-family:'SF Mono',monospace;font-size:10px;color:#22d3ee">r=+0.47</span> = positive &nbsp; <span style="font-family:'SF Mono',monospace;font-size:10px;color:#f87171">r=-0.40</span> = negative</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#06b6d4"></span>Pre-upload</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#a78bfa"></span>Post-upload</span>
+                <span class="jarvis-legend-item"><span class="jarvis-legend-dot" style="background:#f59e0b"></span>Views</span>
+                <span class="jarvis-legend-item"><span style="font-family:'SF Mono',monospace;font-size:10px;color:#22d3ee">r=+</span> positive &nbsp; <span style="font-family:'SF Mono',monospace;font-size:10px;color:#f87171">r=-</span> negative</span>
             </div>
+            <div id="jarvis-edge-legend" class="jarvis-network-legend" style="margin-bottom:6px;flex-wrap:wrap;gap:4px 10px"></div>
             <div class="jarvis-graph-controls" id="jarvis-graph-controls">
                 <div class="jarvis-graph-filters">
                     <span class="jarvis-graph-ctrl-label">Show:</span>
@@ -1905,13 +1957,13 @@ const JarvisUI = (() => {
                 return nodeColor(d.source);
             })
             .attr('stroke-opacity', d => {
-                if (d.interaction) { const absR = Math.abs(d.r || 0); return Math.min(0.1 + absR * 0.3, 0.4); }
+                if (d.interaction) { const absR = Math.abs(d.r || 0); return Math.min(0.25 + absR * 0.5, 0.7); }
                 if (d.peer) return 0.04;
                 const absR = Math.abs(d.r || 0);
                 return Math.min(0.08 + absR * 0.4, 0.55);
             })
             .attr('stroke-width', d => {
-                if (d.interaction) return Math.min(0.5 + Math.abs(d.r || 0) * 1.5, 2);
+                if (d.interaction) return Math.min(1.0 + Math.abs(d.r || 0) * 2.0, 3);
                 if (d.peer) return 0.5;
                 return Math.min(0.5 + Math.abs(d.r || 0) * 2.0, 3);
             })
@@ -1983,6 +2035,7 @@ const JarvisUI = (() => {
                 if (tooltip) tooltip.style.display = 'none';
                 // Restore edge opacity
                 linkGroup.selectAll('line').attr('stroke-opacity', d => {
+                    if (d.interaction) { const absR = Math.abs(d.r || 0); return Math.min(0.25 + absR * 0.5, 0.7); }
                     if (d.peer) return 0.04;
                     return Math.min(0.08 + Math.abs(d.r || 0) * 0.4, 0.55);
                 });
@@ -2076,6 +2129,34 @@ const JarvisUI = (() => {
                 buildD3TacticalGraph();
             });
         });
+
+        // ── Edge-type legend with counts ──
+        const edgeLegendEl = container?.querySelector('#jarvis-edge-legend');
+        if (edgeLegendEl) {
+            const kindCounts = {};
+            let directCount = 0;
+            links.forEach(l => {
+                if (l.interaction) kindCounts[l.kind] = (kindCounts[l.kind] || 0) + 1;
+                else if (!l.peer) directCount++;
+            });
+            const edgeKindMeta = {
+                interaction_to_views:        { label: 'Interaction', color: '#a78bfa', dash: '3,3' },
+                pair_correlation:            { label: 'Pair Corr',  color: '#60a5fa', dash: '4,2' },
+                rank_pair_correlation:       { label: 'Rank Pair',  color: '#38bdf8', dash: '4,2' },
+                conditional_delta_to_views:  { label: 'Cond Delta', color: '#f59e0b', dash: '3,3' },
+                bucketed_curve_to_views:     { label: 'Bucketed',   color: '#4ade80', dash: '6,2' },
+                piecewise_to_views:          { label: 'Piecewise',  color: '#fb923c', dash: '5,3' },
+                depth3_interaction_to_views: { label: 'Depth-3',    color: '#ec4899', dash: '2,2' },
+            };
+            let legendHtml = `<span class="jarvis-legend-item" style="font-size:10px;color:#64748b">Edges:</span>`;
+            legendHtml += `<span class="jarvis-legend-item"><svg width="20" height="6" style="vertical-align:middle"><line x1="0" y1="3" x2="20" y2="3" stroke="#06b6d4" stroke-width="1.5"/></svg><span style="font-size:10px;color:#94a3b8"> Direct (${directCount})</span></span>`;
+            Object.entries(edgeKindMeta).forEach(([kind, meta]) => {
+                const count = kindCounts[kind] || 0;
+                if (count === 0) return;
+                legendHtml += `<span class="jarvis-legend-item"><svg width="20" height="6" style="vertical-align:middle"><line x1="0" y1="3" x2="20" y2="3" stroke="${meta.color}" stroke-width="1.5" stroke-dasharray="${meta.dash}"/></svg><span style="font-size:10px;color:${meta.color}"> ${meta.label} (${count})</span></span>`;
+            });
+            edgeLegendEl.innerHTML = legendHtml;
+        }
     }
 
     // ══════════════════════════════════════════════════

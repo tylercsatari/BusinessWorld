@@ -4426,8 +4426,10 @@ cloud.initR2();
 server.listen(PORT, () => {
     console.log(`Business World running at http://localhost:${PORT}`);
     videoAnalyzer.resumeJobs(process.env.OPENAI_API_KEY, process.env.OPENAI_CHAT_MODEL || 'gpt-4o');
-    // Auto-seed Jarvis data to R2 if missing
-    jarvisStore.autoSeed().catch(e => console.warn('Jarvis auto-seed failed:', e.message));
+    // Auto-seed Jarvis data to R2 if missing, then force-push code-maintained tools.json
+    jarvisStore.autoSeed().then(() => {
+        jarvisStore.forceUploadToR2('tools').catch(e => console.warn('Jarvis tools R2 upload failed:', e.message));
+    }).catch(e => console.warn('Jarvis auto-seed failed:', e.message));
     // Pre-warm metrics cache in background (ready before user opens Pen)
     _loadOrBuildMetrics().catch(e => console.warn('Metrics pre-warm failed:', e.message));
     // Start shorts crawler — initial crawl after 5s, then every 30 minutes
