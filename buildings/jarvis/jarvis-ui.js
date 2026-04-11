@@ -384,6 +384,86 @@ const JarvisUI = (() => {
             </div>`;
     }
 
+    function renderDerivedExperimentCard(d) {
+        const exp = d.experiment || {};
+        const result = d.result || {};
+        const cfg = getExpKindConfig(d.kind);
+        const comps = d.component_keys || [];
+        const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
+
+        const r = result.primary_r;
+        const rho = result.rho;
+        const p = result.p_value ?? (exp.outputs ? exp.outputs.p_value : null);
+        const ciLow = result.ci_low ?? (exp.outputs ? exp.outputs.ci_low : null);
+        const ciHigh = result.ci_high ?? (exp.outputs ? exp.outputs.ci_high : null);
+        const rStr = r != null ? `<span style="font-weight:700;color:${r >= 0 ? '#22d3ee' : '#f87171'}">${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '—';
+
+        const label = derivedExperimentLabel(d);
+
+        const ds = d.dataset || [];
+        const dataRows = ds.slice(0, 20).map((dp, i) =>
+            `<tr style="background:${i % 2 === 0 ? '#0a1020' : '#0d1525'}">
+                <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${dp.ytId}</td>
+                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#cbd5e1;text-align:right">${typeof dp.value === 'number' ? dp.value.toFixed(4) : dp.value}</td>
+                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#94a3b8;text-align:right">${typeof dp.target_value === 'number' ? dp.target_value.toFixed(4) : dp.target_value}</td>
+            </tr>`
+        ).join('');
+
+        return `
+            <div style="background:#0a1628;border-left:3px solid ${cfg.color};border-radius:0 8px 8px 0;padding:14px;margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:#f1f5f9">${label}</div>
+                        <code style="font-size:10px;color:#475569">${exp.id || d.key}</code>
+                    </div>
+                    <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+                        <span style="font-size:9px;padding:2px 8px;border-radius:4px;background:${cfg.color}22;color:${cfg.color};font-weight:700">${cfg.label}</span>
+                        ${d.depth ? `<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:${d.depth >= 3 ? '#ef444422' : '#a78bfa22'};color:${d.depth >= 3 ? '#ef4444' : '#a78bfa'};font-weight:700">Depth ${d.depth}</span>` : ''}
+                    </div>
+                </div>
+
+                ${sectionHdr('Experiment Design')}
+                <div style="background:#0f172a;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8;margin-bottom:4px">
+                    <div><span style="color:#64748b">Kind: </span><span style="color:${cfg.color};font-weight:600">${cfg.label}</span></div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Components: </span>${comps.map(k => `<code style="color:#22d3ee">${k}</code>`).join(' × ')}</div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Target: </span><code style="color:#f59e0b">${d.target || 'views'}</code></div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Formula: </span><code style="color:#22d3ee">${d.derived_formula || (d.metric_definition ? d.metric_definition.formula : '') || '—'}</code></div>
+                    ${d.metric_definition && d.metric_definition.description ? `<div style="margin-top:3px"><span style="color:#64748b">Description: </span>${d.metric_definition.description}</div>` : ''}
+                    <div style="margin-top:3px"><span style="color:#64748b">Tool: </span>${exp.tool_id || '—'}${exp.tool_version ? ' (v' + exp.tool_version + ')' : ''}</div>
+                    ${exp.parameters ? `<div style="margin-top:3px"><span style="color:#64748b">Transform: </span><code>${exp.parameters.transform_target || '—'}</code></div>` : ''}
+                </div>
+
+                ${sectionHdr('Results')}
+                <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #1e293b;margin-bottom:8px">
+                    <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">Pearson r</span><span style="font-size:13px">${rStr}</span></div>
+                    ${rho != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">Spearman ρ</span><span style="font-size:13px;color:${rho >= 0 ? '#22d3ee' : '#f87171'}">${rho >= 0 ? '+' : ''}${rho.toFixed(3)}</span></div>` : ''}
+                    ${p != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">p-value</span><span style="font-size:13px;color:${p < 0.05 ? '#22d3ee' : '#f87171'}">${p < 0.001 ? p.toExponential(2) : p.toFixed(4)}</span></div>` : ''}
+                    ${ciLow != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">95% CI</span><span style="font-size:12px;color:#94a3b8">[${ciLow >= 0 ? '+' : ''}${ciLow.toFixed(3)}, ${ciHigh >= 0 ? '+' : ''}${ciHigh.toFixed(3)}]</span></div>` : ''}
+                    <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">n videos</span><span style="font-size:13px;color:#cbd5e1">${exp.n_videos || ds.length || '—'}</span></div>
+                </div>
+
+                ${result.conclusion ? `
+                <div style="background:#0f2942;border-left:3px solid #22d3ee;padding:10px;border-radius:0 6px 6px 0;font-size:12px;color:#e2e8f0;line-height:1.6;margin-bottom:8px">${result.conclusion}</div>
+                ${result.practical_insight ? `<div style="background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">${result.practical_insight}</div>` : ''}
+                ` : ''}
+
+                ${ds.length ? `
+                ${sectionHdr('Data Points (' + ds.length + ' videos)')}
+                <div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="background:#1e293b;position:sticky;top:0">
+                            <th style="padding:4px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Video ID</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">${d.key}</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">log10(views)</th>
+                        </tr></thead>
+                        <tbody>${dataRows}</tbody>
+                    </table>
+                    ${ds.length > 20 ? `<div style="padding:6px 8px;font-size:10px;color:#475569;text-align:center">… ${ds.length - 20} more rows</div>` : ''}
+                </div>
+                ` : ''}
+            </div>`;
+    }
+
     function bindAnalyticalEvents() {
         container?.querySelectorAll('[data-tool-id]').forEach(row => {
             row.addEventListener('click', (e) => {
@@ -2004,6 +2084,73 @@ const JarvisUI = (() => {
     let expCollapsed = {};
     let expSort = 'newest'; // 'best_r2' | 'newest' | 'kept'
     let expExplainOpen = false;
+    let expKindFilter = null; // null = all, string = filter to one kind
+
+    // ── Experiment Kind Registry ──
+    const EXP_KIND_CONFIG = {
+        atomic:                       { label: 'Atomic → Views',          color: '#3b82f6', icon: '⚛', order: 0 },
+        interaction_to_views:         { label: 'Interaction → Views',     color: '#a78bfa', icon: '×', order: 1 },
+        pair_correlation:             { label: 'Pair Correlations',       color: '#f59e0b', icon: '↔', order: 2 },
+        conditional_delta_to_views:   { label: 'Conditional Effects',     color: '#22d3ee', icon: '▸', order: 3 },
+        rank_pair_correlation:        { label: 'Rank / Monotonic',        color: '#f97316', icon: '↗', order: 4 },
+        bucketed_curve_to_views:      { label: 'Bucketed / Non-linear',   color: '#ec4899', icon: '∿', order: 5 },
+        piecewise_to_views:           { label: 'Piecewise Relationships', color: '#14b8a6', icon: '⌐', order: 6 },
+        depth3_interaction_to_views:  { label: 'Depth 3 Interactions',    color: '#ef4444', icon: '△', order: 7 },
+    };
+
+    function getExpKindConfig(kind) {
+        return EXP_KIND_CONFIG[kind] || { label: kind || 'Unknown', color: '#64748b', icon: '?', order: 99 };
+    }
+
+    function derivedExperimentLabel(d) {
+        const comps = d.component_keys || [];
+        const labels = comps.map(k => humanizeKey(k));
+        const target = d.target || 'views';
+        switch (d.kind) {
+            case 'interaction_to_views':       return `${labels[0]} × ${labels[1]} → ${target}`;
+            case 'pair_correlation':            return `${labels[0]} ↔ ${labels[1]}`;
+            case 'conditional_delta_to_views':  return `${labels[0]} | ${labels[1]} → ${target}`;
+            case 'rank_pair_correlation':       return `${labels[0]} ↔ ${labels[1]} (rank)`;
+            case 'bucketed_curve_to_views':     return `${labels[1] ? labels[0] + ' ∿ ' + labels[1] : labels[0]} → ${target}`;
+            case 'piecewise_to_views':          return `${labels[1] ? labels[0] + ' ⌐ ' + labels[1] : labels[0]} → ${target}`;
+            case 'depth3_interaction_to_views': return `${labels[0]} × ${labels[1]} × ${labels[2] || '?'} → ${target}`;
+            default: return labels.join(' × ') + (target ? ` → ${target}` : '');
+        }
+    }
+
+    function primaryStatLabel(d) {
+        const r = d.result?.primary_r;
+        const rho = d.result?.rho;
+        if (d.kind === 'rank_pair_correlation' && rho != null) return { label: 'ρ', value: rho };
+        if (r != null) return { label: 'r', value: r };
+        if (rho != null) return { label: 'ρ', value: rho };
+        return null;
+    }
+
+    function renderExperimentRow(e, kind, tools) {
+        const exp = e.experiment;
+        if (!exp) return '';
+        const isSelected = experimentsSelectedExpId === exp.id;
+        const cfg = getExpKindConfig(kind);
+        const stat = primaryStatLabel(e);
+        const statHtml = stat
+            ? `<span style="font-family:'SF Mono',monospace;font-size:10px;color:${stat.value >= 0 ? '#22d3ee' : '#f87171'};white-space:nowrap">${stat.label}=${stat.value >= 0 ? '+' : ''}${stat.value.toFixed(3)}</span>`
+            : '';
+        const label = kind === 'atomic'
+            ? (e.label || humanizeKey(e.key))
+            : derivedExperimentLabel(e);
+        const depthBadge = e.depth && e.depth > 1
+            ? `<span style="font-size:8px;padding:1px 5px;border-radius:3px;background:${e.depth >= 3 ? '#ef444433' : '#a78bfa22'};color:${e.depth >= 3 ? '#ef4444' : '#a78bfa'};font-weight:600">D${e.depth}</span>`
+            : '';
+        const kindBadge = kind !== 'atomic'
+            ? `<span style="font-size:8px;padding:1px 5px;border-radius:3px;background:${cfg.color}22;color:${cfg.color};font-weight:600">${cfg.icon}</span>`
+            : '';
+        return `<div class="jarvis-exp-v2-row" data-exp-v2-id="${exp.id}" style="display:flex;align-items:center;gap:6px;background:${isSelected ? '#1e293b' : '#0a1628'};padding:6px 10px;border-radius:6px;cursor:pointer;border-left:3px solid ${isSelected ? cfg.color : 'transparent'};transition:border-color 0.15s">
+            ${kindBadge}${depthBadge}
+            <span style="flex:1;font-size:11px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>
+            ${statHtml}
+        </div>`;
+    }
 
     function renderExperiments() {
         if (!v2Indicators) {
@@ -2021,44 +2168,113 @@ const JarvisUI = (() => {
     }
 
     function renderExperimentsV2Content() {
-        const experiments = v2Indicators || [];
+        const atomics = (v2Indicators || []).map(ind => ({ ...ind, kind: ind.kind || 'atomic' }));
+        const derived = (v2DerivedExperiments || []).map(d => ({ ...d, kind: d.kind || 'interaction_to_views' }));
+        const allExperiments = [...atomics, ...derived];
         const tools = v2Tools || [];
 
-        // Selected experiment detail
+        // Count by kind
+        const kindCounts = {};
+        allExperiments.forEach(e => { kindCounts[e.kind] = (kindCounts[e.kind] || 0) + 1; });
+
+        const totalCount = allExperiments.length;
+        const atomicCount = atomics.length;
+        const derivedCount = derived.length;
+
+        // Summary card builder
+        const summaryCard = (label, count, color, filterKind) => {
+            const isActive = filterKind === null ? !expKindFilter : expKindFilter === filterKind;
+            return `<div class="jarvis-exp-summary-card" data-kind-filter="${filterKind === null ? '' : filterKind}" style="
+                display:inline-flex;flex-direction:column;align-items:center;padding:8px 12px;
+                border-radius:8px;cursor:pointer;min-width:70px;
+                background:${isActive ? color + '22' : 'rgba(15,23,42,0.6)'};
+                border:1px solid ${isActive ? color : '#1e293b'};
+                transition:all 0.15s ease">
+                <span style="font-size:18px;font-weight:800;color:${color}">${count}</span>
+                <span style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap">${label}</span>
+            </div>`;
+        };
+
+        // Top-level summary
+        let summaryHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            ${summaryCard('Total', totalCount, '#f1f5f9', null)}
+            ${summaryCard('Atomic', atomicCount, '#3b82f6', 'atomic')}
+            ${summaryCard('Derived', derivedCount, '#a78bfa', '_derived')}
+        </div>`;
+
+        // Kind breakdown cards (derived kinds only)
+        const kindOrder = Object.entries(EXP_KIND_CONFIG)
+            .filter(([k]) => k !== 'atomic')
+            .sort((a, b) => a[1].order - b[1].order);
+        const kindCards = kindOrder
+            .filter(([k]) => kindCounts[k])
+            .map(([k, cfg]) => summaryCard(cfg.label, kindCounts[k] || 0, cfg.color, k));
+        if (kindCards.length) {
+            summaryHtml += `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">${kindCards.join('')}</div>`;
+        }
+
+        // Selected experiment detail card
         let selectedCard = '';
         if (experimentsSelectedExpId) {
-            const ind = experiments.find(i => i.experiment && i.experiment.id === experimentsSelectedExpId);
-            if (ind) {
-                selectedCard = `
-                    <div style="margin-bottom:12px">
-                        <button id="jarvis-exp-back-btn" style="background:none;border:1px solid #334155;color:#94a3b8;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:8px">&larr; Back</button>
-                        ${renderExperimentInstanceCard(ind)}
-                    </div>`;
+            const found = allExperiments.find(e => e.experiment && e.experiment.id === experimentsSelectedExpId);
+            if (found) {
+                const card = (found.kind === 'atomic' || !found.component_keys)
+                    ? renderExperimentInstanceCard(found)
+                    : renderDerivedExperimentCard(found);
+                selectedCard = `<div style="margin-bottom:12px">
+                    <button id="jarvis-exp-back-btn" style="background:none;border:1px solid #334155;color:#94a3b8;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:8px">&larr; Back</button>
+                    ${card}
+                </div>`;
             }
         }
 
-        // Experiment list rows
-        const rows = experiments.map(ind => {
-            const exp = ind.experiment;
-            if (!exp) return '';
-            const r = ind.result ? ind.result.primary_r : null;
-            const rStr = r != null ? `<span style="font-family:'SF Mono',monospace;color:${r >= 0 ? '#22d3ee' : '#f87171'}">r=${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '';
-            const tool = tools.find(t => t.id === exp.tool_id);
-            const isSelected = experimentsSelectedExpId === exp.id;
-            return `<div class="jarvis-exp-v2-row" data-exp-v2-id="${exp.id}" style="display:flex;align-items:center;gap:8px;background:${isSelected ? '#1e293b' : '#0a1628'};padding:8px 10px;border-radius:6px;cursor:pointer${isSelected ? ';border-left:3px solid #22d3ee' : ''}">
-                <code style="font-size:10px;color:#94a3b8;flex:1">${exp.id}</code>
-                <span style="font-size:10px;color:#64748b">${tool ? tool.name : exp.tool_id}</span>
-                <span style="font-size:11px;color:#94a3b8">${ind.key}</span>
-                ${rStr}
+        // Filter experiments by active kind filter
+        let visible = allExperiments;
+        if (expKindFilter === '_derived') {
+            visible = derived;
+        } else if (expKindFilter) {
+            visible = allExperiments.filter(e => e.kind === expKindFilter);
+        }
+
+        // Group by kind
+        const groups = {};
+        visible.forEach(e => {
+            const k = e.kind || 'atomic';
+            if (!groups[k]) groups[k] = [];
+            groups[k].push(e);
+        });
+
+        // Sort each group by |r| descending
+        Object.values(groups).forEach(arr => {
+            arr.sort((a, b) => Math.abs((b.result?.primary_r) || 0) - Math.abs((a.result?.primary_r) || 0));
+        });
+
+        // Render grouped sections
+        const sortedKinds = Object.keys(groups).sort((a, b) =>
+            (getExpKindConfig(a).order ?? 99) - (getExpKindConfig(b).order ?? 99)
+        );
+
+        const groupsHtml = sortedKinds.map(kind => {
+            const cfg = getExpKindConfig(kind);
+            const items = groups[kind];
+            const rows = items.map(e => renderExperimentRow(e, kind, tools)).join('');
+            return `<div style="margin-bottom:16px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid ${cfg.color}33">
+                    <span style="font-size:12px;color:${cfg.color}">${cfg.icon}</span>
+                    <span style="font-size:12px;font-weight:700;color:${cfg.color}">${cfg.label}</span>
+                    <span style="font-size:10px;color:#64748b">(${items.length})</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;max-height:350px;overflow-y:auto">${rows}</div>
             </div>`;
         }).join('');
 
         return `
-            <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:10px">Experiments (${experiments.length} run)</div>
-            ${selectedCard}
-            <div style="display:flex;flex-direction:column;gap:4px">
-                ${rows}
+            <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:10px">
+                Experiments <span style="font-weight:400;color:#64748b;font-size:12px">(${totalCount} total &mdash; ${atomicCount} atomic + ${derivedCount} derived)</span>
             </div>
+            ${summaryHtml}
+            ${selectedCard}
+            ${groupsHtml}
         `;
     }
 
@@ -2066,6 +2282,21 @@ const JarvisUI = (() => {
         container?.querySelectorAll('[data-exp-v2-id]').forEach(row => {
             row.addEventListener('click', () => {
                 experimentsSelectedExpId = row.dataset.expV2Id;
+                const el = container?.querySelector('.jarvis-exp-root');
+                if (el) {
+                    el.innerHTML = renderExperimentsV2Content();
+                    bindExperimentsV2Events();
+                }
+            });
+        });
+        container?.querySelectorAll('.jarvis-exp-summary-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const kind = card.dataset.kindFilter;
+                if (kind === '') {
+                    expKindFilter = null;
+                } else {
+                    expKindFilter = expKindFilter === kind ? null : kind;
+                }
                 const el = container?.querySelector('.jarvis-exp-root');
                 if (el) {
                     el.innerHTML = renderExperimentsV2Content();
