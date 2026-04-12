@@ -475,5 +475,62 @@
     },
     "formula": "For each n_buckets in [3,5,7]: mono(n) = max(up_steps, down_steps) / (n-1); consistency = min(mono(3), mono(5), mono(7))",
     "interpretation": "consistency >= 0.9: very robust signal. 0.7-0.9: mostly robust. < 0.5: likely noise or resolution artifact."
+  },
+  {
+    "id": "regime_gap",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Regime Gap (Top vs Bottom Views)",
+    "analytical_brain_tab": "derived",
+    "description": "Compares the mean value of an indicator in top-25% view videos vs bottom-25%. Cohen's d effect size measures separation strength. Discovers which pre-upload signals most separate high-performing from low-performing content.",
+    "when_to_use": "For any indicator, especially pre-upload, to understand how it differs between viral and non-viral content.",
+    "parameters": {
+      "indicator": {
+        "type": "string",
+        "required": true
+      },
+      "target": {
+        "type": "string",
+        "default": "views"
+      }
+    },
+    "outputs": {
+      "regime_gap": "Difference in mean indicator value between top and bottom view quartiles",
+      "cohens_d": "Standardized effect size (d >= 0.8: large, 0.5: medium, 0.2: small)",
+      "top_ind_mean": "Mean indicator value in top-25% view videos",
+      "bottom_ind_mean": "Mean indicator value in bottom-25% view videos"
+    },
+    "formula": "regime_gap = mean(indicator | top_25pct_views) - mean(indicator | bottom_25pct_views); d = gap / pooled_std",
+    "interpretation": "|d| >= 0.8: strong regime separation. 0.5-0.8: moderate. 0.2-0.5: weak. < 0.2: no separation."
+  },
+  {
+    "id": "bridge_strength",
+    "version": "1.0",
+    "category": "derived",
+    "name": "Bridge Strength (Pre → Post)",
+    "analytical_brain_tab": "derived",
+    "description": "Measures how strongly a pre-upload indicator correlates with a post-upload indicator. Reveals mechanism pathways: does this content choice (pre) actually produce this audience response (post)? Pathway strength = |r_bridge| * |r_post_views| quantifies the indirect route from pre-upload choice → post-upload response → views.",
+    "when_to_use": "To map causal-like pathways from content decisions to audience behavior to view counts.",
+    "parameters": {
+      "pre_indicator": {
+        "type": "string",
+        "required": true,
+        "description": "Pre-upload indicator key"
+      },
+      "post_indicator": {
+        "type": "string",
+        "required": true,
+        "description": "Post-upload indicator key"
+      }
+    },
+    "outputs": {
+      "r_bridge": "Pearson r between pre and post indicator",
+      "rho_bridge": "Spearman rho between pre and post indicator",
+      "r_pre_views": "Pre indicator correlation with views",
+      "r_post_views": "Post indicator correlation with views",
+      "pathway_strength": "|r_bridge| * |r_post_views| — strength of indirect pathway"
+    },
+    "formula": "r_bridge = pearson(pre, post); pathway = |r_bridge| * |r_post_views|",
+    "interpretation": "pathway > 0.15: strong mechanism link. 0.05-0.15: moderate. < 0.05: weak or no pathway."
   }
 ]

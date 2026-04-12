@@ -1427,6 +1427,206 @@ METRIC_DEFINITIONS = {
         "data_sources": ["analytics.avgViewDuration"],
         "layer": "post",
     },
+    # ── DEEP PRE-UPLOAD: Beat Density & Cadence ─────────────────────────
+    "beat_count": {
+        "description": "Total narrative beats: segment transitions + tension words + questions. Proxy for story rhythm complexity.",
+        "formula": "len(segments) + tension_word_count + question_count",
+        "expected_range": "0 to 50", "data_sources": ["transcript", "aiAnalysis.segments"], "layer": "pre",
+    },
+    "beat_density_per_minute": {
+        "description": "Beats per minute of video — rhythm density normalized by duration.",
+        "formula": "beat_count / (duration_s / 60)",
+        "expected_range": "0 to 60", "data_sources": ["transcript", "aiAnalysis.segments", "metadata.duration"], "layer": "pre",
+    },
+    "beat_cadence_variance": {
+        "description": "Variance in spacing between beats — regular vs chaotic rhythm.",
+        "formula": "var(inter_beat_intervals)",
+        "expected_range": "0 to 500", "data_sources": ["transcript", "aiAnalysis.segments"], "layer": "pre",
+    },
+    "beat_acceleration": {
+        "description": "Whether beats speed up (positive) or slow down (negative) over video.",
+        "formula": "linregress(beat_positions).slope",
+        "expected_range": "-0.1 to 0.1", "data_sources": ["transcript", "aiAnalysis.segments"], "layer": "pre",
+    },
+    "first_beat_delay_pct": {
+        "description": "Position of first tension/pivot beat as percentage of video — how quickly story engages.",
+        "formula": "first_beat_position / duration * 100",
+        "expected_range": "0 to 50", "data_sources": ["transcript", "aiAnalysis.segments", "metadata.duration"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Scene Transition Spacing ───────────────────────
+    "scene_transition_spacing_mean": {
+        "description": "Mean frames between scene changes — average visual segment length.",
+        "formula": "mean(inter_scene_distances)",
+        "expected_range": "1 to 60", "data_sources": ["frames"], "layer": "pre",
+    },
+    "scene_transition_spacing_variance": {
+        "description": "Variance of inter-scene distances — regular vs irregular editing.",
+        "formula": "var(inter_scene_distances)",
+        "expected_range": "0 to 500", "data_sources": ["frames"], "layer": "pre",
+    },
+    "scene_transition_spacing_cv": {
+        "description": "Coefficient of variation of scene spacing — normalized editing regularity.",
+        "formula": "std(distances) / (mean(distances) + 0.1)",
+        "expected_range": "0 to 3", "data_sources": ["frames"], "layer": "pre",
+    },
+    "scene_burst_count": {
+        "description": "Rapid-fire scene sequences: scene changes within 2 frames of each other.",
+        "formula": "count(consecutive scene changes <= 2 frames apart)",
+        "expected_range": "0 to 30", "data_sources": ["frames"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Escalation Curve ───────────────────────────────
+    "escalation_slope": {
+        "description": "Slope of tension/energy word accumulation over transcript — positive=building, negative=deflating.",
+        "formula": "linregress of cumulative tension words over word position",
+        "expected_range": "-0.05 to 0.05", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "escalation_peak_position_pct": {
+        "description": "Position of peak tension word density as percentage of transcript — where energy peaks.",
+        "formula": "argmax(windowed_tension_density) / total_windows * 100",
+        "expected_range": "0 to 100", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "escalation_late_surge": {
+        "description": "Tension words in last 25% minus first 25% — late escalation signal.",
+        "formula": "tension_q4 - tension_q1",
+        "expected_range": "-10 to 10", "data_sources": ["transcript"], "layer": "pre",
+    },
+    "deescalation_speed": {
+        "description": "How quickly tension resolves after peak — fast resolution vs lingering tension.",
+        "formula": "slope of tension words from peak to end",
+        "expected_range": "-0.1 to 0.1", "data_sources": ["transcript"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Visual Alternation Patterns ────────────────────
+    "face_action_alternation_rate": {
+        "description": "Rate of switching between face-focus and action-focus frames per minute.",
+        "formula": "count(face->action or action->face transitions) / (duration/60)",
+        "expected_range": "0 to 30", "data_sources": ["frames", "metadata.duration"], "layer": "pre",
+    },
+    "visual_mode_entropy": {
+        "description": "Shannon entropy of frame mode sequence (face/action/object/text) — visual unpredictability.",
+        "formula": "entropy(mode_bigram_distribution)",
+        "expected_range": "0 to 4", "data_sources": ["frames"], "layer": "pre",
+    },
+    "visual_mode_dominant_pct": {
+        "description": "Fraction of frames in the single most common visual mode — dominance vs diversity.",
+        "formula": "max(mode_counts) / total_frames",
+        "expected_range": "0 to 1", "data_sources": ["frames"], "layer": "pre",
+    },
+    "object_face_transition_count": {
+        "description": "Number of transitions between object-focus and face-focus — demonstration style signal.",
+        "formula": "count(object->face + face->object transitions)",
+        "expected_range": "0 to 50", "data_sources": ["frames"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Text-on-Screen Pacing ─────────────────────────
+    "text_overlay_burst_count": {
+        "description": "Number of text-heavy bursts (3+ consecutive frames with text) — information dump moments.",
+        "formula": "count(text_runs >= 3)",
+        "expected_range": "0 to 15", "data_sources": ["frames"], "layer": "pre",
+    },
+    "text_first_appearance_pct": {
+        "description": "Position of first text overlay as percentage of video — early vs late text introduction.",
+        "formula": "first_text_frame_index / total_frames * 100",
+        "expected_range": "0 to 100", "data_sources": ["frames"], "layer": "pre",
+    },
+    "text_density_q1_q4_ratio": {
+        "description": "Text overlay density in first quarter vs last quarter — front vs back text loading.",
+        "formula": "text_pct_q1 / (text_pct_q4 + 0.01)",
+        "expected_range": "0 to 20", "data_sources": ["frames"], "layer": "pre",
+    },
+    "text_gap_mean": {
+        "description": "Mean gap (frames) between text overlay appearances — text rhythm.",
+        "formula": "mean(gaps between text runs)",
+        "expected_range": "0 to 60", "data_sources": ["frames"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Title Semantic Depth ──────────────────────────
+    "title_compression_ratio": {
+        "description": "Characters per word in title — semantic compression (higher=denser words).",
+        "formula": "title_char_count / (title_word_count + 1)",
+        "expected_range": "2 to 12", "data_sources": ["metadata.title"], "layer": "pre",
+    },
+    "title_contrast_word_count": {
+        "description": "Words in title that create contrast/opposition (vs, but, impossible, never).",
+        "formula": "count(contrast_words in title)",
+        "expected_range": "0 to 5", "data_sources": ["metadata.title"], "layer": "pre",
+    },
+    "title_specificity_score": {
+        "description": "Numbers + proper nouns + material words in title — concreteness signal.",
+        "formula": "count(digits) + count(caps words) + count(material words)",
+        "expected_range": "0 to 10", "data_sources": ["metadata.title"], "layer": "pre",
+    },
+    "title_verb_presence": {
+        "description": "Whether title contains a verb/action word (1=yes) — dynamic vs static framing.",
+        "formula": "int(any(verb in title))",
+        "expected_range": "0 or 1", "data_sources": ["metadata.title"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Narration Burst Patterns ──────────────────────
+    "sentence_burst_density": {
+        "description": "Fraction of sentences that appear in rapid bursts (3+ sentences in 10s window).",
+        "formula": "burst_sentences / total_sentences",
+        "expected_range": "0 to 1", "data_sources": ["transcript.words"], "layer": "pre",
+    },
+    "pause_pattern_regularity": {
+        "description": "Coefficient of variation of inter-sentence pauses — regular vs chaotic delivery.",
+        "formula": "std(pauses) / (mean(pauses) + 0.01)",
+        "expected_range": "0 to 5", "data_sources": ["transcript.words"], "layer": "pre",
+    },
+    "narration_frontload_ratio": {
+        "description": "Words-per-second in first 30% / last 30% — front-loaded vs back-loaded narration.",
+        "formula": "wps_first_30 / (wps_last_30 + 0.01)",
+        "expected_range": "0 to 5", "data_sources": ["transcript.words", "metadata.duration"], "layer": "pre",
+    },
+    "silence_before_climax_s": {
+        "description": "Longest silence gap in the 60-80% region — dramatic pause before payoff.",
+        "formula": "max(gaps in 60-80% of timed words)",
+        "expected_range": "0 to 5", "data_sources": ["transcript.words", "metadata.duration"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Frame Cluster Structure ───────────────────────
+    "frame_cluster_count": {
+        "description": "Number of distinct visual clusters (groups of similar scenes) — scene diversity.",
+        "formula": "count(unique scene type runs)",
+        "expected_range": "1 to 60", "data_sources": ["frames"], "layer": "pre",
+    },
+    "dominant_cluster_pct": {
+        "description": "Fraction of frames in the largest visual cluster — visual concentration.",
+        "formula": "max(cluster_sizes) / total_frames",
+        "expected_range": "0 to 1", "data_sources": ["frames"], "layer": "pre",
+    },
+    "cluster_transition_rate": {
+        "description": "Visual cluster transitions per minute — scene type switching rate.",
+        "formula": "cluster_transitions / (duration / 60)",
+        "expected_range": "0 to 30", "data_sources": ["frames", "metadata.duration"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Motif Recurrence & Callbacks ──────────────────
+    "verbal_callback_count": {
+        "description": "Distinct phrases (2+ words) that appear in hook AND later — verbal callbacks.",
+        "formula": "count(hook_phrases intersect body_phrases)",
+        "expected_range": "0 to 15", "data_sources": ["transcript", "aiAnalysis.segments"], "layer": "pre",
+    },
+    "visual_return_count": {
+        "description": "Scene types that appear, disappear for 5+ frames, then return — visual callbacks.",
+        "formula": "count(scene types with return pattern)",
+        "expected_range": "0 to 10", "data_sources": ["frames"], "layer": "pre",
+    },
+    "motif_recurrence_score": {
+        "description": "Combined verbal + visual recurrence — total callback density.",
+        "formula": "verbal_callback_count + visual_return_count",
+        "expected_range": "0 to 25", "data_sources": ["transcript", "frames", "aiAnalysis.segments"], "layer": "pre",
+    },
+    # ── DEEP PRE-UPLOAD: Structural Balance ────────────────────────────
+    "structural_thirds_balance": {
+        "description": "How evenly content distributes across thirds. 1.0 = perfectly balanced.",
+        "formula": "1 - max_deviation_from_33pct",
+        "expected_range": "0 to 1", "data_sources": ["aiAnalysis.segments", "metadata.duration"], "layer": "pre",
+    },
+    "hook_body_ratio": {
+        "description": "Hook duration / body duration — opening vs middle proportion.",
+        "formula": "hook_dur / (body_dur + 0.1)",
+        "expected_range": "0 to 2", "data_sources": ["aiAnalysis.segments"], "layer": "pre",
+    },
+    "conclusion_weight": {
+        "description": "Conclusion segment as fraction of non-hook content — ending investment.",
+        "formula": "conclusion_dur / (total_dur - hook_dur + 0.1)",
+        "expected_range": "0 to 0.5", "data_sources": ["aiAnalysis.segments", "metadata.duration"], "layer": "pre",
+    },
 }
 
 # ── Word lists for language-based indicators ─────────────────────────────
@@ -1479,6 +1679,16 @@ SUPERLATIVES = {
 COMPARISON_WORDS = {"vs", "versus", "than", "better", "worse", "more", "less", "compared", "difference", "between"}
 MAKING_CONCEPT_WORDS = {"making", "made", "build", "built", "creating", "created", "craft", "crafted", "construct"}
 INDESTRUCTIBLE_CONCEPT_WORDS = {"indestructible", "unbreakable", "bulletproof", "strongest", "invincible", "impenetrable"}
+TITLE_CONTRAST_WORDS = {"vs", "versus", "but", "impossible", "never", "indestructible", "unbreakable",
+                        "worst", "deadliest", "vs.", "against", "without", "only", "nothing"}
+TITLE_VERB_WORDS = {"making", "building", "testing", "breaking", "cutting", "crushing", "shooting",
+                    "hitting", "destroying", "eating", "cooking", "creating", "surviving",
+                    "dropping", "throwing", "smashing", "launching", "firing", "melting"}
+TENSION_UP_WORDS = {"but", "however", "suddenly", "except", "until", "although",
+                    "unfortunately", "surprisingly", "shocking", "insane", "crazy",
+                    "impossible", "never", "worst", "hardest", "dangerous"}
+RESOLUTION_DOWN_WORDS = {"finally", "actually", "turns out", "so", "anyway",
+                         "worked", "success", "easy", "simple", "done", "finished"}
 
 AUTONOMOUS_RUNS_FILE = JARVIS_DIR / "autonomous_runs.json"
 AUTONOMOUS_PROGRESS_FILE = JARVIS_DIR / "autonomous_progress.json"
@@ -1560,10 +1770,15 @@ def _finish_progress(prog, stop_reason):
 # Candidate families: each produces a list of (key, definition) pairs.
 # Keys follow patterns that extract_metric can parse via regex.
 
-RETENTION_POINTS = [5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 75, 80, 85, 90, 95]
+RETENTION_POINTS = [1, 2, 3, 5, 7, 10, 12, 15, 18, 20, 22, 25, 28, 30, 33,
+                    37, 40, 42, 45, 48, 50, 52, 55, 58, 60, 62, 65, 68, 70,
+                    72, 75, 78, 80, 82, 85, 87, 90, 92, 95, 97, 99]
 RETENTION_WINDOWS = [
-    (0, 5), (0, 10), (5, 15), (10, 20), (20, 30), (30, 40), (40, 50),
-    (50, 60), (60, 70), (70, 80), (80, 90), (90, 100), (95, 100),
+    (0, 3), (0, 5), (0, 7), (0, 10), (3, 7), (5, 10), (5, 15), (7, 12),
+    (10, 15), (10, 20), (12, 18), (15, 25), (18, 25), (20, 30), (25, 33),
+    (30, 40), (33, 42), (40, 50), (42, 50), (50, 58), (50, 60), (55, 65),
+    (58, 67), (60, 70), (65, 75), (67, 75), (70, 80), (75, 83), (75, 85),
+    (80, 90), (83, 92), (85, 95), (90, 100), (92, 100), (95, 100), (97, 100),
 ]
 DAILY_VIEWS_WINDOWS = [(0, 1), (0, 3), (0, 7), (7, 14), (14, 30)]
 DAILY_VIEWS_RATIOS = [
@@ -1720,7 +1935,57 @@ def generate_autonomous_candidates():
               "avg_view_duration_s"]:
         candidates.append(k)
 
-    # 20. Interaction terms (expanded with new indicator families)
+    # 20. DEEP: Beat density & cadence
+    for k in ["beat_count", "beat_density_per_minute", "beat_cadence_variance",
+              "beat_acceleration", "first_beat_delay_pct"]:
+        candidates.append(k)
+
+    # 21. DEEP: Scene transition spacing
+    for k in ["scene_transition_spacing_mean", "scene_transition_spacing_variance",
+              "scene_transition_spacing_cv", "scene_burst_count"]:
+        candidates.append(k)
+
+    # 22. DEEP: Escalation curve
+    for k in ["escalation_slope", "escalation_peak_position_pct",
+              "escalation_late_surge", "deescalation_speed"]:
+        candidates.append(k)
+
+    # 23. DEEP: Visual alternation patterns
+    for k in ["face_action_alternation_rate", "visual_mode_entropy",
+              "visual_mode_dominant_pct", "object_face_transition_count"]:
+        candidates.append(k)
+
+    # 24. DEEP: Text-on-screen pacing
+    for k in ["text_overlay_burst_count", "text_first_appearance_pct",
+              "text_density_q1_q4_ratio", "text_gap_mean"]:
+        candidates.append(k)
+
+    # 25. DEEP: Title semantic depth
+    for k in ["title_compression_ratio", "title_contrast_word_count",
+              "title_specificity_score", "title_verb_presence"]:
+        candidates.append(k)
+
+    # 26. DEEP: Narration burst patterns
+    for k in ["sentence_burst_density", "pause_pattern_regularity",
+              "narration_frontload_ratio", "silence_before_climax_s"]:
+        candidates.append(k)
+
+    # 27. DEEP: Frame cluster structure
+    for k in ["frame_cluster_count", "dominant_cluster_pct",
+              "cluster_transition_rate"]:
+        candidates.append(k)
+
+    # 28. DEEP: Motif recurrence & callbacks
+    for k in ["verbal_callback_count", "visual_return_count",
+              "motif_recurrence_score"]:
+        candidates.append(k)
+
+    # 29. DEEP: Structural balance
+    for k in ["structural_thirds_balance", "hook_body_ratio",
+              "conclusion_weight"]:
+        candidates.append(k)
+
+    # 30. Interaction terms (expanded with new deep indicator families)
     interaction_bases = [
         "retention_pct_50", "retention_pct_25", "speech_rate_wps",
         "face_frame_pct", "retention_entropy", "hook_drop_rate",
@@ -1728,10 +1993,14 @@ def generate_autonomous_candidates():
         # pre-upload additions for richer interactions
         "unique_word_ratio", "scene_change_rate", "hook_duration_pct",
         "title_word_count", "avg_segment_duration_s", "close_up_frame_pct",
-        # NEW: high-signal indicators for cross-family interactions
+        # high-signal indicators for cross-family interactions
         "sensory_word_density", "pivot_word_count", "max_silence_gap_s",
         "opening_speech_rate_3s", "action_frame_pct", "final_5pct_retention",
         "hook_payoff_gap", "end_recovery_score", "narrative_arc_completeness",
+        # DEEP: new families for mechanism discovery
+        "beat_density_per_minute", "escalation_slope", "visual_mode_entropy",
+        "motif_recurrence_score", "structural_thirds_balance",
+        "scene_transition_spacing_cv", "text_overlay_burst_count",
     ]
     seen_pairs = set()
     for i, a in enumerate(interaction_bases):
@@ -3803,6 +4072,469 @@ def extract_metric(key, analysis):
         v = analytics.get("avgViewDuration")
         return (float(v), None) if v is not None else (None, "no avgViewDuration")
 
+    # ── DEEP PRE-UPLOAD: Beat Density & Cadence ──────────────────────────
+    def _get_beat_positions():
+        positions = []
+        words_list = transcript.lower().split()
+        for i, w in enumerate(words_list):
+            if w in TENSION_UP_WORDS or w in PIVOT_WORDS or w == '?':
+                positions.append(i / max(len(words_list), 1))
+        for s in segments:
+            pos = s.get("startTime", 0) / max(dur_s, 1)
+            if pos > 0:
+                positions.append(pos)
+        return sorted(set(positions))
+
+    if key == "beat_count":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        t_ct = sum(1 for w in words_lower if w in TENSION_UP_WORDS or w in PIVOT_WORDS)
+        q_ct = transcript.count('?')
+        seg_ct = max(0, len(segments) - 1)
+        return (float(t_ct + q_ct + seg_ct), None)
+
+    if key == "beat_density_per_minute":
+        if not transcript or not dur_s:
+            return (None, "no transcript or duration")
+        words_lower = transcript.lower().split()
+        t_ct = sum(1 for w in words_lower if w in TENSION_UP_WORDS or w in PIVOT_WORDS)
+        q_ct = transcript.count('?')
+        seg_ct = max(0, len(segments) - 1)
+        total_beats = t_ct + q_ct + seg_ct
+        return (float(total_beats / (dur_s / 60)), None)
+
+    if key == "beat_cadence_variance":
+        positions = _get_beat_positions()
+        if len(positions) < 3:
+            return (None, "too few beats")
+        intervals = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
+        return (float(np.var(intervals)), None)
+
+    if key == "beat_acceleration":
+        positions = _get_beat_positions()
+        if len(positions) < 4:
+            return (None, "too few beats")
+        intervals = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
+        if len(intervals) < 3:
+            return (None, "not enough intervals")
+        slope, _, _, _, _ = stats.linregress(range(len(intervals)), intervals)
+        return (float(slope), None)
+
+    if key == "first_beat_delay_pct":
+        positions = _get_beat_positions()
+        if not positions:
+            return (None, "no beats found")
+        return (float(positions[0] * 100), None)
+
+    # ── DEEP PRE-UPLOAD: Scene Transition Spacing ──────────────────────
+    def _get_scene_change_positions():
+        if not frames or len(frames) < 3:
+            return []
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:60] for f in frames]
+        positions = []
+        for i in range(1, len(descs)):
+            if descs[i] != descs[i-1]:
+                positions.append(i)
+        return positions
+
+    if key == "scene_transition_spacing_mean":
+        positions = _get_scene_change_positions()
+        if len(positions) < 2:
+            return (None, "too few scene changes")
+        intervals = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
+        return (float(np.mean(intervals)), None)
+
+    if key == "scene_transition_spacing_variance":
+        positions = _get_scene_change_positions()
+        if len(positions) < 3:
+            return (None, "too few scene changes")
+        intervals = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
+        return (float(np.var(intervals)), None)
+
+    if key == "scene_transition_spacing_cv":
+        positions = _get_scene_change_positions()
+        if len(positions) < 3:
+            return (None, "too few scene changes")
+        intervals = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
+        m_val = np.mean(intervals)
+        s_val = np.std(intervals)
+        return (float(s_val / (m_val + 0.1)), None)
+
+    if key == "scene_burst_count":
+        positions = _get_scene_change_positions()
+        if len(positions) < 2:
+            return (0.0, None)
+        bursts = sum(1 for i in range(len(positions)-1) if positions[i+1] - positions[i] <= 2)
+        return (float(bursts), None)
+
+    # ── DEEP PRE-UPLOAD: Escalation Curve ──────────────────────────────
+    if key == "escalation_slope":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if len(words_lower) < 20:
+            return (None, "transcript too short")
+        cumulative = []
+        ct = 0
+        for w in words_lower:
+            if w in TENSION_UP_WORDS:
+                ct += 1
+            cumulative.append(ct)
+        if ct < 2:
+            return (0.0, None)
+        x_arr = np.arange(len(cumulative), dtype=float)
+        slope, _, _, _, _ = stats.linregress(x_arr, cumulative)
+        return (float(slope), None)
+
+    if key == "escalation_peak_position_pct":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if len(words_lower) < 20:
+            return (None, "transcript too short")
+        win_size = max(10, len(words_lower) // 8)
+        densities = []
+        for i in range(0, len(words_lower) - win_size + 1, win_size // 2):
+            window = words_lower[i:i+win_size]
+            d = sum(1 for w in window if w in TENSION_UP_WORDS)
+            densities.append(d)
+        if not densities:
+            return (None, "no windows")
+        peak_idx = int(np.argmax(densities))
+        return (float(peak_idx / max(len(densities) - 1, 1) * 100), None)
+
+    if key == "escalation_late_surge":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if len(words_lower) < 20:
+            return (None, "transcript too short")
+        q_size = len(words_lower) // 4
+        q1 = sum(1 for w in words_lower[:q_size] if w in TENSION_UP_WORDS)
+        q4 = sum(1 for w in words_lower[-q_size:] if w in TENSION_UP_WORDS)
+        return (float(q4 - q1), None)
+
+    if key == "deescalation_speed":
+        if not transcript:
+            return (None, "no transcript")
+        words_lower = transcript.lower().split()
+        if len(words_lower) < 20:
+            return (None, "transcript too short")
+        win_size = max(10, len(words_lower) // 8)
+        densities = []
+        for i in range(0, len(words_lower) - win_size + 1, win_size // 2):
+            window = words_lower[i:i+win_size]
+            d = sum(1 for w in window if w in TENSION_UP_WORDS)
+            densities.append(d)
+        if len(densities) < 3:
+            return (None, "too few windows")
+        peak_idx = int(np.argmax(densities))
+        if peak_idx >= len(densities) - 1:
+            return (0.0, None)
+        post_peak = densities[peak_idx:]
+        if len(post_peak) < 2:
+            return (0.0, None)
+        slope, _, _, _, _ = stats.linregress(range(len(post_peak)), post_peak)
+        return (float(slope), None)
+
+    # ── DEEP PRE-UPLOAD: Visual Alternation Patterns ───────────────────
+    def _classify_frame(f):
+        desc = str(f.get("analysis", {}).get("sceneDescription", "")).lower()
+        has_face = "face" in desc
+        has_action = any(kw in desc for kw in _action_kw)
+        has_text_f = "text" in str(f.get("analysis", {}).get("visualTechniques", "")).lower()
+        if has_face and has_action:
+            return "face_action"
+        if has_face:
+            return "face"
+        if has_action:
+            return "action"
+        if has_text_f:
+            return "text"
+        return "object"
+
+    if key == "face_action_alternation_rate":
+        if not frames or not dur_s:
+            return (None, "no frames or duration")
+        modes = [_classify_frame(f) for f in frames]
+        transitions = 0
+        for i in range(1, len(modes)):
+            a, b = modes[i-1], modes[i]
+            face_a = "face" in a
+            face_b = "face" in b
+            action_a = "action" in a
+            action_b = "action" in b
+            if (face_a and not face_b and action_b) or (action_a and not action_b and face_b):
+                transitions += 1
+        return (float(transitions / (dur_s / 60)), None)
+
+    if key == "visual_mode_entropy":
+        if not frames or len(frames) < 5:
+            return (None, "too few frames")
+        modes = [_classify_frame(f) for f in frames]
+        from collections import Counter
+        freq = Counter(modes)
+        total = len(modes)
+        probs = [c / total for c in freq.values()]
+        entropy = -sum(p * math.log2(p) for p in probs if p > 0)
+        return (float(entropy), None)
+
+    if key == "visual_mode_dominant_pct":
+        if not frames or len(frames) < 5:
+            return (None, "too few frames")
+        modes = [_classify_frame(f) for f in frames]
+        from collections import Counter
+        freq = Counter(modes)
+        return (float(max(freq.values()) / len(modes)), None)
+
+    if key == "object_face_transition_count":
+        if not frames or len(frames) < 3:
+            return (None, "too few frames")
+        modes = [_classify_frame(f) for f in frames]
+        ct = 0
+        for i in range(1, len(modes)):
+            if (modes[i-1] == "object" and "face" in modes[i]) or \
+               ("face" in modes[i-1] and modes[i] == "object"):
+                ct += 1
+        return (float(ct), None)
+
+    # ── DEEP PRE-UPLOAD: Text-on-Screen Pacing ────────────────────────
+    if key == "text_overlay_burst_count":
+        if not frames:
+            return (None, "no frames")
+        text_flags = [1 if _has_text(f) else 0 for f in frames]
+        bursts = 0
+        run_len = 0
+        for t in text_flags:
+            if t:
+                run_len += 1
+            else:
+                if run_len >= 3:
+                    bursts += 1
+                run_len = 0
+        if run_len >= 3:
+            bursts += 1
+        return (float(bursts), None)
+
+    if key == "text_first_appearance_pct":
+        if not frames:
+            return (None, "no frames")
+        for i, f in enumerate(frames):
+            if _has_text(f):
+                return (float(i / len(frames) * 100), None)
+        return (100.0, None)
+
+    if key == "text_density_q1_q4_ratio":
+        if not frames or len(frames) < 8:
+            return (None, "too few frames")
+        q = len(frames) // 4
+        q1_text = sum(1 for f in frames[:q] if _has_text(f)) / max(q, 1)
+        q4_text = sum(1 for f in frames[-q:] if _has_text(f)) / max(q, 1)
+        return (float(q1_text / (q4_text + 0.01)), None)
+
+    if key == "text_gap_mean":
+        if not frames:
+            return (None, "no frames")
+        text_positions = [i for i, f in enumerate(frames) if _has_text(f)]
+        if len(text_positions) < 2:
+            return (None, "too few text frames")
+        gaps = [text_positions[i+1] - text_positions[i] for i in range(len(text_positions)-1)]
+        return (float(np.mean(gaps)), None)
+
+    # ── DEEP PRE-UPLOAD: Title Semantic Depth ─────────────────────────
+    if key == "title_compression_ratio":
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        words_t = title.split()
+        if not words_t:
+            return (None, "empty title")
+        return (float(len(title) / len(words_t)), None)
+
+    if key == "title_contrast_word_count":
+        title = meta.get("title", "").lower()
+        if not title:
+            return (None, "no title")
+        words_t = set(title.split())
+        return (float(len(words_t & TITLE_CONTRAST_WORDS)), None)
+
+    if key == "title_specificity_score":
+        title = meta.get("title", "")
+        if not title:
+            return (None, "no title")
+        digits = sum(1 for c in title if c.isdigit())
+        caps = sum(1 for w in title.split() if w[0].isupper() and len(w) > 1) if title.split() else 0
+        material = sum(1 for w in title.lower().split() if w in TECHNICAL_WORDS)
+        return (float(digits + caps + material), None)
+
+    if key == "title_verb_presence":
+        title = meta.get("title", "").lower()
+        if not title:
+            return (None, "no title")
+        words_t = set(title.split())
+        return (float(int(bool(words_t & TITLE_VERB_WORDS))), None)
+
+    # ── DEEP PRE-UPLOAD: Narration Burst Patterns ─────────────────────
+    if key == "sentence_burst_density":
+        if not timed_words or not dur_s:
+            return (None, "no timed words")
+        sentence_ends = []
+        for i, w in enumerate(timed_words):
+            word_text = w.get("word", w.get("text", ""))
+            if any(p in word_text for p in '.!?'):
+                sentence_ends.append(w.get("timestamp", 0))
+        if len(sentence_ends) < 5:
+            return (None, "too few sentences")
+        burst_count = 0
+        for i in range(len(sentence_ends) - 2):
+            if sentence_ends[i+2] - sentence_ends[i] < 10:
+                burst_count += 1
+        return (float(burst_count / len(sentence_ends)), None)
+
+    if key == "pause_pattern_regularity":
+        if not timed_words or len(timed_words) < 10:
+            return (None, "not enough timed words")
+        sentence_ends = []
+        for w in timed_words:
+            word_text = w.get("word", w.get("text", ""))
+            if any(p in word_text for p in '.!?'):
+                sentence_ends.append(w.get("timestamp", 0))
+        if len(sentence_ends) < 4:
+            return (None, "too few sentence ends")
+        pauses = [sentence_ends[i+1] - sentence_ends[i] for i in range(len(sentence_ends)-1)]
+        m_p = np.mean(pauses)
+        s_p = np.std(pauses)
+        return (float(s_p / (m_p + 0.01)), None)
+
+    if key == "narration_frontload_ratio":
+        if not timed_words or not dur_s:
+            return (None, "no timed words or duration")
+        cutoff_30 = dur_s * 0.3
+        cutoff_70 = dur_s * 0.7
+        front = len([w for w in timed_words if w.get("timestamp", 0) < cutoff_30])
+        back = len([w for w in timed_words if w.get("timestamp", 0) >= cutoff_70])
+        wps_front = front / (cutoff_30 + 0.01)
+        wps_back = back / ((dur_s - cutoff_70) + 0.01)
+        return (float(wps_front / (wps_back + 0.01)), None)
+
+    if key == "silence_before_climax_s":
+        if len(timed_words) < 5 or not dur_s:
+            return (None, "insufficient data")
+        t60 = dur_s * 0.6
+        t80 = dur_s * 0.8
+        region_words = [w for w in timed_words
+                        if t60 <= w.get("timestamp", 0) <= t80 and "timestamp" in w]
+        if len(region_words) < 2:
+            return (0.0, None)
+        gaps = [region_words[i+1]["timestamp"] - region_words[i]["timestamp"]
+                for i in range(len(region_words)-1)]
+        return (float(max(gaps) if gaps else 0.0), None)
+
+    # ── DEEP PRE-UPLOAD: Frame Cluster Structure ──────────────────────
+    if key == "frame_cluster_count":
+        if not frames or len(frames) < 5:
+            return (None, "too few frames")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:40] for f in frames]
+        cluster_count = 1
+        for i in range(1, len(descs)):
+            if descs[i] != descs[i-1]:
+                cluster_count += 1
+        return (float(cluster_count), None)
+
+    if key == "dominant_cluster_pct":
+        if not frames or len(frames) < 5:
+            return (None, "too few frames")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:40] for f in frames]
+        from collections import Counter
+        freq = Counter(descs)
+        return (float(max(freq.values()) / len(descs)), None)
+
+    if key == "cluster_transition_rate":
+        if not frames or len(frames) < 5 or not dur_s:
+            return (None, "too few frames or no duration")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:40] for f in frames]
+        transitions = sum(1 for i in range(1, len(descs)) if descs[i] != descs[i-1])
+        return (float(transitions / (dur_s / 60)), None)
+
+    # ── DEEP PRE-UPLOAD: Motif Recurrence & Callbacks ─────────────────
+    if key == "verbal_callback_count":
+        hook_text = _get_hook_text()
+        if not hook_text or not transcript or len(transcript.split()) < 20:
+            return (None, "insufficient text")
+        hook_words = hook_text.lower().split()
+        body_start = len(hook_words)
+        all_words = transcript.lower().split()
+        body_words = all_words[body_start:]
+        if len(hook_words) < 4 or len(body_words) < 10:
+            return (0.0, None)
+        hook_bigrams = set(f"{hook_words[i]} {hook_words[i+1]}" for i in range(len(hook_words)-1))
+        body_bigrams = set(f"{body_words[i]} {body_words[i+1]}" for i in range(len(body_words)-1))
+        overlap = len(hook_bigrams & body_bigrams)
+        return (float(overlap), None)
+
+    if key == "visual_return_count":
+        if not frames or len(frames) < 10:
+            return (None, "too few frames")
+        descs = [str(f.get("analysis", {}).get("sceneDescription", ""))[:40] for f in frames]
+        scene_appearances = {}
+        for i, d in enumerate(descs):
+            scene_appearances.setdefault(d, []).append(i)
+        returns = 0
+        for d, positions in scene_appearances.items():
+            if len(positions) < 2:
+                continue
+            for j in range(1, len(positions)):
+                if positions[j] - positions[j-1] >= 5:
+                    returns += 1
+                    break
+        return (float(returns), None)
+
+    if key == "motif_recurrence_score":
+        vc_val, _ = extract_metric("verbal_callback_count", analysis)
+        vr_val, _ = extract_metric("visual_return_count", analysis)
+        vc_val = vc_val or 0
+        vr_val = vr_val or 0
+        return (float(vc_val + vr_val), None)
+
+    # ── DEEP PRE-UPLOAD: Structural Balance ───────────────────────────
+    if key == "structural_thirds_balance":
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        third = dur_s / 3
+        thirds_content = [0.0, 0.0, 0.0]
+        for s in segments:
+            s_start = s.get("startTime", 0)
+            s_end = s.get("endTime", 0)
+            s_dur = s_end - s_start
+            for t_idx in range(3):
+                t_start = t_idx * third
+                t_end = (t_idx + 1) * third
+                overlap = max(0, min(s_end, t_end) - max(s_start, t_start))
+                thirds_content[t_idx] += overlap
+        total = sum(thirds_content) or 1
+        fracs = [t / total for t in thirds_content]
+        max_dev = max(abs(f - 1/3) for f in fracs)
+        return (float(1.0 - max_dev * 3), None)
+
+    if key == "hook_body_ratio":
+        if not segments:
+            return (None, "no segments")
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        hook_dur = (hook_seg.get("endTime", 0) - hook_seg.get("startTime", 0)) if hook_seg else 0
+        body_dur = sum(s.get("endTime", 0) - s.get("startTime", 0)
+                       for s in segments if s.get("label", "").lower() not in ("hook", "conclusion"))
+        return (float(hook_dur / (body_dur + 0.1)), None)
+
+    if key == "conclusion_weight":
+        if not segments or not dur_s:
+            return (None, "no segments or duration")
+        hook_seg = next((s for s in segments if s.get("label", "").lower() == "hook"), None)
+        hook_dur = (hook_seg.get("endTime", 0) - hook_seg.get("startTime", 0)) if hook_seg else 0
+        conc_seg = next((s for s in segments if s.get("label", "").lower() == "conclusion"), None)
+        conc_dur = (conc_seg.get("endTime", 0) - conc_seg.get("startTime", 0)) if conc_seg else 0
+        return (float(conc_dur / (dur_s - hook_dur + 0.1)), None)
+
     # Interaction terms: keyA_x_keyB
     m = re.match(r'^(.+)_x_(.+)$', key)
     if m:
@@ -5063,6 +5795,184 @@ def run_monotonic_consistency(key_a, videos):
     }
 
 
+def run_regime_gap(key_a, videos):
+    """Regime gap: compare mean indicator value in top-25% view videos vs bottom-25%.
+    Discovers which pre-upload signals separate high-view from low-view content."""
+    vals = []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        if va is None:
+            continue
+        fv = float(va)
+        if math.isnan(fv) or math.isinf(fv):
+            continue
+        vals.append((fv, math.log10(vc)))
+    n = len(vals)
+    if n < 60:
+        print(f"  [REGIME] SKIP: n={n} < 60 for {key_a}")
+        return None
+
+    vals.sort(key=lambda x: x[1])
+    q_size = n // 4
+    if q_size < 10:
+        return None
+
+    bottom_q = vals[:q_size]
+    top_q = vals[-q_size:]
+    bottom_ind_mean = sum(v[0] for v in bottom_q) / len(bottom_q)
+    top_ind_mean = sum(v[0] for v in top_q) / len(top_q)
+    bottom_ind_std = float(np.std([v[0] for v in bottom_q]))
+    top_ind_std = float(np.std([v[0] for v in top_q]))
+    pooled_std = math.sqrt((bottom_ind_std**2 + top_ind_std**2) / 2) if (bottom_ind_std + top_ind_std) > 0 else 1
+    cohens_d = (top_ind_mean - bottom_ind_mean) / (pooled_std + 1e-10)
+    regime_gap = top_ind_mean - bottom_ind_mean
+
+    abs_d = abs(cohens_d)
+    direction = "top_higher" if regime_gap > 0 else "bottom_higher"
+    strength = ("strong" if abs_d >= 0.8 else "moderate" if abs_d >= 0.5
+                else "weak" if abs_d >= 0.2 else "none")
+
+    all_x = np.array([v[0] for v in vals])
+    all_y = np.array([v[1] for v in vals])
+    r_full, p_full = pearsonr(all_x, all_y)
+
+    exp_id = f"exp_regime_{key_a}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer = (get_metric_definition(key_a) or {}).get("layer", "post")
+
+    print(f"  [REGIME] {key_a}: gap={regime_gap:+.4f}, d={cohens_d:+.3f} [{strength}], "
+          f"top_mean={top_ind_mean:.4f}, bot_mean={bottom_ind_mean:.4f}, n={n}")
+
+    return {
+        "id": exp_id,
+        "key": f"regime_gap__{key_a}",
+        "kind": "regime_gap_to_views",
+        "component_keys": [key_a],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "regime_gap",
+            "tool_name": "Regime Gap (Top vs Bottom Views)",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "regime_gap": round(regime_gap, 6),
+                "cohens_d": round(cohens_d, 4),
+                "top_ind_mean": round(top_ind_mean, 6),
+                "bottom_ind_mean": round(bottom_ind_mean, 6),
+                "top_ind_std": round(top_ind_std, 6),
+                "bottom_ind_std": round(bottom_ind_std, 6),
+                "r_full": float(r_full),
+                "p_full": float(p_full),
+                "n": int(n),
+                "q_size": q_size,
+            },
+        },
+        "result": {
+            "primary_r": float(r_full),
+            "regime_gap": round(regime_gap, 6),
+            "cohens_d": round(cohens_d, 4),
+            "top_ind_mean": round(top_ind_mean, 6),
+            "bottom_ind_mean": round(bottom_ind_mean, 6),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "layer": layer,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_bridge_strength(key_pre, key_post, videos):
+    """Bridge strength: how strongly a pre-upload indicator correlates with a
+    post-upload indicator. Reveals mechanism pathways from content → audience response."""
+    xa, xb, y, n = _extract_two_vectors(key_pre, key_post, videos)
+    if n < 50:
+        print(f"  [BRIDGE] SKIP: n={n} < 50 for {key_pre} -> {key_post}")
+        return None
+    mask = ~(np.isnan(xa) | np.isnan(xb) | np.isinf(xa) | np.isinf(xb))
+    xa, xb = xa[mask], xb[mask]
+    y_clean = y[mask]
+    n = len(xa)
+    if n < 50:
+        return None
+
+    r_bridge, p_bridge = pearsonr(xa, xb)
+    rho_bridge, p_rho = spearmanr(xa, xb)
+
+    r_pre_views, _ = pearsonr(xa, y_clean)
+    r_post_views, _ = pearsonr(xb, y_clean)
+
+    z = 0.5 * math.log((1 + r_bridge + 1e-10) / (1 - r_bridge + 1e-10))
+    se = 1.0 / math.sqrt(max(n - 3, 1))
+    ci_low = math.tanh(z - 1.96 * se)
+    ci_high = math.tanh(z + 1.96 * se)
+
+    pathway_strength = abs(r_bridge) * abs(r_post_views)
+
+    abs_r = abs(r_bridge)
+    direction = "positive" if r_bridge >= 0 else "negative"
+    strength = ("strong" if abs_r >= 0.5 else "moderate" if abs_r >= 0.3
+                else "weak" if abs_r >= 0.1 else "none")
+
+    exp_id = f"exp_bridge_{key_pre}__{key_post}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+
+    print(f"  [BRIDGE] {key_pre} -> {key_post}: r={r_bridge:+.3f}, "
+          f"pathway={pathway_strength:.3f}, r_pre_v={r_pre_views:+.3f}, "
+          f"r_post_v={r_post_views:+.3f}, n={n}")
+
+    return {
+        "id": exp_id,
+        "key": f"bridge__{key_pre}__{key_post}",
+        "kind": "bridge_strength_pre_to_post",
+        "component_keys": [key_pre, key_post],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "bridge_strength",
+            "tool_name": "Bridge Strength (Pre → Post)",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "r_bridge": float(r_bridge),
+                "rho_bridge": float(rho_bridge),
+                "p_bridge": float(p_bridge),
+                "ci_low": float(ci_low),
+                "ci_high": float(ci_high),
+                "r_pre_views": float(r_pre_views),
+                "r_post_views": float(r_post_views),
+                "pathway_strength": round(pathway_strength, 4),
+                "n": int(n),
+            },
+        },
+        "result": {
+            "primary_r": float(r_bridge),
+            "rho": float(rho_bridge),
+            "p_value": float(p_bridge),
+            "ci_low": float(ci_low),
+            "ci_high": float(ci_high),
+            "r_pre_views": float(r_pre_views),
+            "r_post_views": float(r_post_views),
+            "pathway_strength": round(pathway_strength, 4),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "bridge": True,
+        "layer_a": "pre",
+        "layer_b": "post",
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
 def _add_derived_edge(graph, derived_exp):
     """Add a derived_edge to graph from a derived experiment result."""
     if "derived_edges" not in graph:
@@ -5166,6 +6076,20 @@ def _add_derived_edge(graph, derived_exp):
         base_edge["avg_mono"] = derived_exp["result"].get("avg_mono")
         base_edge["strength_label"] = derived_exp["result"]["strength_label"]
         base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "regime_gap_to_views":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["regime_gap"] = derived_exp["result"].get("regime_gap")
+        base_edge["cohens_d"] = derived_exp["result"].get("cohens_d")
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "bridge_strength_pre_to_post":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["pathway_strength"] = derived_exp["result"].get("pathway_strength")
+        base_edge["r_pre_views"] = derived_exp["result"].get("r_pre_views")
+        base_edge["r_post_views"] = derived_exp["result"].get("r_post_views")
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+        base_edge["bridge"] = True
 
     graph["derived_edges"].append(base_edge)
     _rebuild_connections(graph)
@@ -5251,6 +6175,8 @@ def generate_derived_candidates(indicators, existing_derived_keys):
         "quantile_gap_to_views": [],
         "residual_pair_to_views": [],
         "monotonic_bucket_consistency": [],
+        "regime_gap_to_views": [],
+        "bridge_strength_pre_to_post": [],
     }
 
     top = _get_top_indicators(indicators, n=40)
@@ -5434,6 +6360,50 @@ def generate_derived_candidates(indicators, existing_derived_keys):
         if len(candidates["monotonic_bucket_consistency"]) >= 50:
             break
 
+    # ── regime_gap_to_views: compare indicator in top vs bottom view tiers ──
+    seen_rg = set()
+    for ind in top_diverse:
+        k = ind["key"]
+        rk = f"regime_gap__{k}"
+        if rk not in existing_derived_keys and k not in seen_rg:
+            candidates["regime_gap_to_views"].append((k,))
+            seen_rg.add(k)
+        if len(candidates["regime_gap_to_views"]) >= 60:
+            break
+    # Also add all new deep pre-upload indicators
+    deep_pre = [i for i in indicators if i.get("layer") == "pre"
+                and "_x_" not in i["key"]
+                and abs(i.get("result", {}).get("primary_r") or 0) >= 0.01]
+    for ind in deep_pre:
+        k = ind["key"]
+        rk = f"regime_gap__{k}"
+        if rk not in existing_derived_keys and k not in seen_rg:
+            candidates["regime_gap_to_views"].append((k,))
+            seen_rg.add(k)
+        if len(candidates["regime_gap_to_views"]) >= 100:
+            break
+
+    # ── bridge_strength_pre_to_post: pre → post mechanism pathways ──
+    pre_inds = [i for i in indicators if i.get("layer") == "pre"
+                and "_x_" not in i["key"]
+                and abs(i.get("result", {}).get("primary_r") or 0) >= 0.03]
+    post_inds = [i for i in indicators if i.get("layer") == "post"
+                 and "_x_" not in i["key"]
+                 and abs(i.get("result", {}).get("primary_r") or 0) >= 0.05]
+    pre_inds.sort(key=lambda i: abs(i["result"].get("primary_r") or 0), reverse=True)
+    post_inds.sort(key=lambda i: abs(i["result"].get("primary_r") or 0), reverse=True)
+    seen_bs = set()
+    for p in pre_inds[:25]:
+        for q in post_inds[:15]:
+            bk = f"bridge__{p['key']}__{q['key']}"
+            if bk not in existing_derived_keys and (p["key"], q["key"]) not in seen_bs:
+                candidates["bridge_strength_pre_to_post"].append((p["key"], q["key"]))
+                seen_bs.add((p["key"], q["key"]))
+            if len(candidates["bridge_strength_pre_to_post"]) >= 120:
+                break
+        if len(candidates["bridge_strength_pre_to_post"]) >= 120:
+            break
+
     total = sum(len(v) for v in candidates.values())
     parts = ", ".join(f"{k}={len(v)}" for k, v in candidates.items())
     print(f"  [DERIVED CANDIDATES] {parts} (total={total})")
@@ -5460,7 +6430,8 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
                           "rank_pair_correlation", "bucketed_curve_to_views",
                           "piecewise_to_views",
                           "threshold_delta_to_views", "quantile_gap_to_views",
-                          "residual_pair_to_views", "monotonic_bucket_consistency"]
+                          "residual_pair_to_views", "monotonic_bucket_consistency",
+                          "regime_gap_to_views", "bridge_strength_pre_to_post"]
     limit = max_per_kind or 50
 
     print(f"\n{'=' * 60}")
@@ -5491,6 +6462,8 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
         "quantile_gap_to_views": 2,
         "residual_pair_to_views": 2,
         "monotonic_bucket_consistency": 2,
+        "regime_gap_to_views": 2,
+        "bridge_strength_pre_to_post": 2,
     }
     upgraded = 0
     depth_fixed = 0
@@ -5649,6 +6622,30 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
                 derived.append(result)
                 _add_derived_edge(graph, result)
                 completed["monotonic_bucket_consistency"] += 1
+
+    # ── regime_gap_to_views ──
+    if "regime_gap_to_views" in all_kinds:
+        print(f"\n--- regime_gap_to_views ({len(candidates.get('regime_gap_to_views', []))} candidates) ---")
+        for (key_a,) in candidates.get("regime_gap_to_views", []):
+            if completed["regime_gap_to_views"] >= limit:
+                break
+            result = run_regime_gap(key_a, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["regime_gap_to_views"] += 1
+
+    # ── bridge_strength_pre_to_post ──
+    if "bridge_strength_pre_to_post" in all_kinds:
+        print(f"\n--- bridge_strength_pre_to_post ({len(candidates.get('bridge_strength_pre_to_post', []))} candidates) ---")
+        for key_pre, key_post in candidates.get("bridge_strength_pre_to_post", []):
+            if completed["bridge_strength_pre_to_post"] >= limit:
+                break
+            result = run_bridge_strength(key_pre, key_post, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["bridge_strength_pre_to_post"] += 1
 
     # ── Save all ──
     save_json(DERIVED_EXPERIMENTS_FILE, derived)
