@@ -4695,6 +4695,374 @@ def run_piecewise_to_views(key_a, videos):
     }
 
 
+def run_threshold_delta(key_a, videos):
+    """Threshold delta: split indicator into quartiles, measure views correlation
+    per segment. Identifies which quartile transition shows the biggest effect change."""
+    vals = []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        if va is None:
+            continue
+        fv = float(va)
+        if math.isnan(fv) or math.isinf(fv):
+            continue
+        vals.append((fv, math.log10(vc)))
+    n = len(vals)
+    if n < 80:
+        print(f"  [THRESH] SKIP: n={n} < 80 for {key_a}")
+        return None
+
+    vals.sort(key=lambda x: x[0])
+    q1_idx = n // 4
+    q2_idx = n // 2
+    q3_idx = 3 * n // 4
+    segments = [vals[:q1_idx], vals[q1_idx:q2_idx], vals[q2_idx:q3_idx], vals[q3_idx:]]
+
+    seg_r = []
+    for seg in segments:
+        if len(seg) < 15:
+            return None
+        x = np.array([v[0] for v in seg])
+        y = np.array([v[1] for v in seg])
+        if np.std(x) < 1e-10:
+            seg_r.append(0.0)
+        else:
+            r_s, _ = pearsonr(x, y)
+            seg_r.append(float(r_s))
+
+    deltas = [seg_r[i + 1] - seg_r[i] for i in range(3)]
+    max_delta_idx = max(range(3), key=lambda i: abs(deltas[i]))
+    max_quartile_delta = deltas[max_delta_idx]
+    breakpoint_label = ["Q1_Q2", "Q2_Q3", "Q3_Q4"][max_delta_idx]
+
+    all_x = np.array([v[0] for v in vals])
+    all_y = np.array([v[1] for v in vals])
+    r_full, p_full = pearsonr(all_x, all_y)
+
+    abs_delta = abs(max_quartile_delta)
+    direction = "threshold_up" if max_quartile_delta > 0 else "threshold_down"
+    strength = ("strong" if abs_delta >= 0.3 else "moderate" if abs_delta >= 0.15
+                else "weak" if abs_delta >= 0.05 else "none")
+
+    exp_id = f"exp_thresh_{key_a}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer = (get_metric_definition(key_a) or {}).get("layer", "post")
+
+    print(f"  [THRESH] {key_a}: max_delta={max_quartile_delta:+.3f} at {breakpoint_label}, "
+          f"r_full={r_full:+.3f}, n={n}")
+
+    return {
+        "id": exp_id,
+        "key": f"thresh_delta__{key_a}",
+        "kind": "threshold_delta_to_views",
+        "component_keys": [key_a],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "threshold_delta",
+            "tool_name": "Threshold Delta to Views",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "segment_r": [round(r, 4) for r in seg_r],
+                "quartile_deltas": [round(d, 4) for d in deltas],
+                "max_quartile_delta": round(max_quartile_delta, 4),
+                "breakpoint_label": breakpoint_label,
+                "r_full": float(r_full),
+                "p_full": float(p_full),
+                "n": int(n),
+            },
+        },
+        "result": {
+            "primary_r": float(r_full),
+            "max_quartile_delta": round(max_quartile_delta, 4),
+            "breakpoint_label": breakpoint_label,
+            "segment_r": [round(r, 4) for r in seg_r],
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "layer": layer,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_quantile_gap(key_a, videos):
+    """Top/bottom quantile gap: compare mean log_views in top 25% vs bottom 25%
+    of indicator A. Simple, inspectable effect size measure."""
+    vals = []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        if va is None:
+            continue
+        fv = float(va)
+        if math.isnan(fv) or math.isinf(fv):
+            continue
+        vals.append((fv, math.log10(vc)))
+    n = len(vals)
+    if n < 60:
+        print(f"  [QGAP] SKIP: n={n} < 60 for {key_a}")
+        return None
+
+    vals.sort(key=lambda x: x[0])
+    q_size = n // 4
+    if q_size < 10:
+        return None
+
+    bottom_q = vals[:q_size]
+    top_q = vals[-q_size:]
+    bottom_mean = sum(v[1] for v in bottom_q) / len(bottom_q)
+    top_mean = sum(v[1] for v in top_q) / len(top_q)
+    gap = top_mean - bottom_mean
+
+    mid_views = [v[1] for v in vals[q_size:-q_size]]
+    mid_mean = sum(mid_views) / len(mid_views) if mid_views else (top_mean + bottom_mean) / 2
+
+    all_x = np.array([v[0] for v in vals])
+    all_y = np.array([v[1] for v in vals])
+    r_full, p_full = pearsonr(all_x, all_y)
+
+    abs_gap = abs(gap)
+    direction = "top_higher" if gap > 0 else "bottom_higher"
+    strength = ("strong" if abs_gap >= 0.5 else "moderate" if abs_gap >= 0.25
+                else "weak" if abs_gap >= 0.1 else "none")
+
+    exp_id = f"exp_qgap_{key_a}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer = (get_metric_definition(key_a) or {}).get("layer", "post")
+
+    print(f"  [QGAP] {key_a}: gap={gap:+.3f} ({direction}), top={top_mean:.3f}, "
+          f"bottom={bottom_mean:.3f}, n={n}")
+
+    return {
+        "id": exp_id,
+        "key": f"quantile_gap__{key_a}",
+        "kind": "quantile_gap_to_views",
+        "component_keys": [key_a],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "quantile_gap",
+            "tool_name": "Top/Bottom Quantile Gap",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "gap": round(gap, 4),
+                "top_mean": round(top_mean, 4),
+                "bottom_mean": round(bottom_mean, 4),
+                "mid_mean": round(mid_mean, 4),
+                "r_full": float(r_full),
+                "p_full": float(p_full),
+                "n": int(n),
+                "q_size": q_size,
+            },
+        },
+        "result": {
+            "primary_r": float(r_full),
+            "gap": round(gap, 4),
+            "top_mean": round(top_mean, 4),
+            "bottom_mean": round(bottom_mean, 4),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "layer": layer,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_residual_pair(key_a, key_b, videos):
+    """Residual pair: after removing A's linear effect on views, does B still
+    have signal in the residuals? Tests incremental predictive value."""
+    xa, xb, y, n = _extract_two_vectors(key_a, key_b, videos)
+    if n < 60:
+        print(f"  [RESID] SKIP: n={n} < 60 for {key_a},{key_b}")
+        return None
+    mask = ~(np.isnan(xa) | np.isnan(xb) | np.isnan(y) |
+             np.isinf(xa) | np.isinf(xb) | np.isinf(y))
+    xa, xb, y = xa[mask], xb[mask], y[mask]
+    n = len(xa)
+    if n < 60:
+        return None
+
+    r_a_views, _ = pearsonr(xa, y)
+    r_b_views, _ = pearsonr(xb, y)
+
+    slope_a = np.polyfit(xa, y, 1)[0] if np.std(xa) > 1e-10 else 0
+    intercept_a = np.mean(y) - slope_a * np.mean(xa)
+    residuals = y - (slope_a * xa + intercept_a)
+
+    if np.std(residuals) < 1e-10:
+        return None
+    r_residual, p_residual = pearsonr(xb, residuals)
+    incremental = abs(r_residual)
+
+    abs_r = abs(r_residual)
+    direction = "positive_residual" if r_residual >= 0 else "negative_residual"
+    strength = ("strong" if abs_r >= 0.3 else "moderate" if abs_r >= 0.15
+                else "weak" if abs_r >= 0.05 else "none")
+
+    exp_id = f"exp_resid_{key_a}__{key_b}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer_a = (get_metric_definition(key_a) or {}).get("layer", "post")
+    layer_b = (get_metric_definition(key_b) or {}).get("layer", "post")
+    bridge = (layer_a != layer_b)
+
+    print(f"  [RESID] {key_b} after removing {key_a}: r_resid={r_residual:+.3f}, "
+          f"r_raw_b={r_b_views:+.3f}, n={n}, bridge={bridge}")
+
+    return {
+        "id": exp_id,
+        "key": f"resid_pair__{key_a}__{key_b}",
+        "kind": "residual_pair_to_views",
+        "component_keys": [key_a, key_b],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "residual_pair",
+            "tool_name": "Residual Pair to Views",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "r_residual": float(r_residual),
+                "p_residual": float(p_residual),
+                "r_a_views": float(r_a_views),
+                "r_b_views": float(r_b_views),
+                "incremental_signal": round(incremental, 4),
+                "n": int(n),
+            },
+        },
+        "result": {
+            "primary_r": float(r_residual),
+            "r_residual": float(r_residual),
+            "r_a_views": float(r_a_views),
+            "r_b_views": float(r_b_views),
+            "incremental_signal": round(incremental, 4),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "bridge": bridge,
+        "layer_a": layer_a,
+        "layer_b": layer_b,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
+def run_monotonic_consistency(key_a, videos):
+    """Monotonic bucket consistency: test if the bucket curve holds across
+    3, 5, and 7 bucket resolutions. High consistency = robust signal."""
+    vals = []
+    for vid in videos:
+        vc = vid.get("metadata", {}).get("viewCount", 0)
+        if not vc:
+            continue
+        va, _ = extract_metric(key_a, vid)
+        if va is None:
+            continue
+        fv = float(va)
+        if math.isnan(fv) or math.isinf(fv):
+            continue
+        vals.append((fv, math.log10(vc)))
+    n = len(vals)
+    if n < 70:
+        print(f"  [MONOCON] SKIP: n={n} < 70 for {key_a}")
+        return None
+
+    vals.sort(key=lambda x: x[0])
+
+    def _bucket_mono(n_buckets):
+        bsize = n // n_buckets
+        if bsize < 8:
+            return None
+        means = []
+        for i in range(n_buckets):
+            start = i * bsize
+            end = start + bsize if i < n_buckets - 1 else n
+            bucket = vals[start:end]
+            means.append(sum(v[1] for v in bucket) / len(bucket))
+        up = sum(1 for i in range(len(means) - 1) if means[i + 1] > means[i])
+        down = sum(1 for i in range(len(means) - 1) if means[i + 1] < means[i])
+        return max(up, down) / (n_buckets - 1)
+
+    mono_scores = {}
+    for nb in [3, 5, 7]:
+        score = _bucket_mono(nb)
+        if score is None:
+            return None
+        mono_scores[nb] = score
+
+    consistency = min(mono_scores.values())
+    avg_mono = sum(mono_scores.values()) / len(mono_scores)
+
+    all_x = np.array([v[0] for v in vals])
+    all_y = np.array([v[1] for v in vals])
+    r_full, p_full = pearsonr(all_x, all_y)
+
+    direction = "consistent_positive" if r_full >= 0 else "consistent_negative"
+    strength = ("strong" if consistency >= 0.9 else "moderate" if consistency >= 0.7
+                else "weak" if consistency >= 0.5 else "none")
+
+    exp_id = f"exp_monocon_{key_a}_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    layer = (get_metric_definition(key_a) or {}).get("layer", "post")
+
+    print(f"  [MONOCON] {key_a}: consistency={consistency:.2f}, "
+          f"avg_mono={avg_mono:.2f}, r_full={r_full:+.3f}, n={n}")
+
+    return {
+        "id": exp_id,
+        "key": f"mono_consist__{key_a}",
+        "kind": "monotonic_bucket_consistency",
+        "component_keys": [key_a],
+        "target": "views",
+        "depth": 2,
+        "resolution_id": "r0",
+        "experiment": {
+            "id": exp_id,
+            "tool_id": "monotonic_consistency",
+            "tool_name": "Monotonic Bucket Consistency",
+            "ran_at": now_iso(),
+            "n_videos": int(n),
+            "outputs": {
+                "mono_3": round(mono_scores[3], 4),
+                "mono_5": round(mono_scores[5], 4),
+                "mono_7": round(mono_scores[7], 4),
+                "consistency": round(consistency, 4),
+                "avg_mono": round(avg_mono, 4),
+                "r_full": float(r_full),
+                "p_full": float(p_full),
+                "n": int(n),
+            },
+        },
+        "result": {
+            "primary_r": float(r_full),
+            "consistency": round(consistency, 4),
+            "avg_mono": round(avg_mono, 4),
+            "mono_3": round(mono_scores[3], 4),
+            "mono_5": round(mono_scores[5], 4),
+            "mono_7": round(mono_scores[7], 4),
+            "direction": direction,
+            "strength_label": strength,
+            "status": "discovery",
+        },
+        "layer": layer,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+
+
 def _add_derived_edge(graph, derived_exp):
     """Add a derived_edge to graph from a derived experiment result."""
     if "derived_edges" not in graph:
@@ -4768,6 +5136,34 @@ def _add_derived_edge(graph, derived_exp):
     elif kind == "depth3_interaction_to_views":
         base_edge["to"] = ck[1]  # connect first two, third in component_keys
         base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "threshold_delta_to_views":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["max_quartile_delta"] = derived_exp["result"].get("max_quartile_delta")
+        base_edge["breakpoint_label"] = derived_exp["result"].get("breakpoint_label")
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "quantile_gap_to_views":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["gap"] = derived_exp["result"].get("gap")
+        base_edge["top_mean"] = derived_exp["result"].get("top_mean")
+        base_edge["bottom_mean"] = derived_exp["result"].get("bottom_mean")
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+    elif kind == "residual_pair_to_views":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["r_residual"] = derived_exp["result"].get("r_residual")
+        base_edge["r_a_views"] = derived_exp["result"].get("r_a_views")
+        base_edge["r_b_views"] = derived_exp["result"].get("r_b_views")
+        base_edge["incremental_signal"] = derived_exp["result"].get("incremental_signal")
+        base_edge["strength_label"] = derived_exp["result"]["strength_label"]
+        base_edge["direction"] = derived_exp["result"]["direction"]
+        base_edge["bridge"] = derived_exp.get("bridge", False)
+    elif kind == "monotonic_bucket_consistency":
+        base_edge["primary_r"] = derived_exp["result"]["primary_r"]
+        base_edge["consistency"] = derived_exp["result"].get("consistency")
+        base_edge["avg_mono"] = derived_exp["result"].get("avg_mono")
         base_edge["strength_label"] = derived_exp["result"]["strength_label"]
         base_edge["direction"] = derived_exp["result"]["direction"]
 
@@ -4851,14 +5247,18 @@ def generate_derived_candidates(indicators, existing_derived_keys):
         "rank_pair_correlation": [],
         "bucketed_curve_to_views": [],
         "piecewise_to_views": [],
+        "threshold_delta_to_views": [],
+        "quantile_gap_to_views": [],
+        "residual_pair_to_views": [],
+        "monotonic_bucket_consistency": [],
     }
 
-    top = _get_top_indicators(indicators, n=25)
+    top = _get_top_indicators(indicators, n=40)
     top_keys = [i["key"] for i in top]
-    top_diverse = _get_resolution_diverse_top(indicators, n=30)
+    top_diverse = _get_resolution_diverse_top(indicators, n=50)
 
     # ── pair_correlation: among top indicators + cross-layer bridge pairs ──
-    bridge_pairs = _get_bridge_pairs(indicators, max_pairs=60)
+    bridge_pairs = _get_bridge_pairs(indicators, max_pairs=100)
     seen_pc = set()
     for a, b in bridge_pairs:
         pk = f"pair_corr__{a}__{b}"
@@ -4987,6 +5387,53 @@ def generate_derived_candidates(indicators, existing_derived_keys):
         if len(candidates["piecewise_to_views"]) >= 40:
             break
 
+    # ── threshold_delta_to_views: single-indicator quartile threshold analysis ──
+    seen_td = set()
+    for ind in top_diverse:
+        k = ind["key"]
+        tk = f"thresh_delta__{k}"
+        if tk not in existing_derived_keys and k not in seen_td:
+            candidates["threshold_delta_to_views"].append((k,))
+            seen_td.add(k)
+        if len(candidates["threshold_delta_to_views"]) >= 50:
+            break
+
+    # ── quantile_gap_to_views: top/bottom 25% mean views gap ──
+    seen_qg = set()
+    for ind in top_diverse:
+        k = ind["key"]
+        qk = f"quantile_gap__{k}"
+        if qk not in existing_derived_keys and k not in seen_qg:
+            candidates["quantile_gap_to_views"].append((k,))
+            seen_qg.add(k)
+        if len(candidates["quantile_gap_to_views"]) >= 50:
+            break
+
+    # ── residual_pair_to_views: bridge pairs, test incremental value of B over A ──
+    seen_rp = set()
+    for a, b in bridge_pairs:
+        rk = f"resid_pair__{a}__{b}"
+        if rk not in existing_derived_keys and (a, b) not in seen_rp:
+            candidates["residual_pair_to_views"].append((a, b))
+            seen_rp.add((a, b))
+        rk2 = f"resid_pair__{b}__{a}"
+        if rk2 not in existing_derived_keys and (b, a) not in seen_rp:
+            candidates["residual_pair_to_views"].append((b, a))
+            seen_rp.add((b, a))
+        if len(candidates["residual_pair_to_views"]) >= 80:
+            break
+
+    # ── monotonic_bucket_consistency: multi-resolution consistency check ──
+    seen_mc = set()
+    for ind in top_diverse:
+        k = ind["key"]
+        mk = f"mono_consist__{k}"
+        if mk not in existing_derived_keys and k not in seen_mc:
+            candidates["monotonic_bucket_consistency"].append((k,))
+            seen_mc.add(k)
+        if len(candidates["monotonic_bucket_consistency"]) >= 50:
+            break
+
     total = sum(len(v) for v in candidates.values())
     parts = ", ".join(f"{k}={len(v)}" for k, v in candidates.items())
     print(f"  [DERIVED CANDIDATES] {parts} (total={total})")
@@ -5011,8 +5458,10 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
     all_kinds = kinds or ["pair_correlation", "conditional_delta_to_views",
                           "depth3_interaction_to_views",
                           "rank_pair_correlation", "bucketed_curve_to_views",
-                          "piecewise_to_views"]
-    limit = max_per_kind or 25
+                          "piecewise_to_views",
+                          "threshold_delta_to_views", "quantile_gap_to_views",
+                          "residual_pair_to_views", "monotonic_bucket_consistency"]
+    limit = max_per_kind or 50
 
     print(f"\n{'=' * 60}")
     print(f"DERIVED EXPERIMENT RUN")
@@ -5038,6 +5487,10 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
         "bucketed_curve_to_views": 2,
         "piecewise_to_views": 2,
         "depth3_interaction_to_views": 3,
+        "threshold_delta_to_views": 2,
+        "quantile_gap_to_views": 2,
+        "residual_pair_to_views": 2,
+        "monotonic_bucket_consistency": 2,
     }
     upgraded = 0
     depth_fixed = 0
@@ -5148,6 +5601,54 @@ def cmd_derived_run(max_per_kind=None, kinds=None):
                 derived.append(result)
                 _add_derived_edge(graph, result)
                 completed["piecewise_to_views"] += 1
+
+    # ── threshold_delta_to_views ──
+    if "threshold_delta_to_views" in all_kinds:
+        print(f"\n--- threshold_delta_to_views ({len(candidates.get('threshold_delta_to_views', []))} candidates) ---")
+        for (key_a,) in candidates.get("threshold_delta_to_views", []):
+            if completed["threshold_delta_to_views"] >= limit:
+                break
+            result = run_threshold_delta(key_a, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["threshold_delta_to_views"] += 1
+
+    # ── quantile_gap_to_views ──
+    if "quantile_gap_to_views" in all_kinds:
+        print(f"\n--- quantile_gap_to_views ({len(candidates.get('quantile_gap_to_views', []))} candidates) ---")
+        for (key_a,) in candidates.get("quantile_gap_to_views", []):
+            if completed["quantile_gap_to_views"] >= limit:
+                break
+            result = run_quantile_gap(key_a, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["quantile_gap_to_views"] += 1
+
+    # ── residual_pair_to_views ──
+    if "residual_pair_to_views" in all_kinds:
+        print(f"\n--- residual_pair_to_views ({len(candidates.get('residual_pair_to_views', []))} candidates) ---")
+        for key_a, key_b in candidates.get("residual_pair_to_views", []):
+            if completed["residual_pair_to_views"] >= limit:
+                break
+            result = run_residual_pair(key_a, key_b, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["residual_pair_to_views"] += 1
+
+    # ── monotonic_bucket_consistency ──
+    if "monotonic_bucket_consistency" in all_kinds:
+        print(f"\n--- monotonic_bucket_consistency ({len(candidates.get('monotonic_bucket_consistency', []))} candidates) ---")
+        for (key_a,) in candidates.get("monotonic_bucket_consistency", []):
+            if completed["monotonic_bucket_consistency"] >= limit:
+                break
+            result = run_monotonic_consistency(key_a, videos)
+            if result:
+                derived.append(result)
+                _add_derived_edge(graph, result)
+                completed["monotonic_bucket_consistency"] += 1
 
     # ── Save all ──
     save_json(DERIVED_EXPERIMENTS_FILE, derived)
