@@ -2171,19 +2171,43 @@ const LibraryUI = (() => {
         overlay.innerHTML = `
             <div class="library-script-overlay-header">
                 <span class="script-overlay-label">Script</span>
+                <span class="script-overlay-status"></span>
                 <button class="script-overlay-done">Done</button>
             </div>
             <textarea class="library-script-overlay-textarea"></textarea>
         `;
         const ta = overlay.querySelector('textarea');
+        const overlayStatus = overlay.querySelector('.script-overlay-status');
         ta.value = scriptEl.value;
         document.body.appendChild(overlay);
         ta.focus();
+
+        // Mirror save status into the overlay header
+        const srcStatus = document.getElementById('library-save-status');
+        let obs;
+        if (srcStatus && overlayStatus) {
+            const mirror = () => {
+                overlayStatus.textContent = srcStatus.textContent;
+                overlayStatus.className = 'script-overlay-status' +
+                    (srcStatus.classList.contains('saved') ? ' saved' :
+                     srcStatus.classList.contains('saving') ? ' saving' : '');
+            };
+            mirror();
+            obs = new MutationObserver(mirror);
+            obs.observe(srcStatus, { childList: true, characterData: true, subtree: true });
+        }
+
+        // Continuously sync edits back to the source textarea and trigger save
+        ta.addEventListener('input', () => {
+            scriptEl.value = ta.value;
+            scriptEl.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
         overlay.querySelector('.script-overlay-done').addEventListener('click', () => {
             scriptEl.value = ta.value;
             scriptEl.dispatchEvent(new Event('input', { bubbles: true }));
+            if (obs) obs.disconnect();
             overlay.remove();
-            if (saveFn) saveFn();
         });
     }
 

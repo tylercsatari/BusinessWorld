@@ -1426,6 +1426,7 @@ const IncubatorUI = (() => {
             <div class="inline-script-header">
                 <span class="inline-script-title">${escHtml(label || 'Script')}</span>
                 <div class="inline-script-actions">
+                    <button class="inline-script-fullscreen-btn" title="Fullscreen editing"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>
                     <span class="inline-script-toggle">&#9654;</span>
                 </div>
             </div>
@@ -1490,6 +1491,53 @@ const IncubatorUI = (() => {
                 dirty = true;
                 console.warn('Inline script: save failed', e);
             }
+        }
+
+        // Fullscreen editing overlay
+        const fullscreenBtn = containerDiv.querySelector('.inline-script-fullscreen-btn');
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const overlay = document.createElement('div');
+                overlay.className = 'library-script-overlay';
+                overlay.innerHTML = `
+                    <div class="library-script-overlay-header">
+                        <span class="script-overlay-label">Script</span>
+                        <span class="script-overlay-status"></span>
+                        <button class="script-overlay-done">Done</button>
+                    </div>
+                    <textarea class="library-script-overlay-textarea"></textarea>
+                `;
+                const ta = overlay.querySelector('textarea');
+                const overlayStatus = overlay.querySelector('.script-overlay-status');
+                ta.value = textarea.value;
+                document.body.appendChild(overlay);
+                ta.focus();
+
+                // Mirror save status into overlay
+                const mirrorStatus = () => {
+                    overlayStatus.textContent = statusEl.textContent;
+                    overlayStatus.className = 'script-overlay-status' +
+                        (statusEl.classList.contains('saved') ? ' saved' :
+                         statusEl.classList.contains('saving') ? ' saving' : '');
+                };
+                mirrorStatus();
+                const obs = new MutationObserver(mirrorStatus);
+                obs.observe(statusEl, { childList: true, characterData: true, subtree: true });
+
+                // Continuously sync edits to inline textarea and trigger save
+                ta.addEventListener('input', () => {
+                    textarea.value = ta.value;
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+
+                overlay.querySelector('.script-overlay-done').addEventListener('click', () => {
+                    textarea.value = ta.value;
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    obs.disconnect();
+                    overlay.remove();
+                });
+            });
         }
 
         return () => {

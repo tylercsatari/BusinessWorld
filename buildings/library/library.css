@@ -1479,6 +1479,20 @@
     gap: 6px;
     align-items: center;
 }
+.inline-script-fullscreen-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #999;
+    padding: 2px 4px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 4px;
+}
+.inline-script-fullscreen-btn:hover {
+    color: #5a3e1b;
+    background: rgba(90, 62, 27, 0.08);
+}
 .inline-script-unlink {
     background: none;
     border: 1px solid #ddd;
@@ -2715,6 +2729,14 @@
     font-size: 18px;
     color: #5a3e1b;
 }
+.script-overlay-status {
+    font-size: 12px;
+    color: #8e8e93;
+    margin-left: auto;
+    margin-right: 12px;
+}
+.script-overlay-status.saved { color: #34c759; }
+.script-overlay-status.saving { color: #ff9500; }
 .library-script-overlay-header .script-overlay-done {
     background: none;
     border: none;
