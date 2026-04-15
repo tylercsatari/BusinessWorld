@@ -330,6 +330,30 @@ const ZYGARNIK_PHRASE_SETS = {
         "the longer you wait", "every second counts", "do it now", "as soon as",
         "no time to waste", "urgent",
     ],
+    delayed_gratification: [
+        'worth the wait', 'pay off', 'by the end', 'stay for', 'keep watching',
+        'coming up', 'before I show', 'first let me', 'later in', 'trust me',
+        'about to', 'stick around', 'do not skip', 'the result is', 'big reveal',
+        'the answer is', 'finally shows', 'almost there', 'hold on',
+    ],
+    reference_callback: [
+        'remember when', 'as I mentioned', 'I said earlier', 'going back to',
+        'like I showed', 'that is why', 'which means', 'so now', 'this is why',
+        'this proves', 'see what I mean', 'full circle', 'coming back to',
+        'here is the proof', 'just like I said', 'pays off now', 'and now you see',
+    ],
+    visual_proof: [
+        'look at', 'watch this', 'notice', 'see here', 'right here',
+        'look closely', 'can you see', 'as you can see', 'proof right here',
+        'before and after', 'compare', 'spot the difference', 'did you catch',
+        'pay attention', 'look at that', 'side by side', 'evidence right here',
+    ],
+    story_stake: [
+        'everything depends', 'make or break', 'on the line', 'all or nothing',
+        'cost me', 'no choice', 'last chance', 'final attempt', 'biggest mistake',
+        'if this fails', 'high stakes', 'do or die', 'critical moment',
+        'cannot fail', 'must succeed', 'everything on the line', 'nothing to lose',
+    ],
 };
 
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
@@ -380,6 +404,24 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'demonstration_frame_pct',
     'result_reveal_frame_pct',
     'proof_before_midpoint_flag',
+    'delayed_gratification_density',
+    'delayed_gratification_count',
+    'reference_callback_density',
+    'reference_callback_count',
+    'visual_proof_density',
+    'visual_proof_count',
+    'story_stake_density',
+    'story_stake_count',
+    'open_loop_density_mid',
+    'closure_density_mid',
+    'story_stake_density_first_quarter',
+    'visual_proof_density_hook',
+    'reference_callback_density_mid',
+    'pre_gratification_open_loop_count',
+    'stake_introduction_position_pct',
+    'proof_density_post_midpoint',
+    'callback_before_payoff_flag',
+    'delayed_gratification_peak_position_pct',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -474,6 +516,26 @@ const INTERACTION_BASES = [
     "reward_density_first_half",
     "foreshadow_density_hook",
     "proof_before_midpoint_flag",
+    // Group I: Delayed gratification & reference-callback
+    'delayed_gratification_density',
+    'reference_callback_density',
+    'visual_proof_density',
+    'story_stake_density',
+    'open_loop_density_mid',
+    'closure_density_mid',
+    'story_stake_density_first_quarter',
+    'visual_proof_density_hook',
+    'reference_callback_density_mid',
+    'pre_gratification_open_loop_count',
+    'stake_introduction_position_pct',
+    'proof_density_post_midpoint',
+    'callback_before_payoff_flag',
+    // Group J: Underused metrics now added as bases
+    'title_question_flag',
+    'title_number_flag',
+    'hook_number_density',
+    'identity_hook_density',
+    'story_arc_front_load_ratio',
 ];
 
 // Static metric definitions — keys that have hardcoded extraction logic
@@ -1851,6 +1913,82 @@ function extractMetric(key, analysis) {
         return [proofPos != null && proofPos < 0.5 ? 1 : 0, null];
     }
 
+    if (key === 'open_loop_density_mid') {
+        const mid = segments.filter((_, i) => i >= segments.length * 0.33 && i < segments.length * 0.67);
+        const text = mid.map(s => s.transcript || '').join(' ').toLowerCase();
+        return text.split(/\s+/).length < 3 ? [null, 'insufficient text'] : [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.open_loop) / Math.max(1, text.split(/\s+/).length) * 100, null];
+    }
+
+    if (key === 'closure_density_mid') {
+        const mid = segments.filter((_, i) => i >= segments.length * 0.33 && i < segments.length * 0.67);
+        const text = mid.map(s => s.transcript || '').join(' ').toLowerCase();
+        return text.split(/\s+/).length < 3 ? [null, 'insufficient text'] : [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.closure) / Math.max(1, text.split(/\s+/).length) * 100, null];
+    }
+
+    if (key === 'story_stake_density_first_quarter') {
+        const q1 = segments.filter((_, i) => i < segments.length * 0.25);
+        const text = q1.map(s => s.transcript || '').join(' ').toLowerCase();
+        return text.split(/\s+/).length < 3 ? [null, 'insufficient text'] : [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.story_stake) / Math.max(1, text.split(/\s+/).length) * 100, null];
+    }
+
+    if (key === 'visual_proof_density_hook') {
+        const dur = meta.duration || 60;
+        const hook = segments.filter(s => (s.startTime || 0) < dur * 0.1);
+        const text = hook.map(s => s.transcript || '').join(' ').toLowerCase();
+        return text.split(/\s+/).length < 3 ? [null, 'insufficient text'] : [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.visual_proof) / Math.max(1, text.split(/\s+/).length) * 100, null];
+    }
+
+    if (key === 'reference_callback_density_mid') {
+        const mid = segments.filter((_, i) => i >= segments.length * 0.33 && i < segments.length * 0.67);
+        const text = mid.map(s => s.transcript || '').join(' ').toLowerCase();
+        return text.split(/\s+/).length < 3 ? [null, 'insufficient text'] : [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.reference_callback) / Math.max(1, text.split(/\s+/).length) * 100, null];
+    }
+
+    if (key === 'pre_gratification_open_loop_count') {
+        let firstGratIdx = segments.length;
+        for (let i = 0; i < segments.length; i++) {
+            const t = (segments[i].transcript || '').toLowerCase();
+            if (countPhraseMatches(t, ZYGARNIK_PHRASE_SETS.delayed_gratification) > 0) { firstGratIdx = i; break; }
+        }
+        const pre = segments.slice(0, firstGratIdx);
+        const text = pre.map(s => s.transcript || '').join(' ').toLowerCase();
+        return [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.open_loop), null];
+    }
+
+    if (key === 'stake_introduction_position_pct') {
+        for (let i = 0; i < segments.length; i++) {
+            const t = (segments[i].transcript || '').toLowerCase();
+            if (countPhraseMatches(t, ZYGARNIK_PHRASE_SETS.story_stake) > 0) {
+                return [Math.round((i / Math.max(1, segments.length)) * 100), null];
+            }
+        }
+        return [100, null];
+    }
+
+    if (key === 'proof_density_post_midpoint') {
+        const post = segments.filter((_, i) => i >= segments.length * 0.5);
+        const text = post.map(s => s.transcript || '').join(' ').toLowerCase();
+        return text.split(/\s+/).length < 3 ? [null, 'insufficient text'] : [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.visual_proof) / Math.max(1, text.split(/\s+/).length) * 100, null];
+    }
+
+    if (key === 'callback_before_payoff_flag') {
+        const midPoint = Math.floor(segments.length * 0.5);
+        const preMid = segments.slice(0, midPoint);
+        const text = preMid.map(s => s.transcript || '').join(' ').toLowerCase();
+        return [countPhraseMatches(text, ZYGARNIK_PHRASE_SETS.reference_callback) > 0 ? 1 : 0, null];
+    }
+
+    if (key === 'delayed_gratification_peak_position_pct') {
+        if (!segments.length) return [null, 'no segments'];
+        let peakDen = -1, peakPos = 50;
+        segments.forEach((seg, idx) => {
+            const t = seg.transcript || '';
+            const den = countPhraseMatches(t.toLowerCase(), ZYGARNIK_PHRASE_SETS.delayed_gratification) / Math.max(1, t.split(/\s+/).length);
+            if (den > peakDen) { peakDen = den; peakPos = Math.round((idx / segments.length) * 100); }
+        });
+        return [peakPos, null];
+    }
+
     if (key === "hook_identity_flag") {
         const ht = hookText();
         if (!ht) return [0, null];
@@ -2015,6 +2153,17 @@ function generateAutonomousCandidates() {
         "reward_density_first_half", "foreshadow_density_hook",
         "demonstration_frame_pct", "result_reveal_frame_pct",
         "proof_before_midpoint_flag",
+    ]) {
+        candidates.push(k);
+    }
+
+    // Group I: New temporal/proof/stake computed keys
+    for (const k of [
+        'open_loop_density_mid', 'closure_density_mid', 'story_stake_density_first_quarter',
+        'visual_proof_density_hook', 'reference_callback_density_mid',
+        'pre_gratification_open_loop_count', 'stake_introduction_position_pct',
+        'proof_density_post_midpoint', 'callback_before_payoff_flag',
+        'delayed_gratification_peak_position_pct',
     ]) {
         candidates.push(k);
     }
@@ -2185,6 +2334,15 @@ for (const fam of ZYGARNIK_FAMILIES) {
 }
 for (const k of ZYGARNIK_SPECIAL_KEYS) {
     INDICATOR_RESOLUTION_MAP[k] = k.includes('hook') ? ['r_hook', 0, 10, null, null] : ['r0', 0, 100, null, null];
+}
+for (const k of [
+    'open_loop_density_mid', 'closure_density_mid', 'story_stake_density_first_quarter',
+    'visual_proof_density_hook', 'reference_callback_density_mid',
+    'pre_gratification_open_loop_count', 'stake_introduction_position_pct',
+    'proof_density_post_midpoint', 'callback_before_payoff_flag',
+    'delayed_gratification_peak_position_pct',
+]) {
+    INDICATOR_RESOLUTION_MAP[k] = ['r0', 0, 100, null, null];
 }
 
 const DEFAULT_RESOLUTION_DEFS = {
