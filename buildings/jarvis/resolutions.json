@@ -6784,7 +6784,15 @@
       "retention_pct_50_x_subs_gained_per_view",
       "retention_pct_50_x_retention_pct_10",
       "retention_pct_50_x_retention_75pct",
-      "retention_pct_50_x_retention_90pct"
+      "retention_pct_50_x_retention_90pct",
+      "retention_pct_50_x_emotional_peak_position_pct",
+      "retention_pct_50_x_revelation_pace_score",
+      "retention_pct_25_x_transformation_density",
+      "retention_pct_25_x_vulnerability_density",
+      "retention_pct_25_x_specificity_anchor_density",
+      "transformation_count",
+      "transformation_count_first15s",
+      "transformation_count_first20s"
     ],
     "depth_in_hierarchy": 0
   },
@@ -7089,7 +7097,12 @@
       "story_stake_density_first3s",
       "story_stake_density_first5s",
       "story_stake_density_first8s",
-      "story_stake_density_first10s"
+      "story_stake_density_first10s",
+      "transformation_count_first2s",
+      "transformation_count_first3s",
+      "transformation_count_first5s",
+      "transformation_count_first8s",
+      "transformation_count_first10s"
     ],
     "depth_in_hierarchy": 1
   },
