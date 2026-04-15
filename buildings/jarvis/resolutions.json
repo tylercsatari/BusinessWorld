@@ -19929,7 +19929,16 @@
       "hook_retention_pct_x_payoff_signal_count_hook",
       "payoff_signal_count_hook_x_non_sub_view_share",
       "reference_callback_count_x_setup_duration_pct",
-      "setup_duration_pct_x_reference_callback_count"
+      "setup_duration_pct_x_reference_callback_count",
+      "reference_callback_count_x_hook_tension_ratio",
+      "hook_tension_ratio_x_reference_callback_count",
+      "reference_callback_count_x_hook_open_loop_density",
+      "hook_open_loop_density_x_reference_callback_count",
+      "reference_callback_count_x_open_loop_density",
+      "non_sub_view_share_x_payoff_signal_count_hook",
+      "payoff_signal_count_hook_x_like_rate",
+      "like_rate_x_payoff_signal_count_hook",
+      "open_loop_density_x_reference_callback_count"
     ],
     "depth_in_hierarchy": 0
   },
