@@ -1217,7 +1217,13 @@
         "tension_peak_position_pct",
         "story_arc_front_load_ratio",
         "stakes_density",
-        "stakes_density_hook"
+        "stakes_density_hook",
+        "loss_aversion_density",
+        "credibility_signal_density",
+        "reward_language_density",
+        "foreshadow_density",
+        "urgency_density",
+        "open_loop_density_first_quarter"
       ],
       "description": "Retention at 25% into the video.",
       "experiment_id": "exp_retention_pct_25_20260409_222535",
@@ -2086,7 +2092,9 @@
         "open_loop_density_last_quarter",
         "tension_closure_balance",
         "first_closure_position_pct",
-        "reward_density_first_half"
+        "reward_density_first_half",
+        "foreshadow_density_hook",
+        "proof_before_midpoint_flag"
       ],
       "description": "unique word ratio",
       "experiment_id": "exp_unique_word_ratio_20260410034427.",
@@ -2543,7 +2551,21 @@
         "hook_number_density",
         "tension_peak_position_pct",
         "story_arc_front_load_ratio",
-        "swipe_away_rate"
+        "swipe_away_rate",
+        "stakes_density",
+        "stakes_density_hook",
+        "loss_aversion_density",
+        "credibility_signal_density",
+        "reward_language_density",
+        "foreshadow_density",
+        "urgency_density",
+        "open_loop_density_first_quarter",
+        "open_loop_density_last_quarter",
+        "tension_closure_balance",
+        "first_closure_position_pct",
+        "reward_density_first_half",
+        "foreshadow_density_hook",
+        "proof_before_midpoint_flag"
       ],
       "description": "scene change rate",
       "experiment_id": "exp_scene_change_rate_20260410034428.",
@@ -2803,7 +2825,21 @@
         "hook_number_density",
         "tension_peak_position_pct",
         "story_arc_front_load_ratio",
-        "swipe_away_rate"
+        "swipe_away_rate",
+        "stakes_density",
+        "stakes_density_hook",
+        "loss_aversion_density",
+        "credibility_signal_density",
+        "reward_language_density",
+        "foreshadow_density",
+        "urgency_density",
+        "open_loop_density_first_quarter",
+        "open_loop_density_last_quarter",
+        "tension_closure_balance",
+        "first_closure_position_pct",
+        "reward_density_first_half",
+        "foreshadow_density_hook",
+        "proof_before_midpoint_flag"
       ],
       "description": "hook duration pct",
       "experiment_id": "exp_hook_duration_pct_20260410034428.",
@@ -2901,7 +2937,13 @@
         "hook_number_density",
         "tension_peak_position_pct",
         "story_arc_front_load_ratio",
-        "swipe_away_rate"
+        "swipe_away_rate",
+        "stakes_density",
+        "stakes_density_hook",
+        "loss_aversion_density",
+        "credibility_signal_density",
+        "reward_language_density",
+        "foreshadow_density"
       ],
       "description": "avg segment duration s",
       "experiment_id": "exp_avg_segment_duration_s_20260410034428.",
@@ -3159,7 +3201,21 @@
         "hook_number_density",
         "tension_peak_position_pct",
         "story_arc_front_load_ratio",
-        "swipe_away_rate"
+        "swipe_away_rate",
+        "stakes_density",
+        "stakes_density_hook",
+        "loss_aversion_density",
+        "credibility_signal_density",
+        "reward_language_density",
+        "foreshadow_density",
+        "urgency_density",
+        "open_loop_density_first_quarter",
+        "open_loop_density_last_quarter",
+        "tension_closure_balance",
+        "first_closure_position_pct",
+        "reward_density_first_half",
+        "foreshadow_density_hook",
+        "proof_before_midpoint_flag"
       ],
       "description": "title word count",
       "experiment_id": "exp_title_word_count_20260410034428.",
@@ -17836,7 +17892,12 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "retention_pct_25",
+        "title_word_count",
+        "avg_segment_duration_s"
       ],
       "description": "foreshadow density",
       "experiment_id": "exp_foreshadow_density_20260415064319.",
@@ -17856,7 +17917,12 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "retention_pct_25",
+        "hook_duration_pct",
+        "title_word_count",
+        "avg_segment_duration_s"
       ],
       "description": "credibility signal density",
       "experiment_id": "exp_credibility_signal_density_20260415064447.",
@@ -17876,7 +17942,12 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "retention_pct_25",
+        "title_word_count",
+        "avg_segment_duration_s"
       ],
       "description": "reward language density",
       "experiment_id": "exp_reward_language_density_20260415064546.",
@@ -17896,7 +17967,12 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "retention_pct_25",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count",
+        "avg_segment_duration_s"
       ],
       "description": "loss aversion density",
       "experiment_id": "exp_loss_aversion_density_20260415064644.",
@@ -17916,7 +17992,11 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count",
+        "retention_pct_25"
       ],
       "description": "urgency density",
       "experiment_id": "exp_urgency_density_20260415064739.",
@@ -17937,7 +18017,11 @@
         "speech_rate_wps",
         "face_frame_pct",
         "retention_pct_25",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count",
+        "avg_segment_duration_s"
       ],
       "description": "stakes density",
       "experiment_id": "exp_stakes_density_20260415064800.",
@@ -17958,7 +18042,11 @@
         "speech_rate_wps",
         "face_frame_pct",
         "unique_word_ratio",
-        "retention_pct_25"
+        "retention_pct_25",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count",
+        "avg_segment_duration_s"
       ],
       "description": "stakes density hook",
       "experiment_id": "exp_stakes_density_hook_20260415064831.",
@@ -17978,7 +18066,11 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count",
+        "retention_pct_25"
       ],
       "description": "open loop density first quarter",
       "experiment_id": "exp_open_loop_density_first_quarter_20260415064850.",
@@ -17998,7 +18090,10 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count"
       ],
       "description": "open loop density last quarter",
       "experiment_id": "exp_open_loop_density_last_quarter_20260415064904.",
@@ -18018,7 +18113,10 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count"
       ],
       "description": "tension closure balance",
       "experiment_id": "exp_tension_closure_balance_20260415064919.",
@@ -18038,7 +18136,10 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count"
       ],
       "description": "first closure position pct",
       "experiment_id": "exp_first_closure_position_pct_20260415064937.",
@@ -18058,7 +18159,10 @@
         "retention_pct_50",
         "speech_rate_wps",
         "face_frame_pct",
-        "unique_word_ratio"
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count"
       ],
       "description": "reward density first half",
       "experiment_id": "exp_reward_density_first_half_20260415064954.",
@@ -18077,7 +18181,11 @@
         "views",
         "retention_pct_50",
         "speech_rate_wps",
-        "face_frame_pct"
+        "face_frame_pct",
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count"
       ],
       "description": "foreshadow density hook",
       "experiment_id": "exp_foreshadow_density_hook_20260415065008.",
@@ -18128,7 +18236,11 @@
         "views",
         "speech_rate_wps",
         "retention_pct_50",
-        "face_frame_pct"
+        "face_frame_pct",
+        "unique_word_ratio",
+        "scene_change_rate",
+        "hook_duration_pct",
+        "title_word_count"
       ],
       "description": "proof before midpoint flag",
       "experiment_id": "exp_proof_before_midpoint_flag_20260415065106.",
@@ -22821,7 +22933,7 @@
       "added_at": "2026-04-15T06:51:06.860Z"
     }
   ],
-  "updated_at": "2026-04-15T07:02:30.234Z",
+  "updated_at": "2026-04-15T07:17:38.854Z",
   "derived_edges": [
     {
       "from": "final_5pct_retention",
@@ -116559,6 +116671,1014 @@
       "strength_label": "none",
       "direction": "positive",
       "added_at": "2026-04-15T07:02:30.234Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "foreshadow_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_foreshadow_density_hook",
+      "experiment_key": "unique_word_ratio_x_foreshadow_density_hook",
+      "interaction_r": -0.017662189693989788,
+      "component_keys": [
+        "unique_word_ratio",
+        "foreshadow_density_hook"
+      ],
+      "experiment_id": "exp_unique_word_ratio_x_foreshadow_density_hook_20260415070243.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:02:43.848Z"
+    },
+    {
+      "from": "unique_word_ratio",
+      "to": "proof_before_midpoint_flag",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "unique_word_ratio_x_proof_before_midpoint_flag",
+      "experiment_key": "unique_word_ratio_x_proof_before_midpoint_flag",
+      "interaction_r": 0.10363529969758728,
+      "component_keys": [
+        "unique_word_ratio",
+        "proof_before_midpoint_flag"
+      ],
+      "experiment_id": "exp_unique_word_ratio_x_proof_before_midpoint_flag_20260415070259.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:02:59.518Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "stakes_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_stakes_density",
+      "experiment_key": "scene_change_rate_x_stakes_density",
+      "interaction_r": -0.01398258387501347,
+      "component_keys": [
+        "scene_change_rate",
+        "stakes_density"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_stakes_density_20260415070316.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:03:16.547Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "stakes_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_stakes_density_hook",
+      "experiment_key": "scene_change_rate_x_stakes_density_hook",
+      "interaction_r": -0.01829564711191775,
+      "component_keys": [
+        "scene_change_rate",
+        "stakes_density_hook"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_stakes_density_hook_20260415070335.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:03:35.558Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "loss_aversion_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_loss_aversion_density",
+      "experiment_key": "retention_pct_25_x_loss_aversion_density",
+      "interaction_r": 0.00154483216559868,
+      "component_keys": [
+        "retention_pct_25",
+        "loss_aversion_density"
+      ],
+      "experiment_id": "exp_retention_pct_25_x_loss_aversion_density_20260415070357.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:03:57.241Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "loss_aversion_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_loss_aversion_density",
+      "experiment_key": "scene_change_rate_x_loss_aversion_density",
+      "interaction_r": 0.0015448321655986892,
+      "component_keys": [
+        "scene_change_rate",
+        "loss_aversion_density"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_loss_aversion_density_20260415070412.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:04:12.939Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "credibility_signal_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_credibility_signal_density",
+      "experiment_key": "scene_change_rate_x_credibility_signal_density",
+      "interaction_r": 0.1272676683047966,
+      "component_keys": [
+        "scene_change_rate",
+        "credibility_signal_density"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_credibility_signal_density_20260415070432.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:04:32.188Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "reward_language_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_reward_language_density",
+      "experiment_key": "scene_change_rate_x_reward_language_density",
+      "interaction_r": 0.07370193554932013,
+      "component_keys": [
+        "scene_change_rate",
+        "reward_language_density"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_reward_language_density_20260415070450.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:04:50.930Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "foreshadow_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_foreshadow_density",
+      "experiment_key": "scene_change_rate_x_foreshadow_density",
+      "interaction_r": -0.007211828043672859,
+      "component_keys": [
+        "scene_change_rate",
+        "foreshadow_density"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_foreshadow_density_20260415070507.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:05:07.522Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "urgency_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_urgency_density",
+      "experiment_key": "scene_change_rate_x_urgency_density",
+      "interaction_r": -0.04294233412872645,
+      "component_keys": [
+        "scene_change_rate",
+        "urgency_density"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_urgency_density_20260415070521.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:05:21.553Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "open_loop_density_first_quarter",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_open_loop_density_first_quarter",
+      "experiment_key": "scene_change_rate_x_open_loop_density_first_quarter",
+      "interaction_r": 0.09336960117730549,
+      "component_keys": [
+        "scene_change_rate",
+        "open_loop_density_first_quarter"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_open_loop_density_first_quarter_20260415070537.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:05:37.106Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "open_loop_density_last_quarter",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_open_loop_density_last_quarter",
+      "experiment_key": "scene_change_rate_x_open_loop_density_last_quarter",
+      "interaction_r": 0.02385479362921505,
+      "component_keys": [
+        "scene_change_rate",
+        "open_loop_density_last_quarter"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_open_loop_density_last_quarter_20260415070557.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:05:57.485Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "tension_closure_balance",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_tension_closure_balance",
+      "experiment_key": "scene_change_rate_x_tension_closure_balance",
+      "interaction_r": 0.08572268079857395,
+      "component_keys": [
+        "scene_change_rate",
+        "tension_closure_balance"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_tension_closure_balance_20260415070612.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:06:12.369Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "first_closure_position_pct",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_first_closure_position_pct",
+      "experiment_key": "scene_change_rate_x_first_closure_position_pct",
+      "interaction_r": -0.10513478167140353,
+      "component_keys": [
+        "scene_change_rate",
+        "first_closure_position_pct"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_first_closure_position_pct_20260415070627.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:06:27.378Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "credibility_signal_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_credibility_signal_density",
+      "experiment_key": "retention_pct_25_x_credibility_signal_density",
+      "interaction_r": 0.13315695158165117,
+      "component_keys": [
+        "retention_pct_25",
+        "credibility_signal_density"
+      ],
+      "experiment_id": "exp_retention_pct_25_x_credibility_signal_density_20260415070642.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:06:42.953Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "reward_density_first_half",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_reward_density_first_half",
+      "experiment_key": "scene_change_rate_x_reward_density_first_half",
+      "interaction_r": 0.08834400726178814,
+      "component_keys": [
+        "scene_change_rate",
+        "reward_density_first_half"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_reward_density_first_half_20260415070657.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:06:57.497Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "foreshadow_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_foreshadow_density_hook",
+      "experiment_key": "scene_change_rate_x_foreshadow_density_hook",
+      "interaction_r": -0.017662189693989645,
+      "component_keys": [
+        "scene_change_rate",
+        "foreshadow_density_hook"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_foreshadow_density_hook_20260415070712.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:07:12.545Z"
+    },
+    {
+      "from": "scene_change_rate",
+      "to": "proof_before_midpoint_flag",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "scene_change_rate_x_proof_before_midpoint_flag",
+      "experiment_key": "scene_change_rate_x_proof_before_midpoint_flag",
+      "interaction_r": 0.11515437957550115,
+      "component_keys": [
+        "scene_change_rate",
+        "proof_before_midpoint_flag"
+      ],
+      "experiment_id": "exp_scene_change_rate_x_proof_before_midpoint_flag_20260415070727.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:07:27.209Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "stakes_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_stakes_density",
+      "experiment_key": "hook_duration_pct_x_stakes_density",
+      "interaction_r": -0.04606171171641312,
+      "component_keys": [
+        "hook_duration_pct",
+        "stakes_density"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_stakes_density_20260415070747.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:07:47.154Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "stakes_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_stakes_density_hook",
+      "experiment_key": "hook_duration_pct_x_stakes_density_hook",
+      "interaction_r": -0.04555416805335396,
+      "component_keys": [
+        "hook_duration_pct",
+        "stakes_density_hook"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_stakes_density_hook_20260415070803.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:08:03.883Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "loss_aversion_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_loss_aversion_density",
+      "experiment_key": "hook_duration_pct_x_loss_aversion_density",
+      "interaction_r": 0.001544832165598694,
+      "component_keys": [
+        "hook_duration_pct",
+        "loss_aversion_density"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_loss_aversion_density_20260415070818.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:08:18.840Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "credibility_signal_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_credibility_signal_density",
+      "experiment_key": "hook_duration_pct_x_credibility_signal_density",
+      "interaction_r": 0.07227256346409225,
+      "component_keys": [
+        "hook_duration_pct",
+        "credibility_signal_density"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_credibility_signal_density_20260415070838.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:08:38.552Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "reward_language_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_reward_language_density",
+      "experiment_key": "hook_duration_pct_x_reward_language_density",
+      "interaction_r": 0.062244443211967086,
+      "component_keys": [
+        "hook_duration_pct",
+        "reward_language_density"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_reward_language_density_20260415070855.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:08:55.647Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "foreshadow_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_foreshadow_density",
+      "experiment_key": "hook_duration_pct_x_foreshadow_density",
+      "interaction_r": -0.0011882248273521383,
+      "component_keys": [
+        "hook_duration_pct",
+        "foreshadow_density"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_foreshadow_density_20260415070910.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:09:10.816Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "reward_language_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_reward_language_density",
+      "experiment_key": "retention_pct_25_x_reward_language_density",
+      "interaction_r": 0.089204500233244,
+      "component_keys": [
+        "retention_pct_25",
+        "reward_language_density"
+      ],
+      "experiment_id": "exp_retention_pct_25_x_reward_language_density_20260415070926.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:09:26.078Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "urgency_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_urgency_density",
+      "experiment_key": "hook_duration_pct_x_urgency_density",
+      "interaction_r": -0.07152739737721679,
+      "component_keys": [
+        "hook_duration_pct",
+        "urgency_density"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_urgency_density_20260415070940.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:09:40.112Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "open_loop_density_first_quarter",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_open_loop_density_first_quarter",
+      "experiment_key": "hook_duration_pct_x_open_loop_density_first_quarter",
+      "interaction_r": 0.07714554466618069,
+      "component_keys": [
+        "hook_duration_pct",
+        "open_loop_density_first_quarter"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_open_loop_density_first_quarter_20260415070954.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:09:54.848Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "open_loop_density_last_quarter",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_open_loop_density_last_quarter",
+      "experiment_key": "hook_duration_pct_x_open_loop_density_last_quarter",
+      "interaction_r": -0.02916803749840471,
+      "component_keys": [
+        "hook_duration_pct",
+        "open_loop_density_last_quarter"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_open_loop_density_last_quarter_20260415071009.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:10:09.591Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "tension_closure_balance",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_tension_closure_balance",
+      "experiment_key": "hook_duration_pct_x_tension_closure_balance",
+      "interaction_r": 0.06217442591523754,
+      "component_keys": [
+        "hook_duration_pct",
+        "tension_closure_balance"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_tension_closure_balance_20260415071023.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:10:23.631Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "first_closure_position_pct",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_first_closure_position_pct",
+      "experiment_key": "hook_duration_pct_x_first_closure_position_pct",
+      "interaction_r": 0.000023404813099719206,
+      "component_keys": [
+        "hook_duration_pct",
+        "first_closure_position_pct"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_first_closure_position_pct_20260415071038.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:10:38.674Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "reward_density_first_half",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_reward_density_first_half",
+      "experiment_key": "hook_duration_pct_x_reward_density_first_half",
+      "interaction_r": 0.07082438545925401,
+      "component_keys": [
+        "hook_duration_pct",
+        "reward_density_first_half"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_reward_density_first_half_20260415071053.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:10:53.726Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "foreshadow_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_foreshadow_density_hook",
+      "experiment_key": "hook_duration_pct_x_foreshadow_density_hook",
+      "interaction_r": -0.017662189693989888,
+      "component_keys": [
+        "hook_duration_pct",
+        "foreshadow_density_hook"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_foreshadow_density_hook_20260415071109.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:11:09.281Z"
+    },
+    {
+      "from": "hook_duration_pct",
+      "to": "proof_before_midpoint_flag",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "hook_duration_pct_x_proof_before_midpoint_flag",
+      "experiment_key": "hook_duration_pct_x_proof_before_midpoint_flag",
+      "interaction_r": 0.08983230801525491,
+      "component_keys": [
+        "hook_duration_pct",
+        "proof_before_midpoint_flag"
+      ],
+      "experiment_id": "exp_hook_duration_pct_x_proof_before_midpoint_flag_20260415071128.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:11:28.311Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "stakes_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_stakes_density",
+      "experiment_key": "title_word_count_x_stakes_density",
+      "interaction_r": -0.02810695051048197,
+      "component_keys": [
+        "title_word_count",
+        "stakes_density"
+      ],
+      "experiment_id": "exp_title_word_count_x_stakes_density_20260415071147.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:11:47.797Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "foreshadow_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_foreshadow_density",
+      "experiment_key": "retention_pct_25_x_foreshadow_density",
+      "interaction_r": 0.0065462382416204,
+      "component_keys": [
+        "retention_pct_25",
+        "foreshadow_density"
+      ],
+      "experiment_id": "exp_retention_pct_25_x_foreshadow_density_20260415071204.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:12:04.097Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "stakes_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_stakes_density_hook",
+      "experiment_key": "title_word_count_x_stakes_density_hook",
+      "interaction_r": -0.03745382902820344,
+      "component_keys": [
+        "title_word_count",
+        "stakes_density_hook"
+      ],
+      "experiment_id": "exp_title_word_count_x_stakes_density_hook_20260415071218.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:12:18.733Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "loss_aversion_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_loss_aversion_density",
+      "experiment_key": "title_word_count_x_loss_aversion_density",
+      "interaction_r": 0.0015448321655986892,
+      "component_keys": [
+        "title_word_count",
+        "loss_aversion_density"
+      ],
+      "experiment_id": "exp_title_word_count_x_loss_aversion_density_20260415071237.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:12:37.792Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "credibility_signal_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_credibility_signal_density",
+      "experiment_key": "title_word_count_x_credibility_signal_density",
+      "interaction_r": 0.13900630943435746,
+      "component_keys": [
+        "title_word_count",
+        "credibility_signal_density"
+      ],
+      "experiment_id": "exp_title_word_count_x_credibility_signal_density_20260415071255.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:12:55.786Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "reward_language_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_reward_language_density",
+      "experiment_key": "title_word_count_x_reward_language_density",
+      "interaction_r": 0.0646952464677535,
+      "component_keys": [
+        "title_word_count",
+        "reward_language_density"
+      ],
+      "experiment_id": "exp_title_word_count_x_reward_language_density_20260415071312.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:13:12.276Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "foreshadow_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_foreshadow_density",
+      "experiment_key": "title_word_count_x_foreshadow_density",
+      "interaction_r": -0.02602405272167812,
+      "component_keys": [
+        "title_word_count",
+        "foreshadow_density"
+      ],
+      "experiment_id": "exp_title_word_count_x_foreshadow_density_20260415071327.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:13:27.940Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "urgency_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_urgency_density",
+      "experiment_key": "title_word_count_x_urgency_density",
+      "interaction_r": -0.04206451769943807,
+      "component_keys": [
+        "title_word_count",
+        "urgency_density"
+      ],
+      "experiment_id": "exp_title_word_count_x_urgency_density_20260415071343.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:13:43.610Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "open_loop_density_first_quarter",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_open_loop_density_first_quarter",
+      "experiment_key": "title_word_count_x_open_loop_density_first_quarter",
+      "interaction_r": 0.09341553247759421,
+      "component_keys": [
+        "title_word_count",
+        "open_loop_density_first_quarter"
+      ],
+      "experiment_id": "exp_title_word_count_x_open_loop_density_first_quarter_20260415071358.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:13:58.053Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "open_loop_density_last_quarter",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_open_loop_density_last_quarter",
+      "experiment_key": "title_word_count_x_open_loop_density_last_quarter",
+      "interaction_r": 0.02372849622382041,
+      "component_keys": [
+        "title_word_count",
+        "open_loop_density_last_quarter"
+      ],
+      "experiment_id": "exp_title_word_count_x_open_loop_density_last_quarter_20260415071412.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:14:12.587Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "tension_closure_balance",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_tension_closure_balance",
+      "experiment_key": "title_word_count_x_tension_closure_balance",
+      "interaction_r": 0.11158169705488793,
+      "component_keys": [
+        "title_word_count",
+        "tension_closure_balance"
+      ],
+      "experiment_id": "exp_title_word_count_x_tension_closure_balance_20260415071427.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:14:27.648Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "urgency_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_urgency_density",
+      "experiment_key": "retention_pct_25_x_urgency_density",
+      "interaction_r": -0.014451083489303806,
+      "component_keys": [
+        "retention_pct_25",
+        "urgency_density"
+      ],
+      "experiment_id": "exp_retention_pct_25_x_urgency_density_20260415071442.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:14:42.385Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "first_closure_position_pct",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_first_closure_position_pct",
+      "experiment_key": "title_word_count_x_first_closure_position_pct",
+      "interaction_r": -0.11314741796224834,
+      "component_keys": [
+        "title_word_count",
+        "first_closure_position_pct"
+      ],
+      "experiment_id": "exp_title_word_count_x_first_closure_position_pct_20260415071456.",
+      "strength_label": "weak",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:14:56.418Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "reward_density_first_half",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_reward_density_first_half",
+      "experiment_key": "title_word_count_x_reward_density_first_half",
+      "interaction_r": 0.09361957124568629,
+      "component_keys": [
+        "title_word_count",
+        "reward_density_first_half"
+      ],
+      "experiment_id": "exp_title_word_count_x_reward_density_first_half_20260415071512.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:15:12.594Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "foreshadow_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_foreshadow_density_hook",
+      "experiment_key": "title_word_count_x_foreshadow_density_hook",
+      "interaction_r": -0.017662189693989715,
+      "component_keys": [
+        "title_word_count",
+        "foreshadow_density_hook"
+      ],
+      "experiment_id": "exp_title_word_count_x_foreshadow_density_hook_20260415071526.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:15:26.617Z"
+    },
+    {
+      "from": "title_word_count",
+      "to": "proof_before_midpoint_flag",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "title_word_count_x_proof_before_midpoint_flag",
+      "experiment_key": "title_word_count_x_proof_before_midpoint_flag",
+      "interaction_r": 0.09895181581679934,
+      "component_keys": [
+        "title_word_count",
+        "proof_before_midpoint_flag"
+      ],
+      "experiment_id": "exp_title_word_count_x_proof_before_midpoint_flag_20260415071544.",
+      "strength_label": "none",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:15:44.858Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "stakes_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "avg_segment_duration_s_x_stakes_density",
+      "experiment_key": "avg_segment_duration_s_x_stakes_density",
+      "interaction_r": -0.06792446194426409,
+      "component_keys": [
+        "avg_segment_duration_s",
+        "stakes_density"
+      ],
+      "experiment_id": "exp_avg_segment_duration_s_x_stakes_density_20260415071601.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:16:01.338Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "stakes_density_hook",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "avg_segment_duration_s_x_stakes_density_hook",
+      "experiment_key": "avg_segment_duration_s_x_stakes_density_hook",
+      "interaction_r": -0.06952529505540443,
+      "component_keys": [
+        "avg_segment_duration_s",
+        "stakes_density_hook"
+      ],
+      "experiment_id": "exp_avg_segment_duration_s_x_stakes_density_hook_20260415071616.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:16:16.204Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "loss_aversion_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "avg_segment_duration_s_x_loss_aversion_density",
+      "experiment_key": "avg_segment_duration_s_x_loss_aversion_density",
+      "interaction_r": -0.0018945946371779366,
+      "component_keys": [
+        "avg_segment_duration_s",
+        "loss_aversion_density"
+      ],
+      "experiment_id": "exp_avg_segment_duration_s_x_loss_aversion_density_20260415071634.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:16:34.219Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "credibility_signal_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "avg_segment_duration_s_x_credibility_signal_density",
+      "experiment_key": "avg_segment_duration_s_x_credibility_signal_density",
+      "interaction_r": 0.14300759679202818,
+      "component_keys": [
+        "avg_segment_duration_s",
+        "credibility_signal_density"
+      ],
+      "experiment_id": "exp_avg_segment_duration_s_x_credibility_signal_density_20260415071651.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:16:51.404Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "reward_language_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "avg_segment_duration_s_x_reward_language_density",
+      "experiment_key": "avg_segment_duration_s_x_reward_language_density",
+      "interaction_r": 0.10536812120658169,
+      "component_keys": [
+        "avg_segment_duration_s",
+        "reward_language_density"
+      ],
+      "experiment_id": "exp_avg_segment_duration_s_x_reward_language_density_20260415071706.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:17:06.382Z"
+    },
+    {
+      "from": "retention_pct_25",
+      "to": "open_loop_density_first_quarter",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "retention_pct_25_x_open_loop_density_first_quarter",
+      "experiment_key": "retention_pct_25_x_open_loop_density_first_quarter",
+      "interaction_r": 0.1022864344072957,
+      "component_keys": [
+        "retention_pct_25",
+        "open_loop_density_first_quarter"
+      ],
+      "experiment_id": "exp_retention_pct_25_x_open_loop_density_first_quarter_20260415071721.",
+      "strength_label": "weak",
+      "direction": "positive",
+      "added_at": "2026-04-15T07:17:21.149Z"
+    },
+    {
+      "from": "avg_segment_duration_s",
+      "to": "foreshadow_density",
+      "kind": "interaction_to_views",
+      "depth": 2,
+      "target": "views",
+      "interaction_key": "avg_segment_duration_s_x_foreshadow_density",
+      "experiment_key": "avg_segment_duration_s_x_foreshadow_density",
+      "interaction_r": -0.013276711237093617,
+      "component_keys": [
+        "avg_segment_duration_s",
+        "foreshadow_density"
+      ],
+      "experiment_id": "exp_avg_segment_duration_s_x_foreshadow_density_20260415071738.",
+      "strength_label": "none",
+      "direction": "negative",
+      "added_at": "2026-04-15T07:17:38.854Z"
     }
   ]
 }
