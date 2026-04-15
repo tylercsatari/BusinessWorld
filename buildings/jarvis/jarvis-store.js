@@ -7,7 +7,10 @@
  */
 const path = require('path');
 const fs = require('fs');
-const { uploadToR2, downloadFromR2, existsInR2, isR2Ready } = require('../../cloud-storage');
+const cloudStorage = require('../../cloud-storage');
+const { uploadToR2, downloadFromR2, existsInR2, isR2Ready } = cloudStorage;
+// Auto-init R2 if credentials are present (needed when store runs outside server.js context)
+if (!isR2Ready()) cloudStorage.initR2();
 
 const R2_PREFIX = 'jarvis/';
 const JARVIS_DIR = __dirname;
