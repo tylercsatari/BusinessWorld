@@ -6836,7 +6836,8 @@
       "speech_rate_wps_x_subs_gained_per_view",
       "emotional_peak_density_first20s",
       "revelation_pace_count",
-      "revelation_pace_count_first15s"
+      "revelation_pace_count_first15s",
+      "speech_rate_wps_x_retention_pct_10"
     ],
     "depth_in_hierarchy": 0
   },
