@@ -19803,7 +19803,13 @@
       "comment_rate_x_visual_credibility_count",
       "visual_credibility_count_x_retention_75pct",
       "retention_75pct_x_visual_credibility_count",
-      "visual_credibility_count_x_retention_90pct"
+      "visual_credibility_count_x_retention_90pct",
+      "retention_90pct_x_visual_credibility_count",
+      "visual_credibility_count_x_retention_pct_10",
+      "retention_pct_10_x_visual_credibility_count",
+      "visual_credibility_count_x_subs_gained_per_view",
+      "subs_gained_per_view_x_visual_credibility_count",
+      "visual_credibility_density_x_hook_drop_rate"
     ],
     "depth_in_hierarchy": 0
   },
@@ -20270,7 +20276,25 @@
       "visual_credibility_count_first20s",
       "visual_credibility_density_first2s",
       "visual_credibility_density_first3s",
-      "visual_credibility_density_first5s"
+      "visual_credibility_density_first5s",
+      "visual_credibility_density_first8s",
+      "visual_credibility_density_first10s",
+      "visual_credibility_density_first15s",
+      "visual_credibility_density_first20s",
+      "payoff_signal_count_first2s",
+      "payoff_signal_count_first3s",
+      "payoff_signal_count_first5s",
+      "payoff_signal_count_first8s",
+      "payoff_signal_count_first10s",
+      "payoff_signal_count_first15s",
+      "payoff_signal_count_first20s",
+      "payoff_signal_density_first2s",
+      "payoff_signal_density_first3s",
+      "payoff_signal_density_first5s",
+      "payoff_signal_density_first8s",
+      "payoff_signal_density_first10s",
+      "payoff_signal_density_first15s",
+      "payoff_signal_density_first20s"
     ],
     "depth_in_hierarchy": 1
   },
