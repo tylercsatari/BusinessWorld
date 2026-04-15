@@ -5,6 +5,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.995.0",
     "@aws-sdk/s3-request-presigner": "^3.995.0",
+    "dotenv": "^17.4.2",
     "form-data": "^4.0.5",
     "pdfkit": "^0.17.2",
     "plaid": "^41.4.0",
