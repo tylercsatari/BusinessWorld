@@ -6792,7 +6792,11 @@
       "retention_pct_25_x_specificity_anchor_density",
       "transformation_count",
       "transformation_count_first15s",
-      "transformation_count_first20s"
+      "transformation_count_first20s",
+      "transformation_density",
+      "transformation_density_first15s",
+      "transformation_density_first20s",
+      "vulnerability_count"
     ],
     "depth_in_hierarchy": 0
   },
@@ -7102,7 +7106,12 @@
       "transformation_count_first3s",
       "transformation_count_first5s",
       "transformation_count_first8s",
-      "transformation_count_first10s"
+      "transformation_count_first10s",
+      "transformation_density_first2s",
+      "transformation_density_first3s",
+      "transformation_density_first5s",
+      "transformation_density_first8s",
+      "transformation_density_first10s"
     ],
     "depth_in_hierarchy": 1
   },

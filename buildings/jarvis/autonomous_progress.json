@@ -1,205 +1,134 @@
 {
-  "active": false,
-  "run_id": "auto_20260415100136.",
+  "active": true,
+  "run_id": "auto_20260415110146.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-15T10:01:36.440Z",
-  "updated_at": "2026-04-15T10:31:55.062Z",
-  "finished_at": "2026-04-15T10:31:55.062Z",
+  "started_at": "2026-04-15T11:01:46.489Z",
+  "updated_at": "2026-04-15T11:05:11.407Z",
+  "finished_at": null,
   "requested_iterations": 5000,
-  "attempted": 98,
-  "completed": 94,
+  "attempted": 14,
+  "completed": 9,
   "failures": 4,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 7,
-  "stop_reason": "max_minutes",
-  "current_candidate": null,
-  "last_completed_candidate": "transformation_count_first20s",
-  "last_completed_r": 0.0475,
+  "no_signal_streak": 0,
+  "stop_reason": null,
+  "current_candidate": "vulnerability_count_first2s",
+  "last_completed_candidate": "vulnerability_count",
+  "last_completed_r": 0.0681,
   "recent_events": [
     {
-      "type": "completed",
-      "key": "story_stake_count_first15s",
-      "r": 0.0117,
-      "resolution_id": "r0",
-      "target": "views",
+      "type": "failed",
+      "key": "climax_position_pct",
+      "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-15T10:25:44.460Z"
+      "ts": "2026-04-15T11:02:01.163Z"
+    },
+    {
+      "type": "failed",
+      "key": "hook_to_climax_gap_s",
+      "reason": "processIndicator returned null",
+      "layer": "pre",
+      "ts": "2026-04-15T11:02:01.929Z"
     },
     {
       "type": "completed",
-      "key": "retention_pct_25_x_vulnerability_density",
-      "r": 0.0726,
+      "key": "transformation_density",
+      "r": -0.0807,
       "resolution_id": "r0",
       "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-15T11:02:20.373Z"
+    },
+    {
+      "type": "completed",
+      "key": "transformation_density_first2s",
+      "r": 0,
+      "resolution_id": "r_hook",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-15T11:02:37.776Z"
+    },
+    {
+      "type": "completed",
+      "key": "transformation_density_first3s",
+      "r": 0,
+      "resolution_id": "r_hook",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-15T11:03:00.416Z"
+    },
+    {
+      "type": "completed",
+      "key": "transformation_density_first5s",
+      "r": 0,
+      "resolution_id": "r_hook",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-15T11:03:21.954Z"
+    },
+    {
+      "type": "completed",
+      "key": "transformation_density_first8s",
+      "r": 0,
+      "resolution_id": "r_hook",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-15T11:03:48.239Z"
+    },
+    {
+      "type": "completed",
+      "key": "transformation_density_first10s",
+      "r": 0,
+      "resolution_id": "r_hook",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-15T11:04:09.013Z"
+    },
+    {
+      "type": "failed",
+      "key": "retention_pct_50_x_emotional_peak_position_pct",
+      "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-15T10:26:02.049Z"
+      "ts": "2026-04-15T11:04:09.807Z"
     },
     {
-      "type": "completed",
-      "key": "story_stake_count_first20s",
-      "r": 0.0117,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:26:20.187Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density",
-      "r": 0.002,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:26:39.485Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density_first2s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:27:02.395Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density_first3s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:27:21.460Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density_first5s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:27:42.966Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density_first8s",
-      "r": 0.0015,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:28:06.128Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density_first10s",
-      "r": 0.0015,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:28:23.541Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density_first15s",
-      "r": 0.0104,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:28:41.435Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_density_first20s",
-      "r": 0.0104,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:28:59.354Z"
-    },
-    {
-      "type": "completed",
-      "key": "retention_pct_25_x_specificity_anchor_density",
-      "r": 0.1086,
-      "resolution_id": "r0",
-      "target": "views",
+      "type": "failed",
+      "key": "retention_pct_50_x_revelation_pace_score",
+      "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-15T10:29:17.502Z"
+      "ts": "2026-04-15T11:04:10.812Z"
     },
     {
       "type": "completed",
-      "key": "transformation_count",
-      "r": -0.0801,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:29:34.484Z"
-    },
-    {
-      "type": "completed",
-      "key": "transformation_count_first2s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:29:52.942Z"
-    },
-    {
-      "type": "completed",
-      "key": "transformation_count_first3s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:30:10.532Z"
-    },
-    {
-      "type": "completed",
-      "key": "transformation_count_first5s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:30:27.832Z"
-    },
-    {
-      "type": "completed",
-      "key": "transformation_count_first8s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:30:48.794Z"
-    },
-    {
-      "type": "completed",
-      "key": "transformation_count_first10s",
-      "r": 0,
-      "resolution_id": "r_hook",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-15T10:31:13.313Z"
-    },
-    {
-      "type": "completed",
-      "key": "transformation_count_first15s",
+      "key": "transformation_density_first15s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-15T10:31:31.350Z"
+      "ts": "2026-04-15T11:04:30.214Z"
     },
     {
       "type": "completed",
-      "key": "transformation_count_first20s",
+      "key": "transformation_density_first20s",
       "r": 0.0475,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-15T10:31:54.563Z"
+      "ts": "2026-04-15T11:04:50.489Z"
+    },
+    {
+      "type": "completed",
+      "key": "vulnerability_count",
+      "r": 0.0681,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-15T11:05:10.784Z"
     }
   ],
-  "pre_attempted": 89,
-  "pre_completed": 87,
-  "post_attempted": 9,
-  "post_completed": 7
+  "pre_attempted": 12,
+  "pre_completed": 9,
+  "post_attempted": 2,
+  "post_completed": 0
 }
