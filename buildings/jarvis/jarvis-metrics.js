@@ -354,6 +354,58 @@ const ZYGARNIK_PHRASE_SETS = {
         'if this fails', 'high stakes', 'do or die', 'critical moment',
         'cannot fail', 'must succeed', 'everything on the line', 'nothing to lose',
     ],
+    transformation: [
+        'used to be', 'turned it around', 'changed everything', 'from zero to',
+        'a year later', 'six months of', 'i was broke', 'now i make',
+        'the old me', 'new version', 'completely different', 'unrecognisable',
+        'my life before', 'look where i am now', 'never thought i would',
+        'before this happened', 'after i changed', 'i became', 'transformed my',
+    ],
+    vulnerability: [
+        'i am embarrassed', 'i was ashamed', 'no one knew', 'i never told',
+        'this is hard to say', 'i almost quit', 'i failed', 'my biggest regret',
+        'i was scared', 'i cried', 'i felt like a fraud', 'imposter syndrome',
+        'i doubted myself', 'i made a mistake', 'i was wrong about',
+        'i wish someone told me', 'i was not okay', 'i struggled',
+    ],
+    specificity_anchor: [
+        'at exactly', 'in just', 'after only', 'exactly how much', 'the exact number',
+        'in 30 days', 'in 90 days', 'specific', 'precisely', 'to the dollar',
+        'down to the day', 'per month', 'per year', 'step one', 'step two',
+        'step three', 'here are the five', 'the three reasons', 'exactly',
+    ],
+    micro_commitment: [
+        'if you are still watching', 'comment below', 'let me know', 'tell me',
+        'drop a', 'save this', 'share this', 'you with me', 'follow along',
+        'do this with me', 'take notes', 'write this down', 'pause here',
+        'try this', 'test this', 'bookmark this', 'nod your head', 'stay with me',
+    ],
+    emotional_peak: [
+        'unbelievable', 'i cannot believe', 'this blew my mind', 'shocked',
+        'jaw dropped', 'mind blown', 'electric', 'heart racing', 'goosebumps',
+        'surreal', 'overwhelming', 'speechless', 'in tears', 'screaming inside',
+        'best feeling ever', 'worst feeling', 'i lost it', 'completely lost it',
+    ],
+    revelation_pace: [
+        'first i need to explain', 'before we get to', 'there is more',
+        'but that is not all', 'i saved the best', 'the final piece',
+        'one more thing', 'and here is the kicker', 'plot thickens',
+        'wait there is more', 'the last part', 'and then it gets worse',
+        'but it gets better', 'the twist comes', 'the real reason',
+    ],
+    social_contrast: [
+        'most people do not know', 'while everyone else', 'they do not want you to know',
+        'the real truth', 'what i know that you', 'the insider secret',
+        'what nobody tells you', 'hidden from', 'they hide this',
+        'the thing they never teach', 'mainstream does not', 'what the pros know',
+        'what beginners miss', 'the hack they do not share', 'what i learned the hard way',
+    ],
+    anticipatory_build: [
+        'just a few more', 'almost ready', 'we are getting close', 'nearly there',
+        'patience', 'the wait is almost over', 'building to', 'leading up to',
+        'every second closer', 'worth it trust me', 'not long now', 'you will thank me',
+        'getting warmer', 'closer and closer', 'right around the corner',
+    ],
 };
 
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
@@ -422,6 +474,33 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'proof_density_post_midpoint',
     'callback_before_payoff_flag',
     'delayed_gratification_peak_position_pct',
+    // Group K: Transformation & vulnerability arcs
+    'transformation_density',
+    'transformation_density_hook',
+    'vulnerability_density',
+    'vulnerability_density_hook',
+    'specificity_anchor_density',
+    'specificity_anchor_density_hook',
+    // Group L: Commitment & emotion escalation
+    'micro_commitment_density',
+    'micro_commitment_density_hook',
+    'emotional_peak_density',
+    'emotional_peak_density_first_quarter',
+    'emotional_peak_density_last_quarter',
+    // Group M: Revelation pace & social contrast
+    'revelation_pace_density',
+    'revelation_pace_density_mid',
+    'social_contrast_density',
+    'social_contrast_density_hook',
+    'anticipatory_build_density',
+    'anticipatory_build_density_hook',
+    // Group N: Derived arc-position metrics
+    'early_stakes_flag',
+    'emotional_peak_position_pct',
+    'transformation_arc_flag',
+    'vulnerability_before_proof_flag',
+    'revelation_pace_score',
+    'social_contrast_hook_flag',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -536,6 +615,25 @@ const INTERACTION_BASES = [
     'hook_number_density',
     'identity_hook_density',
     'story_arc_front_load_ratio',
+    // Group K bases
+    'transformation_density',
+    'vulnerability_density',
+    'specificity_anchor_density',
+    'micro_commitment_density',
+    'emotional_peak_density',
+    'revelation_pace_density',
+    'social_contrast_density',
+    'anticipatory_build_density',
+    // Group L bases — underused engagement metrics (key names match STATIC_KEYS)
+    'comment_rate',
+    'share_rate',
+    'subs_gained_per_view',
+    'retention_pct_10',   // retention_pct_N pattern; no explicit retention_10pct in STATIC_KEYS
+    'retention_75pct',    // exists as retention_75pct in STATIC_KEYS
+    'retention_90pct',    // exists as retention_90pct in STATIC_KEYS
+    // Group M bases — new arc-position scalars
+    'emotional_peak_position_pct',
+    'revelation_pace_score',
 ];
 
 // Static metric definitions — keys that have hardcoded extraction logic
@@ -1193,7 +1291,8 @@ function extractMetric(key, analysis) {
     // ── Zygarnik / Open-Loop / Gratification Delay families ────────────
 
     // Phrase family metrics: {family}_{count|density}[_first{N}s]
-    const zyFamMatch = key.match(/^(open_loop|closure|unresolved_ref|temporal_anticipation|contrast|superlative|action_verb|sensory|imperative|outcome_ref|suspense|identity_hook|social_proof|scarcity|pattern_interrupt)_(count|density)(?:_first(\d+)s)?$/);
+    const _zyFamRe = new RegExp(`^(${ZYGARNIK_FAMILIES.join('|')})_(count|density)(?:_first(\\d+)s)?$`);
+    const zyFamMatch = key.match(_zyFamRe);
     if (zyFamMatch) {
         const [, family, measure, windowStr] = zyFamMatch;
         if (!transcript) return [null, 'no transcript'];
@@ -1993,6 +2092,84 @@ function extractMetric(key, analysis) {
         const ht = hookText();
         if (!ht) return [0, null];
         return [countPhraseMatches(ht.toLowerCase(), ZYGARNIK_PHRASE_SETS.identity_hook) > 0 ? 1 : 0, null];
+    }
+
+    // ── Group N: Arc-position derived metrics ────────────────────────────
+
+    if (key === 'early_stakes_flag') {
+        if (!transcript) return [0, null];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const first15 = words.slice(0, Math.ceil(words.length * 0.15)).join(' ');
+        const hasStake = ZYGARNIK_PHRASE_SETS.stakes_high.some(p => first15.includes(p)) ||
+                         ZYGARNIK_PHRASE_SETS.story_stake.some(p => first15.includes(p));
+        return [hasStake ? 1 : 0, null];
+    }
+
+    if (key === 'emotional_peak_position_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        let firstMatchWordIdx = -1;
+        for (const phrase of ZYGARNIK_PHRASE_SETS.emotional_peak) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0) {
+                const wordIdx = tl.slice(0, pos).split(/\s+/).filter(Boolean).length;
+                if (firstMatchWordIdx < 0 || wordIdx < firstMatchWordIdx) firstMatchWordIdx = wordIdx;
+            }
+        }
+        if (firstMatchWordIdx < 0) return [null, null];
+        return [firstMatchWordIdx / words.length * 100, null];
+    }
+
+    if (key === 'transformation_arc_flag') {
+        if (!transcript) return [0, null];
+        const tl = transcript.toLowerCase();
+        const hasTransformation = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.transformation) > 0;
+        if (!hasTransformation) return [0, null];
+        const [proofBefore] = extractMetric('proof_before_midpoint_flag', analysis);
+        return [proofBefore === 1 ? 1 : 0, null];
+    }
+
+    if (key === 'vulnerability_before_proof_flag') {
+        if (!transcript) return [0, null];
+        const tl = transcript.toLowerCase();
+        let firstVuln = -1, firstCred = -1;
+        for (const phrase of ZYGARNIK_PHRASE_SETS.vulnerability) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (firstVuln < 0 || pos < firstVuln)) firstVuln = pos;
+        }
+        for (const phrase of ZYGARNIK_PHRASE_SETS.credibility_signal) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (firstCred < 0 || pos < firstCred)) firstCred = pos;
+        }
+        if (firstVuln < 0 || firstCred < 0) return [0, null];
+        return [firstVuln < firstCred ? 1 : 0, null];
+    }
+
+    if (key === 'revelation_pace_score') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const mid = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, mid).join(' ');
+        const secondHalf = words.slice(mid).join(' ');
+        const firstCount = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.revelation_pace);
+        if (firstCount === 0) return [null, null];
+        const secondCount = countPhraseMatches(secondHalf, ZYGARNIK_PHRASE_SETS.revelation_pace);
+        return [secondCount / firstCount, null];
+    }
+
+    if (key === 'social_contrast_hook_flag') {
+        if (!transcript) return [0, null];
+        const dur = meta.duration || 0;
+        const hookWin = windowedTranscript(transcript, dur || transcript.length, 10);
+        if (!hookWin) return [0, null];
+        const hasContrast = ZYGARNIK_PHRASE_SETS.social_contrast.some(p => hookWin.toLowerCase().includes(p));
+        return [hasContrast ? 1 : 0, null];
     }
 
     // ── Pattern-based keys ───────────────────────────────────────────────
