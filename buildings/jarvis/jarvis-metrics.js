@@ -476,6 +476,62 @@ const NEW_CLOSING_HOOK_PHRASES = [
     'hold on', 'now here is', 'one last', 'quick thing', 'i almost forgot',
 ];
 
+// ── Group Q phrase sets ───────────────────────────────────────────────────
+
+const ANTICIPATION_PHRASES = [
+    'wait for it', "here's the thing", "you won't believe", 'before i show you',
+    'but first', 'hold on', "here's what happened", 'wait until you see',
+    'you need to see this', 'stay with me', 'trust me on this',
+    'this is where it gets', 'it gets better', 'it gets worse', 'what happens next',
+];
+
+const COUNTERINTUITIVE_PHRASES = [
+    'actually', 'surprisingly', 'counterintuitively', "you'd think",
+    'most people think', 'the truth is', 'turns out', 'it turns out',
+    'plot twist', "here's the twist", "not what you'd expect",
+    'against all odds', 'nobody expected', 'the opposite', 'contrary to',
+    'what actually happened', 'what really works', 'what i found instead',
+];
+
+const CONFESSION_PHRASES = [
+    'i was wrong', 'i made a mistake', 'i failed', 'honestly',
+    'truth is', 'i struggled', "it wasn't easy", 'i almost gave up',
+    "i didn't know", 'i had no idea', 'embarrassing', 'hard to admit',
+    'i was scared', 'i was nervous', 'the real reason', 'behind the scenes',
+    'what nobody shows', 'the ugly truth',
+];
+
+const ESCALATION_PHRASES = [
+    'and then', 'but then', "what's worse", 'it gets worse',
+    'even more', 'and on top of that', 'to make matters worse',
+    "but here's the thing", "that's when", "and that's when",
+    'which means', 'so naturally', 'so i decided', 'so what did i do',
+    'the next step', 'what happened next',
+];
+
+const SPECIFICITY_PHRASES = [
+    'exactly', 'specifically', 'precisely', 'in particular',
+    'to be exact', 'to be specific', 'the specific', 'the exact',
+    'for instance', 'for example', 'such as', 'like this',
+    "here's an example", 'case study', 'data shows', 'the numbers show',
+    'the stat', 'the statistic',
+];
+
+const CALLBACK_PHRASES = [
+    'as i mentioned', 'remember when', 'earlier i said', 'going back to',
+    'like i said', 'as we saw', 'as you saw', 'we talked about',
+    'i talked about', 'i mentioned earlier', 'this connects to',
+    'this ties back', 'which brings us back', 'full circle', 'coming full circle',
+];
+
+const URGENCY_PHRASES = [
+    "don't miss", 'watch till the end', 'watch to the end', 'stay till the end',
+    "before it's too late", 'limited time', 'right now', 'today only',
+    'act now', 'time is running out', "don't scroll past", 'stop scrolling',
+    'you need to watch', 'most important', 'the most important thing',
+    'pay attention', 'this matters', 'this is crucial', 'this changes everything',
+];
+
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
 const ZYGARNIK_EARLY_WINDOWS = [2, 3, 5, 8, 10, 15, 20];
 
@@ -2709,6 +2765,218 @@ function extractMetric(key, analysis) {
             if (va != null && vb != null) return [va * vb, null];
             return [null, skipA || skipB || 'missing component'];
         }
+    }
+
+    // ── Group Q: Anticipation language ──────────────────────────────────────
+
+    if (key === 'anticipation_phrase_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), ANTICIPATION_PHRASES), null];
+    }
+    if (key === 'anticipation_phrase_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), ANTICIPATION_PHRASES) / words.length, null];
+    }
+    if (key === 'anticipation_phrase_count_first10s') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ');
+        return [countPhraseMatches(first10.toLowerCase(), ANTICIPATION_PHRASES), null];
+    }
+    if (key === 'anticipation_front_load_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const mid = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, mid).join(' ').toLowerCase();
+        const secondHalf = words.slice(mid).join(' ').toLowerCase();
+        const c1 = countPhraseMatches(firstHalf, ANTICIPATION_PHRASES);
+        const c2 = countPhraseMatches(secondHalf, ANTICIPATION_PHRASES);
+        return [c1 / (c2 + 0.001), null];
+    }
+
+    // ── Group Q: Counterintuitive/reveal signals ─────────────────────────
+
+    if (key === 'counterintuitive_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), COUNTERINTUITIVE_PHRASES), null];
+    }
+    if (key === 'counterintuitive_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), COUNTERINTUITIVE_PHRASES) / words.length, null];
+    }
+    if (key === 'counterintuitive_count_first_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, COUNTERINTUITIVE_PHRASES), null];
+    }
+    if (key === 'counterintuitive_count_first10s') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, COUNTERINTUITIVE_PHRASES), null];
+    }
+
+    // ── Group Q: Confession/vulnerability signals ────────────────────────
+
+    if (key === 'confession_signal_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CONFESSION_PHRASES), null];
+    }
+    if (key === 'confession_signal_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CONFESSION_PHRASES) / words.length, null];
+    }
+    if (key === 'confession_first_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, CONFESSION_PHRASES), null];
+    }
+    if (key === 'confession_hook_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, CONFESSION_PHRASES), null];
+    }
+
+    // ── Group Q: Escalation language ─────────────────────────────────────
+
+    if (key === 'escalation_phrase_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), ESCALATION_PHRASES), null];
+    }
+    if (key === 'escalation_phrase_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), ESCALATION_PHRASES) / words.length, null];
+    }
+    if (key === 'escalation_count_first_third') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstThird = words.slice(0, Math.ceil(words.length / 3)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstThird, ESCALATION_PHRASES), null];
+    }
+    if (key === 'escalation_count_mid_third') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const start = Math.floor(words.length / 3);
+        const end = Math.ceil(words.length * 2 / 3);
+        const midThird = words.slice(start, end).join(' ').toLowerCase();
+        return [countPhraseMatches(midThird, ESCALATION_PHRASES), null];
+    }
+
+    // ── Group Q: Specificity markers ─────────────────────────────────────
+
+    if (key === 'numeric_specificity_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const matches = transcript.match(/\b\d+(?:\.\d+)?(?:%|x|k|m|b|s|sec|min|hour|day|week|month|year)?\b/gi);
+        return [matches ? matches.length : 0, null];
+    }
+    if (key === 'numeric_specificity_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const matches = transcript.match(/\b\d+(?:\.\d+)?(?:%|x|k|m|b|s|sec|min|hour|day|week|month|year)?\b/gi);
+        return [(matches ? matches.length : 0) / words.length, null];
+    }
+    if (key === 'numeric_specificity_first_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ');
+        const matches = firstHalf.match(/\b\d+(?:\.\d+)?(?:%|x|k|m|b|s|sec|min|hour|day|week|month|year)?\b/gi);
+        return [matches ? matches.length : 0, null];
+    }
+    if (key === 'specificity_phrase_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), SPECIFICITY_PHRASES), null];
+    }
+    if (key === 'specificity_phrase_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), SPECIFICITY_PHRASES) / words.length, null];
+    }
+
+    // ── Group Q: Narrative callback signals ──────────────────────────────
+
+    if (key === 'callback_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CALLBACK_PHRASES), null];
+    }
+    if (key === 'callback_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CALLBACK_PHRASES) / words.length, null];
+    }
+    if (key === 'callback_second_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const secondHalf = words.slice(Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(secondHalf, CALLBACK_PHRASES), null];
+    }
+    if (key === 'callback_last_third_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const lastThird = words.slice(Math.floor(words.length * 2 / 3)).join(' ').toLowerCase();
+        return [countPhraseMatches(lastThird, CALLBACK_PHRASES), null];
+    }
+
+    // ── Group Q: Urgency/FOMO signals ────────────────────────────────────
+
+    if (key === 'urgency_signal_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), URGENCY_PHRASES), null];
+    }
+    if (key === 'urgency_signal_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), URGENCY_PHRASES) / words.length, null];
+    }
+    if (key === 'urgency_count_first_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstQuarter = words.slice(0, Math.ceil(words.length * 0.25)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstQuarter, URGENCY_PHRASES), null];
+    }
+    if (key === 'urgency_count_last_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const lastQuarter = words.slice(Math.floor(words.length * 0.75)).join(' ').toLowerCase();
+        return [countPhraseMatches(lastQuarter, URGENCY_PHRASES), null];
+    }
+    if (key === 'urgency_front_load_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const mid = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, mid).join(' ').toLowerCase();
+        const secondHalf = words.slice(mid).join(' ').toLowerCase();
+        const c1 = countPhraseMatches(firstHalf, URGENCY_PHRASES);
+        const c2 = countPhraseMatches(secondHalf, URGENCY_PHRASES);
+        return [c1 / (c2 + 0.001), null];
     }
 
     return [null, `unknown key: ${key}`];
