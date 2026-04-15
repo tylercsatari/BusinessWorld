@@ -13,13 +13,14 @@ const jarvisRunner = require('./jarvis-runner');
 const maxIterations = parseInt(process.argv[2] || '2000');
 const maxMinutes    = parseFloat(process.argv[3] || '25');
 const preuploadRatio = parseFloat(process.argv[4] || '0.65');
+const maxFailures   = parseInt(process.argv[5] || '500');
 
 console.log(`[node-autorun] Starting: maxIter=${maxIterations} maxMin=${maxMinutes} preRatio=${preuploadRatio}`);
 
 jarvisRunner.autoRun({
     maxIterations,
     maxMinutes,
-    maxFailures: 100,
+    maxFailures,
     preuploadRatio,
 }).then(() => {
     console.log('[node-autorun] Complete.');
