@@ -689,10 +689,9 @@ const STAKES_ESCALATION_PHRASES = [
     'everything fell apart',
 ];
 const PROOF_ARRIVAL_PHRASES = [
-    'here is the proof', 'look at the numbers', 'the data shows', 'here are the results',
-    'this is the evidence', 'the numbers speak', 'look at this graph', 'here is the screenshot',
-    'the analytics show', 'you can see the data', 'look at this data', 'the numbers show',
-    'here is the evidence', 'this data proves', 'look at these numbers',
+    'look at this', 'you can see', 'right here', 'see this', 'watch this', 'look how',
+    'check this', 'the result', 'it worked', 'it actually worked', 'i tested', 'i tried it',
+    'here is what happened', 'turns out', 'it turns out', 'and it actually', 'this actually',
 ];
 const NARRATIVE_ANCHOR_PHRASES = [
     'this is the moment', 'this is where', 'at this point', 'right here', 'this is it',
@@ -758,6 +757,30 @@ const CURIOSITY_ESCALATION_PHRASES = [
   'the funny thing', 'the ironic thing', 'the interesting thing',
   'i have not even told you', 'i did not mention', 'oh and by the way',
   'and one more thing', 'one last thing', 'oh wait',
+];
+
+// ── Group V phrase arrays ──
+const EARLY_PROOF_PHRASES = [
+    'i tested', 'i tried', 'i did this', 'i spent', 'i have been',
+    'the result', 'results were', 'it worked', 'it actually worked', 'it does work',
+    'it actually', 'it really does', 'this works', 'and it worked',
+    'after doing this', 'after trying', 'my experience', 'what happened was',
+    'what actually happened', 'here is what happened',
+];
+
+const SOCIAL_SIGNAL_PHRASES = [
+    'million', 'thousand', 'hundreds', 'millions of', 'thousands of',
+    'viral', 'went viral', 'everyone', 'people are saying', 'everyone knows',
+    'subscribers', 'views', 'comments', 'likes', 'my audience',
+    'they told me', 'people said', 'the comments',
+];
+
+const PRE_UPLOAD_CREDIBILITY_PHRASES = [
+    'i am', 'i have', 'i know', 'trust me', 'believe me', 'i promise',
+    'i can tell you', 'from experience', 'in my experience', 'speaking from',
+    'i have done this', 'i have tried', 'i have tested', 'i know what',
+    'let me show you', 'let me tell you', 'i will show you', 'i will tell you',
+    'here is the thing', 'here is what', 'the thing is',
 ];
 
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
@@ -1029,6 +1052,10 @@ const STATIC_KEYS = new Set([
     'viewer_agency_count', 'viewer_agency_density', 'viewer_agency_first_half_count', 'viewer_agency_hook_count',
     'revelation_signal_count', 'revelation_signal_density', 'revelation_signal_first_half_count', 'revelation_signal_hook_count',
     'curiosity_escalation_count', 'curiosity_escalation_density', 'curiosity_escalation_first_half_count', 'curiosity_escalation_hook_count',
+    // Group V: Early proof / social signal / pre-upload credibility
+    'early_proof_count', 'early_proof_density', 'early_proof_count_hook', 'early_proof_front_load_ratio', 'early_proof_count_first_half',
+    'social_signal_count', 'social_signal_density', 'social_signal_count_hook', 'social_signal_front_load_ratio',
+    'pre_upload_credibility_count', 'pre_upload_credibility_density', 'pre_upload_credibility_count_hook', 'pre_upload_credibility_front_load_ratio', 'pre_upload_credibility_position_pct',
 ]);
 
 // Layer map for static keys
@@ -1282,8 +1309,8 @@ for (const k of [
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
 }
-// Windowed variants for Group T families
-for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal']) {
+// Windowed variants for Group T/V families
+for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal', 'early_proof', 'social_signal', 'pre_upload_credibility']) {
     for (const w of ZYGARNIK_EARLY_WINDOWS) {
         for (const variant of ['count', 'density']) {
             STATIC_KEYS.add(`${fam}_${variant}_first${w}s`);
@@ -3928,14 +3955,18 @@ function extractMetric(key, analysis) {
     // ── Group T: Reference callback / visual credibility / payoff signal / setup signal / stakes escalation / proof arrival / narrative anchor / delayed reveal ──
     {
         const _gtFamilies = {
-            'reference_callback': REFERENCE_CALLBACK_PHRASES,
-            'visual_credibility': VISUAL_CREDIBILITY_PHRASES,
-            'payoff_signal':      PAYOFF_SIGNAL_PHRASES,
-            'setup_signal':       SETUP_SIGNAL_PHRASES,
-            'stakes_escalation':  STAKES_ESCALATION_PHRASES,
-            'proof_arrival':      PROOF_ARRIVAL_PHRASES,
-            'narrative_anchor':   NARRATIVE_ANCHOR_PHRASES,
-            'delayed_reveal':     DELAYED_REVEAL_PHRASES,
+            'reference_callback':     REFERENCE_CALLBACK_PHRASES,
+            'visual_credibility':     VISUAL_CREDIBILITY_PHRASES,
+            'payoff_signal':          PAYOFF_SIGNAL_PHRASES,
+            'setup_signal':           SETUP_SIGNAL_PHRASES,
+            'stakes_escalation':      STAKES_ESCALATION_PHRASES,
+            'proof_arrival':          PROOF_ARRIVAL_PHRASES,
+            'narrative_anchor':       NARRATIVE_ANCHOR_PHRASES,
+            'delayed_reveal':         DELAYED_REVEAL_PHRASES,
+            // Group V
+            'early_proof':            EARLY_PROOF_PHRASES,
+            'social_signal':          SOCIAL_SIGNAL_PHRASES,
+            'pre_upload_credibility': PRE_UPLOAD_CREDIBILITY_PHRASES,
         };
 
         // Per-family count/density/hook/positional keys
@@ -4001,7 +4032,7 @@ function extractMetric(key, analysis) {
         }
 
         // Windowed variants for Group T families
-        const _gtWinRe = /^(reference_callback|visual_credibility|payoff_signal|setup_signal|stakes_escalation|proof_arrival|narrative_anchor|delayed_reveal)_(count|density)_first(\d+)s$/;
+        const _gtWinRe = /^(reference_callback|visual_credibility|payoff_signal|setup_signal|stakes_escalation|proof_arrival|narrative_anchor|delayed_reveal|early_proof|social_signal|pre_upload_credibility)_(count|density)_first(\d+)s$/;
         const _gtm = key.match(_gtWinRe);
         if (_gtm) {
             if (!transcript) return [null, 'no transcript'];
@@ -4624,6 +4655,25 @@ for (const k of [
 }
 // Group T windowed variant resolution map
 for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal']) {
+    for (const w of [2, 3, 5, 8, 10, 15, 20]) {
+        for (const variant of ['count', 'density']) {
+            INDICATOR_RESOLUTION_MAP[`${fam}_${variant}_first${w}s`] = ['r_hook', 0, 10, null, null];
+        }
+    }
+}
+// Group V resolution map
+for (const k of [
+    'early_proof_count', 'early_proof_density',
+    'early_proof_count_hook', 'early_proof_front_load_ratio', 'early_proof_count_first_half',
+    'social_signal_count', 'social_signal_density',
+    'social_signal_count_hook', 'social_signal_front_load_ratio',
+    'pre_upload_credibility_count', 'pre_upload_credibility_density',
+    'pre_upload_credibility_count_hook', 'pre_upload_credibility_front_load_ratio', 'pre_upload_credibility_position_pct',
+]) {
+    INDICATOR_RESOLUTION_MAP[k] = k.includes('hook') ? ['r_hook', 0, 10, null, null] : ['r0', 0, 100, null, null];
+}
+// Group V windowed variant resolution map
+for (const fam of ['early_proof', 'social_signal', 'pre_upload_credibility']) {
     for (const w of [2, 3, 5, 8, 10, 15, 20]) {
         for (const variant of ['count', 'density']) {
             INDICATOR_RESOLUTION_MAP[`${fam}_${variant}_first${w}s`] = ['r_hook', 0, 10, null, null];
