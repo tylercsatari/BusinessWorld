@@ -6770,7 +6770,17 @@
       "first_closure_position_pct_x_proof_before_midpoint_flag",
       "reward_density_first_half_x_foreshadow_density_hook",
       "reward_density_first_half_x_proof_before_midpoint_flag",
-      "foreshadow_density_hook_x_proof_before_midpoint_flag"
+      "foreshadow_density_hook_x_proof_before_midpoint_flag",
+      "retention_pct_50_x_transformation_density",
+      "retention_pct_50_x_vulnerability_density",
+      "retention_pct_50_x_specificity_anchor_density",
+      "retention_pct_50_x_micro_commitment_density",
+      "retention_pct_50_x_emotional_peak_density",
+      "retention_pct_50_x_revelation_pace_density",
+      "retention_pct_50_x_social_contrast_density",
+      "retention_pct_50_x_anticipatory_build_density",
+      "retention_pct_50_x_comment_rate",
+      "retention_pct_50_x_share_rate"
     ],
     "depth_in_hierarchy": 0
   },
