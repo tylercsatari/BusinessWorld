@@ -176,6 +176,19 @@ const baseAtomics = [
     'stakes_escalation_mid_density',
     'narrative_anchor_peak_pct',
     'delayed_reveal_setup_ratio',
+    // Group U: Cliffhanger / payoff-tease / stakes-reinforcement / viewer-agency / revelation-signal / curiosity-escalation
+    'cliffhanger_count', 'cliffhanger_density',
+    'cliffhanger_first_half_count', 'cliffhanger_hook_count',
+    'payoff_tease_count', 'payoff_tease_density',
+    'payoff_tease_first_half_count', 'payoff_tease_hook_count',
+    'stakes_reinforcement_count', 'stakes_reinforcement_density',
+    'stakes_reinforcement_first_half_count', 'stakes_reinforcement_hook_count',
+    'viewer_agency_count', 'viewer_agency_density',
+    'viewer_agency_first_half_count', 'viewer_agency_hook_count',
+    'revelation_signal_count', 'revelation_signal_density',
+    'revelation_signal_first_half_count', 'revelation_signal_hook_count',
+    'curiosity_escalation_count', 'curiosity_escalation_density',
+    'curiosity_escalation_first_half_count', 'curiosity_escalation_hook_count',
 ];
 
 // Windowed variants for count/density families
@@ -219,6 +232,13 @@ const allNewAtomics = [...baseAtomics, ...windowedAtomics];
 // ── High-signal existing indicators for cross-composite generation ────────
 const HIGH_SIGNAL_BASES = [
     'open_loop_count', 'dangling_question_ratio', 'hook_payoff_gap',
+    'reference_callback_count', 'reference_callback_density',
+    'reference_callback_front_load_ratio',
+    'visual_credibility_count', 'visual_credibility_density',
+    'payoff_signal_count', 'payoff_signal_count_last_quarter',
+    'setup_signal_count', 'setup_signal_front_load_ratio',
+    'stakes_escalation_count', 'delayed_reveal_count',
+    'proof_arrival_count', 'narrative_anchor_count',
     'gratification_delay_pct', 'promise_proof_gap_pct', 'closure_count',
     'withheld_outcome_flag', 'setup_duration_pct', 'hook_tension_ratio',
     'hook_open_loop_density', 'open_loop_density', 'hook_drop_rate',
@@ -228,7 +248,15 @@ const HIGH_SIGNAL_BASES = [
 ];
 
 // Excluded keys — always return null
-const EXCLUDED = new Set(['emotional_peak_position_pct', 'revelation_pace_score']);
+const EXCLUDED = new Set([
+    'emotional_peak_position_pct', 'revelation_pace_score',
+    'climax_position_pct', 'hook_to_climax_gap_s',
+    'transformation_density_hook', 'vulnerability_density_hook',
+    'specificity_anchor_density_hook', 'micro_commitment_density_hook',
+    'emotional_peak_density_first_quarter', 'emotional_peak_density_last_quarter',
+    'revelation_pace_density_mid', 'social_contrast_density_hook',
+    'anticipatory_build_density_hook',
+]);
 
 // ── Build pre-upload pool ────────────────────────────────────────────────
 const preUpload = allNewAtomics.filter(k => !existingKeys.has(k));

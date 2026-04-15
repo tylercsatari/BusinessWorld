@@ -707,6 +707,59 @@ const DELAYED_REVEAL_PHRASES = [
     'i will reveal that', 'but before that',
 ];
 
+const CLIFFHANGER_PHRASES = [
+  'but wait', 'but here is the thing', 'but here is where it gets', 'and then',
+  'suddenly', 'out of nowhere', 'at that point', 'and that is when',
+  'little did i know', 'what i did not expect', 'what i did not realize',
+  'what happened next', 'and it only gets', 'but it gets worse', 'but it gets better',
+  'what came next', 'you will not believe what', 'here is the twist',
+  'and this is where', 'right at that moment',
+];
+
+const PAYOFF_TEASE_PHRASES = [
+  'spoiler', 'at the end', 'by the end', 'ultimately', 'what ended up happening',
+  'what ended up', 'fast forward', 'skip ahead', 'long story short',
+  'to cut to the chase', 'to get to the point', 'the bottom line',
+  'what you really came for', 'the moment you have been waiting for',
+  'the big reveal', 'here it comes', 'drum roll', 'ta da',
+  'so the result', 'and the result', 'final result', 'final answer',
+];
+
+const STAKES_REINFORCEMENT_PHRASES = [
+  'this matters because', 'this is important because', 'why does this matter',
+  'the reason this matters', 'this changes everything', 'this is a game changer',
+  'this could', 'this would', 'imagine if', 'think about what',
+  'what that means is', 'the implication', 'the consequence', 'so what',
+  'so why should you care', 'why you should care', 'here is why',
+  'that is why', 'and that is why this', 'the stakes',
+];
+
+const VIEWER_AGENCY_PHRASES = [
+  'you can', 'you could', 'you should', 'you need to', 'you want to',
+  'you will want', 'you have to', 'you must', 'do not', 'make sure you',
+  'remember to', 'keep in mind', 'take note', 'pay attention to',
+  'here is what to do', 'what you should do', 'my advice', 'my recommendation',
+  'if i were you', 'trust me on this',
+];
+
+const REVELATION_SIGNAL_PHRASES = [
+  'turns out', 'it turns out', 'as it turns out', 'what i discovered',
+  'what i found', 'what i learned', 'what surprised me', 'the surprising thing',
+  'surprisingly', 'unexpectedly', 'against all odds', 'contrary to what',
+  'the truth is', 'the reality is', 'what no one tells you', 'nobody told me',
+  'the secret is', 'here is the secret', 'here is what works', 'here is what happened',
+  'here is why', 'the reason is', 'and the answer is',
+];
+
+const CURIOSITY_ESCALATION_PHRASES = [
+  'but that is not all', 'and there is more', 'it gets better', 'wait for it',
+  'but here is the best part', 'but here is the crazy part', 'here is the kicker',
+  'the craziest part', 'the best part', 'the worst part', 'the weird part',
+  'the funny thing', 'the ironic thing', 'the interesting thing',
+  'i have not even told you', 'i did not mention', 'oh and by the way',
+  'and one more thing', 'one last thing', 'oh wait',
+];
+
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
 const ZYGARNIK_EARLY_WINDOWS = [2, 3, 5, 8, 10, 15, 20];
 
@@ -966,6 +1019,13 @@ const STATIC_KEYS = new Set([
     // Pre-upload: visual
     'scene_change_rate', 'unique_scene_ratio', 'visual_technique_count_mean',
     'close_up_frame_pct', 'hand_presence_frame_pct', 'motion_word_frame_pct',
+    // Group U: Cliffhanger / payoff-tease / stakes-reinforcement / viewer-agency / revelation-signal / curiosity-escalation
+    'cliffhanger_count', 'cliffhanger_density', 'cliffhanger_first_half_count', 'cliffhanger_hook_count',
+    'payoff_tease_count', 'payoff_tease_density', 'payoff_tease_first_half_count', 'payoff_tease_hook_count',
+    'stakes_reinforcement_count', 'stakes_reinforcement_density', 'stakes_reinforcement_first_half_count', 'stakes_reinforcement_hook_count',
+    'viewer_agency_count', 'viewer_agency_density', 'viewer_agency_first_half_count', 'viewer_agency_hook_count',
+    'revelation_signal_count', 'revelation_signal_density', 'revelation_signal_first_half_count', 'revelation_signal_hook_count',
+    'curiosity_escalation_count', 'curiosity_escalation_density', 'curiosity_escalation_first_half_count', 'curiosity_escalation_hook_count',
 ]);
 
 // Layer map for static keys
@@ -4043,6 +4103,168 @@ function extractMetric(key, analysis) {
             if (ss === 0) return [null, 'no setup signals'];
             return [dr / ss, null];
         }
+    }
+
+    // ── Group U: Cliffhanger signals ─────────────────────────────────────
+
+    if (key === 'cliffhanger_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CLIFFHANGER_PHRASES), null];
+    }
+    if (key === 'cliffhanger_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CLIFFHANGER_PHRASES) / words.length, null];
+    }
+    if (key === 'cliffhanger_first_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, CLIFFHANGER_PHRASES), null];
+    }
+    if (key === 'cliffhanger_hook_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, CLIFFHANGER_PHRASES), null];
+    }
+
+    // ── Group U: Payoff tease signals ────────────────────────────────────
+
+    if (key === 'payoff_tease_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), PAYOFF_TEASE_PHRASES), null];
+    }
+    if (key === 'payoff_tease_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), PAYOFF_TEASE_PHRASES) / words.length, null];
+    }
+    if (key === 'payoff_tease_first_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, PAYOFF_TEASE_PHRASES), null];
+    }
+    if (key === 'payoff_tease_hook_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, PAYOFF_TEASE_PHRASES), null];
+    }
+
+    // ── Group U: Stakes reinforcement signals ────────────────────────────
+
+    if (key === 'stakes_reinforcement_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), STAKES_REINFORCEMENT_PHRASES), null];
+    }
+    if (key === 'stakes_reinforcement_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), STAKES_REINFORCEMENT_PHRASES) / words.length, null];
+    }
+    if (key === 'stakes_reinforcement_first_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, STAKES_REINFORCEMENT_PHRASES), null];
+    }
+    if (key === 'stakes_reinforcement_hook_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, STAKES_REINFORCEMENT_PHRASES), null];
+    }
+
+    // ── Group U: Viewer agency signals ───────────────────────────────────
+
+    if (key === 'viewer_agency_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), VIEWER_AGENCY_PHRASES), null];
+    }
+    if (key === 'viewer_agency_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), VIEWER_AGENCY_PHRASES) / words.length, null];
+    }
+    if (key === 'viewer_agency_first_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, VIEWER_AGENCY_PHRASES), null];
+    }
+    if (key === 'viewer_agency_hook_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, VIEWER_AGENCY_PHRASES), null];
+    }
+
+    // ── Group U: Revelation signal signals ───────────────────────────────
+
+    if (key === 'revelation_signal_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), REVELATION_SIGNAL_PHRASES), null];
+    }
+    if (key === 'revelation_signal_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), REVELATION_SIGNAL_PHRASES) / words.length, null];
+    }
+    if (key === 'revelation_signal_first_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, REVELATION_SIGNAL_PHRASES), null];
+    }
+    if (key === 'revelation_signal_hook_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, REVELATION_SIGNAL_PHRASES), null];
+    }
+
+    // ── Group U: Curiosity escalation signals ────────────────────────────
+
+    if (key === 'curiosity_escalation_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CURIOSITY_ESCALATION_PHRASES), null];
+    }
+    if (key === 'curiosity_escalation_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CURIOSITY_ESCALATION_PHRASES) / words.length, null];
+    }
+    if (key === 'curiosity_escalation_first_half_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, CURIOSITY_ESCALATION_PHRASES), null];
+    }
+    if (key === 'curiosity_escalation_hook_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(first10, CURIOSITY_ESCALATION_PHRASES), null];
     }
 
     return [null, `unknown key: ${key}`];
