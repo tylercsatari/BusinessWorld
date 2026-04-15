@@ -112,6 +112,23 @@ const baseAtomics = [
     'urgency_count_first_quarter',
     'urgency_count_last_quarter',
     'urgency_front_load_ratio',
+    // Family: Group R — Psychographic / Persuasion indicators
+    'rhetorical_question_count', 'rhetorical_question_density',
+    'rhetorical_question_count_hook', 'rhetorical_question_front_load_ratio',
+    'social_comparison_count', 'social_comparison_density',
+    'social_comparison_count_first_half', 'social_comparison_hook_count',
+    'transformation_arc_count', 'transformation_arc_density',
+    'transformation_arc_count_first_half', 'transformation_arc_hook_count',
+    'loss_framing_count', 'loss_framing_density',
+    'loss_framing_count_hook', 'loss_framing_count_first_half',
+    'mystery_setup_count', 'mystery_setup_density',
+    'mystery_setup_count_hook', 'mystery_setup_front_load_ratio',
+    'promise_specificity_count', 'promise_specificity_density',
+    'promise_specificity_count_hook', 'promise_specificity_front_load_ratio',
+    'pattern_interrupt_count', 'pattern_interrupt_density',
+    'pattern_interrupt_count_hook', 'pattern_interrupt_count_first_half',
+    'viewer_stakes_count', 'viewer_stakes_density',
+    'viewer_stakes_count_hook', 'viewer_stakes_front_load_ratio',
 ];
 
 // Windowed variants for count/density families
