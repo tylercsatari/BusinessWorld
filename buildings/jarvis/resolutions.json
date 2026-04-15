@@ -6764,7 +6764,13 @@
       "tension_closure_balance_x_story_stake_density",
       "tension_closure_balance_x_open_loop_density_mid",
       "tension_closure_balance_x_closure_density_mid",
-      "tension_closure_balance_x_story_stake_density_first_quarter"
+      "tension_closure_balance_x_story_stake_density_first_quarter",
+      "first_closure_position_pct_x_reward_density_first_half",
+      "first_closure_position_pct_x_foreshadow_density_hook",
+      "first_closure_position_pct_x_proof_before_midpoint_flag",
+      "reward_density_first_half_x_foreshadow_density_hook",
+      "reward_density_first_half_x_proof_before_midpoint_flag",
+      "foreshadow_density_hook_x_proof_before_midpoint_flag"
     ],
     "depth_in_hierarchy": 0
   },
