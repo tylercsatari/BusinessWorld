@@ -346,6 +346,14 @@ const INTERACTION_BASES = [
     'withheld_outcome_flag', 'countdown_flag',
     'setup_duration_pct', 'payoff_position_pct',
     'hook_open_loop_density', 'hook_closure_density',
+    // New Group A indicators
+    'hook_payoff_gap', 'end_recovery_score', 'narrative_arc_completeness',
+    'action_frame_pct', 'max_silence_gap_s', 'opening_speech_rate_3s',
+    // New Group B indicators
+    'open_loop_to_closure_ratio', 'zygarnik_tension_peak_pct', 'early_proof_position_pct',
+    'hook_stake_density', 'setup_payoff_ratio', 'resolution_density',
+    'closure_rate_per_min', 'tension_arc_score', 'pre_payoff_open_loop_density',
+    'visual_stake_frame_pct',
 ];
 
 // Static metric definitions — keys that have hardcoded extraction logic
@@ -428,6 +436,24 @@ for (const fam of ZYGARNIK_FAMILIES) {
     }
 }
 for (const k of ZYGARNIK_SPECIAL_KEYS) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+
+// ── New Group A indicators ──
+for (const k of ['hook_payoff_gap', 'narrative_arc_completeness', 'action_frame_pct',
+    'max_silence_gap_s', 'opening_speech_rate_3s']) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+STATIC_KEYS.add('end_recovery_score');
+STATIC_LAYER['end_recovery_score'] = 'post';
+
+// ── New Group B indicators ──
+for (const k of ['open_loop_to_closure_ratio', 'zygarnik_tension_peak_pct', 'early_proof_position_pct',
+    'hook_stake_density', 'setup_payoff_ratio', 'resolution_density',
+    'closure_rate_per_min', 'tension_arc_score', 'pre_payoff_open_loop_density',
+    'visual_stake_frame_pct']) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
 }
@@ -1230,6 +1256,212 @@ function extractMetric(key, analysis) {
             const eng = String((f.analysis || {}).engagementAnalysis || '').toLowerCase();
             const desc = String((f.analysis || {}).sceneDescription || '').toLowerCase();
             return aw.some(w => eng.includes(w) || desc.includes(w));
+        }).length;
+        return [ct / frames.length, null];
+    }
+
+    // ── Group A: New indicators ──────────────────────────────────────────
+
+    if (key === 'hook_payoff_gap') {
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        const hs = hookSeg();
+        const payoffLabels = new Set(['payoff', 'reveal', 'result', 'climax', 'peak', 'conclusion']);
+        const ps = segments.find(s => payoffLabels.has((s.label || '').toLowerCase()));
+        if (hs && ps) {
+            return [Math.max(0, (ps.startTime || 0) - (hs.endTime || 0)) / dur * 100, null];
+        }
+        if (transcript && hs) {
+            const tl = transcript.toLowerCase();
+            let closurePos = -1;
+            for (const phrase of ZYGARNIK_PHRASE_SETS.closure) {
+                const pos = tl.indexOf(phrase);
+                if (pos >= 0 && (closurePos < 0 || pos < closurePos)) closurePos = pos;
+            }
+            if (closurePos >= 0) {
+                const closureFrac = closurePos / tl.length;
+                const hookEndFrac = (hs.endTime || 0) / dur;
+                return [Math.max(0, closureFrac - hookEndFrac) * 100, null];
+            }
+        }
+        return [50, null];
+    }
+
+    if (key === 'end_recovery_score') {
+        if (curve.length < 10) return [null, 'curve too short'];
+        const tail = curve.slice(-10).map(p => p.retention);
+        const x = tail.map((_, i) => i);
+        return [linregress(x, tail).slope, null];
+    }
+
+    if (key === 'narrative_arc_completeness') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const openCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closureCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        return [Math.min(2.0, closureCount / (openCount + 1)), null];
+    }
+
+    if (key === 'action_frame_pct') {
+        if (!frames.length) return [null, 'no frames'];
+        const actionWords = ['running', 'jumping', 'hitting', 'throwing', 'cutting', 'breaking',
+            'exploding', 'falling', 'fighting', 'spinning', 'moving', 'action',
+            'fast', 'quick', 'rush', 'slam', 'crash'];
+        const ct = frames.filter(f => {
+            const a = f.analysis || {};
+            const desc = String(a.sceneDescription || '').toLowerCase();
+            const vt = String(a.visualTechniques || '').toLowerCase();
+            return actionWords.some(w => desc.includes(w) || vt.includes(w));
+        }).length;
+        return [ct / frames.length, null];
+    }
+
+    if (key === 'max_silence_gap_s') {
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        if (!transcript) return [dur / 2, null];
+        const wordCount = transcript.split(/\s+/).filter(Boolean).length;
+        const segCount = Math.max(segments.length, 1);
+        const approx = (dur - wordCount / 2.5) / segCount;
+        return [Math.min(Math.max(0, approx), dur / 2), null];
+    }
+
+    if (key === 'opening_speech_rate_3s') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        const text = windowedTranscript(transcript, dur, 3);
+        if (!text) return [null, 'no opening text'];
+        const wc = text.split(/\s+/).filter(Boolean).length;
+        return [wc / 3, null];
+    }
+
+    // ── Group B: Zygarnik-effect / delayed gratification indicators ──────
+
+    if (key === 'open_loop_to_closure_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const openCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closureCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        return [Math.min(10, openCount / (closureCount + 1)), null];
+    }
+
+    if (key === 'zygarnik_tension_peak_pct') {
+        if (!transcript) return [0, null];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (words.length < 5) return [0, null];
+        const windowSize = Math.max(1, Math.floor(words.length * 0.2));
+        let maxDensity = 0, peakPos = 0;
+        for (let i = 0; i <= words.length - windowSize; i++) {
+            const windowText = words.slice(i, i + windowSize).join(' ');
+            const count = countPhraseMatches(windowText, ZYGARNIK_PHRASE_SETS.open_loop);
+            const density = count / windowSize;
+            if (density > maxDensity) {
+                maxDensity = density;
+                peakPos = (i + windowSize / 2) / words.length * 100;
+            }
+        }
+        return [maxDensity > 0 ? peakPos : 0, null];
+    }
+
+    if (key === 'early_proof_position_pct') {
+        if (!transcript) return [1.0, null];
+        const tl = transcript.toLowerCase();
+        const proofPhrases = ['the result', 'it worked', 'look at this', 'here it is', 'turns out',
+            'and it', 'so it', 'actually', 'proof', 'evidence', 'before and after',
+            'this is what', 'as you can see', 'check this out'];
+        let earliest = -1;
+        for (const phrase of proofPhrases) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (earliest < 0 || pos < earliest)) earliest = pos;
+        }
+        if (earliest < 0) return [1.0, null];
+        return [earliest / Math.max(tl.length, 1), null];
+    }
+
+    if (key === 'hook_stake_density') {
+        const ht = hookText();
+        if (!ht) return [null, 'no hook text'];
+        const htl = ht.toLowerCase();
+        const stakePhrases = ['destroy', 'ruin', 'save', 'lose', 'win', 'die', 'break', 'kill',
+            'survive', 'never', 'always', 'impossible', 'dangerous', 'deadly',
+            'incredible', 'insane', 'crazy', 'unbelievable', 'shocking'];
+        const w = ht.split(/\s+/).filter(Boolean);
+        if (!w.length) return [null, 'empty hook'];
+        return [countPhraseMatches(htl, stakePhrases) / w.length, null];
+    }
+
+    if (key === 'setup_payoff_ratio') {
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        const ss = segments.find(s => (s.label || '').toLowerCase() === 'setup');
+        const payoffLabels = new Set(['payoff', 'reveal', 'result', 'climax', 'peak', 'conclusion']);
+        const ps = segments.find(s => payoffLabels.has((s.label || '').toLowerCase()));
+        const setupDur = ss ? (ss.endTime || 0) - (ss.startTime || 0) : 0;
+        if (!ps) return [setupDur ? setupDur / dur : 0, null];
+        const payoffDur = (ps.endTime || 0) - (ps.startTime || 0);
+        return [setupDur / (payoffDur + 1), null];
+    }
+
+    if (key === 'resolution_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const startIdx = Math.floor(words.length * 0.8);
+        const lastWords = words.slice(startIdx);
+        if (!lastWords.length) return [0, null];
+        const count = countPhraseMatches(lastWords.join(' '), ZYGARNIK_PHRASE_SETS.closure);
+        return [count / lastWords.length, null];
+    }
+
+    if (key === 'closure_rate_per_min') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        const count = countPhraseMatches(transcript.toLowerCase(), ZYGARNIK_PHRASE_SETS.closure);
+        return [count / (dur / 60), null];
+    }
+
+    if (key === 'tension_arc_score') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const mid = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, mid).join(' ');
+        const secondHalf = words.slice(mid).join(' ');
+        const firstCount = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.open_loop);
+        const secondCount = countPhraseMatches(secondHalf, ZYGARNIK_PHRASE_SETS.open_loop);
+        const firstDensity = firstCount / Math.max(mid, 1);
+        const secondDensity = secondCount / Math.max(words.length - mid, 1);
+        return [firstDensity - secondDensity, null];
+    }
+
+    if (key === 'pre_payoff_open_loop_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const [payoffPct] = extractMetric('payoff_position_pct', analysis);
+        const cutoffFrac = payoffPct != null ? payoffPct / 100 : 0.7;
+        const cutoffIdx = Math.floor(words.length * cutoffFrac);
+        const preWords = words.slice(0, cutoffIdx);
+        if (!preWords.length) return [0, null];
+        const count = countPhraseMatches(preWords.join(' '), ZYGARNIK_PHRASE_SETS.open_loop);
+        return [count / preWords.length, null];
+    }
+
+    if (key === 'visual_stake_frame_pct') {
+        if (!frames.length) return [null, 'no frames'];
+        const stakeWords = ['danger', 'dramatic', 'intense', 'climax', 'reveal', 'shock',
+            'surprise', 'impact', 'extreme', 'before and after', 'transformation'];
+        const ct = frames.filter(f => {
+            const a = f.analysis || {};
+            const desc = String(a.sceneDescription || '').toLowerCase();
+            const eng = String(a.engagementAnalysis || '').toLowerCase();
+            return stakeWords.some(w => desc.includes(w) || eng.includes(w));
         }).length;
         return [ct / frames.length, null];
     }
