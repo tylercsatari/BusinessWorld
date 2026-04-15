@@ -3793,13 +3793,18 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
 
-    // Compact indicators (no dataset arrays — ~95% smaller)
+    // Compact indicators (precomputed mirror — never loads full 71MB file)
     if (pathname === '/api/jarvis/v2/indicators' && req.method === 'GET') {
         try {
-            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('indicators');
-            const data = await jarvisStore.loadJson('indicators', []);
-            const compact = url.searchParams.get('full') === '1' ? data : data.map(compactIndicator);
-            sendJsonGz(req, res, compact);
+            if (url.searchParams.get('full') === '1') {
+                if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('indicators');
+                const data = await jarvisStore.loadJson('indicators', []);
+                sendJsonGz(req, res, data);
+            } else {
+                if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCompactCache('indicators');
+                const compact = await jarvisStore.loadCompactJson('indicators', []);
+                sendJsonGz(req, res, compact);
+            }
         } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
@@ -3827,34 +3832,55 @@ Respond ONLY as valid JSON (no markdown):
         } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
-    // Compact derived experiments (no dataset arrays — ~95% smaller)
+    // Compact derived experiments (precomputed mirror — never loads full file)
     if (pathname === '/api/jarvis/v2/derived-experiments' && req.method === 'GET') {
         try {
-            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('derived_experiments');
-            const data = await jarvisStore.loadJson('derived_experiments', []);
-            const compact = url.searchParams.get('full') === '1' ? data : data.map(compactDerived);
-            sendJsonGz(req, res, compact);
+            if (url.searchParams.get('full') === '1') {
+                if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('derived_experiments');
+                const data = await jarvisStore.loadJson('derived_experiments', []);
+                sendJsonGz(req, res, data);
+            } else {
+                if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCompactCache('derived_experiments');
+                const compact = await jarvisStore.loadCompactJson('derived_experiments', []);
+                sendJsonGz(req, res, compact);
+            }
         } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
     if (pathname === '/api/jarvis/v2/experiments' && req.method === 'GET') {
         try {
-            if (url.searchParams.get('fresh') === '1') {
-                jarvisStore.invalidateCache('experiments_log');
-                jarvisStore.invalidateCache('derived_experiments');
+            const full = url.searchParams.get('full') === '1';
+            if (full) {
+                if (url.searchParams.get('fresh') === '1') {
+                    jarvisStore.invalidateCache('experiments_log');
+                    jarvisStore.invalidateCache('derived_experiments');
+                }
+                const [atomic, derived] = await Promise.all([
+                    jarvisStore.loadJson('experiments_log', []),
+                    jarvisStore.loadJson('derived_experiments', []),
+                ]);
+                const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
+                sendJsonGz(req, res, {
+                    atomic: taggedAtomic,
+                    derived,
+                    count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
+                });
+            } else {
+                if (url.searchParams.get('fresh') === '1') {
+                    jarvisStore.invalidateCompactCache('experiments_log');
+                    jarvisStore.invalidateCompactCache('derived_experiments');
+                }
+                const [atomic, derived] = await Promise.all([
+                    jarvisStore.loadCompactJson('experiments_log', []),
+                    jarvisStore.loadCompactJson('derived_experiments', []),
+                ]);
+                const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
+                sendJsonGz(req, res, {
+                    atomic: taggedAtomic,
+                    derived,
+                    count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
+                });
             }
-            const [atomic, derived] = await Promise.all([
-                jarvisStore.loadJson('experiments_log', []),
-                jarvisStore.loadJson('derived_experiments', []),
-            ]);
-            const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
-            const compactAtomic = url.searchParams.get('full') === '1' ? taggedAtomic : taggedAtomic.map(compactIndicator);
-            const compactDerivedArr = url.searchParams.get('full') === '1' ? derived : derived.map(compactDerived);
-            sendJsonGz(req, res, {
-                atomic: compactAtomic,
-                derived: compactDerivedArr,
-                count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
-            });
         } catch (e) {
             sendJsonGz(req, res, { atomic: [], derived: [], count: { atomic: 0, derived: 0, total: 0 } });
         }

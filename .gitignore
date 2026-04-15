@@ -22,3 +22,7 @@ buildings/jarvis/vision-scores-cache.json
 buildings/jarvis/__pycache__/
 buildings/jarvis/archive/
 buildings/jarvis/derived_experiments_full_backup.json
+# Compact mirrors (derived from full files, canonical storage is R2)
+buildings/jarvis/indicators_compact.json
+buildings/jarvis/derived_experiments_compact.json
+buildings/jarvis/experiments_log_compact.json

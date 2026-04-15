@@ -33,6 +33,17 @@ const CANONICAL_FILES = [
     'candidate_queue'
 ];
 
+// Files that get precomputed compact mirrors (strip heavy dataset arrays)
+const COMPACT_MIRROR_SOURCES = ['indicators', 'derived_experiments', 'experiments_log'];
+
+function compactMirrorName(name) { return `${name}_compact`; }
+
+function compactProject(item) {
+    if (!item) return item;
+    const { dataset, ...rest } = item;
+    return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+}
+
 // Default fallback values per file (matches existing behavior)
 const DEFAULTS = {
     indicators: [],
@@ -96,6 +107,7 @@ async function loadJson(name, fallback) {
 /**
  * Save JSON data by name.
  * Writes to R2 (if ready) + local disk + updates cache.
+ * Auto-generates compact mirror for eligible files.
  */
 async function saveJson(name, data) {
     const jsonStr = JSON.stringify(data, null, 2);
@@ -118,6 +130,120 @@ async function saveJson(name, data) {
         fs.writeFileSync(localPath(name), jsonStr);
     } catch (e) {
         console.warn(`jarvis-store: local write failed for ${name}:`, e.message);
+    }
+
+    // Auto-generate compact mirror
+    if (COMPACT_MIRROR_SOURCES.includes(name)) {
+        await saveCompactMirror(name, data);
+    }
+}
+
+/**
+ * Save a compact mirror: dataset-stripped projection stored alongside the full file.
+ */
+async function saveCompactMirror(name, data) {
+    if (!Array.isArray(data)) return;
+
+    const compact = data.map(compactProject);
+    const cn = compactMirrorName(name);
+    const jsonStr = JSON.stringify(compact);
+
+    cache[cn] = compact;
+    cacheTime[cn] = Date.now();
+
+    if (isR2Ready()) {
+        try {
+            await uploadToR2(r2Key(cn), Buffer.from(jsonStr), 'application/json');
+        } catch (e) {
+            console.warn(`jarvis-store: R2 compact write failed for ${cn}:`, e.message);
+        }
+    }
+
+    try {
+        fs.writeFileSync(localPath(cn), jsonStr);
+    } catch (e) {
+        console.warn(`jarvis-store: local compact write failed for ${cn}:`, e.message);
+    }
+}
+
+/**
+ * Load a compact mirror by name. Never loads the full file.
+ * Falls back to empty array if compact mirror doesn't exist.
+ */
+async function loadCompactJson(name, fallback) {
+    const cn = compactMirrorName(name);
+    const fb = fallback !== undefined ? fallback : [];
+
+    const now = Date.now();
+    if (cache[cn] && cacheTime[cn] && (now - cacheTime[cn]) < TTL_MS) {
+        return cache[cn];
+    }
+
+    if (isR2Ready()) {
+        try {
+            const buf = await downloadFromR2(r2Key(cn));
+            if (buf) {
+                const data = JSON.parse(buf.toString('utf8'));
+                cache[cn] = data;
+                cacheTime[cn] = now;
+                return data;
+            }
+        } catch (e) {
+            console.warn(`jarvis-store: R2 compact read failed for ${cn}:`, e.message);
+        }
+    }
+
+    const lp = localPath(cn);
+    try {
+        if (fs.existsSync(lp)) {
+            const data = JSON.parse(fs.readFileSync(lp, 'utf8'));
+            cache[cn] = data;
+            cacheTime[cn] = now;
+            return data;
+        }
+    } catch (e) {
+        console.warn(`jarvis-store: local compact read failed for ${cn}:`, e.message);
+    }
+
+    console.warn(`jarvis-store: compact mirror not found for ${name} — return empty`);
+    return fb;
+}
+
+/**
+ * Invalidate compact mirror cache entry.
+ */
+function invalidateCompactCache(name) {
+    const cn = compactMirrorName(name);
+    delete cache[cn];
+    delete cacheTime[cn];
+}
+
+/**
+ * Build compact mirrors for any source that doesn't already have one in R2.
+ * Intended for local/dev use — loads full files to project them.
+ */
+async function buildCompactMirrors() {
+    const built = [];
+    for (const name of COMPACT_MIRROR_SOURCES) {
+        const cn = compactMirrorName(name);
+        if (isR2Ready()) {
+            try {
+                const has = await existsInR2(r2Key(cn));
+                if (has) continue;
+            } catch {}
+        }
+        try {
+            const data = await loadJson(name, []);
+            if (Array.isArray(data) && data.length > 0) {
+                await saveCompactMirror(name, data);
+                built.push(`${name} (${data.length} items)`);
+            }
+        } catch (e) {
+            console.warn(`jarvis-store: compact mirror build failed for ${name}:`, e.message);
+        }
+    }
+    if (built.length > 0) {
+        console.log('jarvis-store: built compact mirrors:', built.join(', '));
     }
 }
 
@@ -194,6 +320,7 @@ function invalidateCache(name) {
 
 /**
  * Auto-seed: run on server startup to populate R2 from local if needed.
+ * Also ensures compact mirrors exist in R2.
  */
 async function autoSeed() {
     if (!isR2Ready()) {
@@ -208,17 +335,23 @@ async function autoSeed() {
     } else {
         console.log('jarvis-store: all canonical files present in R2');
     }
+    // Ensure compact mirrors exist (builds from full files if missing)
+    await buildCompactMirrors();
 }
 
 module.exports = {
     loadJson,
     saveJson,
+    loadCompactJson,
     exists,
     seedFromLocalIfMissing,
     forceUploadToR2,
     migrateAll,
     invalidateCache,
+    invalidateCompactCache,
+    buildCompactMirrors,
     autoSeed,
     CANONICAL_FILES,
+    COMPACT_MIRROR_SOURCES,
     DEFAULTS
 };

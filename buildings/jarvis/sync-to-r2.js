@@ -24,6 +24,15 @@ const FILES = [
     'tools',
 ];
 
+// Files that get compact mirrors (dataset arrays stripped)
+const COMPACT_SOURCES = ['indicators', 'derived_experiments', 'experiments_log'];
+
+function compactProject(item) {
+    if (!item) return item;
+    const { dataset, ...rest } = item;
+    return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+}
+
 async function run() {
     if (!cloudStorage.isR2Ready()) {
         console.error('R2 not ready — check credentials');
@@ -31,18 +40,16 @@ async function run() {
     }
     console.log('R2 ready. Syncing local → R2...');
     for (const name of FILES) {
-        const localPath = path.join(JARVIS_DIR, `${name}.json`);
-        if (!fs.existsSync(localPath)) {
+        const localFile = path.join(JARVIS_DIR, `${name}.json`);
+        if (!fs.existsSync(localFile)) {
             console.log(`  SKIP ${name} (no local file)`);
             continue;
         }
-        const stat = fs.statSync(localPath);
+        const stat = fs.statSync(localFile);
         const sizeMB = (stat.size / 1e6).toFixed(1);
         try {
-            const buf = fs.readFileSync(localPath);
-            // Parse to validate JSON
+            const buf = fs.readFileSync(localFile);
             const parsed = JSON.parse(buf.toString());
-            // Count for summary
             let count = '';
             if (name === 'derived_experiments') {
                 const arr = parsed.experiments || parsed;
@@ -54,6 +61,19 @@ async function run() {
             }
             await cloudStorage.uploadToR2(`${R2_PREFIX}${name}.json`, buf, 'application/json');
             console.log(`  ✓ ${name} ${sizeMB}MB${count}`);
+
+            // Build and upload compact mirror if applicable
+            if (COMPACT_SOURCES.includes(name) && Array.isArray(parsed)) {
+                const compact = parsed.map(compactProject);
+                const compactStr = JSON.stringify(compact);
+                const compactBuf = Buffer.from(compactStr);
+                const compactName = `${name}_compact`;
+                await cloudStorage.uploadToR2(`${R2_PREFIX}${compactName}.json`, compactBuf, 'application/json');
+                const compactMB = (compactBuf.length / 1e6).toFixed(1);
+                // Write local compact file too
+                fs.writeFileSync(path.join(JARVIS_DIR, `${compactName}.json`), compactStr);
+                console.log(`  ✓ ${compactName} ${compactMB}MB (${compact.length} items, compact mirror)`);
+            }
         } catch (e) {
             console.error(`  ✗ ${name}: ${e.message}`);
         }
