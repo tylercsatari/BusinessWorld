@@ -984,9 +984,12 @@ const INTERACTION_BASES = [
     'retention_75pct',    // exists as retention_75pct in STATIC_KEYS
     'retention_90pct',    // exists as retention_90pct in STATIC_KEYS
     // Group M bases — new arc-position scalars
-    'emotional_peak_position_pct',
-    'revelation_pace_score',
+    // NOTE: emotional_peak_position_pct and revelation_pace_score removed from INTERACTION_BASES
+    // because phrase-match coverage is too sparse (4-12 of 370 videos) to produce valid cross-metrics.
+    // They remain as standalone indicators in ZYGARNIK_SPECIAL_KEYS.
 ];
+// Excluded from cross-metric generation due to sparse video coverage (<50 videos with scores):
+// 'emotional_peak_position_pct', 'revelation_pace_score'
 
 // Static metric definitions — keys that have hardcoded extraction logic
 const STATIC_KEYS = new Set([
