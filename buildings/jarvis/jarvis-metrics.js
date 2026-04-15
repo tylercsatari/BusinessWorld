@@ -271,6 +271,29 @@ const ZYGARNIK_PHRASE_SETS = {
         'hoping', 'praying', 'fingers crossed', 'moment of truth',
         'do or die', 'no turning back', 'nerve',
     ],
+    identity_hook: [
+        "if you", "for anyone who", "have you ever", "you know that feeling",
+        "does this sound familiar", "anyone else", "raise your hand if",
+        "you might be", "sounds like you", "if this is you", "relate",
+        "been there", "we all know", "this is for you", "for those of you",
+    ],
+    social_proof: [
+        "million", "millions of", "everyone", "most people", "studies show",
+        "research shows", "experts say", "proven", "scientists", "according to",
+        "data shows", "statistically", "90 percent", "99 percent",
+        "thousands of", "viral", "trending", "people are saying",
+    ],
+    scarcity: [
+        "limited time", "running out", "before it", "disappearing", "last chance",
+        "only a few", "once in a lifetime", "never again", "rare", "exclusive",
+        "while you can", "dont miss", "time sensitive", "act now",
+    ],
+    pattern_interrupt: [
+        "wait", "stop", "actually no", "plot twist", "wrong", "mistake",
+        "i lied", "not what you think", "you were wrong", "everybody says",
+        "they say", "but the truth", "unpopular opinion", "nobody talks about",
+        "what nobody tells you", "secret nobody",
+    ],
 };
 
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
@@ -293,6 +316,18 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'open_loop_before_closure_flag',
     'title_open_loop_flag', 'title_curiosity_gap_flag',
     'hook_question_density',
+    'identity_hook_density',
+    'social_proof_hook_density',
+    'scarcity_hook_density',
+    'pattern_interrupt_density',
+    'hook_specificity_score',
+    'hook_number_density',
+    'title_number_count',
+    'micro_commitment_count',
+    'open_loop_before_first_third_flag',
+    'tension_peak_position_pct',
+    'story_arc_front_load_ratio',
+    'hook_identity_flag',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -354,6 +389,24 @@ const INTERACTION_BASES = [
     'hook_stake_density', 'setup_payoff_ratio', 'resolution_density',
     'closure_rate_per_min', 'tension_arc_score', 'pre_payoff_open_loop_density',
     'visual_stake_frame_pct',
+    // New indicator families
+    'open_loop_count_first3s',
+    'open_loop_count_first15s',
+    'closure_count_first10s',
+    'suspense_count',
+    'suspense_density',
+    'contrast_density',
+    'identity_hook_density',
+    'social_proof_hook_density',
+    'pattern_interrupt_density',
+    'hook_specificity_score',
+    'hook_number_density',
+    'open_loop_to_closure_ratio',
+    'zygarnik_tension_peak_pct',
+    'tension_arc_score',
+    'resolution_density',
+    'tension_peak_position_pct',
+    'story_arc_front_load_ratio',
 ];
 
 // Static metric definitions — keys that have hardcoded extraction logic
@@ -1011,7 +1064,7 @@ function extractMetric(key, analysis) {
     // ── Zygarnik / Open-Loop / Gratification Delay families ────────────
 
     // Phrase family metrics: {family}_{count|density}[_first{N}s]
-    const zyFamMatch = key.match(/^(open_loop|closure|unresolved_ref|temporal_anticipation|contrast|superlative|action_verb|sensory|imperative|outcome_ref|suspense)_(count|density)(?:_first(\d+)s)?$/);
+    const zyFamMatch = key.match(/^(open_loop|closure|unresolved_ref|temporal_anticipation|contrast|superlative|action_verb|sensory|imperative|outcome_ref|suspense|identity_hook|social_proof|scarcity|pattern_interrupt)_(count|density)(?:_first(\d+)s)?$/);
     if (zyFamMatch) {
         const [, family, measure, windowStr] = zyFamMatch;
         if (!transcript) return [null, 'no transcript'];
@@ -1464,6 +1517,129 @@ function extractMetric(key, analysis) {
             return stakeWords.some(w => desc.includes(w) || eng.includes(w));
         }).length;
         return [ct / frames.length, null];
+    }
+
+    if (key === "identity_hook_density") {
+        const ht = hookText();
+        if (!ht) return [null, "no hook text"];
+        const htl = ht.toLowerCase();
+        const w = ht.split(/\s+/).filter(Boolean);
+        if (!w.length) return [null, "empty hook"];
+        return [countPhraseMatches(htl, ZYGARNIK_PHRASE_SETS.identity_hook) / w.length, null];
+    }
+
+    if (key === "social_proof_hook_density") {
+        const ht = hookText();
+        if (!ht) return [null, "no hook text"];
+        const htl = ht.toLowerCase();
+        const w = ht.split(/\s+/).filter(Boolean);
+        if (!w.length) return [null, "empty hook"];
+        return [countPhraseMatches(htl, ZYGARNIK_PHRASE_SETS.social_proof) / w.length, null];
+    }
+
+    if (key === "scarcity_hook_density") {
+        const ht = hookText();
+        if (!ht) return [null, "no hook text"];
+        const htl = ht.toLowerCase();
+        const w = ht.split(/\s+/).filter(Boolean);
+        if (!w.length) return [null, "empty hook"];
+        return [countPhraseMatches(htl, ZYGARNIK_PHRASE_SETS.scarcity) / w.length, null];
+    }
+
+    if (key === "pattern_interrupt_density") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        // Weight early words more (first 25% of video)
+        const earlyWords = words.slice(0, Math.ceil(words.length * 0.25)).join(" ");
+        return [countPhraseMatches(earlyWords, ZYGARNIK_PHRASE_SETS.pattern_interrupt) / Math.max(earlyWords.split(/\s+/).length, 1), null];
+    }
+
+    if (key === "hook_specificity_score") {
+        const ht = hookText();
+        if (!ht) return [null, "no hook text"];
+        // Numbers, percentages, specific time references = high specificity
+        const numberMatches = (ht.match(/\b\d+(\.\d+)?(%|\s*percent|\s*times|\s*x|\s*dollars?|\s*seconds?|\s*minutes?|\s*hours?|\s*days?|\s*months?|\s*years?)?\b/gi) || []).length;
+        const w = ht.split(/\s+/).filter(Boolean);
+        return [numberMatches / Math.max(w.length, 1), null];
+    }
+
+    if (key === "hook_number_density") {
+        const ht = hookText();
+        if (!ht) return [null, "no hook text"];
+        const numberMatches = (ht.match(/\b\d+\b/g) || []).length;
+        const w = ht.split(/\s+/).filter(Boolean);
+        return [numberMatches / Math.max(w.length, 1), null];
+    }
+
+    if (key === "title_number_count") {
+        const title = (meta.title || "").toLowerCase();
+        return [(title.match(/\b\d+\b/g) || []).length, null];
+    }
+
+    if (key === "micro_commitment_count") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const mcPhrases = [
+            "raise your hand", "comment below", "tell me", "let me know",
+            "do you agree", "have you tried", "tag someone", "save this",
+            "share this", "write yes", "type yes", "tap the", "click the",
+            "smash the like", "hit the like",
+        ];
+        return [countPhraseMatches(tl, mcPhrases), null];
+    }
+
+    if (key === "open_loop_before_first_third_flag") {
+        if (!transcript) return [0, null];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        const firstThird = words.slice(0, Math.ceil(words.length / 3)).join(" ");
+        const hasOpen = countPhraseMatches(firstThird, ZYGARNIK_PHRASE_SETS.open_loop) > 0;
+        const hasClose = countPhraseMatches(firstThird, ZYGARNIK_PHRASE_SETS.closure) > 0;
+        return [hasOpen && !hasClose ? 1 : 0, null];
+    }
+
+    if (key === "tension_peak_position_pct") {
+        // Like zygarnik_tension_peak_pct but for suspense language
+        if (!transcript) return [0, null];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (words.length < 5) return [0, null];
+        const windowSize = Math.max(1, Math.floor(words.length * 0.15));
+        let maxDensity = 0, peakPos = 0;
+        for (let i = 0; i <= words.length - windowSize; i++) {
+            const windowText = words.slice(i, i + windowSize).join(" ");
+            const count = countPhraseMatches(windowText, ZYGARNIK_PHRASE_SETS.suspense);
+            const density = count / windowSize;
+            if (density > maxDensity) {
+                maxDensity = density;
+                peakPos = (i + windowSize / 2) / words.length * 100;
+            }
+        }
+        return [maxDensity > 0 ? peakPos : 0, null];
+    }
+
+    if (key === "story_arc_front_load_ratio") {
+        // How much narrative tension is in first 40% vs last 60%
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        const splitIdx = Math.floor(words.length * 0.4);
+        const firstPart = words.slice(0, splitIdx).join(" ");
+        const lastPart = words.slice(splitIdx).join(" ");
+        const firstTension = countPhraseMatches(firstPart, ZYGARNIK_PHRASE_SETS.open_loop) +
+                             countPhraseMatches(firstPart, ZYGARNIK_PHRASE_SETS.suspense);
+        const lastTension = countPhraseMatches(lastPart, ZYGARNIK_PHRASE_SETS.open_loop) +
+                            countPhraseMatches(lastPart, ZYGARNIK_PHRASE_SETS.suspense);
+        return [firstTension / (lastTension + 1), null];
+    }
+
+    if (key === "hook_identity_flag") {
+        const ht = hookText();
+        if (!ht) return [0, null];
+        return [countPhraseMatches(ht.toLowerCase(), ZYGARNIK_PHRASE_SETS.identity_hook) > 0 ? 1 : 0, null];
     }
 
     // ── Pattern-based keys ───────────────────────────────────────────────
