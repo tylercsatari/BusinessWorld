@@ -601,6 +601,61 @@ const VIEWER_STAKES_PHRASES = [
     'save you', 'help you', 'benefit you',
 ];
 
+// ── Group S phrase arrays ──
+const SOCIAL_PROOF_PHRASES = [
+    'studies show', 'research shows', 'according to', 'proven', 'data shows',
+    'statistics show', 'percent of people', 'millions of', 'thousands of',
+    'experts say', 'scientists found', 'survey found', 'results show',
+    'the numbers', 'backed by', 'evidence shows', 'clinical', 'scientifically',
+];
+const CURIOSITY_GAP_PHRASES = [
+    'you probably don', "you don't know", 'most people miss', 'most people don',
+    'what nobody', 'the thing is', 'here is why', "here's why", 'the reason is',
+    'turns out', 'it turns out', "here's the secret", 'the real secret',
+    "here's what", 'what actually', "what's really", 'the hidden', 'the missing',
+    'overlooked', 'underrated', 'the key is', "here's the key",
+];
+const EMOTIONAL_PEAK_PHRASES = [
+    'honestly', 'genuinely', 'truly', 'literally', 'absolutely', 'completely',
+    'blew my mind', 'blew me away', 'i was shocked', 'i was devastated',
+    'i was terrified', 'i was amazed', 'unbelievable', 'incredible', 'insane',
+    'ridiculous', 'wild', 'crazy', 'i cried', "i couldn't believe",
+];
+const COMMITMENT_DEVICE_PHRASES = [
+    'by the end of this', 'stay until', 'stick around', 'stay to the end',
+    "don't leave yet", 'part one', 'part two', 'series', 'next video',
+    'next week', 'tomorrow i will', 'subscribe to see', 'challenge accepted',
+    'day one', 'day two', 'week one', 'follow along', 'join me', 'the journey',
+];
+const PROOF_OF_WORK_PHRASES = [
+    'i tested', "i've tested", 'i tried', 'i spent', 'after years',
+    'after months', 'after weeks', 'i built', 'i created', 'i learned',
+    "i've been doing this", 'my experience', 'in my experience', 'from experience',
+    'i went through', 'i did this for', 'hours of', 'i analyzed', 'i researched',
+    'i found that', 'my results',
+];
+const FUTURE_SELF_PHRASES = [
+    'you will be', "you'll be able to", "you'll finally", "you'll never",
+    'imagine yourself', 'your future', 'by next month', 'in 30 days',
+    'in 90 days', 'a year from now', 'six months from now', 'the version of you',
+    'who you want to be', 'who you become', 'your future self', 'build the life',
+    'the life you want', 'the person you', 'one day you',
+];
+const FAILURE_VULNERABILITY_PHRASES = [
+    'i failed', "i've failed", 'my biggest failure', 'i was wrong',
+    'i made a mistake', 'i got this wrong', 'embarrassing', 'humiliating',
+    'i struggled', 'the hardest part', 'i almost quit', 'i wanted to quit',
+    "i couldn't figure", 'i had no idea', 'i was clueless', "i didn't know",
+    'i was terrible', 'i sucked at', 'my worst', 'brutal lesson',
+];
+const ACTION_TRIGGER_PHRASES = [
+    'right now', 'do this now', 'start today', 'start now', 'take action',
+    'take this step', 'the next step', 'first step', 'step one is', 'begin by',
+    'get started', 'go ahead and', 'click the link', 'use the code',
+    'limited time', 'before it', 'before you', 'do not wait', "don't wait",
+    'act now', 'deadline',
+];
+
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
 const ZYGARNIK_EARLY_WINDOWS = [2, 3, 5, 8, 10, 15, 20];
 
@@ -1024,6 +1079,54 @@ for (const k of [
 ]) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
+}
+
+// ── New Group S: Social proof / curiosity gap / emotional peak / commitment device / proof of work / future self / failure vulnerability / action trigger ──
+for (const k of [
+    // Social proof
+    'social_proof_count', 'social_proof_density',
+    'social_proof_count_hook', 'social_proof_front_load_ratio',
+    // Curiosity gap
+    'curiosity_gap_count', 'curiosity_gap_density',
+    'curiosity_gap_count_hook', 'curiosity_gap_front_load_ratio',
+    // Emotional peak
+    'emotional_peak_count', 'emotional_peak_density',
+    'emotional_peak_count_hook', 'emotional_peak_count_first_half',
+    // Commitment device
+    'commitment_device_count', 'commitment_device_density',
+    'commitment_device_count_hook', 'commitment_device_count_first_quarter',
+    // Proof of work
+    'proof_of_work_count', 'proof_of_work_density',
+    'proof_of_work_count_hook', 'proof_of_work_front_load_ratio',
+    // Future self
+    'future_self_count', 'future_self_density',
+    'future_self_count_hook', 'future_self_count_first_half',
+    // Failure vulnerability
+    'failure_vulnerability_count', 'failure_vulnerability_density',
+    'failure_vulnerability_count_hook', 'failure_vulnerability_count_first_half',
+    // Action trigger
+    'action_trigger_count', 'action_trigger_density',
+    'action_trigger_count_hook', 'action_trigger_count_last_quarter',
+    // Scalar/derived indicators
+    'loop_resolution_ratio',
+    'promise_density_first_third',
+    'emotional_arc_peak_pct',
+    'curiosity_resolution_gap_pct',
+    'hook_phrase_diversity',
+    'social_proof_before_midpoint_count',
+    'proof_of_work_before_claim_ratio',
+]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+// Windowed variants for Group S families
+for (const fam of ['social_proof', 'curiosity_gap', 'emotional_peak', 'proof_of_work', 'failure_vulnerability']) {
+    for (const w of ZYGARNIK_EARLY_WINDOWS) {
+        for (const variant of ['count', 'density']) {
+            STATIC_KEYS.add(`${fam}_${variant}_first${w}s`);
+            STATIC_LAYER[`${fam}_${variant}_first${w}s`] = 'pre';
+        }
+    }
 }
 
 
@@ -3318,6 +3421,347 @@ function extractMetric(key, analysis) {
         return [f / s, null];
     }
 
+    // ── Group S: Social proof / curiosity gap / emotional peak / commitment device / proof of work / future self / failure vulnerability / action trigger ──
+
+    // Social proof
+    if (key === 'social_proof_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), SOCIAL_PROOF_PHRASES), null];
+    }
+    if (key === 'social_proof_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), SOCIAL_PROOF_PHRASES) / words.length, null];
+    }
+    if (key === 'social_proof_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, SOCIAL_PROOF_PHRASES), null];
+    }
+    if (key === 'social_proof_front_load_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const half = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, half).join(' ').toLowerCase();
+        const secondHalf = words.slice(half).join(' ').toLowerCase();
+        const f = countPhraseMatches(firstHalf, SOCIAL_PROOF_PHRASES);
+        const s = countPhraseMatches(secondHalf, SOCIAL_PROOF_PHRASES) + 0.0001;
+        return [f / s, null];
+    }
+
+    // Curiosity gap
+    if (key === 'curiosity_gap_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CURIOSITY_GAP_PHRASES), null];
+    }
+    if (key === 'curiosity_gap_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), CURIOSITY_GAP_PHRASES) / words.length, null];
+    }
+    if (key === 'curiosity_gap_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, CURIOSITY_GAP_PHRASES), null];
+    }
+    if (key === 'curiosity_gap_front_load_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const half = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, half).join(' ').toLowerCase();
+        const secondHalf = words.slice(half).join(' ').toLowerCase();
+        const f = countPhraseMatches(firstHalf, CURIOSITY_GAP_PHRASES);
+        const s = countPhraseMatches(secondHalf, CURIOSITY_GAP_PHRASES) + 0.0001;
+        return [f / s, null];
+    }
+
+    // Emotional peak
+    if (key === 'emotional_peak_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), EMOTIONAL_PEAK_PHRASES), null];
+    }
+    if (key === 'emotional_peak_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), EMOTIONAL_PEAK_PHRASES) / words.length, null];
+    }
+    if (key === 'emotional_peak_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, EMOTIONAL_PEAK_PHRASES), null];
+    }
+    if (key === 'emotional_peak_count_first_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, EMOTIONAL_PEAK_PHRASES), null];
+    }
+
+    // Commitment device
+    if (key === 'commitment_device_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), COMMITMENT_DEVICE_PHRASES), null];
+    }
+    if (key === 'commitment_device_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), COMMITMENT_DEVICE_PHRASES) / words.length, null];
+    }
+    if (key === 'commitment_device_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, COMMITMENT_DEVICE_PHRASES), null];
+    }
+    if (key === 'commitment_device_count_first_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstQuarter = words.slice(0, Math.floor(words.length / 4)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstQuarter, COMMITMENT_DEVICE_PHRASES), null];
+    }
+
+    // Proof of work
+    if (key === 'proof_of_work_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), PROOF_OF_WORK_PHRASES), null];
+    }
+    if (key === 'proof_of_work_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), PROOF_OF_WORK_PHRASES) / words.length, null];
+    }
+    if (key === 'proof_of_work_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, PROOF_OF_WORK_PHRASES), null];
+    }
+    if (key === 'proof_of_work_front_load_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const half = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, half).join(' ').toLowerCase();
+        const secondHalf = words.slice(half).join(' ').toLowerCase();
+        const f = countPhraseMatches(firstHalf, PROOF_OF_WORK_PHRASES);
+        const s = countPhraseMatches(secondHalf, PROOF_OF_WORK_PHRASES) + 0.0001;
+        return [f / s, null];
+    }
+
+    // Future self
+    if (key === 'future_self_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), FUTURE_SELF_PHRASES), null];
+    }
+    if (key === 'future_self_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), FUTURE_SELF_PHRASES) / words.length, null];
+    }
+    if (key === 'future_self_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, FUTURE_SELF_PHRASES), null];
+    }
+    if (key === 'future_self_count_first_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, FUTURE_SELF_PHRASES), null];
+    }
+
+    // Failure vulnerability
+    if (key === 'failure_vulnerability_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), FAILURE_VULNERABILITY_PHRASES), null];
+    }
+    if (key === 'failure_vulnerability_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), FAILURE_VULNERABILITY_PHRASES) / words.length, null];
+    }
+    if (key === 'failure_vulnerability_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, FAILURE_VULNERABILITY_PHRASES), null];
+    }
+    if (key === 'failure_vulnerability_count_first_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, FAILURE_VULNERABILITY_PHRASES), null];
+    }
+
+    // Action trigger
+    if (key === 'action_trigger_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), ACTION_TRIGGER_PHRASES), null];
+    }
+    if (key === 'action_trigger_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), ACTION_TRIGGER_PHRASES) / words.length, null];
+    }
+    if (key === 'action_trigger_count_hook') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        return [countPhraseMatches(hookText, ACTION_TRIGGER_PHRASES), null];
+    }
+    if (key === 'action_trigger_count_last_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const lastQuarter = words.slice(Math.floor(words.length * 0.75)).join(' ').toLowerCase();
+        return [countPhraseMatches(lastQuarter, ACTION_TRIGGER_PHRASES), null];
+    }
+
+    // ── Group S: Scalar/derived indicators ──────────────────────────────
+    if (key === 'loop_resolution_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const openCt = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closedCt = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        return [closedCt / (openCt + 0.001), null];
+    }
+    if (key === 'promise_density_first_third') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const third = Math.floor(words.length / 3);
+        const firstThird = words.slice(0, third).join(' ').toLowerCase();
+        const tWords = firstThird.split(/\s+/).filter(Boolean);
+        if (!tWords.length) return [0, null];
+        return [countPhraseMatches(firstThird, PROMISE_SPECIFICITY_PHRASES) / tWords.length, null];
+    }
+    if (key === 'emotional_arc_peak_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean);
+        if (words.length < 10) return [null, 'transcript too short'];
+        const WIN = 10;
+        let maxDensity = -1;
+        let peakPos = 0;
+        for (let i = 0; i <= words.length - WIN; i++) {
+            const windowText = words.slice(i, i + WIN).join(' ');
+            const density = countPhraseMatches(windowText, EMOTIONAL_PEAK_PHRASES) / WIN;
+            if (density > maxDensity) {
+                maxDensity = density;
+                peakPos = i;
+            }
+        }
+        return [(peakPos / words.length) * 100, null];
+    }
+    if (key === 'curiosity_resolution_gap_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const [payoffPct] = extractMetric('payoff_position_pct', analysis);
+        const [gratPct] = extractMetric('gratification_delay_pct', analysis);
+        if (payoffPct == null || gratPct == null) return [null, 'missing component metrics'];
+        return [Math.abs(payoffPct - gratPct), null];
+    }
+    if (key === 'hook_phrase_diversity') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+        const allFamilies = [
+            NEW_PROOF_PHRASES, NEW_SETUP_PHRASES, NEW_PAYOFF_PHRASES,
+            NEW_VISUAL_PROOF_PHRASES, NEW_CREDENTIAL_PHRASES, NEW_CONSEQUENCE_PHRASES,
+            NEW_PERSONAL_STAKE_PHRASES, NEW_MICRO_REWARD_PHRASES, NEW_EARLY_ENGAGEMENT_PHRASES,
+            NEW_MID_FILLER_PHRASES, NEW_CLOSING_HOOK_PHRASES,
+            ANTICIPATION_PHRASES, COUNTERINTUITIVE_PHRASES, CONFESSION_PHRASES,
+            ESCALATION_PHRASES, SPECIFICITY_PHRASES, CALLBACK_PHRASES, URGENCY_PHRASES,
+            RHETORICAL_QUESTION_PHRASES, SOCIAL_COMPARISON_PHRASES, TRANSFORMATION_ARC_PHRASES,
+            LOSS_FRAMING_PHRASES, MYSTERY_SETUP_PHRASES, PROMISE_SPECIFICITY_PHRASES,
+            PATTERN_INTERRUPT_PHRASES, VIEWER_STAKES_PHRASES,
+            SOCIAL_PROOF_PHRASES, CURIOSITY_GAP_PHRASES, EMOTIONAL_PEAK_PHRASES,
+            COMMITMENT_DEVICE_PHRASES, PROOF_OF_WORK_PHRASES, FUTURE_SELF_PHRASES,
+            FAILURE_VULNERABILITY_PHRASES, ACTION_TRIGGER_PHRASES,
+            ...Object.values(ZYGARNIK_PHRASE_SETS),
+        ];
+        let diversity = 0;
+        for (const familyPhrases of allFamilies) {
+            if (countPhraseMatches(hookText, familyPhrases) > 0) diversity++;
+        }
+        return [diversity, null];
+    }
+    if (key === 'social_proof_before_midpoint_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, SOCIAL_PROOF_PHRASES), null];
+    }
+    if (key === 'proof_of_work_before_claim_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstThird = words.slice(0, Math.floor(words.length * 0.3)).join(' ').toLowerCase();
+        const f = countPhraseMatches(firstThird, PROOF_OF_WORK_PHRASES);
+        const total = countPhraseMatches(transcript.toLowerCase(), PROOF_OF_WORK_PHRASES);
+        return [f / (total + 0.001), null];
+    }
+
+    // ── Group S: Windowed variants for phrase families ───────────────────
+    {
+        const _gsRe = /^(social_proof|curiosity_gap|emotional_peak|proof_of_work|failure_vulnerability)_(count|density)_first(\d+)s$/;
+        const _gsm = key.match(_gsRe);
+        if (_gsm) {
+            if (!transcript) return [null, 'no transcript'];
+            const dur = meta.duration || 0;
+            const wSec = parseInt(_gsm[3]);
+            const fam = _gsm[1];
+            const variant = _gsm[2];
+            let wText;
+            if (dur) {
+                wText = windowedTranscript(transcript, dur, wSec);
+            } else {
+                const allWords = transcript.split(/\s+/).filter(Boolean);
+                wText = allWords.slice(0, Math.ceil(allWords.length * 0.1)).join(' ');
+            }
+            if (!wText) return [null, 'no text for window'];
+            const wl = wText.toLowerCase();
+            const wWords = wl.split(/\s+/).filter(Boolean);
+            if (!wWords.length) return [0, null];
+            const _gsPhraseMap = {
+                'social_proof': SOCIAL_PROOF_PHRASES,
+                'curiosity_gap': CURIOSITY_GAP_PHRASES,
+                'emotional_peak': EMOTIONAL_PEAK_PHRASES,
+                'proof_of_work': PROOF_OF_WORK_PHRASES,
+                'failure_vulnerability': FAILURE_VULNERABILITY_PHRASES,
+            };
+            const phrases = _gsPhraseMap[fam];
+            const count = countPhraseMatches(wl, phrases);
+            return variant === 'density' ? [count / wWords.length, null] : [count, null];
+        }
+    }
+
     return [null, `unknown key: ${key}`];
 }
 
@@ -3611,6 +4055,39 @@ for (const k of [
     'viewer_stakes_count_hook', 'viewer_stakes_front_load_ratio',
 ]) {
     INDICATOR_RESOLUTION_MAP[k] = k.includes('hook') ? ['r_hook', 0, 10, null, null] : ['r0', 0, 100, null, null];
+}
+// Group S resolution map
+for (const k of [
+    'social_proof_count', 'social_proof_density',
+    'social_proof_count_hook', 'social_proof_front_load_ratio',
+    'curiosity_gap_count', 'curiosity_gap_density',
+    'curiosity_gap_count_hook', 'curiosity_gap_front_load_ratio',
+    'emotional_peak_count', 'emotional_peak_density',
+    'emotional_peak_count_hook', 'emotional_peak_count_first_half',
+    'commitment_device_count', 'commitment_device_density',
+    'commitment_device_count_hook', 'commitment_device_count_first_quarter',
+    'proof_of_work_count', 'proof_of_work_density',
+    'proof_of_work_count_hook', 'proof_of_work_front_load_ratio',
+    'future_self_count', 'future_self_density',
+    'future_self_count_hook', 'future_self_count_first_half',
+    'failure_vulnerability_count', 'failure_vulnerability_density',
+    'failure_vulnerability_count_hook', 'failure_vulnerability_count_first_half',
+    'action_trigger_count', 'action_trigger_density',
+    'action_trigger_count_hook', 'action_trigger_count_last_quarter',
+    'loop_resolution_ratio', 'promise_density_first_third',
+    'emotional_arc_peak_pct', 'curiosity_resolution_gap_pct',
+    'hook_phrase_diversity', 'social_proof_before_midpoint_count',
+    'proof_of_work_before_claim_ratio',
+]) {
+    INDICATOR_RESOLUTION_MAP[k] = k.includes('hook') ? ['r_hook', 0, 10, null, null] : ['r0', 0, 100, null, null];
+}
+// Group S windowed variant resolution map
+for (const fam of ['social_proof', 'curiosity_gap', 'emotional_peak', 'proof_of_work', 'failure_vulnerability']) {
+    for (const w of [2, 3, 5, 8, 10, 15, 20]) {
+        for (const variant of ['count', 'density']) {
+            INDICATOR_RESOLUTION_MAP[`${fam}_${variant}_first${w}s`] = ['r_hook', 0, 10, null, null];
+        }
+    }
 }
 
 const DEFAULT_RESOLUTION_DEFS = {

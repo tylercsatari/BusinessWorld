@@ -129,6 +129,28 @@ const baseAtomics = [
     'pattern_interrupt_count_hook', 'pattern_interrupt_count_first_half',
     'viewer_stakes_count', 'viewer_stakes_density',
     'viewer_stakes_count_hook', 'viewer_stakes_front_load_ratio',
+    // Family: Group S — Social proof / curiosity gap / emotional peak / commitment device / proof of work / future self / failure vulnerability / action trigger
+    'social_proof_count', 'social_proof_density',
+    'social_proof_count_hook', 'social_proof_front_load_ratio',
+    'curiosity_gap_count', 'curiosity_gap_density',
+    'curiosity_gap_count_hook', 'curiosity_gap_front_load_ratio',
+    'emotional_peak_count', 'emotional_peak_density',
+    'emotional_peak_count_hook', 'emotional_peak_count_first_half',
+    'commitment_device_count', 'commitment_device_density',
+    'commitment_device_count_hook', 'commitment_device_count_first_quarter',
+    'proof_of_work_count', 'proof_of_work_density',
+    'proof_of_work_count_hook', 'proof_of_work_front_load_ratio',
+    'future_self_count', 'future_self_density',
+    'future_self_count_hook', 'future_self_count_first_half',
+    'failure_vulnerability_count', 'failure_vulnerability_density',
+    'failure_vulnerability_count_hook', 'failure_vulnerability_count_first_half',
+    'action_trigger_count', 'action_trigger_density',
+    'action_trigger_count_hook', 'action_trigger_count_last_quarter',
+    // Group S scalar/derived indicators
+    'loop_resolution_ratio', 'promise_density_first_third',
+    'emotional_arc_peak_pct', 'curiosity_resolution_gap_pct',
+    'hook_phrase_diversity', 'social_proof_before_midpoint_count',
+    'proof_of_work_before_claim_ratio',
 ];
 
 // Windowed variants for count/density families
@@ -138,6 +160,12 @@ const windowedFamilies = [
     ['consequence',         ['density']],
     ['personal_stake',      ['density']],
     ['micro_reward',        ['density']],
+    // Group S windowed families
+    ['social_proof',           ['count', 'density']],
+    ['curiosity_gap',          ['count', 'density']],
+    ['emotional_peak',         ['count', 'density']],
+    ['proof_of_work',          ['count', 'density']],
+    ['failure_vulnerability',  ['count', 'density']],
 ];
 const windowedAtomics = [];
 for (const [fam, measures] of windowedFamilies) {
