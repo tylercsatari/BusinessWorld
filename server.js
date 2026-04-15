@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 // Load .env file
 const envPath = path.join(__dirname, '.env');
@@ -29,6 +30,42 @@ function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
 const BUILD_TS = Date.now();
+
+// ── Jarvis Compact Helpers ────────────────────────────────────────────
+function sendJsonGz(req, res, data, statusCode) {
+    const json = typeof data === 'string' ? data : JSON.stringify(data);
+    const accepts = (req.headers['accept-encoding'] || '');
+    if (accepts.includes('gzip')) {
+        zlib.gzip(Buffer.from(json, 'utf8'), (err, compressed) => {
+            if (err) {
+                res.writeHead(statusCode || 200, { 'Content-Type': 'application/json' });
+                res.end(json);
+            } else {
+                res.writeHead(statusCode || 200, {
+                    'Content-Type': 'application/json',
+                    'Content-Encoding': 'gzip',
+                    'Vary': 'Accept-Encoding',
+                });
+                res.end(compressed);
+            }
+        });
+    } else {
+        res.writeHead(statusCode || 200, { 'Content-Type': 'application/json' });
+        res.end(json);
+    }
+}
+
+function compactIndicator(ind) {
+    if (!ind) return ind;
+    const { dataset, ...rest } = ind;
+    return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+}
+
+function compactDerived(d) {
+    if (!d) return d;
+    const { dataset, ...rest } = d;
+    return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+}
 
 // ── Jarvis Runner State (in-memory, survives across requests) ──────────
 const LOG_TAIL_MAX = 32 * 1024; // keep last 32 KB of output
@@ -3733,49 +3770,71 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
 
+    // Detail endpoint: single indicator by key (full record with dataset)
+    if (pathname.startsWith('/api/jarvis/v2/indicator/') && req.method === 'GET') {
+        try {
+            const key = decodeURIComponent(pathname.slice('/api/jarvis/v2/indicator/'.length));
+            const data = await jarvisStore.loadJson('indicators', []);
+            const found = data.find(i => i.key === key);
+            if (!found) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
+            sendJsonGz(req, res, found);
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    // Detail endpoint: single derived experiment by key (full record with dataset)
+    if (pathname.startsWith('/api/jarvis/v2/derived-experiment/') && req.method === 'GET') {
+        try {
+            const key = decodeURIComponent(pathname.slice('/api/jarvis/v2/derived-experiment/'.length));
+            const data = await jarvisStore.loadJson('derived_experiments', []);
+            const found = data.find(d => d.key === key);
+            if (!found) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
+            sendJsonGz(req, res, found);
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+
+    // Compact indicators (no dataset arrays — ~95% smaller)
     if (pathname === '/api/jarvis/v2/indicators' && req.method === 'GET') {
         try {
             if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('indicators');
             const data = await jarvisStore.loadJson('indicators', []);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
-        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+            const compact = url.searchParams.get('full') === '1' ? data : data.map(compactIndicator);
+            sendJsonGz(req, res, compact);
+        } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
     if (pathname === '/api/jarvis/v2/graph' && req.method === 'GET') {
         try {
             if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('graph');
             const data = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
-        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"nodes":[],"edges":[],"derived_edges":[]}'); }
+            sendJsonGz(req, res, data);
+        } catch { sendJsonGz(req, res, { nodes: [], edges: [], derived_edges: [] }); }
         return;
     }
     if (pathname === '/api/jarvis/v2/tools' && req.method === 'GET') {
         try {
             if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('tools');
             const data = await jarvisStore.loadJson('tools', []);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
-        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+            sendJsonGz(req, res, data);
+        } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
     if (pathname === '/api/jarvis/v2/resolutions' && req.method === 'GET') {
         try {
             if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('resolutions');
             const data = await jarvisStore.loadJson('resolutions', []);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
-        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+            sendJsonGz(req, res, data);
+        } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
+    // Compact derived experiments (no dataset arrays — ~95% smaller)
     if (pathname === '/api/jarvis/v2/derived-experiments' && req.method === 'GET') {
         try {
             if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('derived_experiments');
             const data = await jarvisStore.loadJson('derived_experiments', []);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
-        } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+            const compact = url.searchParams.get('full') === '1' ? data : data.map(compactDerived);
+            sendJsonGz(req, res, compact);
+        } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
     if (pathname === '/api/jarvis/v2/experiments' && req.method === 'GET') {
@@ -3788,17 +3847,16 @@ Respond ONLY as valid JSON (no markdown):
                 jarvisStore.loadJson('experiments_log', []),
                 jarvisStore.loadJson('derived_experiments', []),
             ]);
-            // Tag atomic experiments with kind if missing
             const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                atomic: taggedAtomic,
-                derived,
+            const compactAtomic = url.searchParams.get('full') === '1' ? taggedAtomic : taggedAtomic.map(compactIndicator);
+            const compactDerivedArr = url.searchParams.get('full') === '1' ? derived : derived.map(compactDerived);
+            sendJsonGz(req, res, {
+                atomic: compactAtomic,
+                derived: compactDerivedArr,
                 count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
-            }));
+            });
         } catch (e) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ atomic: [], derived: [], count: { atomic: 0, derived: 0, total: 0 } }));
+            sendJsonGz(req, res, { atomic: [], derived: [], count: { atomic: 0, derived: 0, total: 0 } });
         }
         return;
     }

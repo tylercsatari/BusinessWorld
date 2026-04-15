@@ -358,12 +358,12 @@ const JarvisUI = (() => {
         const result = ind.result;
         const tool = v2Tools ? v2Tools.find(t => t.id === exp.tool_id) : null;
         const dataset = ind.dataset || [];
+        const datasetSize = dataset.length || ind._datasetSize || 0;
         const metricDef = ind.metric_definition || {};
         const color = ind.layer === 'pre' ? '#06b6d4' : '#a78bfa';
 
         const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
 
-        // Stats
         const r = result ? result.primary_r : null;
         const rho = result ? result.rho : null;
         const p = exp.outputs ? exp.outputs.p_value : null;
@@ -371,14 +371,33 @@ const JarvisUI = (() => {
         const ciHigh = exp.outputs ? exp.outputs.ci_high : null;
         const rStr = r != null ? `<span style="font-weight:700;color:${r >= 0 ? '#22d3ee' : '#f87171'}">${r >= 0 ? '+' : ''}${r.toFixed(3)}</span>` : '—';
 
-        // Data points table (show first 20, with toggle hint)
-        const dataRows = dataset.slice(0, 20).map((d, i) =>
-            `<tr style="background:${i % 2 === 0 ? '#0a1020' : '#0d1525'}">
-                <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${d.ytId}</td>
-                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#cbd5e1;text-align:right">${typeof d.value === 'number' ? d.value.toFixed(4) : d.value}</td>
-                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#94a3b8;text-align:right">${typeof d.target_value === 'number' ? d.target_value.toFixed(4) : d.target_value}</td>
-            </tr>`
-        ).join('');
+        let dataTableHtml = '';
+        if (dataset.length) {
+            const dataRows = dataset.slice(0, 20).map((d, i) =>
+                `<tr style="background:${i % 2 === 0 ? '#0a1020' : '#0d1525'}">
+                    <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${d.ytId}</td>
+                    <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#cbd5e1;text-align:right">${typeof d.value === 'number' ? d.value.toFixed(4) : d.value}</td>
+                    <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#94a3b8;text-align:right">${typeof d.target_value === 'number' ? d.target_value.toFixed(4) : d.target_value}</td>
+                </tr>`
+            ).join('');
+            dataTableHtml = `${sectionHdr('Data Points (' + dataset.length + ' videos)')}
+                <div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="background:#1e293b;position:sticky;top:0">
+                            <th style="padding:4px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Video ID</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">${ind.key}</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">log10(views)</th>
+                        </tr></thead>
+                        <tbody>${dataRows}</tbody>
+                    </table>
+                    ${dataset.length > 20 ? '<div style="padding:6px 8px;font-size:10px;color:#475569;text-align:center">… ' + (dataset.length - 20) + ' more rows</div>' : ''}
+                </div>`;
+        } else if (datasetSize > 0) {
+            dataTableHtml = `${sectionHdr('Data Points (' + datasetSize + ' videos)')}
+                <div id="jarvis-exp-dataset-${ind.key}" style="padding:8px">
+                    <button onclick="JarvisUI.loadExpDataset('${ind.key}','indicator')" style="background:#1e293b;border:1px solid #334155;color:#22d3ee;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Load data points</button>
+                </div>`;
+        }
 
         return `
             <div style="background:#0a1628;border-left:3px solid ${color};border-radius:0 8px 8px 0;padding:14px;margin-bottom:12px">
@@ -387,13 +406,13 @@ const JarvisUI = (() => {
                         <div style="font-size:15px;font-weight:700;color:#f1f5f9">${ind.label || ind.key}</div>
                         <code style="font-size:10px;color:#475569">${exp.id}</code>
                     </div>
-                    <button onclick="JarvisUI.closeAnalyticalPanel()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer">×</button>
+                    <button onclick="JarvisUI.closeAnalyticalPanel()" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer">&times;</button>
                 </div>
 
                 ${sectionHdr('Instance: Method Applied to Indicator')}
                 <div style="font-size:12px;color:#94a3b8;margin-bottom:8px">
                     Tool: <strong style="color:#cbd5e1">${tool ? tool.name : exp.tool_id}</strong> &mdash;
-                    Indicator: <code style="color:${color}">${ind.key}</code> →
+                    Indicator: <code style="color:${color}">${ind.key}</code> &rarr;
                     Target: <code style="color:#f59e0b">${exp.parameters ? exp.parameters.target : 'views'}</code>
                     (transform: <code>${exp.parameters ? exp.parameters.transform_target : 'log10'}</code>)
                 </div>
@@ -417,21 +436,10 @@ const JarvisUI = (() => {
 
                 ${result && result.conclusion ? `
                 <div style="background:#0f2942;border-left:3px solid #22d3ee;padding:10px;border-radius:0 6px 6px 0;font-size:12px;color:#e2e8f0;line-height:1.6;margin-bottom:8px">${result.conclusion}</div>
-                ${result.practical_insight ? `<div style="background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">💡 ${result.practical_insight}</div>` : ''}
+                ${result.practical_insight ? `<div style="background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">${result.practical_insight}</div>` : ''}
                 ` : ''}
 
-                ${sectionHdr(`Data Points (${dataset.length} videos)`)}
-                <div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b">
-                    <table style="width:100%;border-collapse:collapse">
-                        <thead><tr style="background:#1e293b;position:sticky;top:0">
-                            <th style="padding:4px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Video ID</th>
-                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">${ind.key}</th>
-                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">log10(views)</th>
-                        </tr></thead>
-                        <tbody>${dataRows}</tbody>
-                    </table>
-                    ${dataset.length > 20 ? `<div style="padding:6px 8px;font-size:10px;color:#475569;text-align:center">… ${dataset.length - 20} more rows</div>` : ''}
-                </div>
+                ${dataTableHtml}
             </div>`;
     }
 
@@ -452,13 +460,35 @@ const JarvisUI = (() => {
         const label = derivedExperimentLabel(d);
 
         const ds = d.dataset || [];
-        const dataRows = ds.slice(0, 20).map((dp, i) =>
-            `<tr style="background:${i % 2 === 0 ? '#0a1020' : '#0d1525'}">
-                <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${dp.ytId}</td>
-                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#cbd5e1;text-align:right">${typeof dp.value === 'number' ? dp.value.toFixed(4) : dp.value}</td>
-                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#94a3b8;text-align:right">${typeof dp.target_value === 'number' ? dp.target_value.toFixed(4) : dp.target_value}</td>
-            </tr>`
-        ).join('');
+        const dsSize = ds.length || d._datasetSize || 0;
+
+        let dataTableHtml = '';
+        if (ds.length) {
+            const dataRows = ds.slice(0, 20).map((dp, i) =>
+                `<tr style="background:${i % 2 === 0 ? '#0a1020' : '#0d1525'}">
+                    <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${dp.ytId}</td>
+                    <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#cbd5e1;text-align:right">${typeof dp.value === 'number' ? dp.value.toFixed(4) : dp.value}</td>
+                    <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#94a3b8;text-align:right">${typeof dp.target_value === 'number' ? dp.target_value.toFixed(4) : dp.target_value}</td>
+                </tr>`
+            ).join('');
+            dataTableHtml = `${sectionHdr('Data Points (' + ds.length + ' videos)')}
+                <div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="background:#1e293b;position:sticky;top:0">
+                            <th style="padding:4px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Video ID</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">${d.key}</th>
+                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">log10(views)</th>
+                        </tr></thead>
+                        <tbody>${dataRows}</tbody>
+                    </table>
+                    ${ds.length > 20 ? '<div style="padding:6px 8px;font-size:10px;color:#475569;text-align:center">… ' + (ds.length - 20) + ' more rows</div>' : ''}
+                </div>`;
+        } else if (dsSize > 0) {
+            dataTableHtml = `${sectionHdr('Data Points (' + dsSize + ' videos)')}
+                <div id="jarvis-exp-dataset-${d.key}" style="padding:8px">
+                    <button onclick="JarvisUI.loadExpDataset('${d.key}','derived')" style="background:#1e293b;border:1px solid #334155;color:#22d3ee;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Load data points</button>
+                </div>`;
+        }
 
         return `
             <div style="background:#0a1628;border-left:3px solid ${cfg.color};border-radius:0 8px 8px 0;padding:14px;margin-bottom:12px">
@@ -476,7 +506,7 @@ const JarvisUI = (() => {
                 ${sectionHdr('Experiment Design')}
                 <div style="background:#0f172a;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8;margin-bottom:4px">
                     <div><span style="color:#64748b">Kind: </span><span style="color:${cfg.color};font-weight:600">${cfg.label}</span></div>
-                    <div style="margin-top:3px"><span style="color:#64748b">Components: </span>${comps.map(k => `<code style="color:#22d3ee">${k}</code>`).join(' × ')}</div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Components: </span>${comps.map(k => `<code style="color:#22d3ee">${k}</code>`).join(' &times; ')}</div>
                     <div style="margin-top:3px"><span style="color:#64748b">Target: </span><code style="color:#f59e0b">${d.target || 'views'}</code></div>
                     <div style="margin-top:3px"><span style="color:#64748b">Formula: </span><code style="color:#22d3ee">${d.derived_formula || (d.metric_definition ? d.metric_definition.formula : '') || '—'}</code></div>
                     ${d.metric_definition && d.metric_definition.description ? `<div style="margin-top:3px"><span style="color:#64748b">Description: </span>${d.metric_definition.description}</div>` : ''}
@@ -490,7 +520,7 @@ const JarvisUI = (() => {
                     ${rho != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">Spearman ρ</span><span style="font-size:13px;color:${rho >= 0 ? '#22d3ee' : '#f87171'}">${rho >= 0 ? '+' : ''}${rho.toFixed(3)}</span></div>` : ''}
                     ${p != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">p-value</span><span style="font-size:13px;color:${p < 0.05 ? '#22d3ee' : '#f87171'}">${p < 0.001 ? p.toExponential(2) : p.toFixed(4)}</span></div>` : ''}
                     ${ciLow != null ? `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">95% CI</span><span style="font-size:12px;color:#94a3b8">[${ciLow >= 0 ? '+' : ''}${ciLow.toFixed(3)}, ${ciHigh >= 0 ? '+' : ''}${ciHigh.toFixed(3)}]</span></div>` : ''}
-                    <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">n videos</span><span style="font-size:13px;color:#cbd5e1">${exp.n_videos || ds.length || '—'}</span></div>
+                    <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">n videos</span><span style="font-size:13px;color:#cbd5e1">${exp.n_videos || dsSize || '—'}</span></div>
                 </div>
 
                 ${result.conclusion ? `
@@ -498,20 +528,7 @@ const JarvisUI = (() => {
                 ${result.practical_insight ? `<div style="background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">${result.practical_insight}</div>` : ''}
                 ` : ''}
 
-                ${ds.length ? `
-                ${sectionHdr('Data Points (' + ds.length + ' videos)')}
-                <div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b">
-                    <table style="width:100%;border-collapse:collapse">
-                        <thead><tr style="background:#1e293b;position:sticky;top:0">
-                            <th style="padding:4px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Video ID</th>
-                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">${d.key}</th>
-                            <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">log10(views)</th>
-                        </tr></thead>
-                        <tbody>${dataRows}</tbody>
-                    </table>
-                    ${ds.length > 20 ? `<div style="padding:6px 8px;font-size:10px;color:#475569;text-align:center">… ${ds.length - 20} more rows</div>` : ''}
-                </div>
-                ` : ''}
+                ${dataTableHtml}
             </div>`;
     }
 
@@ -1086,12 +1103,15 @@ const JarvisUI = (() => {
     let selectedNodeKey = null;
     let nodeClickCount = {};
 
-    // ── v2 data cache ──
-    let v2Indicators = null;   // array from /api/jarvis/v2/indicators (atomic only)
-    let v2DerivedExperiments = null; // array from /api/jarvis/v2/derived-experiments (interactions)
-    let v2Graph = null;        // {nodes, edges, derived_edges} from /api/jarvis/v2/graph
-    let v2Tools = null;        // array from /api/jarvis/v2/tools
-    let v2Resolutions = null;  // array from /api/jarvis/v2/resolutions
+    // ── v2 data cache (compact summaries — no dataset arrays) ──
+    let v2Indicators = null;
+    let v2DerivedExperiments = null;
+    let v2Graph = null;
+    let v2Tools = null;
+    let v2Resolutions = null;
+
+    // Detail cache: full records fetched on demand (keyed by indicator/derived key)
+    const v2DetailCache = {};
 
     async function loadV2Data() {
         try {
@@ -1112,6 +1132,28 @@ const JarvisUI = (() => {
             console.error('Jarvis v2 load failed:', e);
             return false;
         }
+    }
+
+    async function fetchIndicatorDetail(key) {
+        if (v2DetailCache['ind:' + key]) return v2DetailCache['ind:' + key];
+        try {
+            const res = await fetch('/api/jarvis/v2/indicator/' + encodeURIComponent(key));
+            if (!res.ok) return null;
+            const data = await res.json();
+            v2DetailCache['ind:' + key] = data;
+            return data;
+        } catch (e) { console.error('Detail fetch failed:', key, e); return null; }
+    }
+
+    async function fetchDerivedDetail(key) {
+        if (v2DetailCache['der:' + key]) return v2DetailCache['der:' + key];
+        try {
+            const res = await fetch('/api/jarvis/v2/derived-experiment/' + encodeURIComponent(key));
+            if (!res.ok) return null;
+            const data = await res.json();
+            v2DetailCache['der:' + key] = data;
+            return data;
+        } catch (e) { console.error('Detail fetch failed:', key, e); return null; }
     }
 
     // Composite keys have kind:'interaction' set by the runner, or match _x_ pattern
@@ -1432,20 +1474,18 @@ const JarvisUI = (() => {
 
     function renderSignalDetail(sig) {
         const color = sig.layer === 'pre' ? '#06b6d4' : '#a78bfa';
-        const layerLabel = sig.layer === 'pre' ? 'Pre-upload' : 'Post-upload';
-        // v2 full data
         const ind = v2Indicators ? v2Indicators.find(i => i.key === sig.key) : null;
         const metricDef = ind ? ind.metric_definition : null;
         const exp = ind ? ind.experiment : null;
         const result = ind ? ind.result : null;
         const dataset = ind ? ind.dataset : null;
+        const datasetSize = dataset ? dataset.length : (ind ? ind._datasetSize || 0 : 0);
         const tool = (v2Tools && exp) ? v2Tools.find(t => t.id === exp.tool_id) : null;
         const resObj = (v2Resolutions && ind) ? v2Resolutions.find(r => r.id === ind.resolution_id) : null;
         const connTargets = (ind && ind.connections) ? ind.connections : [];
 
         const statPill = (label, val, valColor) => `<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">${label}</span><span style="font-size:12px;color:${valColor || '#cbd5e1'}">${val}</span></div>`;
 
-        // r value with sign and color
         const rVal = result ? result.primary_r : null;
         const rhoVal = result ? result.rho : null;
         const rStr = rVal != null ? `<span style="font-weight:700;color:${rVal >= 0 ? '#22d3ee' : '#f87171'}">${rVal >= 0 ? '+' : ''}${rVal.toFixed(3)}</span>` : '—';
@@ -1453,10 +1493,26 @@ const JarvisUI = (() => {
         const pStr = (exp && exp.outputs && exp.outputs.p_value != null) ? exp.outputs.p_value.toFixed(4) : '—';
         const ciStr = (exp && exp.outputs && exp.outputs.ci_low != null) ? `[${exp.outputs.ci_low >= 0 ? '+' : ''}${exp.outputs.ci_low.toFixed(3)}, ${exp.outputs.ci_high >= 0 ? '+' : ''}${exp.outputs.ci_high.toFixed(3)}]` : '';
 
+        let datasetHtml = '';
+        if (dataset && dataset.length) {
+            const vals = dataset.map(d => d.value);
+            datasetHtml = `<div style="margin-bottom:10px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Dataset (${dataset.length} videos)</div>
+                <div style="background:#0a1628;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">
+                    <div>Min: <span style="color:#cbd5e1">${Math.min(...vals).toFixed(3)}</span> &nbsp; Max: <span style="color:#cbd5e1">${Math.max(...vals).toFixed(3)}</span> &nbsp; Mean: <span style="color:#cbd5e1">${(vals.reduce((s,v) => s+v, 0)/vals.length).toFixed(3)}</span></div>
+                </div>
+            </div>`;
+        } else if (datasetSize > 0) {
+            datasetHtml = `<div style="margin-bottom:10px" id="jarvis-detail-ds-${sig.key}">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Dataset (${datasetSize} videos)</div>
+                <div style="background:#0a1628;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">
+                    <button onclick="JarvisUI.loadSignalDataset('${sig.key}')" style="background:#1e293b;border:1px solid #334155;color:#22d3ee;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Load data points</button>
+                </div>
+            </div>`;
+        }
+
         return `<div class="jarvis-signal-detail" style="border-left: 3px solid ${color}">
             <div class="jarvis-signal-detail-name">${sig.label || sig.key}</div>
-
-            <!-- Stats row -->
             <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #1e293b;margin-bottom:10px">
                 ${statPill('Pearson r', rStr)}
                 ${rhoVal != null ? statPill('Spearman ρ', rhoStr) : ''}
@@ -1470,7 +1526,6 @@ const JarvisUI = (() => {
                 ${statPill('Depth', sig.depth || 1)}
             </div>
 
-            <!-- Metric Definition -->
             ${metricDef ? `
             <div style="margin-bottom:10px">
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">What This Measures</div>
@@ -1482,7 +1537,6 @@ const JarvisUI = (() => {
                 </div>
             </div>` : ''}
 
-            <!-- Experiment -->
             ${exp ? `
             <div style="margin-bottom:10px">
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Experiment</div>
@@ -1503,25 +1557,15 @@ const JarvisUI = (() => {
                 </div>
             </div>` : ''}
 
-            <!-- Dataset sample -->
-            ${dataset && dataset.length ? `
-            <div style="margin-bottom:10px">
-                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Dataset (${dataset.length} videos)</div>
-                <div style="background:#0a1628;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">
-                    <div>Min: <span style="color:#cbd5e1">${Math.min(...dataset.map(d => d.value)).toFixed(3)}</span> &nbsp; Max: <span style="color:#cbd5e1">${Math.max(...dataset.map(d => d.value)).toFixed(3)}</span> &nbsp; Mean: <span style="color:#cbd5e1">${(dataset.reduce((s,d) => s+d.value, 0)/dataset.length).toFixed(3)}</span></div>
-                    <div style="margin-top:4px;font-size:10px;color:#475569">Per-video values stored for all ${dataset.length} videos. Click to inspect individual data points.</div>
-                </div>
-            </div>` : ''}
+            ${datasetHtml}
 
-            <!-- Conclusion -->
             ${result && result.conclusion ? `
             <div style="margin-bottom:6px">
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Finding</div>
                 <div style="background:#0f2942;border-left:3px solid #22d3ee;padding:10px;border-radius:0 6px 6px 0;font-size:12px;color:#e2e8f0;line-height:1.6">${result.conclusion}</div>
-                ${result.practical_insight ? `<div style="margin-top:6px;background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">💡 ${result.practical_insight}</div>` : ''}
+                ${result.practical_insight ? `<div style="margin-top:6px;background:#0a1f0a;border-left:3px solid #22c55e;padding:8px;border-radius:0 6px 6px 0;font-size:11px;color:#86efac;line-height:1.5">${result.practical_insight}</div>` : ''}
             </div>` : ''}
 
-            <!-- Connections -->
             ${connTargets.length ? `
             <div>
                 <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Graph Connections</div>
@@ -1607,6 +1651,7 @@ const JarvisUI = (() => {
         const tool = (v2Tools && exp) ? v2Tools.find(t => t.id === exp.tool_id) : null;
         const resObj = (v2Resolutions && ind) ? v2Resolutions.find(r => r.id === ind.resolution_id) : null;
         const dataset = ind ? ind.dataset : null;
+        const datasetSize = dataset ? dataset.length : (ind ? ind._datasetSize || 0 : 0);
         const connTargets = ind ? (ind.connections || []) : (d.connections || []);
 
         const label = d.label || humanizeKey(d.key);
@@ -1687,6 +1732,11 @@ const JarvisUI = (() => {
                 + dataset.length + ' videos &nbsp;—&nbsp; min: <span style="color:#cbd5e1">' + mn.toFixed(3) + '</span>'
                 + ' &nbsp; max: <span style="color:#cbd5e1">' + mx.toFixed(3) + '</span>'
                 + ' &nbsp; mean: <span style="color:#cbd5e1">' + mean.toFixed(3) + '</span>'
+                + '</div>';
+        } else if (datasetSize > 0) {
+            dataHtml = sectionHdr('Dataset')
+                + '<div style="background:#0a1628;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">'
+                + datasetSize + ' videos'
                 + '</div>';
         }
 
@@ -3463,7 +3513,48 @@ const JarvisUI = (() => {
         container = null;
     }
 
-    return { open, close, openExperimentInstance, closeAnalyticalPanel };
+    async function loadSignalDataset(key) {
+        const el = document.getElementById('jarvis-detail-ds-' + key);
+        if (el) el.innerHTML = '<div style="font-size:11px;color:#64748b;padding:4px 8px">Loading…</div>';
+        const detail = await fetchIndicatorDetail(key);
+        if (!detail || !detail.dataset) { if (el) el.innerHTML = '<div style="font-size:11px;color:#f87171;padding:4px 8px">Failed to load</div>'; return; }
+        const ds = detail.dataset;
+        const vals = ds.map(d => d.value);
+        if (el) el.innerHTML = `
+            <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Dataset (${ds.length} videos)</div>
+            <div style="background:#0a1628;border-radius:6px;padding:8px;font-size:11px;color:#94a3b8">
+                <div>Min: <span style="color:#cbd5e1">${Math.min(...vals).toFixed(3)}</span> &nbsp; Max: <span style="color:#cbd5e1">${Math.max(...vals).toFixed(3)}</span> &nbsp; Mean: <span style="color:#cbd5e1">${(vals.reduce((s,v) => s+v, 0)/vals.length).toFixed(3)}</span></div>
+            </div>`;
+    }
+
+    async function loadExpDataset(key, type) {
+        const el = document.getElementById('jarvis-exp-dataset-' + key);
+        if (el) el.innerHTML = '<div style="font-size:11px;color:#64748b;padding:4px 8px">Loading…</div>';
+        const detail = type === 'derived' ? await fetchDerivedDetail(key) : await fetchIndicatorDetail(key);
+        if (!detail || !detail.dataset) { if (el) el.innerHTML = '<div style="font-size:11px;color:#f87171;padding:4px 8px">Failed to load</div>'; return; }
+        const ds = detail.dataset;
+        const dataRows = ds.slice(0, 20).map((dp, i) =>
+            `<tr style="background:${i % 2 === 0 ? '#0a1020' : '#0d1525'}">
+                <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${dp.ytId}</td>
+                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#cbd5e1;text-align:right">${typeof dp.value === 'number' ? dp.value.toFixed(4) : dp.value}</td>
+                <td style="padding:3px 8px;font-family:monospace;font-size:11px;color:#94a3b8;text-align:right">${typeof dp.target_value === 'number' ? dp.target_value.toFixed(4) : dp.target_value}</td>
+            </tr>`
+        ).join('');
+        if (el) el.innerHTML = `
+            <div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead><tr style="background:#1e293b;position:sticky;top:0">
+                        <th style="padding:4px 8px;text-align:left;font-size:10px;color:#64748b;font-weight:600">Video ID</th>
+                        <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">${key}</th>
+                        <th style="padding:4px 8px;text-align:right;font-size:10px;color:#64748b;font-weight:600">log10(views)</th>
+                    </tr></thead>
+                    <tbody>${dataRows}</tbody>
+                </table>
+                ${ds.length > 20 ? '<div style="padding:6px 8px;font-size:10px;color:#475569;text-align:center">… ' + (ds.length - 20) + ' more rows</div>' : ''}
+            </div>`;
+    }
+
+    return { open, close, openExperimentInstance, closeAnalyticalPanel, loadSignalDataset, loadExpDataset };
 })();
 
 BuildingRegistry.register('Jarvis', {
