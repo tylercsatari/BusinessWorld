@@ -656,6 +656,57 @@ const ACTION_TRIGGER_PHRASES = [
     'act now', 'deadline',
 ];
 
+// ── Group T phrase arrays ──
+const REFERENCE_CALLBACK_PHRASES = [
+    'remember when i said', 'as i mentioned', 'going back to', 'earlier i showed',
+    'i told you', 'you saw earlier', 'like i said', 'recall that', 'as we covered',
+    'what i showed before', 'as i said earlier', 'remember i mentioned',
+    'going back to what', 'earlier i mentioned', 'as i showed',
+];
+const VISUAL_CREDIBILITY_PHRASES = [
+    'look at this', 'you can see', 'notice how', 'watch what happens', 'look at the screen',
+    'right here you can see', 'this is what it looks like', 'watch closely', 'check this out',
+    'see this number', 'look at these', 'as you can see', 'watch this', 'look right here',
+    'see what happens',
+];
+const PAYOFF_SIGNAL_PHRASES = [
+    'here is the result', 'heres what happened', 'and the answer is', 'so the answer is',
+    'here it is', 'that is the secret', 'turns out the answer', 'so what actually happened',
+    'the reveal is', 'and it worked', 'here are the results', 'and this is it',
+    'so here is what', 'and this is what', 'the outcome was',
+];
+const SETUP_SIGNAL_PHRASES = [
+    'in this video i will', 'what i am going to show', 'by the end of this video',
+    'today i will show', 'i am going to prove', 'let me show you exactly',
+    'what you are about to see', 'this is how i', 'i am going to walk you through',
+    'today we will cover', 'in this video i am', 'what i will show you',
+    'by the end of this', 'i will walk you through', 'today i am going to',
+];
+const STAKES_ESCALATION_PHRASES = [
+    'it gets worse', 'but then', 'and then suddenly', 'everything changed', 'and that is when',
+    'out of nowhere', 'which meant', 'and i realized', 'the problem was', 'what i did not know',
+    'but here is the thing', 'and then it happened', 'that is when i', 'and suddenly',
+    'everything fell apart',
+];
+const PROOF_ARRIVAL_PHRASES = [
+    'here is the proof', 'look at the numbers', 'the data shows', 'here are the results',
+    'this is the evidence', 'the numbers speak', 'look at this graph', 'here is the screenshot',
+    'the analytics show', 'you can see the data', 'look at this data', 'the numbers show',
+    'here is the evidence', 'this data proves', 'look at these numbers',
+];
+const NARRATIVE_ANCHOR_PHRASES = [
+    'this is the moment', 'this is where', 'at this point', 'right here', 'this is it',
+    'this is the part', 'this is when', 'that moment when', 'the moment i', 'right at this point',
+    'this is exactly where', 'this is the spot', 'right at this moment', 'this is the exact moment',
+    'at this exact point',
+];
+const DELAYED_REVEAL_PHRASES = [
+    'i will tell you in a second', 'keep watching', 'before i tell you', 'but first',
+    'hold on', 'just wait', 'in just a moment', 'i will get to that', 'the answer is coming',
+    'stay with me', 'bear with me', 'i will explain in a moment', 'before i show you',
+    'i will reveal that', 'but before that',
+];
+
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
 const ZYGARNIK_EARLY_WINDOWS = [2, 3, 5, 8, 10, 15, 20];
 
@@ -1121,6 +1172,55 @@ for (const k of [
 }
 // Windowed variants for Group S families
 for (const fam of ['social_proof', 'curiosity_gap', 'emotional_peak', 'proof_of_work', 'failure_vulnerability']) {
+    for (const w of ZYGARNIK_EARLY_WINDOWS) {
+        for (const variant of ['count', 'density']) {
+            STATIC_KEYS.add(`${fam}_${variant}_first${w}s`);
+            STATIC_LAYER[`${fam}_${variant}_first${w}s`] = 'pre';
+        }
+    }
+}
+
+// ── New Group T: Reference callback / visual credibility / payoff signal / setup signal / stakes escalation / proof arrival / narrative anchor / delayed reveal ──
+for (const k of [
+    // Reference callback
+    'reference_callback_count', 'reference_callback_density',
+    'reference_callback_count_hook', 'reference_callback_front_load_ratio',
+    // Visual credibility
+    'visual_credibility_count', 'visual_credibility_density',
+    'visual_credibility_count_hook', 'visual_credibility_front_load_ratio',
+    // Payoff signal
+    'payoff_signal_count', 'payoff_signal_density',
+    'payoff_signal_count_hook', 'payoff_signal_count_last_quarter',
+    // Setup signal
+    'setup_signal_count', 'setup_signal_density',
+    'setup_signal_count_hook', 'setup_signal_front_load_ratio',
+    // Stakes escalation
+    'stakes_escalation_count', 'stakes_escalation_density',
+    'stakes_escalation_count_mid', 'stakes_escalation_count_first_half',
+    // Proof arrival
+    'proof_arrival_count', 'proof_arrival_density',
+    'proof_arrival_count_hook', 'proof_arrival_position_pct',
+    // Narrative anchor
+    'narrative_anchor_count', 'narrative_anchor_density',
+    'narrative_anchor_count_first_half', 'narrative_anchor_count_last_quarter',
+    // Delayed reveal
+    'delayed_reveal_count', 'delayed_reveal_density',
+    'delayed_reveal_count_hook', 'delayed_reveal_front_load_ratio',
+    // Group T scalar/derived
+    'setup_to_payoff_signal_gap_pct',
+    'proof_arrival_timing_pct',
+    'delayed_reveal_to_payoff_ratio',
+    'visual_credibility_before_claim_ratio',
+    'reference_callback_rate_per_min',
+    'stakes_escalation_mid_density',
+    'narrative_anchor_peak_pct',
+    'delayed_reveal_setup_ratio',
+]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+// Windowed variants for Group T families
+for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal']) {
     for (const w of ZYGARNIK_EARLY_WINDOWS) {
         for (const variant of ['count', 'density']) {
             STATIC_KEYS.add(`${fam}_${variant}_first${w}s`);
@@ -3762,6 +3862,189 @@ function extractMetric(key, analysis) {
         }
     }
 
+    // ── Group T: Reference callback / visual credibility / payoff signal / setup signal / stakes escalation / proof arrival / narrative anchor / delayed reveal ──
+    {
+        const _gtFamilies = {
+            'reference_callback': REFERENCE_CALLBACK_PHRASES,
+            'visual_credibility': VISUAL_CREDIBILITY_PHRASES,
+            'payoff_signal':      PAYOFF_SIGNAL_PHRASES,
+            'setup_signal':       SETUP_SIGNAL_PHRASES,
+            'stakes_escalation':  STAKES_ESCALATION_PHRASES,
+            'proof_arrival':      PROOF_ARRIVAL_PHRASES,
+            'narrative_anchor':   NARRATIVE_ANCHOR_PHRASES,
+            'delayed_reveal':     DELAYED_REVEAL_PHRASES,
+        };
+
+        // Per-family count/density/hook/positional keys
+        for (const [fam, phrases] of Object.entries(_gtFamilies)) {
+            if (key === `${fam}_count`) {
+                if (!transcript) return [null, 'no transcript'];
+                return [countPhraseMatches(transcript.toLowerCase(), phrases), null];
+            }
+            if (key === `${fam}_density`) {
+                if (!transcript) return [null, 'no transcript'];
+                const words = transcript.split(/\s+/).filter(Boolean);
+                if (!words.length) return [null, 'empty transcript'];
+                return [countPhraseMatches(transcript.toLowerCase(), phrases) / words.length, null];
+            }
+            if (key === `${fam}_count_hook`) {
+                if (!transcript) return [null, 'no transcript'];
+                const words = transcript.split(/\s+/).filter(Boolean);
+                if (!words.length) return [null, 'empty transcript'];
+                const hookText = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
+                return [countPhraseMatches(hookText, phrases), null];
+            }
+            if (key === `${fam}_front_load_ratio`) {
+                if (!transcript) return [null, 'no transcript'];
+                const words = transcript.split(/\s+/).filter(Boolean);
+                if (!words.length) return [null, 'empty transcript'];
+                const half = Math.floor(words.length / 2);
+                const firstHalf = words.slice(0, half).join(' ').toLowerCase();
+                const secondHalf = words.slice(half).join(' ').toLowerCase();
+                const f = countPhraseMatches(firstHalf, phrases);
+                const s = countPhraseMatches(secondHalf, phrases) + 0.0001;
+                return [f / s, null];
+            }
+            if (key === `${fam}_count_mid`) {
+                if (!transcript) return [null, 'no transcript'];
+                const words = transcript.split(/\s+/).filter(Boolean);
+                if (!words.length) return [null, 'empty transcript'];
+                const midText = words.slice(Math.floor(words.length * 0.33), Math.floor(words.length * 0.67)).join(' ').toLowerCase();
+                return [countPhraseMatches(midText, phrases), null];
+            }
+            if (key === `${fam}_count_first_half`) {
+                if (!transcript) return [null, 'no transcript'];
+                const words = transcript.split(/\s+/).filter(Boolean);
+                if (!words.length) return [null, 'empty transcript'];
+                const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+                return [countPhraseMatches(firstHalf, phrases), null];
+            }
+            if (key === `${fam}_count_last_quarter`) {
+                if (!transcript) return [null, 'no transcript'];
+                const words = transcript.split(/\s+/).filter(Boolean);
+                if (!words.length) return [null, 'empty transcript'];
+                const lqText = words.slice(Math.floor(words.length * 0.75)).join(' ').toLowerCase();
+                return [countPhraseMatches(lqText, phrases), null];
+            }
+            if (key === `${fam}_position_pct`) {
+                if (!transcript) return [null, 'no transcript'];
+                const tl = transcript.toLowerCase();
+                for (const ph of phrases) {
+                    const idx = tl.indexOf(ph);
+                    if (idx !== -1) return [idx / tl.length, null];
+                }
+                return [null, 'phrase not found'];
+            }
+        }
+
+        // Windowed variants for Group T families
+        const _gtWinRe = /^(reference_callback|visual_credibility|payoff_signal|setup_signal|stakes_escalation|proof_arrival|narrative_anchor|delayed_reveal)_(count|density)_first(\d+)s$/;
+        const _gtm = key.match(_gtWinRe);
+        if (_gtm) {
+            if (!transcript) return [null, 'no transcript'];
+            const dur = meta.duration || 0;
+            const wSec = parseInt(_gtm[3]);
+            const fam = _gtm[1];
+            const variant = _gtm[2];
+            let wText;
+            if (dur) {
+                wText = windowedTranscript(transcript, dur, wSec);
+            } else {
+                const allWords = transcript.split(/\s+/).filter(Boolean);
+                wText = allWords.slice(0, Math.ceil(allWords.length * 0.1)).join(' ');
+            }
+            if (!wText) return [null, 'no text for window'];
+            const wl = wText.toLowerCase();
+            const wWords = wl.split(/\s+/).filter(Boolean);
+            if (!wWords.length) return [0, null];
+            const phrases = _gtFamilies[fam];
+            const count = countPhraseMatches(wl, phrases);
+            return variant === 'density' ? [count / wWords.length, null] : [count, null];
+        }
+
+        // Group T scalar/derived metrics
+        if (key === 'setup_to_payoff_signal_gap_pct') {
+            if (!transcript) return [null, 'no transcript'];
+            const tl = transcript.toLowerCase();
+            let firstSetup = -1, firstPayoff = -1;
+            for (const ph of SETUP_SIGNAL_PHRASES) {
+                const idx = tl.indexOf(ph);
+                if (idx !== -1) firstSetup = firstSetup === -1 ? idx : Math.min(firstSetup, idx);
+            }
+            for (const ph of PAYOFF_SIGNAL_PHRASES) {
+                const idx = tl.indexOf(ph);
+                if (idx !== -1) firstPayoff = firstPayoff === -1 ? idx : Math.min(firstPayoff, idx);
+            }
+            if (firstSetup === -1 || firstPayoff === -1) return [null, 'phrase not found'];
+            return [Math.max(0, (firstPayoff - firstSetup) / tl.length), null];
+        }
+        if (key === 'proof_arrival_timing_pct') {
+            if (!transcript) return [null, 'no transcript'];
+            const tl = transcript.toLowerCase();
+            for (const ph of PROOF_ARRIVAL_PHRASES) {
+                const idx = tl.indexOf(ph);
+                if (idx !== -1) return [idx / tl.length, null];
+            }
+            return [null, 'phrase not found'];
+        }
+        if (key === 'delayed_reveal_to_payoff_ratio') {
+            if (!transcript) return [null, 'no transcript'];
+            const tl = transcript.toLowerCase();
+            let dr = 0, ps = 0;
+            for (const ph of DELAYED_REVEAL_PHRASES) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { dr++; i += ph.length; } }
+            for (const ph of PAYOFF_SIGNAL_PHRASES) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { ps++; i += ph.length; } }
+            if (ps === 0) return [null, 'no payoff signals'];
+            return [dr / ps, null];
+        }
+        if (key === 'visual_credibility_before_claim_ratio') {
+            if (!transcript) return [null, 'no transcript'];
+            const words = transcript.split(/\s+/).filter(Boolean);
+            if (!words.length) return [null, 'empty transcript'];
+            const tl = transcript.toLowerCase();
+            const halfText = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+            const total = countPhraseMatches(tl, VISUAL_CREDIBILITY_PHRASES);
+            if (total === 0) return [null, 'no visual credibility phrases'];
+            const beforeHalf = countPhraseMatches(halfText, VISUAL_CREDIBILITY_PHRASES);
+            return [beforeHalf / total, null];
+        }
+        if (key === 'reference_callback_rate_per_min') {
+            if (!transcript) return [null, 'no transcript'];
+            const dur = meta.duration || 0;
+            if (!dur) return [null, 'no duration'];
+            const count = countPhraseMatches(transcript.toLowerCase(), REFERENCE_CALLBACK_PHRASES);
+            return [count / (dur / 60), null];
+        }
+        if (key === 'stakes_escalation_mid_density') {
+            if (!transcript) return [null, 'no transcript'];
+            const words = transcript.split(/\s+/).filter(Boolean);
+            if (!words.length) return [null, 'empty transcript'];
+            const midText = words.slice(Math.floor(words.length * 0.33), Math.floor(words.length * 0.67)).join(' ').toLowerCase();
+            const midWords = midText.split(/\s+/).filter(Boolean);
+            if (!midWords.length) return [0, null];
+            return [countPhraseMatches(midText, STAKES_ESCALATION_PHRASES) / midWords.length, null];
+        }
+        if (key === 'narrative_anchor_peak_pct') {
+            if (!transcript) return [null, 'no transcript'];
+            const tl = transcript.toLowerCase();
+            let lastIdx = -1;
+            for (const ph of NARRATIVE_ANCHOR_PHRASES) {
+                let i = 0;
+                while ((i = tl.indexOf(ph, i)) !== -1) { lastIdx = Math.max(lastIdx, i); i += ph.length; }
+            }
+            if (lastIdx === -1) return [null, 'phrase not found'];
+            return [lastIdx / tl.length, null];
+        }
+        if (key === 'delayed_reveal_setup_ratio') {
+            if (!transcript) return [null, 'no transcript'];
+            const tl = transcript.toLowerCase();
+            let dr = 0, ss = 0;
+            for (const ph of DELAYED_REVEAL_PHRASES) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { dr++; i += ph.length; } }
+            for (const ph of SETUP_SIGNAL_PHRASES) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { ss++; i += ph.length; } }
+            if (ss === 0) return [null, 'no setup signals'];
+            return [dr / ss, null];
+        }
+    }
+
     return [null, `unknown key: ${key}`];
 }
 
@@ -4083,6 +4366,39 @@ for (const k of [
 }
 // Group S windowed variant resolution map
 for (const fam of ['social_proof', 'curiosity_gap', 'emotional_peak', 'proof_of_work', 'failure_vulnerability']) {
+    for (const w of [2, 3, 5, 8, 10, 15, 20]) {
+        for (const variant of ['count', 'density']) {
+            INDICATOR_RESOLUTION_MAP[`${fam}_${variant}_first${w}s`] = ['r_hook', 0, 10, null, null];
+        }
+    }
+}
+// Group T resolution map
+for (const k of [
+    'reference_callback_count', 'reference_callback_density',
+    'reference_callback_count_hook', 'reference_callback_front_load_ratio',
+    'visual_credibility_count', 'visual_credibility_density',
+    'visual_credibility_count_hook', 'visual_credibility_front_load_ratio',
+    'payoff_signal_count', 'payoff_signal_density',
+    'payoff_signal_count_hook', 'payoff_signal_count_last_quarter',
+    'setup_signal_count', 'setup_signal_density',
+    'setup_signal_count_hook', 'setup_signal_front_load_ratio',
+    'stakes_escalation_count', 'stakes_escalation_density',
+    'stakes_escalation_count_mid', 'stakes_escalation_count_first_half',
+    'proof_arrival_count', 'proof_arrival_density',
+    'proof_arrival_count_hook', 'proof_arrival_position_pct',
+    'narrative_anchor_count', 'narrative_anchor_density',
+    'narrative_anchor_count_first_half', 'narrative_anchor_count_last_quarter',
+    'delayed_reveal_count', 'delayed_reveal_density',
+    'delayed_reveal_count_hook', 'delayed_reveal_front_load_ratio',
+    'setup_to_payoff_signal_gap_pct', 'proof_arrival_timing_pct',
+    'delayed_reveal_to_payoff_ratio', 'visual_credibility_before_claim_ratio',
+    'reference_callback_rate_per_min', 'stakes_escalation_mid_density',
+    'narrative_anchor_peak_pct', 'delayed_reveal_setup_ratio',
+]) {
+    INDICATOR_RESOLUTION_MAP[k] = k.includes('hook') ? ['r_hook', 0, 10, null, null] : ['r0', 0, 100, null, null];
+}
+// Group T windowed variant resolution map
+for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal']) {
     for (const w of [2, 3, 5, 8, 10, 15, 20]) {
         for (const variant of ['count', 'density']) {
             INDICATOR_RESOLUTION_MAP[`${fam}_${variant}_first${w}s`] = ['r_hook', 0, 10, null, null];

@@ -151,6 +151,31 @@ const baseAtomics = [
     'emotional_arc_peak_pct', 'curiosity_resolution_gap_pct',
     'hook_phrase_diversity', 'social_proof_before_midpoint_count',
     'proof_of_work_before_claim_ratio',
+    // Group T: Reference callback / visual credibility / payoff signal / setup signal / stakes escalation / proof arrival / narrative anchor / delayed reveal
+    'reference_callback_count', 'reference_callback_density',
+    'reference_callback_count_hook', 'reference_callback_front_load_ratio',
+    'visual_credibility_count', 'visual_credibility_density',
+    'visual_credibility_count_hook', 'visual_credibility_front_load_ratio',
+    'payoff_signal_count', 'payoff_signal_density',
+    'payoff_signal_count_hook', 'payoff_signal_count_last_quarter',
+    'setup_signal_count', 'setup_signal_density',
+    'setup_signal_count_hook', 'setup_signal_front_load_ratio',
+    'stakes_escalation_count', 'stakes_escalation_density',
+    'stakes_escalation_count_mid', 'stakes_escalation_count_first_half',
+    'proof_arrival_count', 'proof_arrival_density',
+    'proof_arrival_count_hook', 'proof_arrival_position_pct',
+    'narrative_anchor_count', 'narrative_anchor_density',
+    'narrative_anchor_count_first_half', 'narrative_anchor_count_last_quarter',
+    'delayed_reveal_count', 'delayed_reveal_density',
+    'delayed_reveal_count_hook', 'delayed_reveal_front_load_ratio',
+    'setup_to_payoff_signal_gap_pct',
+    'proof_arrival_timing_pct',
+    'delayed_reveal_to_payoff_ratio',
+    'visual_credibility_before_claim_ratio',
+    'reference_callback_rate_per_min',
+    'stakes_escalation_mid_density',
+    'narrative_anchor_peak_pct',
+    'delayed_reveal_setup_ratio',
 ];
 
 // Windowed variants for count/density families
@@ -166,6 +191,15 @@ const windowedFamilies = [
     ['emotional_peak',         ['count', 'density']],
     ['proof_of_work',          ['count', 'density']],
     ['failure_vulnerability',  ['count', 'density']],
+    // Group T windowed families
+    ['reference_callback',  ['count', 'density']],
+    ['visual_credibility',  ['count', 'density']],
+    ['payoff_signal',       ['count', 'density']],
+    ['setup_signal',        ['count', 'density']],
+    ['stakes_escalation',   ['count', 'density']],
+    ['proof_arrival',       ['count', 'density']],
+    ['narrative_anchor',    ['count', 'density']],
+    ['delayed_reveal',      ['count', 'density']],
 ];
 const windowedAtomics = [];
 for (const [fam, measures] of windowedFamilies) {
