@@ -294,6 +294,42 @@ const ZYGARNIK_PHRASE_SETS = {
         "they say", "but the truth", "unpopular opinion", "nobody talks about",
         "what nobody tells you", "secret nobody",
     ],
+    foreshadow: [
+        "you will see", "by the end", "coming up", "stay for this", "the moment when",
+        "here is the twist", "everything changes when", "wait for the part where",
+        "i am saving the best", "the real surprise", "you will not believe what",
+        "stick around for", "coming later", "later in this video", "before i show you",
+    ],
+    stakes_high: [
+        "everything changes", "life changing", "never be the same", "risk everything",
+        "all or nothing", "make or break", "point of no return", "game changer",
+        "changed my life", "changed everything", "stakes are high", "this is huge",
+        "the most important", "most critical", "biggest thing",
+    ],
+    credibility_signal: [
+        "years of", "i have done this", "i have been doing", "my experience",
+        "i tested", "i tried", "i built", "i made", "based on", "the data shows",
+        "the science says", "been proven", "verified", "confirmed", "real results",
+        "actual results", "it actually works", "this actually works",
+    ],
+    reward_language: [
+        "finally", "exactly how", "step by step", "here is how", "the key is",
+        "what actually works", "the truth about", "worth it", "paid off",
+        "the solution", "solved", "figured it out", "the answer is", "found the way",
+        "the method", "the technique", "the approach", "the strategy",
+    ],
+    loss_aversion: [
+        "stop wasting", "do not make this mistake", "avoid this", "biggest mistake",
+        "most people fail", "why most fail", "if you do not", "what could go wrong",
+        "the risk", "the danger", "you will lose", "you could lose", "at risk",
+        "common error", "wrong way", "the wrong approach",
+    ],
+    urgency: [
+        "right now", "immediately", "do not wait", "today", "before it is too late",
+        "time is running out", "quickly", "fast", "sooner the better",
+        "the longer you wait", "every second counts", "do it now", "as soon as",
+        "no time to waste", "urgent",
+    ],
 };
 
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
@@ -328,6 +364,22 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'tension_peak_position_pct',
     'story_arc_front_load_ratio',
     'hook_identity_flag',
+    'stakes_density',
+    'stakes_density_hook',
+    'loss_aversion_density',
+    'credibility_signal_density',
+    'reward_language_density',
+    'foreshadow_density',
+    'urgency_density',
+    'open_loop_density_first_quarter',
+    'open_loop_density_last_quarter',
+    'tension_closure_balance',
+    'first_closure_position_pct',
+    'reward_density_first_half',
+    'foreshadow_density_hook',
+    'demonstration_frame_pct',
+    'result_reveal_frame_pct',
+    'proof_before_midpoint_flag',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -407,6 +459,21 @@ const INTERACTION_BASES = [
     'resolution_density',
     'tension_peak_position_pct',
     'story_arc_front_load_ratio',
+    // Group H: New temporal tension mechanics
+    "stakes_density",
+    "stakes_density_hook",
+    "loss_aversion_density",
+    "credibility_signal_density",
+    "reward_language_density",
+    "foreshadow_density",
+    "urgency_density",
+    "open_loop_density_first_quarter",
+    "open_loop_density_last_quarter",
+    "tension_closure_balance",
+    "first_closure_position_pct",
+    "reward_density_first_half",
+    "foreshadow_density_hook",
+    "proof_before_midpoint_flag",
 ];
 
 // Static metric definitions — keys that have hardcoded extraction logic
@@ -1636,6 +1703,154 @@ function extractMetric(key, analysis) {
         return [firstTension / (lastTension + 1), null];
     }
 
+    if (key === "stakes_density") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.stakes_high) / words.length, null];
+    }
+
+    if (key === "stakes_density_hook") {
+        const ht = hookText();
+        if (!ht) return [null, "no hook text"];
+        const htl = ht.toLowerCase();
+        const w = ht.split(/\s+/).filter(Boolean);
+        if (!w.length) return [null, "empty hook"];
+        return [countPhraseMatches(htl, ZYGARNIK_PHRASE_SETS.stakes_high) / w.length, null];
+    }
+
+    if (key === "loss_aversion_density") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.loss_aversion) / words.length, null];
+    }
+
+    if (key === "credibility_signal_density") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.credibility_signal) / words.length, null];
+    }
+
+    if (key === "reward_language_density") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.reward_language) / words.length, null];
+    }
+
+    if (key === "foreshadow_density") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.foreshadow) / words.length, null];
+    }
+
+    if (key === "urgency_density") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.urgency) / words.length, null];
+    }
+
+    if (key === "open_loop_density_first_quarter") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        const quarter = words.slice(0, Math.ceil(words.length * 0.25));
+        if (!quarter.length) return [0, null];
+        return [countPhraseMatches(quarter.join(" "), ZYGARNIK_PHRASE_SETS.open_loop) / quarter.length, null];
+    }
+
+    if (key === "open_loop_density_last_quarter") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        const quarter = words.slice(Math.floor(words.length * 0.75));
+        if (!quarter.length) return [0, null];
+        return [countPhraseMatches(quarter.join(" "), ZYGARNIK_PHRASE_SETS.open_loop) / quarter.length, null];
+    }
+
+    if (key === "tension_closure_balance") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const openCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closeCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        return [(openCount - closeCount) / (openCount + closeCount + 1), null];
+    }
+
+    if (key === "first_closure_position_pct") {
+        if (!transcript) return [1.0, null];
+        const tl = transcript.toLowerCase();
+        let earliest = -1;
+        for (const phrase of ZYGARNIK_PHRASE_SETS.closure) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (earliest < 0 || pos < earliest)) earliest = pos;
+        }
+        if (earliest < 0) return [1.0, null];
+        return [earliest / Math.max(tl.length, 1), null];
+    }
+
+    if (key === "reward_density_first_half") {
+        if (!transcript) return [null, "no transcript"];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, "empty transcript"];
+        const half = words.slice(0, Math.ceil(words.length * 0.5));
+        if (!half.length) return [0, null];
+        return [countPhraseMatches(half.join(" "), ZYGARNIK_PHRASE_SETS.reward_language) / half.length, null];
+    }
+
+    if (key === "foreshadow_density_hook") {
+        const ht = hookText();
+        if (!ht) return [null, "no hook text"];
+        const htl = ht.toLowerCase();
+        const w = ht.split(/\s+/).filter(Boolean);
+        if (!w.length) return [null, "empty hook"];
+        return [countPhraseMatches(htl, ZYGARNIK_PHRASE_SETS.foreshadow) / w.length, null];
+    }
+
+    if (key === "demonstration_frame_pct") {
+        if (!frames.length) return [null, "no frames"];
+        const demoWords = ["demo", "demonstrat", "showing", "watch how", "step by step",
+            "applying", "adding", "cutting", "building", "assembling", "testing",
+            "working on", "in progress", "hands on", "hands working"];
+        const ct = frames.filter(f => {
+            const a = f.analysis || {};
+            const desc = String(a.sceneDescription || "").toLowerCase();
+            return demoWords.some(w => desc.includes(w));
+        }).length;
+        return [ct / frames.length, null];
+    }
+
+    if (key === "result_reveal_frame_pct") {
+        if (!frames.length) return [null, "no frames"];
+        const resultWords = ["result", "final", "finished", "complete", "done", "outcome",
+            "before and after", "transformation", "reveal", "the end result",
+            "achieved", "success", "worked"];
+        const ct = frames.filter(f => {
+            const a = f.analysis || {};
+            const desc = String(a.sceneDescription || "").toLowerCase();
+            const eng = String(a.engagementAnalysis || "").toLowerCase();
+            return resultWords.some(w => desc.includes(w) || eng.includes(w));
+        }).length;
+        return [ct / frames.length, null];
+    }
+
+    if (key === "proof_before_midpoint_flag") {
+        const [proofPos] = extractMetric("early_proof_position_pct", analysis);
+        return [proofPos != null && proofPos < 0.5 ? 1 : 0, null];
+    }
+
     if (key === "hook_identity_flag") {
         const ht = hookText();
         if (!ht) return [0, null];
@@ -1788,6 +2003,20 @@ function generateAutonomousCandidates() {
             const pk = `${INTERACTION_BASES[i]}_x_${INTERACTION_BASES[j]}`;
             if (!seenPairs.has(pk)) { seenPairs.add(pk); candidates.push(pk); }
         }
+    }
+
+    // Group H: New families — temporal tension, stakes, proof signals
+    for (const k of [
+        "stakes_density", "stakes_density_hook", "loss_aversion_density",
+        "credibility_signal_density", "reward_language_density",
+        "foreshadow_density", "urgency_density",
+        "open_loop_density_first_quarter", "open_loop_density_last_quarter",
+        "tension_closure_balance", "first_closure_position_pct",
+        "reward_density_first_half", "foreshadow_density_hook",
+        "demonstration_frame_pct", "result_reveal_frame_pct",
+        "proof_before_midpoint_flag",
+    ]) {
+        candidates.push(k);
     }
 
     // Deduplicate preserving order
