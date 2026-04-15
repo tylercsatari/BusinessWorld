@@ -3828,6 +3828,29 @@ Respond ONLY as valid JSON (no markdown):
     // =========================================
     // API: Jarvis Autonomous Run
     // =========================================
+    if (pathname === '/api/jarvis/v2/node-auto-run' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', () => {
+            try {
+                const opts = JSON.parse(body || '{}');
+                const result = _launchNodeRunner('auto', {
+                    maxIterations: parseInt(opts.maxIterations) || 3000,
+                    maxMinutes: opts.maxMinutes || null,
+                    maxFailures: opts.maxFailures || null,
+                    maxNoSignal: opts.maxNoSignal || null,
+                    preuploadRatio: opts.preuploadRatio != null ? parseFloat(opts.preuploadRatio) : null,
+                });
+                res.writeHead(result.started ? 200 : 409, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
     if (pathname === '/api/jarvis/v2/auto-run' && req.method === 'POST') {
         let body = '';
         req.on('data', d => body += d);
