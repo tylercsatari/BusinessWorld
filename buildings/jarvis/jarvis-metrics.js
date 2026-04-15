@@ -408,6 +408,74 @@ const ZYGARNIK_PHRASE_SETS = {
     ],
 };
 
+// ── New phrase sets for expanded indicator families (Group P) ─────────────
+
+const NEW_PROOF_PHRASES = [
+    'the result', 'it worked', 'here is the result', 'look at this', 'as you can see',
+    'check this out', 'before and after', 'here it is', 'turns out', 'proof',
+    'evidence', 'you can see', 'i showed', 'what happened was',
+];
+
+const NEW_SETUP_PHRASES = [
+    'the problem', 'i was', 'i had', 'imagine', 'what if', 'the question is',
+    'most people', 'everyone thinks', 'the truth is', 'here is what',
+    'let me show', 'i want to show', 'you might think', 'the challenge', 'the struggle',
+];
+
+const NEW_PAYOFF_PHRASES = [
+    'the result', 'it worked', 'in the end', 'finally', 'at the end',
+    'and that is how', 'so that is why', 'this is the answer', 'here is what happened',
+    'the takeaway', 'what i learned', 'the lesson', 'that is why',
+];
+
+const NEW_VISUAL_PROOF_PHRASES = [
+    'look at this', 'as you can see', 'check this out', 'before and after',
+    'watch this', 'see the results', 'here are the numbers', 'the data shows',
+    'here is what', 'i will show you', 'you can see', 'look how', 'notice how',
+    'see how', 'here is proof',
+];
+
+const NEW_CREDENTIAL_PHRASES = [
+    'i tested', 'the science says', 'studies show', 'my clients',
+    'in my experience', 'i found', 'research shows', 'data shows', 'according to',
+    'experts say', 'i spent', 'i tried', 'it took me', 'tested this',
+];
+
+const NEW_CONSEQUENCE_PHRASES = [
+    'that meant', 'which means', 'so that', 'as a result', 'because of this',
+    'this is why', 'which led to', 'ended up', 'turned out', 'the consequence',
+    'that is when', 'everything changed',
+];
+
+const NEW_PERSONAL_STAKE_PHRASES = [
+    'my life', 'everything changed', 'almost lost', 'could have', 'would have',
+    'saved me', 'cost me', 'changed everything', 'biggest mistake', 'best decision',
+    'best thing', 'ruined', 'broke', 'fixed',
+];
+
+const NEW_MICRO_REWARD_PHRASES = [
+    'exactly', 'that is right', 'here is why', 'wait for it', 'i will show',
+    'you will see', 'now watch', 'here is the thing', 'the reason is',
+    'this is key', 'pay attention', 'this is important', 'here is what most',
+    'most people do not know',
+];
+
+const NEW_EARLY_ENGAGEMENT_PHRASES = [
+    'think about this', 'imagine', 'picture this',
+    'have you ever', 'do you know', 'what would you', 'can you imagine',
+    'what if i told', 'here is something',
+];
+
+const NEW_MID_FILLER_PHRASES = [
+    'um', 'uh', 'so basically', 'and then', 'like i said',
+    'you know', 'anyway', 'moving on', 'so yeah', 'and so',
+];
+
+const NEW_CLOSING_HOOK_PHRASES = [
+    'but wait', 'one more thing', 'before you go', 'last thing',
+    'hold on', 'now here is', 'one last', 'quick thing', 'i almost forgot',
+];
+
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
 const ZYGARNIK_EARLY_WINDOWS = [2, 3, 5, 8, 10, 15, 20];
 
@@ -736,6 +804,48 @@ for (const k of ['open_loop_to_closure_ratio', 'zygarnik_tension_peak_pct', 'ear
     'visual_stake_frame_pct']) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
+}
+
+// ── New Group P: Zygarnik depth / proof / stake / closure / micro-reward ──
+for (const k of [
+    'zygarnik_buildup_ratio', 'unresolved_loop_count', 'zygarnik_score',
+    'loop_density_acceleration',
+    'proof_withheld_duration_pct', 'setup_density_first_third', 'payoff_density_last_third',
+    'setup_to_payoff_ratio', 'pre_proof_tension_score',
+    'visual_proof_phrase_count', 'visual_proof_phrase_density',
+    'credential_signal_count', 'credential_signal_density',
+    'consequence_density', 'consequence_density_first_half',
+    'personal_stake_density', 'personal_stake_density_first10s',
+    'stakes_early_flag', 'consequence_front_load_ratio',
+    'first_payoff_position_pct', 'hook_to_payoff_gap_pct',
+    'pre_closure_open_loop_count', 'closure_gap_pct',
+    'micro_reward_density', 'micro_reward_density_first_quarter',
+    'information_drip_ratio', 'early_engagement_density',
+    'mid_filler_density', 'closing_hook_density',
+    'title_open_loop_count',
+]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+// Windowed variants for new count/density families
+for (const [fam, measures] of [
+    ['visual_proof_phrase', ['count', 'density']],
+    ['credential_signal', ['count', 'density']],
+    ['consequence', ['density']],
+    ['personal_stake', ['density']],
+    ['micro_reward', ['density']],
+]) {
+    for (const measure of measures) {
+        for (const w of ZYGARNIK_EARLY_WINDOWS) {
+            const wk = `${fam}_${measure}_first${w}s`;
+            STATIC_KEYS.add(wk);
+            STATIC_LAYER[wk] = 'pre';
+        }
+    }
+}
+for (const w of ZYGARNIK_EARLY_WINDOWS) {
+    STATIC_KEYS.add(`unresolved_loop_count_first${w}s`);
+    STATIC_LAYER[`unresolved_loop_count_first${w}s`] = 'pre';
 }
 
 
@@ -2170,6 +2280,360 @@ function extractMetric(key, analysis) {
         if (!hookWin) return [0, null];
         const hasContrast = ZYGARNIK_PHRASE_SETS.social_contrast.some(p => hookWin.toLowerCase().includes(p));
         return [hasContrast ? 1 : 0, null];
+    }
+
+    // ── Group P: Zygarnik depth / proof / stake / closure / micro-reward ──
+
+    // Family 1: Zygarnik depth metrics
+    if (key === 'zygarnik_buildup_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const mid = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, mid).join(' ');
+        const secondHalf = words.slice(mid).join(' ');
+        const firstDensity = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.open_loop) / Math.max(mid, 1);
+        const secondDensity = countPhraseMatches(secondHalf, ZYGARNIK_PHRASE_SETS.open_loop) / Math.max(words.length - mid, 1);
+        return [firstDensity / (secondDensity + 0.0001), null];
+    }
+
+    if (key === 'unresolved_loop_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalfText = words.slice(0, Math.floor(words.length / 2)).join(' ');
+        const openCount = countPhraseMatches(firstHalfText, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closureCount = countPhraseMatches(firstHalfText, ZYGARNIK_PHRASE_SETS.closure);
+        return [Math.max(0, openCount - closureCount), null];
+    }
+
+    if (key === 'zygarnik_score') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        const wText = windowedTranscript(transcript, dur, 10);
+        const openCount = wText ? countPhraseMatches(wText.toLowerCase(), ZYGARNIK_PHRASE_SETS.open_loop) : 0;
+        const [gratPct] = extractMetric('gratification_delay_pct', analysis);
+        if (gratPct == null) return [null, 'no gratification_delay_pct'];
+        return [Math.min(10, openCount * (1 - Math.min(1, gratPct / 100))), null];
+    }
+
+    if (key === 'loop_density_acceleration') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const q1End = Math.floor(words.length * 0.25);
+        const q2End = Math.floor(words.length * 0.50);
+        const quarter1 = words.slice(0, q1End).join(' ');
+        const quarter2 = words.slice(q1End, q2End).join(' ');
+        const d1 = countPhraseMatches(quarter1, ZYGARNIK_PHRASE_SETS.open_loop) / Math.max(q1End, 1);
+        const d2 = countPhraseMatches(quarter2, ZYGARNIK_PHRASE_SETS.open_loop) / Math.max(q2End - q1End, 1);
+        return [d1 - d2, null];
+    }
+
+    // Family 2: Delayed gratification / pre-proof tension
+    if (key === 'proof_withheld_duration_pct') {
+        if (!transcript) return [1.0, null];
+        const tl = transcript.toLowerCase();
+        let earliest = -1;
+        for (const phrase of NEW_PROOF_PHRASES) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (earliest < 0 || pos < earliest)) earliest = pos;
+        }
+        if (earliest < 0) return [1.0, null];
+        return [earliest / Math.max(tl.length, 1), null];
+    }
+
+    if (key === 'setup_density_first_third') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const third = words.slice(0, Math.ceil(words.length / 3));
+        if (!third.length) return [0, null];
+        return [countPhraseMatches(third.join(' '), NEW_SETUP_PHRASES) / third.length, null];
+    }
+
+    if (key === 'payoff_density_last_third') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const startIdx = Math.floor(words.length * 2 / 3);
+        const lastThird = words.slice(startIdx);
+        if (!lastThird.length) return [0, null];
+        return [countPhraseMatches(lastThird.join(' '), NEW_PAYOFF_PHRASES) / lastThird.length, null];
+    }
+
+    if (key === 'setup_to_payoff_ratio') {
+        const [setupD] = extractMetric('setup_density_first_third', analysis);
+        const [payoffD] = extractMetric('payoff_density_last_third', analysis);
+        if (setupD == null) return [null, 'no setup_density_first_third'];
+        if (payoffD == null) return [null, 'no payoff_density_last_third'];
+        return [setupD / (payoffD + 0.001), null];
+    }
+
+    if (key === 'pre_proof_tension_score') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const openLoopDensity = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop) / words.length;
+        const [proofWithheld] = extractMetric('proof_withheld_duration_pct', analysis);
+        if (proofWithheld == null) return [null, 'no proof_withheld_duration_pct'];
+        return [Math.min(10, openLoopDensity * proofWithheld * 10), null];
+    }
+
+    // Family 3: Visual credibility / proof markers
+    if (key === 'visual_proof_phrase_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), NEW_VISUAL_PROOF_PHRASES), null];
+    }
+
+    if (key === 'visual_proof_phrase_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(tl, NEW_VISUAL_PROOF_PHRASES) / words.length, null];
+    }
+
+    if (key === 'credential_signal_count') {
+        if (!transcript) return [null, 'no transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), NEW_CREDENTIAL_PHRASES), null];
+    }
+
+    if (key === 'credential_signal_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(tl, NEW_CREDENTIAL_PHRASES) / words.length, null];
+    }
+
+    // Family 4: Story stake / consequence proxies
+    if (key === 'consequence_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(tl, NEW_CONSEQUENCE_PHRASES) / words.length, null];
+    }
+
+    if (key === 'consequence_density_first_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const half = words.slice(0, Math.ceil(words.length / 2));
+        if (!half.length) return [0, null];
+        return [countPhraseMatches(half.join(' '), NEW_CONSEQUENCE_PHRASES) / half.length, null];
+    }
+
+    if (key === 'personal_stake_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(tl, NEW_PERSONAL_STAKE_PHRASES) / words.length, null];
+    }
+
+    if (key === 'personal_stake_density_first10s') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        const wText = windowedTranscript(transcript, dur, 10);
+        if (!wText) return [null, 'no text for window'];
+        const words = wText.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        return [countPhraseMatches(wText.toLowerCase(), NEW_PERSONAL_STAKE_PHRASES) / words.length, null];
+    }
+
+    if (key === 'stakes_early_flag') {
+        if (!transcript) return [0, null];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const first15 = words.slice(0, Math.ceil(words.length * 0.15)).join(' ');
+        return [countPhraseMatches(first15, NEW_PERSONAL_STAKE_PHRASES) > 0 ? 1 : 0, null];
+    }
+
+    if (key === 'consequence_front_load_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const mid = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, mid).join(' ');
+        const secondHalf = words.slice(mid).join(' ');
+        const d1 = countPhraseMatches(firstHalf, NEW_CONSEQUENCE_PHRASES) / Math.max(mid, 1);
+        const d2 = countPhraseMatches(secondHalf, NEW_CONSEQUENCE_PHRASES) / Math.max(words.length - mid, 1);
+        return [d1 / (d2 + 0.0001), null];
+    }
+
+    // Family 5: Setup-payoff gap / closure gap (transcript-based)
+    if (key === 'first_payoff_position_pct') {
+        if (!transcript) return [1.0, null];
+        const tl = transcript.toLowerCase();
+        const payoffPhrases = [
+            'the answer is', 'turns out', 'it worked', 'here is why', 'the result',
+            'you can see', 'as you can see', 'the truth', 'what actually', 'what really',
+            'in reality', 'actually it', 'the real reason', 'i discovered',
+        ];
+        let earliest = -1;
+        for (const phrase of payoffPhrases) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (earliest < 0 || pos < earliest)) earliest = pos;
+        }
+        if (earliest < 0) return [1.0, null];
+        return [earliest / Math.max(tl.length, 1), null];
+    }
+
+    if (key === 'hook_to_payoff_gap_pct') {
+        const [firstPayoffPct] = extractMetric('first_payoff_position_pct', analysis);
+        const [hookDurPct] = extractMetric('hook_duration_pct', analysis);
+        const hookFrac = hookDurPct != null ? hookDurPct / 100 : 0.1;
+        const payoffPos = firstPayoffPct != null ? firstPayoffPct : 1.0;
+        return [payoffPos - hookFrac, null];
+    }
+
+    if (key === 'pre_closure_open_loop_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        let firstClosure = -1;
+        for (const phrase of ZYGARNIK_PHRASE_SETS.closure) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (firstClosure < 0 || pos < firstClosure)) firstClosure = pos;
+        }
+        const preText = firstClosure >= 0 ? tl.slice(0, firstClosure) : tl;
+        return [countPhraseMatches(preText, ZYGARNIK_PHRASE_SETS.open_loop), null];
+    }
+
+    if (key === 'closure_gap_pct') {
+        if (!transcript) return [1.0, null];
+        const tl = transcript.toLowerCase();
+        let earliest = -1;
+        for (const phrase of ZYGARNIK_PHRASE_SETS.closure) {
+            const pos = tl.indexOf(phrase);
+            if (pos >= 0 && (earliest < 0 || pos < earliest)) earliest = pos;
+        }
+        if (earliest < 0) return [1.0, null];
+        return [earliest / Math.max(tl.length, 1), null];
+    }
+
+    // Family 6: Micro-reward / information drip
+    if (key === 'micro_reward_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(tl, NEW_MICRO_REWARD_PHRASES) / words.length, null];
+    }
+
+    if (key === 'micro_reward_density_first_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const quarter = words.slice(0, Math.ceil(words.length * 0.25));
+        if (!quarter.length) return [0, null];
+        return [countPhraseMatches(quarter.join(' '), NEW_MICRO_REWARD_PHRASES) / quarter.length, null];
+    }
+
+    if (key === 'information_drip_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const thirdLen = Math.max(1, Math.floor(words.length / 3));
+        const firstThird = words.slice(0, thirdLen).join(' ');
+        const lastThird = words.slice(words.length - thirdLen).join(' ');
+        const d1 = countPhraseMatches(firstThird, NEW_MICRO_REWARD_PHRASES) / thirdLen;
+        const d2 = countPhraseMatches(lastThird, NEW_MICRO_REWARD_PHRASES) / thirdLen;
+        return [d1 / (d2 + 0.0001), null];
+    }
+
+    if (key === 'early_engagement_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const quarter = words.slice(0, Math.ceil(words.length * 0.25));
+        if (!quarter.length) return [0, null];
+        return [countPhraseMatches(quarter.join(' '), NEW_EARLY_ENGAGEMENT_PHRASES) / quarter.length, null];
+    }
+
+    if (key === 'mid_filler_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const midStart = Math.floor(words.length * 0.25);
+        const midEnd = Math.ceil(words.length * 0.75);
+        const midWords = words.slice(midStart, midEnd);
+        if (!midWords.length) return [0, null];
+        return [countPhraseMatches(midWords.join(' '), NEW_MID_FILLER_PHRASES) / midWords.length, null];
+    }
+
+    if (key === 'closing_hook_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const closingWords = words.slice(Math.floor(words.length * 0.80));
+        if (!closingWords.length) return [0, null];
+        return [countPhraseMatches(closingWords.join(' '), NEW_CLOSING_HOOK_PHRASES) / closingWords.length, null];
+    }
+
+    // Family 7: Title curiosity gap
+    if (key === 'title_open_loop_count') {
+        const title = (meta.title || '').toLowerCase();
+        if (!title) return [null, 'no title'];
+        const titleLoopPhrases = [
+            'why', 'how', 'what', 'when', 'this is why', 'the reason',
+            "you won't believe", 'nobody tells', 'secret', 'mistake',
+            'truth about', 'real reason', 'actually', 'surprising',
+        ];
+        return [countPhraseMatches(title, titleLoopPhrases), null];
+    }
+
+    // Windowed variants for new count/density families
+    {
+        const _nfRe = /^(visual_proof_phrase_(?:count|density)|credential_signal_(?:count|density)|consequence_density|personal_stake_density|micro_reward_density|unresolved_loop_count)_first(\d+)s$/;
+        const _nfm = key.match(_nfRe);
+        if (_nfm) {
+            if (!transcript) return [null, 'no transcript'];
+            const dur = meta.duration || 0;
+            if (!dur) return [null, 'no duration'];
+            const wSec = parseInt(_nfm[2]);
+            const wText = windowedTranscript(transcript, dur, wSec);
+            if (!wText) return [null, 'no text for window'];
+            const wl = wText.toLowerCase();
+            const wWords = wl.split(/\s+/).filter(Boolean);
+            if (!wWords.length) return [0, null];
+            const baseKey = _nfm[1];
+            if (baseKey === 'unresolved_loop_count') {
+                const openCt = countPhraseMatches(wl, ZYGARNIK_PHRASE_SETS.open_loop);
+                const closeCt = countPhraseMatches(wl, ZYGARNIK_PHRASE_SETS.closure);
+                return [Math.max(0, openCt - closeCt), null];
+            }
+            const phraseMap = {
+                'visual_proof_phrase_count': NEW_VISUAL_PROOF_PHRASES,
+                'visual_proof_phrase_density': NEW_VISUAL_PROOF_PHRASES,
+                'credential_signal_count': NEW_CREDENTIAL_PHRASES,
+                'credential_signal_density': NEW_CREDENTIAL_PHRASES,
+                'consequence_density': NEW_CONSEQUENCE_PHRASES,
+                'personal_stake_density': NEW_PERSONAL_STAKE_PHRASES,
+                'micro_reward_density': NEW_MICRO_REWARD_PHRASES,
+            };
+            const phrases = phraseMap[baseKey];
+            if (!phrases) return [null, `unknown windowed family: ${baseKey}`];
+            const count = countPhraseMatches(wl, phrases);
+            return baseKey.endsWith('_density') ? [count / wWords.length, null] : [count, null];
+        }
     }
 
     // ── Pattern-based keys ───────────────────────────────────────────────
