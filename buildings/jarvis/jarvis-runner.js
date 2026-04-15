@@ -419,7 +419,18 @@ async function runQueue(nToRun) {
         if (result) {
             const isComposite = metrics.isCompositeKey(key);
             if (isComposite) {
-                derivedExperiments.push(result);
+                // Store compact form only (no dataset) to avoid 512MB+ bloat
+                const rVal = (result.result && result.result.r) ||
+                    (result.experiment && result.experiment.outputs && result.experiment.outputs.r) || null;
+                derivedExperiments.push({
+                    key: result.key,
+                    r: rVal,
+                    status: result.status,
+                    layer: result.layer,
+                    target: result.target,
+                    resolution_id: result.resolution_id,
+                    kind: 'interaction',
+                });
             } else {
                 indicators.push(result);
             }
@@ -540,7 +551,18 @@ async function autoRun(opts = {}) {
             if (result) {
                 const isComposite = metrics.isCompositeKey(key);
                 if (isComposite) {
-                    derivedExperiments.push(result);
+                    // Store compact form only (no dataset) to avoid 512MB+ bloat
+                    const rVal = (result.result && result.result.r) ||
+                        (result.experiment && result.experiment.outputs && result.experiment.outputs.r) || null;
+                    derivedExperiments.push({
+                        key: result.key,
+                        r: rVal,
+                        status: result.status,
+                        layer: result.layer,
+                        target: result.target,
+                        resolution_id: result.resolution_id,
+                        kind: 'interaction',
+                    });
                 } else {
                     indicators.push(result);
                 }

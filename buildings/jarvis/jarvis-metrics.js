@@ -904,6 +904,28 @@ for (const w of ZYGARNIK_EARLY_WINDOWS) {
     STATIC_LAYER[`unresolved_loop_count_first${w}s`] = 'pre';
 }
 
+// ── New Group Q: Anticipation / Counterintuitive / Confession / Escalation / Specificity / Callback / Urgency ──
+for (const k of [
+    'anticipation_phrase_count', 'anticipation_phrase_density',
+    'anticipation_phrase_count_first10s', 'anticipation_front_load_ratio',
+    'counterintuitive_count', 'counterintuitive_density',
+    'counterintuitive_count_first_half', 'counterintuitive_count_first10s',
+    'confession_signal_count', 'confession_signal_density',
+    'confession_first_half_count', 'confession_hook_count',
+    'escalation_phrase_count', 'escalation_phrase_density',
+    'escalation_count_first_third', 'escalation_count_mid_third',
+    'numeric_specificity_count', 'numeric_specificity_density',
+    'numeric_specificity_first_half', 'specificity_phrase_count', 'specificity_phrase_density',
+    'callback_count', 'callback_density',
+    'callback_second_half_count', 'callback_last_third_count',
+    'urgency_signal_count', 'urgency_signal_density',
+    'urgency_count_first_quarter', 'urgency_count_last_quarter',
+    'urgency_front_load_ratio',
+]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+
 
 // ── get_metric_definition ────────────────────────────────────────────────
 
