@@ -21,3 +21,4 @@ buildings/jarvis/vision-retention-cache.json
 buildings/jarvis/vision-scores-cache.json
 buildings/jarvis/__pycache__/
 buildings/jarvis/archive/
+buildings/jarvis/derived_experiments_full_backup.json
