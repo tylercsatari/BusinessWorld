@@ -6780,7 +6780,11 @@
       "retention_pct_50_x_social_contrast_density",
       "retention_pct_50_x_anticipatory_build_density",
       "retention_pct_50_x_comment_rate",
-      "retention_pct_50_x_share_rate"
+      "retention_pct_50_x_share_rate",
+      "retention_pct_50_x_subs_gained_per_view",
+      "retention_pct_50_x_retention_pct_10",
+      "retention_pct_50_x_retention_75pct",
+      "retention_pct_50_x_retention_90pct"
     ],
     "depth_in_hierarchy": 0
   },
