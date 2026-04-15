@@ -65490,5 +65490,3203 @@
     "ran_at": "2026-04-15T04:14:03.747Z",
     "source": "deterministic",
     "kind": "interaction"
+  },
+  {
+    "id": "exp_sensory_word_density_x_motif_recurrence_score_20260415_044200",
+    "indicator_key": "sensory_word_density_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.08859558499738808,
+      "p_value": 0.08880194799071565,
+      "n": 370,
+      "ci_low": -0.013481866633201662,
+      "ci_high": 0.18884544988707064,
+      "rho": 0.11789030289765849,
+      "p_rho": 0.023334926310866422
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:42:00.391479Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_sensory_word_density_x_structural_thirds_balance_20260415_044217",
+    "indicator_key": "sensory_word_density_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.14998639312389794,
+      "p_value": 0.011380275607744466,
+      "n": 284,
+      "ci_low": 0.034189387724919106,
+      "ci_high": 0.26180971744828807,
+      "rho": 0.1643101910245758,
+      "p_rho": 0.00550860747668636
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:42:17.576941Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_non_sub_view_share_20260415_044231",
+    "indicator_key": "hook_drop_rate_x_non_sub_view_share",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.59754765762415,
+      "p_value": 3.493203936359019e-37,
+      "n": 370,
+      "ci_low": -0.6593344510742171,
+      "ci_high": -0.5277439253506954,
+      "rho": -0.6116840527332934,
+      "p_rho": 2.397933085560075e-39
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:42:31.585042Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_swipe_away_rate_20260415_044245",
+    "indicator_key": "hook_drop_rate_x_swipe_away_rate",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.060478184130716005,
+      "p_value": 0.2465102328860407,
+      "n": 369,
+      "ci_low": -0.16157444273841343,
+      "ci_high": 0.041874258981691746,
+      "rho": 0.2790342304128094,
+      "p_rho": 5.022243441241656e-8
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:42:45.158129Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_like_rate_20260415_044258",
+    "indicator_key": "hook_drop_rate_x_like_rate",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.06970934046645991,
+      "p_value": 0.1809039428294496,
+      "n": 370,
+      "ci_low": -0.03247715553012609,
+      "ci_high": 0.17045355458784886,
+      "rho": 0.02617392226227937,
+      "p_rho": 0.61577452516317
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:42:58.594877Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_unique_word_ratio_20260415_044311",
+    "indicator_key": "hook_drop_rate_x_unique_word_ratio",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.2979501802651916,
+      "p_value": 5.063381402207035e-9,
+      "n": 370,
+      "ci_low": -0.3881157834675419,
+      "ci_high": -0.2021349035936872,
+      "rho": -0.27726272061292767,
+      "p_rho": 5.8978109888970255e-8
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:43:11.993381Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_sensory_word_density_x_scene_transition_spacing_cv_20260415_044326",
+    "indicator_key": "sensory_word_density_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.017130354731845113,
+      "p_value": 0.7429336033826167,
+      "n": 369,
+      "ci_low": -0.08511239117467058,
+      "ci_high": 0.11901609938013953,
+      "rho": 0.10242466931929227,
+      "p_rho": 0.04929727985441487
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:43:26.031346Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_sensory_word_density_x_text_overlay_burst_count_20260415_044341",
+    "indicator_key": "sensory_word_density_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.056836540617705725,
+      "p_value": 0.2755127112919555,
+      "n": 370,
+      "ci_low": -0.04538211231671855,
+      "ci_high": 0.15787734407570458,
+      "rho": 0.07538613896531911,
+      "p_rho": 0.1478311596175735
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:43:41.539047Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_max_silence_gap_s_20260415_044357",
+    "indicator_key": "pivot_word_count_x_max_silence_gap_s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.15810007418704292,
+      "p_value": 0.0022881839693470038,
+      "n": 370,
+      "ci_low": 0.05706423158175772,
+      "ci_high": 0.25593035408707254,
+      "rho": 0.26682944545128995,
+      "p_rho": 1.8888246121398439e-7
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:43:57.061747Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_opening_speech_rate_3s_20260415_044412",
+    "indicator_key": "pivot_word_count_x_opening_speech_rate_3s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.17255733095331358,
+      "p_value": 0.0008591150424255712,
+      "n": 370,
+      "ci_low": 0.07186601164345516,
+      "ci_high": 0.26976693987762546,
+      "rho": 0.1853708233045059,
+      "p_rho": 0.0003374265497003378
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:44:12.251171Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_action_frame_pct_20260415_044426",
+    "indicator_key": "pivot_word_count_x_action_frame_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.23211828362492848,
+      "p_value": 0.00000643575740833172,
+      "n": 370,
+      "ci_low": 0.1333176775355422,
+      "ci_high": 0.32635061546368566,
+      "rho": 0.28591186009082437,
+      "p_rho": 2.1645715792158096e-8
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:44:26.745102Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_narrative_arc_completeness_20260415_044439",
+    "indicator_key": "pivot_word_count_x_narrative_arc_completeness",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.14173874288092952,
+      "p_value": 0.006314733842874727,
+      "n": 370,
+      "ci_low": 0.04036640829676217,
+      "ci_high": 0.24022293698613795,
+      "rho": 0.1488167824092128,
+      "p_rho": 0.004119628258739248
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:44:39.916004Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_scene_change_rate_20260415_044452",
+    "indicator_key": "hook_drop_rate_x_scene_change_rate",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.40851744218794667,
+      "p_value": 2.5787134052668076e-16,
+      "n": 370,
+      "ci_low": -0.49006171544341703,
+      "ci_high": -0.3198852030103247,
+      "rho": -0.3989802306415283,
+      "p_rho": 1.4342915133393738e-15
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:44:52.544100Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_hook_duration_pct_20260415_044505",
+    "indicator_key": "hook_drop_rate_x_hook_duration_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.14743247703284373,
+      "p_value": 0.004484975893021529,
+      "n": 370,
+      "ci_low": -0.2456949664483248,
+      "ci_high": -0.04617082502986454,
+      "rho": -0.15051707549290513,
+      "p_rho": 0.003707796951540369
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:45:05.962571Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_title_word_count_20260415_044519",
+    "indicator_key": "hook_drop_rate_x_title_word_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.2238509338481262,
+      "p_value": 0.000013828265761418857,
+      "n": 370,
+      "ci_low": -0.3185366840278725,
+      "ci_high": -0.12474223769212936,
+      "rho": -0.2051408979158634,
+      "p_rho": 0.00007038918554738405
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:45:19.306918Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_avg_segment_duration_s_20260415_044531",
+    "indicator_key": "hook_drop_rate_x_avg_segment_duration_s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.3307938380865024,
+      "p_value": 1.1188675127444826e-8,
+      "n": 284,
+      "ci_low": -0.43060826418553244,
+      "ci_high": -0.22298544034370069,
+      "rho": -0.3999643761770923,
+      "p_rho": 2.4670310550955267e-12
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:45:31.952024Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_beat_density_per_minute_20260415_044546",
+    "indicator_key": "pivot_word_count_x_beat_density_per_minute",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.16525020565445625,
+      "p_value": 0.0014234488858069377,
+      "n": 370,
+      "ci_low": 0.06437920680629022,
+      "ci_high": 0.2627785337593236,
+      "rho": 0.18330121220708043,
+      "p_rho": 0.0003940873799351795
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:45:46.057539Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_escalation_slope_20260415_044600",
+    "indicator_key": "pivot_word_count_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.11036890786840486,
+      "p_value": 0.0347971518490953,
+      "n": 366,
+      "ci_low": 0.007946869475914976,
+      "ci_high": 0.2104992419599821,
+      "rho": 0.12647047704750433,
+      "p_rho": 0.015478950403864706
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:46:00.387348Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_visual_mode_entropy_20260415_044614",
+    "indicator_key": "pivot_word_count_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.2230785717572309,
+      "p_value": 0.000015233382434067322,
+      "n": 369,
+      "ci_low": 0.12380431762806805,
+      "ci_high": 0.3179315851452189,
+      "rho": 0.25152533083659917,
+      "p_rho": 9.872910512424836e-7
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:46:14.362605Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_motif_recurrence_score_20260415_044626",
+    "indicator_key": "pivot_word_count_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.12760199169090622,
+      "p_value": 0.014040848987035953,
+      "n": 370,
+      "ci_low": 0.025984369432134072,
+      "ci_high": 0.22660953135575126,
+      "rho": 0.1950068919870581,
+      "p_rho": 0.00016023885692080487
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:46:26.254375Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_structural_thirds_balance_20260415_044640",
+    "indicator_key": "pivot_word_count_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.19138205850172016,
+      "p_value": 0.0011910579934549057,
+      "n": 284,
+      "ci_low": 0.07669666369168654,
+      "ci_high": 0.30106939414350475,
+      "rho": 0.17909861213070272,
+      "p_rho": 0.00245004403857002
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:46:40.689773Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_scene_transition_spacing_cv_20260415_044654",
+    "indicator_key": "pivot_word_count_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.06339763916037996,
+      "p_value": 0.2243968040205705,
+      "n": 369,
+      "ci_low": -0.03894834693217377,
+      "ci_high": 0.1644272741424607,
+      "rho": 0.09937321056175584,
+      "p_rho": 0.05650201214372286
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:46:54.681303Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_close_up_frame_pct_20260415_044717",
+    "indicator_key": "hook_drop_rate_x_close_up_frame_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.33290386775934644,
+      "p_value": 5.024576850021749e-11,
+      "n": 370,
+      "ci_low": -0.4205843041060295,
+      "ci_high": -0.23906231403807465,
+      "rho": -0.332167115231842,
+      "p_rho": 5.5724040745579454e-11
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:47:17.505563Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_sensory_word_density_20260415_044730",
+    "indicator_key": "hook_drop_rate_x_sensory_word_density",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.17393894980130606,
+      "p_value": 0.0007791139347590064,
+      "n": 370,
+      "ci_low": -0.2710871456954589,
+      "ci_high": -0.07328288066023572,
+      "rho": -0.18188717030056872,
+      "p_rho": 0.00043776237538931383
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:47:30.829461Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_pivot_word_count_20260415_044743",
+    "indicator_key": "hook_drop_rate_x_pivot_word_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.3552368207198505,
+      "p_value": 1.909238510220241e-12,
+      "n": 370,
+      "ci_low": -0.44121247902866373,
+      "ci_high": -0.2627993216560369,
+      "rho": -0.3717447716852226,
+      "p_rho": 1.4347441614794048e-13
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:47:43.690593Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_max_silence_gap_s_20260415_044758",
+    "indicator_key": "hook_drop_rate_x_max_silence_gap_s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.07864770446682515,
+      "p_value": 0.1310332708986279,
+      "n": 370,
+      "ci_low": -0.17916671421657973,
+      "ci_high": 0.023496375411601406,
+      "rho": -0.3057781205043055,
+      "p_rho": 1.8977937250466508e-9
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:47:58.466438Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_pivot_word_count_x_text_overlay_burst_count_20260415_044815",
+    "indicator_key": "pivot_word_count_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.12281965557239471,
+      "p_value": 0.018105965300996552,
+      "n": 370,
+      "ci_low": 0.021128558446916943,
+      "ci_high": 0.22199546501881767,
+      "rho": 0.1383915066826264,
+      "p_rho": 0.007679494539356784
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:48:15.565897Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_opening_speech_rate_3s_20260415_044831",
+    "indicator_key": "max_silence_gap_s_x_opening_speech_rate_3s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.021902550974500522,
+      "p_value": 0.6745374545322264,
+      "n": 370,
+      "ci_low": -0.08023228720493245,
+      "ci_high": 0.12358225307846808,
+      "rho": 0.014400166529947406,
+      "p_rho": 0.7824944518422393
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:48:31.582808Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_action_frame_pct_20260415_044845",
+    "indicator_key": "max_silence_gap_s_x_action_frame_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.02006694253519076,
+      "p_value": 0.7004389330666633,
+      "n": 370,
+      "ci_low": -0.08205661257366839,
+      "ci_high": 0.12177347379497452,
+      "rho": 0.19539156211998499,
+      "p_rho": 0.0001554280153502628
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:48:45.846304Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_narrative_arc_completeness_20260415_044901",
+    "indicator_key": "max_silence_gap_s_x_narrative_arc_completeness",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.029495045409231258,
+      "p_value": 0.5716984458704156,
+      "n": 370,
+      "ci_low": -0.0726791868272996,
+      "ci_high": 0.1310566059747574,
+      "rho": 0.08804587615470567,
+      "p_rho": 0.09080789287060469
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:49:01.948890Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_beat_density_per_minute_20260415_044914",
+    "indicator_key": "max_silence_gap_s_x_beat_density_per_minute",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.031916214457253456,
+      "p_value": 0.5405382282530016,
+      "n": 370,
+      "ci_low": -0.07026811304783323,
+      "ci_high": 0.13343767535510992,
+      "rho": 0.13073636240367906,
+      "p_rho": 0.011833630164548895
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:49:14.907871Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_escalation_slope_20260415_044926",
+    "indicator_key": "max_silence_gap_s_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.017675029013650253,
+      "p_value": 0.7361072020238185,
+      "n": 366,
+      "ci_low": -0.08499091648550319,
+      "ci_high": 0.11996960619065494,
+      "rho": 0.0957524834274981,
+      "p_rho": 0.06728089013883161
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:49:26.763068Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_opening_speech_rate_3s_20260415_044938",
+    "indicator_key": "hook_drop_rate_x_opening_speech_rate_3s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.25257371886126945,
+      "p_value": 8.568994319860147e-7,
+      "n": 370,
+      "ci_low": -0.34562898735082703,
+      "ci_high": -0.15459917998943867,
+      "rho": -0.22854455307915264,
+      "p_rho": 0.000008988787671623983
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:49:38.618670Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_action_frame_pct_20260415_044952",
+    "indicator_key": "hook_drop_rate_x_action_frame_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.2246619722490124,
+      "p_value": 0.000012844777640575232,
+      "n": 370,
+      "ci_low": -0.3193038111628131,
+      "ci_high": -0.12558284562165847,
+      "rho": -0.28524308236988066,
+      "p_rho": 2.3418773693828844e-8
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:49:52.538871Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_final_5pct_retention_20260415_045005",
+    "indicator_key": "hook_drop_rate_x_final_5pct_retention",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.4732568357942079,
+      "p_value": 4.7542771221931785e-22,
+      "n": 370,
+      "ci_low": -0.5487353581935831,
+      "ci_high": -0.3901251788209024,
+      "rho": -0.4716151954992268,
+      "p_rho": 6.888509847430136e-22
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:50:05.723208Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_hook_payoff_gap_20260415_045019",
+    "indicator_key": "hook_drop_rate_x_hook_payoff_gap",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.07323018344755351,
+      "p_value": 0.15980358197823202,
+      "n": 370,
+      "ci_low": -0.028941573392519203,
+      "ci_high": 0.17388757070783567,
+      "rho": 0.025209470860644352,
+      "p_rho": 0.6288473115092805
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:50:19.018124Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_visual_mode_entropy_20260415_045031",
+    "indicator_key": "max_silence_gap_s_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.058377763473881586,
+      "p_value": 0.26333230984719874,
+      "n": 369,
+      "ci_low": -0.04397823987084141,
+      "ci_high": 0.1595209092115117,
+      "rho": 0.12656121073408924,
+      "p_rho": 0.014986601065490672
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:50:31.641145Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_motif_recurrence_score_20260415_045044",
+    "indicator_key": "max_silence_gap_s_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.06660579250539735,
+      "p_value": 0.201153259330919,
+      "n": 370,
+      "ci_low": -0.03559157645814924,
+      "ci_high": 0.16742451201548791,
+      "rho": 0.06280526055448722,
+      "p_rho": 0.2281316258474217
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:50:44.871712Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_structural_thirds_balance_20260415_045059",
+    "indicator_key": "max_silence_gap_s_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.06467566669333545,
+      "p_value": 0.2773620379093554,
+      "n": 284,
+      "ci_low": -0.05211047972632515,
+      "ci_high": 0.179716653007127,
+      "rho": 0.09847804757921673,
+      "p_rho": 0.09766300902492413
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:50:59.339757Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_scene_transition_spacing_cv_20260415_045114",
+    "indicator_key": "max_silence_gap_s_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.04800169449397629,
+      "p_value": 0.35784241268328526,
+      "n": 369,
+      "ci_low": -0.05435859201949209,
+      "ci_high": 0.14936360374119184,
+      "rho": 0.0690344135216935,
+      "p_rho": 0.18577300667625923
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:51:14.486101Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_max_silence_gap_s_x_text_overlay_burst_count_20260415_045129",
+    "indicator_key": "max_silence_gap_s_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.03941848191135984,
+      "p_value": 0.44967442864101853,
+      "n": 370,
+      "ci_low": -0.06278953765483089,
+      "ci_high": 0.1408082546013871,
+      "rho": -0.009589338904981284,
+      "p_rho": 0.8541431213318438
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:51:29.570277Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_action_frame_pct_20260415_045142",
+    "indicator_key": "opening_speech_rate_3s_x_action_frame_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.09811497365721213,
+      "p_value": 0.05936981848509105,
+      "n": 370,
+      "ci_low": -0.00387950684076417,
+      "ci_high": 0.19808908593721203,
+      "rho": 0.13440996625857332,
+      "p_rho": 0.009641322027917214
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:51:42.789252Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_end_recovery_score_20260415_045159",
+    "indicator_key": "hook_drop_rate_x_end_recovery_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.4845985061339713,
+      "p_value": 3.471028616484946e-23,
+      "n": 370,
+      "ci_low": -0.5589383926032612,
+      "ci_high": -0.40253090628803057,
+      "rho": -0.4830490736611307,
+      "p_rho": 4.991664458472428e-23
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:51:59.730457Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_narrative_arc_completeness_20260415_045215",
+    "indicator_key": "hook_drop_rate_x_narrative_arc_completeness",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.1641851662784775,
+      "p_value": 0.0015295889209315805,
+      "n": 370,
+      "ci_low": -0.26175909369313216,
+      "ci_high": -0.0632889258205913,
+      "rho": -0.16859467076714085,
+      "p_rho": 0.0011325558256260627
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:52:15.716523Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_beat_density_per_minute_20260415_045229",
+    "indicator_key": "hook_drop_rate_x_beat_density_per_minute",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.23475467543656675,
+      "p_value": 0.000005012660671293345,
+      "n": 370,
+      "ci_low": -0.3288397104097513,
+      "ci_high": -0.13605543145012405,
+      "rho": -0.2518893579348199,
+      "p_rho": 9.193604135175092e-7
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:52:29.037539Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_escalation_slope_20260415_045242",
+    "indicator_key": "hook_drop_rate_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.16047913211195033,
+      "p_value": 0.0020725927466757107,
+      "n": 366,
+      "ci_low": -0.2587346315287378,
+      "ci_high": -0.058936751989495884,
+      "rho": -0.17994317121585332,
+      "p_rho": 0.0005421531988891759
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:52:42.077805Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_narrative_arc_completeness_20260415_045255",
+    "indicator_key": "opening_speech_rate_3s_x_narrative_arc_completeness",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.03202849695869896,
+      "p_value": 0.539113944082705,
+      "n": 370,
+      "ci_low": -0.07015626974151222,
+      "ci_high": 0.13354806979207162,
+      "rho": 0.03466464494247321,
+      "p_rho": 0.5062223103856308
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:52:55.750127Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_beat_density_per_minute_20260415_045310",
+    "indicator_key": "opening_speech_rate_3s_x_beat_density_per_minute",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.005825998972348502,
+      "p_value": 0.9110715186338896,
+      "n": 370,
+      "ci_low": -0.09618680769484185,
+      "ci_high": 0.10771768766454083,
+      "rho": -0.011391568832234794,
+      "p_rho": 0.8271277024010307
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:53:10.255874Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_escalation_slope_20260415_045324",
+    "indicator_key": "opening_speech_rate_3s_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.04087238752583565,
+      "p_value": 0.4356346678315627,
+      "n": 366,
+      "ci_low": -0.14278607728325984,
+      "ci_high": 0.061898913552840606,
+      "rho": -0.04126482018299641,
+      "p_rho": 0.43123658063117215
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:53:24.507615Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_visual_mode_entropy_20260415_045338",
+    "indicator_key": "opening_speech_rate_3s_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.07130830963378201,
+      "p_value": 0.17166259960837268,
+      "n": 369,
+      "ci_low": -0.031011349884760005,
+      "ci_high": 0.17214893324647695,
+      "rho": 0.06160412404264916,
+      "p_rho": 0.23780813310202906
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:53:38.019787Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_motif_recurrence_score_20260415_045352",
+    "indicator_key": "opening_speech_rate_3s_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.031029482244096403,
+      "p_value": 0.5518516769099332,
+      "n": 370,
+      "ci_low": -0.07115128654065671,
+      "ci_high": 0.13256576529484965,
+      "rho": 0.06831073413557057,
+      "p_rho": 0.18983442960620886
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:53:52.120490Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_structural_thirds_balance_20260415_045406",
+    "indicator_key": "opening_speech_rate_3s_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.09760331355504322,
+      "p_value": 0.10069212251590426,
+      "n": 284,
+      "ci_low": -0.21159338877944986,
+      "ci_high": 0.01900647461374487,
+      "rho": -0.13516699572761076,
+      "p_rho": 0.0227090823673664
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:54:06.933441Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_visual_mode_entropy_20260415_045423",
+    "indicator_key": "hook_drop_rate_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.3177597250433147,
+      "p_value": 4.2145397375250364e-10,
+      "n": 369,
+      "ci_low": -0.40666099506756814,
+      "ci_high": -0.222896903949557,
+      "rho": -0.3185966278276371,
+      "p_rho": 3.7708567049345675e-10
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:54:23.717099Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_motif_recurrence_score_20260415_045436",
+    "indicator_key": "hook_drop_rate_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.19275538315045596,
+      "p_value": 0.00019131416069887645,
+      "n": 370,
+      "ci_low": -0.2890308748255783,
+      "ci_high": -0.09261992431275241,
+      "rho": -0.223053057990412,
+      "p_rho": 0.000014865301973948802
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:54:36.573757Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_structural_thirds_balance_20260415_045450",
+    "indicator_key": "hook_drop_rate_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.3494974740856253,
+      "p_value": 1.3963148071910183e-9,
+      "n": 284,
+      "ci_low": -0.4476800034707956,
+      "ci_high": -0.2429882131243561,
+      "rho": -0.3397250155199375,
+      "p_rho": 4.213969391918371e-9
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:54:50.296966Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_scene_transition_spacing_cv_20260415_045507",
+    "indicator_key": "hook_drop_rate_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.10682075997637269,
+      "p_value": 0.04027968417572664,
+      "n": 369,
+      "ci_low": -0.20666086131318856,
+      "ci_high": -0.004778985925050757,
+      "rho": -0.13139292821728155,
+      "p_rho": 0.011524668105368407
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:55:07.022588Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_scene_transition_spacing_cv_20260415_045521",
+    "indicator_key": "opening_speech_rate_3s_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.017926568395700348,
+      "p_value": 0.7314349387375452,
+      "n": 369,
+      "ci_low": -0.11980120150897812,
+      "ci_high": 0.08432164896296847,
+      "rho": 0.005416659836844979,
+      "p_rho": 0.9174087181524749
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:55:21.527077Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_opening_speech_rate_3s_x_text_overlay_burst_count_20260415_045536",
+    "indicator_key": "opening_speech_rate_3s_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.06905772486908844,
+      "p_value": 0.1850252575924053,
+      "n": 370,
+      "ci_low": -0.16981773988808285,
+      "ci_high": 0.03313121862310252,
+      "rho": -0.07211446912876288,
+      "p_rho": 0.16627924130681274
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:55:36.167455Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_narrative_arc_completeness_20260415_045550",
+    "indicator_key": "action_frame_pct_x_narrative_arc_completeness",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1498067633567826,
+      "p_value": 0.0038750830863900697,
+      "n": 370,
+      "ci_low": 0.04859328786329851,
+      "ci_high": 0.24797495319245055,
+      "rho": 0.16462746316624924,
+      "p_rho": 0.001484658520662011
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:55:50.760853Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_beat_density_per_minute_20260415_045609",
+    "indicator_key": "action_frame_pct_x_beat_density_per_minute",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1303571739935226,
+      "p_value": 0.012083256282981132,
+      "n": 370,
+      "ci_low": 0.02878406063700159,
+      "ci_high": 0.2292657546332279,
+      "rho": 0.18344498376816312,
+      "p_rho": 0.0003898815939885282
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:56:09.432248Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_escalation_slope_20260415_045625",
+    "indicator_key": "action_frame_pct_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.10622356861880278,
+      "p_value": 0.04225758330644503,
+      "n": 366,
+      "ci_low": 0.0037524797433400813,
+      "ci_high": 0.20648704326698758,
+      "rho": 0.1476703149243286,
+      "p_rho": 0.004640678336367441
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:56:25.742903Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_visual_mode_entropy_20260415_045639",
+    "indicator_key": "action_frame_pct_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.15171600486873665,
+      "p_value": 0.003484503501729562,
+      "n": 369,
+      "ci_low": 0.050402815597358694,
+      "ci_high": 0.24993853006069905,
+      "rho": 0.16320306999652068,
+      "p_rho": 0.001657991145317723
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:56:39.826592Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_hook_drop_rate_x_text_overlay_burst_count_20260415_045654",
+    "indicator_key": "hook_drop_rate_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.11829753328903257,
+      "p_value": 0.02285824546308408,
+      "n": 370,
+      "ci_low": -0.21762836710540698,
+      "ci_high": -0.016541368133078167,
+      "rho": -0.1881065208262631,
+      "p_rho": 0.00027413359337289604
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:56:54.562724Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_swipe_away_rate_20260415_045707",
+    "indicator_key": "non_sub_view_share_x_swipe_away_rate",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.0728579186321982,
+      "p_value": 0.16251486510298851,
+      "n": 369,
+      "ci_low": -0.029455070910776173,
+      "ci_high": 0.17366006697764824,
+      "rho": -0.3008149188424904,
+      "p_rho": 3.7247645778179654e-9
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:57:07.730802Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_like_rate_20260415_045721",
+    "indicator_key": "non_sub_view_share_x_like_rate",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.18566754717280476,
+      "p_value": 0.0003299552327223702,
+      "n": 370,
+      "ci_low": -0.282279704299138,
+      "ci_high": -0.08532710495650331,
+      "rho": -0.11243534639761055,
+      "p_rho": 0.030596616544022882
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:57:21.822813Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_unique_word_ratio_20260415_045744",
+    "indicator_key": "non_sub_view_share_x_unique_word_ratio",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.3655945771540639,
+      "p_value": 3.829432751035618e-13,
+      "n": 370,
+      "ci_low": 0.2738463753375519,
+      "ci_high": 0.4507488384888614,
+      "rho": 0.44801468354160484,
+      "p_rho": 1.1475297042990689e-19
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:57:44.700873Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_motif_recurrence_score_20260415_045800",
+    "indicator_key": "action_frame_pct_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1686810955994353,
+      "p_value": 0.0011258221375588773,
+      "n": 370,
+      "ci_low": 0.06789304752659676,
+      "ci_high": 0.26606105139654934,
+      "rho": 0.18323908073781625,
+      "p_rho": 0.0003959179599460992
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:58:00.358812Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_structural_thirds_balance_20260415_045813",
+    "indicator_key": "action_frame_pct_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.19057209418946705,
+      "p_value": 0.0012507849688813582,
+      "n": 284,
+      "ci_low": 0.07586093107224977,
+      "ci_high": 0.30030477348589274,
+      "rho": 0.199516196873318,
+      "p_rho": 0.0007208098055280873
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:58:13.548908Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_scene_transition_spacing_cv_20260415_045826",
+    "indicator_key": "action_frame_pct_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.14382872152015166,
+      "p_value": 0.005642034679378144,
+      "n": 369,
+      "ci_low": 0.04235679771164509,
+      "ci_high": 0.24236373660395172,
+      "rho": 0.1423286698437188,
+      "p_rho": 0.006167808322144251
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:58:26.901787Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_action_frame_pct_x_text_overlay_burst_count_20260415_045842",
+    "indicator_key": "action_frame_pct_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.10699109614571131,
+      "p_value": 0.03969017929863749,
+      "n": 370,
+      "ci_low": 0.005090957765378173,
+      "ci_high": 0.20669209887082893,
+      "rho": 0.12045830323583524,
+      "p_rho": 0.020467434303548988
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:58:42.038342Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_narrative_arc_completeness_x_beat_density_per_minute_20260415_045857",
+    "indicator_key": "narrative_arc_completeness_x_beat_density_per_minute",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.053907168712227525,
+      "p_value": 0.3010573335464289,
+      "n": 370,
+      "ci_low": -0.048314044438407665,
+      "ci_high": 0.15501087927483662,
+      "rho": 0.06353648613208007,
+      "p_rho": 0.2227509826709733
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:58:57.458715Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_narrative_arc_completeness_x_escalation_slope_20260415_045910",
+    "indicator_key": "narrative_arc_completeness_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.04800877315960826,
+      "p_value": 0.3597464436466435,
+      "n": 366,
+      "ci_low": -0.05477273971476775,
+      "ci_high": 0.14978356768703588,
+      "rho": 0.07749037271323095,
+      "p_rho": 0.1389713063461958
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:59:10.476366Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_scene_change_rate_20260415_045923",
+    "indicator_key": "non_sub_view_share_x_scene_change_rate",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.721417479338582,
+      "p_value": 1.0815155812698967e-60,
+      "n": 370,
+      "ci_low": 0.6686421805549841,
+      "ci_high": 0.7669611609366054,
+      "rho": 0.8396013790399431,
+      "p_rho": 1.44623755461883e-99
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:59:23.599418Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_hook_duration_pct_20260415_045936",
+    "indicator_key": "non_sub_view_share_x_hook_duration_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.128835995585061,
+      "p_value": 0.013132012520374716,
+      "n": 370,
+      "ci_low": 0.0272381111155314,
+      "ci_high": 0.22779939513917602,
+      "rho": 0.11454980520893265,
+      "p_rho": 0.027579888008806945
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:59:36.415901Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_title_word_count_20260415_045950",
+    "indicator_key": "non_sub_view_share_x_title_word_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.2092624508424214,
+      "p_value": 0.00004978683134519874,
+      "n": 370,
+      "ci_low": 0.10964613290283172,
+      "ci_high": 0.30471683888959783,
+      "rho": 0.18857085999285722,
+      "p_rho": 0.0002645598331662959
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T04:59:50.634641Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_avg_segment_duration_s_20260415_050004",
+    "indicator_key": "non_sub_view_share_x_avg_segment_duration_s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.36113417793502617,
+      "p_value": 3.5636451325599954e-10,
+      "n": 284,
+      "ci_low": 0.2554790683095626,
+      "ci_high": 0.458265406441795,
+      "rho": 0.42772895509564735,
+      "p_rho": 4.6300269795676226e-14
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:00:04.248821Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_narrative_arc_completeness_x_visual_mode_entropy_20260415_050020",
+    "indicator_key": "narrative_arc_completeness_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.0952493769220467,
+      "p_value": 0.06760506624381818,
+      "n": 369,
+      "ci_low": -0.006911727805560251,
+      "ci_high": 0.19544271025253876,
+      "rho": 0.1105281666382465,
+      "p_rho": 0.03379743274425794
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:00:20.073761Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_narrative_arc_completeness_x_motif_recurrence_score_20260415_050034",
+    "indicator_key": "narrative_arc_completeness_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.017164122611745103,
+      "p_value": 0.7421061079497832,
+      "n": 370,
+      "ci_low": -0.08494019331500831,
+      "ci_high": 0.11891170186476892,
+      "rho": 0.07275188653734697,
+      "p_rho": 0.16255599117562686
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:00:34.237459Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_narrative_arc_completeness_x_structural_thirds_balance_20260415_050048",
+    "indicator_key": "narrative_arc_completeness_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.017178389870763623,
+      "p_value": 0.7731631328546174,
+      "n": 284,
+      "ci_low": -0.13330571701526775,
+      "ci_high": 0.09941425136291701,
+      "rho": -0.03122597528819184,
+      "p_rho": 0.6002531894708656
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:00:48.149748Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_narrative_arc_completeness_x_scene_transition_spacing_cv_20260415_050103",
+    "indicator_key": "narrative_arc_completeness_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.03828631220349246,
+      "p_value": 0.4634183795680483,
+      "n": 369,
+      "ci_low": -0.1398336231764607,
+      "ci_high": 0.06405796995911557,
+      "rho": 0.0002202488935959915,
+      "p_rho": 0.9966357388000534
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:01:03.465865Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_narrative_arc_completeness_x_text_overlay_burst_count_20260415_050117",
+    "indicator_key": "narrative_arc_completeness_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.014902994051887655,
+      "p_value": 0.7750996999903493,
+      "n": 370,
+      "ci_low": -0.08718515128682237,
+      "ci_high": 0.11668137545816469,
+      "rho": 0.04794667595825341,
+      "p_rho": 0.3577394219365543
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:01:17.100070Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_beat_density_per_minute_x_escalation_slope_20260415_050130",
+    "indicator_key": "beat_density_per_minute_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.002793556190195619,
+      "p_value": 0.9575238211110332,
+      "n": 366,
+      "ci_low": -0.09974695894699485,
+      "ci_high": 0.10527535849258436,
+      "rho": 0.011114166213719438,
+      "p_rho": 0.8321805743552085
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:01:30.041259Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_close_up_frame_pct_20260415_050143",
+    "indicator_key": "non_sub_view_share_x_close_up_frame_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.3297761976290392,
+      "p_value": 7.781585495684755e-11,
+      "n": 370,
+      "ci_low": 0.2357469394700043,
+      "ci_high": 0.4176881282873477,
+      "rho": 0.3205845701899379,
+      "p_rho": 2.7350878961232625e-10
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:01:43.161133Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_sensory_word_density_20260415_050157",
+    "indicator_key": "non_sub_view_share_x_sensory_word_density",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.18527865998796395,
+      "p_value": 0.00033977905794879806,
+      "n": 370,
+      "ci_low": 0.08492728187347298,
+      "ci_high": 0.2819090117542832,
+      "rho": 0.18299534640287296,
+      "p_rho": 0.00040317577869598
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:01:57.147302Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_pivot_word_count_20260415_050212",
+    "indicator_key": "non_sub_view_share_x_pivot_word_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.3741424144143185,
+      "p_value": 9.729385816869898e-14,
+      "n": 370,
+      "ci_low": 0.2829813313450528,
+      "ci_high": 0.4586041978352733,
+      "rho": 0.3796183402155865,
+      "p_rho": 3.9587351030190106e-14
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:02:12.547022Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_max_silence_gap_s_20260415_050228",
+    "indicator_key": "non_sub_view_share_x_max_silence_gap_s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.048141326499347666,
+      "p_value": 0.3557888402478053,
+      "n": 370,
+      "ci_low": -0.0540797846158696,
+      "ci_high": 0.14936387887402391,
+      "rho": 0.3064758137928869,
+      "p_rho": 1.7363827763737466e-9
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:02:28.630206Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_beat_density_per_minute_x_visual_mode_entropy_20260415_050241",
+    "indicator_key": "beat_density_per_minute_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1423561036355322,
+      "p_value": 0.006157811045793808,
+      "n": 369,
+      "ci_low": 0.04085599954870462,
+      "ci_high": 0.2409481309383235,
+      "rho": 0.14608713347315783,
+      "p_rho": 0.004926189710384107
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:02:41.025895Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_beat_density_per_minute_x_motif_recurrence_score_20260415_050254",
+    "indicator_key": "beat_density_per_minute_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.04504568768736915,
+      "p_value": 0.3876000253526017,
+      "n": 370,
+      "ci_low": -0.057172558948922376,
+      "ci_high": 0.14632931869494714,
+      "rho": 0.10673633964792688,
+      "p_rho": 0.04016646810622171
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:02:54.820306Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_beat_density_per_minute_x_structural_thirds_balance_20260415_050310",
+    "indicator_key": "beat_density_per_minute_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.023441212107578848,
+      "p_value": 0.6940608974564643,
+      "n": 284,
+      "ci_low": -0.1394545888393833,
+      "ci_high": 0.09320696150008749,
+      "rho": -0.02658253335994337,
+      "p_rho": 0.655539515247483
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:03:10.457395Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_beat_density_per_minute_x_scene_transition_spacing_cv_20260415_050325",
+    "indicator_key": "beat_density_per_minute_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.03257942256375044,
+      "p_value": 0.5327112736752347,
+      "n": 369,
+      "ci_low": -0.13422685500888423,
+      "ci_high": 0.06974645777481227,
+      "rho": 0.018116909472274952,
+      "p_rho": 0.7286948572161114
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:03:25.728043Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_beat_density_per_minute_x_text_overlay_burst_count_20260415_050338",
+    "indicator_key": "beat_density_per_minute_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.007679137647303974,
+      "p_value": 0.8829634809041103,
+      "n": 370,
+      "ci_low": -0.10954904055077377,
+      "ci_high": 0.0943504045849924,
+      "rho": 0.001962375136098926,
+      "p_rho": 0.969991177279911
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:03:38.627686Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_escalation_slope_x_visual_mode_entropy_20260415_050351",
+    "indicator_key": "escalation_slope_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.06903409629416102,
+      "p_value": 0.18758571336449398,
+      "n": 366,
+      "ci_low": -0.033716459333044964,
+      "ci_high": 0.17034057702247146,
+      "rho": 0.09604598394937383,
+      "p_rho": 0.06644233223967386
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:03:51.938200Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_opening_speech_rate_3s_20260415_050405",
+    "indicator_key": "non_sub_view_share_x_opening_speech_rate_3s",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.26990136278758203,
+      "p_value": 1.3475976660268225e-7,
+      "n": 370,
+      "ci_low": 0.1726979893831284,
+      "ci_high": 0.3618983260235355,
+      "rho": 0.24861826490390593,
+      "p_rho": 0.0000012832771176918872
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:04:05.233145Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_action_frame_pct_20260415_050422",
+    "indicator_key": "non_sub_view_share_x_action_frame_pct",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.25719706815125787,
+      "p_value": 5.298884900773344e-7,
+      "n": 370,
+      "ci_low": 0.15942186761884644,
+      "ci_high": 0.34997543948366594,
+      "rho": 0.2717981314826514,
+      "p_rho": 1.0917068031444274e-7
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:04:22.382071Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_final_5pct_retention_20260415_050437",
+    "indicator_key": "non_sub_view_share_x_final_5pct_retention",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.6682864663381344,
+      "p_value": 3.239950242919268e-49,
+      "n": 370,
+      "ci_low": 0.6077394860304637,
+      "ci_high": 0.7211089504869144,
+      "rho": 0.698724666419098,
+      "p_rho": 1.7584169056503872e-55
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:04:37.481994Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_hook_payoff_gap_20260415_050450",
+    "indicator_key": "non_sub_view_share_x_hook_payoff_gap",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.15644083616008012,
+      "p_value": 0.0025476952208734285,
+      "n": 370,
+      "ci_low": 0.0553682897472574,
+      "ci_high": 0.25433978115977857,
+      "rho": 0.13410932462934302,
+      "p_rho": 0.009806118395569571
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:04:50.332893Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_escalation_slope_x_motif_recurrence_score_20260415_050504",
+    "indicator_key": "escalation_slope_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.022427648107521157,
+      "p_value": 0.6689043037606798,
+      "n": 366,
+      "ci_low": -0.0802688484722984,
+      "ci_high": 0.12465300844239877,
+      "rho": 0.06944619946755645,
+      "p_rho": 0.1849588709769049
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:05:04.283726Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_escalation_slope_x_structural_thirds_balance_20260415_050520",
+    "indicator_key": "escalation_slope_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.009098579496768587,
+      "p_value": 0.8786672742198728,
+      "n": 284,
+      "ci_low": -0.10740903518753284,
+      "ci_high": 0.1253596877146823,
+      "rho": 0.007373471455023739,
+      "p_rho": 0.9015420419201713
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:05:20.734427Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_escalation_slope_x_scene_transition_spacing_cv_20260415_050536",
+    "indicator_key": "escalation_slope_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.014750644570519758,
+      "p_value": 0.7785213831909548,
+      "n": 366,
+      "ci_low": -0.11708554779327322,
+      "ci_high": 0.08789421210511626,
+      "rho": 0.03711433971523382,
+      "p_rho": 0.47903578787273254
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:05:36.945366Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_escalation_slope_x_text_overlay_burst_count_20260415_050551",
+    "indicator_key": "escalation_slope_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.05653903803942535,
+      "p_value": 0.28066858081443063,
+      "n": 366,
+      "ci_low": -0.15813445259292755,
+      "ci_high": 0.0462409212847469,
+      "rho": -0.007162618192446123,
+      "p_rho": 0.8913770351436751
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:05:51.402048Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_visual_mode_entropy_x_motif_recurrence_score_20260415_050606",
+    "indicator_key": "visual_mode_entropy_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.10911256425056967,
+      "p_value": 0.03615928287367742,
+      "n": 369,
+      "ci_low": 0.0070977386533934,
+      "ci_high": 0.20887959515229484,
+      "rho": 0.14827530459219446,
+      "p_rho": 0.004311736086119413
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:06:06.569333Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_visual_mode_entropy_x_structural_thirds_balance_20260415_050623",
+    "indicator_key": "visual_mode_entropy_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.16114827137526397,
+      "p_value": 0.006497626327602971,
+      "n": 284,
+      "ci_low": 0.04560989462805649,
+      "ci_high": 0.27243221656248384,
+      "rho": 0.1438919757838887,
+      "p_rho": 0.015230199516639915
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:06:23.299621Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_end_recovery_score_20260415_050639",
+    "indicator_key": "non_sub_view_share_x_end_recovery_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.6984329588183799,
+      "p_value": 2.036632875557248e-55,
+      "n": 370,
+      "ci_low": 0.6422084366455416,
+      "ci_high": 0.7471823707837909,
+      "rho": 0.7532520621337925,
+      "p_rho": 6.065996724767022e-69
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:06:39.917014Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_narrative_arc_completeness_20260415_050653",
+    "indicator_key": "non_sub_view_share_x_narrative_arc_completeness",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.15996266086517902,
+      "p_value": 0.0020257578452821264,
+      "n": 370,
+      "ci_low": 0.05896871524588604,
+      "ci_high": 0.2577152295504124,
+      "rho": 0.17868647522689302,
+      "p_rho": 0.0005537613569679715
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:06:53.207109Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_beat_density_per_minute_20260415_050711",
+    "indicator_key": "non_sub_view_share_x_beat_density_per_minute",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.28143745328411773,
+      "p_value": 3.651155368569153e-8,
+      "n": 370,
+      "ci_low": 0.1847839997808459,
+      "ci_high": 0.37269885079337634,
+      "rho": 0.2863592691719463,
+      "p_rho": 2.053276620490666e-8
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:07:11.086000Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_escalation_slope_20260415_050725",
+    "indicator_key": "non_sub_view_share_x_escalation_slope",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.15835232189067155,
+      "p_value": 0.0023792668727757042,
+      "n": 366,
+      "ci_low": 0.05676178593806878,
+      "ci_high": 0.2566973034852511,
+      "rho": 0.17307727700870912,
+      "p_rho": 0.0008842990317731446
+    },
+    "n_videos": 366,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:07:25.958445Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_visual_mode_entropy_x_scene_transition_spacing_cv_20260415_050741",
+    "indicator_key": "visual_mode_entropy_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.08047239079726771,
+      "p_value": 0.12281065985464326,
+      "n": 369,
+      "ci_low": -0.021800609797140102,
+      "ci_high": 0.1810785887082408,
+      "rho": 0.09442478704108016,
+      "p_rho": 0.07002688532901961
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:07:41.424798Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_visual_mode_entropy_x_text_overlay_burst_count_20260415_050757",
+    "indicator_key": "visual_mode_entropy_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.04387626777245309,
+      "p_value": 0.4006949307318098,
+      "n": 369,
+      "ci_low": -0.058479583920361344,
+      "ci_high": 0.1453192030018649,
+      "rho": 0.044140417601526996,
+      "p_rho": 0.39786239438889925
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:07:57.637569Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_motif_recurrence_score_x_structural_thirds_balance_20260415_050810",
+    "indicator_key": "motif_recurrence_score_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.001189705562674301,
+      "p_value": 0.9840745977559451,
+      "n": 284,
+      "ci_low": -0.11522011596815485,
+      "ci_high": 0.1175672919895416,
+      "rho": 0.01317917882049488,
+      "p_rho": 0.8249915717108822
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:08:10.916858Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_motif_recurrence_score_x_scene_transition_spacing_cv_20260415_050824",
+    "indicator_key": "motif_recurrence_score_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.01927132403516712,
+      "p_value": 0.7121513354200327,
+      "n": 369,
+      "ci_low": -0.08298584177569879,
+      "ci_high": 0.12112690118755999,
+      "rho": 0.06450598436030584,
+      "p_rho": 0.21638304105781977
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:08:24.688478Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_motif_recurrence_score_x_text_overlay_burst_count_20260415_050842",
+    "indicator_key": "motif_recurrence_score_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.0303404859498444,
+      "p_value": 0.5607215320320277,
+      "n": 370,
+      "ci_low": -0.07183740709949396,
+      "ci_high": 0.13188817739863137,
+      "rho": 0.049695867513565944,
+      "p_rho": 0.34045139461037394
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:08:42.151547Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_structural_thirds_balance_x_scene_transition_spacing_cv_20260415_050859",
+    "indicator_key": "structural_thirds_balance_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.09457940444231444,
+      "p_value": 0.11174062988065994,
+      "n": 284,
+      "ci_low": -0.2086760682367102,
+      "ci_high": 0.022057278785884957,
+      "rho": -0.059077708113943535,
+      "p_rho": 0.32116285640717995
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:08:59.307092Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_visual_mode_entropy_20260415_050912",
+    "indicator_key": "non_sub_view_share_x_visual_mode_entropy",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.33917075554708886,
+      "p_value": 2.193016803521746e-11,
+      "n": 369,
+      "ci_low": 0.245580648680571,
+      "ci_high": 0.4264962502936691,
+      "rho": 0.3157106566333085,
+      "p_rho": 5.52588720466142e-10
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:09:12.988373Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_motif_recurrence_score_20260415_050927",
+    "indicator_key": "non_sub_view_share_x_motif_recurrence_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.1691372537908566,
+      "p_value": 0.0010908878494151652,
+      "n": 370,
+      "ci_low": 0.0683604229384838,
+      "ci_high": 0.2664973125368491,
+      "rho": 0.1925189310168386,
+      "p_rho": 0.00019488627519672437
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:09:27.200186Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_structural_thirds_balance_20260415_050944",
+    "indicator_key": "non_sub_view_share_x_structural_thirds_balance",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.6293441038162599,
+      "p_value": 9.861575323964336e-33,
+      "n": 284,
+      "ci_low": 0.5534947181058507,
+      "ci_high": 0.6948397148727874,
+      "rho": 0.9006802578536123,
+      "p_rho": 4.2628491743876577e-104
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:09:44.059923Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_scene_transition_spacing_cv_20260415_050957",
+    "indicator_key": "non_sub_view_share_x_scene_transition_spacing_cv",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.06654870260130165,
+      "p_value": 0.202155008956609,
+      "n": 369,
+      "ci_low": -0.03578834359801679,
+      "ci_high": 0.16750453305467292,
+      "rho": 0.10904947419306117,
+      "p_rho": 0.036267727783209476
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:09:57.101865Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_structural_thirds_balance_x_text_overlay_burst_count_20260415_051014",
+    "indicator_key": "structural_thirds_balance_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.02332190856685263,
+      "p_value": 0.6955402916685423,
+      "n": 284,
+      "ci_low": -0.1393375395265679,
+      "ci_high": 0.09332529196150235,
+      "rho": -0.07039684802005743,
+      "p_rho": 0.2369739577279019
+    },
+    "n_videos": 284,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:10:14.080693Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_scene_transition_spacing_cv_x_text_overlay_burst_count_20260415_051029",
+    "indicator_key": "scene_transition_spacing_cv_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.0828599593540238,
+      "p_value": 0.11205563187172582,
+      "n": 369,
+      "ci_low": -0.1834023603059503,
+      "ci_high": 0.019398030665695704,
+      "rho": 0.012311169202859306,
+      "p_rho": 0.8136682621945085
+    },
+    "n_videos": 369,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:10:29.936486Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_open_loop_count_x_title_curiosity_gap_score_20260415_051044",
+    "indicator_key": "open_loop_count_x_title_curiosity_gap_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.024207612684770178,
+      "p_value": 0.6425508966791899,
+      "n": 370,
+      "ci_low": -0.1258526675966494,
+      "ci_high": 0.07794042466117893,
+      "rho": 0.05584255416681363,
+      "p_rho": 0.2840100172974401
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:10:44.527175Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_title_curiosity_gap_score_x_superlative_count_20260415_051101",
+    "indicator_key": "title_curiosity_gap_score_x_superlative_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.08059339202479704,
+      "p_value": 0.12173847981039919,
+      "n": 370,
+      "ci_low": -0.1810612921190768,
+      "ci_high": 0.021539267456051576,
+      "rho": -0.04745598149583268,
+      "p_rho": 0.3626863203285373
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:11:01.492883Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_title_curiosity_gap_score_x_open_loop_count_20260415_051119",
+    "indicator_key": "title_curiosity_gap_score_x_open_loop_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.024207612684770178,
+      "p_value": 0.6425508966791899,
+      "n": 370,
+      "ci_low": -0.1258526675966494,
+      "ci_high": 0.07794042466117893,
+      "rho": 0.05584255416681363,
+      "p_rho": 0.2840100172974401
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:11:19.150114Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_superlative_count_x_title_curiosity_gap_score_20260415_051134",
+    "indicator_key": "superlative_count_x_title_curiosity_gap_score",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": -0.08059339202479704,
+      "p_value": 0.12173847981039919,
+      "n": 370,
+      "ci_low": -0.1810612921190768,
+      "ci_high": 0.021539267456051576,
+      "rho": -0.04745598149583268,
+      "p_rho": 0.3626863203285373
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:11:34.045875Z",
+    "source": "deterministic"
+  },
+  {
+    "id": "exp_non_sub_view_share_x_text_overlay_burst_count_20260415_051147",
+    "indicator_key": "non_sub_view_share_x_text_overlay_burst_count",
+    "tool_id": "pearson_r",
+    "tool_name": "Pearson Correlation",
+    "target": "views",
+    "parameters": {
+      "target": "views",
+      "transform_target": "log10",
+      "confounds": [],
+      "min_n": 50
+    },
+    "outputs": {
+      "r": 0.09156566374288484,
+      "p_value": 0.07857104534972877,
+      "n": 370,
+      "ci_low": -0.010487920013741632,
+      "ci_high": 0.1917314009409911,
+      "rho": 0.3940172504369467,
+      "p_rho": 3.4281873144144162e-15
+    },
+    "n_videos": 370,
+    "status": "discovery",
+    "ran_at": "2026-04-15T05:11:47.473883Z",
+    "source": "deterministic"
   }
 ]
