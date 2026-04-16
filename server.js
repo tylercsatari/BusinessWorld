@@ -227,6 +227,7 @@ const MIME_TYPES = {
     '.json': 'application/json',
     '.glb': 'model/gltf-binary',
     '.gltf': 'model/gltf+json',
+    '.md': 'text/markdown; charset=utf-8',
 };
 
 // Helper: read request body as JSON

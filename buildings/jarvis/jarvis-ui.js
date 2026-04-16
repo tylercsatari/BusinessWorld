@@ -103,13 +103,14 @@ const JarvisUI = (() => {
         ['blend', 'gbm'],
     ];
 
-    // ── Tab structure (5 tabs) ──
+    // ── Tab structure ──
     const TABS = [
         { id: 'analytical', label: 'Analytical' },
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'resolution', label: 'Resolution' },
+        { id: 'metaArchitecture', label: 'Meta-Architecture' },
     ];
 
     // ── Dataset loading ──
@@ -199,6 +200,7 @@ const JarvisUI = (() => {
             case 'experiments': return renderExperiments();
             case 'autoResearch': return renderAutoResearch();
             case 'resolution': return renderResolution();
+            case 'metaArchitecture': return renderMetaArchitecture();
             default: return '';
         }
     }
@@ -3467,6 +3469,186 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
+    // TAB: META-ARCHITECTURE — Reference framework doc
+    // ══════════════════════════════════════════════════
+    let metaArchMarkdown = null;
+    let metaArchError = null;
+
+    function renderMetaArchitecture() {
+        if (metaArchMarkdown == null && !metaArchError) {
+            fetch('./buildings/jarvis/JARVIS_META_ARCHITECTURE.md', { cache: 'no-cache' })
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.text();
+                })
+                .then(txt => {
+                    metaArchMarkdown = txt;
+                    const root = container?.querySelector('.jarvis-meta-arch-root');
+                    if (root) root.innerHTML = renderMetaArchitectureBody();
+                })
+                .catch(err => {
+                    metaArchError = err.message || String(err);
+                    const root = container?.querySelector('.jarvis-meta-arch-root');
+                    if (root) root.innerHTML = renderMetaArchitectureBody();
+                });
+            return `<div class="jarvis-meta-arch-root"><div class="jarvis-loading" style="padding:24px;color:#64748b;font-size:12px">Loading meta-architecture…</div></div>`;
+        }
+        return `<div class="jarvis-meta-arch-root">${renderMetaArchitectureBody()}</div>`;
+    }
+
+    function renderMetaArchitectureBody() {
+        if (metaArchError) {
+            return `<div style="padding:24px;color:#f87171;font-size:12px">Failed to load meta-architecture document: ${escapeHtml(metaArchError)}</div>`;
+        }
+        if (!metaArchMarkdown) {
+            return `<div class="jarvis-loading" style="padding:24px;color:#64748b;font-size:12px">Loading…</div>`;
+        }
+        return `
+            <div class="jarvis-meta-arch-banner">
+                <div class="jarvis-meta-arch-eyebrow">Reference</div>
+                <div class="jarvis-meta-arch-banner-title">Jarvis Meta-Architecture</div>
+                <div class="jarvis-meta-arch-banner-sub">The framework Jarvis is being built around. Layers, the discovery loop, and the rules that keep categorization emergent.</div>
+            </div>
+            <article class="jarvis-meta-arch-doc">${renderMarkdown(metaArchMarkdown)}</article>
+        `;
+    }
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // Minimal markdown renderer — handles headings, lists, blockquotes,
+    // fenced code, inline code, bold, italics, paragraphs, hr, links.
+    // Intentionally small; the architecture doc is the primary consumer.
+    function renderMarkdown(md) {
+        const lines = md.replace(/\r\n/g, '\n').split('\n');
+        const out = [];
+        let i = 0;
+        const flushPara = (buf) => {
+            if (buf.length) {
+                out.push('<p>' + renderInline(buf.join(' ').trim()) + '</p>');
+                buf.length = 0;
+            }
+        };
+        let para = [];
+        while (i < lines.length) {
+            const line = lines[i];
+
+            // Fenced code block
+            if (/^```/.test(line)) {
+                flushPara(para);
+                const code = [];
+                i++;
+                while (i < lines.length && !/^```/.test(lines[i])) {
+                    code.push(lines[i]);
+                    i++;
+                }
+                i++; // skip closing fence
+                out.push('<pre class="jarvis-md-pre"><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
+                continue;
+            }
+
+            // Horizontal rule
+            if (/^---+\s*$/.test(line)) {
+                flushPara(para);
+                out.push('<hr class="jarvis-md-hr"/>');
+                i++;
+                continue;
+            }
+
+            // Heading
+            const h = line.match(/^(#{1,6})\s+(.*)$/);
+            if (h) {
+                flushPara(para);
+                const level = h[1].length;
+                out.push(`<h${level} class="jarvis-md-h${level}">${renderInline(h[2])}</h${level}>`);
+                i++;
+                continue;
+            }
+
+            // Blockquote
+            if (/^>\s?/.test(line)) {
+                flushPara(para);
+                const block = [];
+                while (i < lines.length && /^>\s?/.test(lines[i])) {
+                    block.push(lines[i].replace(/^>\s?/, ''));
+                    i++;
+                }
+                out.push('<blockquote class="jarvis-md-quote">' + renderInline(block.join(' ')) + '</blockquote>');
+                continue;
+            }
+
+            // Unordered list
+            if (/^[-*]\s+/.test(line)) {
+                flushPara(para);
+                const items = [];
+                while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+                    let item = lines[i].replace(/^[-*]\s+/, '');
+                    i++;
+                    // Continuation lines (indented)
+                    while (i < lines.length && /^ {2,}\S/.test(lines[i])) {
+                        item += ' ' + lines[i].trim();
+                        i++;
+                    }
+                    items.push('<li>' + renderInline(item) + '</li>');
+                }
+                out.push('<ul class="jarvis-md-ul">' + items.join('') + '</ul>');
+                continue;
+            }
+
+            // Ordered list
+            if (/^\d+\.\s+/.test(line)) {
+                flushPara(para);
+                const items = [];
+                while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+                    let item = lines[i].replace(/^\d+\.\s+/, '');
+                    i++;
+                    while (i < lines.length && /^ {2,}\S/.test(lines[i])) {
+                        item += ' ' + lines[i].trim();
+                        i++;
+                    }
+                    items.push('<li>' + renderInline(item) + '</li>');
+                }
+                out.push('<ol class="jarvis-md-ol">' + items.join('') + '</ol>');
+                continue;
+            }
+
+            // Blank line — paragraph break
+            if (/^\s*$/.test(line)) {
+                flushPara(para);
+                i++;
+                continue;
+            }
+
+            // Default: paragraph line
+            para.push(line);
+            i++;
+        }
+        flushPara(para);
+        return out.join('\n');
+    }
+
+    function renderInline(text) {
+        let s = escapeHtml(text);
+        // Inline code first so its contents aren't further transformed
+        s = s.replace(/`([^`]+)`/g, '<code class="jarvis-md-code">$1</code>');
+        // Bold (** or __)
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        // Italics (* or _) — single, not adjacent to word boundary inside code already handled
+        s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+        s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+        // Links [text](url)
+        s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+        return s;
+    }
+
+    // ══════════════════════════════════════════════════
     // EVENTS
     // ══════════════════════════════════════════════════
     function bindEvents() {
@@ -3506,6 +3688,8 @@ const JarvisUI = (() => {
         arModel = null;
         arHypotheses = null;
         arSummaryOpen = true;
+        metaArchMarkdown = null;
+        metaArchError = null;
         render();
     }
 
