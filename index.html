@@ -31,7 +31,8 @@
         #pen-scale-slider { -webkit-appearance: none; appearance: none; width: 42px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #d4c5a9, #5a3e1b); outline: none; cursor: pointer; }
         #pen-scale-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: linear-gradient(135deg, #fff, #f0ece4); border: 2px solid #5a3e1b; box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer; }
         #pen-scale-label { font-family: 'Fredoka One', cursive; font-size: 9px; color: #5a3e1b; opacity: 0.7; }
-        #finance-breakdown { margin-top: 6px; font-size: 12px; }
+        #finance-breakdown { margin-top: 6px; font-size: 12px; cursor: pointer; user-select: none; transition: filter 0.2s; }
+        #finance-breakdown.pixelated { filter: blur(6px); }
         .finance-row { display: flex; align-items: center; padding: 1px 0; gap: 6px; }
         .finance-label { font-family: 'Fredoka One', cursive; color: #8B5E3C; min-width: 62px; font-size: 11px; }
         .finance-value { font-family: 'Fredoka One', cursive; text-align: right; flex: 1; font-size: 12px; color: #5a3e1b; }
@@ -141,7 +142,7 @@
     <div id="money-display">
         <div id="level-text">Lv. 1</div>
         <div id="money-bar-container"><div id="money-bar-fill" style="width: 20%"></div></div>
-        <div id="finance-breakdown">
+        <div id="finance-breakdown" onclick="if(!event.target.closest('.finance-edit-btn'))this.classList.toggle('pixelated')">
             <span id="finance-bank" style="display:none">$0</span>
             <span id='hud-balance-amount' style="display:none">$—</span>
             <div class="finance-row" id="hud-bank-row" style="display:none">
