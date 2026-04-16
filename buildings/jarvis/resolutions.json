@@ -22476,7 +22476,11 @@
       "temporal_anticipation_density_x_viewer_stakes_count",
       "temporal_anticipation_density_x_viewer_stakes_density",
       "temporal_anticipation_density_x_transformation_arc_count",
-      "temporal_anticipation_density_x_transformation_arc_density"
+      "temporal_anticipation_density_x_transformation_arc_density",
+      "temporal_anticipation_density_x_social_proof_count",
+      "temporal_anticipation_density_x_social_proof_density",
+      "closure_density_x_stakes_reinforcement_count",
+      "closure_density_x_stakes_reinforcement_density"
     ],
     "depth_in_hierarchy": 0
   },
