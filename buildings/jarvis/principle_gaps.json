@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "generated_at": "2026-04-16T04:21:47.727Z",
-  "n_gaps": 17,
+  "generated_at": "2026-04-16T06:42:00.738Z",
+  "n_gaps": 54,
   "thresholds": {
     "min_mech_observations": 10
   },
@@ -13,15 +13,39 @@
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_text_overlay_X_segment_call_to_action_at_late",
+      "n_observations": 52,
+      "n_videos": 52,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "phrase_climax_marker_at_unknown",
       "n_observations": 38,
       "n_videos": 38,
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_natural_lighting_X_segment_call_to_action_at_late",
+      "n_observations": 29,
+      "n_videos": 29,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "phrase_consequence_at_unknown",
       "n_observations": 27,
       "n_videos": 27,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_motion_X_segment_setup_at_first_5s",
+      "n_observations": 19,
+      "n_videos": 19,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_direct_address_X_segment_main_point_at_mid",
+      "n_observations": 18,
+      "n_videos": 18,
       "reason": "no mechanism→indicator link above threshold"
     },
     {
@@ -37,9 +61,45 @@
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_motion_X_segment_conclusion_at_late",
+      "n_observations": 17,
+      "n_videos": 17,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_relatability_X_segment_main_point_at_first_10s",
+      "n_observations": 17,
+      "n_videos": 17,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "frame_reveal_at_first_5s",
       "n_observations": 21,
       "n_videos": 16,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_relatability_X_segment_climax_at_mid",
+      "n_observations": 15,
+      "n_videos": 15,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_relatability_X_segment_resolution_at_late",
+      "n_observations": 15,
+      "n_videos": 15,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_relatability_X_segment_introduction_at_first_5s",
+      "n_observations": 15,
+      "n_videos": 15,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_high_energy_X_segment_conclusion_at_late",
+      "n_observations": 15,
+      "n_videos": 15,
       "reason": "no mechanism→indicator link above threshold"
     },
     {
@@ -49,7 +109,43 @@
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_text_overlay_X_segment_development_at_mid",
+      "n_observations": 14,
+      "n_videos": 14,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_motion_X_segment_setup_at_first_10s",
+      "n_observations": 13,
+      "n_videos": 13,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_close_up_X_segment_development_at_mid",
+      "n_observations": 13,
+      "n_videos": 13,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_direct_address_X_segment_conclusion_at_late",
+      "n_observations": 13,
+      "n_videos": 13,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "segment_resolution_at_mid",
+      "n_observations": 13,
+      "n_videos": 13,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_close_up_X_segment_resolution_at_mid",
+      "n_observations": 13,
+      "n_videos": 13,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_text_overlay_X_segment_resolution_at_mid",
       "n_observations": 13,
       "n_videos": 13,
       "reason": "no mechanism→indicator link above threshold"
@@ -61,7 +157,37 @@
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_high_energy_X_segment_challenge_at_mid",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_high_energy_X_segment_climax_at_mid",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_natural_lighting_X_segment_resolution_at_mid",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "segment_climax_at_late",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_close_up_X_segment_climax_at_late",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_text_overlay_X_segment_climax_at_late",
       "n_observations": 12,
       "n_videos": 12,
       "reason": "no mechanism→indicator link above threshold"
@@ -79,6 +205,36 @@
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_close_up_X_segment_progress_at_mid",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_natural_lighting_X_segment_progress_at_mid",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_text_overlay_X_segment_progress_at_mid",
+      "n_observations": 12,
+      "n_videos": 12,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_high_energy_X_segment_call_to_action_at_late",
+      "n_observations": 11,
+      "n_videos": 11,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_natural_lighting_X_segment_development_at_mid",
+      "n_observations": 11,
+      "n_videos": 11,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "frame_direct_address_at_hook_quarter",
       "n_observations": 13,
       "n_videos": 11,
@@ -91,13 +247,79 @@
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_motion_X_segment_climax_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_high_energy_X_segment_resolution_at_late",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "segment_complication_at_mid",
       "n_observations": 10,
       "n_videos": 10,
       "reason": "no mechanism→indicator link above threshold"
     },
     {
+      "mechanism_id": "compound_frame_close_up_X_segment_complication_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_natural_lighting_X_segment_complication_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_text_overlay_X_segment_complication_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_relatability_X_segment_resolution_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_natural_lighting_X_segment_climax_at_late",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
       "mechanism_id": "segment_main_point_2_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_close_up_X_segment_main_point_2_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_text_overlay_X_segment_main_point_2_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_relatability_X_segment_development_at_mid",
+      "n_observations": 10,
+      "n_videos": 10,
+      "reason": "no mechanism→indicator link above threshold"
+    },
+    {
+      "mechanism_id": "compound_frame_motion_X_segment_call_to_action_at_late",
       "n_observations": 10,
       "n_videos": 10,
       "reason": "no mechanism→indicator link above threshold"

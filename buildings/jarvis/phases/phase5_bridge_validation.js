@@ -95,17 +95,16 @@ function pickRetention(curve, pct) {
 }
 
 function videoMechCounts(video) {
-    const counts = {};
+    const observations = [];
     const dur = (video.metadata && video.metadata.duration) || 0;
     const segs = (video.aiAnalysis && video.aiAnalysis.segments) || [];
-    function bump(id) { counts[id] = (counts[id] || 0) + 1; }
 
     for (const seg of segs) {
         if (!seg || !seg.label) continue;
         const start = (typeof seg.startTime === 'number') ? seg.startTime : 0;
         const labelKey = lowerOrEmpty(seg.label).trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
         if (!labelKey) continue;
-        bump(`segment_${labelKey}_at_${positionBucket(start, dur)}`);
+        observations.push({ mechanism_id: `segment_${labelKey}_at_${positionBucket(start, dur)}` });
     }
     const words = (video.transcript && video.transcript.words) || [];
     if (words.length && dur > 0) {
@@ -118,7 +117,7 @@ function videoMechCounts(video) {
             for (const h of hits) {
                 if (seen.has(h.family)) continue;
                 seen.add(h.family);
-                bump(`phrase_${h.family}_at_${positionBucket(t, dur)}`);
+                observations.push({ mechanism_id: `phrase_${h.family}_at_${positionBucket(t, dur)}` });
             }
         }
     }
@@ -135,9 +134,15 @@ function videoMechCounts(video) {
         for (const h of hits) {
             if (seen.has(h.family)) continue;
             seen.add(h.family);
-            bump(`frame_${h.family}_at_${positionBucket(ts, dur)}`);
+            observations.push({ mechanism_id: `frame_${h.family}_at_${positionBucket(ts, dur)}` });
         }
     }
+    // Mirror phase 2: cross-source co-occurrence compounds in the same bucket.
+    const compounds = lib.expandCompoundMechanisms(observations);
+    for (const c of compounds) observations.push(c);
+
+    const counts = {};
+    for (const o of observations) counts[o.mechanism_id] = (counts[o.mechanism_id] || 0) + 1;
     return counts;
 }
 
@@ -168,6 +173,19 @@ function main() {
     const principles = principlesBlob.principles;
     console.log(`  ${principles.length} candidate principles to validate`);
 
+    // Load mechanism catalog to get specificity (IDF) metadata for ranking,
+    // plus the authoritative pool size. If phase 2 was run with the old
+    // schema, fall back to computing IDF against the largest observed n.
+    const mechBlob = lib.readJson(path.join(JARVIS, 'mechanisms.json'), { mechanisms: [], n_videos_pool: 0 });
+    const mechMeta = new Map();
+    let derivedPool = 0;
+    for (const m of (mechBlob.mechanisms || [])) {
+        mechMeta.set(m.id, m);
+        if ((m.n_videos || 0) > derivedPool) derivedPool = m.n_videos;
+    }
+    const poolSize = Number(mechBlob.n_videos_pool) || derivedPool;
+    console.log(`  mechanism pool size: ${poolSize}`);
+
     const videoIds = lib.listVideoIds();
     console.log(`  re-extracting per-video signals for ${videoIds.length} videos`);
 
@@ -186,12 +204,21 @@ function main() {
         }
     }
 
-    // For each principle, compute the chain freshly + first-10s + swipe-away
+    // For each principle, compute the chain freshly + first-10s + swipe-away.
+    // Tautological principles (target-proxy via_indicator) are rejected up front
+    // so bridge ranking mirrors phase 4's filter even if upstream drift
+    // introduces them — defense in depth.
     const rows = [];
     let pProcessed = 0;
+    let droppedTautology = 0;
     for (const p of principles) {
         const mech = p.edge.from_mechanism;
         const ind = p.edge.via_indicator;
+        if (lib.isTargetProxyIndicator(ind, p.indicator_outcome_r)) {
+            droppedTautology++;
+            pProcessed++;
+            continue;
+        }
 
         // pre→post (mech count vs the via_indicator)
         const xs = [], ys = [];
@@ -218,6 +245,18 @@ function main() {
             ? +(preToPost * postToViews).toFixed(4)
             : null;
 
+        const mechRec = mechMeta.get(mech);
+        const mechNVideos = (mechRec && typeof mechRec.n_videos === 'number')
+            ? mechRec.n_videos
+            : (typeof p.mechanism_n_videos === 'number' ? p.mechanism_n_videos : 0);
+        const specIdf = (mechRec && typeof mechRec.specificity_idf === 'number')
+            ? mechRec.specificity_idf
+            : lib.idfWeight(poolSize, mechNVideos);
+        const prevalence = poolSize > 0 ? +(mechNVideos / poolSize).toFixed(4) : null;
+        const chainSpec = (chainStrength != null)
+            ? +(chainStrength * specIdf).toFixed(4)
+            : null;
+
         rows.push({
             principle_id: p.id,
             mechanism_id: mech,
@@ -230,6 +269,10 @@ function main() {
             first_10s_signal: first10 != null ? +first10.toFixed(4) : null,
             swipe_away_signal: swipe != null ? +swipe.toFixed(4) : null,
             n_videos_used: xs.length,
+            mechanism_n_videos: mechNVideos,
+            mechanism_prevalence_ratio: prevalence,
+            mechanism_specificity_idf: +specIdf.toFixed(4),
+            chain_strength_specificity_weighted: chainSpec,
         });
         pProcessed++;
         if (pProcessed % 100 === 0) {
@@ -238,9 +281,11 @@ function main() {
         }
     }
 
+    // Rank by specificity-weighted chain strength so a mechanism in 99% of
+    // videos (near-zero IDF) cannot dominate the top on ubiquity alone.
     rows.sort((a, b) => {
-        const ax = a.chain_strength == null ? -Infinity : Math.abs(a.chain_strength);
-        const bx = b.chain_strength == null ? -Infinity : Math.abs(b.chain_strength);
+        const ax = a.chain_strength_specificity_weighted == null ? -Infinity : Math.abs(a.chain_strength_specificity_weighted);
+        const bx = b.chain_strength_specificity_weighted == null ? -Infinity : Math.abs(b.chain_strength_specificity_weighted);
         return bx - ax;
     });
 
@@ -249,17 +294,22 @@ function main() {
         version: '1.0',
         generated_at: lib.nowIso(),
         n_principles_validated: rows.length,
+        n_dropped_tautological: droppedTautology,
         n_chains_with_both_legs_nonzero: rows.filter(r => r.pre_to_post_rho != null && r.post_to_views_r != null && Math.abs(r.chain_strength || 0) > 0.01).length,
         n_videos_in_pool: videoIds.length,
+        ranking: 'chain_strength_specificity_weighted (|chain_strength| × mechanism IDF)',
+        excluded_target_proxy_indicators: Array.from(lib.TARGET_PROXY_INDICATORS),
         rows,
     });
-    console.log(`  wrote bridge_validation.json (${rows.length} principles validated)`);
+    console.log(`  wrote bridge_validation.json (${rows.length} principles validated, ${droppedTautology} tautological dropped)`);
 
     const top = rows.slice(0, 25);
     const topFile = path.join(JARVIS, 'bridge_top_principles.json');
     lib.writeJson(topFile, {
         version: '1.0',
         generated_at: lib.nowIso(),
+        ranking: 'chain_strength_specificity_weighted (|chain_strength| × mechanism IDF)',
+        excluded_target_proxy_indicators: Array.from(lib.TARGET_PROXY_INDICATORS),
         top: top,
     });
     console.log(`  wrote bridge_top_principles.json (top ${top.length})`);
@@ -269,6 +319,13 @@ function main() {
     const hasKnown = top.some(t => knownStrong.includes(t.via_indicator));
     if (!hasKnown) {
         console.warn('  WARNING: top-25 principles do not include any of the expected strong indicators on the right side. Likely a data-loading mismatch — inspect bridge_validation.json.');
+    }
+    // Tautology sanity: no row in the top should route through a target-proxy
+    // indicator (e.g. log_views → views is the identity). If any slip
+    // through, something upstream regressed.
+    const tautRows = top.filter(t => lib.isTargetProxyIndicator(t.via_indicator, t.post_to_views_r));
+    if (tautRows.length) {
+        console.warn(`  WARNING: ${tautRows.length} top-25 row(s) still route through a target-proxy indicator; expected 0.`);
     }
 
     lib.patchStatus(s => {
@@ -280,9 +337,12 @@ function main() {
             started_at: startedAt,
             completed_at: lib.nowIso(),
             n_principles_validated: rows.length,
+            n_dropped_tautological: droppedTautology,
             n_videos_used: videoIds.length,
             top_chain_strength: top.length ? top[0].chain_strength : null,
+            top_chain_strength_specificity_weighted: top.length ? top[0].chain_strength_specificity_weighted : null,
             sanity_known_strong_in_top25: hasKnown,
+            sanity_no_target_proxy_in_top25: tautRows.length === 0,
         };
         s.completed_phases = Array.from(new Set([...(s.completed_phases || []), PHASE_ID]));
         s.totals = s.totals || {};

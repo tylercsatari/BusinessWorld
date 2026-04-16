@@ -76,9 +76,46 @@ function main() {
     lines.push(`- Principle gaps (mechanisms with no principle yet): ${gapsBlob.n_gaps || 0}`);
     lines.push(`- Bridges validated: ${(bridgeBlob.rows || []).length}`);
     lines.push(``);
-    lines.push(`## Top 10 mechanisms by support`);
+    lines.push(`## Ranking & filter rules (in effect this run)`);
+    const excluded = (principlesBlob.excluded_target_proxy_indicators || bridgeBlob.excluded_target_proxy_indicators || []);
+    const excludedStr = excluded.length ? excluded.map(e => `\`${e}\``).join(', ') : '(none)';
+    lines.push(`- **Tautology filter (§11):** principles routing through a target-proxy indicator are dropped. Excluded: ${excludedStr}. Rationale: an indicator that *is* the outcome (e.g. log10 of views) yields chains that look strong but identify no distinct optimization lever.`);
+    lines.push(`- **Specificity-weighted ranking (§11):** top principles are sorted by \`|chain_strength| × mechanism IDF\`, where \`IDF = log((N+1)/(n_videos+1))\`. Mechanisms present in nearly every video approach IDF 0 and cannot dominate rankings on ubiquity alone. Raw \`chain_strength\` is kept per row for inspection.`);
+    lines.push(`- **Cross-source compound mechanisms:** phase 2 mechanically emits \`compound_<kindA>_<famA>_X_<kindB>_<famB>_at_<bucket>\` ids when two evidence sources co-occur in the same position bucket. No curated taxonomy — purely emergent co-occurrence.`);
+    lines.push(`- **Dropped in phase 4:** ${principlesBlob.n_dropped_tautological || 0} tautological + ${principlesBlob.n_dropped || 0} sub-threshold. **Dropped in phase 5:** ${bridgeBlob.n_dropped_tautological || 0} tautological.`);
+    lines.push(``);
+    lines.push(`## Top 10 mechanisms by raw support`);
     for (const m of (mechBlob.mechanisms || []).slice(0, 10)) {
-        lines.push(`- \`${m.id}\` — ${m.n_videos} videos, ${m.n_observations} observations`);
+        const p = (typeof m.prevalence_ratio === 'number') ? ` (prev=${(m.prevalence_ratio * 100).toFixed(0)}%, idf=${m.specificity_idf})` : '';
+        lines.push(`- \`${m.id}\` — ${m.n_videos} videos, ${m.n_observations} observations${p}`);
+    }
+    lines.push(``);
+    // Specificity-adjusted mechanism ranking: supports the filter by showing
+    // which moves have meaningful support AND discriminative specificity.
+    // We require at least 20 videos of support to avoid surfacing rare noise.
+    const mechsForSpec = (mechBlob.mechanisms || []).filter(m => (m.n_videos || 0) >= 20);
+    const specTop = mechsForSpec.slice().sort((a, b) => {
+        const as = (a.n_videos || 0) * (a.specificity_idf || 0);
+        const bs = (b.n_videos || 0) * (b.specificity_idf || 0);
+        return bs - as;
+    }).slice(0, 10);
+    lines.push(`## Top 10 mechanisms by specificity-adjusted support (n_videos × IDF, n≥20)`);
+    for (const m of specTop) {
+        const score = ((m.n_videos || 0) * (m.specificity_idf || 0)).toFixed(2);
+        lines.push(`- \`${m.id}\` — ${m.n_videos} videos, idf=${m.specificity_idf}, score=${score}`);
+    }
+    lines.push(``);
+    // Surface compound mechanisms specifically so the reader can see the
+    // emergent cross-source observations separately from single-source ones.
+    const compoundMechs = (mechBlob.mechanisms || []).filter(m => m.source_family === 'compound' && (m.n_videos || 0) >= 20);
+    compoundMechs.sort((a, b) => (b.n_videos || 0) * (b.specificity_idf || 0) - (a.n_videos || 0) * (a.specificity_idf || 0));
+    lines.push(`## Top 10 compound (cross-source) mechanisms by specificity-adjusted support (n≥20)`);
+    if (!compoundMechs.length) {
+        lines.push(`- (none yet — phase 2 may not have emitted compound ids in this run)`);
+    } else {
+        for (const m of compoundMechs.slice(0, 10)) {
+            lines.push(`- \`${m.id}\` — ${m.n_videos} videos, idf=${m.specificity_idf}`);
+        }
     }
     lines.push(``);
     lines.push(`## Top 10 components`);
@@ -86,9 +123,12 @@ function main() {
         lines.push(`- \`${c.id}\` — ${c.label} (${c.n_mechanisms_using} mechanisms)`);
     }
     lines.push(``);
-    lines.push(`## Top 25 candidate principles by chain strength`);
+    lines.push(`## Top 25 candidate principles by specificity-weighted chain strength`);
     for (const p of (topBlob.top || []).slice(0, 25)) {
-        lines.push(`- \`${p.principle_id}\` — ${p.mechanism_id} → ${p.via_indicator} → views | chain=${p.chain_strength}, n=${p.n_videos_used}`);
+        const chainSpec = (p.chain_strength_specificity_weighted != null) ? p.chain_strength_specificity_weighted : '—';
+        const chain = (p.chain_strength != null) ? p.chain_strength : '—';
+        const prev = (typeof p.mechanism_prevalence_ratio === 'number') ? ` prev=${(p.mechanism_prevalence_ratio * 100).toFixed(0)}%` : '';
+        lines.push(`- \`${p.principle_id}\` — ${p.mechanism_id} → ${p.via_indicator} → views | weighted=${chainSpec} (raw=${chain},${prev}), n=${p.n_videos_used}`);
     }
     lines.push(``);
     lines.push(`## Phase results`);
@@ -99,6 +139,7 @@ function main() {
     lines.push(`## Notes`);
     lines.push(`Every principle here is **status: candidate**. Promotion is a human pass.`);
     lines.push(`Mechanism IDs are observation-derived; categorization is allowed to evolve.`);
+    lines.push(`Tautological chains (e.g. \`… → log_views → views\`) are filtered per §11: correlation with the outcome is not optimization-worthiness.`);
     fs.writeFileSync(reportFile, lines.join('\n'));
     console.log(`  wrote overnight_report.md`);
 

@@ -2,7 +2,7 @@
   "version": "1.0",
   "overall_status": "completed",
   "started_at": "2026-04-16T04:21:45.919Z",
-  "finished_at": "2026-04-16T04:21:48.488Z",
+  "finished_at": "2026-04-16T06:42:01.607Z",
   "current_phase": null,
   "current_phase_started_at": null,
   "current_phase_progress": null,
@@ -56,61 +56,66 @@
     },
     "phase_2_mechanisms": {
       "status": "completed",
-      "started_at": "2026-04-16T04:21:46.338Z",
-      "completed_at": "2026-04-16T04:21:47.290Z",
+      "started_at": "2026-04-16T06:41:59.365Z",
+      "completed_at": "2026-04-16T06:42:00.328Z",
       "n_videos_processed": 372,
-      "n_observations": 35054,
-      "n_mechanism_ids": 501,
-      "n_mechanisms_in_scope_for_links": 66,
-      "n_links": 224
+      "n_observations": 41119,
+      "n_mechanism_ids": 2444,
+      "n_mechanisms_in_scope_for_links": 114,
+      "n_links": 361
     },
     "phase_3_components": {
       "status": "completed",
-      "started_at": "2026-04-16T04:21:47.337Z",
-      "completed_at": "2026-04-16T04:21:47.343Z",
-      "n_components": 42,
-      "n_mechanisms_decomposed": 501,
+      "started_at": "2026-04-16T06:42:00.369Z",
+      "completed_at": "2026-04-16T06:42:00.384Z",
+      "n_components": 87,
+      "n_mechanisms_decomposed": 2444,
       "coverage_pct": 100
     },
     "phase_4_principles": {
       "status": "completed",
-      "started_at": "2026-04-16T04:21:47.381Z",
-      "completed_at": "2026-04-16T04:21:47.727Z",
-      "n_principles": 224,
-      "n_gaps": 17,
-      "n_unique_mechanisms_in_principles": 63
+      "started_at": "2026-04-16T06:42:00.422Z",
+      "completed_at": "2026-04-16T06:42:00.738Z",
+      "n_principles": 312,
+      "n_gaps": 54,
+      "n_dropped_tautological": 49,
+      "n_unique_mechanisms_in_principles": 109
     },
     "phase_5_bridge": {
       "status": "completed",
-      "started_at": "2026-04-16T04:21:47.774Z",
-      "completed_at": "2026-04-16T04:21:48.295Z",
-      "n_principles_validated": 224,
+      "started_at": "2026-04-16T06:42:00.796Z",
+      "completed_at": "2026-04-16T06:42:01.364Z",
+      "n_principles_validated": 312,
+      "n_dropped_tautological": 0,
       "n_videos_used": 372,
-      "top_chain_strength": 0.2466,
-      "sanity_known_strong_in_top25": true
+      "top_chain_strength": -0.0853,
+      "top_chain_strength_specificity_weighted": -0.1477,
+      "sanity_known_strong_in_top25": true,
+      "sanity_no_target_proxy_in_top25": true
     },
     "phase_6_persist": {
       "status": "completed",
-      "started_at": "2026-04-16T04:21:48.335Z",
-      "completed_at": "2026-04-16T04:21:48.482Z",
+      "started_at": "2026-04-16T06:42:01.404Z",
+      "completed_at": "2026-04-16T06:42:01.597Z",
       "graph_merged_in_place": true,
       "graph_extension_file": null,
-      "new_mech_nodes": 501,
-      "new_mech_edges": 224
+      "new_mech_nodes": 2444,
+      "new_mech_edges": 361
     }
   },
   "totals": {
     "n_videos_processed": 372,
-    "n_mechanism_observations": 35054,
-    "n_mechanisms": 501,
-    "n_components": 42,
-    "n_principles": 224,
-    "n_bridges_validated": 224
+    "n_mechanism_observations": 41119,
+    "n_mechanisms": 2444,
+    "n_components": 87,
+    "n_principles": 312,
+    "n_bridges_validated": 312
   },
   "notes": [
     "This file is the live status feed for the overnight orchestrator.",
     "It is overwritten at every phase transition and updated periodically during long phases.",
     "Parent agents can read this file to monitor progress without interrupting the orchestrator."
   ],
-  "updated_at": "2026-04-16T04:21:48.488Z"
+  "updated_at": "2026-04-16T06:42:01.607Z",
+  "resumed_from": "phase_2_mechanisms"
 }

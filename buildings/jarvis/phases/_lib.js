@@ -96,10 +96,93 @@ function spearmanr(x, y) {
     return { rho: r, n };
 }
 
+// Ubiquity-aware weight per §11 of the meta-architecture. A mechanism in
+// nearly every video carries almost no discriminative signal and is not
+// actionable as a lever — so its weight approaches zero. Rare mechanisms
+// receive higher weight. Add-one smoothing keeps the endpoints finite.
+function idfWeight(totalVideos, nVideosWithMech) {
+    const N = Number(totalVideos) || 0;
+    const n = Math.max(0, Number(nVideosWithMech) || 0);
+    if (N <= 0) return 0;
+    return Math.log((N + 1) / (n + 1));
+}
+
+// Target-proxy / tautological indicator guard. Per Tyler's filter rule, an
+// indicator that IS the outcome (log_views vs views_log10 is the identity)
+// produces bridges that look strong but encode no distinct optimization
+// behavior, so we exclude them from the principle and bridge layers. Kept
+// as a set so it is easy to extend without recompile-time changes.
+const TARGET_PROXY_INDICATORS = new Set([
+    'log_views',
+    'views',
+    'views_log10',
+    'log10_views',
+]);
+
+function isTargetProxyIndicator(key, indicatorOutcomeR) {
+    if (key && TARGET_PROXY_INDICATORS.has(String(key).toLowerCase())) return true;
+    if (typeof indicatorOutcomeR === 'number' && Math.abs(indicatorOutcomeR) >= 0.99) return true;
+    return false;
+}
+
+// Parse a mechanism_id of shape "<kind>_<family>_at_<bucket>" into parts.
+// Families may contain underscores (e.g. "text_overlay"). Returns null on
+// shapes that do not match the observation-derived grammar.
+function parseMechanismId(id) {
+    const atIdx = String(id || '').lastIndexOf('_at_');
+    if (atIdx < 0) return null;
+    const head = id.slice(0, atIdx);
+    const bucket = id.slice(atIdx + 4);
+    const us = head.indexOf('_');
+    if (us < 0) return null;
+    return { kind: head.slice(0, us), family: head.slice(us + 1), bucket };
+}
+
+// Emit cross-source co-occurrence "compound" mechanisms from a set of
+// same-video observations. Two observations whose (kind, family) differ in
+// kind but share a position bucket produce a compound id of the form
+//   compound_<kindA>_<famA>_X_<kindB>_<famB>_at_<bucket>
+// Pair order is stable (lexicographic) so the same pair always produces
+// the same id. Compounds of compounds are not emitted. `bucket === 'unknown'`
+// is skipped so we do not manufacture phantom co-occurrence.
+function expandCompoundMechanisms(observations) {
+    const perBucket = new Map();
+    for (const o of observations || []) {
+        const d = parseMechanismId(o && o.mechanism_id);
+        if (!d) continue;
+        if (d.kind === 'compound') continue;
+        if (d.bucket === 'unknown') continue;
+        if (!perBucket.has(d.bucket)) perBucket.set(d.bucket, new Set());
+        perBucket.get(d.bucket).add(`${d.kind}|${d.family}`);
+    }
+    const out = [];
+    for (const [bucket, set] of perBucket.entries()) {
+        const arr = Array.from(set).sort();
+        for (let i = 0; i < arr.length; i++) {
+            for (let j = i + 1; j < arr.length; j++) {
+                const [ka, fa] = arr[i].split('|');
+                const [kb, fb] = arr[j].split('|');
+                if (ka === kb) continue;
+                out.push({
+                    mechanism_id: `compound_${ka}_${fa}_X_${kb}_${fb}_at_${bucket}`,
+                    evidence_kind: 'cross_source_cooccurrence',
+                    evidence_text: `${ka}:${fa} co-occurs with ${kb}:${fb} in ${bucket}`,
+                    position_s: null,
+                    position_pct: null,
+                    source: 'phase2_cooccurrence',
+                });
+            }
+        }
+    }
+    return out;
+}
+
 module.exports = {
     JARVIS_DIR, REPO_ROOT, VIDEO_DATA_DIR, STATUS_FILE,
     nowIso, readJson, writeJson,
     listVideoIds, loadVideo,
     patchStatus, setPhaseProgress,
     pearsonr, spearmanr, rankArr,
+    idfWeight, TARGET_PROXY_INDICATORS, isTargetProxyIndicator,
+    parseMechanismId, expandCompoundMechanisms,
 };

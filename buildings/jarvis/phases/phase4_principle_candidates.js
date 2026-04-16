@@ -39,10 +39,12 @@ function buildIndicatorOutcomeMap() {
             }
         }
     }
-    // Some keys we computed inline in phase 2 won't be in the catalog with the
-    // same name. Provide deterministic fallbacks for the canonical few.
+    // Deterministic fallbacks for the canonical indicators that phase 2
+    // computes inline. We retain log_views as a fallback so the filter code
+    // downstream has a consistent view, but isTargetProxyIndicator() will
+    // strip principles that route through it.
     const fallback = {
-        log_views: 1.0,                         // identity (but useless as a principle target)
+        log_views: 1.0,                         // identity — filtered as tautological
         avg_retention: 0.40,
         retention_pct_10: 0.30,
         retention_pct_25: 0.30,
@@ -103,9 +105,11 @@ function main() {
     const principles = [];
     let nextId = 1;
     let dropped = 0;
+    let droppedTautology = 0;
     const principlesPerMechMin = 1;
     const minMechObs = 10;
     const minRho = 0.05;
+    const poolSize = Number(mechBlob.n_videos_pool) || 0;
 
     for (const link of links.links) {
         const mech = mechCatalog.get(link.mechanism_id);
@@ -114,8 +118,21 @@ function main() {
         if (Math.abs(link.rho) < minRho) { dropped++; continue; }
         const indR = indOutMap[link.indicator_key];
         if (indR == null) { dropped++; continue; }
+        // §11 filter: principles that route through a target-proxy indicator
+        // (e.g. log_views) are tautological — they describe correlation with
+        // the outcome but do not identify a distinct optimization lever.
+        if (lib.isTargetProxyIndicator(link.indicator_key, indR)) {
+            droppedTautology++;
+            continue;
+        }
         const id = `princ_${String(nextId).padStart(5, '0')}`;
         nextId++;
+        const chainSigned = +(link.rho * indR).toFixed(4);
+        const mechNVideos = mech.n_videos || 0;
+        const specIdf = (typeof mech.specificity_idf === 'number')
+            ? mech.specificity_idf
+            : lib.idfWeight(poolSize, mechNVideos);
+        const specWeighted = +(chainSigned * specIdf).toFixed(4);
         principles.push({
             id,
             edge: {
@@ -127,13 +144,20 @@ function main() {
             supporting_n: link.n,
             mechanism_indicator_rho: link.rho,
             indicator_outcome_r: +indR.toFixed(4),
-            chain_strength_signed: +(link.rho * indR).toFixed(4),
+            chain_strength_signed: chainSigned,
+            mechanism_n_videos: mechNVideos,
+            mechanism_prevalence_ratio: (typeof mech.prevalence_ratio === 'number') ? mech.prevalence_ratio : null,
+            mechanism_specificity_idf: +specIdf.toFixed(4),
+            chain_strength_specificity_weighted: specWeighted,
             status: 'candidate',
             generated_at: lib.nowIso(),
         });
     }
 
-    principles.sort((a, b) => Math.abs(b.chain_strength_signed) - Math.abs(a.chain_strength_signed));
+    // Rank by specificity-weighted chain strength so ubiquitous mechanisms
+    // (that can't be moved as levers) don't dominate. Raw chain strength is
+    // retained per-principle for inspection.
+    principles.sort((a, b) => Math.abs(b.chain_strength_specificity_weighted) - Math.abs(a.chain_strength_specificity_weighted));
 
     const principlesFile = path.join(JARVIS, 'principles.json');
     lib.writeJson(principlesFile, {
@@ -141,10 +165,13 @@ function main() {
         generated_at: lib.nowIso(),
         n_principles: principles.length,
         n_dropped: dropped,
+        n_dropped_tautological: droppedTautology,
+        excluded_target_proxy_indicators: Array.from(lib.TARGET_PROXY_INDICATORS),
         thresholds: { min_mech_observations: minMechObs, min_abs_rho: minRho },
+        ranking: 'chain_strength_specificity_weighted (|chain_strength| × mechanism IDF)',
         principles,
     });
-    console.log(`  wrote principles.json (${principles.length} candidates, ${dropped} dropped)`);
+    console.log(`  wrote principles.json (${principles.length} candidates, ${dropped} dropped, ${droppedTautology} tautological)`);
 
     // Gaps: mechanisms with ≥10 observations that produced zero principles.
     const mechWithPrinciple = new Set(principles.map(p => p.edge.from_mechanism));
@@ -180,6 +207,7 @@ function main() {
             completed_at: lib.nowIso(),
             n_principles: principles.length,
             n_gaps: gaps.length,
+            n_dropped_tautological: droppedTautology,
             n_unique_mechanisms_in_principles: mechWithPrinciple.size,
         };
         s.completed_phases = Array.from(new Set([...(s.completed_phases || []), PHASE_ID]));

@@ -237,6 +237,15 @@ function extractFromVideo(video) {
         }
     }
 
+    // Source 4: cross-source co-occurrence compounds.
+    // Mechanical combiner per §9/§13 of the meta-architecture — no hand-curated
+    // taxonomy, purely an emergent join of evidence sources that fired in the
+    // same temporal bucket. Compound mechanisms are discriminative by
+    // construction (their support is bounded by the rarer leg) and stay
+    // faithful to rough-language IDs.
+    const compounds = lib.expandCompoundMechanisms(observations);
+    for (const c of compounds) observations.push(c);
+
     return observations;
 }
 
@@ -322,21 +331,34 @@ function main() {
     });
     console.log(`  wrote mechanism_observations.json (${observationsRows.length} rows, capped=${observationsRows.length >= MAX_OBS_ROWS})`);
 
-    // Write mechanisms.json
+    // Write mechanisms.json — includes specificity (IDF) per mechanism so
+    // downstream phases rank discriminative observations above ubiquitous
+    // ones. Pool size is stamped explicitly so phases 4/5 do not have to
+    // re-derive it.
+    const poolSize = videoIds.length;
     const mechanisms = [];
     for (const [id, slot] of observationsByMech.entries()) {
         const samples = sampleEvidenceByMech.get(id) || [];
+        const prevalence = poolSize > 0 ? slot.n_videos / poolSize : 0;
+        const specIdf = lib.idfWeight(poolSize, slot.n_videos);
+        const parsed = lib.parseMechanismId(id);
         mechanisms.push({
             id,
             label: id.replace(/_/g, ' '),
             rough_description: `Observed: ${id} (${slot.n_observations} obs across ${slot.n_videos} videos)`,
             source_kinds: Array.from(slot.evidence_kinds),
+            source_family: parsed ? parsed.kind : null,
+            position_bucket: parsed ? parsed.bucket : null,
             n_observations: slot.n_observations,
             n_videos: slot.n_videos,
+            prevalence_ratio: +prevalence.toFixed(4),
+            specificity_idf: +specIdf.toFixed(4),
             sample_evidence: samples,
             emergence_method: 'phase2_observation_derived',
         });
     }
+    // Primary sort stays by raw support (for the collection-breadth view),
+    // but we also surface a specificity-adjusted ranking downstream.
     mechanisms.sort((a, b) => b.n_videos - a.n_videos);
 
     const mechFile = path.join(JARVIS, 'mechanisms.json');
@@ -344,9 +366,10 @@ function main() {
         version: '1.0',
         generated_at: lib.nowIso(),
         n_mechanisms: mechanisms.length,
+        n_videos_pool: poolSize,
         mechanisms,
     });
-    console.log(`  wrote mechanisms.json (${mechanisms.length} mechanism ids)`);
+    console.log(`  wrote mechanisms.json (${mechanisms.length} mechanism ids, pool=${poolSize})`);
 
     // ── Mechanism × indicator links via Spearman rho ─────────────────────
     // Only consider mechanisms observed in at least 20 videos. Indicators are
