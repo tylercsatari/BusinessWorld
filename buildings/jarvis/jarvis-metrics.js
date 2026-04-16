@@ -406,6 +406,40 @@ const ZYGARNIK_PHRASE_SETS = {
         'every second closer', 'worth it trust me', 'not long now', 'you will thank me',
         'getting warmer', 'closer and closer', 'right around the corner',
     ],
+    // Group X: New conceptual families
+    tension_ratchet: [
+        'it gets worse', 'then something unexpected', 'but that was just the beginning',
+        'little did i know', 'and then everything changed', 'what happened next',
+        'but wait', 'and it only got worse', 'that was nothing compared to',
+        'the real problem', 'things spiraled', 'it escalated quickly',
+        'then it hit me', 'that is when', 'out of nowhere',
+        'everything fell apart', 'i had no idea', 'it was about to get much worse',
+        'the situation escalated', 'stakes just went up', 'it gets even better',
+    ],
+    promise_echo: [
+        'remember what i said', 'like i mentioned', 'as i promised', 'i told you',
+        'going back to what', 'recall that', 'earlier i said', 'you might remember',
+        'as i showed you', 'circling back', 'that brings us back',
+        'this is what i was talking about', 'which is why i said', 'as promised',
+        'remember the', 'earlier we', 'going back to',
+    ],
+    story_clock: [
+        'by the end of this', 'in the next', 'within minutes', 'before this video ends',
+        'at the end i will', 'at the end of this video', 'by the time you finish watching',
+        'by the end', 'in just a moment', 'coming up', 'stay till the end',
+        'stick around because', 'do not skip ahead', 'save this for later',
+        'before i show you', 'later in this video', 'in a few minutes',
+        'stay to the end', 'at the very end', 'keep watching',
+    ],
+    proof_build: [
+        'here is proof', 'the data shows', 'as you can see', 'the evidence',
+        'studies show', 'research shows', 'tested this', 'ran the numbers',
+        'i measured', 'here are the results', 'the experiment showed',
+        'this confirms', 'this proves', 'the numbers', 'statistically',
+        'according to', 'in my experience testing', 'the stats show',
+        'i have proof', 'look at this', 'check this out', 'as you saw',
+        'see for yourself', 'the math', 'here is the data',
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
@@ -865,6 +899,15 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'transformation_arc_flag',
     'vulnerability_before_proof_flag',
     'social_contrast_hook_flag',
+    // Group X special keys
+    'tension_ratchet_hook_count',
+    'tension_ratchet_density',
+    'promise_echo_density',
+    'promise_echo_second_half_count',
+    'story_clock_density',
+    'story_clock_count_first10s',
+    'proof_build_density',
+    'proof_build_count_first_half',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -1024,6 +1067,38 @@ const INTERACTION_BASES = [
     'proof_density_hook',
     'stakes_to_loop_ratio',
     'stake_loop_product',
+    // Group R bases (psychographic/persuasion — have extraction logic, new as cross-product bases)
+    'rhetorical_question_count', 'rhetorical_question_density',
+    'social_comparison_count', 'social_comparison_density',
+    'mystery_setup_count', 'mystery_setup_density',
+    'promise_specificity_count', 'promise_specificity_density',
+    'loss_framing_count', 'loss_framing_density',
+    'viewer_stakes_count', 'viewer_stakes_density',
+    'transformation_arc_count', 'transformation_arc_density',
+    // Group S bases (social proof / curiosity / commitment)
+    'social_proof_count', 'social_proof_density',
+    'curiosity_gap_count', 'curiosity_gap_density',
+    'emotional_peak_count', 'emotional_peak_density',
+    'proof_of_work_count', 'proof_of_work_density',
+    'failure_vulnerability_count', 'failure_vulnerability_density',
+    'future_self_count', 'future_self_density',
+    'commitment_device_count', 'commitment_device_density',
+    'action_trigger_count', 'action_trigger_density',
+    // Group T bases (reference-callback / visual-credibility / payoff / setup / stakes / proof)
+    'reference_callback_count', 'reference_callback_density',
+    'visual_credibility_count', 'visual_credibility_density',
+    'payoff_signal_count', 'payoff_signal_density',
+    'setup_signal_count', 'setup_signal_density',
+    'stakes_escalation_count', 'stakes_escalation_density',
+    'delayed_reveal_count', 'delayed_reveal_density',
+    'proof_arrival_count', 'proof_arrival_density',
+    'narrative_anchor_count', 'narrative_anchor_density',
+    // Group U bases (cliffhanger / payoff-tease / revelation / curiosity-escalation)
+    'cliffhanger_count', 'cliffhanger_density',
+    'payoff_tease_count', 'payoff_tease_density',
+    'revelation_signal_count', 'revelation_signal_density',
+    'curiosity_escalation_count', 'curiosity_escalation_density',
+    'stakes_reinforcement_count', 'stakes_reinforcement_density',
 ];
 // Excluded from cross-metric generation due to sparse video coverage (<50 videos with scores):
 // 'emotional_peak_position_pct', 'revelation_pace_score'
@@ -4420,6 +4495,55 @@ function extractMetric(key, analysis) {
         const [cdFull] = extractMetric('consequence_density', analysis);
         const a = cdH || 0, b = cdFull || 0;
         return [a / Math.max(b, 0.001), null];
+    }
+
+    // Group X special keys: tension_ratchet / promise_echo / story_clock / proof_build
+    if (key === 'tension_ratchet_hook_count') {
+        const htl = (analysis.hook_text || '').toLowerCase();
+        return [countPhraseMatches(htl, ZYGARNIK_PHRASE_SETS.tension_ratchet), null];
+    }
+    if (key === 'tension_ratchet_density') {
+        const tl = (transcript || '').toLowerCase();
+        const dur = durationS;
+        if (!tl || !dur) return [null, 'no transcript/duration'];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.tension_ratchet) / dur, null];
+    }
+    if (key === 'promise_echo_density') {
+        const tl = (transcript || '').toLowerCase();
+        const dur = durationS;
+        if (!tl || !dur) return [null, 'no transcript/duration'];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.promise_echo) / dur, null];
+    }
+    if (key === 'promise_echo_second_half_count') {
+        if (!transcript || !durationS) return [null, 'no transcript/duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        const half = Math.floor(words.length / 2);
+        const secondHalf = words.slice(half).join(' ').toLowerCase();
+        return [countPhraseMatches(secondHalf, ZYGARNIK_PHRASE_SETS.promise_echo), null];
+    }
+    if (key === 'story_clock_density') {
+        const tl = (transcript || '').toLowerCase();
+        const dur = durationS;
+        if (!tl || !dur) return [null, 'no transcript/duration'];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.story_clock) / dur, null];
+    }
+    if (key === 'story_clock_count_first10s') {
+        if (!transcript || !durationS) return [null, 'no transcript/duration'];
+        const win = windowedTranscript(transcript, durationS, 10).toLowerCase();
+        return [countPhraseMatches(win, ZYGARNIK_PHRASE_SETS.story_clock), null];
+    }
+    if (key === 'proof_build_density') {
+        const tl = (transcript || '').toLowerCase();
+        const dur = durationS;
+        if (!tl || !dur) return [null, 'no transcript/duration'];
+        return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.proof_build) / dur, null];
+    }
+    if (key === 'proof_build_count_first_half') {
+        if (!transcript || !durationS) return [null, 'no transcript/duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        const half = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, half).join(' ').toLowerCase();
+        return [countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.proof_build), null];
     }
 
     return [null, `unknown key: ${key}`];

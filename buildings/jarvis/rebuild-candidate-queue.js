@@ -205,6 +205,16 @@ const baseAtomics = [
     'stakes_to_loop_ratio',
     'stake_loop_product',
     'consequence_front_weight',
+    // Group X: Narrative tension arc / promise-echo / story-clock / proof-build
+    'tension_ratchet_count', 'tension_ratchet_density',
+    'tension_ratchet_count_first5s', 'tension_ratchet_count_first10s',
+    'tension_ratchet_hook_count',
+    'promise_echo_count', 'promise_echo_density',
+    'promise_echo_second_half_count',
+    'story_clock_count', 'story_clock_density',
+    'story_clock_count_first10s', 'story_clock_count_first5s',
+    'proof_build_count', 'proof_build_density',
+    'proof_build_count_first_half', 'proof_build_count_first5s',
 ];
 
 // Windowed variants for count/density families
@@ -229,6 +239,11 @@ const windowedFamilies = [
     ['proof_arrival',       ['count', 'density']],
     ['narrative_anchor',    ['count', 'density']],
     ['delayed_reveal',      ['count', 'density']],
+    // Group X windowed families
+    ['tension_ratchet',     ['count', 'density']],
+    ['promise_echo',        ['count', 'density']],
+    ['story_clock',         ['count', 'density']],
+    ['proof_build',         ['count', 'density']],
 ];
 const windowedAtomics = [];
 for (const [fam, measures] of windowedFamilies) {
@@ -261,6 +276,15 @@ const HIGH_SIGNAL_BASES = [
     'hook_retention_pct', 'non_sub_view_share', 'like_rate', 'share_rate',
     'comment_rate', 'retention_75pct', 'retention_90pct',
     'retention_pct_10', 'subs_gained_per_view',
+    // New high-signal bases from Groups R/S/T/U
+    'rhetorical_question_count', 'social_comparison_count', 'mystery_setup_count',
+    'viewer_stakes_count', 'social_proof_count', 'curiosity_gap_count',
+    'proof_of_work_count', 'failure_vulnerability_count',
+    'payoff_signal_count', 'stakes_escalation_count', 'delayed_reveal_count',
+    'cliffhanger_count', 'payoff_tease_count', 'revelation_signal_count',
+    'curiosity_escalation_count',
+    // Group X high-signal bases
+    'tension_ratchet_count', 'promise_echo_count', 'story_clock_count', 'proof_build_count',
 ];
 
 // Excluded keys — always return null
