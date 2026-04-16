@@ -21542,7 +21542,8 @@
       "title_word_count_x_narrative_anchor_count",
       "retention_entropy_x_rhetorical_question_density",
       "retention_entropy_x_social_comparison_count",
-      "retention_entropy_x_social_comparison_density"
+      "retention_entropy_x_social_comparison_density",
+      "title_word_count_x_narrative_anchor_density"
     ],
     "depth_in_hierarchy": 0
   },
