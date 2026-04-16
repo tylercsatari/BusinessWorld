@@ -23881,7 +23881,14 @@
       "setup_payoff_ratio_x_stakes_reinforcement_count",
       "setup_payoff_ratio_x_stakes_reinforcement_density",
       "narrative_arc_completeness_x_proof_arrival_delay_proxy",
-      "narrative_arc_completeness_x_closure_to_open_ratio_first10s"
+      "narrative_arc_completeness_x_closure_to_open_ratio_first10s",
+      "narrative_arc_completeness_x_credibility_setup_pct",
+      "narrative_arc_completeness_x_proof_density_hook",
+      "narrative_arc_completeness_x_stakes_to_loop_ratio",
+      "narrative_arc_completeness_x_stake_loop_product",
+      "narrative_arc_completeness_x_rhetorical_question_count",
+      "narrative_arc_completeness_x_rhetorical_question_density",
+      "narrative_arc_completeness_x_social_comparison_count"
     ],
     "depth_in_hierarchy": 0
   },
