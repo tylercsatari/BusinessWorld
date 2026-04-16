@@ -189,6 +189,22 @@ const baseAtomics = [
     'revelation_signal_first_half_count', 'revelation_signal_hook_count',
     'curiosity_escalation_count', 'curiosity_escalation_density',
     'curiosity_escalation_first_half_count', 'curiosity_escalation_hook_count',
+    // Group W: Zygarnik gradient / ref-to-gratification / proof-closure / credibility / story-stake
+    'zygarnik_gradient_pct',
+    'zygarnik_front_load_ratio',
+    'loop_to_closure_gap_s',
+    'ref_to_gratification_gap_pct',
+    'gratification_density_first_quarter',
+    'pre_payoff_tension_index',
+    'early_proof_to_loop_ratio',
+    'proof_arrival_delay_proxy',
+    'closure_to_open_ratio_first10s',
+    'credibility_setup_pct',
+    'proof_density_hook',
+    'visual_credibility_density_hook',
+    'stakes_to_loop_ratio',
+    'stake_loop_product',
+    'consequence_front_weight',
 ];
 
 // Windowed variants for count/density families

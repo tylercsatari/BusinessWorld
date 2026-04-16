@@ -1010,6 +1010,31 @@ const INTERACTION_BASES = [
     // NOTE: emotional_peak_position_pct and revelation_pace_score removed from INTERACTION_BASES
     // because phrase-match coverage is too sparse (4-12 of 370 videos) to produce valid cross-metrics.
     // They remain as standalone indicators in ZYGARNIK_SPECIAL_KEYS.
+    // Group P bases (full coverage, n=370)
+    'visual_proof_phrase_count',
+    'visual_proof_phrase_density',
+    'zygarnik_score',
+    'zygarnik_buildup_ratio',
+    'unresolved_loop_count',
+    'pre_proof_tension_score',
+    'credential_signal_count',
+    'credential_signal_density',
+    'closure_gap_pct',
+    'micro_reward_density',
+    'information_drip_ratio',
+    // Group W bases (zygarnik-gradient/proof-closure/credibility/story-stake)
+    'zygarnik_gradient_pct',
+    'zygarnik_front_load_ratio',
+    'loop_to_closure_gap_s',
+    'ref_to_gratification_gap_pct',
+    'pre_payoff_tension_index',
+    'early_proof_to_loop_ratio',
+    'proof_arrival_delay_proxy',
+    'closure_to_open_ratio_first10s',
+    'credibility_setup_pct',
+    'proof_density_hook',
+    'stakes_to_loop_ratio',
+    'stake_loop_product',
 ];
 // Excluded from cross-metric generation due to sparse video coverage (<50 videos with scores):
 // 'emotional_peak_position_pct', 'revelation_pace_score'
@@ -1319,6 +1344,23 @@ for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 
     }
 }
 
+
+// ── New Group W: Zygarnik gradient / ref-to-gratification / proof-closure / credibility / story-stake ──
+for (const k of [
+    // W1: Zygarnik tension gradient
+    'zygarnik_gradient_pct', 'zygarnik_front_load_ratio', 'loop_to_closure_gap_s',
+    // W2: Reference-to-gratification timing
+    'ref_to_gratification_gap_pct', 'gratification_density_first_quarter', 'pre_payoff_tension_index',
+    // W3: Early proof vs closure
+    'early_proof_to_loop_ratio', 'proof_arrival_delay_proxy', 'closure_to_open_ratio_first10s',
+    // W4: Visual credibility setup-to-payoff
+    'credibility_setup_pct', 'proof_density_hook', 'visual_credibility_density_hook',
+    // W5: Story-stake proxies
+    'stakes_to_loop_ratio', 'stake_loop_product', 'consequence_front_weight',
+]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
 
 // ── get_metric_definition ────────────────────────────────────────────────
 
@@ -4299,6 +4341,96 @@ function extractMetric(key, analysis) {
         if (!words.length) return [null, 'empty transcript'];
         const first10 = words.slice(0, Math.ceil(words.length * 0.1)).join(' ').toLowerCase();
         return [countPhraseMatches(first10, CURIOSITY_ESCALATION_PHRASES), null];
+    }
+
+    // ── Group W: Zygarnik gradient / ref-to-gratification / proof-closure / credibility / story-stake ──
+    if (key === "zygarnik_gradient_pct") {
+        const [olFull] = extractMetric('open_loop_count', analysis);
+        const [ol20] = extractMetric('open_loop_count_first20s', analysis);
+        const [ol5] = extractMetric('open_loop_count_first5s', analysis);
+        const a = olFull || 0, b = ol20 || 0, c = ol5 || 0;
+        return [Math.max(0, b - c) / Math.max(a, 1), null];
+    }
+    if (key === "zygarnik_front_load_ratio") {
+        const [olFull] = extractMetric('open_loop_count', analysis);
+        const [ol10] = extractMetric('open_loop_count_first10s', analysis);
+        const a = olFull || 0, b = ol10 || 0;
+        return [b / Math.max(a, 1), null];
+    }
+    if (key === "loop_to_closure_gap_s") {
+        const dur = meta.duration || 60;
+        const [cl5] = extractMetric('closure_count_first5s', analysis);
+        const [ol5] = extractMetric('open_loop_count_first5s', analysis);
+        const c = cl5 || 0, o = ol5 || 0;
+        return [c > 0 ? 0 : dur * Math.min(o / Math.max(o, 1), 1), null];
+    }
+    if (key === "ref_to_gratification_gap_pct") {
+        const [olQ1] = extractMetric('open_loop_density_first_quarter', analysis);
+        const [cbDensity] = extractMetric('reference_callback_density', analysis);
+        const a = olQ1 || 0, b = cbDensity || 0;
+        return [a / Math.max(b, 0.001), null];
+    }
+    if (key === "gratification_density_first_quarter") {
+        const [mrd] = extractMetric('micro_reward_density', analysis);
+        const [sdp] = extractMetric('setup_duration_pct', analysis);
+        const a = mrd || 0, b = sdp || 0;
+        return [a * b, null];
+    }
+    if (key === "pre_payoff_tension_index") {
+        const [zs] = extractMetric('zygarnik_score', analysis);
+        const [sdp] = extractMetric('setup_duration_pct', analysis);
+        const a = zs || 0, b = sdp || 0;
+        return [a * (1 - b), null];
+    }
+    if (key === "early_proof_to_loop_ratio") {
+        const [vp10] = extractMetric('visual_proof_phrase_count_first10s', analysis);
+        const [ol10] = extractMetric('open_loop_count_first10s', analysis);
+        const a = vp10 || 0, b = ol10 || 0;
+        return [a / Math.max(b, 1), null];
+    }
+    if (key === "proof_arrival_delay_proxy") {
+        const [vp10] = extractMetric('visual_proof_phrase_count_first10s', analysis);
+        const [vpFull] = extractMetric('visual_proof_phrase_count', analysis);
+        const a = vp10 || 0, b = vpFull || 0;
+        return [1 - (a / Math.max(b, 1)), null];
+    }
+    if (key === "closure_to_open_ratio_first10s") {
+        const [cl10] = extractMetric('closure_count_first10s', analysis);
+        const [ol10] = extractMetric('open_loop_count_first10s', analysis);
+        const a = cl10 || 0, b = ol10 || 0;
+        return [a / Math.max(b, 1), null];
+    }
+    if (key === "credibility_setup_pct") {
+        const [cs10] = extractMetric('credential_signal_count_first10s', analysis);
+        const [csFull] = extractMetric('credential_signal_count', analysis);
+        const a = cs10 || 0, b = csFull || 0;
+        return [a / Math.max(b, 1), null];
+    }
+    if (key === "proof_density_hook") {
+        const [vp5] = extractMetric('visual_proof_phrase_count_first5s', analysis);
+        return [(vp5 || 0) / 5.0, null];
+    }
+    if (key === "visual_credibility_density_hook") {
+        const [cs5] = extractMetric('credential_signal_count_first5s', analysis);
+        return [(cs5 || 0) / 5.0, null];
+    }
+    if (key === "stakes_to_loop_ratio") {
+        const [sh] = extractMetric('stakes_density_hook', analysis);
+        const [ol5] = extractMetric('open_loop_density_first5s', analysis);
+        const a = sh || 0, b = ol5 || 0;
+        return [a / Math.max(b, 0.001), null];
+    }
+    if (key === "stake_loop_product") {
+        const [psd] = extractMetric('personal_stake_density', analysis);
+        const [old_] = extractMetric('open_loop_density', analysis);
+        const a = psd || 0, b = old_ || 0;
+        return [a * b, null];
+    }
+    if (key === "consequence_front_weight") {
+        const [cdH] = extractMetric('consequence_density_first_half', analysis);
+        const [cdFull] = extractMetric('consequence_density', analysis);
+        const a = cdH || 0, b = cdFull || 0;
+        return [a / Math.max(b, 0.001), null];
     }
 
     return [null, `unknown key: ${key}`];
