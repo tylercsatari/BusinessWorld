@@ -25598,7 +25598,11 @@
       "emotional_peak_density_x_cliffhanger_density",
       "identity_hook_density_x_transformation_arc_count",
       "identity_hook_density_x_transformation_arc_density",
-      "identity_hook_density_x_social_proof_count"
+      "identity_hook_density_x_social_proof_count",
+      "identity_hook_density_x_social_proof_density",
+      "identity_hook_density_x_curiosity_gap_count",
+      "identity_hook_density_x_curiosity_gap_density",
+      "identity_hook_density_x_emotional_peak_count"
     ],
     "depth_in_hierarchy": 0
   },
