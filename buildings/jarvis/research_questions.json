@@ -1,0 +1,98 @@
+{
+  "version": "1.0",
+  "questions": [
+    {
+      "id": "q001",
+      "text": "What actually predicts 100M+ views? What separates mega-viral from merely viral?",
+      "targets": [
+        "views_100M+",
+        "views_regime"
+      ],
+      "status": "answered",
+      "created_at": "2026-04-16T01:00:00Z",
+      "analysis_runs": [
+        {
+          "run_id": "analysis_1776299110220",
+          "timestamp": "2026-04-16T00:25:10.220Z",
+          "method": "multi-evidence synthesis: regime_gap (Cohen's d), quantile_gap, bridge paths, nonlinearity detection"
+        }
+      ],
+      "answer_id": "analysis_1776299110220"
+    },
+    {
+      "id": "q002",
+      "text": "What minimizes falloff in the first 10 seconds?",
+      "targets": [
+        "retention_pct_10",
+        "hook_drop_rate",
+        "retention_slope_0_10"
+      ],
+      "status": "answered",
+      "created_at": "2026-04-16T01:00:00Z",
+      "analysis_runs": [
+        {
+          "run_id": "analysis_1776299110221_q2",
+          "timestamp": "2026-04-16T00:25:10.221Z",
+          "method": "target-specific edge analysis: retention_pct_10 + hook_drop_rate as targets"
+        }
+      ],
+      "answer_id": "analysis_1776299110221_q2"
+    },
+    {
+      "id": "q003",
+      "text": "What maximizes swipe hold / reduces skip?",
+      "targets": [
+        "swipe_away_rate",
+        "hook_retention_pct",
+        "stayed_to_watch_rate"
+      ],
+      "status": "answered",
+      "created_at": "2026-04-16T01:00:00Z",
+      "analysis_runs": [
+        {
+          "run_id": "analysis_1776299110221_q3",
+          "timestamp": "2026-04-16T00:25:10.221Z",
+          "method": "target-specific edge analysis: swipe_away_rate + hook_payoff_gap as targets"
+        }
+      ],
+      "answer_id": "analysis_1776299110221_q3"
+    },
+    {
+      "id": "q004",
+      "text": "Which pre-upload indicators bridge into which post-upload indicators, and then into views? What is the structural path from controllable inputs to outcomes?",
+      "targets": [
+        "bridge_pre_to_post",
+        "path_to_views"
+      ],
+      "status": "answered",
+      "created_at": "2026-04-16T01:00:00Z",
+      "analysis_runs": [
+        {
+          "run_id": "analysis_1776299110222_q4",
+          "timestamp": "2026-04-16T00:25:10.222Z",
+          "method": "multi-evidence bridge scoring: interaction_r, pathway_strength, pair_correlation, residual_r"
+        }
+      ],
+      "answer_id": "analysis_1776299110222_q4"
+    },
+    {
+      "id": "q005",
+      "text": "What does the pre->post->views bridge structure say about the Boba Fett flamethrower hook problem? How do spectacle hooks connect through retention to views?",
+      "targets": [
+        "hook_structure",
+        "retention_bridge",
+        "views"
+      ],
+      "status": "answered",
+      "created_at": "2026-04-16T01:00:00Z",
+      "analysis_runs": [
+        {
+          "run_id": "analysis_1776299110222_q5",
+          "timestamp": "2026-04-16T00:25:10.222Z",
+          "method": "hook structure analysis: trace hook indicators through retention to views"
+        }
+      ],
+      "answer_id": "analysis_1776299110222_q5"
+    }
+  ]
+}
