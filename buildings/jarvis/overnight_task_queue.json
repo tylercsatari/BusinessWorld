@@ -1,0 +1,81 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-15",
+  "description": "Sequential overnight execution queue for Jarvis meta-architecture build. Each task is a phase script run as a child node process. The orchestrator runs them in order and only advances when the previous task exits 0.",
+  "max_total_minutes": 480,
+  "tasks": [
+    {
+      "id": "phase_1_init",
+      "label": "Phase 1 — Architecture, contracts, registries",
+      "script": "phases/phase1_init.js",
+      "max_minutes": 5,
+      "depends_on": [],
+      "outputs": [
+        "mechanisms.json",
+        "components.json",
+        "principles.json",
+        "mechanism_observations.json",
+        "bridge_validation.json",
+        "research_questions.json",
+        "indicator-registry.json"
+      ]
+    },
+    {
+      "id": "phase_2_mechanisms",
+      "label": "Phase 2 — Mechanism extraction over video pool",
+      "script": "phases/phase2_mechanism_extraction.js",
+      "max_minutes": 90,
+      "depends_on": ["phase_1_init"],
+      "outputs": [
+        "mechanism_observations.json",
+        "mechanisms.json",
+        "mechanism_indicator_links.json"
+      ]
+    },
+    {
+      "id": "phase_3_components",
+      "label": "Phase 3 — Component emergence",
+      "script": "phases/phase3_component_emergence.js",
+      "max_minutes": 30,
+      "depends_on": ["phase_2_mechanisms"],
+      "outputs": [
+        "components.json",
+        "mechanism_components.json"
+      ]
+    },
+    {
+      "id": "phase_4_principles",
+      "label": "Phase 4 — Principle candidate surfacing",
+      "script": "phases/phase4_principle_candidates.js",
+      "max_minutes": 30,
+      "depends_on": ["phase_3_components"],
+      "outputs": [
+        "principles.json",
+        "principle_gaps.json"
+      ]
+    },
+    {
+      "id": "phase_5_bridge",
+      "label": "Phase 5 — Pre→post→views bridge validation",
+      "script": "phases/phase5_bridge_validation.js",
+      "max_minutes": 60,
+      "depends_on": ["phase_4_principles"],
+      "outputs": [
+        "bridge_validation.json",
+        "bridge_top_principles.json"
+      ]
+    },
+    {
+      "id": "phase_6_persist",
+      "label": "Phase 6 — Persist into Jarvis surfaces",
+      "script": "phases/phase6_persist.js",
+      "max_minutes": 15,
+      "depends_on": ["phase_5_bridge"],
+      "outputs": [
+        "findings-summary.json",
+        "overnight_report.md",
+        "graph.json"
+      ]
+    }
+  ]
+}

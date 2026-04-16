@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-16T04:20:28.956Z",
+  "schema": {
+    "id": "stable component identifier",
+    "label": "human-readable label",
+    "fragment_kind": "phrase_family | position_bucket | evidence_kind | segment_label",
+    "fragment_value": "the recurring fragment value",
+    "n_mechanisms_using": "count of distinct mechanism ids that include this fragment",
+    "n_observations_total": "sum of observation counts across those mechanisms",
+    "mechanism_ids": "list of mechanism ids that use this component"
+  },
+  "components": []
+}

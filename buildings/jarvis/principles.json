@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-16T04:20:28.956Z",
+  "schema": {
+    "id": "principle id",
+    "edge": "{from_mechanism, via_indicator, to_outcome}",
+    "hypothesis_text": "templated rationale tied to mechanism evidence + indicator family",
+    "supporting_n": "video count behind the supporting correlation",
+    "mechanism_indicator_rho": "rank correlation of mechanism observation count vs indicator value",
+    "indicator_outcome_r": "pearson r of indicator vs views(log10)",
+    "status": "always candidate; promotion is a human pass"
+  },
+  "principles": []
+}

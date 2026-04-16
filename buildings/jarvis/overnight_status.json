@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "overall_status": "not_started",
+  "started_at": null,
+  "finished_at": null,
+  "current_phase": "phase_1_init",
+  "current_phase_started_at": null,
+  "current_phase_progress": {
+    "step": "completed",
+    "completed_at": "2026-04-16T04:20:29.289Z"
+  },
+  "completed_phases": [
+    "phase_1_init"
+  ],
+  "failed_phase": null,
+  "failure_reason": null,
+  "phase_results": {
+    "phase_1_init": {
+      "status": "completed",
+      "started_at": "2026-04-16T04:20:28.956Z",
+      "completed_at": "2026-04-16T04:20:29.289Z",
+      "written": {
+        "mechanisms": {
+          "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanisms.json",
+          "bytes": 695
+        },
+        "components": {
+          "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/components.json",
+          "bytes": 565
+        },
+        "principles": {
+          "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/principles.json",
+          "bytes": 583
+        },
+        "mechanism_observations": {
+          "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanism_observations.json",
+          "bytes": 90
+        },
+        "bridge_validation": {
+          "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/bridge_validation.json",
+          "bytes": 82
+        },
+        "research_questions": {
+          "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/research_questions.json",
+          "bytes": 14356,
+          "n_questions": 36
+        },
+        "indicator_registry": {
+          "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/indicator-registry.json",
+          "bytes": 4734038,
+          "n_entries": 23000
+        }
+      }
+    }
+  },
+  "totals": {
+    "n_videos_processed": 0,
+    "n_mechanism_observations": 0,
+    "n_mechanisms": 0,
+    "n_components": 0,
+    "n_principles": 0,
+    "n_bridges_validated": 0
+  },
+  "notes": [
+    "This file is the live status feed for the overnight orchestrator.",
+    "It is overwritten at every phase transition and updated periodically during long phases.",
+    "Parent agents can read this file to monitor progress without interrupting the orchestrator."
+  ],
+  "updated_at": "2026-04-16T04:20:29.289Z"
+}

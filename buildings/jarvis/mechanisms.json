@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-16T04:20:28.955Z",
+  "schema": {
+    "id": "stable rough-language identifier (e.g. open_with_curiosity_gap_first_5s)",
+    "label": "human-readable label",
+    "rough_description": "free-text description of the move",
+    "source_kinds": "array of evidence kinds that produced this id (segment_label, transcript_phrase, frame_engagement)",
+    "n_observations": "total observation count across the corpus",
+    "n_videos": "distinct videos in which this mechanism was observed",
+    "sample_evidence": "up to 3 evidence rows for inspection",
+    "emergence_method": "how the id was produced (always observation-derived)"
+  },
+  "mechanisms": []
+}

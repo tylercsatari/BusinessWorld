@@ -21403,7 +21403,16 @@
       "retention_pct_25_x_payoff_signal_density",
       "retention_pct_25_x_setup_signal_count",
       "retention_pct_25_x_setup_signal_density",
-      "scene_change_rate_x_payoff_signal_density"
+      "scene_change_rate_x_payoff_signal_density",
+      "scene_change_rate_x_setup_signal_count",
+      "scene_change_rate_x_setup_signal_density",
+      "scene_change_rate_x_stakes_escalation_count",
+      "scene_change_rate_x_stakes_escalation_density",
+      "scene_change_rate_x_delayed_reveal_count",
+      "scene_change_rate_x_delayed_reveal_density",
+      "retention_pct_25_x_stakes_escalation_count",
+      "retention_pct_25_x_stakes_escalation_density",
+      "retention_pct_25_x_delayed_reveal_count"
     ],
     "depth_in_hierarchy": 0
   },
