@@ -4504,18 +4504,19 @@ function extractMetric(key, analysis) {
     }
     if (key === 'tension_ratchet_density') {
         const tl = (transcript || '').toLowerCase();
-        const dur = durationS;
+        const dur = meta.duration || 0;
         if (!tl || !dur) return [null, 'no transcript/duration'];
         return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.tension_ratchet) / dur, null];
     }
     if (key === 'promise_echo_density') {
         const tl = (transcript || '').toLowerCase();
-        const dur = durationS;
+        const dur = meta.duration || 0;
         if (!tl || !dur) return [null, 'no transcript/duration'];
         return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.promise_echo) / dur, null];
     }
     if (key === 'promise_echo_second_half_count') {
-        if (!transcript || !durationS) return [null, 'no transcript/duration'];
+        const dur2 = meta.duration || 0;
+        if (!transcript || !dur2) return [null, 'no transcript/duration'];
         const words = transcript.split(/\s+/).filter(Boolean);
         const half = Math.floor(words.length / 2);
         const secondHalf = words.slice(half).join(' ').toLowerCase();
@@ -4523,23 +4524,25 @@ function extractMetric(key, analysis) {
     }
     if (key === 'story_clock_density') {
         const tl = (transcript || '').toLowerCase();
-        const dur = durationS;
+        const dur = meta.duration || 0;
         if (!tl || !dur) return [null, 'no transcript/duration'];
         return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.story_clock) / dur, null];
     }
     if (key === 'story_clock_count_first10s') {
-        if (!transcript || !durationS) return [null, 'no transcript/duration'];
-        const win = windowedTranscript(transcript, durationS, 10).toLowerCase();
+        const dur3 = meta.duration || 0;
+        if (!transcript || !dur3) return [null, 'no transcript/duration'];
+        const win = windowedTranscript(transcript, dur3, 10).toLowerCase();
         return [countPhraseMatches(win, ZYGARNIK_PHRASE_SETS.story_clock), null];
     }
     if (key === 'proof_build_density') {
         const tl = (transcript || '').toLowerCase();
-        const dur = durationS;
+        const dur = meta.duration || 0;
         if (!tl || !dur) return [null, 'no transcript/duration'];
         return [countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.proof_build) / dur, null];
     }
     if (key === 'proof_build_count_first_half') {
-        if (!transcript || !durationS) return [null, 'no transcript/duration'];
+        const dur4 = meta.duration || 0;
+        if (!transcript || !dur4) return [null, 'no transcript/duration'];
         const words = transcript.split(/\s+/).filter(Boolean);
         const half = Math.floor(words.length / 2);
         const firstHalf = words.slice(0, half).join(' ').toLowerCase();
