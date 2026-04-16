@@ -21662,7 +21662,10 @@
       "close_up_frame_pct_x_delayed_reveal_count",
       "close_up_frame_pct_x_delayed_reveal_density",
       "retention_entropy_x_stakes_escalation_density",
-      "retention_entropy_x_delayed_reveal_count"
+      "retention_entropy_x_delayed_reveal_count",
+      "close_up_frame_pct_x_proof_arrival_count",
+      "close_up_frame_pct_x_proof_arrival_density",
+      "close_up_frame_pct_x_narrative_anchor_count"
     ],
     "depth_in_hierarchy": 0
   },
