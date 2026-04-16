@@ -142,7 +142,7 @@
     <div id="money-display">
         <div id="level-text">Lv. 1</div>
         <div id="money-bar-container"><div id="money-bar-fill" style="width: 20%"></div></div>
-        <div id="finance-breakdown" onclick="if(!event.target.closest('.finance-edit-btn'))this.classList.toggle('pixelated')">
+        <div id="finance-breakdown" class="pixelated" onclick="if(!event.target.closest('.finance-edit-btn'))this.classList.toggle('pixelated')">
             <span id="finance-bank" style="display:none">$0</span>
             <span id='hud-balance-amount' style="display:none">$—</span>
             <div class="finance-row" id="hud-bank-row" style="display:none">
