@@ -23888,7 +23888,10 @@
       "narrative_arc_completeness_x_stake_loop_product",
       "narrative_arc_completeness_x_rhetorical_question_count",
       "narrative_arc_completeness_x_rhetorical_question_density",
-      "narrative_arc_completeness_x_social_comparison_count"
+      "narrative_arc_completeness_x_social_comparison_count",
+      "resolution_density_x_cliffhanger_count",
+      "resolution_density_x_cliffhanger_density",
+      "resolution_density_x_payoff_tease_count"
     ],
     "depth_in_hierarchy": 0
   },
