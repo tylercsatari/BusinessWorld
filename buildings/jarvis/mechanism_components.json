@@ -1,0 +1,2598 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-16T04:21:47.343Z",
+  "n_mechanisms": 501,
+  "mechanism_components": {
+    "segment_hook_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_setup_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019",
+      "comp_0017"
+    ],
+    "segment_main_point_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0025"
+    ],
+    "segment_conclusion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_setup_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0017"
+    ],
+    "segment_call_to_action_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0029"
+    ],
+    "segment_main_point_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0025"
+    ],
+    "segment_introduction_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_resolution_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0031"
+    ],
+    "segment_climax_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_development_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_resolution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0031"
+    ],
+    "segment_climax_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_progress_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_complication_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_main_point_2_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_struggle_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_execution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0032"
+    ],
+    "segment_conclusion_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_preparation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0033"
+    ],
+    "segment_conclusion_and_call_to_action_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_morning_routine_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_discovery_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_teaser_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_main_point_3_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experimentation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_testing_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_escalation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0029"
+    ],
+    "segment_solution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_main_point_1_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_problem_identification_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_perseverance_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_main_point_1_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_setup_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034",
+      "comp_0017"
+    ],
+    "segment_process_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_testing_phase_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_turning_point_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experimentation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_transition_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0029"
+    ],
+    "segment_background_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0035"
+    ],
+    "segment_rising_action_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenges_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_next_steps_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_results_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_explanation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_initial_test_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_afternoon_routine_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_setup_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0037"
+    ],
+    "segment_adaptation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_background_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0035"
+    ],
+    "segment_preparation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0033"
+    ],
+    "segment_conflict_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_innovation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_details_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_determination_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_main_point_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034",
+      "comp_0025"
+    ],
+    "segment_initial_attempt_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_observation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_explanation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_challenge_intensifies_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_insight_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_challenge_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_determination_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_development_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_experiment_setup_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019",
+      "comp_0037"
+    ],
+    "segment_training_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_struggle_and_determination_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_exploration_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_problem_statement_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_midday_activities_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_experiment_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0032"
+    ],
+    "segment_challenge_experience_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_problem_encounter_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_initial_experience_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_progress_update_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0038"
+    ],
+    "segment_personal_experience_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_plan_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_persistence_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_teaser_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_construction_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_results_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_afternoon_activities_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_afternoon_activities_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_evening_routine_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_unexpected_outcome_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_solution_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_plan_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_surprise_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_tension_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_main_point_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0025"
+    ],
+    "segment_commitment_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_reflection_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0039"
+    ],
+    "segment_call_to_action_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_continuation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_equipment_introduction_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_struggle_and_motivation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_conclusion_and_reward_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_details_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_falling_action_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_testing__running_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_testing__jumping_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_encouragement_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_progression_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_challenge_evaluation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_favorite_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_initial_success_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_enhancements_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_demonstration_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0040"
+    ],
+    "segment_first_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_second_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_idea_introduction_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_execution_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_problem_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0041"
+    ],
+    "segment_challenge_realization_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_progress_and_discovery_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_solution_development_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_expansion_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_editing_process_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_problem_with_fireproof_coating_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_alternative_solution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_solution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_preparation_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0033"
+    ],
+    "segment_execution_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_optimism_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_challenges_begin_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_struggle_intensifies_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_plan_introduction_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_step_one_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_step_two_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_step_three_and_conclusion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_training_process_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_transition_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_evening_work_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_problem_encountered_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_new_discovery_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_future_idea_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_product_placement_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_solution_and_teaser_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_attempt_and_realization_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_challenge_escalation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_midpoint_struggle_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0032"
+    ],
+    "segment_progress_and_challenges_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_description_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_reflection_and_teaser_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_problem_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0041"
+    ],
+    "segment_resolution_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0031"
+    ],
+    "segment_additional_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_conclusion_and_future_plans_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_unexpected_effect_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_buildup_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_first_test_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_optimization_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_before_transformation_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_fitness_journey_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_style_improvement_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_final_touches_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_transformation_reveal_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_strategy_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_alternative_approach_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_final_effort_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_observation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_experiment_adjustment_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_continued_experimentation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_outcome_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_to_audience_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_motivational_conclusion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_pushups_challenge_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_crunches_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_clips_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_initial_results_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_emerging_issues_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_teaser_and_conclusion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_observations_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_progress_concerns_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_initial_experience_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_performance_and_challenges_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_persistence_and_outcome_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_challenge_explanation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_training_journey_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_progress_and_confidence_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_main_test_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_expert_consultation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_product_development_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_project_development_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_innovation_and_challenges_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034"
+    ],
+    "segment_major_breakthrough_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_advanced_developments_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_revelation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_breakfast_and_soccer_training_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_lunch_and_napping_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_second_lunch_and_dinner_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_conclusion_and_reveal_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_surprising_diet_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_gym_and_snack_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_evening_routine_and_reveal_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_special_mention_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_outcome_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_process_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_training_days_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_the_competition_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenges_and_realizations_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_coping_mechanisms_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_anticipation_and_conclusion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_calculation_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_challenge_execution_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_achievement_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_warning_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_problem_statement_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_action_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_experiment_introduction_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_plan_and_execution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_decision_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_experiment_setup_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034",
+      "comp_0037"
+    ],
+    "segment_initial_observations_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenges_faced_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_main_point__part_1_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_main_point__part_2_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_result_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_breakthrough_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_reflection_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0039"
+    ],
+    "segment_discovery_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034"
+    ],
+    "segment_project_introduction_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_assembly_and_purpose_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_experiment_details_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_unexpected_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_physical_struggle_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_overcoming_obstacles_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_further_testing_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_introduction_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_pauls_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_narrators_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_perspective_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_resolution_attempt_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_context_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_journey_begins_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_unexpected_challenges_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_arrival_and_cliffhanger_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_challenge_begins_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_completion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_training_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_surprise_element_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_practice_round_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_main_challenge_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_unexpected_outcome_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034"
+    ],
+    "segment_habit_formation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_project_excitement_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_evening_plans_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_features_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_harness_and_electronics_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_exercise_and_study_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_initial_reaction_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_progress_check_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_progress_update_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0038"
+    ],
+    "segment_idea_and_determination_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_pros_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034"
+    ],
+    "segment_cons_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_unexpected_observation_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_inciting_incident_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_progression_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_solution_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_unexpected_observation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_redesign_and_testing_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_future_plans_and_call_to_action_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_failed_attempts_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_solution_and_test_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_test_results_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_main_event_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_initial_idea_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_problems_with_initial_idea_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_effort_and_complexity_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_outcome_and_promotion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_crisis_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_success_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_breakfast_description_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_midmorning_snack_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_lunch_description_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_dinner_description_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_workout_details_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_boxing_and_lunch_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_evening_routine_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_day_one_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_building_process_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_concerns_and_progress_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_steps_and_conclusion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_main_point_3_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_escalation_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_teasercall_to_action_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_vision_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_setback_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_cliffhanger_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_main_point_4_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_doubt_and_reflection_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_countdown_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_enhancement_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_hypnosis_begins_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_goal_setting_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_achievement_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_attempts_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034"
+    ],
+    "segment_research_and_discovery_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034"
+    ],
+    "segment_testing_materials_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_advanced_material_integration_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_testing_and_construction_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_design_planning_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_execution_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_resolution_and_anticipation_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_failure_and_new_strategy_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_innovative_solution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_success_and_additional_clues_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_conclusion_and_sponsorship_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_main_challenge_description_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_adaptation_and_continuation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_testing_with_bat_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_testing_with_sharp_object_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_axe_test_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_bullet_test_setup_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_material_explanation_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_demonstration_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019",
+      "comp_0040"
+    ],
+    "segment_further_testing_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_method_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_progress_and_teaser_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_main_point_introduction_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_personal_story_setup_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_personal_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_attempt_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_cooking_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_personal_story_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_motivation_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0042"
+    ],
+    "segment_initial_observation_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_challenge_progress_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_increased_difficulty_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_conclusion_and_outcome_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_goal_setting_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_motivation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0042"
+    ],
+    "segment_focus_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_encouragement_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_breakthrough_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_problem_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034",
+      "comp_0041"
+    ],
+    "segment_rebuild_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_success_and_next_steps_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_preparation_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019",
+      "comp_0033"
+    ],
+    "segment_first_experience_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_second_experience_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_1_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_experiment_2_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_setup_for_final_test_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_3_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_unexpected_challenge_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_technique_development_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_analysis_and_adjustment_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_attempt_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_experiment_execution_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_first_impressions_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_daily_routine_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_intensifies_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_progress_and_future_plans_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_technical_challenges_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_advanced_development_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_integration_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_testing_and_conclusion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_test_1_physical_exertion_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_test_2_heart_rate_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_test_3_muscle_endurance_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_activity_sequence_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_anticipation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_introduction_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_progress_and_difficulty_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_resolution_and_future_plan_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_experience_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_without_mask_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_with_mask_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_conclusion_and_call_for_suggestions_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_exciting_moment_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_3_nut_allergy_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_challenge_2_ice_bath_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_challenge_1_hot_sauce_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_motivation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028",
+      "comp_0042"
+    ],
+    "segment_challenge_realization_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_decision_point_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_initial_experiment_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_research_and_realization_at_hook_quarter": [
+      "comp_0018",
+      "comp_0020",
+      "comp_0034"
+    ],
+    "segment_collaboration_with_ice_river_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_improving_the_machine_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_experiment_and_future_potential_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_tool_mention_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_climax_and_teaser_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_solution_exploration_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_problem_solving_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_personal_context_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_problem_setup_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_demonstration_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026",
+      "comp_0040"
+    ],
+    "segment_main_challenge_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_experiment_results_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_experiment_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_intermediate_test_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_advanced_test_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_final_carbon_fiber_test_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_transition_to_new_material_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_twist_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_experiment_failure_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_revised_experiment_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_testing_and_results_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_personal_experience_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_challenge_details_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_progress_update_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027",
+      "comp_0038"
+    ],
+    "segment_expansion_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_experiment_preparation_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_reveal_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019",
+      "comp_0030"
+    ],
+    "segment_background_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019",
+      "comp_0035"
+    ],
+    "segment_reflection_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019",
+      "comp_0039"
+    ],
+    "segment_content_creation_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_problem_identification_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_solution_development_at_first_10s": [
+      "comp_0018",
+      "comp_0005",
+      "comp_0028"
+    ],
+    "segment_improvement_plan_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_additional_factor_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_struggle_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_solution_and_call_to_action_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_morning_activities_at_first_5s": [
+      "comp_0018",
+      "comp_0003",
+      "comp_0019"
+    ],
+    "segment_evening_activities_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_action_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_progression_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_sustenance_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_practice_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "segment_progress_at_late": [
+      "comp_0018",
+      "comp_0007",
+      "comp_0027"
+    ],
+    "segment_design_process_at_mid": [
+      "comp_0018",
+      "comp_0009",
+      "comp_0026"
+    ],
+    "frame_text_overlay_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0002"
+    ],
+    "frame_close_up_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0011"
+    ],
+    "frame_natural_lighting_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0015"
+    ],
+    "frame_relatability_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0016"
+    ],
+    "frame_motion_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0023"
+    ],
+    "frame_high_energy_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0024"
+    ],
+    "frame_direct_address_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0022"
+    ],
+    "frame_reveal_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0030"
+    ],
+    "frame_fast_cut_at_mid": [
+      "comp_0009",
+      "comp_0001",
+      "comp_0010",
+      "comp_0036"
+    ],
+    "frame_text_overlay_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0002"
+    ],
+    "frame_close_up_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0011"
+    ],
+    "frame_natural_lighting_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0015"
+    ],
+    "frame_relatability_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0016"
+    ],
+    "frame_motion_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0023"
+    ],
+    "frame_high_energy_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0024"
+    ],
+    "frame_direct_address_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0022"
+    ],
+    "frame_reveal_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0030"
+    ],
+    "frame_fast_cut_at_late": [
+      "comp_0007",
+      "comp_0001",
+      "comp_0008",
+      "comp_0036"
+    ],
+    "frame_text_overlay_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0002"
+    ],
+    "frame_close_up_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0011"
+    ],
+    "frame_natural_lighting_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0015"
+    ],
+    "frame_relatability_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0016"
+    ],
+    "frame_motion_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0023"
+    ],
+    "frame_high_energy_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0024"
+    ],
+    "frame_direct_address_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0022"
+    ],
+    "frame_reveal_at_first_10s": [
+      "comp_0005",
+      "comp_0001",
+      "comp_0006",
+      "comp_0030"
+    ],
+    "frame_text_overlay_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0002"
+    ],
+    "frame_close_up_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0011"
+    ],
+    "frame_natural_lighting_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0015"
+    ],
+    "frame_text_overlay_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0002"
+    ],
+    "frame_direct_address_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0022"
+    ],
+    "frame_relatability_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0016"
+    ],
+    "frame_close_up_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0011"
+    ],
+    "frame_natural_lighting_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0015"
+    ],
+    "frame_high_energy_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0024"
+    ],
+    "frame_motion_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0023"
+    ],
+    "frame_relatability_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0016"
+    ],
+    "frame_motion_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0023"
+    ],
+    "frame_reveal_at_first_5s": [
+      "comp_0001",
+      "comp_0003",
+      "comp_0004",
+      "comp_0030"
+    ],
+    "frame_direct_address_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0022"
+    ],
+    "frame_high_energy_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0024"
+    ],
+    "frame_reveal_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0030"
+    ],
+    "frame_fast_cut_at_hook_quarter": [
+      "comp_0001",
+      "comp_0020",
+      "comp_0021",
+      "comp_0036"
+    ],
+    "phrase_action_trigger_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_personal_stake_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_setup_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014",
+      "comp_0017"
+    ],
+    "phrase_revelation_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_proof_of_work_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_pattern_interrupt_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_anticipation_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_urgency_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_transformation_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_visual_credibility_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_payoff_signal_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_specificity_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_foreshadow_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_loss_aversion_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_micro_reward_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_climax_marker_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_counterintuitive_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_stakes_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_consequence_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_social_proof_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_proof_signal_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_commitment_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_credibility_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_rhetorical_question_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_open_loop_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_failure_vulnerability_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_curiosity_gap_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ],
+    "phrase_callback_at_unknown": [
+      "comp_0012",
+      "comp_0013",
+      "comp_0014"
+    ]
+  }
+}

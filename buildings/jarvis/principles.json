@@ -1,14 +1,3372 @@
 {
   "version": "1.0",
-  "generated_at": "2026-04-16T04:20:28.956Z",
-  "schema": {
-    "id": "principle id",
-    "edge": "{from_mechanism, via_indicator, to_outcome}",
-    "hypothesis_text": "templated rationale tied to mechanism evidence + indicator family",
-    "supporting_n": "video count behind the supporting correlation",
-    "mechanism_indicator_rho": "rank correlation of mechanism observation count vs indicator value",
-    "indicator_outcome_r": "pearson r of indicator vs views(log10)",
-    "status": "always candidate; promotion is a human pass"
+  "generated_at": "2026-04-16T04:21:47.726Z",
+  "n_principles": 224,
+  "n_dropped": 0,
+  "thresholds": {
+    "min_mech_observations": 10,
+    "min_abs_rho": 0.05
   },
-  "principles": []
+  "principles": [
+    {
+      "id": "princ_00041",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_mid",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the mid window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.247). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2466,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.2466,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00042",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_late",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the late window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.244). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2442,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.2442,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00046",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_late",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the late window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.230). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2303,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.2303,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00049",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_hook_quarter",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.219). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2186,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.2186,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00001",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.948). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.9481,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.209,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00055",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_mid",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the mid window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.206). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2064,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.2064,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00002",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.926). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.9258,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.2041,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00003",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_hook_quarter",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.887). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.8866,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.1954,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00063",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_hook_quarter",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.192). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1922,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1922,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00004",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_hook_quarter",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.763). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.763,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.1682,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00075",
+      "edge": {
+        "from_mechanism": "phrase_setup_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.162). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1624,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1624,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00005",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.671). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.6712,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.148,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00086",
+      "edge": {
+        "from_mechanism": "phrase_revelation_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"revelation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.143). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1435,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1435,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00090",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_first_5s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.140). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1398,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1398,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00092",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_5s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.139). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1385,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1385,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00008",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.434). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.434,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.1302,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00006",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.568). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.5676,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.1251,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00096",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_hook_quarter",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.124). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1238,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1238,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00098",
+      "edge": {
+        "from_mechanism": "phrase_foreshadow_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"foreshadow\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.123). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1232,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1232,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00101",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_mid",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the mid window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.122). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1224,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1224,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00114",
+      "edge": {
+        "from_mechanism": "phrase_specificity_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"specificity\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.117). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1173,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1173,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00119",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_late",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the late window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.114). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1137,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1137,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00013",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_hook_quarter",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.372). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.3725,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.1118,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00030",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_late",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the late window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.279). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2785,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.1114,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00125",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_10s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.108). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1078,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1078,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00126",
+      "edge": {
+        "from_mechanism": "phrase_counterintuitive_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"counterintuitive\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.106). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1064,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1064,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00132",
+      "edge": {
+        "from_mechanism": "phrase_stakes_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"stakes\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.104). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1038,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1038,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00034",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_hook_quarter",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.257). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2566,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.1026,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00134",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_5s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.102). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1024,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.1024,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00019",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.340). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.3404,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.1021,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00039",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_hook_quarter",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.253). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2528,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.1011,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00007",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_hook_quarter",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.457). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.4572,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.1008,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00040",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.249). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2495,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0998,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00138",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_mid",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the mid window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.099). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0991,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0991,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00139",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_10s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.099). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0987,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0987,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00021",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.321). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.321,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0963,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00022",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_hook_quarter",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.319). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.3191,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0957,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00025",
+      "edge": {
+        "from_mechanism": "phrase_specificity_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"specificity\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.310). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.3099,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.093,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00145",
+      "edge": {
+        "from_mechanism": "segment_hook_at_first_5s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"hook\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.092). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0916,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0916,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00149",
+      "edge": {
+        "from_mechanism": "phrase_payoff_signal_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"payoff_signal\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.089). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0888,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0888,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00011",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_10s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.402). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.4024,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0887,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00012",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_hook_quarter",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.394). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.3943,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0869,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00153",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_5s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.086). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0864,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0864,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00052",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_hook_quarter",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.215). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2146,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0858,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00028",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.281). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.2806,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0842,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00156",
+      "edge": {
+        "from_mechanism": "phrase_proof_of_work_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"proof_of_work\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.084). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0841,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0841,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00009",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.420). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.4201,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.084,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00010",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_mid",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the mid window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.410). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.4103,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0821,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00158",
+      "edge": {
+        "from_mechanism": "phrase_action_trigger_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"action_trigger\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.081). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0813,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0813,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00161",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_hook_quarter",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.081). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0809,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0809,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00165",
+      "edge": {
+        "from_mechanism": "phrase_pattern_interrupt_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"pattern_interrupt\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.079). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0785,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0785,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00168",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_first_10s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.077). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0774,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0774,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00017",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.350). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.3503,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0772,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00035",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.256). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.2562,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0769,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00036",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.256). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.2558,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0767,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00038",
+      "edge": {
+        "from_mechanism": "phrase_pattern_interrupt_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"pattern_interrupt\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.254). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.2543,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0763,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00014",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_late",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the late window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.372). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.3722,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0744,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00177",
+      "edge": {
+        "from_mechanism": "frame_motion_at_hook_quarter",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.073). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0734,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0734,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00015",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_hook_quarter",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.354). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.3542,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0708,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00016",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_late",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the late window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.352). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.3516,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0703,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00068",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.175). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.175,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.07,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00018",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_hook_quarter",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.347). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.347,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0694,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00024",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_first_10s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"duration_s\" tends to decreases (rank correlation ρ=-0.313). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.3128,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": -0.0689,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00047",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.228). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.2284,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0685,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00020",
+      "edge": {
+        "from_mechanism": "phrase_pattern_interrupt_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"pattern_interrupt\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.339). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.3392,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0678,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00072",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.169). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1686,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0674,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00194",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_first_10s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"log_views\" tends to decreases (rank correlation ρ=-0.065). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.0646,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": -0.0646,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00023",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_mid",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the mid window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.318). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.3176,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0635,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00027",
+      "edge": {
+        "from_mechanism": "frame_motion_at_hook_quarter",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.287). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2875,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0634,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00053",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.211). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.2113,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0634,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00197",
+      "edge": {
+        "from_mechanism": "phrase_transformation_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"transformation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.062). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0617,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0617,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00057",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.205). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.2052,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0616,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00198",
+      "edge": {
+        "from_mechanism": "phrase_personal_stake_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"personal_stake\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.061). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0611,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0611,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00031",
+      "edge": {
+        "from_mechanism": "phrase_specificity_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"specificity\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.275). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.275,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0606,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00059",
+      "edge": {
+        "from_mechanism": "phrase_counterintuitive_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"counterintuitive\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.202). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.2021,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0606,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00082",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.151). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1509,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0604,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00084",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.150). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1496,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0598,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00026",
+      "edge": {
+        "from_mechanism": "phrase_specificity_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"specificity\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.292). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2922,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0584,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00033",
+      "edge": {
+        "from_mechanism": "phrase_pattern_interrupt_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"pattern_interrupt\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.263). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2634,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0581,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00062",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.194). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1938,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0581,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00207",
+      "edge": {
+        "from_mechanism": "phrase_visual_credibility_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"visual_credibility\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.058). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0578,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0578,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00064",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_hook_quarter",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.191). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1906,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0572,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00029",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_10s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.280). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2803,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0561,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.725Z"
+    },
+    {
+      "id": "princ_00037",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.254). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2543,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0561,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00091",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_10s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.139). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1387,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0555,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00032",
+      "edge": {
+        "from_mechanism": "phrase_revelation_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"revelation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.271). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.271,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0542,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00065",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.180). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1797,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0539,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00066",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.179). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.179,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0537,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00067",
+      "edge": {
+        "from_mechanism": "phrase_stakes_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"stakes\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.176). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1761,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0528,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00044",
+      "edge": {
+        "from_mechanism": "segment_hook_at_first_5s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"hook\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.239). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2391,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0527,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00217",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_10s",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.052). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0525,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0525,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00219",
+      "edge": {
+        "from_mechanism": "phrase_urgency_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"urgency\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to decreases (rank correlation ρ=-0.052). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.0519,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": -0.0519,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00221",
+      "edge": {
+        "from_mechanism": "phrase_anticipation_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"anticipation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to increases (rank correlation ρ=0.051). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0512,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": 0.0512,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00223",
+      "edge": {
+        "from_mechanism": "phrase_social_proof_at_unknown",
+        "via_indicator": "log_views",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"social_proof\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"log_views\" tends to decreases (rank correlation ρ=-0.050). That indicator is strongly positively correlated with views(log10) at r=1.000. Candidate principle: this move is a lever on views via \"log_views\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.0503,
+      "indicator_outcome_r": 1,
+      "chain_strength_signed": -0.0503,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00100",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_late",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the late window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.122). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1225,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.049,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00048",
+      "edge": {
+        "from_mechanism": "phrase_counterintuitive_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"counterintuitive\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.220). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2201,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0485,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00077",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.161). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.161,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0483,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00043",
+      "edge": {
+        "from_mechanism": "segment_hook_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"hook\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.241). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.241,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0482,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00106",
+      "edge": {
+        "from_mechanism": "phrase_specificity_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"specificity\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.121). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1206,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0482,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00079",
+      "edge": {
+        "from_mechanism": "frame_reveal_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"reveal\" appears via frame signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.160). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1595,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0478,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00051",
+      "edge": {
+        "from_mechanism": "phrase_setup_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.215). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2151,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0474,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00111",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_hook_quarter",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.118). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1183,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0473,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00045",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.236). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.2359,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0472,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00080",
+      "edge": {
+        "from_mechanism": "segment_hook_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"hook\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.156). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.156,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0468,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00056",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_5s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"duration_s\" tends to decreases (rank correlation ρ=-0.206). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.2056,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": -0.0453,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00058",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_5s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"duration_s\" tends to decreases (rank correlation ρ=-0.203). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.2035,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": -0.0449,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00121",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_10s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.112). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1118,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0447,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00060",
+      "edge": {
+        "from_mechanism": "phrase_revelation_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"revelation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.201). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.2005,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0442,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00050",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_hook_quarter",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.217). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.2174,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0435,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00087",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.142). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1423,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0427,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00089",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.141). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1405,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0421,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00054",
+      "edge": {
+        "from_mechanism": "phrase_counterintuitive_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"counterintuitive\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.207). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.207,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0414,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00061",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_mid",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the mid window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.200). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1997,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0399,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00095",
+      "edge": {
+        "from_mechanism": "phrase_anticipation_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"anticipation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.132). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.132,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0396,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00141",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_late",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the late window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.096). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.096,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0384,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00070",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.172). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1721,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0379,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00071",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.171). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.171,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0377,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00099",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.123). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1228,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0368,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00103",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.122). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1222,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0367,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00073",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.166). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1658,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0365,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00104",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_hook_quarter",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.122). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1216,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0365,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00148",
+      "edge": {
+        "from_mechanism": "phrase_proof_of_work_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"proof_of_work\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.089). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0892,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0357,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00150",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.088). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0882,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0353,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00069",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.175). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1748,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.035,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00115",
+      "edge": {
+        "from_mechanism": "frame_motion_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.117). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1167,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.035,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00152",
+      "edge": {
+        "from_mechanism": "phrase_revelation_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"revelation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.088). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0876,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.035,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00118",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.115). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1147,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0344,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00122",
+      "edge": {
+        "from_mechanism": "phrase_revelation_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"revelation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.111). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1112,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0334,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00123",
+      "edge": {
+        "from_mechanism": "phrase_transformation_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"transformation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.111). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1112,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0334,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00083",
+      "edge": {
+        "from_mechanism": "frame_reveal_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"reveal\" appears via frame signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.150). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1503,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0331,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00085",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.149). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1489,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0328,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00074",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_10s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.163). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1627,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0325,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00160",
+      "edge": {
+        "from_mechanism": "frame_motion_at_hook_quarter",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.081). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0812,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0325,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00076",
+      "edge": {
+        "from_mechanism": "segment_setup_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.161). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1611,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0322,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00078",
+      "edge": {
+        "from_mechanism": "frame_reveal_at_mid",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"reveal\" appears via frame signal in the mid window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.160). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.16,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.032,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00127",
+      "edge": {
+        "from_mechanism": "segment_introduction_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"introduction\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.106). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1062,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0319,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00128",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.106). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1061,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0318,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00129",
+      "edge": {
+        "from_mechanism": "segment_conclusion_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"conclusion\" appears via segment signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.105). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.1055,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0316,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00081",
+      "edge": {
+        "from_mechanism": "segment_conclusion_at_late",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"conclusion\" appears via segment signal in the late window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.154). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1539,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0308,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00169",
+      "edge": {
+        "from_mechanism": "frame_motion_at_first_10s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.077). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0771,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0308,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00170",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.077). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0766,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0306,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00172",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_10s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.075). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0755,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0302,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00136",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.100). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.1003,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0301,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00173",
+      "edge": {
+        "from_mechanism": "frame_reveal_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"reveal\" appears via frame signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.075). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0746,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0298,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00094",
+      "edge": {
+        "from_mechanism": "frame_close_up_at_first_10s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"close_up\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.134). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1342,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0296,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00174",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.074). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.074,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0296,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00176",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.073). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0734,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0294,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00181",
+      "edge": {
+        "from_mechanism": "frame_motion_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.073). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0726,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.029,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00088",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_mid",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the mid window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.142). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1422,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0284,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00185",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.070). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0705,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0282,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00186",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_10s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.070). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0704,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0282,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00093",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_late",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the late window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.137). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1365,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0273,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00102",
+      "edge": {
+        "from_mechanism": "phrase_visual_credibility_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"visual_credibility\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.122). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1223,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.027,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00187",
+      "edge": {
+        "from_mechanism": "phrase_foreshadow_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"foreshadow\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.068). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0676,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.027,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00188",
+      "edge": {
+        "from_mechanism": "phrase_micro_reward_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"micro_reward\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.068). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0676,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.027,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00189",
+      "edge": {
+        "from_mechanism": "phrase_pattern_interrupt_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"pattern_interrupt\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.067). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0669,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0268,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00107",
+      "edge": {
+        "from_mechanism": "segment_challenge_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"challenge\" appears via segment signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.120). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1205,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0266,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00193",
+      "edge": {
+        "from_mechanism": "phrase_loss_aversion_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"loss_aversion\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.066). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0655,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0262,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00110",
+      "edge": {
+        "from_mechanism": "phrase_transformation_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"transformation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.119). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1186,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0261,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00112",
+      "edge": {
+        "from_mechanism": "phrase_foreshadow_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"foreshadow\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.118). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1176,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0259,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00195",
+      "edge": {
+        "from_mechanism": "frame_motion_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.064). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.064,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0256,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00120",
+      "edge": {
+        "from_mechanism": "frame_motion_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.113). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1131,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0249,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00097",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_10s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.124). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1236,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0247,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00199",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.061). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.061,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0244,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00200",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_first_10s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.061). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0607,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0243,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00124",
+      "edge": {
+        "from_mechanism": "phrase_social_proof_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"social_proof\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to decreases (rank correlation ρ=-0.110). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.1098,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": -0.0242,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00105",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_first_10s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.121). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1207,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0241,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00108",
+      "edge": {
+        "from_mechanism": "phrase_setup_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.120). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1202,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.024,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00109",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_late",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the late window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.119). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1187,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0237,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00203",
+      "edge": {
+        "from_mechanism": "phrase_setup_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"setup\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.059). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0593,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0237,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00204",
+      "edge": {
+        "from_mechanism": "phrase_counterintuitive_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"counterintuitive\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.059). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0593,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0237,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00205",
+      "edge": {
+        "from_mechanism": "frame_reveal_at_late",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"reveal\" appears via frame signal in the late window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.059). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0592,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0237,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00164",
+      "edge": {
+        "from_mechanism": "phrase_foreshadow_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"foreshadow\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.079). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.0787,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0236,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00113",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_hook_quarter",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.118). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.1176,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0235,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00166",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.078). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.0784,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0235,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00206",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_late",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the late window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.059). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0587,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0235,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00167",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.078). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.0778,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0233,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00116",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_mid",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the mid window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.115). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1154,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0231,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00117",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_late",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the late window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.115). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1149,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.023,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00130",
+      "edge": {
+        "from_mechanism": "frame_reveal_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"reveal\" appears via frame signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.104). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1041,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0229,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00131",
+      "edge": {
+        "from_mechanism": "phrase_micro_reward_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"micro_reward\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.104). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1039,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0229,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00135",
+      "edge": {
+        "from_mechanism": "segment_conclusion_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"conclusion\" appears via segment signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.102). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.1022,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0225,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00175",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.074). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.0739,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0222,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00179",
+      "edge": {
+        "from_mechanism": "phrase_proof_of_work_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"proof_of_work\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.073). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.0731,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0219,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00212",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_5s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.055). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0546,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0218,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00183",
+      "edge": {
+        "from_mechanism": "frame_reveal_at_late",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"reveal\" appears via frame signal in the late window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.071). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.0712,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0214,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00140",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.097). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0965,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0213,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00215",
+      "edge": {
+        "from_mechanism": "segment_conclusion_at_late",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"conclusion\" appears via segment signal in the late window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.053). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0529,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0212,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00216",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_first_10s",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the first_10s window of the video, the post-upload indicator \"avg_retention\" tends to increases (rank correlation ρ=0.053). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0527,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": 0.0211,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00218",
+      "edge": {
+        "from_mechanism": "phrase_social_proof_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"social_proof\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.052). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0523,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0209,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00142",
+      "edge": {
+        "from_mechanism": "phrase_payoff_signal_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"payoff_signal\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.094). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0944,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0208,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00133",
+      "edge": {
+        "from_mechanism": "phrase_social_proof_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"social_proof\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.103). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.1034,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0207,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00220",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_mid",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the mid window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.051). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0513,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.0205,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00190",
+      "edge": {
+        "from_mechanism": "frame_motion_at_first_10s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.067). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.0666,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.02,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00224",
+      "edge": {
+        "from_mechanism": "phrase_payoff_signal_at_unknown",
+        "via_indicator": "avg_retention",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"payoff_signal\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"avg_retention\" tends to decreases (rank correlation ρ=-0.050). That indicator is strongly positively correlated with views(log10) at r=0.400. Candidate principle: this move is a lever on views via \"avg_retention\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.05,
+      "indicator_outcome_r": 0.4,
+      "chain_strength_signed": -0.02,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00137",
+      "edge": {
+        "from_mechanism": "segment_introduction_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"introduction\" appears via segment signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.099). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0993,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0199,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00192",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.066). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.066,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0198,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00196",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_5s",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.063). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.0634,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.019,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00143",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.094). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0943,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0189,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00154",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_5s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.086). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0856,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0189,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00144",
+      "edge": {
+        "from_mechanism": "frame_natural_lighting_at_first_10s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"natural_lighting\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.093). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.093,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0186,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00146",
+      "edge": {
+        "from_mechanism": "segment_challenge_at_mid",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"challenge\" appears via segment signal in the mid window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.092). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0916,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0183,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00201",
+      "edge": {
+        "from_mechanism": "frame_motion_at_hook_quarter",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.060). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.0603,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0181,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00147",
+      "edge": {
+        "from_mechanism": "frame_motion_at_hook_quarter",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the hook_quarter window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.089). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0895,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0179,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00159",
+      "edge": {
+        "from_mechanism": "frame_relatability_at_first_10s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"relatability\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"duration_s\" tends to decreases (rank correlation ρ=-0.081). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.0812,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": -0.0179,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00162",
+      "edge": {
+        "from_mechanism": "frame_motion_at_first_5s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.080). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0802,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0177,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00151",
+      "edge": {
+        "from_mechanism": "phrase_stakes_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"stakes\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.088). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0879,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0176,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00163",
+      "edge": {
+        "from_mechanism": "phrase_personal_stake_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"personal_stake\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.079). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.079,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0174,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00155",
+      "edge": {
+        "from_mechanism": "phrase_visual_credibility_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"visual_credibility\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.085). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0852,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.017,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00157",
+      "edge": {
+        "from_mechanism": "phrase_anticipation_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"anticipation\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.082). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0819,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0164,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00211",
+      "edge": {
+        "from_mechanism": "phrase_social_proof_at_unknown",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"social_proof\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"swipe_away_rate\" tends to decreases (rank correlation ρ=-0.055). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": -0.0547,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": 0.0164,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00213",
+      "edge": {
+        "from_mechanism": "segment_main_point_at_mid",
+        "via_indicator": "swipe_away_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"main_point\" appears via segment signal in the mid window of the video, the post-upload indicator \"swipe_away_rate\" tends to increases (rank correlation ρ=0.055). That indicator is moderately negatively correlated with views(log10) at r=-0.300. Candidate principle: this move is a lever on views via \"swipe_away_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 369,
+      "mechanism_indicator_rho": 0.0546,
+      "indicator_outcome_r": -0.3,
+      "chain_strength_signed": -0.0164,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00178",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_first_5s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"duration_s\" tends to decreases (rank correlation ρ=-0.073). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": -0.0733,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": -0.0162,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00182",
+      "edge": {
+        "from_mechanism": "phrase_proof_of_work_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"proof_of_work\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.072). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0716,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0158,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00171",
+      "edge": {
+        "from_mechanism": "phrase_urgency_at_unknown",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"urgency\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.076). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0757,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0151,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00180",
+      "edge": {
+        "from_mechanism": "frame_direct_address_at_first_10s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"direct_address\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.073). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.073,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0146,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00191",
+      "edge": {
+        "from_mechanism": "segment_resolution_at_late",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"resolution\" appears via segment signal in the late window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.066). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0662,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0146,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00184",
+      "edge": {
+        "from_mechanism": "frame_motion_at_late",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the late window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.071). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0711,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0142,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00202",
+      "edge": {
+        "from_mechanism": "segment_climax_at_mid",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"climax\" appears via segment signal in the mid window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.060). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0596,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0131,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00208",
+      "edge": {
+        "from_mechanism": "frame_motion_at_first_10s",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"motion\" appears via frame signal in the first_10s window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.058). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0577,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0127,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00209",
+      "edge": {
+        "from_mechanism": "phrase_action_trigger_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"action_trigger\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.058). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0575,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0127,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00210",
+      "edge": {
+        "from_mechanism": "phrase_loss_aversion_at_unknown",
+        "via_indicator": "duration_s",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"loss_aversion\" appears via phrase signal in the unknown window of the video, the post-upload indicator \"duration_s\" tends to increases (rank correlation ρ=0.056). That indicator is moderately positively correlated with views(log10) at r=0.220. Candidate principle: this move is a lever on views via \"duration_s\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 372,
+      "mechanism_indicator_rho": 0.0561,
+      "indicator_outcome_r": 0.2204,
+      "chain_strength_signed": 0.0124,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00214",
+      "edge": {
+        "from_mechanism": "frame_high_energy_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"high_energy\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to increases (rank correlation ρ=0.054). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": 0.0542,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": 0.0108,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    },
+    {
+      "id": "princ_00222",
+      "edge": {
+        "from_mechanism": "frame_text_overlay_at_first_5s",
+        "via_indicator": "like_rate",
+        "to_outcome": "views_log10"
+      },
+      "hypothesis_text": "When the move \"text_overlay\" appears via frame signal in the first_5s window of the video, the post-upload indicator \"like_rate\" tends to decreases (rank correlation ρ=-0.051). That indicator is moderately positively correlated with views(log10) at r=0.200. Candidate principle: this move is a lever on views via \"like_rate\" — direction and size to be confirmed by intervention, not assumed.",
+      "supporting_n": 370,
+      "mechanism_indicator_rho": -0.0509,
+      "indicator_outcome_r": 0.2,
+      "chain_strength_signed": -0.0102,
+      "status": "candidate",
+      "generated_at": "2026-04-16T04:21:47.726Z"
+    }
+  ]
 }

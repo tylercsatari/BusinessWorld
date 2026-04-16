@@ -1,24 +1,26 @@
 {
   "version": "1.0",
-  "overall_status": "not_started",
-  "started_at": null,
-  "finished_at": null,
-  "current_phase": "phase_1_init",
+  "overall_status": "completed",
+  "started_at": "2026-04-16T04:21:45.919Z",
+  "finished_at": "2026-04-16T04:21:48.488Z",
+  "current_phase": null,
   "current_phase_started_at": null,
-  "current_phase_progress": {
-    "step": "completed",
-    "completed_at": "2026-04-16T04:20:29.289Z"
-  },
+  "current_phase_progress": null,
   "completed_phases": [
-    "phase_1_init"
+    "phase_1_init",
+    "phase_2_mechanisms",
+    "phase_3_components",
+    "phase_4_principles",
+    "phase_5_bridge",
+    "phase_6_persist"
   ],
   "failed_phase": null,
   "failure_reason": null,
   "phase_results": {
     "phase_1_init": {
       "status": "completed",
-      "started_at": "2026-04-16T04:20:28.956Z",
-      "completed_at": "2026-04-16T04:20:29.289Z",
+      "started_at": "2026-04-16T04:21:45.962Z",
+      "completed_at": "2026-04-16T04:21:46.292Z",
       "written": {
         "mechanisms": {
           "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanisms.json",
@@ -42,7 +44,7 @@
         },
         "research_questions": {
           "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/research_questions.json",
-          "bytes": 14356,
+          "bytes": 26149,
           "n_questions": 36
         },
         "indicator_registry": {
@@ -51,20 +53,64 @@
           "n_entries": 23000
         }
       }
+    },
+    "phase_2_mechanisms": {
+      "status": "completed",
+      "started_at": "2026-04-16T04:21:46.338Z",
+      "completed_at": "2026-04-16T04:21:47.290Z",
+      "n_videos_processed": 372,
+      "n_observations": 35054,
+      "n_mechanism_ids": 501,
+      "n_mechanisms_in_scope_for_links": 66,
+      "n_links": 224
+    },
+    "phase_3_components": {
+      "status": "completed",
+      "started_at": "2026-04-16T04:21:47.337Z",
+      "completed_at": "2026-04-16T04:21:47.343Z",
+      "n_components": 42,
+      "n_mechanisms_decomposed": 501,
+      "coverage_pct": 100
+    },
+    "phase_4_principles": {
+      "status": "completed",
+      "started_at": "2026-04-16T04:21:47.381Z",
+      "completed_at": "2026-04-16T04:21:47.727Z",
+      "n_principles": 224,
+      "n_gaps": 17,
+      "n_unique_mechanisms_in_principles": 63
+    },
+    "phase_5_bridge": {
+      "status": "completed",
+      "started_at": "2026-04-16T04:21:47.774Z",
+      "completed_at": "2026-04-16T04:21:48.295Z",
+      "n_principles_validated": 224,
+      "n_videos_used": 372,
+      "top_chain_strength": 0.2466,
+      "sanity_known_strong_in_top25": true
+    },
+    "phase_6_persist": {
+      "status": "completed",
+      "started_at": "2026-04-16T04:21:48.335Z",
+      "completed_at": "2026-04-16T04:21:48.482Z",
+      "graph_merged_in_place": true,
+      "graph_extension_file": null,
+      "new_mech_nodes": 501,
+      "new_mech_edges": 224
     }
   },
   "totals": {
-    "n_videos_processed": 0,
-    "n_mechanism_observations": 0,
-    "n_mechanisms": 0,
-    "n_components": 0,
-    "n_principles": 0,
-    "n_bridges_validated": 0
+    "n_videos_processed": 372,
+    "n_mechanism_observations": 35054,
+    "n_mechanisms": 501,
+    "n_components": 42,
+    "n_principles": 224,
+    "n_bridges_validated": 224
   },
   "notes": [
     "This file is the live status feed for the overnight orchestrator.",
     "It is overwritten at every phase transition and updated periodically during long phases.",
     "Parent agents can read this file to monitor progress without interrupting the orchestrator."
   ],
-  "updated_at": "2026-04-16T04:20:29.289Z"
+  "updated_at": "2026-04-16T04:21:48.488Z"
 }

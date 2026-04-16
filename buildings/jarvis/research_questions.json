@@ -1,101 +1,395 @@
 {
   "version": "2.0",
-  "generated_at": "2026-04-16T04:20:28.960Z",
+  "generated_at": "2026-04-16T04:21:45.967Z",
   "legacy": {
-    "version": "1.0",
+    "version": "2.0",
+    "generated_at": "2026-04-16T04:20:28.960Z",
+    "legacy": {
+      "version": "1.0",
+      "questions": [
+        {
+          "id": "q001",
+          "text": "What actually predicts 100M+ views? What separates mega-viral from merely viral?",
+          "targets": [
+            "views_100M+",
+            "views_regime"
+          ],
+          "status": "answered",
+          "created_at": "2026-04-16T01:00:00Z",
+          "analysis_runs": [
+            {
+              "run_id": "analysis_1776299110220",
+              "timestamp": "2026-04-16T00:25:10.220Z",
+              "method": "multi-evidence synthesis: regime_gap (Cohen's d), quantile_gap, bridge paths, nonlinearity detection"
+            }
+          ],
+          "answer_id": "analysis_1776299110220"
+        },
+        {
+          "id": "q002",
+          "text": "What minimizes falloff in the first 10 seconds?",
+          "targets": [
+            "retention_pct_10",
+            "hook_drop_rate",
+            "retention_slope_0_10"
+          ],
+          "status": "answered",
+          "created_at": "2026-04-16T01:00:00Z",
+          "analysis_runs": [
+            {
+              "run_id": "analysis_1776299110221_q2",
+              "timestamp": "2026-04-16T00:25:10.221Z",
+              "method": "target-specific edge analysis: retention_pct_10 + hook_drop_rate as targets"
+            }
+          ],
+          "answer_id": "analysis_1776299110221_q2"
+        },
+        {
+          "id": "q003",
+          "text": "What maximizes swipe hold / reduces skip?",
+          "targets": [
+            "swipe_away_rate",
+            "hook_retention_pct",
+            "stayed_to_watch_rate"
+          ],
+          "status": "answered",
+          "created_at": "2026-04-16T01:00:00Z",
+          "analysis_runs": [
+            {
+              "run_id": "analysis_1776299110221_q3",
+              "timestamp": "2026-04-16T00:25:10.221Z",
+              "method": "target-specific edge analysis: swipe_away_rate + hook_payoff_gap as targets"
+            }
+          ],
+          "answer_id": "analysis_1776299110221_q3"
+        },
+        {
+          "id": "q004",
+          "text": "Which pre-upload indicators bridge into which post-upload indicators, and then into views? What is the structural path from controllable inputs to outcomes?",
+          "targets": [
+            "bridge_pre_to_post",
+            "path_to_views"
+          ],
+          "status": "answered",
+          "created_at": "2026-04-16T01:00:00Z",
+          "analysis_runs": [
+            {
+              "run_id": "analysis_1776299110222_q4",
+              "timestamp": "2026-04-16T00:25:10.222Z",
+              "method": "multi-evidence bridge scoring: interaction_r, pathway_strength, pair_correlation, residual_r"
+            }
+          ],
+          "answer_id": "analysis_1776299110222_q4"
+        },
+        {
+          "id": "q005",
+          "text": "What does the pre->post->views bridge structure say about the Boba Fett flamethrower hook problem? How do spectacle hooks connect through retention to views?",
+          "targets": [
+            "hook_structure",
+            "retention_bridge",
+            "views"
+          ],
+          "status": "answered",
+          "created_at": "2026-04-16T01:00:00Z",
+          "analysis_runs": [
+            {
+              "run_id": "analysis_1776299110222_q5",
+              "timestamp": "2026-04-16T00:25:10.222Z",
+              "method": "hook structure analysis: trace hook indicators through retention to views"
+            }
+          ],
+          "answer_id": "analysis_1776299110222_q5"
+        }
+      ]
+    },
     "questions": [
       {
-        "id": "q001",
-        "text": "What actually predicts 100M+ views? What separates mega-viral from merely viral?",
-        "targets": [
-          "views_100M+",
-          "views_regime"
-        ],
-        "status": "answered",
-        "created_at": "2026-04-16T01:00:00Z",
-        "analysis_runs": [
-          {
-            "run_id": "analysis_1776299110220",
-            "timestamp": "2026-04-16T00:25:10.220Z",
-            "method": "multi-evidence synthesis: regime_gap (Cohen's d), quantile_gap, bridge paths, nonlinearity detection"
-          }
-        ],
-        "answer_id": "analysis_1776299110220"
+        "id": "q0001",
+        "layer": "outcome",
+        "resolution": "global",
+        "question": "What outcome signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
       },
       {
-        "id": "q002",
-        "text": "What minimizes falloff in the first 10 seconds?",
-        "targets": [
-          "retention_pct_10",
-          "hook_drop_rate",
-          "retention_slope_0_10"
-        ],
-        "status": "answered",
-        "created_at": "2026-04-16T01:00:00Z",
-        "analysis_runs": [
-          {
-            "run_id": "analysis_1776299110221_q2",
-            "timestamp": "2026-04-16T00:25:10.221Z",
-            "method": "target-specific edge analysis: retention_pct_10 + hook_drop_rate as targets"
-          }
-        ],
-        "answer_id": "analysis_1776299110221_q2"
+        "id": "q0002",
+        "layer": "outcome",
+        "resolution": "first_10s",
+        "question": "What outcome signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
       },
       {
-        "id": "q003",
-        "text": "What maximizes swipe hold / reduces skip?",
-        "targets": [
-          "swipe_away_rate",
-          "hook_retention_pct",
-          "stayed_to_watch_rate"
-        ],
-        "status": "answered",
-        "created_at": "2026-04-16T01:00:00Z",
-        "analysis_runs": [
-          {
-            "run_id": "analysis_1776299110221_q3",
-            "timestamp": "2026-04-16T00:25:10.221Z",
-            "method": "target-specific edge analysis: swipe_away_rate + hook_payoff_gap as targets"
-          }
-        ],
-        "answer_id": "analysis_1776299110221_q3"
+        "id": "q0003",
+        "layer": "outcome",
+        "resolution": "mid",
+        "question": "What outcome signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
       },
       {
-        "id": "q004",
-        "text": "Which pre-upload indicators bridge into which post-upload indicators, and then into views? What is the structural path from controllable inputs to outcomes?",
-        "targets": [
-          "bridge_pre_to_post",
-          "path_to_views"
-        ],
-        "status": "answered",
-        "created_at": "2026-04-16T01:00:00Z",
-        "analysis_runs": [
-          {
-            "run_id": "analysis_1776299110222_q4",
-            "timestamp": "2026-04-16T00:25:10.222Z",
-            "method": "multi-evidence bridge scoring: interaction_r, pathway_strength, pair_correlation, residual_r"
-          }
-        ],
-        "answer_id": "analysis_1776299110222_q4"
+        "id": "q0004",
+        "layer": "outcome",
+        "resolution": "final",
+        "question": "What outcome signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
       },
       {
-        "id": "q005",
-        "text": "What does the pre->post->views bridge structure say about the Boba Fett flamethrower hook problem? How do spectacle hooks connect through retention to views?",
-        "targets": [
-          "hook_structure",
-          "retention_bridge",
-          "views"
-        ],
-        "status": "answered",
-        "created_at": "2026-04-16T01:00:00Z",
-        "analysis_runs": [
-          {
-            "run_id": "analysis_1776299110222_q5",
-            "timestamp": "2026-04-16T00:25:10.222Z",
-            "method": "hook structure analysis: trace hook indicators through retention to views"
-          }
-        ],
-        "answer_id": "analysis_1776299110222_q5"
+        "id": "q0005",
+        "layer": "outcome",
+        "resolution": "first_3_days",
+        "question": "What outcome signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0006",
+        "layer": "outcome",
+        "resolution": "days_7_to_14",
+        "question": "What outcome signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0007",
+        "layer": "post_indicator",
+        "resolution": "global",
+        "question": "What post_indicator signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0008",
+        "layer": "post_indicator",
+        "resolution": "first_10s",
+        "question": "What post_indicator signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0009",
+        "layer": "post_indicator",
+        "resolution": "mid",
+        "question": "What post_indicator signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0010",
+        "layer": "post_indicator",
+        "resolution": "final",
+        "question": "What post_indicator signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0011",
+        "layer": "post_indicator",
+        "resolution": "first_3_days",
+        "question": "What post_indicator signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0012",
+        "layer": "post_indicator",
+        "resolution": "days_7_to_14",
+        "question": "What post_indicator signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0013",
+        "layer": "pre_indicator",
+        "resolution": "global",
+        "question": "What pre_indicator signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0014",
+        "layer": "pre_indicator",
+        "resolution": "first_10s",
+        "question": "What pre_indicator signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0015",
+        "layer": "pre_indicator",
+        "resolution": "mid",
+        "question": "What pre_indicator signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0016",
+        "layer": "pre_indicator",
+        "resolution": "final",
+        "question": "What pre_indicator signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0017",
+        "layer": "pre_indicator",
+        "resolution": "first_3_days",
+        "question": "What pre_indicator signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0018",
+        "layer": "pre_indicator",
+        "resolution": "days_7_to_14",
+        "question": "What pre_indicator signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0019",
+        "layer": "mechanism",
+        "resolution": "global",
+        "question": "What mechanism signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0020",
+        "layer": "mechanism",
+        "resolution": "first_10s",
+        "question": "What mechanism signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0021",
+        "layer": "mechanism",
+        "resolution": "mid",
+        "question": "What mechanism signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0022",
+        "layer": "mechanism",
+        "resolution": "final",
+        "question": "What mechanism signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0023",
+        "layer": "mechanism",
+        "resolution": "first_3_days",
+        "question": "What mechanism signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0024",
+        "layer": "mechanism",
+        "resolution": "days_7_to_14",
+        "question": "What mechanism signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0025",
+        "layer": "component",
+        "resolution": "global",
+        "question": "What component signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0026",
+        "layer": "component",
+        "resolution": "first_10s",
+        "question": "What component signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0027",
+        "layer": "component",
+        "resolution": "mid",
+        "question": "What component signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0028",
+        "layer": "component",
+        "resolution": "final",
+        "question": "What component signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0029",
+        "layer": "component",
+        "resolution": "first_3_days",
+        "question": "What component signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0030",
+        "layer": "component",
+        "resolution": "days_7_to_14",
+        "question": "What component signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0031",
+        "layer": "principle",
+        "resolution": "global",
+        "question": "What principle signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0032",
+        "layer": "principle",
+        "resolution": "first_10s",
+        "question": "What principle signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0033",
+        "layer": "principle",
+        "resolution": "mid",
+        "question": "What principle signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0034",
+        "layer": "principle",
+        "resolution": "final",
+        "question": "What principle signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0035",
+        "layer": "principle",
+        "resolution": "first_3_days",
+        "question": "What principle signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
+      },
+      {
+        "id": "q0036",
+        "layer": "principle",
+        "resolution": "days_7_to_14",
+        "question": "What principle signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
+        "status": "open",
+        "generated_at": "2026-04-16T04:20:28.960Z"
       }
     ]
   },
@@ -106,7 +400,7 @@
       "resolution": "global",
       "question": "What outcome signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0002",
@@ -114,7 +408,7 @@
       "resolution": "first_10s",
       "question": "What outcome signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0003",
@@ -122,7 +416,7 @@
       "resolution": "mid",
       "question": "What outcome signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0004",
@@ -130,7 +424,7 @@
       "resolution": "final",
       "question": "What outcome signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0005",
@@ -138,7 +432,7 @@
       "resolution": "first_3_days",
       "question": "What outcome signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0006",
@@ -146,7 +440,7 @@
       "resolution": "days_7_to_14",
       "question": "What outcome signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0007",
@@ -154,7 +448,7 @@
       "resolution": "global",
       "question": "What post_indicator signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0008",
@@ -162,7 +456,7 @@
       "resolution": "first_10s",
       "question": "What post_indicator signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0009",
@@ -170,7 +464,7 @@
       "resolution": "mid",
       "question": "What post_indicator signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0010",
@@ -178,7 +472,7 @@
       "resolution": "final",
       "question": "What post_indicator signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0011",
@@ -186,7 +480,7 @@
       "resolution": "first_3_days",
       "question": "What post_indicator signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0012",
@@ -194,7 +488,7 @@
       "resolution": "days_7_to_14",
       "question": "What post_indicator signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0013",
@@ -202,7 +496,7 @@
       "resolution": "global",
       "question": "What pre_indicator signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0014",
@@ -210,7 +504,7 @@
       "resolution": "first_10s",
       "question": "What pre_indicator signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0015",
@@ -218,7 +512,7 @@
       "resolution": "mid",
       "question": "What pre_indicator signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0016",
@@ -226,7 +520,7 @@
       "resolution": "final",
       "question": "What pre_indicator signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0017",
@@ -234,7 +528,7 @@
       "resolution": "first_3_days",
       "question": "What pre_indicator signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0018",
@@ -242,7 +536,7 @@
       "resolution": "days_7_to_14",
       "question": "What pre_indicator signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0019",
@@ -250,7 +544,7 @@
       "resolution": "global",
       "question": "What mechanism signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0020",
@@ -258,7 +552,7 @@
       "resolution": "first_10s",
       "question": "What mechanism signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0021",
@@ -266,7 +560,7 @@
       "resolution": "mid",
       "question": "What mechanism signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0022",
@@ -274,7 +568,7 @@
       "resolution": "final",
       "question": "What mechanism signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0023",
@@ -282,7 +576,7 @@
       "resolution": "first_3_days",
       "question": "What mechanism signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0024",
@@ -290,7 +584,7 @@
       "resolution": "days_7_to_14",
       "question": "What mechanism signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0025",
@@ -298,7 +592,7 @@
       "resolution": "global",
       "question": "What component signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0026",
@@ -306,7 +600,7 @@
       "resolution": "first_10s",
       "question": "What component signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0027",
@@ -314,7 +608,7 @@
       "resolution": "mid",
       "question": "What component signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0028",
@@ -322,7 +616,7 @@
       "resolution": "final",
       "question": "What component signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0029",
@@ -330,7 +624,7 @@
       "resolution": "first_3_days",
       "question": "What component signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0030",
@@ -338,7 +632,7 @@
       "resolution": "days_7_to_14",
       "question": "What component signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0031",
@@ -346,7 +640,7 @@
       "resolution": "global",
       "question": "What principle signals at resolution=global most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0032",
@@ -354,7 +648,7 @@
       "resolution": "first_10s",
       "question": "What principle signals at resolution=first_10s most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0033",
@@ -362,7 +656,7 @@
       "resolution": "mid",
       "question": "What principle signals at resolution=mid most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0034",
@@ -370,7 +664,7 @@
       "resolution": "final",
       "question": "What principle signals at resolution=final most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0035",
@@ -378,7 +672,7 @@
       "resolution": "first_3_days",
       "question": "What principle signals at resolution=first_3_days most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     },
     {
       "id": "q0036",
@@ -386,7 +680,7 @@
       "resolution": "days_7_to_14",
       "question": "What principle signals at resolution=days_7_to_14 most strongly relate to views(log10), and through which mechanism?",
       "status": "open",
-      "generated_at": "2026-04-16T04:20:28.960Z"
+      "generated_at": "2026-04-16T04:21:45.967Z"
     }
   ]
 }
