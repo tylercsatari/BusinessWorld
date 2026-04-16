@@ -849,32 +849,21 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'proof_density_post_midpoint',
     'callback_before_payoff_flag',
     'delayed_gratification_peak_position_pct',
-    // Group K: Transformation & vulnerability arcs
+    // Group K: Transformation & vulnerability arcs (base density only; _hook variants excluded — return null)
     'transformation_density',
-    'transformation_density_hook',
     'vulnerability_density',
-    'vulnerability_density_hook',
     'specificity_anchor_density',
-    'specificity_anchor_density_hook',
-    // Group L: Commitment & emotion escalation
+    // Group L: Commitment & emotion escalation (base density only; _hook/_quarter variants excluded — return null)
     'micro_commitment_density',
-    'micro_commitment_density_hook',
     'emotional_peak_density',
-    'emotional_peak_density_first_quarter',
-    'emotional_peak_density_last_quarter',
-    // Group M: Revelation pace & social contrast
+    // Group M: Revelation pace & social contrast (base density only; _mid/_hook variants excluded — return null)
     'revelation_pace_density',
-    'revelation_pace_density_mid',
     'social_contrast_density',
-    'social_contrast_density_hook',
     'anticipatory_build_density',
-    'anticipatory_build_density_hook',
-    // Group N: Derived arc-position metrics
+    // Group N: Derived arc-position metrics (EXCLUDED: emotional_peak_position_pct, revelation_pace_score — sparse coverage, always return null)
     'early_stakes_flag',
-    'emotional_peak_position_pct',
     'transformation_arc_flag',
     'vulnerability_before_proof_flag',
-    'revelation_pace_score',
     'social_contrast_hook_flag',
 ];
 
@@ -4478,10 +4467,10 @@ function generateAutonomousCandidates() {
     // Pre-upload visual
     for (const k of ['scene_change_rate', 'unique_scene_ratio', 'visual_technique_count_mean',
         'close_up_frame_pct', 'hand_presence_frame_pct', 'motion_word_frame_pct']) candidates.push(k);
-    // Pre-upload structure
+    // Pre-upload structure (climax_position_pct and hook_to_climax_gap_s excluded — require segment data, return null for most videos)
     for (const k of ['hook_duration_pct', 'avg_segment_duration_s', 'longest_segment_duration_s',
-        'shortest_segment_duration_s', 'hook_position_s', 'climax_position_pct',
-        'has_climax_segment', 'hook_to_climax_gap_s']) candidates.push(k);
+        'shortest_segment_duration_s', 'hook_position_s',
+        'has_climax_segment']) candidates.push(k);
     // Pre-upload metadata
     for (const k of ['duration_s', 'title_char_count', 'title_word_count',
         'title_question_flag', 'title_exclamation_flag', 'title_number_flag']) candidates.push(k);
