@@ -22067,7 +22067,11 @@
       "closure_density_first5s_x_loop_to_closure_gap_s",
       "closure_density_first5s_x_ref_to_gratification_gap_pct",
       "closure_density_first5s_x_pre_payoff_tension_index",
-      "closure_density_first5s_x_early_proof_to_loop_ratio"
+      "closure_density_first5s_x_early_proof_to_loop_ratio",
+      "closure_density_first5s_x_proof_arrival_delay_proxy",
+      "closure_density_first5s_x_closure_to_open_ratio_first10s",
+      "unique_word_ratio_x_curiosity_escalation_density",
+      "unique_word_ratio_x_stakes_reinforcement_count"
     ],
     "depth_in_hierarchy": 0
   },
