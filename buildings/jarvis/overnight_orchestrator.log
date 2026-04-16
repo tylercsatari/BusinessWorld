@@ -1,0 +1,63 @@
+[2026-04-16T04:20:26.963Z] orchestrator starting; 6 task(s) ahead
+[2026-04-16T04:20:26.966Z] task order: phase_1_init → phase_2_mechanisms → phase_3_components → phase_4_principles → phase_5_bridge → phase_6_persist
+[2026-04-16T04:20:26.966Z] dry-run: not executing.
+[2026-04-16T04:21:45.917Z] orchestrator starting; 6 task(s) ahead
+[2026-04-16T04:21:45.919Z] task order: phase_1_init → phase_2_mechanisms → phase_3_components → phase_4_principles → phase_5_bridge → phase_6_persist
+[2026-04-16T04:21:45.920Z] ▶ START phase_1_init — Phase 1 — Architecture, contracts, registries
+[phase_1_init] start
+  wrote mechanisms.json (695 bytes)
+  wrote components.json (565 bytes)
+  wrote principles.json (583 bytes)
+  wrote mechanism_observations.json (90 bytes)
+  wrote bridge_validation.json (82 bytes)
+  wrote research_questions.json (36 questions)
+  wrote indicator-registry.json (23000 entries)
+[phase_1_init] completed
+[2026-04-16T04:21:46.301Z] ✓ DONE phase_1_init (elapsed=0.01m)
+[2026-04-16T04:21:46.302Z] ▶ START phase_2_mechanisms — Phase 2 — Mechanism extraction over video pool
+[phase_2_mechanisms] start
+  pool: 372 videos
+  [26.9%] processed 100/372 videos, 210 mech ids so far
+  [53.8%] processed 200/372 videos, 349 mech ids so far
+  [80.6%] processed 300/372 videos, 443 mech ids so far
+  extraction done: 372 videos, 372 with observations, 35054 total observations, 501 distinct mechanism ids
+  wrote mechanism_observations.json (35054 rows, capped=false)
+  wrote mechanisms.json (501 mechanism ids)
+  building mechanism×indicator links: 66 mechanisms × 11 indicators
+    links progress: 50/66 mechanisms scored, 178 non-trivial links so far
+  wrote mechanism_indicator_links.json (224 links)
+[phase_2_mechanisms] completed
+[2026-04-16T04:21:47.300Z] ✓ DONE phase_2_mechanisms (elapsed=0.02m)
+[2026-04-16T04:21:47.300Z] ▶ START phase_3_components — Phase 3 — Component emergence
+[phase_3_components] start
+  501 mechanisms in catalog
+  wrote components.json (42 components, 501/501 mechanisms decomposed = 100%)
+  wrote mechanism_components.json
+[phase_3_components] completed
+[2026-04-16T04:21:47.344Z] ✓ DONE phase_3_components (elapsed=0m)
+[2026-04-16T04:21:47.345Z] ▶ START phase_4_principles — Phase 4 — Principle candidate surfacing
+[phase_4_principles] start
+  indicator→outcome reference: 1780 keys
+  wrote principles.json (224 candidates, 0 dropped)
+  wrote principle_gaps.json (17 mechanisms with no principle yet)
+[phase_4_principles] completed
+[2026-04-16T04:21:47.735Z] ✓ DONE phase_4_principles (elapsed=0.01m)
+[2026-04-16T04:21:47.736Z] ▶ START phase_5_bridge — Phase 5 — Pre→post→views bridge validation
+[phase_5_bridge] start
+  224 candidate principles to validate
+  re-extracting per-video signals for 372 videos
+    re-extract progress: 200/372
+    validated 100/224 principles
+    validated 200/224 principles
+  wrote bridge_validation.json (224 principles validated)
+  wrote bridge_top_principles.json (top 25)
+[phase_5_bridge] completed
+[2026-04-16T04:21:48.297Z] ✓ DONE phase_5_bridge (elapsed=0.01m)
+[2026-04-16T04:21:48.297Z] ▶ START phase_6_persist — Phase 6 — Persist into Jarvis surfaces
+[phase_6_persist] start
+  augmented findings-summary.json
+  wrote overnight_report.md
+  graph.json merged in place (+-20.3%, 501 nodes, 224 edges)
+[phase_6_persist] completed
+[2026-04-16T04:21:48.488Z] ✓ DONE phase_6_persist (elapsed=0m)
+[2026-04-16T04:21:48.488Z] orchestrator completed all phases.

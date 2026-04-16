@@ -21412,7 +21412,12 @@
       "scene_change_rate_x_delayed_reveal_density",
       "retention_pct_25_x_stakes_escalation_count",
       "retention_pct_25_x_stakes_escalation_density",
-      "retention_pct_25_x_delayed_reveal_count"
+      "retention_pct_25_x_delayed_reveal_count",
+      "scene_change_rate_x_proof_arrival_count",
+      "scene_change_rate_x_proof_arrival_density",
+      "scene_change_rate_x_narrative_anchor_count",
+      "scene_change_rate_x_narrative_anchor_density",
+      "hook_duration_pct_x_rhetorical_question_count"
     ],
     "depth_in_hierarchy": 0
   },
