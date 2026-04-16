@@ -1,0 +1,197 @@
+[2026-04-16T13:00:48Z] watch-and-sync started
+[2026-04-16T13:01:18Z] active=True completed=71 updated=2026-04-16T13:01:08.379Z
+[2026-04-16T13:01:49Z] active=True completed=74 updated=2026-04-16T13:01:42.039Z
+[2026-04-16T13:02:19Z] active=True completed=77 updated=2026-04-16T13:02:17.659Z
+[2026-04-16T13:02:49Z] active=True completed=79 updated=2026-04-16T13:02:40.160Z
+[2026-04-16T13:03:19Z] active=True completed=82 updated=2026-04-16T13:03:14.933Z
+[2026-04-16T13:03:49Z] active=True completed=85 updated=2026-04-16T13:03:49.615Z
+[2026-04-16T13:04:20Z] active=True completed=87 updated=2026-04-16T13:04:17.058Z
+[2026-04-16T13:04:50Z] active=True completed=89 updated=2026-04-16T13:04:38.425Z
+[2026-04-16T13:05:20Z] active=True completed=92 updated=2026-04-16T13:05:18.680Z
+[2026-04-16T13:05:50Z] active=True completed=94 updated=2026-04-16T13:05:42.049Z
+[2026-04-16T13:06:20Z] active=True completed=97 updated=2026-04-16T13:06:17.599Z
+[2026-04-16T13:06:50Z] active=True completed=99 updated=2026-04-16T13:06:40.838Z
+[2026-04-16T13:07:20Z] active=True completed=102 updated=2026-04-16T13:07:17.585Z
+[2026-04-16T13:07:51Z] active=True completed=104 updated=2026-04-16T13:07:40.427Z
+[2026-04-16T13:08:21Z] active=True completed=107 updated=2026-04-16T13:08:20.778Z
+[2026-04-16T13:08:51Z] active=True completed=109 updated=2026-04-16T13:08:46.673Z
+[2026-04-16T13:09:21Z] active=True completed=111 updated=2026-04-16T13:09:14.085Z
+[2026-04-16T13:09:51Z] active=True completed=114 updated=2026-04-16T13:09:50.571Z
+[2026-04-16T13:10:21Z] active=True completed=116 updated=2026-04-16T13:10:13.753Z
+[2026-04-16T13:10:51Z] active=True completed=119 updated=2026-04-16T13:10:48.478Z
+[2026-04-16T13:11:22Z] active=True completed=122 updated=2026-04-16T13:11:21.449Z
+[2026-04-16T13:11:52Z] active=True completed=124 updated=2026-04-16T13:11:42.939Z
+[2026-04-16T13:12:22Z] active=False completed=125 updated=2026-04-16T13:11:56.618Z
+[2026-04-16T13:12:22Z] Run complete. Syncing R2...
+[2026-04-16T13:12:22Z] Syncing to R2... exp_count=23847
+◇ injected env (42) from ../../.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+R2: Connected to bucket "business-world-videos"
+R2 ready. Syncing local → R2...
+  ✓ autonomous_progress 0.0MB (active=false, completed=125)
+  ✓ derived_experiments 12.8MB (23847 exps)
+  ✓ derived_experiments_compact 4.9MB (23847 items, compact mirror)
+  ✓ graph 17.7MB (1409 nodes, 1408 edges)
+  ✓ resolutions 1.4MB
+  ✓ indicators 78.7MB
+  ✓ indicators_compact 2.8MB (1779 items, compact mirror)
+  ✓ candidate_queue 2.2MB
+  ✓ experiments_log 18.7MB
+  ✓ experiments_log_compact 14.8MB (24200 items, compact mirror)
+  ✓ tools 0.0MB
+Sync complete.
+[2026-04-16T13:12:36Z] R2 sync exit=0
+[2026-04-16T13:12:36Z] staged changed files=4
+[master 5ee73e0] Sync Jarvis state: run auto_20260416124644. complete (125 done, max_minutes); 23847 derived experiments; 38857 candidates remain; R2 synced — pre-upload 0.70 bias, top new r=0.0477
+ 4 files changed, 2867 insertions(+), 128 deletions(-)
+error: src refspec main does not match any
+error: failed to push some refs to 'https://github.com/tylercsatari/BusinessWorld.git'
+[2026-04-16T13:12:36Z] Committed and pushed. exit=1
+[2026-04-16T13:12:36Z] watch-and-sync complete.
+[2026-04-16T13:32:23Z] watch-and-sync started
+[2026-04-16T13:32:53Z] active=True completed=96 updated=2026-04-16T13:32:44.731Z
+[2026-04-16T13:33:24Z] active=True completed=98 updated=2026-04-16T13:33:12.466Z
+[2026-04-16T13:33:54Z] active=True completed=101 updated=2026-04-16T13:33:47.486Z
+[2026-04-16T13:34:24Z] active=True completed=104 updated=2026-04-16T13:34:22.007Z
+[2026-04-16T13:34:54Z] active=True completed=106 updated=2026-04-16T13:34:45.757Z
+[2026-04-16T13:35:24Z] active=True completed=109 updated=2026-04-16T13:35:20.439Z
+[2026-04-16T13:35:55Z] active=True completed=112 updated=2026-04-16T13:35:54.052Z
+[2026-04-16T13:36:25Z] active=True completed=114 updated=2026-04-16T13:36:23.191Z
+[2026-04-16T13:36:55Z] active=True completed=116 updated=2026-04-16T13:36:47.128Z
+[2026-04-16T13:37:25Z] active=True completed=118 updated=2026-04-16T13:37:14.337Z
+[2026-04-16T13:37:55Z] active=True completed=121 updated=2026-04-16T13:37:47.734Z
+[2026-04-16T13:38:26Z] active=False completed=123 updated=2026-04-16T13:38:09.692Z
+[2026-04-16T13:38:26Z] Run complete. Syncing R2...
+[2026-04-16T13:38:26Z] Syncing to R2... exp_count=23970
+◇ injected env (42) from ../../.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+R2: Connected to bucket "business-world-videos"
+R2 ready. Syncing local → R2...
+  ✓ autonomous_progress 0.0MB (active=false, completed=123)
+  ✓ derived_experiments 12.8MB (23970 exps)
+  ✓ derived_experiments_compact 5.0MB (23970 items, compact mirror)
+  ✓ graph 17.8MB (1409 nodes, 1408 edges)
+  ✓ resolutions 1.4MB
+  ✓ indicators 78.7MB
+  ✓ indicators_compact 2.8MB (1779 items, compact mirror)
+  ✓ candidate_queue 2.2MB
+  ✓ experiments_log 18.8MB
+  ✓ experiments_log_compact 14.9MB (24323 items, compact mirror)
+  ✓ tools 0.0MB
+Sync complete.
+[2026-04-16T13:38:38Z] R2 sync exit=0
+[2026-04-16T13:38:38Z] staged changed files=4
+[master 9b9872c] Sync Jarvis state: run auto_20260416131301. complete (123 done, max_minutes); 23970 derived experiments; 38857 candidates remain; R2 synced — pre-upload 0.70 bias, top new r=-0.0004
+ 4 files changed, 2852 insertions(+), 146 deletions(-)
+To https://github.com/tylercsatari/BusinessWorld.git
+   5ee73e0..9b9872c  master -> master
+[2026-04-16T13:38:41Z] Committed and pushed. exit=0
+[2026-04-16T13:38:41Z] watch-and-sync complete.
+[2026-04-16T14:01:41Z] watch-and-sync started
+[2026-04-16T14:02:11Z] active=True completed=112 updated=2026-04-16T14:01:59.968Z
+[2026-04-16T14:02:41Z] active=True completed=115 updated=2026-04-16T14:02:35.603Z
+[2026-04-16T14:03:12Z] active=True completed=118 updated=2026-04-16T14:03:11.495Z
+[2026-04-16T14:03:42Z] active=True completed=120 updated=2026-04-16T14:03:38.242Z
+[2026-04-16T14:04:12Z] active=True completed=122 updated=2026-04-16T14:04:02.180Z
+[2026-04-16T14:04:42Z] active=True completed=0 updated=2026-04-16T14:04:37.661Z
+[2026-04-16T14:05:12Z] active=True completed=2 updated=2026-04-16T14:05:03.980Z
+[2026-04-16T14:05:43Z] active=True completed=5 updated=2026-04-16T14:05:38.284Z
+[2026-04-16T14:06:13Z] active=True completed=7 updated=2026-04-16T14:06:02.964Z
+[2026-04-16T14:06:43Z] active=True completed=10 updated=2026-04-16T14:06:40.000Z
+[2026-04-16T14:07:13Z] active=True completed=12 updated=2026-04-16T14:07:02.560Z
+[2026-04-16T14:07:43Z] active=True completed=15 updated=2026-04-16T14:07:42.997Z
+[2026-04-16T14:08:13Z] active=True completed=17 updated=2026-04-16T14:08:09.325Z
+[2026-04-16T14:08:43Z] active=True completed=19 updated=2026-04-16T14:08:34.745Z
+[2026-04-16T14:09:14Z] active=True completed=22 updated=2026-04-16T14:09:12.437Z
+[2026-04-16T14:09:44Z] active=True completed=24 updated=2026-04-16T14:09:38.160Z
+[2026-04-16T14:10:14Z] active=True completed=27 updated=2026-04-16T14:10:13.640Z
+[2026-04-16T14:10:44Z] active=True completed=29 updated=2026-04-16T14:10:39.342Z
+[2026-04-16T14:11:14Z] active=True completed=31 updated=2026-04-16T14:11:04.590Z
+[2026-04-16T14:11:45Z] active=True completed=33 updated=2026-04-16T14:11:27.974Z
+[2026-04-16T14:12:15Z] active=True completed=36 updated=2026-04-16T14:12:11.032Z
+[2026-04-16T14:12:45Z] active=True completed=38 updated=2026-04-16T14:12:33.825Z
+[2026-04-16T14:13:15Z] active=True completed=41 updated=2026-04-16T14:13:10.446Z
+[2026-04-16T14:13:45Z] active=True completed=43 updated=2026-04-16T14:13:34.114Z
+[2026-04-16T14:14:15Z] active=True completed=46 updated=2026-04-16T14:14:11.735Z
+[2026-04-16T14:14:45Z] active=True completed=48 updated=2026-04-16T14:14:35.419Z
+[2026-04-16T14:15:15Z] active=True completed=51 updated=2026-04-16T14:15:12.156Z
+[2026-04-16T14:15:45Z] active=True completed=53 updated=2026-04-16T14:15:41.440Z
+[2026-04-16T14:16:15Z] active=True completed=55 updated=2026-04-16T14:16:06.501Z
+[2026-04-16T14:16:46Z] active=True completed=58 updated=2026-04-16T14:16:39.235Z
+[2026-04-16T14:17:16Z] active=True completed=61 updated=2026-04-16T14:17:12.034Z
+[2026-04-16T14:17:46Z] active=True completed=64 updated=2026-04-16T14:17:44.728Z
+[2026-04-16T14:18:16Z] active=True completed=66 updated=2026-04-16T14:18:07.755Z
+[2026-04-16T14:18:46Z] active=True completed=69 updated=2026-04-16T14:18:42.774Z
+[2026-04-16T14:19:16Z] active=True completed=71 updated=2026-04-16T14:19:05.554Z
+[2026-04-16T14:19:46Z] active=True completed=74 updated=2026-04-16T14:19:39.497Z
+[2026-04-16T14:20:17Z] active=True completed=77 updated=2026-04-16T14:20:15.029Z
+[2026-04-16T14:20:47Z] active=True completed=79 updated=2026-04-16T14:20:39.266Z
+[2026-04-16T14:21:17Z] active=True completed=82 updated=2026-04-16T14:21:15.514Z
+[2026-04-16T14:21:47Z] active=True completed=84 updated=2026-04-16T14:21:40.943Z
+[2026-04-16T14:22:17Z] active=True completed=86 updated=2026-04-16T14:22:05.825Z
+[2026-04-16T14:22:47Z] active=True completed=89 updated=2026-04-16T14:22:46.378Z
+[2026-04-16T14:23:17Z] active=True completed=91 updated=2026-04-16T14:23:09.361Z
+[2026-04-16T14:23:48Z] active=True completed=94 updated=2026-04-16T14:23:43.520Z
+[2026-04-16T14:24:18Z] active=True completed=96 updated=2026-04-16T14:24:08.262Z
+[2026-04-16T14:24:48Z] active=True completed=99 updated=2026-04-16T14:24:45.657Z
+[2026-04-16T14:25:18Z] active=True completed=101 updated=2026-04-16T14:25:09.018Z
+[2026-04-16T14:25:49Z] active=True completed=104 updated=2026-04-16T14:25:46.642Z
+[2026-04-16T14:26:19Z] active=True completed=106 updated=2026-04-16T14:26:10.099Z
+[2026-04-16T14:26:49Z] active=True completed=109 updated=2026-04-16T14:26:45.992Z
+[2026-04-16T14:27:19Z] active=True completed=111 updated=2026-04-16T14:27:08.507Z
+[2026-04-16T14:27:49Z] active=True completed=113 updated=2026-04-16T14:27:38.370Z
+[2026-04-16T14:28:19Z] active=True completed=116 updated=2026-04-16T14:28:14.568Z
+[2026-04-16T14:28:50Z] active=True completed=118 updated=2026-04-16T14:28:39.536Z
+[2026-04-16T14:29:20Z] active=True completed=121 updated=2026-04-16T14:29:17.803Z
+[2026-04-16T14:29:50Z] active=True completed=0 updated=2026-04-16T14:29:47.506Z
+[2026-04-16T14:30:20Z] active=True completed=2 updated=2026-04-16T14:30:18.485Z
+[2026-04-16T14:30:50Z] active=True completed=4 updated=2026-04-16T14:30:41.670Z
+[2026-04-16T14:31:21Z] active=True completed=7 updated=2026-04-16T14:31:19.508Z
+[2026-04-16T14:31:51Z] active=True completed=9 updated=2026-04-16T14:31:48.175Z
+[2026-04-16T14:31:51Z] Syncing to R2... exp_count=24224
+◇ injected env (42) from ../../.env // tip: ⌁ auth for agents [www.vestauth.com]
+R2: Connected to bucket "business-world-videos"
+R2 ready. Syncing local → R2...
+  ✓ autonomous_progress 0.0MB (active=true, completed=9)
+  ✓ derived_experiments 12.8MB (24224 exps)
+  ✓ derived_experiments_compact 5.0MB (24224 items, compact mirror)
+  ✓ graph 18.0MB (1409 nodes, 1408 edges)
+  ✓ resolutions 1.4MB
+  ✓ indicators 78.7MB
+  ✓ indicators_compact 2.8MB (1779 items, compact mirror)
+  ✓ candidate_queue 2.2MB
+  ✓ experiments_log 18.9MB
+  ✓ experiments_log_compact 15.0MB (24578 items, compact mirror)
+  ✓ tools 0.0MB
+Sync complete.
+[2026-04-16T14:32:04Z] R2 sync exit=0
+[2026-04-16T14:32:04Z] staged changed files=3
+[master 8c89c24] Sync Jarvis state: run auto_20260416142947. complete (9 done, None); 24224 derived experiments; 38857 candidates remain; R2 synced — pre-upload 0.70 bias, top new r=-0.0129
+ 3 files changed, 106 insertions(+), 16 deletions(-)
+To https://github.com/tylercsatari/BusinessWorld.git
+   2c17037..8c89c24  master -> master
+[2026-04-16T14:32:07Z] Committed and pushed. exit=0
+[2026-04-16T14:32:07Z] watch-and-sync complete.
+[2026-04-16T15:02:00Z] watch-and-sync started
+[2026-04-16T15:02:31Z] active=True completed=30 updated=2026-04-16T15:02:20.477Z
+[2026-04-16T15:03:01Z] active=True completed=33 updated=2026-04-16T15:03:00.693Z
+[2026-04-16T15:03:31Z] active=True completed=35 updated=2026-04-16T15:03:24.548Z
+[2026-04-16T15:04:01Z] active=True completed=37 updated=2026-04-16T15:03:51.030Z
+[2026-04-16T15:04:31Z] active=True completed=40 updated=2026-04-16T15:04:24.131Z
+[2026-04-16T15:05:01Z] active=True completed=43 updated=2026-04-16T15:04:57.724Z
+[2026-04-16T15:05:32Z] active=True completed=46 updated=2026-04-16T15:05:31.579Z
+[2026-04-16T15:06:02Z] active=True completed=48 updated=2026-04-16T15:05:53.687Z
+[2026-04-16T15:06:32Z] active=True completed=51 updated=2026-04-16T15:06:27.514Z
+[2026-04-16T15:07:02Z] active=True completed=53 updated=2026-04-16T15:06:57.113Z
+[2026-04-16T15:07:32Z] active=True completed=55 updated=2026-04-16T15:07:22.901Z
+[2026-04-16T15:08:02Z] active=True completed=58 updated=2026-04-16T15:08:02.098Z
+[2026-04-16T15:08:32Z] active=True completed=60 updated=2026-04-16T15:08:26.102Z
+[2026-04-16T15:09:02Z] active=True completed=63 updated=2026-04-16T15:09:01.458Z
+[2026-04-16T15:09:33Z] active=True completed=65 updated=2026-04-16T15:09:23.792Z
+[2026-04-16T15:10:03Z] active=True completed=68 updated=2026-04-16T15:09:58.446Z
+[2026-04-16T15:10:33Z] active=True completed=70 updated=2026-04-16T15:10:23.671Z
+[2026-04-16T15:11:03Z] active=True completed=73 updated=2026-04-16T15:11:02.996Z
+[2026-04-16T15:11:33Z] active=True completed=75 updated=2026-04-16T15:11:27.904Z
+[2026-04-16T15:12:03Z] active=True completed=77 updated=2026-04-16T15:11:54.298Z
+[2026-04-16T15:12:33Z] active=True completed=80 updated=2026-04-16T15:12:32.056Z
+[2026-04-16T15:13:04Z] active=True completed=82 updated=2026-04-16T15:13:00.731Z
+[2026-04-16T15:13:34Z] active=True completed=84 updated=2026-04-16T15:13:29.111Z
+[2026-04-16T15:14:04Z] active=True completed=86 updated=2026-04-16T15:13:57.147Z
