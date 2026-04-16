@@ -61,3 +61,56 @@
 [phase_6_persist] completed
 [2026-04-16T04:21:48.488Z] ✓ DONE phase_6_persist (elapsed=0m)
 [2026-04-16T04:21:48.488Z] orchestrator completed all phases.
+[2026-04-16T06:41:59.319Z] resuming from phase_2_mechanisms
+[2026-04-16T06:41:59.321Z] orchestrator starting; 5 task(s) ahead
+[2026-04-16T06:41:59.321Z] task order: phase_2_mechanisms → phase_3_components → phase_4_principles → phase_5_bridge → phase_6_persist
+[2026-04-16T06:41:59.322Z] ▶ START phase_2_mechanisms — Phase 2 — Mechanism extraction over video pool
+[phase_2_mechanisms] start
+  pool: 372 videos
+  [26.9%] processed 100/372 videos, 851 mech ids so far
+  [53.8%] processed 200/372 videos, 1601 mech ids so far
+  [80.6%] processed 300/372 videos, 2144 mech ids so far
+  extraction done: 372 videos, 372 with observations, 41119 total observations, 2444 distinct mechanism ids
+  wrote mechanism_observations.json (41119 rows, capped=false)
+  wrote mechanisms.json (2444 mechanism ids, pool=372)
+  building mechanism×indicator links: 114 mechanisms × 11 indicators
+    links progress: 50/114 mechanisms scored, 191 non-trivial links so far
+    links progress: 100/114 mechanisms scored, 324 non-trivial links so far
+  wrote mechanism_indicator_links.json (361 links)
+[phase_2_mechanisms] completed
+[2026-04-16T06:42:00.332Z] ✓ DONE phase_2_mechanisms (elapsed=0.02m)
+[2026-04-16T06:42:00.332Z] ▶ START phase_3_components — Phase 3 — Component emergence
+[phase_3_components] start
+  2444 mechanisms in catalog
+  wrote components.json (87 components, 2444/2444 mechanisms decomposed = 100%)
+  wrote mechanism_components.json
+[phase_3_components] completed
+[2026-04-16T06:42:00.386Z] ✓ DONE phase_3_components (elapsed=0m)
+[2026-04-16T06:42:00.386Z] ▶ START phase_4_principles — Phase 4 — Principle candidate surfacing
+[phase_4_principles] start
+  indicator→outcome reference: 1780 keys
+  wrote principles.json (312 candidates, 0 dropped, 49 tautological)
+  wrote principle_gaps.json (54 mechanisms with no principle yet)
+[phase_4_principles] completed
+[2026-04-16T06:42:00.755Z] ✓ DONE phase_4_principles (elapsed=0.01m)
+[2026-04-16T06:42:00.755Z] ▶ START phase_5_bridge — Phase 5 — Pre→post→views bridge validation
+[phase_5_bridge] start
+  312 candidate principles to validate
+  mechanism pool size: 372
+  re-extracting per-video signals for 372 videos
+    re-extract progress: 200/372
+    validated 100/312 principles
+    validated 200/312 principles
+    validated 300/312 principles
+  wrote bridge_validation.json (312 principles validated, 0 tautological dropped)
+  wrote bridge_top_principles.json (top 25)
+[phase_5_bridge] completed
+[2026-04-16T06:42:01.367Z] ✓ DONE phase_5_bridge (elapsed=0.01m)
+[2026-04-16T06:42:01.368Z] ▶ START phase_6_persist — Phase 6 — Persist into Jarvis surfaces
+[phase_6_persist] start
+  augmented findings-summary.json
+  wrote overnight_report.md
+  graph.json merged in place (+-15.2%, 2444 nodes, 361 edges)
+[phase_6_persist] completed
+[2026-04-16T06:42:01.606Z] ✓ DONE phase_6_persist (elapsed=0m)
+[2026-04-16T06:42:01.607Z] orchestrator completed all phases.
