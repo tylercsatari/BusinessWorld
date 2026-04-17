@@ -109,6 +109,7 @@ const JarvisUI = (() => {
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
         { id: 'autoResearch', label: 'AutoResearch' },
+        { id: 'knowledge', label: 'Knowledge' },
         { id: 'resolution', label: 'Resolution' },
         { id: 'metaArchitecture', label: 'Meta-Architecture' },
     ];
@@ -199,6 +200,7 @@ const JarvisUI = (() => {
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
             case 'autoResearch': return renderAutoResearch();
+            case 'knowledge': return renderKnowledge();
             case 'resolution': return renderResolution();
             case 'metaArchitecture': return renderMetaArchitecture();
             default: return '';
@@ -3649,6 +3651,1165 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
+    // TAB: KNOWLEDGE — Mechanisms · Components · Principles · Bridges · Research
+    // Reads overnight_build artifacts (mechanisms.json, components.json,
+    // principles.json, bridge_validation.json, bridge_top_principles.json,
+    // principle_gaps.json, research_questions.json, research_answers.json,
+    // overnight_status.json) via /api/jarvis/knowledge/<name>.
+    // ══════════════════════════════════════════════════
+    let knowledgeSubTab = 'overview';
+    let knowledgeData = {};      // key -> parsed payload
+    let knowledgeLoading = {};   // key -> bool
+    let knowledgeError = {};     // key -> message
+    let knowledgeSearch = { mechanisms: '', principles: '', components: '', bridges: '', research: '' };
+    let knowledgeSort = { mechanisms: 'n_videos_desc', principles: 'chain_strength_desc', components: 'n_mechanisms_desc', bridges: 'chain_strength_desc' };
+    let knowledgeFilter = { mechanisms: 'all', principles: 'all', components: 'all', bridges: 'all', research: 'all' };
+    let knowledgeExpanded = { mechanism: null, principle: null, component: null, bridge: null, question: null };
+    let knowledgeListLimit = { mechanisms: 200, principles: 400, components: 100, bridges: 400 };
+    let knowledgeGraphFocus = null; // { type: 'mechanism'|'principle'|'component', id }
+
+    const KNOWLEDGE_SUB_TABS = [
+        { id: 'overview', label: 'Overview' },
+        { id: 'mechanisms', label: 'Mechanisms' },
+        { id: 'components', label: 'Components' },
+        { id: 'principles', label: 'Principles' },
+        { id: 'bridges', label: 'Bridges' },
+        { id: 'research', label: 'Research' },
+        { id: 'graph', label: 'Graph' },
+    ];
+
+    // Keys mirror server.js KNOWLEDGE_FILES mapping
+    const KNOWLEDGE_ENDPOINTS = {
+        overview: 'overview',
+        mechanisms: 'mechanisms',
+        mechanism_components: 'mechanism-components',
+        components: 'components',
+        principles: 'principles',
+        principle_gaps: 'principle-gaps',
+        bridge_validation: 'bridge-validation',
+        bridge_top: 'bridge-top-principles',
+        research_questions: 'research-questions',
+        research_answers: 'research-answers',
+        overnight_status: 'overnight-status',
+    };
+
+    async function loadKnowledge(key, force = false) {
+        if (!force && knowledgeData[key]) return knowledgeData[key];
+        if (knowledgeLoading[key]) return null;
+        const endpoint = KNOWLEDGE_ENDPOINTS[key];
+        if (!endpoint) return null;
+        knowledgeLoading[key] = true;
+        knowledgeError[key] = null;
+        try {
+            const res = await fetch('/api/jarvis/knowledge/' + endpoint);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const json = await res.json();
+            knowledgeData[key] = json;
+            return json;
+        } catch (e) {
+            knowledgeError[key] = e.message || String(e);
+            return null;
+        } finally {
+            knowledgeLoading[key] = false;
+        }
+    }
+
+    function refreshKnowledgeRoot() {
+        const root = container?.querySelector('.jarvis-knowledge-root');
+        if (root) {
+            root.innerHTML = renderKnowledgeBody();
+            bindKnowledgeEvents();
+        }
+    }
+
+    function renderKnowledge() {
+        // Always fetch the data needed for the current sub-tab
+        ensureKnowledgeDataForSubTab(knowledgeSubTab);
+        setTimeout(bindKnowledgeEvents, 30);
+        return `<div class="jarvis-knowledge-root">${renderKnowledgeBody()}</div>`;
+    }
+
+    function ensureKnowledgeDataForSubTab(sub) {
+        const need = {
+            overview: ['overview'],
+            mechanisms: ['mechanisms', 'mechanism_components'],
+            components: ['components'],
+            principles: ['principles', 'bridge_validation'],
+            bridges: ['bridge_validation', 'bridge_top', 'principles'],
+            research: ['research_questions', 'research_answers', 'principle_gaps'],
+            graph: ['mechanisms', 'components', 'principles', 'mechanism_components', 'bridge_validation'],
+        }[sub] || [];
+        let pending = 0;
+        need.forEach(k => {
+            if (!knowledgeData[k] && !knowledgeLoading[k]) {
+                pending++;
+                loadKnowledge(k).then(() => {
+                    pending--;
+                    if (pending === 0) refreshKnowledgeRoot();
+                    else refreshKnowledgeRoot(); // partial refresh so spinners flip
+                });
+            }
+        });
+    }
+
+    function fmtNum(n) {
+        if (n == null || isNaN(n)) return '—';
+        if (Math.abs(n) >= 1000) return n.toLocaleString();
+        if (Math.abs(n) >= 1) return (+n).toFixed(2).replace(/\.?0+$/, '');
+        return (+n).toFixed(4).replace(/\.?0+$/, '');
+    }
+    function fmtSigned(n) {
+        if (n == null || isNaN(n)) return '—';
+        const s = (+n).toFixed(4).replace(/\.?0+$/, '') || '0';
+        return (n > 0 ? '+' : '') + s;
+    }
+    function fmtPct(n) {
+        if (n == null || isNaN(n)) return '—';
+        return (n * 100).toFixed(1) + '%';
+    }
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        try {
+            const d = new Date(iso);
+            return d.toLocaleString();
+        } catch { return iso; }
+    }
+
+    function rColor(r) {
+        if (r == null || isNaN(r)) return '#64748b';
+        if (r >= 0) return '#22d3ee';
+        return '#f87171';
+    }
+
+    function renderKnowledgeBody() {
+        const subTabs = KNOWLEDGE_SUB_TABS.map(t =>
+            `<button class="jarvis-knowledge-subtab${knowledgeSubTab === t.id ? ' active' : ''}" data-sub="${t.id}">${t.label}</button>`
+        ).join('');
+        let body = '';
+        switch (knowledgeSubTab) {
+            case 'overview': body = renderKnowledgeOverview(); break;
+            case 'mechanisms': body = renderKnowledgeMechanisms(); break;
+            case 'components': body = renderKnowledgeComponents(); break;
+            case 'principles': body = renderKnowledgePrinciples(); break;
+            case 'bridges': body = renderKnowledgeBridges(); break;
+            case 'research': body = renderKnowledgeResearch(); break;
+            case 'graph': body = renderKnowledgeGraph(); break;
+        }
+        return `
+            <div style="margin-bottom:10px">
+                <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:3px">Knowledge — Overnight Build Artifacts</div>
+                <div style="font-size:12px;color:#64748b;line-height:1.5">Mechanisms, components, principles, bridge validation and research questions that the overnight Jarvis pipeline produced from the video pool.</div>
+            </div>
+            <div class="jarvis-knowledge-subtabs" style="display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--j-border, rgba(59,130,246,0.15));margin-bottom:12px;padding-bottom:6px">
+                ${subTabs}
+            </div>
+            <div class="jarvis-knowledge-panel">${body}</div>
+        `;
+    }
+
+    // ── Overview ─────────────────────────────────────────
+    function renderKnowledgeOverview() {
+        const o = knowledgeData.overview;
+        if (knowledgeError.overview) return loadingBox('Overview failed: ' + knowledgeError.overview, true);
+        if (!o) return loadingBox('Loading overnight artifacts overview…');
+        const c = o.counts || {};
+        const on = o.overnight || {};
+        const thresholds = o.thresholds || {};
+        const gen = o.generated_at || {};
+        const pillColor = (status) => status === 'completed' ? '#22c55e' : status === 'running' ? '#f59e0b' : status === 'failed' ? '#f87171' : '#64748b';
+        const card = (label, value, sub, color) => `
+            <div style="background:#0a1628;border-radius:8px;padding:12px 14px;flex:1;min-width:140px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">${label}</div>
+                <div style="font-size:22px;font-weight:700;color:${color || '#f1f5f9'}">${value}</div>
+                ${sub ? `<div style="font-size:10px;color:#64748b;margin-top:4px">${sub}</div>` : ''}
+            </div>`;
+        return `
+            <div style="background:#0a1628;border-radius:10px;padding:14px;margin-bottom:16px;border:1px solid ${pillColor(on.overall_status)}33">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                    <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${pillColor(on.overall_status)}"></span>
+                    <span style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b">Overnight Build Status</span>
+                    <span style="font-size:13px;font-weight:700;color:${pillColor(on.overall_status)}">${(on.overall_status || 'unknown').toUpperCase()}</span>
+                    ${on.current_phase ? `<span style="font-size:11px;color:#94a3b8">· phase ${escapeHtml(on.current_phase)}</span>` : ''}
+                </div>
+                <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:#94a3b8">
+                    <span>Started: <b style="color:#cbd5e1">${fmtDate(on.started_at)}</b></span>
+                    <span>Finished: <b style="color:#cbd5e1">${fmtDate(on.finished_at)}</b></span>
+                    <span>Updated: <b style="color:#cbd5e1">${fmtDate(on.updated_at)}</b></span>
+                    ${on.failed_phase ? `<span>Failed: <b style="color:#f87171">${escapeHtml(on.failed_phase)}</b></span>` : ''}
+                </div>
+                ${Array.isArray(on.completed_phases) && on.completed_phases.length ? `
+                    <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">
+                        ${on.completed_phases.map(p => `<span style="background:#1e293b;border-radius:4px;padding:2px 8px;font-size:10px;color:#22c55e">✓ ${escapeHtml(p)}</span>`).join('')}
+                    </div>
+                ` : ''}
+                ${on.failure_reason ? `<div style="margin-top:8px;font-size:11px;color:#f87171">Failure: ${escapeHtml(on.failure_reason)}</div>` : ''}
+                ${Array.isArray(on.notes) && on.notes.length ? `
+                    <div style="margin-top:8px;font-size:10px;color:#64748b;line-height:1.5">
+                        ${on.notes.map(n => `<div>• ${escapeHtml(String(n))}</div>`).join('')}
+                    </div>
+                ` : ''}
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+                ${card('Mechanisms', (c.mechanisms || 0).toLocaleString(), c.n_videos_pool ? `from ${c.n_videos_pool} videos` : '', '#22d3ee')}
+                ${card('Components', (c.components || 0).toLocaleString(), 'recurring fragments', '#06b6d4')}
+                ${card('Principles', (c.principles || 0).toLocaleString(), c.principles_dropped_tautological ? `${c.principles_dropped_tautological} dropped tautological` : '', '#a78bfa')}
+                ${card('Bridge rows', (c.bridge_rows || 0).toLocaleString(), `${c.bridge_n_chains_both_legs_nonzero || 0} with both legs`, '#f59e0b')}
+                ${card('Top principles', (c.bridge_top || 0).toLocaleString(), 'ranked by |chain|×IDF', '#facc15')}
+                ${card('Principle gaps', (c.principle_gaps || 0).toLocaleString(), 'mechs under threshold', '#ef4444')}
+                ${card('Research Q', (c.research_questions || 0).toLocaleString(), `${c.research_answers || 0} answered`, '#ec4899')}
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:16px">
+                <div style="background:#0a1628;border-radius:8px;padding:12px 14px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Ranking · Thresholds</div>
+                    <div style="font-size:11px;color:#cbd5e1;margin-bottom:4px"><b>Ranking:</b> ${escapeHtml(o.ranking || '—')}</div>
+                    ${thresholds.min_mech_observations != null ? `<div style="font-size:11px;color:#cbd5e1;margin-bottom:2px">min mech observations: <b>${thresholds.min_mech_observations}</b></div>` : ''}
+                    ${thresholds.min_abs_rho != null ? `<div style="font-size:11px;color:#cbd5e1;margin-bottom:2px">min |ρ|: <b>${thresholds.min_abs_rho}</b></div>` : ''}
+                </div>
+                <div style="background:#0a1628;border-radius:8px;padding:12px 14px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Artifacts Generated</div>
+                    <div style="font-size:11px;color:#cbd5e1">mechanisms · ${fmtDate(gen.mechanisms)}</div>
+                    <div style="font-size:11px;color:#cbd5e1">components · ${fmtDate(gen.components)}</div>
+                    <div style="font-size:11px;color:#cbd5e1">principles · ${fmtDate(gen.principles)}</div>
+                    <div style="font-size:11px;color:#cbd5e1">bridge · ${fmtDate(gen.bridge)}</div>
+                    <div style="font-size:11px;color:#cbd5e1">bridge_top · ${fmtDate(gen.bridge_top)}</div>
+                </div>
+            </div>
+
+            <div style="background:#0a1628;border-radius:8px;padding:12px 14px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Pipeline Phases</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    ${['phase_1_init','phase_2_mechanisms','phase_3_components','phase_4_principles','phase_5_bridge','phase_6_persist'].map(p => {
+                        const done = (on.completed_phases || []).includes(p);
+                        const failed = on.failed_phase === p;
+                        const color = done ? '#22c55e' : failed ? '#f87171' : '#64748b';
+                        const icon = done ? '✓' : failed ? '✗' : '○';
+                        return `<span style="background:#1e293b;border:1px solid ${color}44;border-radius:5px;padding:4px 10px;font-size:11px;color:${color}"><b>${icon}</b> ${escapeHtml(p.replace('phase_',''))}</span>`;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    function loadingBox(msg, isError = false) {
+        return `<div style="padding:32px;text-align:center;color:${isError ? '#f87171' : '#64748b'};font-size:12px">${escapeHtml(msg)}</div>`;
+    }
+
+    // ── Mechanisms ───────────────────────────────────────
+    function renderKnowledgeMechanisms() {
+        const mData = knowledgeData.mechanisms;
+        if (knowledgeError.mechanisms) return loadingBox('Failed to load mechanisms: ' + knowledgeError.mechanisms, true);
+        if (!mData) return loadingBox('Loading mechanisms…');
+        const mcData = knowledgeData.mechanism_components || { mechanism_components: {} };
+        const allMechs = Array.isArray(mData.mechanisms) ? mData.mechanisms : [];
+
+        const q = (knowledgeSearch.mechanisms || '').trim().toLowerCase();
+        const filter = knowledgeFilter.mechanisms;
+        let list = allMechs.filter(m => {
+            if (q && !((m.id||'').toLowerCase().includes(q) || (m.label||'').toLowerCase().includes(q) || (m.rough_description||'').toLowerCase().includes(q))) return false;
+            if (filter === 'compound' && m.source_family !== 'compound') return false;
+            if (filter === 'single' && m.source_family === 'compound') return false;
+            if (filter === 'high-prev' && (m.prevalence_ratio || 0) < 0.5) return false;
+            if (filter === 'low-prev' && (m.prevalence_ratio || 0) > 0.1) return false;
+            return true;
+        });
+
+        const sort = knowledgeSort.mechanisms;
+        list.sort((a, b) => {
+            switch (sort) {
+                case 'n_videos_desc': return (b.n_videos||0) - (a.n_videos||0);
+                case 'n_videos_asc': return (a.n_videos||0) - (b.n_videos||0);
+                case 'n_obs_desc': return (b.n_observations||0) - (a.n_observations||0);
+                case 'prev_desc': return (b.prevalence_ratio||0) - (a.prevalence_ratio||0);
+                case 'specificity_desc': return (b.specificity_idf||0) - (a.specificity_idf||0);
+                case 'label_asc': return (a.label||'').localeCompare(b.label||'');
+                default: return 0;
+            }
+        });
+
+        const limit = knowledgeListLimit.mechanisms;
+        const shown = list.slice(0, limit);
+
+        const positionBuckets = new Set();
+        allMechs.forEach(m => m.position_bucket && positionBuckets.add(m.position_bucket));
+
+        const sortOpts = [
+            ['n_videos_desc','Videos ↓'],
+            ['n_videos_asc','Videos ↑'],
+            ['n_obs_desc','Observations ↓'],
+            ['prev_desc','Prevalence ↓'],
+            ['specificity_desc','Specificity (IDF) ↓'],
+            ['label_asc','Label A→Z'],
+        ];
+        const filterOpts = [
+            ['all','All'],
+            ['compound','Compound only'],
+            ['single','Single-kind only'],
+            ['high-prev','Prevalence ≥ 0.5'],
+            ['low-prev','Prevalence ≤ 0.1'],
+        ];
+
+        return `
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                <input id="knowledge-mech-search" type="text" value="${escapeHtml(knowledgeSearch.mechanisms)}" placeholder="Search id, label, description…" style="flex:1;min-width:220px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:12px;color:#e2e8f0" />
+                <select id="knowledge-mech-sort" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    ${sortOpts.map(([v,l]) => `<option value="${v}"${sort===v?' selected':''}>${l}</option>`).join('')}
+                </select>
+                <select id="knowledge-mech-filter" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    ${filterOpts.map(([v,l]) => `<option value="${v}"${filter===v?' selected':''}>${l}</option>`).join('')}
+                </select>
+            </div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:8px">${list.length.toLocaleString()} match · showing first ${Math.min(shown.length, list.length).toLocaleString()}${list.length > limit ? ` · <button id="knowledge-mech-more" class="knowledge-more-btn" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:11px">Show 200 more</button>` : ''}</div>
+            <div style="border-radius:8px;overflow:hidden;border:1px solid #1e293b">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead><tr style="background:#1e293b">
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Mechanism</th>
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Family</th>
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Position</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Videos</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Obs</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Prev</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">IDF</th>
+                    </tr></thead>
+                    <tbody>
+                        ${shown.map(m => renderMechanismRow(m, mcData.mechanism_components || {})).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderMechanismRow(m, mcMap) {
+        const expanded = knowledgeExpanded.mechanism === m.id;
+        const kinds = Array.isArray(m.source_kinds) ? m.source_kinds.join(',') : (m.source_kinds || '');
+        let detailHtml = '';
+        if (expanded) {
+            const comps = mcMap[m.id] || [];
+            const evs = Array.isArray(m.sample_evidence) ? m.sample_evidence.slice(0, 12) : [];
+            detailHtml = `
+                <tr data-mech-detail-row="${escapeHtml(m.id)}" style="background:#0a1628;border-bottom:1px solid #1e293b">
+                    <td colspan="7" style="padding:10px 14px">
+                        <div style="font-size:11px;color:#cbd5e1;margin-bottom:6px;line-height:1.5">${escapeHtml(m.rough_description || '')}</div>
+                        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#94a3b8">
+                            <span>source_kinds: <b style="color:#cbd5e1">${escapeHtml(kinds)}</b></span>
+                            <span>emergence: <b style="color:#cbd5e1">${escapeHtml(m.emergence_method || '—')}</b></span>
+                            <span>components: <b style="color:#06b6d4">${comps.length}</b></span>
+                        </div>
+                        ${comps.length ? `<div style="margin-bottom:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:3px">Components</div>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap">${comps.map(c => `<span style="background:#1e293b;border-radius:4px;padding:2px 8px;font-size:10px;color:#06b6d4;font-family:'SF Mono',monospace">${escapeHtml(c)}</span>`).join('')}</div></div>` : ''}
+                        ${evs.length ? `<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:3px">Sample Evidence (${Math.min(12, m.sample_evidence.length)}/${m.sample_evidence.length})</div>
+                            <div style="max-height:240px;overflow:auto;border:1px solid #1e293b;border-radius:6px">
+                                <table style="width:100%;border-collapse:collapse;font-size:10px">
+                                    <thead><tr style="background:#1e293b"><th style="padding:3px 8px;text-align:left;color:#64748b">Video</th><th style="padding:3px 8px;text-align:left;color:#64748b">Kind</th><th style="padding:3px 8px;text-align:left;color:#64748b">Text</th><th style="padding:3px 8px;text-align:right;color:#64748b">t(s)</th><th style="padding:3px 8px;text-align:right;color:#64748b">%</th></tr></thead>
+                                    <tbody>${evs.map(e => `<tr style="border-bottom:1px solid #1e293b"><td style="padding:3px 8px;font-family:'SF Mono',monospace;color:#94a3b8">${escapeHtml(e.video_id || '')}</td><td style="padding:3px 8px;color:#94a3b8">${escapeHtml(e.evidence_kind || '')}</td><td style="padding:3px 8px;color:#cbd5e1">${escapeHtml(e.evidence_text || '')}</td><td style="padding:3px 8px;text-align:right;color:#94a3b8">${e.position_s != null ? e.position_s.toFixed ? e.position_s.toFixed(1) : e.position_s : '—'}</td><td style="padding:3px 8px;text-align:right;color:#94a3b8">${e.position_pct != null ? e.position_pct.toFixed ? e.position_pct.toFixed(1) : e.position_pct : '—'}</td></tr>`).join('')}</tbody>
+                                </table>
+                            </div>
+                        </div>` : '<div style="font-size:11px;color:#64748b;font-style:italic">No sample evidence.</div>'}
+                        <div style="margin-top:8px"><button class="knowledge-graph-focus-btn" data-focus-type="mechanism" data-focus-id="${escapeHtml(m.id)}" style="background:#1e293b;border:1px solid #334155;color:#a78bfa;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">View in Graph →</button></div>
+                    </td>
+                </tr>`;
+        }
+        return `
+            <tr data-mech-row="${escapeHtml(m.id)}" style="cursor:pointer;border-bottom:1px solid #1e293b">
+                <td style="padding:5px 8px;font-size:11px;color:#cbd5e1">
+                    <div style="font-weight:600;color:#e2e8f0">${escapeHtml(m.label || m.id)}</div>
+                    <div style="font-size:10px;font-family:'SF Mono',monospace;color:#64748b">${escapeHtml(m.id)}</div>
+                </td>
+                <td style="padding:5px 8px;font-size:10px;color:${m.source_family === 'compound' ? '#a78bfa' : '#06b6d4'}">${escapeHtml(m.source_family || '—')}</td>
+                <td style="padding:5px 8px;font-size:10px;color:#94a3b8">${escapeHtml(m.position_bucket || '—')}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#22d3ee;text-align:right">${m.n_videos || 0}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#94a3b8;text-align:right">${m.n_observations || 0}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#cbd5e1;text-align:right">${fmtNum(m.prevalence_ratio)}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#cbd5e1;text-align:right">${fmtNum(m.specificity_idf)}</td>
+            </tr>
+            ${detailHtml}
+        `;
+    }
+
+    // ── Components ───────────────────────────────────────
+    function renderKnowledgeComponents() {
+        const cData = knowledgeData.components;
+        if (knowledgeError.components) return loadingBox('Failed to load components: ' + knowledgeError.components, true);
+        if (!cData) return loadingBox('Loading components…');
+        const all = Array.isArray(cData.components) ? cData.components : [];
+        const q = (knowledgeSearch.components || '').trim().toLowerCase();
+        const filter = knowledgeFilter.components;
+        let list = all.filter(c => {
+            if (q && !((c.id||'').toLowerCase().includes(q) || (c.label||'').toLowerCase().includes(q) || (c.fragment_value||'').toLowerCase().includes(q))) return false;
+            if (filter !== 'all' && c.fragment_kind !== filter) return false;
+            return true;
+        });
+        const sort = knowledgeSort.components;
+        list.sort((a, b) => {
+            switch (sort) {
+                case 'n_mechanisms_desc': return (b.n_mechanisms_using||0) - (a.n_mechanisms_using||0);
+                case 'n_mechanisms_asc': return (a.n_mechanisms_using||0) - (b.n_mechanisms_using||0);
+                case 'n_obs_desc': return (b.n_observations_total||0) - (a.n_observations_total||0);
+                case 'label_asc': return (a.label||'').localeCompare(b.label||'');
+                default: return 0;
+            }
+        });
+        const kindCounts = {};
+        all.forEach(c => { kindCounts[c.fragment_kind] = (kindCounts[c.fragment_kind] || 0) + 1; });
+        const kinds = Object.keys(kindCounts).sort();
+        const limit = knowledgeListLimit.components;
+        const shown = list.slice(0, limit);
+
+        return `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Total components</div><div style="font-size:18px;font-weight:700;color:#06b6d4">${all.length.toLocaleString()}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Coverage</div><div style="font-size:18px;font-weight:700;color:#22d3ee">${cData.coverage_pct || 0}%</div><div style="font-size:9px;color:#64748b">${cData.n_mechanisms_decomposed || 0} mechs decomposed</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Min recurrence</div><div style="font-size:18px;font-weight:700;color:#a78bfa">${cData.min_recurrence || 0}</div></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                <input id="knowledge-comp-search" type="text" value="${escapeHtml(knowledgeSearch.components)}" placeholder="Search id, label, fragment value…" style="flex:1;min-width:220px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:12px;color:#e2e8f0" />
+                <select id="knowledge-comp-sort" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    <option value="n_mechanisms_desc"${sort==='n_mechanisms_desc'?' selected':''}>Mechanisms ↓</option>
+                    <option value="n_mechanisms_asc"${sort==='n_mechanisms_asc'?' selected':''}>Mechanisms ↑</option>
+                    <option value="n_obs_desc"${sort==='n_obs_desc'?' selected':''}>Observations ↓</option>
+                    <option value="label_asc"${sort==='label_asc'?' selected':''}>Label A→Z</option>
+                </select>
+                <select id="knowledge-comp-filter" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    <option value="all"${filter==='all'?' selected':''}>All kinds (${all.length})</option>
+                    ${kinds.map(k => `<option value="${escapeHtml(k)}"${filter===k?' selected':''}>${escapeHtml(k)} (${kindCounts[k]})</option>`).join('')}
+                </select>
+            </div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:8px">${list.length} match · showing ${Math.min(shown.length, list.length)}</div>
+            <div style="border-radius:8px;overflow:hidden;border:1px solid #1e293b">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead><tr style="background:#1e293b">
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Component</th>
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Fragment Kind</th>
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Value</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Mechanisms</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Observations</th>
+                    </tr></thead>
+                    <tbody>
+                        ${shown.map(c => renderComponentRow(c)).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderComponentRow(c) {
+        const expanded = knowledgeExpanded.component === c.id;
+        let detailHtml = '';
+        if (expanded) {
+            const mechs = Array.isArray(c.mechanism_ids) ? c.mechanism_ids.slice(0, 60) : [];
+            detailHtml = `
+                <tr data-comp-detail-row="${escapeHtml(c.id)}" style="background:#0a1628;border-bottom:1px solid #1e293b">
+                    <td colspan="5" style="padding:10px 14px">
+                        <div style="font-size:11px;color:#94a3b8;margin-bottom:8px">First ${mechs.length} of ${(c.mechanism_ids || []).length} mechanisms using this component</div>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap;max-height:220px;overflow:auto">
+                            ${mechs.map(id => `<span class="knowledge-mech-jump" data-mech-id="${escapeHtml(id)}" style="background:#1e293b;border-radius:4px;padding:2px 8px;font-size:10px;color:#22d3ee;font-family:'SF Mono',monospace;cursor:pointer">${escapeHtml(id)}</span>`).join('')}
+                        </div>
+                        <div style="margin-top:8px"><button class="knowledge-graph-focus-btn" data-focus-type="component" data-focus-id="${escapeHtml(c.id)}" style="background:#1e293b;border:1px solid #334155;color:#a78bfa;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">View in Graph →</button></div>
+                    </td>
+                </tr>`;
+        }
+        return `
+            <tr data-comp-row="${escapeHtml(c.id)}" style="cursor:pointer;border-bottom:1px solid #1e293b">
+                <td style="padding:5px 8px;font-size:11px">
+                    <div style="font-weight:600;color:#e2e8f0">${escapeHtml(c.label || c.id)}</div>
+                    <div style="font-size:10px;font-family:'SF Mono',monospace;color:#64748b">${escapeHtml(c.id)}</div>
+                </td>
+                <td style="padding:5px 8px;font-size:10px;color:#06b6d4">${escapeHtml(c.fragment_kind || '—')}</td>
+                <td style="padding:5px 8px;font-size:11px;color:#cbd5e1;font-family:'SF Mono',monospace">${escapeHtml(c.fragment_value || '—')}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#a78bfa;text-align:right">${c.n_mechanisms_using || 0}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#94a3b8;text-align:right">${c.n_observations_total || 0}</td>
+            </tr>
+            ${detailHtml}
+        `;
+    }
+
+    // ── Principles ───────────────────────────────────────
+    function renderKnowledgePrinciples() {
+        const pData = knowledgeData.principles;
+        if (knowledgeError.principles) return loadingBox('Failed to load principles: ' + knowledgeError.principles, true);
+        if (!pData) return loadingBox('Loading principles…');
+        const bv = knowledgeData.bridge_validation;
+        const bvByPid = {};
+        if (bv && Array.isArray(bv.rows)) bv.rows.forEach(r => { bvByPid[r.principle_id] = r; });
+        const all = Array.isArray(pData.principles) ? pData.principles : [];
+
+        const q = (knowledgeSearch.principles || '').trim().toLowerCase();
+        const filter = knowledgeFilter.principles;
+        let list = all.filter(p => {
+            if (q && !JSON.stringify(p).toLowerCase().includes(q)) return false;
+            if (filter === 'positive' && (p.chain_strength_signed || 0) <= 0) return false;
+            if (filter === 'negative' && (p.chain_strength_signed || 0) >= 0) return false;
+            if (filter === 'strong' && Math.abs(p.chain_strength_signed || 0) < 0.1) return false;
+            return true;
+        });
+
+        const sort = knowledgeSort.principles;
+        list.sort((a, b) => {
+            switch (sort) {
+                case 'chain_strength_desc': return Math.abs(b.chain_strength_signed || 0) - Math.abs(a.chain_strength_signed || 0);
+                case 'weighted_desc': return Math.abs(b.chain_strength_specificity_weighted || 0) - Math.abs(a.chain_strength_specificity_weighted || 0);
+                case 'rho_desc': return Math.abs(b.mechanism_indicator_rho || 0) - Math.abs(a.mechanism_indicator_rho || 0);
+                case 'r_desc': return Math.abs(b.indicator_outcome_r || 0) - Math.abs(a.indicator_outcome_r || 0);
+                case 'n_videos_desc': return (b.mechanism_n_videos || 0) - (a.mechanism_n_videos || 0);
+                default: return 0;
+            }
+        });
+
+        const limit = knowledgeListLimit.principles;
+        const shown = list.slice(0, limit);
+
+        return `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Total</div><div style="font-size:18px;font-weight:700;color:#a78bfa">${(pData.n_principles || all.length).toLocaleString()}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Dropped tautological</div><div style="font-size:18px;font-weight:700;color:#ef4444">${pData.n_dropped_tautological || 0}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Dropped other</div><div style="font-size:18px;font-weight:700;color:#f87171">${pData.n_dropped || 0}</div></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                <input id="knowledge-prin-search" type="text" value="${escapeHtml(knowledgeSearch.principles)}" placeholder="Search mechanism, indicator, hypothesis…" style="flex:1;min-width:220px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:12px;color:#e2e8f0" />
+                <select id="knowledge-prin-sort" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    <option value="chain_strength_desc"${sort==='chain_strength_desc'?' selected':''}>|Chain strength| ↓</option>
+                    <option value="weighted_desc"${sort==='weighted_desc'?' selected':''}>|Weighted (×IDF)| ↓</option>
+                    <option value="rho_desc"${sort==='rho_desc'?' selected':''}>|ρ (mech→indicator)| ↓</option>
+                    <option value="r_desc"${sort==='r_desc'?' selected':''}>|r (indicator→views)| ↓</option>
+                    <option value="n_videos_desc"${sort==='n_videos_desc'?' selected':''}>Videos ↓</option>
+                </select>
+                <select id="knowledge-prin-filter" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    <option value="all"${filter==='all'?' selected':''}>All</option>
+                    <option value="positive"${filter==='positive'?' selected':''}>Positive chain</option>
+                    <option value="negative"${filter==='negative'?' selected':''}>Negative chain</option>
+                    <option value="strong"${filter==='strong'?' selected':''}>|chain| ≥ 0.1</option>
+                </select>
+            </div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:8px">${list.length} match · showing ${Math.min(shown.length, list.length)}</div>
+            <div style="border-radius:8px;overflow:hidden;border:1px solid #1e293b">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead><tr style="background:#1e293b">
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">ID</th>
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Mechanism → Indicator → Outcome</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">ρ (mech→ind)</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">r (ind→views)</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Chain</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Weighted</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">N vids</th>
+                    </tr></thead>
+                    <tbody>
+                        ${shown.map(p => renderPrincipleRow(p, bvByPid[p.id])).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderPrincipleRow(p, bv) {
+        const expanded = knowledgeExpanded.principle === p.id;
+        const edge = p.edge || {};
+        let detailHtml = '';
+        if (expanded) {
+            detailHtml = `
+                <tr data-prin-detail-row="${escapeHtml(p.id)}" style="background:#0a1628;border-bottom:1px solid #1e293b">
+                    <td colspan="7" style="padding:10px 14px">
+                        <div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:8px">${escapeHtml(p.hypothesis_text || '')}</div>
+                        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#94a3b8;margin-bottom:8px">
+                            <span>status: <b style="color:#cbd5e1">${escapeHtml(p.status || '—')}</b></span>
+                            <span>supporting_n: <b style="color:#cbd5e1">${p.supporting_n || 0}</b></span>
+                            <span>mechanism_n_videos: <b style="color:#22d3ee">${p.mechanism_n_videos || 0}</b></span>
+                            <span>prevalence: <b style="color:#cbd5e1">${fmtNum(p.mechanism_prevalence_ratio)}</b></span>
+                            <span>IDF: <b style="color:#cbd5e1">${fmtNum(p.mechanism_specificity_idf)}</b></span>
+                            <span>generated: <b style="color:#cbd5e1">${fmtDate(p.generated_at)}</b></span>
+                        </div>
+                        ${bv ? `<div style="background:#050a14;border-radius:6px;padding:8px 12px;margin-bottom:6px;border-left:3px solid #f59e0b">
+                            <div style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#f59e0b;margin-bottom:4px">Bridge Validation</div>
+                            <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#cbd5e1">
+                                <span>pre→post ρ: <b style="color:${rColor(bv.pre_to_post_rho)}">${fmtSigned(bv.pre_to_post_rho)}</b></span>
+                                <span>post→views r: <b style="color:${rColor(bv.post_to_views_r)}">${fmtSigned(bv.post_to_views_r)}</b></span>
+                                <span>chain: <b style="color:${rColor(bv.chain_strength)}">${fmtSigned(bv.chain_strength)}</b></span>
+                                <span>mech→views (direct) ρ: <b style="color:${rColor(bv.mech_to_views_rho_direct)}">${fmtSigned(bv.mech_to_views_rho_direct)}</b></span>
+                                <span>first_10s: <b style="color:${rColor(bv.first_10s_signal)}">${bv.first_10s_signal != null ? fmtSigned(bv.first_10s_signal) : '—'}</b></span>
+                                <span>swipe_away: <b style="color:${rColor(bv.swipe_away_signal)}">${bv.swipe_away_signal != null ? fmtSigned(bv.swipe_away_signal) : '—'}</b></span>
+                                <span>n_videos_used: <b style="color:#22d3ee">${bv.n_videos_used || 0}</b></span>
+                            </div>
+                        </div>` : `<div style="font-size:11px;color:#64748b;font-style:italic;margin-bottom:6px">No bridge validation row for this principle.</div>`}
+                        <div><button class="knowledge-graph-focus-btn" data-focus-type="principle" data-focus-id="${escapeHtml(p.id)}" style="background:#1e293b;border:1px solid #334155;color:#a78bfa;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">View in Graph →</button></div>
+                    </td>
+                </tr>`;
+        }
+        const chain = p.chain_strength_signed;
+        const weighted = p.chain_strength_specificity_weighted;
+        return `
+            <tr data-prin-row="${escapeHtml(p.id)}" style="cursor:pointer;border-bottom:1px solid #1e293b">
+                <td style="padding:5px 8px;font-size:10px;font-family:'SF Mono',monospace;color:#a78bfa">${escapeHtml(p.id)}</td>
+                <td style="padding:5px 8px;font-size:11px;color:#cbd5e1">
+                    <span style="color:#22d3ee">${escapeHtml(edge.from_mechanism || '—')}</span>
+                    <span style="color:#475569;margin:0 4px">→</span>
+                    <span style="color:#f59e0b">${escapeHtml(edge.via_indicator || '—')}</span>
+                    <span style="color:#475569;margin:0 4px">→</span>
+                    <span style="color:#a78bfa">${escapeHtml(edge.to_outcome || '—')}</span>
+                </td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(p.mechanism_indicator_rho)};text-align:right">${fmtSigned(p.mechanism_indicator_rho)}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(p.indicator_outcome_r)};text-align:right">${fmtSigned(p.indicator_outcome_r)}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(chain)};text-align:right">${fmtSigned(chain)}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(weighted)};text-align:right">${fmtSigned(weighted)}</td>
+                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#94a3b8;text-align:right">${p.mechanism_n_videos || 0}</td>
+            </tr>
+            ${detailHtml}
+        `;
+    }
+
+    // ── Bridges ──────────────────────────────────────────
+    function renderKnowledgeBridges() {
+        const bv = knowledgeData.bridge_validation;
+        const bt = knowledgeData.bridge_top;
+        if (knowledgeError.bridge_validation) return loadingBox('Failed to load bridge validation: ' + knowledgeError.bridge_validation, true);
+        if (!bv) return loadingBox('Loading bridge validation…');
+        const topList = bt && Array.isArray(bt.top) ? bt.top : [];
+        const rows = Array.isArray(bv.rows) ? bv.rows : [];
+        const q = (knowledgeSearch.bridges || '').trim().toLowerCase();
+        const filter = knowledgeFilter.bridges;
+        let list = rows.filter(r => {
+            if (q && !((r.principle_id||'').toLowerCase().includes(q) || (r.mechanism_id||'').toLowerCase().includes(q) || (r.via_indicator||'').toLowerCase().includes(q))) return false;
+            if (filter === 'both_legs' && !(r.pre_to_post_rho && r.post_to_views_r)) return false;
+            if (filter === 'positive_chain' && (r.chain_strength || 0) <= 0) return false;
+            if (filter === 'negative_chain' && (r.chain_strength || 0) >= 0) return false;
+            return true;
+        });
+        const sort = knowledgeSort.bridges;
+        list.sort((a, b) => {
+            switch (sort) {
+                case 'chain_strength_desc': return Math.abs(b.chain_strength || 0) - Math.abs(a.chain_strength || 0);
+                case 'weighted_desc': return Math.abs(b.chain_strength_specificity_weighted || 0) - Math.abs(a.chain_strength_specificity_weighted || 0);
+                case 'mech_direct_desc': return Math.abs(b.mech_to_views_rho_direct || 0) - Math.abs(a.mech_to_views_rho_direct || 0);
+                default: return 0;
+            }
+        });
+        const limit = knowledgeListLimit.bridges;
+        const shown = list.slice(0, limit);
+
+        return `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Validated rows</div><div style="font-size:18px;font-weight:700;color:#f59e0b">${(bv.n_principles_validated || rows.length).toLocaleString()}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Both legs nonzero</div><div style="font-size:18px;font-weight:700;color:#22c55e">${bv.n_chains_with_both_legs_nonzero || 0}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Video pool</div><div style="font-size:18px;font-weight:700;color:#06b6d4">${bv.n_videos_in_pool || 0}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Top principles cached</div><div style="font-size:18px;font-weight:700;color:#facc15">${topList.length}</div></div>
+            </div>
+
+            ${topList.length ? `
+            <div style="margin-bottom:16px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Top ${topList.length} Bridge Principles — ${escapeHtml(bt?.ranking || '')}</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px">
+                    ${topList.map((t, i) => `
+                        <div style="background:#0a1628;border:1px solid #1e293b;border-radius:8px;padding:10px 12px">
+                            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:10px;color:#64748b">#${i+1}</span><span style="font-family:'SF Mono',monospace;font-size:10px;color:#a78bfa">${escapeHtml(t.principle_id)}</span></div>
+                            <div style="font-size:11px;color:#cbd5e1;margin-bottom:4px;line-height:1.4">
+                                <span style="color:#22d3ee">${escapeHtml(t.mechanism_id)}</span><br/>
+                                <span style="color:#475569">↳ via </span><span style="color:#f59e0b">${escapeHtml(t.via_indicator)}</span> <span style="color:#475569">→</span> <span style="color:#a78bfa">${escapeHtml(t.to_outcome)}</span>
+                            </div>
+                            <div style="display:flex;gap:8px;font-size:10px;font-family:'SF Mono',monospace">
+                                <span style="color:${rColor(t.chain_strength)}">chain ${fmtSigned(t.chain_strength)}</span>
+                                <span style="color:${rColor(t.chain_strength_specificity_weighted)}">w ${fmtSigned(t.chain_strength_specificity_weighted)}</span>
+                                <span style="color:#94a3b8">n=${t.n_videos_used}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>` : ''}
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                <input id="knowledge-bridge-search" type="text" value="${escapeHtml(knowledgeSearch.bridges)}" placeholder="Search principle, mechanism, indicator…" style="flex:1;min-width:220px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:12px;color:#e2e8f0" />
+                <select id="knowledge-bridge-sort" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    <option value="chain_strength_desc"${sort==='chain_strength_desc'?' selected':''}>|Chain| ↓</option>
+                    <option value="weighted_desc"${sort==='weighted_desc'?' selected':''}>|Weighted| ↓</option>
+                    <option value="mech_direct_desc"${sort==='mech_direct_desc'?' selected':''}>|Mech→views direct| ↓</option>
+                </select>
+                <select id="knowledge-bridge-filter" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    <option value="all"${filter==='all'?' selected':''}>All</option>
+                    <option value="both_legs"${filter==='both_legs'?' selected':''}>Both legs nonzero</option>
+                    <option value="positive_chain"${filter==='positive_chain'?' selected':''}>Positive chain</option>
+                    <option value="negative_chain"${filter==='negative_chain'?' selected':''}>Negative chain</option>
+                </select>
+            </div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:8px">${list.length} match · showing ${Math.min(shown.length, list.length)}</div>
+            <div style="border-radius:8px;overflow:hidden;border:1px solid #1e293b">
+                <table style="width:100%;border-collapse:collapse">
+                    <thead><tr style="background:#1e293b">
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Principle</th>
+                        <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Mechanism → Indicator → Views</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">ρ leg1</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">r leg2</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Chain</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Weighted</th>
+                        <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Direct</th>
+                    </tr></thead>
+                    <tbody>
+                        ${shown.map(r => `
+                            <tr style="border-bottom:1px solid #1e293b">
+                                <td style="padding:5px 8px;font-size:10px;font-family:'SF Mono',monospace;color:#a78bfa">${escapeHtml(r.principle_id)}</td>
+                                <td style="padding:5px 8px;font-size:11px;color:#cbd5e1">
+                                    <span style="color:#22d3ee">${escapeHtml(r.mechanism_id)}</span>
+                                    <span style="color:#475569;margin:0 4px">→</span>
+                                    <span style="color:#f59e0b">${escapeHtml(r.via_indicator)}</span>
+                                    <span style="color:#475569;margin:0 4px">→</span>
+                                    <span style="color:#a78bfa">${escapeHtml(r.to_outcome)}</span>
+                                </td>
+                                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(r.pre_to_post_rho)};text-align:right">${fmtSigned(r.pre_to_post_rho)}</td>
+                                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(r.post_to_views_r)};text-align:right">${fmtSigned(r.post_to_views_r)}</td>
+                                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(r.chain_strength)};text-align:right">${fmtSigned(r.chain_strength)}</td>
+                                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(r.chain_strength_specificity_weighted)};text-align:right">${fmtSigned(r.chain_strength_specificity_weighted)}</td>
+                                <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:${rColor(r.mech_to_views_rho_direct)};text-align:right">${fmtSigned(r.mech_to_views_rho_direct)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    // ── Research ─────────────────────────────────────────
+    function renderKnowledgeResearch() {
+        const rq = knowledgeData.research_questions;
+        const ra = knowledgeData.research_answers;
+        const gaps = knowledgeData.principle_gaps;
+        if (knowledgeError.research_questions) return loadingBox('Failed to load research questions: ' + knowledgeError.research_questions, true);
+        if (!rq) return loadingBox('Loading research questions…');
+        const questions = Array.isArray(rq.questions) ? rq.questions : [];
+        const answers = ra && Array.isArray(ra.answers) ? ra.answers : [];
+        const answerByQid = {};
+        answers.forEach(a => { answerByQid[a.question_id] = a; });
+        const gapList = gaps && Array.isArray(gaps.gaps) ? gaps.gaps : [];
+
+        const q = (knowledgeSearch.research || '').trim().toLowerCase();
+        const filter = knowledgeFilter.research;
+        const filtered = questions.filter(qq => {
+            if (q && !((qq.id||'').toLowerCase().includes(q) || (qq.question||'').toLowerCase().includes(q) || (qq.layer||'').toLowerCase().includes(q))) return false;
+            if (filter === 'answered' && qq.status !== 'answered') return false;
+            if (filter === 'open' && qq.status === 'answered') return false;
+            return true;
+        });
+        const byLayer = {};
+        questions.forEach(qq => { byLayer[qq.layer] = (byLayer[qq.layer] || 0) + 1; });
+        const answeredCount = questions.filter(qq => qq.status === 'answered' || answerByQid[qq.id] || answerByQid[qq.id?.replace(/^q0*/, 'q')]).length;
+
+        return `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Questions</div><div style="font-size:18px;font-weight:700;color:#ec4899">${questions.length}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Answered</div><div style="font-size:18px;font-weight:700;color:#22c55e">${answers.length}</div></div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:140px"><div style="font-size:10px;color:#64748b">Principle gaps</div><div style="font-size:18px;font-weight:700;color:#ef4444">${gapList.length}</div></div>
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                <input id="knowledge-research-search" type="text" value="${escapeHtml(knowledgeSearch.research)}" placeholder="Search questions…" style="flex:1;min-width:220px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:12px;color:#e2e8f0" />
+                <select id="knowledge-research-filter" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px 8px;font-size:12px;color:#e2e8f0">
+                    <option value="all"${filter==='all'?' selected':''}>All</option>
+                    <option value="answered"${filter==='answered'?' selected':''}>Answered</option>
+                    <option value="open"${filter==='open'?' selected':''}>Open</option>
+                </select>
+                <span style="font-size:11px;color:#64748b">Layers: ${Object.entries(byLayer).map(([l,n])=>`<b style="color:#cbd5e1">${escapeHtml(l)}</b>×${n}`).join(' · ')}</span>
+            </div>
+
+            <div style="margin-bottom:16px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Questions (${filtered.length})</div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                    ${filtered.map(qq => renderResearchQuestion(qq, answerByQid[qq.id])).join('')}
+                </div>
+            </div>
+
+            ${gapList.length ? `
+            <div>
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Principle Gaps (${gapList.length}) — mechanisms with no mechanism→indicator link above threshold</div>
+                <div style="border-radius:8px;overflow:hidden;border:1px solid #1e293b">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead><tr style="background:#1e293b">
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Mechanism</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Observations</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:10px;color:#64748b">Videos</th>
+                            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#64748b">Reason</th>
+                        </tr></thead>
+                        <tbody>
+                            ${gapList.map(g => `
+                                <tr style="border-bottom:1px solid #1e293b">
+                                    <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#22d3ee">${escapeHtml(g.mechanism_id)}</td>
+                                    <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#94a3b8;text-align:right">${g.n_observations || 0}</td>
+                                    <td style="padding:5px 8px;font-size:11px;font-family:'SF Mono',monospace;color:#94a3b8;text-align:right">${g.n_videos || 0}</td>
+                                    <td style="padding:5px 8px;font-size:11px;color:#cbd5e1">${escapeHtml(g.reason || '')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>` : ''}
+        `;
+    }
+
+    function renderResearchQuestion(q, answer) {
+        const expanded = knowledgeExpanded.question === q.id;
+        const isAnswered = q.status === 'answered' || !!answer;
+        const color = isAnswered ? '#22c55e' : '#f59e0b';
+        let detailHtml = '';
+        if (expanded) {
+            if (answer) {
+                detailHtml = `<div style="background:#050a14;border-left:3px solid #22c55e;padding:10px 14px;margin-top:6px;border-radius:0 6px 6px 0">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10px;color:#64748b;margin-bottom:6px">
+                        <span>analysis: <b style="color:#cbd5e1">${escapeHtml(answer.analysis_id || '—')}</b></span>
+                        <span>timestamp: <b style="color:#cbd5e1">${fmtDate(answer.timestamp)}</b></span>
+                        <span>method: <b style="color:#cbd5e1">${escapeHtml(answer.method || '—')}</b></span>
+                    </div>
+                    ${answer.summary ? `<div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-bottom:6px;white-space:pre-wrap">${escapeHtml(typeof answer.summary === 'string' ? answer.summary : JSON.stringify(answer.summary, null, 2))}</div>` : ''}
+                    ${answer.findings ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:10px;color:#64748b">Findings JSON</summary><pre style="margin-top:6px;padding:10px;background:#020510;color:#94a3b8;border-radius:6px;font-size:10px;max-height:320px;overflow:auto;font-family:'SF Mono',monospace">${escapeHtml(JSON.stringify(answer.findings, null, 2))}</pre></details>` : ''}
+                </div>`;
+            } else {
+                detailHtml = `<div style="padding:8px 14px;margin-top:4px;background:#1a1005;border-left:3px solid #f59e0b;border-radius:0 6px 6px 0;font-size:11px;color:#fcd34d">Open question — no answer recorded.</div>`;
+            }
+        }
+        return `
+            <div data-question-id="${escapeHtml(q.id)}" style="background:#0a1628;border:1px solid #1e293b;border-radius:8px;padding:10px 14px;cursor:pointer">
+                <div style="display:flex;align-items:baseline;gap:10px">
+                    <span style="font-size:10px;font-family:'SF Mono',monospace;color:${color};font-weight:700">${escapeHtml(q.id)}</span>
+                    <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:#1e293b;color:#94a3b8">${escapeHtml(q.layer || '—')}</span>
+                    <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:#1e293b;color:#94a3b8">${escapeHtml(q.resolution || '—')}</span>
+                    <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:${isAnswered?'#052e16':'#1a1005'};color:${color}">${isAnswered ? '✓ answered' : '○ open'}</span>
+                    <span style="font-size:10px;color:#64748b;margin-left:auto">${fmtDate(q.generated_at)}</span>
+                </div>
+                <div style="font-size:12px;color:#cbd5e1;margin-top:4px;line-height:1.5">${escapeHtml(q.question || '')}</div>
+                ${detailHtml}
+            </div>
+        `;
+    }
+
+    // ── Graph ────────────────────────────────────────────
+    function renderKnowledgeGraph() {
+        const mData = knowledgeData.mechanisms;
+        const cData = knowledgeData.components;
+        const pData = knowledgeData.principles;
+        const mcData = knowledgeData.mechanism_components;
+        const bvData = knowledgeData.bridge_validation;
+        if (!mData || !cData || !pData || !mcData) return loadingBox('Loading knowledge graph data (mechanisms, components, principles, mapping)…');
+
+        const mechs = mData.mechanisms || [];
+        const comps = cData.components || [];
+        const principles = pData.principles || [];
+        const mcMap = mcData.mechanism_components || {};
+
+        // Default focus: top principle (by |weighted|)
+        let focus = knowledgeGraphFocus;
+        if (!focus) {
+            const top = [...principles].sort((a,b) => Math.abs(b.chain_strength_specificity_weighted||0) - Math.abs(a.chain_strength_specificity_weighted||0))[0];
+            if (top) focus = { type: 'principle', id: top.id };
+            else if (mechs[0]) focus = { type: 'mechanism', id: mechs[0].id };
+            else return loadingBox('No data to graph.');
+        }
+
+        // Build a focused sub-graph
+        let centerMech = null;
+        let centerPrin = null;
+        let centerComp = null;
+        let relatedPrinciples = [];
+        let relatedComponents = [];
+        let relatedMechanisms = [];
+
+        if (focus.type === 'principle') {
+            centerPrin = principles.find(p => p.id === focus.id);
+            if (centerPrin) {
+                const fromMechId = centerPrin.edge?.from_mechanism;
+                centerMech = mechs.find(m => m.id === fromMechId) || null;
+                if (centerMech) {
+                    const compIds = mcMap[centerMech.id] || [];
+                    relatedComponents = compIds.map(id => comps.find(c => c.id === id || c.label === id) || { id, label: id }).filter(Boolean);
+                }
+                // other principles pointing at this mechanism
+                relatedPrinciples = principles.filter(p => p.edge?.from_mechanism === fromMechId && p.id !== centerPrin.id).slice(0, 8);
+            }
+        } else if (focus.type === 'mechanism') {
+            centerMech = mechs.find(m => m.id === focus.id);
+            if (centerMech) {
+                const compIds = mcMap[centerMech.id] || [];
+                relatedComponents = compIds.map(id => comps.find(c => c.id === id || c.label === id) || { id, label: id }).filter(Boolean);
+                relatedPrinciples = principles.filter(p => p.edge?.from_mechanism === centerMech.id).slice(0, 10);
+            }
+        } else if (focus.type === 'component') {
+            centerComp = comps.find(c => c.id === focus.id);
+            if (centerComp) {
+                const mIds = (centerComp.mechanism_ids || []).slice(0, 12);
+                relatedMechanisms = mIds.map(id => mechs.find(m => m.id === id) || { id, label: id }).filter(Boolean);
+            }
+        }
+
+        const svg = renderGraphSvg({ centerMech, centerPrin, centerComp, relatedPrinciples, relatedComponents, relatedMechanisms, bvData });
+
+        // Picker dropdowns
+        const mechOpts = mechs.slice(0, 400).map(m => `<option value="${escapeHtml(m.id)}"${focus.type==='mechanism'&&focus.id===m.id?' selected':''}>${escapeHtml(m.label||m.id)}</option>`).join('');
+        const prinOpts = principles.slice(0, 400).map(p => `<option value="${escapeHtml(p.id)}"${focus.type==='principle'&&focus.id===p.id?' selected':''}>${escapeHtml(p.id)} · ${escapeHtml(p.edge?.from_mechanism||'')}</option>`).join('');
+        const compOpts = comps.map(c => `<option value="${escapeHtml(c.id)}"${focus.type==='component'&&focus.id===c.id?' selected':''}>${escapeHtml(c.label||c.id)}</option>`).join('');
+
+        return `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:260px">
+                    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px">Focus principle</div>
+                    <select id="knowledge-graph-principle" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:6px;font-size:11px;color:#e2e8f0"><option value="">— pick —</option>${prinOpts}</select>
+                </div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:260px">
+                    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px">Focus mechanism</div>
+                    <select id="knowledge-graph-mechanism" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:6px;font-size:11px;color:#e2e8f0"><option value="">— pick —</option>${mechOpts}</select>
+                </div>
+                <div style="background:#0a1628;border-radius:8px;padding:8px 12px;flex:1;min-width:260px">
+                    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px">Focus component</div>
+                    <select id="knowledge-graph-component" style="width:100%;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:6px;font-size:11px;color:#e2e8f0"><option value="">— pick —</option>${compOpts}</select>
+                </div>
+            </div>
+            <div style="background:#050a14;border:1px solid #1e293b;border-radius:8px;padding:12px">
+                <div style="font-size:10px;color:#64748b;margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap">
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#06b6d4;margin-right:4px;vertical-align:middle"></span>Component</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22d3ee;margin-right:4px;vertical-align:middle"></span>Mechanism</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#a78bfa;margin-right:4px;vertical-align:middle"></span>Principle / Outcome</span>
+                </div>
+                ${svg}
+            </div>
+        `;
+    }
+
+    function renderGraphSvg({ centerMech, centerPrin, centerComp, relatedPrinciples, relatedComponents, relatedMechanisms, bvData }) {
+        const W = 900, H = 520;
+        const cx = W / 2, cy = H / 2;
+        const nodes = [];
+        const edges = [];
+        const truncate = (s, n=34) => {
+            s = String(s || '');
+            return s.length > n ? s.slice(0, n - 1) + '…' : s;
+        };
+
+        if (centerMech) {
+            nodes.push({ id: 'M:' + centerMech.id, type: 'mechanism', label: centerMech.label || centerMech.id, sub: `n_videos=${centerMech.n_videos||0} · IDF=${fmtNum(centerMech.specificity_idf)}`, x: cx, y: cy, r: 26 });
+            // components on the left
+            const comps = relatedComponents.slice(0, 10);
+            const spread = Math.min(comps.length, 10);
+            comps.forEach((c, i) => {
+                const y = cy - (spread-1)/2*46 + i*46;
+                nodes.push({ id: 'C:' + c.id, type: 'component', label: c.label || c.id, sub: c.fragment_kind ? c.fragment_kind + ': ' + (c.fragment_value||'') : '', x: 120, y, r: 18 });
+                edges.push({ from: 'C:' + c.id, to: 'M:' + centerMech.id, color: '#06b6d4', opacity: 0.5 });
+            });
+            // principles on the right
+            let ps = relatedPrinciples.slice(0, 10);
+            if (centerPrin && !ps.find(p => p.id === centerPrin.id)) ps = [centerPrin, ...ps].slice(0, 10);
+            const pspread = Math.min(ps.length, 10);
+            ps.forEach((p, i) => {
+                const y = cy - (pspread-1)/2*46 + i*46;
+                const isCenter = centerPrin && p.id === centerPrin.id;
+                nodes.push({ id: 'P:' + p.id, type: 'principle', label: p.id, sub: truncate(`${p.edge?.via_indicator||''} → ${p.edge?.to_outcome||''}`, 30), x: W - 120, y, r: isCenter ? 22 : 16, highlight: isCenter });
+                const cs = p.chain_strength_signed || 0;
+                edges.push({ from: 'M:' + centerMech.id, to: 'P:' + p.id, color: cs >= 0 ? '#22d3ee' : '#f87171', opacity: Math.min(1, 0.25 + Math.abs(cs)*3), label: fmtSigned(cs) });
+            });
+        } else if (centerComp) {
+            nodes.push({ id: 'C:' + centerComp.id, type: 'component', label: centerComp.label || centerComp.id, sub: (centerComp.fragment_kind||'')+': '+(centerComp.fragment_value||''), x: cx, y: cy, r: 26 });
+            const ms = relatedMechanisms.slice(0, 12);
+            const spread = Math.min(ms.length, 12);
+            ms.forEach((m, i) => {
+                const angle = (i / spread) * Math.PI * 2;
+                const x = cx + Math.cos(angle) * 260;
+                const y = cy + Math.sin(angle) * 180;
+                nodes.push({ id: 'M:' + m.id, type: 'mechanism', label: m.label || m.id, sub: m.n_videos ? `n_videos=${m.n_videos}` : '', x, y, r: 18 });
+                edges.push({ from: 'C:' + centerComp.id, to: 'M:' + m.id, color: '#06b6d4', opacity: 0.5 });
+            });
+        }
+
+        const colorFor = (t) => t === 'component' ? '#06b6d4' : t === 'principle' ? '#a78bfa' : '#22d3ee';
+        const strokeFor = (t) => t === 'component' ? '#0e7490' : t === 'principle' ? '#7c3aed' : '#0891b2';
+
+        const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+        const edgeHtml = edges.map(e => {
+            const a = nodeById[e.from], b = nodeById[e.to];
+            if (!a || !b) return '';
+            const midx = (a.x + b.x) / 2;
+            const midy = (a.y + b.y) / 2;
+            const labelEl = e.label ? `<text x="${midx}" y="${midy - 4}" fill="${e.color}" font-size="10" text-anchor="middle" font-family="SF Mono, monospace">${escapeHtml(e.label)}</text>` : '';
+            return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${e.color}" stroke-opacity="${e.opacity}" stroke-width="1.5" />${labelEl}`;
+        }).join('');
+
+        const nodeHtml = nodes.map(n => `
+            <g class="knowledge-graph-node" data-node-type="${n.type}" data-node-id="${escapeHtml(n.id.slice(2))}" style="cursor:pointer">
+                <circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="${colorFor(n.type)}" stroke="${n.highlight?'#f1f5f9':strokeFor(n.type)}" stroke-width="${n.highlight?3:1.5}" opacity="0.85" />
+                <text x="${n.x}" y="${n.y + n.r + 12}" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="Inter, sans-serif">${escapeHtml(truncate(n.label, 26))}</text>
+                ${n.sub ? `<text x="${n.x}" y="${n.y + n.r + 24}" text-anchor="middle" fill="#64748b" font-size="9">${escapeHtml(truncate(n.sub, 34))}</text>` : ''}
+            </g>
+        `).join('');
+
+        // Legend / caption below
+        let caption = '';
+        if (centerPrin) {
+            const e = centerPrin.edge || {};
+            caption = `<div style="margin-top:8px;font-size:11px;color:#cbd5e1;line-height:1.5"><b style="color:#a78bfa">${escapeHtml(centerPrin.id)}</b> — <span style="color:#22d3ee">${escapeHtml(e.from_mechanism||'')}</span> → <span style="color:#f59e0b">${escapeHtml(e.via_indicator||'')}</span> → <span style="color:#a78bfa">${escapeHtml(e.to_outcome||'')}</span> · chain=<b style="color:${rColor(centerPrin.chain_strength_signed)}">${fmtSigned(centerPrin.chain_strength_signed)}</b> · weighted=<b style="color:${rColor(centerPrin.chain_strength_specificity_weighted)}">${fmtSigned(centerPrin.chain_strength_specificity_weighted)}</b></div>`;
+        } else if (centerMech) {
+            caption = `<div style="margin-top:8px;font-size:11px;color:#cbd5e1">Mechanism <b style="color:#22d3ee">${escapeHtml(centerMech.label||centerMech.id)}</b> — ${relatedComponents.length} components, ${relatedPrinciples.length} principles</div>`;
+        } else if (centerComp) {
+            caption = `<div style="margin-top:8px;font-size:11px;color:#cbd5e1">Component <b style="color:#06b6d4">${escapeHtml(centerComp.label||centerComp.id)}</b> — used by ${(centerComp.mechanism_ids||[]).length} mechanisms (showing ${relatedMechanisms.length})</div>`;
+        }
+
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:520px;display:block">${edgeHtml}${nodeHtml}</svg>${caption}`;
+    }
+
+    // ── Events ───────────────────────────────────────────
+    function bindKnowledgeEvents() {
+        const root = container?.querySelector('.jarvis-knowledge-root');
+        if (!root) return;
+
+        // Sub-tabs
+        root.querySelectorAll('.jarvis-knowledge-subtab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                knowledgeSubTab = btn.dataset.sub;
+                refreshKnowledgeRoot();
+                ensureKnowledgeDataForSubTab(knowledgeSubTab);
+            });
+        });
+
+        // Mechanism rows
+        root.querySelectorAll('[data-mech-row]').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('button')) return;
+                const id = row.getAttribute('data-mech-row');
+                knowledgeExpanded.mechanism = knowledgeExpanded.mechanism === id ? null : id;
+                refreshKnowledgeRoot();
+            });
+            row.addEventListener('mouseenter', () => row.style.background = '#0f2942');
+            row.addEventListener('mouseleave', () => row.style.background = '');
+        });
+
+        // Mechanism search/sort/filter
+        const mechSearch = root.querySelector('#knowledge-mech-search');
+        if (mechSearch) mechSearch.addEventListener('input', () => {
+            knowledgeSearch.mechanisms = mechSearch.value;
+            const pos = mechSearch.selectionStart;
+            refreshKnowledgeRoot();
+            const el = container?.querySelector('#knowledge-mech-search');
+            if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
+        });
+        const mechSort = root.querySelector('#knowledge-mech-sort');
+        if (mechSort) mechSort.addEventListener('change', () => { knowledgeSort.mechanisms = mechSort.value; refreshKnowledgeRoot(); });
+        const mechFilter = root.querySelector('#knowledge-mech-filter');
+        if (mechFilter) mechFilter.addEventListener('change', () => { knowledgeFilter.mechanisms = mechFilter.value; refreshKnowledgeRoot(); });
+        const mechMore = root.querySelector('#knowledge-mech-more');
+        if (mechMore) mechMore.addEventListener('click', () => { knowledgeListLimit.mechanisms += 200; refreshKnowledgeRoot(); });
+
+        // Component rows
+        root.querySelectorAll('[data-comp-row]').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('button') || e.target.closest('.knowledge-mech-jump')) return;
+                const id = row.getAttribute('data-comp-row');
+                knowledgeExpanded.component = knowledgeExpanded.component === id ? null : id;
+                refreshKnowledgeRoot();
+            });
+            row.addEventListener('mouseenter', () => row.style.background = '#0f2942');
+            row.addEventListener('mouseleave', () => row.style.background = '');
+        });
+
+        // Component controls
+        const compSearch = root.querySelector('#knowledge-comp-search');
+        if (compSearch) compSearch.addEventListener('input', () => {
+            knowledgeSearch.components = compSearch.value;
+            const pos = compSearch.selectionStart;
+            refreshKnowledgeRoot();
+            const el = container?.querySelector('#knowledge-comp-search');
+            if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
+        });
+        const compSort = root.querySelector('#knowledge-comp-sort');
+        if (compSort) compSort.addEventListener('change', () => { knowledgeSort.components = compSort.value; refreshKnowledgeRoot(); });
+        const compFilter = root.querySelector('#knowledge-comp-filter');
+        if (compFilter) compFilter.addEventListener('change', () => { knowledgeFilter.components = compFilter.value; refreshKnowledgeRoot(); });
+
+        // Principle rows
+        root.querySelectorAll('[data-prin-row]').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('button')) return;
+                const id = row.getAttribute('data-prin-row');
+                knowledgeExpanded.principle = knowledgeExpanded.principle === id ? null : id;
+                refreshKnowledgeRoot();
+            });
+            row.addEventListener('mouseenter', () => row.style.background = '#0f2942');
+            row.addEventListener('mouseleave', () => row.style.background = '');
+        });
+
+        // Principle controls
+        const prinSearch = root.querySelector('#knowledge-prin-search');
+        if (prinSearch) prinSearch.addEventListener('input', () => {
+            knowledgeSearch.principles = prinSearch.value;
+            const pos = prinSearch.selectionStart;
+            refreshKnowledgeRoot();
+            const el = container?.querySelector('#knowledge-prin-search');
+            if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
+        });
+        const prinSort = root.querySelector('#knowledge-prin-sort');
+        if (prinSort) prinSort.addEventListener('change', () => { knowledgeSort.principles = prinSort.value; refreshKnowledgeRoot(); });
+        const prinFilter = root.querySelector('#knowledge-prin-filter');
+        if (prinFilter) prinFilter.addEventListener('change', () => { knowledgeFilter.principles = prinFilter.value; refreshKnowledgeRoot(); });
+
+        // Bridge controls
+        const bridgeSearch = root.querySelector('#knowledge-bridge-search');
+        if (bridgeSearch) bridgeSearch.addEventListener('input', () => {
+            knowledgeSearch.bridges = bridgeSearch.value;
+            const pos = bridgeSearch.selectionStart;
+            refreshKnowledgeRoot();
+            const el = container?.querySelector('#knowledge-bridge-search');
+            if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
+        });
+        const bridgeSort = root.querySelector('#knowledge-bridge-sort');
+        if (bridgeSort) bridgeSort.addEventListener('change', () => { knowledgeSort.bridges = bridgeSort.value; refreshKnowledgeRoot(); });
+        const bridgeFilter = root.querySelector('#knowledge-bridge-filter');
+        if (bridgeFilter) bridgeFilter.addEventListener('change', () => { knowledgeFilter.bridges = bridgeFilter.value; refreshKnowledgeRoot(); });
+
+        // Research
+        root.querySelectorAll('[data-question-id]').forEach(row => {
+            row.addEventListener('click', () => {
+                const id = row.getAttribute('data-question-id');
+                knowledgeExpanded.question = knowledgeExpanded.question === id ? null : id;
+                refreshKnowledgeRoot();
+            });
+        });
+        const researchSearch = root.querySelector('#knowledge-research-search');
+        if (researchSearch) researchSearch.addEventListener('input', () => {
+            knowledgeSearch.research = researchSearch.value;
+            const pos = researchSearch.selectionStart;
+            refreshKnowledgeRoot();
+            const el = container?.querySelector('#knowledge-research-search');
+            if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} }
+        });
+        const researchFilter = root.querySelector('#knowledge-research-filter');
+        if (researchFilter) researchFilter.addEventListener('change', () => { knowledgeFilter.research = researchFilter.value; refreshKnowledgeRoot(); });
+
+        // Graph pickers
+        const gp = root.querySelector('#knowledge-graph-principle');
+        if (gp) gp.addEventListener('change', () => { if (gp.value) { knowledgeGraphFocus = { type: 'principle', id: gp.value }; refreshKnowledgeRoot(); } });
+        const gm = root.querySelector('#knowledge-graph-mechanism');
+        if (gm) gm.addEventListener('change', () => { if (gm.value) { knowledgeGraphFocus = { type: 'mechanism', id: gm.value }; refreshKnowledgeRoot(); } });
+        const gc = root.querySelector('#knowledge-graph-component');
+        if (gc) gc.addEventListener('change', () => { if (gc.value) { knowledgeGraphFocus = { type: 'component', id: gc.value }; refreshKnowledgeRoot(); } });
+        root.querySelectorAll('.knowledge-graph-node').forEach(node => {
+            node.addEventListener('click', () => {
+                const t = node.getAttribute('data-node-type');
+                const id = node.getAttribute('data-node-id');
+                if (t && id) { knowledgeGraphFocus = { type: t, id }; knowledgeSubTab = 'graph'; refreshKnowledgeRoot(); }
+            });
+        });
+
+        // Cross-tab jumps
+        root.querySelectorAll('.knowledge-graph-focus-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                knowledgeGraphFocus = { type: btn.getAttribute('data-focus-type'), id: btn.getAttribute('data-focus-id') };
+                knowledgeSubTab = 'graph';
+                refreshKnowledgeRoot();
+                ensureKnowledgeDataForSubTab('graph');
+            });
+        });
+        root.querySelectorAll('.knowledge-mech-jump').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.getAttribute('data-mech-id');
+                knowledgeSubTab = 'mechanisms';
+                knowledgeExpanded.mechanism = id;
+                refreshKnowledgeRoot();
+                ensureKnowledgeDataForSubTab('mechanisms');
+            });
+        });
+    }
+
+    // ══════════════════════════════════════════════════
     // EVENTS
     // ══════════════════════════════════════════════════
     function bindEvents() {
@@ -3690,6 +4851,17 @@ const JarvisUI = (() => {
         arSummaryOpen = true;
         metaArchMarkdown = null;
         metaArchError = null;
+        knowledgeSubTab = 'overview';
+        knowledgeData = {};
+        knowledgeLoading = {};
+        knowledgeError = {};
+        knowledgeSearch = { mechanisms: '', principles: '', components: '', bridges: '', research: '' };
+        knowledgeSort = { mechanisms: 'n_videos_desc', principles: 'chain_strength_desc', components: 'n_mechanisms_desc', bridges: 'chain_strength_desc' };
+        knowledgeFilter = { mechanisms: 'all', principles: 'all', components: 'all', bridges: 'all', research: 'all' };
+        knowledgeExpanded = { mechanism: null, principle: null, component: null, bridge: null, question: null };
+        knowledgeListLimit = { mechanisms: 200, principles: 400, components: 100, bridges: 400 };
+        knowledgeGraphFocus = null;
+
         render();
     }
 

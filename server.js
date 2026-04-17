@@ -3817,6 +3817,164 @@ Respond ONLY as valid JSON (no markdown):
         } catch { sendJsonGz(req, res, { nodes: [], edges: [], derived_edges: [] }); }
         return;
     }
+
+    // =========================================
+    // API: Jarvis Knowledge artifacts (overnight build outputs)
+    // Direct file reads from buildings/jarvis/<name>.json — no R2 mirror.
+    // =========================================
+    {
+        const KNOWLEDGE_FILES = {
+            'mechanisms': 'mechanisms.json',
+            'mechanism-components': 'mechanism_components.json',
+            'mechanism-observations': 'mechanism_observations.json',
+            'components': 'components.json',
+            'principles': 'principles.json',
+            'principle-gaps': 'principle_gaps.json',
+            'bridge-validation': 'bridge_validation.json',
+            'bridge-top-principles': 'bridge_top_principles.json',
+            'research-questions': 'research_questions.json',
+            'research-answers': 'research_answers.json',
+            'overnight-status': 'overnight_status.json',
+            'findings-summary': 'findings-summary.json',
+        };
+        if (pathname.startsWith('/api/jarvis/knowledge/')) {
+            const name = pathname.slice('/api/jarvis/knowledge/'.length);
+            // Overview endpoint — small summary card payload pulled from many files
+            if (name === 'overview' && req.method === 'GET') {
+                try {
+                    const dir = path.join(__dirname, 'buildings', 'jarvis');
+                    const safeRead = (f, fallback) => {
+                        try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); }
+                        catch { return fallback; }
+                    };
+                    const status = safeRead('overnight_status.json', {});
+                    const principles = safeRead('principles.json', { n_principles: 0, principles: [], generated_at: null, ranking: null, thresholds: null });
+                    const mechanisms = safeRead('mechanisms.json', { n_mechanisms: 0, generated_at: null, n_videos_pool: null });
+                    const components = safeRead('components.json', { n_components: 0, generated_at: null, coverage_pct: null, min_recurrence: null });
+                    const bridge = safeRead('bridge_validation.json', { rows: [], n_principles_validated: 0, n_chains_with_both_legs_nonzero: 0, n_videos_in_pool: null, generated_at: null });
+                    const bridgeTop = safeRead('bridge_top_principles.json', { top: [], generated_at: null });
+                    const gaps = safeRead('principle_gaps.json', { gaps: [], n_gaps: 0 });
+                    const questions = safeRead('research_questions.json', { questions: [] });
+                    const answers = safeRead('research_answers.json', { answers: {} });
+                    const overview = {
+                        overnight: {
+                            overall_status: status.overall_status || null,
+                            current_phase: status.current_phase || null,
+                            started_at: status.started_at || null,
+                            finished_at: status.finished_at || null,
+                            updated_at: status.updated_at || null,
+                            totals: status.totals || {},
+                            completed_phases: status.completed_phases || [],
+                            failed_phase: status.failed_phase || null,
+                            failure_reason: status.failure_reason || null,
+                            notes: status.notes || null,
+                        },
+                        counts: {
+                            mechanisms: mechanisms.n_mechanisms || (Array.isArray(mechanisms.mechanisms) ? mechanisms.mechanisms.length : 0),
+                            components: components.n_components || (Array.isArray(components.components) ? components.components.length : 0),
+                            principles: principles.n_principles || (Array.isArray(principles.principles) ? principles.principles.length : 0),
+                            principles_dropped_tautological: principles.n_dropped_tautological || 0,
+                            principles_dropped: principles.n_dropped || 0,
+                            bridge_rows: Array.isArray(bridge.rows) ? bridge.rows.length : 0,
+                            bridge_top: Array.isArray(bridgeTop.top) ? bridgeTop.top.length : 0,
+                            bridge_n_chains_both_legs_nonzero: bridge.n_chains_with_both_legs_nonzero || 0,
+                            principle_gaps: gaps.n_gaps || (Array.isArray(gaps.gaps) ? gaps.gaps.length : 0),
+                            research_questions: Array.isArray(questions.questions) ? questions.questions.length : 0,
+                            research_answers: Array.isArray(answers.answers)
+                                ? answers.answers.length
+                                : (questions.questions ? questions.questions.filter(q => q.status === 'answered').length : Object.keys(answers.answers || {}).length),
+                            n_videos_pool: mechanisms.n_videos_pool || null,
+                        },
+                        thresholds: principles.thresholds || null,
+                        ranking: principles.ranking || null,
+                        generated_at: {
+                            principles: principles.generated_at || null,
+                            mechanisms: mechanisms.generated_at || null,
+                            components: components.generated_at || null,
+                            bridge: bridge.generated_at || null,
+                            bridge_top: bridgeTop.generated_at || null,
+                        },
+                    };
+                    sendJsonGz(req, res, overview);
+                } catch (e) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: e.message }));
+                }
+                return;
+            }
+            // Single-mechanism detail (full record incl. all sample_evidence)
+            if (name.startsWith('mechanism/') && req.method === 'GET') {
+                const mechId = decodeURIComponent(name.slice('mechanism/'.length));
+                try {
+                    const dir = path.join(__dirname, 'buildings', 'jarvis');
+                    const mechs = JSON.parse(fs.readFileSync(path.join(dir, 'mechanisms.json'), 'utf8'));
+                    const found = (mechs.mechanisms || []).find(m => m.id === mechId);
+                    if (!found) { res.writeHead(404); res.end('{}'); return; }
+                    // Include component links + observation count if available
+                    let componentIds = null;
+                    try {
+                        const mc = JSON.parse(fs.readFileSync(path.join(dir, 'mechanism_components.json'), 'utf8'));
+                        componentIds = (mc.mechanism_components || {})[mechId] || null;
+                    } catch {}
+                    sendJsonGz(req, res, { mechanism: found, component_ids: componentIds });
+                } catch (e) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: e.message }));
+                }
+                return;
+            }
+            // Single-principle detail
+            if (name.startsWith('principle/') && req.method === 'GET') {
+                const pid = decodeURIComponent(name.slice('principle/'.length));
+                try {
+                    const dir = path.join(__dirname, 'buildings', 'jarvis');
+                    const principles = JSON.parse(fs.readFileSync(path.join(dir, 'principles.json'), 'utf8'));
+                    const found = (principles.principles || []).find(p => p.id === pid);
+                    if (!found) { res.writeHead(404); res.end('{}'); return; }
+                    let validation = null;
+                    try {
+                        const bv = JSON.parse(fs.readFileSync(path.join(dir, 'bridge_validation.json'), 'utf8'));
+                        validation = (bv.rows || []).find(r => r.principle_id === pid) || null;
+                    } catch {}
+                    sendJsonGz(req, res, { principle: found, bridge_validation: validation });
+                } catch (e) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: e.message }));
+                }
+                return;
+            }
+            // Generic file passthrough — used for full-list loads
+            if (KNOWLEDGE_FILES[name] && req.method === 'GET') {
+                const fp = path.join(__dirname, 'buildings', 'jarvis', KNOWLEDGE_FILES[name]);
+                try {
+                    const buf = fs.readFileSync(fp);
+                    const accepts = (req.headers['accept-encoding'] || '');
+                    if (accepts.includes('gzip')) {
+                        zlib.gzip(buf, (err, compressed) => {
+                            if (err) {
+                                res.writeHead(200, { 'Content-Type': 'application/json' });
+                                res.end(buf);
+                            } else {
+                                res.writeHead(200, {
+                                    'Content-Type': 'application/json',
+                                    'Content-Encoding': 'gzip',
+                                    'Vary': 'Accept-Encoding',
+                                });
+                                res.end(compressed);
+                            }
+                        });
+                    } else {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(buf);
+                    }
+                } catch (e) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: `Not found: ${KNOWLEDGE_FILES[name]}` }));
+                }
+                return;
+            }
+        }
+    }
     if (pathname === '/api/jarvis/v2/tools' && req.method === 'GET') {
         try {
             if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('tools');
