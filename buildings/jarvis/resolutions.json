@@ -26831,7 +26831,17 @@
       "close_up_frame_pct_x_challenge_statement_count",
       "non_sub_view_share_x_challenge_to_resolution_gap_pct",
       "non_sub_view_share_x_loop_front_half_density",
-      "non_sub_view_share_x_answer_withhold_density_first_third"
+      "non_sub_view_share_x_answer_withhold_density_first_third",
+      "close_up_frame_pct_x_challenge_statement_density",
+      "close_up_frame_pct_x_narrative_tension_count",
+      "close_up_frame_pct_x_narrative_tension_density",
+      "close_up_frame_pct_x_payoff_delay_score",
+      "close_up_frame_pct_x_challenge_to_resolution_gap_pct",
+      "close_up_frame_pct_x_loop_front_half_density",
+      "close_up_frame_pct_x_answer_withhold_density_first_third",
+      "non_sub_view_share_x_narrative_tension_density_first_half",
+      "non_sub_view_share_x_challenge_setup_density_first_quarter",
+      "swipe_away_rate_x_challenge_statement_count"
     ],
     "depth_in_hierarchy": 0
   },
