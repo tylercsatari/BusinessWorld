@@ -1,205 +1,205 @@
 {
   "active": false,
-  "run_id": "auto_20260417135849.",
+  "run_id": "auto_20260417142448.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-17T13:58:49.337Z",
-  "updated_at": "2026-04-17T14:24:00.495Z",
-  "finished_at": "2026-04-17T14:24:00.495Z",
+  "started_at": "2026-04-17T14:24:48.015Z",
+  "updated_at": "2026-04-17T14:49:56.976Z",
+  "finished_at": "2026-04-17T14:49:56.976Z",
   "requested_iterations": 3000,
-  "attempted": 112,
-  "completed": 111,
+  "attempted": 115,
+  "completed": 114,
   "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 0,
+  "no_signal_streak": 5,
   "stop_reason": "max_minutes",
   "current_candidate": null,
-  "last_completed_candidate": "closure_density_mid_x_transformation_arc_density",
-  "last_completed_r": 0.0876,
+  "last_completed_candidate": "story_stake_density_first_quarter_x_curiosity_gap_count",
+  "last_completed_r": 0,
   "recent_events": [
     {
       "type": "completed",
-      "key": "closure_density_mid_x_rhetorical_question_count",
-      "r": 0.0075,
+      "key": "story_stake_density_first_quarter_x_social_comparison_density",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:19:47.866Z"
+      "ts": "2026-04-17T14:45:38.658Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_rhetorical_question_density",
-      "r": -0.0147,
+      "key": "story_stake_density_first_quarter_x_mystery_setup_count",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:19:59.685Z"
+      "ts": "2026-04-17T14:45:53.302Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_social_comparison_count",
-      "r": 0.0253,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-17T14:20:11.352Z"
-    },
-    {
-      "type": "completed",
-      "key": "closure_density_mid_x_social_comparison_density",
-      "r": 0.0253,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-17T14:20:24.227Z"
-    },
-    {
-      "type": "completed",
-      "key": "closure_density_mid_x_mystery_setup_count",
-      "r": -0.0734,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-17T14:20:37.960Z"
-    },
-    {
-      "type": "completed",
-      "key": "revelation_signal_density_x_stakes_reinforcement_count",
-      "r": 0.0232,
+      "key": "curiosity_escalation_density_x_loop_front_half_density",
+      "r": 0.1058,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-17T14:20:51.911Z"
+      "ts": "2026-04-17T14:46:05.157Z"
     },
     {
       "type": "completed",
-      "key": "revelation_signal_density_x_stakes_reinforcement_density",
-      "r": 0.0269,
+      "key": "curiosity_escalation_density_x_answer_withhold_density_first_third",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-17T14:21:04.711Z"
+      "ts": "2026-04-17T14:46:17.431Z"
     },
     {
       "type": "completed",
-      "key": "revelation_signal_density_x_challenge_statement_count",
-      "r": 0.0445,
+      "key": "curiosity_escalation_density_x_narrative_tension_density_first_half",
+      "r": 0.0695,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-17T14:21:18.219Z"
+      "ts": "2026-04-17T14:46:31.010Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_mystery_setup_density",
-      "r": -0.0801,
+      "key": "story_stake_density_first_quarter_x_mystery_setup_density",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:21:30.047Z"
+      "ts": "2026-04-17T14:46:44.759Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_promise_specificity_count",
-      "r": 0.1215,
+      "key": "story_stake_density_first_quarter_x_promise_specificity_count",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:21:42.085Z"
+      "ts": "2026-04-17T14:47:00.357Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_promise_specificity_density",
-      "r": 0.0707,
+      "key": "story_stake_density_first_quarter_x_promise_specificity_density",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:22:01.747Z"
+      "ts": "2026-04-17T14:47:15.685Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_loss_framing_count",
-      "r": -0.0436,
+      "key": "story_stake_density_first_quarter_x_loss_framing_count",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:22:13.567Z"
+      "ts": "2026-04-17T14:47:28.572Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_loss_framing_density",
-      "r": -0.0718,
+      "key": "story_stake_density_first_quarter_x_loss_framing_density",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:22:26.356Z"
+      "ts": "2026-04-17T14:47:40.769Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_viewer_stakes_count",
-      "r": 0.1086,
+      "key": "story_stake_density_first_quarter_x_viewer_stakes_count",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:22:38.581Z"
+      "ts": "2026-04-17T14:47:52.447Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_viewer_stakes_density",
-      "r": 0.1122,
+      "key": "story_stake_density_first_quarter_x_viewer_stakes_density",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:22:52.010Z"
+      "ts": "2026-04-17T14:48:03.824Z"
     },
     {
       "type": "completed",
-      "key": "revelation_signal_density_x_challenge_statement_density",
-      "r": 0.025,
+      "key": "curiosity_escalation_density_x_challenge_setup_density_first_quarter",
+      "r": 0.0535,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-17T14:23:05.330Z"
+      "ts": "2026-04-17T14:48:17.091Z"
     },
     {
       "type": "completed",
-      "key": "revelation_signal_density_x_narrative_tension_count",
-      "r": 0.0658,
+      "key": "stakes_reinforcement_count_x_stakes_reinforcement_density",
+      "r": 0.1253,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-17T14:23:20.896Z"
+      "ts": "2026-04-17T14:48:31.160Z"
     },
     {
       "type": "completed",
-      "key": "revelation_signal_density_x_narrative_tension_density",
-      "r": 0.0646,
+      "key": "stakes_reinforcement_count_x_challenge_statement_count",
+      "r": 0.1304,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-17T14:23:35.245Z"
+      "ts": "2026-04-17T14:48:45.014Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_transformation_arc_count",
-      "r": 0.0848,
+      "key": "story_stake_density_first_quarter_x_transformation_arc_count",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:23:48.261Z"
+      "ts": "2026-04-17T14:48:57.600Z"
     },
     {
       "type": "completed",
-      "key": "closure_density_mid_x_transformation_arc_density",
-      "r": 0.0876,
+      "key": "story_stake_density_first_quarter_x_transformation_arc_density",
+      "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T14:24:00.125Z"
+      "ts": "2026-04-17T14:49:09.167Z"
+    },
+    {
+      "type": "completed",
+      "key": "story_stake_density_first_quarter_x_social_proof_count",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T14:49:22.797Z"
+    },
+    {
+      "type": "completed",
+      "key": "story_stake_density_first_quarter_x_social_proof_density",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T14:49:38.004Z"
+    },
+    {
+      "type": "completed",
+      "key": "story_stake_density_first_quarter_x_curiosity_gap_count",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T14:49:56.689Z"
     }
   ],
-  "pre_attempted": 79,
-  "pre_completed": 78,
+  "pre_attempted": 82,
+  "pre_completed": 81,
   "post_attempted": 33,
   "post_completed": 33
 }
