@@ -503,6 +503,26 @@ async function autoRun(opts = {}) {
 
     let pool = merged.filter(k => !existingKeys.has(k));
 
+    // Filter out candidates whose component indicators are zero-variance (all same value).
+    // These always produce r=0 trivially and waste iterations.
+    const zeroVarKeys = new Set();
+    for (const ind of indicators) {
+        const ds = ind.dataset || [];
+        if (!ds.length) continue;
+        const vals = ds.map(d => (d && typeof d === 'object') ? d.value : d).filter(v => v != null);
+        if (!vals.length) continue;
+        const firstVal = String(vals[0]);
+        if (vals.every(v => String(v) === firstVal)) zeroVarKeys.add(ind.key);
+    }
+    if (zeroVarKeys.size > 0) {
+        const before = pool.length;
+        pool = pool.filter(k => {
+            const parts = k.split('_x_');
+            return !parts.some(p => zeroVarKeys.has(p));
+        });
+        log(`Zero-variance filter: skipped ${before - pool.length} candidates (${zeroVarKeys.size} constant-value indicators)`);
+    }
+
     if (preuploadRatio != null) {
         const preCt = pool.filter(k => metrics.getCandidateLayer(k) === 'pre').length;
         log(`Pool before bias: ${preCt} pre, ${pool.length - preCt} post`);
