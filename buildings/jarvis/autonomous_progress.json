@@ -1,32 +1,205 @@
 {
   "active": true,
-  "run_id": "auto_20260417105945.",
+  "run_id": "auto_20260417110028.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-17T10:59:45.777Z",
-  "updated_at": "2026-04-17T10:59:53.860Z",
+  "started_at": "2026-04-17T11:00:28.253Z",
+  "updated_at": "2026-04-17T11:25:01.706Z",
   "finished_at": null,
   "requested_iterations": 3000,
-  "attempted": 2,
-  "completed": 0,
+  "attempted": 101,
+  "completed": 99,
   "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
   "stop_reason": null,
-  "current_candidate": "reward_density_first_half_x_information_drip_ratio",
-  "last_completed_candidate": null,
-  "last_completed_r": null,
+  "current_candidate": "foreshadow_density_hook_x_unresolved_loop_count",
+  "last_completed_candidate": "visual_credibility_count_x_cliffhanger_count",
+  "last_completed_r": 0.0914,
   "recent_events": [
     {
-      "type": "failed",
-      "key": "payoff_position_pct_x_challenge_to_resolution_gap_pct",
-      "reason": "processIndicator returned null",
+      "type": "completed",
+      "key": "reward_density_first_half_x_challenge_statement_count",
+      "r": 0.0778,
+      "resolution_id": "r0",
+      "target": "views",
       "layer": "pre",
-      "ts": "2026-04-17T10:59:53.508Z"
+      "ts": "2026-04-17T11:20:00.692Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_challenge_statement_density",
+      "r": 0.0512,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:20:14.449Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_narrative_tension_count",
+      "r": 0.0932,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:20:28.573Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_narrative_tension_density",
+      "r": 0.0899,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:20:46.851Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_payoff_delay_score",
+      "r": 0.0846,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:21:01.983Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_challenge_to_resolution_gap_pct",
+      "r": 0.0259,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:21:15.943Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_loop_front_half_density",
+      "r": 0.0281,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:21:30.233Z"
+    },
+    {
+      "type": "completed",
+      "key": "reference_callback_count_x_revelation_signal_density",
+      "r": 0.0803,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-17T11:21:44.506Z"
+    },
+    {
+      "type": "completed",
+      "key": "reference_callback_count_x_curiosity_escalation_count",
+      "r": 0.0712,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-17T11:22:00.393Z"
+    },
+    {
+      "type": "completed",
+      "key": "reference_callback_count_x_curiosity_escalation_density",
+      "r": 0.0712,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-17T11:22:27.110Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_answer_withhold_density_first_third",
+      "r": -0.0248,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:22:53.350Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_narrative_tension_density_first_half",
+      "r": 0.1276,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:23:09.346Z"
+    },
+    {
+      "type": "completed",
+      "key": "reward_density_first_half_x_challenge_setup_density_first_quarter",
+      "r": -0.0026,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:23:28.998Z"
+    },
+    {
+      "type": "completed",
+      "key": "foreshadow_density_hook_x_visual_proof_phrase_count",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:23:41.643Z"
+    },
+    {
+      "type": "completed",
+      "key": "foreshadow_density_hook_x_visual_proof_phrase_density",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:23:55.551Z"
+    },
+    {
+      "type": "completed",
+      "key": "foreshadow_density_hook_x_zygarnik_score",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:24:09.334Z"
+    },
+    {
+      "type": "completed",
+      "key": "foreshadow_density_hook_x_zygarnik_buildup_ratio",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-17T11:24:22.202Z"
+    },
+    {
+      "type": "completed",
+      "key": "reference_callback_count_x_stakes_reinforcement_count",
+      "r": -0.0247,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-17T11:24:35.082Z"
+    },
+    {
+      "type": "completed",
+      "key": "reference_callback_count_x_stakes_reinforcement_density",
+      "r": -0.0243,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-17T11:24:49.173Z"
+    },
+    {
+      "type": "completed",
+      "key": "visual_credibility_count_x_cliffhanger_count",
+      "r": 0.0914,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-17T11:25:01.425Z"
     }
   ],
-  "pre_attempted": 2,
-  "pre_completed": 0,
-  "post_attempted": 0,
-  "post_completed": 0
+  "pre_attempted": 71,
+  "pre_completed": 69,
+  "post_attempted": 30,
+  "post_completed": 30
 }
