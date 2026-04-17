@@ -28444,7 +28444,8 @@
       "reward_density_first_half_x_credential_signal_count",
       "reward_density_first_half_x_credential_signal_density",
       "reward_density_first_half_x_closure_gap_pct",
-      "reward_density_first_half_x_micro_reward_density"
+      "reward_density_first_half_x_micro_reward_density",
+      "reward_density_first_half_x_information_drip_ratio"
     ],
     "depth_in_hierarchy": 0
   },
