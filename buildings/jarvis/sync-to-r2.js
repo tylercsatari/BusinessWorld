@@ -19,6 +19,7 @@ const FILES = [
     'graph',
     'resolutions',
     'indicators',
+    'indicator-registry',
     'candidate_queue',
     'experiments_log',
     'tools',

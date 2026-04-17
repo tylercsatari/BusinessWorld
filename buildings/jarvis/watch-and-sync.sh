@@ -40,7 +40,7 @@ echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] R2 sync exit=$R2_EXIT" >> "$LOG"
 
 # Commit and push
 cd "$REPO_DIR"
-git add buildings/jarvis/autonomous_progress.json buildings/jarvis/graph.json buildings/jarvis/resolutions.json buildings/jarvis/derived_experiments.json buildings/jarvis/derived_experiments_compact.json buildings/jarvis/experiments_log.json buildings/jarvis/experiments_log_compact.json buildings/jarvis/indicators.json buildings/jarvis/indicators_compact.json buildings/jarvis/candidate_queue.json buildings/jarvis/autonomous_runs.json 2>/dev/null
+git add buildings/jarvis/autonomous_progress.json buildings/jarvis/graph.json buildings/jarvis/resolutions.json buildings/jarvis/derived_experiments.json buildings/jarvis/derived_experiments_compact.json buildings/jarvis/experiments_log.json buildings/jarvis/experiments_log_compact.json buildings/jarvis/indicators.json buildings/jarvis/indicators_compact.json buildings/jarvis/candidate_queue.json buildings/jarvis/autonomous_runs.json buildings/jarvis/indicator-registry.json 2>/dev/null
 
 CHANGED=$(git diff --cached --name-only | wc -l | tr -d ' ')
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] staged changed files=$CHANGED" >> "$LOG"
