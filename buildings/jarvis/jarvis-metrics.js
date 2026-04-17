@@ -908,6 +908,13 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'story_clock_count_first10s',
     'proof_build_density',
     'proof_build_count_first_half',
+    // Group Y: High-resolution zygarnik structural metrics
+    'open_loop_density_second_quarter',
+    'open_loop_density_third_quarter',
+    'loop_resolution_ratio',
+    'sustained_tension_word_pct',
+    'proof_phrase_mid_density',
+    'open_loop_front_third_density',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -4549,6 +4556,75 @@ function extractMetric(key, analysis) {
         return [countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.proof_build), null];
     }
 
+    // ── Group Y: High-resolution zygarnik structural metrics ────────────────
+    if (key === 'open_loop_density_second_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const q1 = Math.floor(words.length * 0.25);
+        const q2 = Math.floor(words.length * 0.50);
+        const midText = words.slice(q1, q2).join(' ').toLowerCase();
+        const midWords = midText.split(/\s+/).filter(Boolean);
+        if (!midWords.length) return [0, null];
+        return [countPhraseMatches(midText, ZYGARNIK_PHRASE_SETS.open_loop) / midWords.length, null];
+    }
+    if (key === 'open_loop_density_third_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const q2 = Math.floor(words.length * 0.50);
+        const q3 = Math.floor(words.length * 0.75);
+        const midText = words.slice(q2, q3).join(' ').toLowerCase();
+        const midWords = midText.split(/\s+/).filter(Boolean);
+        if (!midWords.length) return [0, null];
+        return [countPhraseMatches(midText, ZYGARNIK_PHRASE_SETS.open_loop) / midWords.length, null];
+    }
+    if (key === 'loop_resolution_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const ol = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        const cl = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        if (cl === 0) return [ol > 0 ? 2.0 : null, ol > 0 ? null : 'no loops or closures'];
+        return [ol / cl, null];
+    }
+    if (key === 'sustained_tension_word_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        let firstLoop = -1, firstClosure = -1;
+        for (const ph of ZYGARNIK_PHRASE_SETS.open_loop) {
+            const idx = tl.indexOf(ph);
+            if (idx !== -1) firstLoop = firstLoop === -1 ? idx : Math.min(firstLoop, idx);
+        }
+        for (const ph of ZYGARNIK_PHRASE_SETS.closure) {
+            const idx = tl.indexOf(ph);
+            if (idx !== -1) firstClosure = firstClosure === -1 ? idx : Math.min(firstClosure, idx);
+        }
+        if (firstLoop === -1) return [null, 'no open loops'];
+        if (firstClosure === -1 || firstClosure <= firstLoop) return [null, 'no closure after loop'];
+        return [(firstClosure - firstLoop) / tl.length, null];
+    }
+    if (key === 'proof_phrase_mid_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const q1 = Math.floor(words.length * 0.25);
+        const q3 = Math.floor(words.length * 0.75);
+        const midText = words.slice(q1, q3).join(' ').toLowerCase();
+        const midWords = midText.split(/\s+/).filter(Boolean);
+        if (!midWords.length) return [0, null];
+        return [countPhraseMatches(midText, NEW_VISUAL_PROOF_PHRASES) / midWords.length, null];
+    }
+    if (key === 'open_loop_front_third_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const q1 = Math.floor(words.length * 0.33);
+        const frontText = words.slice(0, q1).join(' ').toLowerCase();
+        const frontWords = frontText.split(/\s+/).filter(Boolean);
+        if (!frontWords.length) return [0, null];
+        return [countPhraseMatches(frontText, ZYGARNIK_PHRASE_SETS.open_loop) / frontWords.length, null];
+    }
+
     return [null, `unknown key: ${key}`];
 }
 
@@ -4594,6 +4670,39 @@ function generateAutonomousCandidates() {
         'delayed_reveal_to_payoff_ratio', 'visual_credibility_before_claim_ratio',
         'reference_callback_rate_per_min', 'stakes_escalation_mid_density',
         'narrative_anchor_peak_pct', 'delayed_reveal_setup_ratio',
+        // Group Y: High-resolution zygarnik structural metrics (new atomics)
+        'open_loop_density_second_quarter', 'open_loop_density_third_quarter',
+        'loop_resolution_ratio', 'sustained_tension_word_pct',
+        'proof_phrase_mid_density', 'open_loop_front_third_density',
+    ]) { candidates.push(k); }
+
+    // ── Group X: High-signal zygarnik cross-products (top-r pairs, run before generic interaction loop) ──
+    for (const k of [
+        'pre_gratification_open_loop_count_x_open_loop_to_closure_ratio',
+        'pre_gratification_open_loop_count_x_visual_proof_phrase_count',
+        'pre_gratification_open_loop_count_x_setup_duration_s',
+        'open_loop_to_closure_ratio_x_setup_duration_s',
+        'open_loop_to_closure_ratio_x_proof_before_midpoint_flag',
+        'open_loop_density_mid_x_visual_proof_phrase_count',
+        'open_loop_density_mid_x_setup_duration_s',
+        'open_loop_density_mid_x_open_loop_to_closure_ratio',
+        'pre_closure_open_loop_count_x_visual_proof_phrase_count',
+        'pre_closure_open_loop_count_x_setup_duration_s',
+        'open_loop_before_closure_flag_x_visual_proof_phrase_count',
+        'open_loop_before_closure_flag_x_setup_duration_s',
+        'zygarnik_gradient_pct_x_open_loop_to_closure_ratio',
+        'zygarnik_gradient_pct_x_pre_gratification_open_loop_count',
+        'zygarnik_buildup_ratio_x_pre_gratification_open_loop_count',
+        'zygarnik_buildup_ratio_x_open_loop_to_closure_ratio',
+        'loop_to_closure_gap_s_x_pre_gratification_open_loop_count',
+        'stakes_reinforcement_count_x_open_loop_to_closure_ratio',
+        'stakes_reinforcement_count_x_pre_gratification_open_loop_count',
+        'proof_before_midpoint_flag_x_pre_gratification_open_loop_count',
+        'proof_before_midpoint_flag_x_open_loop_density_mid',
+        'setup_duration_s_x_pre_gratification_open_loop_count',
+        'setup_duration_s_x_open_loop_density_mid',
+        'open_loop_count_first20s_x_visual_proof_phrase_count',
+        'open_loop_count_first20s_x_setup_duration_s',
     ]) { candidates.push(k); }
 
     for (const pct of RETENTION_POINTS) candidates.push(`retention_pct_${pct}`);
