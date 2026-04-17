@@ -199,6 +199,31 @@ const CLIMAX_LABELS = new Set(['climax', 'peak', 'payoff', 'reveal']);
 
 // ── Zygarnik / Open-Loop / Gratification Delay word lists ───────────────
 
+const CHALLENGE_STATEMENT_PHRASES = [
+    "let's see if", "let's see how", "let's find out", 'let me see if',
+    'let me find out', 'can i', 'can we', 'i want to see if',
+    'i want to find out', 'the goal is', 'my goal is', 'the challenge is',
+    'my challenge', 'my mission is', 'i decided to', 'i am going to try',
+    "i'm going to try", "i'm going to see", 'what happens if', 'what happens when',
+    'what would happen', 'the question is', 'the big question', 'i wonder if',
+    'i set out to', 'the experiment', 'my experiment', "i'm testing",
+    'i tested', 'i tried to', 'i attempted', 'i set a goal',
+    'i gave myself', 'i challenged myself', 'challenge accepted',
+];
+
+const NARRATIVE_TENSION_PHRASES = [
+    'i was nervous', 'i was scared', 'i was worried', 'not sure if',
+    "i didn't know if", "i didn't expect", "i wasn't sure",
+    'the scary part', 'the hard part', "but here's the problem",
+    'the problem was', "but there's a catch", "there's a catch",
+    "what i didn't know", "what i didn't realize",
+    'little did i know', 'i had no idea', 'i had no clue',
+    'out of nowhere', 'and then suddenly', 'and then it happened',
+    'everything changed', 'something happened', 'then things got',
+    'the twist is', "here's the twist", 'but then', 'and then',
+    "and that's when", "that's when i", 'this is when',
+];
+
 const ZYGARNIK_PHRASE_SETS = {
     open_loop: [
         'what if', 'i wonder', "let's see", 'will it', 'can i', 'can we',
@@ -440,6 +465,8 @@ const ZYGARNIK_PHRASE_SETS = {
         'i have proof', 'look at this', 'check this out', 'as you saw',
         'see for yourself', 'the math', 'here is the data',
     ],
+    challenge_statement: CHALLENGE_STATEMENT_PHRASES,
+    narrative_tension: NARRATIVE_TENSION_PHRASES,
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
@@ -952,6 +979,14 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'sustained_tension_word_pct',
     'proof_phrase_mid_density',
     'open_loop_front_third_density',
+    // Group Z: New structural zygarnik/challenge/tension metrics
+    'challenge_setup_density_first_quarter',
+    'narrative_tension_density_first_half',
+    'answer_withhold_density_first_third',
+    'payoff_delay_score',
+    'loop_front_half_density',
+    'resolution_density_second_half',
+    'challenge_to_resolution_gap_pct',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -1143,6 +1178,15 @@ const INTERACTION_BASES = [
     'revelation_signal_count', 'revelation_signal_density',
     'curiosity_escalation_count', 'curiosity_escalation_density',
     'stakes_reinforcement_count', 'stakes_reinforcement_density',
+    // Group Z bases (challenge/tension structural)
+    'challenge_statement_count', 'challenge_statement_density',
+    'narrative_tension_count', 'narrative_tension_density',
+    'payoff_delay_score',
+    'challenge_to_resolution_gap_pct',
+    'loop_front_half_density',
+    'answer_withhold_density_first_third',
+    'narrative_tension_density_first_half',
+    'challenge_setup_density_first_quarter',
 ];
 // Excluded from cross-metric generation due to sparse video coverage (<50 videos with scores):
 // 'emotional_peak_position_pct', 'revelation_pace_score'
@@ -4219,7 +4263,8 @@ function extractMetric(key, analysis) {
                 const idx = tl.indexOf(ph);
                 if (idx !== -1) firstPayoff = firstPayoff === -1 ? idx : Math.min(firstPayoff, idx);
             }
-            if (firstSetup === -1 || firstPayoff === -1) return [null, 'phrase not found'];
+            if (firstPayoff === -1) return [null, 'no payoff signal'];
+            if (firstSetup === -1) firstSetup = 0; // implicit setup at video start
             return [Math.max(0, (firstPayoff - firstSetup) / tl.length), null];
         }
         if (key === 'proof_arrival_timing_pct') {
@@ -4281,11 +4326,11 @@ function extractMetric(key, analysis) {
         if (key === 'delayed_reveal_setup_ratio') {
             if (!transcript) return [null, 'no transcript'];
             const tl = transcript.toLowerCase();
-            let dr = 0, ss = 0;
+            let dr = 0;
             for (const ph of DELAYED_REVEAL_PHRASES) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { dr++; i += ph.length; } }
-            for (const ph of SETUP_SIGNAL_PHRASES) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { ss++; i += ph.length; } }
-            if (ss === 0) return [null, 'no setup signals'];
-            return [dr / ss, null];
+            const wordCount = tl.split(/\s+/).filter(Boolean).length;
+            if (!wordCount) return [null, 'empty transcript'];
+            return [dr / wordCount, null];
         }
     }
 
@@ -4662,6 +4707,77 @@ function extractMetric(key, analysis) {
         return [countPhraseMatches(frontText, ZYGARNIK_PHRASE_SETS.open_loop) / frontWords.length, null];
     }
 
+    // ── Group Z: Challenge/tension structural metrics ─────────────────────────────────────
+    if (key === 'challenge_setup_density_first_quarter') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const q1 = words.slice(0, Math.floor(words.length / 4)).join(' ').toLowerCase();
+        const q1Words = q1.split(/\s+/).filter(Boolean).length || 1;
+        return [countPhraseMatches(q1, CHALLENGE_STATEMENT_PHRASES) / q1Words, null];
+    }
+    if (key === 'narrative_tension_density_first_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const half = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        const halfWords = half.split(/\s+/).filter(Boolean).length || 1;
+        return [countPhraseMatches(half, NARRATIVE_TENSION_PHRASES) / halfWords, null];
+    }
+    if (key === 'answer_withhold_density_first_third') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const third = words.slice(0, Math.floor(words.length / 3)).join(' ').toLowerCase();
+        const thirdWords = third.split(/\s+/).filter(Boolean).length || 1;
+        return [countPhraseMatches(third, DELAYED_REVEAL_PHRASES) / thirdWords, null];
+    }
+    if (key === 'payoff_delay_score') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        let firstPayoff = -1;
+        for (const ph of PAYOFF_SIGNAL_PHRASES) {
+            const idx = tl.indexOf(ph);
+            if (idx !== -1) firstPayoff = firstPayoff === -1 ? idx : Math.min(firstPayoff, idx);
+        }
+        if (firstPayoff === -1) return [1.0, null]; // no payoff = treated as max delay
+        return [firstPayoff / tl.length, null];
+    }
+    if (key === 'loop_front_half_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const half = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        const halfWords = half.split(/\s+/).filter(Boolean).length || 1;
+        const OPEN_LOOP_PHRASES = ZYGARNIK_PHRASE_SETS['open_loop'] || [];
+        return [countPhraseMatches(half, OPEN_LOOP_PHRASES) / halfWords, null];
+    }
+    if (key === 'resolution_density_second_half') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const half = words.slice(Math.floor(words.length / 2)).join(' ').toLowerCase();
+        const halfWords = half.split(/\s+/).filter(Boolean).length || 1;
+        const CLOSURE_PHRASES = ZYGARNIK_PHRASE_SETS['closure'] || [];
+        return [countPhraseMatches(half, CLOSURE_PHRASES) / halfWords, null];
+    }
+    if (key === 'challenge_to_resolution_gap_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        let firstChallenge = -1, firstPayoff = -1;
+        for (const ph of CHALLENGE_STATEMENT_PHRASES) {
+            const idx = tl.indexOf(ph);
+            if (idx !== -1) firstChallenge = firstChallenge === -1 ? idx : Math.min(firstChallenge, idx);
+        }
+        for (const ph of PAYOFF_SIGNAL_PHRASES) {
+            const idx = tl.indexOf(ph);
+            if (idx !== -1) firstPayoff = firstPayoff === -1 ? idx : Math.min(firstPayoff, idx);
+        }
+        if (firstChallenge === -1) firstChallenge = 0; // treat video start as implicit challenge
+        if (firstPayoff === -1) return [null, 'no payoff signal'];
+        return [Math.max(0, (firstPayoff - firstChallenge) / tl.length), null];
+    }
+
     return [null, `unknown key: ${key}`];
 }
 
@@ -4711,6 +4827,11 @@ function generateAutonomousCandidates() {
         'open_loop_density_second_quarter', 'open_loop_density_third_quarter',
         'loop_resolution_ratio', 'sustained_tension_word_pct',
         'proof_phrase_mid_density', 'open_loop_front_third_density',
+        // Group Z: New challenge/tension/structural metrics
+        'challenge_setup_density_first_quarter', 'narrative_tension_density_first_half',
+        'answer_withhold_density_first_third', 'payoff_delay_score',
+        'loop_front_half_density', 'resolution_density_second_half',
+        'challenge_to_resolution_gap_pct',
     ]) { candidates.push(k); }
 
     // ── Group X: High-signal zygarnik cross-products (top-r pairs, run before generic interaction loop) ──
@@ -4740,6 +4861,21 @@ function generateAutonomousCandidates() {
         'setup_duration_s_x_open_loop_density_mid',
         'open_loop_count_first20s_x_visual_proof_phrase_count',
         'open_loop_count_first20s_x_setup_duration_s',
+        // Group Z priority pairs
+        'challenge_statement_count_x_open_loop_count',
+        'challenge_statement_count_x_pre_gratification_open_loop_count',
+        'challenge_statement_density_x_open_loop_to_closure_ratio',
+        'payoff_delay_score_x_open_loop_count',
+        'payoff_delay_score_x_pre_gratification_open_loop_count',
+        'narrative_tension_count_x_open_loop_count',
+        'narrative_tension_density_x_pre_gratification_open_loop_count',
+        'challenge_to_resolution_gap_pct_x_open_loop_count',
+        'challenge_to_resolution_gap_pct_x_pre_gratification_open_loop_count',
+        'loop_front_half_density_x_resolution_density_second_half',
+        'answer_withhold_density_first_third_x_open_loop_count',
+        'challenge_statement_count_x_non_sub_view_share',
+        'narrative_tension_count_x_non_sub_view_share',
+        'payoff_delay_score_x_non_sub_view_share',
     ]) { candidates.push(k); }
 
     for (const pct of RETENTION_POINTS) candidates.push(`retention_pct_${pct}`);
