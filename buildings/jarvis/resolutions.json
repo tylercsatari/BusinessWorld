@@ -30327,7 +30327,10 @@
       "cliffhanger_count_x_viewer_stakes_count",
       "title_number_flag_x_promise_specificity_count",
       "title_number_flag_x_promise_specificity_density",
-      "title_number_flag_x_loss_framing_count"
+      "title_number_flag_x_loss_framing_count",
+      "title_number_flag_x_loss_framing_density",
+      "title_number_flag_x_viewer_stakes_count",
+      "title_number_flag_x_viewer_stakes_density"
     ],
     "depth_in_hierarchy": 0
   },
