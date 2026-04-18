@@ -30397,7 +30397,9 @@
       "transformation_density_x_pre_proof_tension_score",
       "transformation_density_x_credential_signal_count",
       "transformation_density_x_credential_signal_density",
-      "payoff_tease_count_x_viewer_stakes_front_load_ratio"
+      "payoff_tease_count_x_viewer_stakes_front_load_ratio",
+      "viewer_stakes_front_load_ratio_x_revelation_signal_count",
+      "revelation_signal_count_x_viewer_stakes_front_load_ratio"
     ],
     "depth_in_hierarchy": 0
   },
