@@ -1605,6 +1605,23 @@ function getMetricDefinition(key) {
         }
     }
 
+    // Group R retention-curve zygarnik metrics
+    const GROUP_R_KEYS = new Set([
+        'retention_zygarnik_arc', 'retention_recovery_ratio', 'retention_late_payoff',
+        'retention_pre_payoff_drop', 'retention_hook_to_mid_ratio',
+        'retention_setup_phase_mean', 'retention_open_loop_phase_mean',
+        'retention_payoff_phase_mean', 'retention_tension_trough_pct', 'retention_arc_width'
+    ]);
+    if (GROUP_R_KEYS.has(key)) {
+        return {
+            description: key.replace(/_/g, ' '),
+            formula: key,
+            expected_range: 'varies',
+            data_sources: ['analytics.retentionCurve'],
+            layer: 'post',
+        };
+    }
+
     // Interaction terms: keyA_x_keyB
     m = key.match(/^(.+)_x_(.+)$/);
     if (m) {
@@ -1765,6 +1782,65 @@ function extractMetric(key, analysis) {
     if (key === 'retention_skew') {
         if (curve.length < 3) return [null, 'curve too short'];
         return [skew(curve.map(p => p.retention)), null];
+    }
+
+    // ── Group R: Retention-Curve Zygarnik metrics ─────────────────────────
+    if (key === 'retention_zygarnik_arc') {
+        const v25 = curveVal(25), v50 = curveVal(50), v75 = curveVal(75);
+        if (v25 == null || v50 == null || v75 == null || v25 === 0) return [null, 'no curve'];
+        const drop = v25 - v50;
+        const recovery = Math.max(0, v75 - v50);
+        return [(drop + recovery) / v25, null];
+    }
+    if (key === 'retention_recovery_ratio') {
+        const v50 = curveVal(50), v75 = curveVal(75);
+        if (v50 == null || v75 == null || v50 === 0) return [null, 'no curve'];
+        return [v75 / v50, null];
+    }
+    if (key === 'retention_late_payoff') {
+        const v50 = curveVal(50), v90 = curveVal(90);
+        if (v50 == null || v90 == null || v50 === 0) return [null, 'no curve'];
+        return [v90 / v50, null];
+    }
+    if (key === 'retention_pre_payoff_drop') {
+        const v25 = curveVal(25), v50 = curveVal(50);
+        if (v25 == null || v50 == null) return [null, 'no curve'];
+        return [v25 - v50, null];
+    }
+    if (key === 'retention_hook_to_mid_ratio') {
+        const v10 = curveVal(10), v50 = curveVal(50);
+        if (v10 == null || v50 == null || v50 === 0) return [null, 'no curve'];
+        return [v10 / v50, null];
+    }
+    if (key === 'retention_setup_phase_mean') {
+        const pts = [5,10,15,20,25].map(i => curveVal(i)).filter(v => v != null);
+        if (pts.length < 3) return [null, 'curve too short'];
+        return [pts.reduce((a,b)=>a+b,0)/pts.length, null];
+    }
+    if (key === 'retention_open_loop_phase_mean') {
+        const pts = [25,30,35,40,45,50].map(i => curveVal(i)).filter(v => v != null);
+        if (pts.length < 4) return [null, 'curve too short'];
+        return [pts.reduce((a,b)=>a+b,0)/pts.length, null];
+    }
+    if (key === 'retention_payoff_phase_mean') {
+        const pts = [60,65,70,75,80,85,90].map(i => curveVal(i)).filter(v => v != null);
+        if (pts.length < 4) return [null, 'curve too short'];
+        return [pts.reduce((a,b)=>a+b,0)/pts.length, null];
+    }
+    if (key === 'retention_tension_trough_pct') {
+        if (curve.length < 10) return [null, 'curve too short'];
+        let minVal = Infinity, minPct = null;
+        for (let i = 0; i < curve.length; i++) {
+            if (curve[i].retention < minVal) { minVal = curve[i].retention; minPct = i; }
+        }
+        return [minPct, null];
+    }
+    if (key === 'retention_arc_width') {
+        const v25 = curveVal(25), v50 = curveVal(50), v75 = curveVal(75);
+        if (v25 == null || v50 == null || v75 == null) return [null, 'no curve'];
+        const peak = Math.max(v25, v75);
+        const trough = v50;
+        return [peak - trough, null];
     }
 
     // Views / engagement
@@ -4833,6 +4909,38 @@ function generateAutonomousCandidates() {
         'loop_front_half_density', 'resolution_density_second_half',
         'challenge_to_resolution_gap_pct',
     ]) { candidates.push(k); }
+
+    // ── Group R: Retention-Curve Zygarnik metrics (priority atomics) ──
+    for (const k of [
+        'retention_zygarnik_arc', 'retention_recovery_ratio', 'retention_late_payoff',
+        'retention_pre_payoff_drop', 'retention_hook_to_mid_ratio',
+        'retention_setup_phase_mean', 'retention_open_loop_phase_mean',
+        'retention_payoff_phase_mean', 'retention_tension_trough_pct', 'retention_arc_width',
+    ]) { candidates.push(k); }
+
+    // ── Group R cross-products: retention-curve × known good anchors ──
+    const R_BASES = [
+        'retention_zygarnik_arc', 'retention_recovery_ratio', 'retention_late_payoff',
+        'retention_pre_payoff_drop', 'retention_hook_to_mid_ratio',
+        'retention_setup_phase_mean', 'retention_open_loop_phase_mean',
+        'retention_payoff_phase_mean',
+    ];
+    const GOOD_ANCHORS = [
+        'open_loop_count', 'open_loop_to_closure_ratio', 'payoff_delay_score',
+        'setup_duration_s', 'visual_proof_phrase_count', 'pre_gratification_open_loop_count',
+        'hook_drop_rate', 'zygarnik_score', 'zygarnik_buildup_ratio',
+        'open_loop_density', 'dangling_question_ratio', 'hook_tension_ratio',
+        'gratification_delay_pct', 'promise_proof_gap_pct', 'non_sub_view_share',
+        'title_number_flag', 'hook_open_loop_density', 'open_loop_count_first20s',
+    ];
+    for (const r of R_BASES) {
+        for (const a of GOOD_ANCHORS) {
+            const pk = `${r}_x_${a}`;
+            const pk2 = `${a}_x_${r}`;
+            candidates.push(pk);
+            candidates.push(pk2);
+        }
+    }
 
     // ── Group X: High-signal zygarnik cross-products (top-r pairs, run before generic interaction loop) ──
     for (const k of [
