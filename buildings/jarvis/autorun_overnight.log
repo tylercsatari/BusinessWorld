@@ -2755,3 +2755,211 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 15:28:07]   Stop: max_minutes, Top |r|: 0.3972, Elapsed: 25.6m
 [jarvis-runner 15:28:07]   Total indicators: 1852
 [launch-autorun] Complete.
+◇ injected env (42) from ../../.env // tip: ⌘ enable debugging { debug: true }
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 16:04:09] 
+============================================================
+[jarvis-runner 16:04:09] AUTONOMOUS RUN: auto_20260419160409.
+[jarvis-runner 16:04:09]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7
+[jarvis-runner 16:04:49] Zero-variance filter: skipped indicators — 175 constant-value, 450 sparse (<20 nonzero); removed 1531 candidates
+[jarvis-runner 16:04:49] Pool before bias: 16829 pre, 29237 post
+[jarvis-runner 16:04:49] Candidate pool: 46066 unrun (32927 already done)
+[jarvis-runner 16:04:50] Loaded 370 videos
+[jarvis-runner 16:04:50] 
+==================================================
+[jarvis-runner 16:04:50] INDICATOR: payoff_position_pct_x_challenge_to_resolution_gap_pct
+[jarvis-runner 16:04:50]   [DATASET]   43 videos, 327 skipped
+[jarvis-runner 16:04:50]   Only 43 videos — skip
+[jarvis-runner 16:04:51] 
+==================================================
+[jarvis-runner 16:04:51] INDICATOR: unresolved_loop_count_x_credential_signal_density
+[jarvis-runner 16:04:51]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:04:51]   [EXPERIMENT] Pearson r=0.089, rho=0.103, p=0.0863, n=370
+[jarvis-runner 16:04:51]   [RESULT]    none positive: Interaction: unresolved_loop_count * credential_signal_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:04:51]   [GRAPH]     Derived edge added: unresolved_loop_count × credential_signal_density → 'views', depth=2
+[jarvis-runner 16:04:51]   [DONE]      r=0.089 (none positive)
+[jarvis-runner 16:05:48] 
+==================================================
+[jarvis-runner 16:05:48] INDICATOR: unresolved_loop_count_x_closure_gap_pct
+[jarvis-runner 16:05:48]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:05:48]   [EXPERIMENT] Pearson r=0.110, rho=0.114, p=0.0342, n=370
+[jarvis-runner 16:05:48]   [RESULT]    weak positive: Maximize interaction: unresolved_loop_count * closure_gap_pct. to increase views.
+[jarvis-runner 16:05:48]   [GRAPH]     Derived edge added: unresolved_loop_count × closure_gap_pct → 'views', depth=2
+[jarvis-runner 16:05:48]   [DONE]      r=0.110 (weak positive)
+[jarvis-runner 16:06:46] 
+==================================================
+[jarvis-runner 16:06:46] INDICATOR: unresolved_loop_count_x_micro_reward_density
+[jarvis-runner 16:06:46]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:06:46]   [EXPERIMENT] Pearson r=0.059, rho=0.069, p=0.2593, n=370
+[jarvis-runner 16:06:46]   [RESULT]    none positive: Interaction: unresolved_loop_count * micro_reward_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:06:46]   [GRAPH]     Derived edge added: unresolved_loop_count × micro_reward_density → 'views', depth=2
+[jarvis-runner 16:06:46]   [DONE]      r=0.059 (none positive)
+[jarvis-runner 16:07:48] 
+==================================================
+[jarvis-runner 16:07:48] INDICATOR: unresolved_loop_count_x_zygarnik_gradient_pct
+[jarvis-runner 16:07:48]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:07:48]   [EXPERIMENT] Pearson r=0.119, rho=0.157, p=0.0221, n=370
+[jarvis-runner 16:07:48]   [RESULT]    weak positive: Maximize interaction: unresolved_loop_count * zygarnik_gradient_pct. to increase views.
+[jarvis-runner 16:07:48]   [GRAPH]     Derived edge added: unresolved_loop_count × zygarnik_gradient_pct → 'views', depth=2
+[jarvis-runner 16:07:48]   [DONE]      r=0.119 (weak positive)
+[jarvis-runner 16:08:45] 
+==================================================
+[jarvis-runner 16:08:45] INDICATOR: unresolved_loop_count_x_zygarnik_front_load_ratio
+[jarvis-runner 16:08:46]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:08:46]   [EXPERIMENT] Pearson r=0.065, rho=0.071, p=0.2095, n=370
+[jarvis-runner 16:08:46]   [RESULT]    none positive: Interaction: unresolved_loop_count * zygarnik_front_load_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:08:46]   [GRAPH]     Derived edge added: unresolved_loop_count × zygarnik_front_load_ratio → 'views', depth=2
+[jarvis-runner 16:08:46]   [DONE]      r=0.065 (none positive)
+[jarvis-runner 16:09:39] 
+==================================================
+[jarvis-runner 16:09:39] INDICATOR: unresolved_loop_count_x_loop_to_closure_gap_s
+[jarvis-runner 16:09:39]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:09:39]   [EXPERIMENT] Pearson r=0.094, rho=0.018, p=0.0709, n=370
+[jarvis-runner 16:09:39]   [RESULT]    none positive: Interaction: unresolved_loop_count * loop_to_closure_gap_s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:09:39]   [GRAPH]     Derived edge added: unresolved_loop_count × loop_to_closure_gap_s → 'views', depth=2
+[jarvis-runner 16:09:39]   [DONE]      r=0.094 (none positive)
+[jarvis-runner 16:10:37] 
+==================================================
+[jarvis-runner 16:10:37] INDICATOR: retention_setup_phase_mean_x_open_loop_count_first20s
+[jarvis-runner 16:10:37]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:10:37]   [EXPERIMENT] Pearson r=0.143, rho=0.155, p=0.0057, n=370
+[jarvis-runner 16:10:37]   [RESULT]    weak positive: Maximize interaction: retention_setup_phase_mean * open_loop_count_first20s. to increase views.
+[jarvis-runner 16:10:37]   [GRAPH]     Derived edge added: retention_setup_phase_mean × open_loop_count_first20s → 'views', depth=2
+[jarvis-runner 16:10:37]   [DONE]      r=0.143 (weak positive)
+[jarvis-runner 16:11:29] 
+==================================================
+[jarvis-runner 16:11:29] INDICATOR: open_loop_count_first20s_x_retention_setup_phase_mean
+[jarvis-runner 16:11:29]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:11:29]   [EXPERIMENT] Pearson r=0.143, rho=0.155, p=0.0057, n=370
+[jarvis-runner 16:11:29]   [RESULT]    weak positive: Maximize interaction: open_loop_count_first20s * retention_setup_phase_mean. to increase views.
+[jarvis-runner 16:11:29]   [GRAPH]     Derived edge added: open_loop_count_first20s × retention_setup_phase_mean → 'views', depth=2
+[jarvis-runner 16:11:29]   [DONE]      r=0.143 (weak positive)
+[jarvis-runner 16:12:23] 
+==================================================
+[jarvis-runner 16:12:23] INDICATOR: retention_open_loop_phase_mean_x_open_loop_count
+[jarvis-runner 16:12:23]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:12:23]   [EXPERIMENT] Pearson r=0.237, rho=0.247, p=0.0000, n=370
+[jarvis-runner 16:12:23]   [RESULT]    weak positive: Maximize interaction: retention_open_loop_phase_mean * open_loop_count. to increase views.
+[jarvis-runner 16:12:23]   [GRAPH]     Derived edge added: retention_open_loop_phase_mean × open_loop_count → 'views', depth=2
+[jarvis-runner 16:12:23]   [DONE]      r=0.237 (weak positive)
+[jarvis-runner 16:13:18] 
+==================================================
+[jarvis-runner 16:13:18] INDICATOR: unresolved_loop_count_x_ref_to_gratification_gap_pct
+[jarvis-runner 16:13:18]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:13:18]   [EXPERIMENT] Pearson r=0.060, rho=0.076, p=0.2524, n=370
+[jarvis-runner 16:13:18]   [RESULT]    none positive: Interaction: unresolved_loop_count * ref_to_gratification_gap_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:13:18]   [GRAPH]     Derived edge added: unresolved_loop_count × ref_to_gratification_gap_pct → 'views', depth=2
+[jarvis-runner 16:13:18]   [DONE]      r=0.060 (none positive)
+[jarvis-runner 16:14:16] 
+==================================================
+[jarvis-runner 16:14:16] INDICATOR: unresolved_loop_count_x_pre_payoff_tension_index
+[jarvis-runner 16:14:16]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:14:16]   [EXPERIMENT] Pearson r=-0.091, rho=-0.074, p=0.0809, n=370
+[jarvis-runner 16:14:16]   [RESULT]    none negative: Interaction: unresolved_loop_count * pre_payoff_tension_index. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:14:16]   [GRAPH]     Derived edge added: unresolved_loop_count × pre_payoff_tension_index → 'views', depth=2
+[jarvis-runner 16:14:16]   [DONE]      r=-0.091 (none negative)
+[jarvis-runner 16:15:26] 
+==================================================
+[jarvis-runner 16:15:26] INDICATOR: unresolved_loop_count_x_early_proof_to_loop_ratio
+[jarvis-runner 16:15:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:15:26]   [EXPERIMENT] Pearson r=0.068, rho=0.056, p=0.1890, n=370
+[jarvis-runner 16:15:26]   [RESULT]    none positive: Interaction: unresolved_loop_count * early_proof_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:15:26]   [GRAPH]     Derived edge added: unresolved_loop_count × early_proof_to_loop_ratio → 'views', depth=2
+[jarvis-runner 16:15:26]   [DONE]      r=0.068 (none positive)
+[jarvis-runner 16:16:26] 
+==================================================
+[jarvis-runner 16:16:26] INDICATOR: unresolved_loop_count_x_proof_arrival_delay_proxy
+[jarvis-runner 16:16:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:16:26]   [EXPERIMENT] Pearson r=0.157, rho=0.138, p=0.0025, n=370
+[jarvis-runner 16:16:26]   [RESULT]    weak positive: Maximize interaction: unresolved_loop_count * proof_arrival_delay_proxy. to increase views.
+[jarvis-runner 16:16:26]   [GRAPH]     Derived edge added: unresolved_loop_count × proof_arrival_delay_proxy → 'views', depth=2
+[jarvis-runner 16:16:26]   [DONE]      r=0.157 (weak positive)
+[jarvis-runner 16:17:31] 
+==================================================
+[jarvis-runner 16:17:31] INDICATOR: unresolved_loop_count_x_closure_to_open_ratio_first10s
+[jarvis-runner 16:17:31]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:17:31]   [EXPERIMENT] Pearson r=0.111, rho=0.101, p=0.0330, n=370
+[jarvis-runner 16:17:31]   [RESULT]    weak positive: Maximize interaction: unresolved_loop_count * closure_to_open_ratio_first10s. to increase views.
+[jarvis-runner 16:17:31]   [GRAPH]     Derived edge added: unresolved_loop_count × closure_to_open_ratio_first10s → 'views', depth=2
+[jarvis-runner 16:17:31]   [DONE]      r=0.111 (weak positive)
+[jarvis-runner 16:18:42] 
+==================================================
+[jarvis-runner 16:18:42] INDICATOR: unresolved_loop_count_x_credibility_setup_pct
+[jarvis-runner 16:18:43]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:18:43]   [EXPERIMENT] Pearson r=0.052, rho=0.036, p=0.3172, n=370
+[jarvis-runner 16:18:43]   [RESULT]    none positive: Interaction: unresolved_loop_count * credibility_setup_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:18:43]   [GRAPH]     Derived edge added: unresolved_loop_count × credibility_setup_pct → 'views', depth=2
+[jarvis-runner 16:18:43]   [DONE]      r=0.052 (none positive)
+[jarvis-runner 16:19:41] 
+==================================================
+[jarvis-runner 16:19:41] INDICATOR: unresolved_loop_count_x_proof_density_hook
+[jarvis-runner 16:19:41]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:19:41]   [EXPERIMENT] Pearson r=-0.036, rho=-0.061, p=0.4916, n=370
+[jarvis-runner 16:19:41]   [RESULT]    none negative: Interaction: unresolved_loop_count * proof_density_hook. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:19:41]   [GRAPH]     Derived edge added: unresolved_loop_count × proof_density_hook → 'views', depth=2
+[jarvis-runner 16:19:41]   [DONE]      r=-0.036 (none negative)
+[jarvis-runner 16:20:36] 
+==================================================
+[jarvis-runner 16:20:36] INDICATOR: open_loop_count_x_retention_open_loop_phase_mean
+[jarvis-runner 16:20:37]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:20:37]   [EXPERIMENT] Pearson r=0.237, rho=0.247, p=0.0000, n=370
+[jarvis-runner 16:20:37]   [RESULT]    weak positive: Maximize interaction: open_loop_count * retention_open_loop_phase_mean. to increase views.
+[jarvis-runner 16:20:37]   [GRAPH]     Derived edge added: open_loop_count × retention_open_loop_phase_mean → 'views', depth=2
+[jarvis-runner 16:20:37]   [DONE]      r=0.237 (weak positive)
+[jarvis-runner 16:21:32] 
+==================================================
+[jarvis-runner 16:21:32] INDICATOR: retention_open_loop_phase_mean_x_open_loop_to_closure_ratio
+[jarvis-runner 16:21:32]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:21:32]   [EXPERIMENT] Pearson r=0.190, rho=0.205, p=0.0002, n=370
+[jarvis-runner 16:21:32]   [RESULT]    weak positive: Maximize interaction: retention_open_loop_phase_mean * open_loop_to_closure_ratio. to increase views.
+[jarvis-runner 16:21:32]   [GRAPH]     Derived edge added: retention_open_loop_phase_mean × open_loop_to_closure_ratio → 'views', depth=2
+[jarvis-runner 16:21:32]   [DONE]      r=0.190 (weak positive)
+[jarvis-runner 16:24:20] 
+==================================================
+[jarvis-runner 16:24:20] INDICATOR: open_loop_to_closure_ratio_x_retention_open_loop_phase_mean
+[jarvis-runner 16:24:20]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:24:20]   [EXPERIMENT] Pearson r=0.190, rho=0.205, p=0.0002, n=370
+[jarvis-runner 16:24:20]   [RESULT]    weak positive: Maximize interaction: open_loop_to_closure_ratio * retention_open_loop_phase_mean. to increase views.
+[jarvis-runner 16:24:20]   [GRAPH]     Derived edge added: open_loop_to_closure_ratio × retention_open_loop_phase_mean → 'views', depth=2
+[jarvis-runner 16:24:20]   [DONE]      r=0.190 (weak positive)
+[jarvis-runner 16:25:32] 
+==================================================
+[jarvis-runner 16:25:32] INDICATOR: unresolved_loop_count_x_stake_loop_product
+[jarvis-runner 16:25:32]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:25:32]   [EXPERIMENT] Pearson r=0.066, rho=0.090, p=0.2071, n=370
+[jarvis-runner 16:25:32]   [RESULT]    none positive: Interaction: unresolved_loop_count * stake_loop_product. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:25:32]   [GRAPH]     Derived edge added: unresolved_loop_count × stake_loop_product → 'views', depth=2
+[jarvis-runner 16:25:32]   [DONE]      r=0.066 (none positive)
+[jarvis-runner 16:26:32] 
+==================================================
+[jarvis-runner 16:26:32] INDICATOR: unresolved_loop_count_x_rhetorical_question_count
+[jarvis-runner 16:26:32]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:26:32]   [EXPERIMENT] Pearson r=0.041, rho=0.073, p=0.4347, n=370
+[jarvis-runner 16:26:32]   [RESULT]    none positive: Interaction: unresolved_loop_count * rhetorical_question_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:26:32]   [GRAPH]     Derived edge added: unresolved_loop_count × rhetorical_question_count → 'views', depth=2
+[jarvis-runner 16:26:32]   [DONE]      r=0.041 (none positive)
+[jarvis-runner 16:27:42] 
+==================================================
+[jarvis-runner 16:27:42] INDICATOR: unresolved_loop_count_x_rhetorical_question_density
+[jarvis-runner 16:27:42]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:27:42]   [EXPERIMENT] Pearson r=0.019, rho=0.072, p=0.7154, n=370
+[jarvis-runner 16:27:42]   [RESULT]    none positive: Interaction: unresolved_loop_count * rhetorical_question_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:27:42]   [GRAPH]     Derived edge added: unresolved_loop_count × rhetorical_question_density → 'views', depth=2
+[jarvis-runner 16:27:42]   [DONE]      r=0.019 (none positive)
+[jarvis-runner 16:28:44] 
+==================================================
+[jarvis-runner 16:28:44] INDICATOR: unresolved_loop_count_x_mystery_setup_count
+[jarvis-runner 16:28:44]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 16:28:44]   [EXPERIMENT] Pearson r=-0.032, rho=-0.016, p=0.5403, n=370
+[jarvis-runner 16:28:44]   [RESULT]    none negative: Interaction: unresolved_loop_count * mystery_setup_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 16:28:44]   [GRAPH]     Derived edge added: unresolved_loop_count × mystery_setup_count → 'views', depth=2
+[jarvis-runner 16:28:44]   [DONE]      r=-0.032 (none negative)
+[jarvis-runner 16:29:44] 
+============================================================
+[jarvis-runner 16:29:44] AUTONOMOUS RUN COMPLETE: auto_20260419160409.
+[jarvis-runner 16:29:44]   Attempted: 24, Completed: 23, Failures: 1
+[jarvis-runner 16:29:44]   Pre: 18/17, Post: 6/6
+[jarvis-runner 16:29:44]   Stop: max_minutes, Top |r|: 0.2374, Elapsed: 25.5m
+[jarvis-runner 16:29:44]   Total indicators: 1852
+[launch-autorun] Complete.

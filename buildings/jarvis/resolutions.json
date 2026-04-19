@@ -31360,7 +31360,12 @@
       "unresolved_loop_count_x_action_trigger_count",
       "unresolved_loop_count_x_action_trigger_density",
       "unresolved_loop_count_x_stakes_escalation_density",
-      "unresolved_loop_count_x_delayed_reveal_density"
+      "unresolved_loop_count_x_delayed_reveal_density",
+      "unresolved_loop_count_x_narrative_anchor_density",
+      "unresolved_loop_count_x_challenge_statement_count",
+      "unresolved_loop_count_x_challenge_statement_density",
+      "unresolved_loop_count_x_narrative_tension_count",
+      "unresolved_loop_count_x_narrative_tension_density"
     ],
     "depth_in_hierarchy": 0
   },
