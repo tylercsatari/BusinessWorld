@@ -110,6 +110,7 @@ const JarvisUI = (() => {
         { id: 'experiments', label: 'Experiments' },
         { id: 'variables', label: 'Variables' },
         { id: 'mechanisms', label: 'Mechanisms' },
+        { id: 'ideaModel', label: 'Idea Model' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'knowledge', label: 'Knowledge' },
         { id: 'resolution', label: 'Resolution' },
@@ -208,6 +209,7 @@ const JarvisUI = (() => {
                 // one click away from anywhere in Jarvis.
                 knowledgeSubTab = 'mechanisms';
                 return renderKnowledge();
+            case 'ideaModel': return renderIdeaModel();
             case 'autoResearch': return renderAutoResearch();
             case 'knowledge': return renderKnowledge();
             case 'resolution': return renderResolution();
@@ -5265,6 +5267,386 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
+    // TAB: IDEA MODEL — Viral Idea Engine brief + generated ideas
+    // Reads the deterministic routes:
+    //   GET /api/jarvis/viral-idea-model   — compressed structured brief
+    //   GET /api/jarvis/viral-idea-ideas?count=5 — evidence-backed ideas
+    // ══════════════════════════════════════════════════
+    let ideaModelBrief = null;
+    let ideaModelIdeas = null;
+    let ideaModelLoading = false;
+    let ideaModelError = null;
+    let ideaIdeasCount = 5;
+
+    async function loadIdeaModel(force = false) {
+        if (ideaModelLoading) return;
+        if (!force && ideaModelBrief && ideaModelIdeas) return;
+        ideaModelLoading = true;
+        ideaModelError = null;
+        refreshIdeaModelRoot();
+        try {
+            const [briefRes, ideasRes] = await Promise.all([
+                fetch('/api/jarvis/viral-idea-model'),
+                fetch('/api/jarvis/viral-idea-ideas?count=' + ideaIdeasCount),
+            ]);
+            if (!briefRes.ok) throw new Error('brief HTTP ' + briefRes.status);
+            if (!ideasRes.ok) throw new Error('ideas HTTP ' + ideasRes.status);
+            ideaModelBrief = await briefRes.json();
+            ideaModelIdeas = await ideasRes.json();
+        } catch (e) {
+            ideaModelError = e.message || String(e);
+        } finally {
+            ideaModelLoading = false;
+            refreshIdeaModelRoot();
+        }
+    }
+
+    function refreshIdeaModelRoot() {
+        const root = container?.querySelector('.jarvis-idea-model-root');
+        if (!root) return;
+        root.innerHTML = renderIdeaModelBody();
+        bindIdeaModelEvents();
+    }
+
+    function renderIdeaModel() {
+        if (!ideaModelBrief && !ideaModelLoading && !ideaModelError) {
+            loadIdeaModel();
+        }
+        setTimeout(bindIdeaModelEvents, 30);
+        return `<div class="jarvis-idea-model-root">${renderIdeaModelBody()}</div>`;
+    }
+
+    function renderIdeaModelBody() {
+        const header = `
+            <div style="margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                <div>
+                    <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:3px">Idea Model — Evidence-Backed Viral Ideas</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">Deterministic compression of Jarvis findings (post-upload predictors, pre→post→views bridges, mechanism principles, concept anchors) into a structured brief — and 5 concrete video ideas scored from that same brief. No LLM calls; all evidence is auditable.</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <select id="jarvis-idea-count" style="background:#0a1628;color:#cbd5e1;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:11px">
+                        ${[3,5,8,10].map(n => `<option value="${n}"${n === ideaIdeasCount ? ' selected' : ''}>${n} ideas</option>`).join('')}
+                    </select>
+                    <button id="jarvis-idea-refresh" style="background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">
+                        ${ideaModelLoading ? 'Loading…' : '↻ Refresh'}
+                    </button>
+                </div>
+            </div>
+        `;
+        if (ideaModelError) return header + loadingBox('Failed to load idea model: ' + ideaModelError, true);
+        if (!ideaModelBrief || !ideaModelIdeas) return header + loadingBox('Loading idea model and generated ideas…');
+
+        return header
+            + renderIdeaOverview()
+            + renderIdeaPostUpload()
+            + renderIdeaPreUpload()
+            + renderIdeaBridges()
+            + renderIdeaMechanismPrinciples()
+            + renderIdeaConceptAnchors()
+            + renderIdeaHookMechanisms()
+            + renderIdeaComponents()
+            + renderIdeaGenerated();
+    }
+
+    function ideaSection(title, subtitle, bodyHtml) {
+        return `
+            <div style="margin-bottom:18px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;gap:12px;flex-wrap:wrap">
+                    <div style="font-size:13px;font-weight:700;color:#f1f5f9;letter-spacing:0.02em">${escapeHtml(title)}</div>
+                    ${subtitle ? `<div style="font-size:10px;color:#64748b">${escapeHtml(subtitle)}</div>` : ''}
+                </div>
+                <div style="background:#0a1628;border-radius:8px;padding:12px 14px;border:1px solid #1e293b">${bodyHtml}</div>
+            </div>
+        `;
+    }
+
+    function renderIdeaOverview() {
+        const b = ideaModelBrief;
+        const s = b.source_sizes || {};
+        const h = b.headline_model_r2 || {};
+        const card = (label, value, sub, color) => `
+            <div style="background:#0f172a;border-radius:6px;padding:10px 12px;flex:1;min-width:140px">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">${escapeHtml(label)}</div>
+                <div style="font-size:18px;font-weight:700;color:${color || '#f1f5f9'}">${value}</div>
+                ${sub ? `<div style="font-size:10px;color:#64748b;margin-top:3px">${escapeHtml(sub)}</div>` : ''}
+            </div>`;
+        const body = `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+                ${card('Headline CV R²', h.cv_r2 != null ? (+h.cv_r2).toFixed(3) : '—', h.model ? h.model : '', '#22d3ee')}
+                ${card('Features', h.n_features != null ? h.n_features : '—', 'in headline model', '#06b6d4')}
+                ${card('Videos', (s.videos_in_pool || 0).toLocaleString(), 'in pool', '#a78bfa')}
+                ${card('Principles', (s.principles_total || 0).toLocaleString(), 'total', '#f59e0b')}
+                ${card('Mechanisms', (s.mechanisms_total || 0).toLocaleString(), 'named', '#facc15')}
+                ${card('Components', (s.components_total || 0).toLocaleString(), 'fragments', '#ec4899')}
+            </div>
+            <div style="font-size:10px;color:#64748b">Brief generated at <span style="color:#cbd5e1">${escapeHtml(b.generated_at || '—')}</span> · click Refresh to regenerate from the latest artifacts.</div>
+        `;
+        return ideaSection('Model Overview', 'compressed brief from Jarvis artifacts', body);
+    }
+
+    function renderIdeaPostUpload() {
+        const rows = ideaModelBrief.top_post_upload_predictors || [];
+        if (!rows.length) return ideaSection('Top Post-Upload Predictors', '— no rows —', '<div style="font-size:11px;color:#64748b">No predictors available.</div>');
+        const table = `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead><tr style="color:#64748b;font-size:10px;letter-spacing:0.05em;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 8px">Signal</th>
+                    <th style="text-align:left;padding:4px 8px">Family</th>
+                    <th style="text-align:right;padding:4px 8px">r → log10(views)</th>
+                </tr></thead>
+                <tbody>
+                    ${rows.map((r, i) => `
+                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                            <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.key || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#94a3b8">${escapeHtml(r.family || '')}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.r_to_views)};font-weight:600">${r.r_to_views != null ? (+r.r_to_views).toFixed(3) : '—'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        return ideaSection('Top Post-Upload Predictors', 'deduped by family · direct correlation with views', table);
+    }
+
+    function renderIdeaPreUpload() {
+        const rows = ideaModelBrief.top_pre_upload_predictors || [];
+        if (!rows.length) return ideaSection('Top Pre-Upload Predictors', '— no rows —', '<div style="font-size:11px;color:#64748b">No predictors available.</div>');
+        const table = `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead><tr style="color:#64748b;font-size:10px;letter-spacing:0.05em;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 8px">Signal</th>
+                    <th style="text-align:right;padding:4px 8px">r → views</th>
+                    <th style="text-align:left;padding:4px 8px">Direction</th>
+                </tr></thead>
+                <tbody>
+                    ${rows.map((r, i) => `
+                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                            <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.key || '')}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.r_to_views)};font-weight:600">${r.r_to_views != null ? (+r.r_to_views).toFixed(3) : '—'}</td>
+                            <td style="padding:5px 8px;color:#94a3b8">${escapeHtml(r.direction || '')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        return ideaSection('Top Pre-Upload Predictors', 'levers controllable before shoot — ranked by |r|', table);
+    }
+
+    function renderIdeaBridges() {
+        const rows = ideaModelBrief.top_bridges_pre_to_post_to_views || [];
+        if (!rows.length) return ideaSection('Top Pre → Post → Views Bridges', '— no rows —', '<div style="font-size:11px;color:#64748b">No bridges available.</div>');
+        const table = `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead><tr style="color:#64748b;font-size:10px;letter-spacing:0.05em;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 8px">Pre</th>
+                    <th style="text-align:left;padding:4px 8px">Post</th>
+                    <th style="text-align:right;padding:4px 8px">pre r</th>
+                    <th style="text-align:right;padding:4px 8px">post r</th>
+                    <th style="text-align:right;padding:4px 8px">Bridge</th>
+                    <th style="text-align:right;padding:4px 8px">Score</th>
+                    <th style="text-align:left;padding:4px 8px">Source</th>
+                </tr></thead>
+                <tbody>
+                    ${rows.map((r, i) => `
+                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                            <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.pre || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.post || '')}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.pre_r)}">${r.pre_r != null ? (+r.pre_r).toFixed(3) : '—'}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.post_r)}">${r.post_r != null ? (+r.post_r).toFixed(3) : '—'}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:#94a3b8">${r.bridge_strength != null ? (+r.bridge_strength).toFixed(3) : (r.path_strength != null ? (+r.path_strength).toFixed(3) : '—')}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:#facc15;font-weight:600">${r.score != null ? (+r.score).toFixed(3) : '—'}</td>
+                            <td style="padding:5px 8px;color:#64748b;font-size:10px">${escapeHtml(r.source || '')}${r.sign_consistent ? ' · ✓' : ''}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        return ideaSection('Top Pre → Post → Views Bridges', 'pre-upload signals that flow through post-upload behavior into views', table);
+    }
+
+    function renderIdeaMechanismPrinciples() {
+        const rows = ideaModelBrief.top_mechanism_principles || [];
+        if (!rows.length) return ideaSection('Top Mechanism Principles', '— no rows —', '<div style="font-size:11px;color:#64748b">No principles available.</div>');
+        const table = `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead><tr style="color:#64748b;font-size:10px;letter-spacing:0.05em;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 8px">Principle</th>
+                    <th style="text-align:left;padding:4px 8px">Mechanism</th>
+                    <th style="text-align:left;padding:4px 8px">Via Indicator</th>
+                    <th style="text-align:left;padding:4px 8px">Outcome</th>
+                    <th style="text-align:right;padding:4px 8px">CSW</th>
+                    <th style="text-align:right;padding:4px 8px">n</th>
+                </tr></thead>
+                <tbody>
+                    ${rows.map((r, i) => {
+                        const csw = r.chain_strength_specificity_weighted;
+                        return `
+                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                            <td style="padding:5px 8px;font-family:monospace;color:#94a3b8;font-size:10px">${escapeHtml(r.principle_id || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1;font-size:10px">${escapeHtml(r.mechanism_id || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#22d3ee">${escapeHtml(r.via_indicator || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#a78bfa">${escapeHtml(r.to_outcome || '')}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(csw)};font-weight:600">${csw != null ? (+csw).toFixed(3) : '—'}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:#94a3b8">${r.mechanism_n_videos != null ? r.mechanism_n_videos : '—'}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+        return ideaSection('Top Mechanism Principles', 'mechanism → indicator → outcome chains ranked by |CSW|', table);
+    }
+
+    function renderIdeaConceptAnchors() {
+        const rows = ideaModelBrief.concept_anchors || [];
+        if (!rows.length) return ideaSection('Concept Anchors', '— no rows —', '<div style="font-size:11px;color:#64748b">No anchors.</div>');
+        const cards = rows.map(c => `
+            <div style="background:#0f172a;border-radius:6px;padding:10px 12px;border:1px solid #1e293b">
+                <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px">
+                    <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#22d3ee22;color:#22d3ee;font-weight:700;text-transform:uppercase">${escapeHtml(c.id || '')}</span>
+                    <span style="font-size:12px;font-weight:700;color:#f1f5f9">${escapeHtml(c.label || '')}</span>
+                </div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:4px">signals: ${(c.signals || []).map(s => `<code style="color:#fbbf24;background:#1e293b;padding:1px 5px;border-radius:3px;margin-right:2px">${escapeHtml(s)}</code>`).join(' ')}</div>
+                <div style="font-size:11px;color:#cbd5e1;line-height:1.5">${escapeHtml(c.evidence || '')}</div>
+            </div>
+        `).join('');
+        return ideaSection('Concept Anchors', 'high-lift concept buckets grounded in proven signals', `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px">${cards}</div>`);
+    }
+
+    function renderIdeaHookMechanisms() {
+        const rows = ideaModelBrief.hook_mechanisms || [];
+        if (!rows.length) return ideaSection('Hook Mechanisms', '— no rows —', '<div style="font-size:11px;color:#64748b">No first-5s/10s mechanisms found.</div>');
+        const table = `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead><tr style="color:#64748b;font-size:10px;letter-spacing:0.05em;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 8px">Bucket</th>
+                    <th style="text-align:left;padding:4px 8px">Mechanism</th>
+                    <th style="text-align:left;padding:4px 8px">Via Indicator</th>
+                    <th style="text-align:right;padding:4px 8px">CSW</th>
+                    <th style="text-align:right;padding:4px 8px">Sign</th>
+                    <th style="text-align:right;padding:4px 8px">n</th>
+                </tr></thead>
+                <tbody>
+                    ${rows.map((r, i) => `
+                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                            <td style="padding:5px 8px;font-family:monospace;color:#facc15">${escapeHtml(r.bucket || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1;font-size:10px">${escapeHtml(r.mechanism_id || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#22d3ee">${escapeHtml(r.via_indicator || '')}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.csw)};font-weight:600">${r.csw != null ? (+r.csw).toFixed(3) : '—'}</td>
+                            <td style="padding:5px 8px;text-align:right;color:${r.sign === 'positive' ? '#22c55e' : '#f87171'}">${escapeHtml(r.sign || '')}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:#94a3b8">${r.n_videos != null ? r.n_videos : '—'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        return ideaSection('Hook Mechanisms', 'first-5s / first-10s / hook-quarter principles driving retention', table);
+    }
+
+    function renderIdeaComponents() {
+        const rows = ideaModelBrief.top_components || [];
+        if (!rows.length) return ideaSection('Top Components', '— no rows —', '<div style="font-size:11px;color:#64748b">No components available.</div>');
+        const table = `
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead><tr style="color:#64748b;font-size:10px;letter-spacing:0.05em;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 8px">Component</th>
+                    <th style="text-align:left;padding:4px 8px">Kind</th>
+                    <th style="text-align:left;padding:4px 8px">Value</th>
+                    <th style="text-align:right;padding:4px 8px">Mechanisms</th>
+                    <th style="text-align:right;padding:4px 8px">Observations</th>
+                </tr></thead>
+                <tbody>
+                    ${rows.map((r, i) => `
+                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                            <td style="padding:5px 8px;color:#cbd5e1">${escapeHtml(r.label || r.id || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#a78bfa">${escapeHtml(r.fragment_kind || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#22d3ee">${escapeHtml(String(r.fragment_value || ''))}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:#facc15">${r.n_mechanisms_using != null ? r.n_mechanisms_using : '—'}</td>
+                            <td style="padding:5px 8px;text-align:right;font-family:monospace;color:#94a3b8">${r.n_observations_total != null ? r.n_observations_total : '—'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        return ideaSection('Top Components', 'recurring fragments shared across mechanisms', table);
+    }
+
+    function renderIdeaGenerated() {
+        const ideas = (ideaModelIdeas && ideaModelIdeas.ideas) || [];
+        if (!ideas.length) return ideaSection('Generated Ideas', '— none —', '<div style="font-size:11px;color:#64748b">No ideas generated.</div>');
+        const cards = ideas.map(idea => {
+            const score = idea.score_breakdown || {};
+            const parts = score.parts || {};
+            const partPill = (label, v, color) => `
+                <span style="background:#1e293b;border-radius:4px;padding:2px 6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:${color}">
+                    ${escapeHtml(label)} <b style="color:#f1f5f9">${v != null ? (+v).toFixed(3) : '0'}</b>
+                </span>`;
+            const hooks = (idea.hook_mechanisms || []).map(h =>
+                `<div style="font-size:10px;color:#94a3b8;margin-bottom:2px"><span style="color:#facc15">[${escapeHtml(h.bucket || '')}]</span> <code style="color:#22d3ee">${escapeHtml(h.via_indicator || '')}</code> · csw <b style="color:${rColor(h.csw)}">${h.csw != null ? (+h.csw).toFixed(3) : '—'}</b> · n=${h.n_videos || '—'}</div>`
+            ).join('');
+            const narratives = (idea.narrative_structures || []).map(n =>
+                `<code style="background:#1e293b;color:#a78bfa;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(n)}</code>`
+            ).join('');
+            const levers = (idea.pre_upload_levers || []).map(l =>
+                `<code style="background:#1e293b;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(l)}</code>`
+            ).join('');
+            const concepts = (idea.concept_anchors || []).map(c =>
+                `<code style="background:#1e293b;color:#22d3ee;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(c)}</code>`
+            ).join('');
+            const evidence = (idea.evidence || []).map(e =>
+                `<li style="margin-bottom:3px;color:#94a3b8">${escapeHtml(e)}</li>`
+            ).join('');
+            return `
+                <div style="background:#0f172a;border-radius:8px;padding:14px 16px;border:1px solid #1e293b;margin-bottom:10px">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+                        <div style="display:flex;gap:8px;align-items:baseline">
+                            <span style="font-size:14px;font-weight:700;color:#facc15">#${idea.rank}</span>
+                            <span style="font-size:13px;font-weight:700;color:#f1f5f9">${escapeHtml(idea.title || '')}</span>
+                        </div>
+                        <div style="font-size:10px;color:#64748b">total score <b style="color:#22d3ee">${score.total != null ? (+score.total).toFixed(3) : '—'}</b></div>
+                    </div>
+                    <div style="font-size:11px;color:#cbd5e1;line-height:1.5;margin-bottom:8px">${escapeHtml(idea.one_line_premise || '')}</div>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+                        ${partPill('concept', parts.concept, '#22d3ee')}
+                        ${partPill('hook', parts.hook, '#facc15')}
+                        ${partPill('narrative', parts.narrative, '#a78bfa')}
+                        ${partPill('duration', parts.duration, '#f59e0b')}
+                        ${partPill('bridge', parts.bridge, '#ec4899')}
+                    </div>
+                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Concepts</span>${concepts}</div>
+                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Narrative</span>${narratives}</div>
+                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Pre-upload levers</span>${levers}</div>
+                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Duration</span><code style="background:#1e293b;color:#f59e0b;padding:1px 6px;border-radius:3px;font-size:10px">${escapeHtml(idea.duration_band_id || '')}</code></div>
+                    ${hooks ? `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #1e293b"><div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Hook mechanisms</div>${hooks}</div>` : ''}
+                    ${evidence ? `<details style="margin-top:8px"><summary style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;cursor:pointer">Evidence (${(idea.evidence || []).length})</summary><ul style="font-size:10px;line-height:1.55;margin:6px 0 0 16px;padding:0">${evidence}</ul></details>` : ''}
+                </div>
+            `;
+        }).join('');
+        return ideaSection('Generated Ideas', `${ideas.length} deterministically scored`, cards);
+    }
+
+    function bindIdeaModelEvents() {
+        const refreshBtn = container?.querySelector('#jarvis-idea-refresh');
+        if (refreshBtn) {
+            refreshBtn.onclick = () => {
+                ideaModelBrief = null;
+                ideaModelIdeas = null;
+                loadIdeaModel(true);
+            };
+        }
+        const countSel = container?.querySelector('#jarvis-idea-count');
+        if (countSel) {
+            countSel.onchange = () => {
+                const n = parseInt(countSel.value, 10);
+                if (!isNaN(n)) {
+                    ideaIdeasCount = n;
+                    ideaModelIdeas = null;
+                    loadIdeaModel(true);
+                }
+            };
+        }
+    }
+
+    // ══════════════════════════════════════════════════
     // EVENTS
     // ══════════════════════════════════════════════════
     function bindEvents() {
@@ -5316,6 +5698,11 @@ const JarvisUI = (() => {
         knowledgeExpanded = { mechanism: null, principle: null, component: null, bridge: null, question: null };
         knowledgeListLimit = { mechanisms: 200, principles: 400, components: 100, bridges: 400 };
         knowledgeGraphFocus = null;
+        ideaModelBrief = null;
+        ideaModelIdeas = null;
+        ideaModelLoading = false;
+        ideaModelError = null;
+        ideaIdeasCount = 5;
 
         render();
     }
