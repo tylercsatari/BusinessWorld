@@ -1,0 +1,1702 @@
+node:internal/modules/cjs/loader:1244
+  throw err;
+  ^
+
+Error: Cannot find module 'dotenv'
+Require stack:
+- /private/tmp/jarvis_autorun_launch.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1241:15)
+    at Function._load (node:internal/modules/cjs/loader:1066:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1327:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (/private/tmp/jarvis_autorun_launch.js:2:1)
+    at Module._compile (node:internal/modules/cjs/loader:1566:14)
+    at Object..js (node:internal/modules/cjs/loader:1718:10)
+    at Module.load (node:internal/modules/cjs/loader:1305:32) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/private/tmp/jarvis_autorun_launch.js' ]
+}
+
+Node.js v23.4.0
+◇ injected env (42) from ../../Desktop/BusinessHub/BusinessWorld/.env // tip: ⌘ suppress logs { quiet: true }
+R2: Connected to bucket "business-world-videos"
+[autorun] Starting zygarnik/open-loop run: maxIter=5000 maxMin=55 preRatio=0.70 maxNoSignal=25
+[jarvis-runner 22:03:01] 
+============================================================
+[jarvis-runner 22:03:01] AUTONOMOUS RUN: auto_20260418220301.
+[jarvis-runner 22:03:01]   maxIterations=5000, maxMinutes=55, maxFailures=500, maxNoSignal=25, preuploadRatio=0.7
+[jarvis-runner 22:03:44] Zero-variance filter: skipped 8096 candidates (175 constant-value indicators)
+[jarvis-runner 22:03:44] Pool before bias: 24539 pre, 7598 post
+[jarvis-runner 22:03:44] Candidate pool: 32137 unrun (32122 already done)
+[jarvis-runner 22:03:45] Loaded 370 videos
+[jarvis-runner 22:03:45] 
+==================================================
+[jarvis-runner 22:03:45] INDICATOR: payoff_position_pct_x_challenge_to_resolution_gap_pct
+[jarvis-runner 22:03:45]   [DATASET]   43 videos, 327 skipped
+[jarvis-runner 22:03:45]   Only 43 videos — skip
+[jarvis-runner 22:03:46] 
+==================================================
+[jarvis-runner 22:03:46] INDICATOR: vulnerability_density_x_information_drip_ratio
+[jarvis-runner 22:03:46]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:03:46]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:03:46]   [RESULT]    none positive: Interaction: vulnerability_density * information_drip_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:03:46]   [GRAPH]     Derived edge added: vulnerability_density × information_drip_ratio → 'views', depth=2
+[jarvis-runner 22:03:46]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:04:40] 
+==================================================
+[jarvis-runner 22:04:40] INDICATOR: vulnerability_density_x_zygarnik_gradient_pct
+[jarvis-runner 22:04:40]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:04:40]   [EXPERIMENT] Pearson r=0.039, rho=0.024, p=0.4490, n=370
+[jarvis-runner 22:04:40]   [RESULT]    none positive: Interaction: vulnerability_density * zygarnik_gradient_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:04:40]   [GRAPH]     Derived edge added: vulnerability_density × zygarnik_gradient_pct → 'views', depth=2
+[jarvis-runner 22:04:40]   [DONE]      r=0.039 (none positive)
+[jarvis-runner 22:05:35] 
+==================================================
+[jarvis-runner 22:05:35] INDICATOR: vulnerability_density_x_zygarnik_front_load_ratio
+[jarvis-runner 22:05:35]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:05:35]   [EXPERIMENT] Pearson r=0.092, rho=0.093, p=0.0777, n=370
+[jarvis-runner 22:05:35]   [RESULT]    none positive: Interaction: vulnerability_density * zygarnik_front_load_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:05:35]   [GRAPH]     Derived edge added: vulnerability_density × zygarnik_front_load_ratio → 'views', depth=2
+[jarvis-runner 22:05:35]   [DONE]      r=0.092 (none positive)
+[jarvis-runner 22:06:29] 
+==================================================
+[jarvis-runner 22:06:29] INDICATOR: vulnerability_density_x_loop_to_closure_gap_s
+[jarvis-runner 22:06:29]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:06:29]   [EXPERIMENT] Pearson r=0.084, rho=0.078, p=0.1048, n=370
+[jarvis-runner 22:06:29]   [RESULT]    none positive: Interaction: vulnerability_density * loop_to_closure_gap_s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:06:29]   [GRAPH]     Derived edge added: vulnerability_density × loop_to_closure_gap_s → 'views', depth=2
+[jarvis-runner 22:06:29]   [DONE]      r=0.084 (none positive)
+[jarvis-runner 22:07:21] 
+==================================================
+[jarvis-runner 22:07:21] INDICATOR: vulnerability_density_x_ref_to_gratification_gap_pct
+[jarvis-runner 22:07:21]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:07:21]   [EXPERIMENT] Pearson r=0.055, rho=0.093, p=0.2906, n=370
+[jarvis-runner 22:07:21]   [RESULT]    none positive: Interaction: vulnerability_density * ref_to_gratification_gap_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:07:21]   [GRAPH]     Derived edge added: vulnerability_density × ref_to_gratification_gap_pct → 'views', depth=2
+[jarvis-runner 22:07:21]   [DONE]      r=0.055 (none positive)
+[jarvis-runner 22:08:20] 
+==================================================
+[jarvis-runner 22:08:20] INDICATOR: vulnerability_density_x_pre_payoff_tension_index
+[jarvis-runner 22:08:20]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:08:20]   [EXPERIMENT] Pearson r=-0.101, rho=-0.023, p=0.0533, n=370
+[jarvis-runner 22:08:20]   [RESULT]    weak negative: Minimize interaction: vulnerability_density * pre_payoff_tension_index. to increase views.
+[jarvis-runner 22:08:20]   [GRAPH]     Derived edge added: vulnerability_density × pre_payoff_tension_index → 'views', depth=2
+[jarvis-runner 22:08:20]   [DONE]      r=-0.101 (weak negative)
+[jarvis-runner 22:09:22] 
+==================================================
+[jarvis-runner 22:09:22] INDICATOR: retention_zygarnik_arc_x_payoff_delay_score
+[jarvis-runner 22:09:22]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:09:22]   [EXPERIMENT] Pearson r=-0.371, rho=-0.344, p=0.0000, n=370
+[jarvis-runner 22:09:22]   [RESULT]    moderate negative: Minimize interaction: retention_zygarnik_arc * payoff_delay_score. to increase views.
+[jarvis-runner 22:09:22]   [GRAPH]     Derived edge added: retention_zygarnik_arc × payoff_delay_score → 'views', depth=2
+[jarvis-runner 22:09:22]   [DONE]      r=-0.371 (moderate negative)
+[jarvis-runner 22:10:17] 
+==================================================
+[jarvis-runner 22:10:17] INDICATOR: payoff_delay_score_x_retention_zygarnik_arc
+[jarvis-runner 22:10:17]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:10:17]   [EXPERIMENT] Pearson r=-0.371, rho=-0.344, p=0.0000, n=370
+[jarvis-runner 22:10:17]   [RESULT]    moderate negative: Minimize interaction: payoff_delay_score * retention_zygarnik_arc. to increase views.
+[jarvis-runner 22:10:17]   [GRAPH]     Derived edge added: payoff_delay_score × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 22:10:17]   [DONE]      r=-0.371 (moderate negative)
+[jarvis-runner 22:11:17] 
+==================================================
+[jarvis-runner 22:11:17] INDICATOR: retention_zygarnik_arc_x_setup_duration_s
+[jarvis-runner 22:11:17]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:11:17]   [EXPERIMENT] Pearson r=-0.041, rho=-0.005, p=0.4322, n=370
+[jarvis-runner 22:11:17]   [RESULT]    none negative: Interaction: retention_zygarnik_arc * setup_duration_s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:11:17]   [GRAPH]     Derived edge added: retention_zygarnik_arc × setup_duration_s → 'views', depth=2
+[jarvis-runner 22:11:17]   [DONE]      r=-0.041 (none negative)
+[jarvis-runner 22:12:20] 
+==================================================
+[jarvis-runner 22:12:20] INDICATOR: vulnerability_density_x_early_proof_to_loop_ratio
+[jarvis-runner 22:12:20]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:12:20]   [EXPERIMENT] Pearson r=0.048, rho=0.053, p=0.3603, n=370
+[jarvis-runner 22:12:20]   [RESULT]    none positive: Interaction: vulnerability_density * early_proof_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:12:20]   [GRAPH]     Derived edge added: vulnerability_density × early_proof_to_loop_ratio → 'views', depth=2
+[jarvis-runner 22:12:20]   [DONE]      r=0.048 (none positive)
+[jarvis-runner 22:13:14] 
+==================================================
+[jarvis-runner 22:13:14] INDICATOR: vulnerability_density_x_proof_arrival_delay_proxy
+[jarvis-runner 22:13:14]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:13:14]   [EXPERIMENT] Pearson r=0.052, rho=0.048, p=0.3169, n=370
+[jarvis-runner 22:13:14]   [RESULT]    none positive: Interaction: vulnerability_density * proof_arrival_delay_proxy. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:13:14]   [GRAPH]     Derived edge added: vulnerability_density × proof_arrival_delay_proxy → 'views', depth=2
+[jarvis-runner 22:13:14]   [DONE]      r=0.052 (none positive)
+[jarvis-runner 22:14:10] 
+==================================================
+[jarvis-runner 22:14:10] INDICATOR: vulnerability_density_x_closure_to_open_ratio_first10s
+[jarvis-runner 22:14:10]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:14:10]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:14:10]   [RESULT]    none positive: Interaction: vulnerability_density * closure_to_open_ratio_first10s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:14:10]   [GRAPH]     Derived edge added: vulnerability_density × closure_to_open_ratio_first10s → 'views', depth=2
+[jarvis-runner 22:14:10]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:15:03] 
+==================================================
+[jarvis-runner 22:15:03] INDICATOR: vulnerability_density_x_credibility_setup_pct
+[jarvis-runner 22:15:03]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:15:03]   [EXPERIMENT] Pearson r=-0.064, rho=-0.058, p=0.2196, n=370
+[jarvis-runner 22:15:03]   [RESULT]    none negative: Interaction: vulnerability_density * credibility_setup_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:15:03]   [GRAPH]     Derived edge added: vulnerability_density × credibility_setup_pct → 'views', depth=2
+[jarvis-runner 22:15:03]   [DONE]      r=-0.064 (none negative)
+[jarvis-runner 22:15:59] 
+==================================================
+[jarvis-runner 22:15:59] INDICATOR: vulnerability_density_x_proof_density_hook
+[jarvis-runner 22:15:59]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:15:59]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:15:59]   [RESULT]    none positive: Interaction: vulnerability_density * proof_density_hook. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:15:59]   [GRAPH]     Derived edge added: vulnerability_density × proof_density_hook → 'views', depth=2
+[jarvis-runner 22:15:59]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:16:54] 
+==================================================
+[jarvis-runner 22:16:54] INDICATOR: vulnerability_density_x_stakes_to_loop_ratio
+[jarvis-runner 22:16:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:16:54]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:16:54]   [RESULT]    none positive: Interaction: vulnerability_density * stakes_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:16:54]   [GRAPH]     Derived edge added: vulnerability_density × stakes_to_loop_ratio → 'views', depth=2
+[jarvis-runner 22:16:54]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:17:50] 
+==================================================
+[jarvis-runner 22:17:50] INDICATOR: vulnerability_density_x_stake_loop_product
+[jarvis-runner 22:17:50]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:17:50]   [EXPERIMENT] Pearson r=0.020, rho=0.070, p=0.6971, n=370
+[jarvis-runner 22:17:50]   [RESULT]    none positive: Interaction: vulnerability_density * stake_loop_product. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:17:50]   [GRAPH]     Derived edge added: vulnerability_density × stake_loop_product → 'views', depth=2
+[jarvis-runner 22:17:50]   [DONE]      r=0.020 (none positive)
+[jarvis-runner 22:18:44] 
+==================================================
+[jarvis-runner 22:18:44] INDICATOR: setup_duration_s_x_retention_zygarnik_arc
+[jarvis-runner 22:18:44]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:18:44]   [EXPERIMENT] Pearson r=-0.041, rho=-0.005, p=0.4322, n=370
+[jarvis-runner 22:18:44]   [RESULT]    none negative: Interaction: setup_duration_s * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:18:44]   [GRAPH]     Derived edge added: setup_duration_s × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 22:18:44]   [DONE]      r=-0.041 (none negative)
+[jarvis-runner 22:19:39] 
+==================================================
+[jarvis-runner 22:19:39] INDICATOR: retention_zygarnik_arc_x_visual_proof_phrase_count
+[jarvis-runner 22:19:39]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:19:39]   [EXPERIMENT] Pearson r=0.065, rho=0.092, p=0.2099, n=370
+[jarvis-runner 22:19:39]   [RESULT]    none positive: Interaction: retention_zygarnik_arc * visual_proof_phrase_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:19:39]   [GRAPH]     Derived edge added: retention_zygarnik_arc × visual_proof_phrase_count → 'views', depth=2
+[jarvis-runner 22:19:39]   [DONE]      r=0.065 (none positive)
+[jarvis-runner 22:20:35] 
+==================================================
+[jarvis-runner 22:20:35] INDICATOR: visual_proof_phrase_count_x_retention_zygarnik_arc
+[jarvis-runner 22:20:35]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:20:35]   [EXPERIMENT] Pearson r=0.065, rho=0.092, p=0.2099, n=370
+[jarvis-runner 22:20:35]   [RESULT]    none positive: Interaction: visual_proof_phrase_count * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:20:35]   [GRAPH]     Derived edge added: visual_proof_phrase_count × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 22:20:35]   [DONE]      r=0.065 (none positive)
+[jarvis-runner 22:22:53] 
+==================================================
+[jarvis-runner 22:22:53] INDICATOR: vulnerability_density_x_rhetorical_question_count
+[jarvis-runner 22:22:53]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:22:53]   [EXPERIMENT] Pearson r=0.094, rho=0.087, p=0.0714, n=370
+[jarvis-runner 22:22:53]   [RESULT]    none positive: Interaction: vulnerability_density * rhetorical_question_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:22:53]   [GRAPH]     Derived edge added: vulnerability_density × rhetorical_question_count → 'views', depth=2
+[jarvis-runner 22:22:53]   [DONE]      r=0.094 (none positive)
+[jarvis-runner 22:23:46] 
+==================================================
+[jarvis-runner 22:23:46] INDICATOR: vulnerability_density_x_rhetorical_question_density
+[jarvis-runner 22:23:46]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:23:46]   [EXPERIMENT] Pearson r=0.094, rho=0.087, p=0.0714, n=370
+[jarvis-runner 22:23:46]   [RESULT]    none positive: Interaction: vulnerability_density * rhetorical_question_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:23:46]   [GRAPH]     Derived edge added: vulnerability_density × rhetorical_question_density → 'views', depth=2
+[jarvis-runner 22:23:46]   [DONE]      r=0.094 (none positive)
+[jarvis-runner 22:24:42] 
+==================================================
+[jarvis-runner 22:24:42] INDICATOR: vulnerability_density_x_social_comparison_count
+[jarvis-runner 22:24:42]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:24:42]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:24:42]   [RESULT]    none positive: Interaction: vulnerability_density * social_comparison_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:24:42]   [GRAPH]     Derived edge added: vulnerability_density × social_comparison_count → 'views', depth=2
+[jarvis-runner 22:24:42]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:25:41] 
+==================================================
+[jarvis-runner 22:25:41] INDICATOR: vulnerability_density_x_social_comparison_density
+[jarvis-runner 22:25:41]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:25:41]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:25:41]   [RESULT]    none positive: Interaction: vulnerability_density * social_comparison_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:25:41]   [GRAPH]     Derived edge added: vulnerability_density × social_comparison_density → 'views', depth=2
+[jarvis-runner 22:25:41]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:26:38] 
+==================================================
+[jarvis-runner 22:26:38] INDICATOR: vulnerability_density_x_mystery_setup_count
+[jarvis-runner 22:26:38]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:26:38]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:26:38]   [RESULT]    none positive: Interaction: vulnerability_density * mystery_setup_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:26:38]   [GRAPH]     Derived edge added: vulnerability_density × mystery_setup_count → 'views', depth=2
+[jarvis-runner 22:26:38]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:27:34] 
+==================================================
+[jarvis-runner 22:27:34] INDICATOR: vulnerability_density_x_mystery_setup_density
+[jarvis-runner 22:27:34]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:27:34]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:27:34]   [RESULT]    none positive: Interaction: vulnerability_density * mystery_setup_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:27:34]   [GRAPH]     Derived edge added: vulnerability_density × mystery_setup_density → 'views', depth=2
+[jarvis-runner 22:27:34]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:28:34] 
+==================================================
+[jarvis-runner 22:28:34] INDICATOR: vulnerability_density_x_promise_specificity_count
+[jarvis-runner 22:28:34]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:28:34]   [EXPERIMENT] Pearson r=-0.012, rho=-0.002, p=0.8234, n=370
+[jarvis-runner 22:28:34]   [RESULT]    none negative: Interaction: vulnerability_density * promise_specificity_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:28:34]   [GRAPH]     Derived edge added: vulnerability_density × promise_specificity_count → 'views', depth=2
+[jarvis-runner 22:28:34]   [DONE]      r=-0.012 (none negative)
+[jarvis-runner 22:29:26] 
+==================================================
+[jarvis-runner 22:29:26] INDICATOR: retention_zygarnik_arc_x_pre_gratification_open_loop_count
+[jarvis-runner 22:29:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:29:26]   [EXPERIMENT] Pearson r=0.081, rho=0.090, p=0.1184, n=370
+[jarvis-runner 22:29:26]   [RESULT]    none positive: Interaction: retention_zygarnik_arc * pre_gratification_open_loop_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:29:26]   [GRAPH]     Derived edge added: retention_zygarnik_arc × pre_gratification_open_loop_count → 'views', depth=2
+[jarvis-runner 22:29:26]   [DONE]      r=0.081 (none positive)
+[jarvis-runner 22:30:25] 
+==================================================
+[jarvis-runner 22:30:25] INDICATOR: pre_gratification_open_loop_count_x_retention_zygarnik_arc
+[jarvis-runner 22:30:25]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:30:25]   [EXPERIMENT] Pearson r=0.081, rho=0.090, p=0.1184, n=370
+[jarvis-runner 22:30:25]   [RESULT]    none positive: Interaction: pre_gratification_open_loop_count * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:30:25]   [GRAPH]     Derived edge added: pre_gratification_open_loop_count × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 22:30:25]   [DONE]      r=0.081 (none positive)
+[jarvis-runner 22:31:18] 
+==================================================
+[jarvis-runner 22:31:18] INDICATOR: retention_zygarnik_arc_x_hook_drop_rate
+[jarvis-runner 22:31:18]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:31:18]   [EXPERIMENT] Pearson r=0.186, rho=0.226, p=0.0003, n=370
+[jarvis-runner 22:31:18]   [RESULT]    weak positive: Maximize interaction: retention_zygarnik_arc * hook_drop_rate. to increase views.
+[jarvis-runner 22:31:18]   [GRAPH]     Derived edge added: retention_zygarnik_arc × hook_drop_rate → 'views', depth=2
+[jarvis-runner 22:31:18]   [DONE]      r=0.186 (weak positive)
+[jarvis-runner 22:32:11] 
+==================================================
+[jarvis-runner 22:32:11] INDICATOR: vulnerability_density_x_promise_specificity_density
+[jarvis-runner 22:32:11]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:32:11]   [EXPERIMENT] Pearson r=-0.020, rho=-0.002, p=0.6969, n=370
+[jarvis-runner 22:32:11]   [RESULT]    none negative: Interaction: vulnerability_density * promise_specificity_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:32:11]   [GRAPH]     Derived edge added: vulnerability_density × promise_specificity_density → 'views', depth=2
+[jarvis-runner 22:32:11]   [DONE]      r=-0.020 (none negative)
+[jarvis-runner 22:33:05] 
+==================================================
+[jarvis-runner 22:33:05] INDICATOR: vulnerability_density_x_loss_framing_count
+[jarvis-runner 22:33:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:33:05]   [EXPERIMENT] Pearson r=-0.037, rho=-0.011, p=0.4832, n=370
+[jarvis-runner 22:33:05]   [RESULT]    none negative: Interaction: vulnerability_density * loss_framing_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:33:05]   [GRAPH]     Derived edge added: vulnerability_density × loss_framing_count → 'views', depth=2
+[jarvis-runner 22:33:05]   [DONE]      r=-0.037 (none negative)
+[jarvis-runner 22:34:00] 
+==================================================
+[jarvis-runner 22:34:00] INDICATOR: vulnerability_density_x_loss_framing_density
+[jarvis-runner 22:34:00]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:34:00]   [EXPERIMENT] Pearson r=-0.052, rho=-0.011, p=0.3197, n=370
+[jarvis-runner 22:34:00]   [RESULT]    none negative: Interaction: vulnerability_density * loss_framing_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:34:00]   [GRAPH]     Derived edge added: vulnerability_density × loss_framing_density → 'views', depth=2
+[jarvis-runner 22:34:00]   [DONE]      r=-0.052 (none negative)
+[jarvis-runner 22:34:54] 
+==================================================
+[jarvis-runner 22:34:54] INDICATOR: vulnerability_density_x_viewer_stakes_count
+[jarvis-runner 22:34:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:34:54]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:34:54]   [RESULT]    none positive: Interaction: vulnerability_density * viewer_stakes_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:34:54]   [GRAPH]     Derived edge added: vulnerability_density × viewer_stakes_count → 'views', depth=2
+[jarvis-runner 22:34:54]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:35:52] 
+==================================================
+[jarvis-runner 22:35:52] INDICATOR: vulnerability_density_x_viewer_stakes_density
+[jarvis-runner 22:35:52]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:35:52]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:35:52]   [RESULT]    none positive: Interaction: vulnerability_density * viewer_stakes_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:35:52]   [GRAPH]     Derived edge added: vulnerability_density × viewer_stakes_density → 'views', depth=2
+[jarvis-runner 22:35:52]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:36:51] 
+==================================================
+[jarvis-runner 22:36:51] INDICATOR: vulnerability_density_x_transformation_arc_count
+[jarvis-runner 22:36:51]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:36:51]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:36:51]   [RESULT]    none positive: Interaction: vulnerability_density * transformation_arc_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:36:51]   [GRAPH]     Derived edge added: vulnerability_density × transformation_arc_count → 'views', depth=2
+[jarvis-runner 22:36:51]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:37:58] 
+==================================================
+[jarvis-runner 22:37:58] INDICATOR: vulnerability_density_x_transformation_arc_density
+[jarvis-runner 22:37:58]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:37:58]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:37:58]   [RESULT]    none positive: Interaction: vulnerability_density * transformation_arc_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:37:58]   [GRAPH]     Derived edge added: vulnerability_density × transformation_arc_density → 'views', depth=2
+[jarvis-runner 22:37:58]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:38:54] 
+==================================================
+[jarvis-runner 22:38:54] INDICATOR: hook_drop_rate_x_retention_zygarnik_arc
+[jarvis-runner 22:38:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:38:54]   [EXPERIMENT] Pearson r=0.186, rho=0.226, p=0.0003, n=370
+[jarvis-runner 22:38:54]   [RESULT]    weak positive: Maximize interaction: hook_drop_rate * retention_zygarnik_arc. to increase views.
+[jarvis-runner 22:38:54]   [GRAPH]     Derived edge added: hook_drop_rate × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 22:38:54]   [DONE]      r=0.186 (weak positive)
+[jarvis-runner 22:39:50] 
+==================================================
+[jarvis-runner 22:39:50] INDICATOR: retention_zygarnik_arc_x_zygarnik_score
+[jarvis-runner 22:39:50]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:39:50]   [EXPERIMENT] Pearson r=0.025, rho=0.057, p=0.6294, n=370
+[jarvis-runner 22:39:50]   [RESULT]    none positive: Interaction: retention_zygarnik_arc * zygarnik_score. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:39:50]   [GRAPH]     Derived edge added: retention_zygarnik_arc × zygarnik_score → 'views', depth=2
+[jarvis-runner 22:39:50]   [DONE]      r=0.025 (none positive)
+[jarvis-runner 22:40:45] 
+==================================================
+[jarvis-runner 22:40:45] INDICATOR: zygarnik_score_x_retention_zygarnik_arc
+[jarvis-runner 22:40:45]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:40:45]   [EXPERIMENT] Pearson r=0.025, rho=0.057, p=0.6294, n=370
+[jarvis-runner 22:40:45]   [RESULT]    none positive: Interaction: zygarnik_score * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:40:45]   [GRAPH]     Derived edge added: zygarnik_score × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 22:40:45]   [DONE]      r=0.025 (none positive)
+[jarvis-runner 22:41:40] 
+==================================================
+[jarvis-runner 22:41:40] INDICATOR: vulnerability_density_x_social_proof_count
+[jarvis-runner 22:41:40]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:41:40]   [EXPERIMENT] Pearson r=-0.009, rho=-0.012, p=0.8593, n=370
+[jarvis-runner 22:41:40]   [RESULT]    none negative: Interaction: vulnerability_density * social_proof_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:41:40]   [GRAPH]     Derived edge added: vulnerability_density × social_proof_count → 'views', depth=2
+[jarvis-runner 22:41:40]   [DONE]      r=-0.009 (none negative)
+[jarvis-runner 22:44:21] 
+==================================================
+[jarvis-runner 22:44:21] INDICATOR: vulnerability_density_x_social_proof_density
+[jarvis-runner 22:44:21]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:44:21]   [EXPERIMENT] Pearson r=-0.009, rho=-0.012, p=0.8593, n=370
+[jarvis-runner 22:44:21]   [RESULT]    none negative: Interaction: vulnerability_density * social_proof_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:44:21]   [GRAPH]     Derived edge added: vulnerability_density × social_proof_density → 'views', depth=2
+[jarvis-runner 22:44:21]   [DONE]      r=-0.009 (none negative)
+[jarvis-runner 22:45:17] 
+==================================================
+[jarvis-runner 22:45:17] INDICATOR: vulnerability_density_x_curiosity_gap_count
+[jarvis-runner 22:45:17]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:45:17]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:45:17]   [RESULT]    none positive: Interaction: vulnerability_density * curiosity_gap_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:45:17]   [GRAPH]     Derived edge added: vulnerability_density × curiosity_gap_count → 'views', depth=2
+[jarvis-runner 22:45:17]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:46:15] 
+==================================================
+[jarvis-runner 22:46:15] INDICATOR: vulnerability_density_x_curiosity_gap_density
+[jarvis-runner 22:46:15]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:46:15]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:46:15]   [RESULT]    none positive: Interaction: vulnerability_density * curiosity_gap_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:46:15]   [GRAPH]     Derived edge added: vulnerability_density × curiosity_gap_density → 'views', depth=2
+[jarvis-runner 22:46:15]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:47:11] 
+==================================================
+[jarvis-runner 22:47:11] INDICATOR: vulnerability_density_x_emotional_peak_count
+[jarvis-runner 22:47:11]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:47:11]   [EXPERIMENT] Pearson r=0.063, rho=0.067, p=0.2282, n=370
+[jarvis-runner 22:47:11]   [RESULT]    none positive: Interaction: vulnerability_density * emotional_peak_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:47:11]   [GRAPH]     Derived edge added: vulnerability_density × emotional_peak_count → 'views', depth=2
+[jarvis-runner 22:47:11]   [DONE]      r=0.063 (none positive)
+[jarvis-runner 22:48:05] 
+==================================================
+[jarvis-runner 22:48:05] INDICATOR: vulnerability_density_x_proof_of_work_count
+[jarvis-runner 22:48:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:48:05]   [EXPERIMENT] Pearson r=0.016, rho=0.030, p=0.7655, n=370
+[jarvis-runner 22:48:05]   [RESULT]    none positive: Interaction: vulnerability_density * proof_of_work_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:48:05]   [GRAPH]     Derived edge added: vulnerability_density × proof_of_work_count → 'views', depth=2
+[jarvis-runner 22:48:05]   [DONE]      r=0.016 (none positive)
+[jarvis-runner 22:49:00] 
+==================================================
+[jarvis-runner 22:49:00] INDICATOR: vulnerability_density_x_proof_of_work_density
+[jarvis-runner 22:49:00]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:49:00]   [EXPERIMENT] Pearson r=0.005, rho=0.030, p=0.9252, n=370
+[jarvis-runner 22:49:00]   [RESULT]    none positive: Interaction: vulnerability_density * proof_of_work_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:49:00]   [GRAPH]     Derived edge added: vulnerability_density × proof_of_work_density → 'views', depth=2
+[jarvis-runner 22:49:00]   [DONE]      r=0.005 (none positive)
+[jarvis-runner 22:49:55] 
+==================================================
+[jarvis-runner 22:49:55] INDICATOR: retention_zygarnik_arc_x_zygarnik_buildup_ratio
+[jarvis-runner 22:49:55]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:49:55]   [EXPERIMENT] Pearson r=0.020, rho=0.132, p=0.6968, n=370
+[jarvis-runner 22:49:55]   [RESULT]    none positive: Interaction: retention_zygarnik_arc * zygarnik_buildup_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:49:55]   [GRAPH]     Derived edge added: retention_zygarnik_arc × zygarnik_buildup_ratio → 'views', depth=2
+[jarvis-runner 22:49:55]   [DONE]      r=0.020 (none positive)
+[jarvis-runner 22:50:52] 
+==================================================
+[jarvis-runner 22:50:52] INDICATOR: zygarnik_buildup_ratio_x_retention_zygarnik_arc
+[jarvis-runner 22:50:52]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:50:52]   [EXPERIMENT] Pearson r=0.020, rho=0.132, p=0.6968, n=370
+[jarvis-runner 22:50:52]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:50:52]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 22:50:52]   [DONE]      r=0.020 (none positive)
+[jarvis-runner 22:51:50] 
+==================================================
+[jarvis-runner 22:51:50] INDICATOR: retention_zygarnik_arc_x_open_loop_density
+[jarvis-runner 22:51:50]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:51:50]   [EXPERIMENT] Pearson r=0.030, rho=0.062, p=0.5692, n=370
+[jarvis-runner 22:51:50]   [RESULT]    none positive: Interaction: retention_zygarnik_arc * open_loop_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:51:50]   [GRAPH]     Derived edge added: retention_zygarnik_arc × open_loop_density → 'views', depth=2
+[jarvis-runner 22:51:50]   [DONE]      r=0.030 (none positive)
+[jarvis-runner 22:52:47] 
+==================================================
+[jarvis-runner 22:52:47] INDICATOR: vulnerability_density_x_failure_vulnerability_count
+[jarvis-runner 22:52:47]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:52:47]   [EXPERIMENT] Pearson r=0.044, rho=0.036, p=0.3945, n=370
+[jarvis-runner 22:52:47]   [RESULT]    none positive: Interaction: vulnerability_density * failure_vulnerability_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:52:47]   [GRAPH]     Derived edge added: vulnerability_density × failure_vulnerability_count → 'views', depth=2
+[jarvis-runner 22:52:47]   [DONE]      r=0.044 (none positive)
+[jarvis-runner 22:53:42] 
+==================================================
+[jarvis-runner 22:53:42] INDICATOR: vulnerability_density_x_failure_vulnerability_density
+[jarvis-runner 22:53:42]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:53:42]   [EXPERIMENT] Pearson r=0.047, rho=0.036, p=0.3691, n=370
+[jarvis-runner 22:53:42]   [RESULT]    none positive: Interaction: vulnerability_density * failure_vulnerability_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:53:42]   [GRAPH]     Derived edge added: vulnerability_density × failure_vulnerability_density → 'views', depth=2
+[jarvis-runner 22:53:42]   [DONE]      r=0.047 (none positive)
+[jarvis-runner 22:54:36] 
+==================================================
+[jarvis-runner 22:54:36] INDICATOR: vulnerability_density_x_future_self_count
+[jarvis-runner 22:54:36]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:54:36]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:54:36]   [RESULT]    none positive: Interaction: vulnerability_density * future_self_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:54:36]   [GRAPH]     Derived edge added: vulnerability_density × future_self_count → 'views', depth=2
+[jarvis-runner 22:54:36]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:55:34] 
+==================================================
+[jarvis-runner 22:55:34] INDICATOR: vulnerability_density_x_future_self_density
+[jarvis-runner 22:55:34]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:55:34]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 22:55:34]   [RESULT]    none positive: Interaction: vulnerability_density * future_self_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:55:34]   [GRAPH]     Derived edge added: vulnerability_density × future_self_density → 'views', depth=2
+[jarvis-runner 22:55:34]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 22:56:31] 
+==================================================
+[jarvis-runner 22:56:31] INDICATOR: vulnerability_density_x_commitment_device_count
+[jarvis-runner 22:56:31]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:56:31]   [EXPERIMENT] Pearson r=-0.027, rho=-0.033, p=0.6020, n=370
+[jarvis-runner 22:56:31]   [RESULT]    none negative: Interaction: vulnerability_density * commitment_device_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:56:31]   [GRAPH]     Derived edge added: vulnerability_density × commitment_device_count → 'views', depth=2
+[jarvis-runner 22:56:31]   [DONE]      r=-0.027 (none negative)
+[jarvis-runner 22:57:26] 
+==================================================
+[jarvis-runner 22:57:26] INDICATOR: vulnerability_density_x_commitment_device_density
+[jarvis-runner 22:57:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 22:57:26]   [EXPERIMENT] Pearson r=-0.027, rho=-0.033, p=0.6020, n=370
+[jarvis-runner 22:57:26]   [RESULT]    none negative: Interaction: vulnerability_density * commitment_device_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 22:57:26]   [GRAPH]     Derived edge added: vulnerability_density × commitment_device_density → 'views', depth=2
+[jarvis-runner 22:57:26]   [DONE]      r=-0.027 (none negative)
+[jarvis-runner 22:58:24] 
+============================================================
+[jarvis-runner 22:58:24] AUTONOMOUS RUN COMPLETE: auto_20260418220301.
+[jarvis-runner 22:58:24]   Attempted: 56, Completed: 55, Failures: 1
+[jarvis-runner 22:58:24]   Pre: 41/40, Post: 15/15
+[jarvis-runner 22:58:24]   Stop: max_minutes, Top |r|: 0.3709, Elapsed: 55.4m
+[jarvis-runner 22:58:24]   Total indicators: 1852
+[autorun] Complete. stop_reason: undefined
+◇ injected env (42) from ../../Desktop/BusinessHub/BusinessWorld/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+R2: Connected to bucket "business-world-videos"
+[autorun] Starting zygarnik/open-loop run: maxIter=5000 maxMin=55 preRatio=0.70 maxNoSignal=25
+[jarvis-runner 00:00:17] 
+============================================================
+[jarvis-runner 00:00:17] AUTONOMOUS RUN: auto_20260419000017.
+[jarvis-runner 00:00:17]   maxIterations=5000, maxMinutes=55, maxFailures=500, maxNoSignal=25, preuploadRatio=0.7
+[jarvis-runner 00:01:03] Zero-variance filter: skipped 8096 candidates (175 constant-value indicators)
+[jarvis-runner 00:01:03] Pool before bias: 24481 pre, 7577 post
+[jarvis-runner 00:01:03] Candidate pool: 32058 unrun (32201 already done)
+[jarvis-runner 00:01:03] Loaded 370 videos
+[jarvis-runner 00:01:04] 
+==================================================
+[jarvis-runner 00:01:04] INDICATOR: payoff_position_pct_x_challenge_to_resolution_gap_pct
+[jarvis-runner 00:01:04]   [DATASET]   43 videos, 327 skipped
+[jarvis-runner 00:01:04]   Only 43 videos — skip
+[jarvis-runner 00:01:05] 
+==================================================
+[jarvis-runner 00:01:05] INDICATOR: vulnerability_density_x_narrative_tension_count
+[jarvis-runner 00:01:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:01:05]   [EXPERIMENT] Pearson r=0.046, rho=0.040, p=0.3782, n=370
+[jarvis-runner 00:01:05]   [RESULT]    none positive: Interaction: vulnerability_density * narrative_tension_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:01:05]   [GRAPH]     Derived edge added: vulnerability_density × narrative_tension_count → 'views', depth=2
+[jarvis-runner 00:01:05]   [DONE]      r=0.046 (none positive)
+[jarvis-runner 00:02:00] 
+==================================================
+[jarvis-runner 00:02:00] INDICATOR: vulnerability_density_x_narrative_tension_density
+[jarvis-runner 00:02:00]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:02:00]   [EXPERIMENT] Pearson r=0.032, rho=0.039, p=0.5351, n=370
+[jarvis-runner 00:02:00]   [RESULT]    none positive: Interaction: vulnerability_density * narrative_tension_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:02:00]   [GRAPH]     Derived edge added: vulnerability_density × narrative_tension_density → 'views', depth=2
+[jarvis-runner 00:02:00]   [DONE]      r=0.032 (none positive)
+[jarvis-runner 00:02:54] 
+==================================================
+[jarvis-runner 00:02:54] INDICATOR: vulnerability_density_x_payoff_delay_score
+[jarvis-runner 00:02:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:02:54]   [EXPERIMENT] Pearson r=0.092, rho=0.063, p=0.0778, n=370
+[jarvis-runner 00:02:54]   [RESULT]    none positive: Interaction: vulnerability_density * payoff_delay_score. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:02:54]   [GRAPH]     Derived edge added: vulnerability_density × payoff_delay_score → 'views', depth=2
+[jarvis-runner 00:02:54]   [DONE]      r=0.092 (none positive)
+[jarvis-runner 00:03:51] 
+==================================================
+[jarvis-runner 00:03:51] INDICATOR: vulnerability_density_x_challenge_to_resolution_gap_pct
+[jarvis-runner 00:03:51]   [DATASET]   109 videos, 261 skipped
+[jarvis-runner 00:03:51]   [EXPERIMENT] Pearson r=0.180, rho=0.127, p=0.0618, n=109
+[jarvis-runner 00:03:51]   [RESULT]    weak positive: Maximize interaction: vulnerability_density * challenge_to_resolution_gap_pct. to increase views.
+[jarvis-runner 00:03:51]   [GRAPH]     Derived edge added: vulnerability_density × challenge_to_resolution_gap_pct → 'views', depth=2
+[jarvis-runner 00:03:51]   [DONE]      r=0.180 (weak positive)
+[jarvis-runner 00:04:47] 
+==================================================
+[jarvis-runner 00:04:47] INDICATOR: vulnerability_density_x_loop_front_half_density
+[jarvis-runner 00:04:47]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:04:47]   [EXPERIMENT] Pearson r=0.071, rho=0.112, p=0.1720, n=370
+[jarvis-runner 00:04:47]   [RESULT]    none positive: Interaction: vulnerability_density * loop_front_half_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:04:47]   [GRAPH]     Derived edge added: vulnerability_density × loop_front_half_density → 'views', depth=2
+[jarvis-runner 00:04:47]   [DONE]      r=0.071 (none positive)
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:06:42] 
+==================================================
+[jarvis-runner 00:06:42] INDICATOR: vulnerability_density_x_answer_withhold_density_first_third
+[jarvis-runner 00:06:42]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:06:42]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 00:06:42]   [RESULT]    none positive: Interaction: vulnerability_density * answer_withhold_density_first_third. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:06:42]   [GRAPH]     Derived edge added: vulnerability_density × answer_withhold_density_first_third → 'views', depth=2
+[jarvis-runner 00:06:42]   [DONE]      r=0.000 (none positive)
+jarvis-store: R2 read failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:06:45] 
+==================================================
+[jarvis-runner 00:06:45] INDICATOR: gratification_delay_pct_x_retention_zygarnik_arc
+[jarvis-runner 00:06:45]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:06:45]   [EXPERIMENT] Pearson r=-0.401, rho=-0.390, p=0.0000, n=370
+[jarvis-runner 00:06:45]   [RESULT]    moderate negative: Minimize interaction: gratification_delay_pct * retention_zygarnik_arc. to increase views.
+[jarvis-runner 00:06:45]   [GRAPH]     Derived edge added: gratification_delay_pct × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 00:06:45]   [DONE]      r=-0.401 (moderate negative)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:06:48] 
+==================================================
+[jarvis-runner 00:06:48] INDICATOR: retention_zygarnik_arc_x_promise_proof_gap_pct
+[jarvis-runner 00:06:48]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:06:48]   [EXPERIMENT] Pearson r=-0.053, rho=0.032, p=0.3061, n=370
+[jarvis-runner 00:06:48]   [RESULT]    none negative: Interaction: retention_zygarnik_arc * promise_proof_gap_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:06:48]   [GRAPH]     Derived edge added: retention_zygarnik_arc × promise_proof_gap_pct → 'views', depth=2
+[jarvis-runner 00:06:48]   [DONE]      r=-0.053 (none negative)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:06:51] 
+==================================================
+[jarvis-runner 00:06:51] INDICATOR: promise_proof_gap_pct_x_retention_zygarnik_arc
+[jarvis-runner 00:06:51]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:06:51]   [EXPERIMENT] Pearson r=-0.053, rho=0.032, p=0.3061, n=370
+[jarvis-runner 00:06:51]   [RESULT]    none negative: Interaction: promise_proof_gap_pct * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:06:51]   [GRAPH]     Derived edge added: promise_proof_gap_pct × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 00:06:51]   [DONE]      r=-0.053 (none negative)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:06:54] 
+==================================================
+[jarvis-runner 00:06:54] INDICATOR: vulnerability_density_x_narrative_tension_density_first_half
+[jarvis-runner 00:06:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:06:54]   [EXPERIMENT] Pearson r=0.028, rho=0.052, p=0.5878, n=370
+[jarvis-runner 00:06:54]   [RESULT]    none positive: Interaction: vulnerability_density * narrative_tension_density_first_half. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:06:54]   [GRAPH]     Derived edge added: vulnerability_density × narrative_tension_density_first_half → 'views', depth=2
+[jarvis-runner 00:06:54]   [DONE]      r=0.028 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:06:57] 
+==================================================
+[jarvis-runner 00:06:57] INDICATOR: vulnerability_density_x_challenge_setup_density_first_quarter
+[jarvis-runner 00:06:57]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:06:57]   [EXPERIMENT] Pearson r=0.096, rho=0.089, p=0.0661, n=370
+[jarvis-runner 00:06:57]   [RESULT]    none positive: Interaction: vulnerability_density * challenge_setup_density_first_quarter. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:06:57]   [GRAPH]     Derived edge added: vulnerability_density × challenge_setup_density_first_quarter → 'views', depth=2
+[jarvis-runner 00:06:57]   [DONE]      r=0.096 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:00] 
+==================================================
+[jarvis-runner 00:07:00] INDICATOR: specificity_anchor_density_x_visual_proof_phrase_count
+[jarvis-runner 00:07:00]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:00]   [EXPERIMENT] Pearson r=0.086, rho=0.110, p=0.0995, n=370
+[jarvis-runner 00:07:00]   [RESULT]    none positive: Interaction: specificity_anchor_density * visual_proof_phrase_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:00]   [GRAPH]     Derived edge added: specificity_anchor_density × visual_proof_phrase_count → 'views', depth=2
+[jarvis-runner 00:07:00]   [DONE]      r=0.086 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:03] 
+==================================================
+[jarvis-runner 00:07:03] INDICATOR: specificity_anchor_density_x_visual_proof_phrase_density
+[jarvis-runner 00:07:03]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:03]   [EXPERIMENT] Pearson r=0.074, rho=0.109, p=0.1566, n=370
+[jarvis-runner 00:07:03]   [RESULT]    none positive: Interaction: specificity_anchor_density * visual_proof_phrase_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:03]   [GRAPH]     Derived edge added: specificity_anchor_density × visual_proof_phrase_density → 'views', depth=2
+[jarvis-runner 00:07:03]   [DONE]      r=0.074 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:05] 
+==================================================
+[jarvis-runner 00:07:05] INDICATOR: specificity_anchor_density_x_zygarnik_score
+[jarvis-runner 00:07:06]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:06]   [EXPERIMENT] Pearson r=0.079, rho=0.083, p=0.1274, n=370
+[jarvis-runner 00:07:06]   [RESULT]    none positive: Interaction: specificity_anchor_density * zygarnik_score. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:06]   [GRAPH]     Derived edge added: specificity_anchor_density × zygarnik_score → 'views', depth=2
+[jarvis-runner 00:07:06]   [DONE]      r=0.079 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:08] 
+==================================================
+[jarvis-runner 00:07:08] INDICATOR: specificity_anchor_density_x_zygarnik_buildup_ratio
+[jarvis-runner 00:07:08]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:08]   [EXPERIMENT] Pearson r=0.071, rho=0.085, p=0.1733, n=370
+[jarvis-runner 00:07:08]   [RESULT]    none positive: Interaction: specificity_anchor_density * zygarnik_buildup_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:08]   [GRAPH]     Derived edge added: specificity_anchor_density × zygarnik_buildup_ratio → 'views', depth=2
+[jarvis-runner 00:07:08]   [DONE]      r=0.071 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:11] 
+==================================================
+[jarvis-runner 00:07:11] INDICATOR: specificity_anchor_density_x_unresolved_loop_count
+[jarvis-runner 00:07:12]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:12]   [EXPERIMENT] Pearson r=0.077, rho=0.072, p=0.1376, n=370
+[jarvis-runner 00:07:12]   [RESULT]    none positive: Interaction: specificity_anchor_density * unresolved_loop_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:12]   [GRAPH]     Derived edge added: specificity_anchor_density × unresolved_loop_count → 'views', depth=2
+[jarvis-runner 00:07:12]   [DONE]      r=0.077 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:14] 
+==================================================
+[jarvis-runner 00:07:14] INDICATOR: retention_zygarnik_arc_x_non_sub_view_share
+[jarvis-runner 00:07:14]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:14]   [EXPERIMENT] Pearson r=-0.305, rho=-0.301, p=0.0000, n=370
+[jarvis-runner 00:07:14]   [RESULT]    moderate negative: Minimize interaction: retention_zygarnik_arc * non_sub_view_share. to increase views.
+[jarvis-runner 00:07:14]   [GRAPH]     Derived edge added: retention_zygarnik_arc × non_sub_view_share → 'views', depth=2
+[jarvis-runner 00:07:14]   [DONE]      r=-0.305 (moderate negative)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:16] 
+==================================================
+[jarvis-runner 00:07:16] INDICATOR: non_sub_view_share_x_retention_zygarnik_arc
+[jarvis-runner 00:07:16]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:16]   [EXPERIMENT] Pearson r=-0.305, rho=-0.301, p=0.0000, n=370
+[jarvis-runner 00:07:16]   [RESULT]    moderate negative: Minimize interaction: non_sub_view_share * retention_zygarnik_arc. to increase views.
+[jarvis-runner 00:07:16]   [GRAPH]     Derived edge added: non_sub_view_share × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 00:07:16]   [DONE]      r=-0.305 (moderate negative)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:19] 
+==================================================
+[jarvis-runner 00:07:19] INDICATOR: retention_zygarnik_arc_x_title_number_flag
+[jarvis-runner 00:07:19]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:19]   [EXPERIMENT] Pearson r=-0.306, rho=-0.238, p=0.0000, n=370
+[jarvis-runner 00:07:19]   [RESULT]    moderate negative: Minimize interaction: retention_zygarnik_arc * title_number_flag. to increase views.
+[jarvis-runner 00:07:19]   [GRAPH]     Derived edge added: retention_zygarnik_arc × title_number_flag → 'views', depth=2
+[jarvis-runner 00:07:19]   [DONE]      r=-0.306 (moderate negative)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:22] 
+==================================================
+[jarvis-runner 00:07:22] INDICATOR: specificity_anchor_density_x_pre_proof_tension_score
+[jarvis-runner 00:07:22]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:22]   [EXPERIMENT] Pearson r=0.051, rho=0.096, p=0.3245, n=370
+[jarvis-runner 00:07:22]   [RESULT]    none positive: Interaction: specificity_anchor_density * pre_proof_tension_score. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:22]   [GRAPH]     Derived edge added: specificity_anchor_density × pre_proof_tension_score → 'views', depth=2
+[jarvis-runner 00:07:22]   [DONE]      r=0.051 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:25] 
+==================================================
+[jarvis-runner 00:07:25] INDICATOR: specificity_anchor_density_x_credential_signal_count
+[jarvis-runner 00:07:25]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:25]   [EXPERIMENT] Pearson r=0.044, rho=0.039, p=0.4009, n=370
+[jarvis-runner 00:07:25]   [RESULT]    none positive: Interaction: specificity_anchor_density * credential_signal_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:25]   [GRAPH]     Derived edge added: specificity_anchor_density × credential_signal_count → 'views', depth=2
+[jarvis-runner 00:07:25]   [DONE]      r=0.044 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:28] 
+==================================================
+[jarvis-runner 00:07:28] INDICATOR: specificity_anchor_density_x_credential_signal_density
+[jarvis-runner 00:07:28]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:28]   [EXPERIMENT] Pearson r=0.016, rho=0.037, p=0.7545, n=370
+[jarvis-runner 00:07:28]   [RESULT]    none positive: Interaction: specificity_anchor_density * credential_signal_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:28]   [GRAPH]     Derived edge added: specificity_anchor_density × credential_signal_density → 'views', depth=2
+[jarvis-runner 00:07:28]   [DONE]      r=0.016 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:31] 
+==================================================
+[jarvis-runner 00:07:31] INDICATOR: specificity_anchor_density_x_closure_gap_pct
+[jarvis-runner 00:07:31]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:31]   [EXPERIMENT] Pearson r=0.050, rho=0.106, p=0.3327, n=370
+[jarvis-runner 00:07:31]   [RESULT]    none positive: Interaction: specificity_anchor_density * closure_gap_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:31]   [GRAPH]     Derived edge added: specificity_anchor_density × closure_gap_pct → 'views', depth=2
+[jarvis-runner 00:07:31]   [DONE]      r=0.050 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:33] 
+==================================================
+[jarvis-runner 00:07:33] INDICATOR: specificity_anchor_density_x_micro_reward_density
+[jarvis-runner 00:07:33]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:33]   [EXPERIMENT] Pearson r=0.038, rho=0.130, p=0.4612, n=370
+[jarvis-runner 00:07:33]   [RESULT]    none positive: Interaction: specificity_anchor_density * micro_reward_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:33]   [GRAPH]     Derived edge added: specificity_anchor_density × micro_reward_density → 'views', depth=2
+[jarvis-runner 00:07:33]   [DONE]      r=0.038 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:35] 
+==================================================
+[jarvis-runner 00:07:35] INDICATOR: specificity_anchor_density_x_information_drip_ratio
+[jarvis-runner 00:07:36]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:36]   [EXPERIMENT] Pearson r=0.102, rho=0.134, p=0.0508, n=370
+[jarvis-runner 00:07:36]   [RESULT]    weak positive: Maximize interaction: specificity_anchor_density * information_drip_ratio. to increase views.
+[jarvis-runner 00:07:36]   [GRAPH]     Derived edge added: specificity_anchor_density × information_drip_ratio → 'views', depth=2
+[jarvis-runner 00:07:36]   [DONE]      r=0.102 (weak positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:39] 
+==================================================
+[jarvis-runner 00:07:39] INDICATOR: specificity_anchor_density_x_zygarnik_gradient_pct
+[jarvis-runner 00:07:39]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:39]   [EXPERIMENT] Pearson r=0.028, rho=0.055, p=0.5938, n=370
+[jarvis-runner 00:07:39]   [RESULT]    none positive: Interaction: specificity_anchor_density * zygarnik_gradient_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:39]   [GRAPH]     Derived edge added: specificity_anchor_density × zygarnik_gradient_pct → 'views', depth=2
+[jarvis-runner 00:07:39]   [DONE]      r=0.028 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:41] 
+==================================================
+[jarvis-runner 00:07:41] INDICATOR: title_number_flag_x_retention_zygarnik_arc
+[jarvis-runner 00:07:41]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:41]   [EXPERIMENT] Pearson r=-0.306, rho=-0.238, p=0.0000, n=370
+[jarvis-runner 00:07:41]   [RESULT]    moderate negative: Minimize interaction: title_number_flag * retention_zygarnik_arc. to increase views.
+[jarvis-runner 00:07:41]   [GRAPH]     Derived edge added: title_number_flag × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 00:07:41]   [DONE]      r=-0.306 (moderate negative)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:44] 
+==================================================
+[jarvis-runner 00:07:44] INDICATOR: retention_zygarnik_arc_x_hook_open_loop_density
+[jarvis-runner 00:07:44]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:44]   [EXPERIMENT] Pearson r=0.029, rho=0.058, p=0.5753, n=370
+[jarvis-runner 00:07:44]   [RESULT]    none positive: Interaction: retention_zygarnik_arc * hook_open_loop_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:44]   [GRAPH]     Derived edge added: retention_zygarnik_arc × hook_open_loop_density → 'views', depth=2
+[jarvis-runner 00:07:44]   [DONE]      r=0.029 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:47] 
+==================================================
+[jarvis-runner 00:07:47] INDICATOR: hook_open_loop_density_x_retention_zygarnik_arc
+[jarvis-runner 00:07:47]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:47]   [EXPERIMENT] Pearson r=0.029, rho=0.058, p=0.5753, n=370
+[jarvis-runner 00:07:47]   [RESULT]    none positive: Interaction: hook_open_loop_density * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:47]   [GRAPH]     Derived edge added: hook_open_loop_density × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 00:07:47]   [DONE]      r=0.029 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:50] 
+==================================================
+[jarvis-runner 00:07:50] INDICATOR: specificity_anchor_density_x_zygarnik_front_load_ratio
+[jarvis-runner 00:07:50]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:50]   [EXPERIMENT] Pearson r=0.099, rho=0.084, p=0.0574, n=370
+[jarvis-runner 00:07:50]   [RESULT]    none positive: Interaction: specificity_anchor_density * zygarnik_front_load_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:50]   [GRAPH]     Derived edge added: specificity_anchor_density × zygarnik_front_load_ratio → 'views', depth=2
+[jarvis-runner 00:07:50]   [DONE]      r=0.099 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for graph: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for autonomous_progress: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:07:53] 
+==================================================
+[jarvis-runner 00:07:53] INDICATOR: specificity_anchor_density_x_loop_to_closure_gap_s
+[jarvis-runner 00:07:53]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:07:53]   [EXPERIMENT] Pearson r=0.082, rho=0.046, p=0.1146, n=370
+[jarvis-runner 00:07:53]   [RESULT]    none positive: Interaction: specificity_anchor_density * loop_to_closure_gap_s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:07:53]   [GRAPH]     Derived edge added: specificity_anchor_density × loop_to_closure_gap_s → 'views', depth=2
+[jarvis-runner 00:07:53]   [DONE]      r=0.082 (none positive)
+jarvis-store: R2 write failed for experiments_log: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for experiments_log_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for indicators: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for indicators_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for derived_experiments: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 compact write failed for derived_experiments_compact: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+jarvis-store: R2 write failed for resolutions: getaddrinfo ENOTFOUND business-world-videos.48bf12e3d51b906245df57097a5ca06f.r2.cloudflarestorage.com
+[jarvis-runner 00:08:02] 
+==================================================
+[jarvis-runner 00:08:02] INDICATOR: specificity_anchor_density_x_ref_to_gratification_gap_pct
+[jarvis-runner 00:08:02]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:08:02]   [EXPERIMENT] Pearson r=0.062, rho=0.072, p=0.2330, n=370
+[jarvis-runner 00:08:02]   [RESULT]    none positive: Interaction: specificity_anchor_density * ref_to_gratification_gap_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:08:02]   [GRAPH]     Derived edge added: specificity_anchor_density × ref_to_gratification_gap_pct → 'views', depth=2
+[jarvis-runner 00:08:02]   [DONE]      r=0.062 (none positive)
+[jarvis-runner 00:08:55] 
+==================================================
+[jarvis-runner 00:08:55] INDICATOR: specificity_anchor_density_x_pre_payoff_tension_index
+[jarvis-runner 00:08:55]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:08:55]   [EXPERIMENT] Pearson r=-0.056, rho=-0.028, p=0.2812, n=370
+[jarvis-runner 00:08:55]   [RESULT]    none negative: Interaction: specificity_anchor_density * pre_payoff_tension_index. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:08:55]   [GRAPH]     Derived edge added: specificity_anchor_density × pre_payoff_tension_index → 'views', depth=2
+[jarvis-runner 00:08:55]   [DONE]      r=-0.056 (none negative)
+[jarvis-runner 00:10:03] 
+==================================================
+[jarvis-runner 00:10:03] INDICATOR: specificity_anchor_density_x_early_proof_to_loop_ratio
+[jarvis-runner 00:10:03]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:10:03]   [EXPERIMENT] Pearson r=0.078, rho=0.083, p=0.1331, n=370
+[jarvis-runner 00:10:03]   [RESULT]    none positive: Interaction: specificity_anchor_density * early_proof_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:10:03]   [GRAPH]     Derived edge added: specificity_anchor_density × early_proof_to_loop_ratio → 'views', depth=2
+[jarvis-runner 00:10:03]   [DONE]      r=0.078 (none positive)
+[jarvis-runner 00:11:01] 
+==================================================
+[jarvis-runner 00:11:01] INDICATOR: specificity_anchor_density_x_proof_arrival_delay_proxy
+[jarvis-runner 00:11:01]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:11:01]   [EXPERIMENT] Pearson r=0.096, rho=0.114, p=0.0654, n=370
+[jarvis-runner 00:11:01]   [RESULT]    none positive: Interaction: specificity_anchor_density * proof_arrival_delay_proxy. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:11:01]   [GRAPH]     Derived edge added: specificity_anchor_density × proof_arrival_delay_proxy → 'views', depth=2
+[jarvis-runner 00:11:01]   [DONE]      r=0.096 (none positive)
+[jarvis-runner 00:12:05] 
+==================================================
+[jarvis-runner 00:12:05] INDICATOR: specificity_anchor_density_x_closure_to_open_ratio_first10s
+[jarvis-runner 00:12:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:12:05]   [EXPERIMENT] Pearson r=0.105, rho=0.109, p=0.0436, n=370
+[jarvis-runner 00:12:05]   [RESULT]    weak positive: Maximize interaction: specificity_anchor_density * closure_to_open_ratio_first10s. to increase views.
+[jarvis-runner 00:12:05]   [GRAPH]     Derived edge added: specificity_anchor_density × closure_to_open_ratio_first10s → 'views', depth=2
+[jarvis-runner 00:12:05]   [DONE]      r=0.105 (weak positive)
+[jarvis-runner 00:13:04] 
+==================================================
+[jarvis-runner 00:13:04] INDICATOR: retention_zygarnik_arc_x_open_loop_count_first20s
+[jarvis-runner 00:13:04]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:13:04]   [EXPERIMENT] Pearson r=0.046, rho=0.079, p=0.3802, n=370
+[jarvis-runner 00:13:04]   [RESULT]    none positive: Interaction: retention_zygarnik_arc * open_loop_count_first20s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:13:04]   [GRAPH]     Derived edge added: retention_zygarnik_arc × open_loop_count_first20s → 'views', depth=2
+[jarvis-runner 00:13:04]   [DONE]      r=0.046 (none positive)
+[jarvis-runner 00:14:06] 
+==================================================
+[jarvis-runner 00:14:06] INDICATOR: open_loop_count_first20s_x_retention_zygarnik_arc
+[jarvis-runner 00:14:06]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:14:06]   [EXPERIMENT] Pearson r=0.046, rho=0.079, p=0.3802, n=370
+[jarvis-runner 00:14:06]   [RESULT]    none positive: Interaction: open_loop_count_first20s * retention_zygarnik_arc. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:14:06]   [GRAPH]     Derived edge added: open_loop_count_first20s × retention_zygarnik_arc → 'views', depth=2
+[jarvis-runner 00:14:06]   [DONE]      r=0.046 (none positive)
+[jarvis-runner 00:15:16] 
+==================================================
+[jarvis-runner 00:15:16] INDICATOR: retention_recovery_ratio_x_open_loop_count
+[jarvis-runner 00:15:16]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:15:16]   [EXPERIMENT] Pearson r=0.217, rho=0.205, p=0.0000, n=370
+[jarvis-runner 00:15:16]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * open_loop_count. to increase views.
+[jarvis-runner 00:15:16]   [GRAPH]     Derived edge added: retention_recovery_ratio × open_loop_count → 'views', depth=2
+[jarvis-runner 00:15:16]   [DONE]      r=0.217 (weak positive)
+[jarvis-runner 00:16:20] 
+==================================================
+[jarvis-runner 00:16:20] INDICATOR: specificity_anchor_density_x_credibility_setup_pct
+[jarvis-runner 00:16:20]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:16:20]   [EXPERIMENT] Pearson r=-0.024, rho=-0.033, p=0.6437, n=370
+[jarvis-runner 00:16:20]   [RESULT]    none negative: Interaction: specificity_anchor_density * credibility_setup_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:16:20]   [GRAPH]     Derived edge added: specificity_anchor_density × credibility_setup_pct → 'views', depth=2
+[jarvis-runner 00:16:20]   [DONE]      r=-0.024 (none negative)
+[jarvis-runner 00:17:32] 
+==================================================
+[jarvis-runner 00:17:32] INDICATOR: specificity_anchor_density_x_proof_density_hook
+[jarvis-runner 00:17:32]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:17:32]   [EXPERIMENT] Pearson r=0.018, rho=0.018, p=0.7358, n=370
+[jarvis-runner 00:17:32]   [RESULT]    none positive: Interaction: specificity_anchor_density * proof_density_hook. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:17:32]   [GRAPH]     Derived edge added: specificity_anchor_density × proof_density_hook → 'views', depth=2
+[jarvis-runner 00:17:32]   [DONE]      r=0.018 (none positive)
+[jarvis-runner 00:18:34] 
+==================================================
+[jarvis-runner 00:18:34] INDICATOR: specificity_anchor_density_x_stakes_to_loop_ratio
+[jarvis-runner 00:18:34]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:18:34]   [EXPERIMENT] Pearson r=-0.009, rho=-0.011, p=0.8691, n=370
+[jarvis-runner 00:18:34]   [RESULT]    none negative: Interaction: specificity_anchor_density * stakes_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:18:34]   [GRAPH]     Derived edge added: specificity_anchor_density × stakes_to_loop_ratio → 'views', depth=2
+[jarvis-runner 00:18:34]   [DONE]      r=-0.009 (none negative)
+[jarvis-runner 00:19:34] 
+==================================================
+[jarvis-runner 00:19:34] INDICATOR: specificity_anchor_density_x_stake_loop_product
+[jarvis-runner 00:19:34]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:19:34]   [EXPERIMENT] Pearson r=0.056, rho=0.092, p=0.2800, n=370
+[jarvis-runner 00:19:34]   [RESULT]    none positive: Interaction: specificity_anchor_density * stake_loop_product. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:19:34]   [GRAPH]     Derived edge added: specificity_anchor_density × stake_loop_product → 'views', depth=2
+[jarvis-runner 00:19:34]   [DONE]      r=0.056 (none positive)
+[jarvis-runner 00:20:37] 
+==================================================
+[jarvis-runner 00:20:37] INDICATOR: specificity_anchor_density_x_rhetorical_question_count
+[jarvis-runner 00:20:37]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:20:37]   [EXPERIMENT] Pearson r=0.083, rho=0.070, p=0.1113, n=370
+[jarvis-runner 00:20:37]   [RESULT]    none positive: Interaction: specificity_anchor_density * rhetorical_question_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:20:37]   [GRAPH]     Derived edge added: specificity_anchor_density × rhetorical_question_count → 'views', depth=2
+[jarvis-runner 00:20:37]   [DONE]      r=0.083 (none positive)
+[jarvis-runner 00:21:46] 
+==================================================
+[jarvis-runner 00:21:46] INDICATOR: specificity_anchor_density_x_rhetorical_question_density
+[jarvis-runner 00:21:46]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:21:46]   [EXPERIMENT] Pearson r=0.072, rho=0.070, p=0.1669, n=370
+[jarvis-runner 00:21:46]   [RESULT]    none positive: Interaction: specificity_anchor_density * rhetorical_question_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:21:46]   [GRAPH]     Derived edge added: specificity_anchor_density × rhetorical_question_density → 'views', depth=2
+[jarvis-runner 00:21:46]   [DONE]      r=0.072 (none positive)
+[jarvis-runner 00:22:50] 
+==================================================
+[jarvis-runner 00:22:50] INDICATOR: specificity_anchor_density_x_social_comparison_count
+[jarvis-runner 00:22:50]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:22:50]   [EXPERIMENT] Pearson r=-0.013, rho=-0.016, p=0.8060, n=370
+[jarvis-runner 00:22:50]   [RESULT]    none negative: Interaction: specificity_anchor_density * social_comparison_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:22:50]   [GRAPH]     Derived edge added: specificity_anchor_density × social_comparison_count → 'views', depth=2
+[jarvis-runner 00:22:50]   [DONE]      r=-0.013 (none negative)
+[jarvis-runner 00:23:47] 
+==================================================
+[jarvis-runner 00:23:47] INDICATOR: open_loop_count_x_retention_recovery_ratio
+[jarvis-runner 00:23:47]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:23:47]   [EXPERIMENT] Pearson r=0.217, rho=0.205, p=0.0000, n=370
+[jarvis-runner 00:23:47]   [RESULT]    weak positive: Maximize interaction: open_loop_count * retention_recovery_ratio. to increase views.
+[jarvis-runner 00:23:47]   [GRAPH]     Derived edge added: open_loop_count × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 00:23:47]   [DONE]      r=0.217 (weak positive)
+[jarvis-runner 00:24:48] 
+==================================================
+[jarvis-runner 00:24:48] INDICATOR: retention_recovery_ratio_x_open_loop_to_closure_ratio
+[jarvis-runner 00:24:48]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:24:48]   [EXPERIMENT] Pearson r=0.173, rho=0.184, p=0.0008, n=370
+[jarvis-runner 00:24:48]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * open_loop_to_closure_ratio. to increase views.
+[jarvis-runner 00:24:48]   [GRAPH]     Derived edge added: retention_recovery_ratio × open_loop_to_closure_ratio → 'views', depth=2
+[jarvis-runner 00:24:48]   [DONE]      r=0.173 (weak positive)
+[jarvis-runner 00:25:50] 
+==================================================
+[jarvis-runner 00:25:50] INDICATOR: open_loop_to_closure_ratio_x_retention_recovery_ratio
+[jarvis-runner 00:25:50]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:25:50]   [EXPERIMENT] Pearson r=0.173, rho=0.184, p=0.0008, n=370
+[jarvis-runner 00:25:50]   [RESULT]    weak positive: Maximize interaction: open_loop_to_closure_ratio * retention_recovery_ratio. to increase views.
+[jarvis-runner 00:25:50]   [GRAPH]     Derived edge added: open_loop_to_closure_ratio × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 00:25:50]   [DONE]      r=0.173 (weak positive)
+[jarvis-runner 00:28:15] 
+==================================================
+[jarvis-runner 00:28:15] INDICATOR: specificity_anchor_density_x_social_comparison_density
+[jarvis-runner 00:28:15]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:28:15]   [EXPERIMENT] Pearson r=-0.013, rho=-0.016, p=0.8060, n=370
+[jarvis-runner 00:28:15]   [RESULT]    none negative: Interaction: specificity_anchor_density * social_comparison_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:28:15]   [GRAPH]     Derived edge added: specificity_anchor_density × social_comparison_density → 'views', depth=2
+[jarvis-runner 00:28:15]   [DONE]      r=-0.013 (none negative)
+[jarvis-runner 00:29:12] 
+==================================================
+[jarvis-runner 00:29:12] INDICATOR: specificity_anchor_density_x_mystery_setup_count
+[jarvis-runner 00:29:12]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:29:12]   [EXPERIMENT] Pearson r=0.025, rho=0.035, p=0.6262, n=370
+[jarvis-runner 00:29:12]   [RESULT]    none positive: Interaction: specificity_anchor_density * mystery_setup_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:29:12]   [GRAPH]     Derived edge added: specificity_anchor_density × mystery_setup_count → 'views', depth=2
+[jarvis-runner 00:29:12]   [DONE]      r=0.025 (none positive)
+[jarvis-runner 00:30:13] 
+==================================================
+[jarvis-runner 00:30:13] INDICATOR: specificity_anchor_density_x_mystery_setup_density
+[jarvis-runner 00:30:13]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:30:13]   [EXPERIMENT] Pearson r=0.020, rho=0.035, p=0.6953, n=370
+[jarvis-runner 00:30:13]   [RESULT]    none positive: Interaction: specificity_anchor_density * mystery_setup_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:30:13]   [GRAPH]     Derived edge added: specificity_anchor_density × mystery_setup_density → 'views', depth=2
+[jarvis-runner 00:30:13]   [DONE]      r=0.020 (none positive)
+[jarvis-runner 00:31:37] 
+==================================================
+[jarvis-runner 00:31:37] INDICATOR: specificity_anchor_density_x_promise_specificity_count
+[jarvis-runner 00:31:37]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:31:37]   [EXPERIMENT] Pearson r=0.100, rho=0.121, p=0.0538, n=370
+[jarvis-runner 00:31:37]   [RESULT]    weak positive: Maximize interaction: specificity_anchor_density * promise_specificity_count. to increase views.
+[jarvis-runner 00:31:37]   [GRAPH]     Derived edge added: specificity_anchor_density × promise_specificity_count → 'views', depth=2
+[jarvis-runner 00:31:37]   [DONE]      r=0.100 (weak positive)
+[jarvis-runner 00:32:52] 
+==================================================
+[jarvis-runner 00:32:52] INDICATOR: specificity_anchor_density_x_promise_specificity_density
+[jarvis-runner 00:32:52]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:32:52]   [EXPERIMENT] Pearson r=0.042, rho=0.119, p=0.4153, n=370
+[jarvis-runner 00:32:52]   [RESULT]    none positive: Interaction: specificity_anchor_density * promise_specificity_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:32:52]   [GRAPH]     Derived edge added: specificity_anchor_density × promise_specificity_density → 'views', depth=2
+[jarvis-runner 00:32:52]   [DONE]      r=0.042 (none positive)
+[jarvis-runner 00:33:51] 
+==================================================
+[jarvis-runner 00:33:51] INDICATOR: specificity_anchor_density_x_loss_framing_count
+[jarvis-runner 00:33:51]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:33:51]   [EXPERIMENT] Pearson r=0.060, rho=0.063, p=0.2460, n=370
+[jarvis-runner 00:33:51]   [RESULT]    none positive: Interaction: specificity_anchor_density * loss_framing_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:33:51]   [GRAPH]     Derived edge added: specificity_anchor_density × loss_framing_count → 'views', depth=2
+[jarvis-runner 00:33:51]   [DONE]      r=0.060 (none positive)
+[jarvis-runner 00:34:53] 
+==================================================
+[jarvis-runner 00:34:53] INDICATOR: specificity_anchor_density_x_loss_framing_density
+[jarvis-runner 00:34:53]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:34:53]   [EXPERIMENT] Pearson r=0.060, rho=0.063, p=0.2460, n=370
+[jarvis-runner 00:34:53]   [RESULT]    none positive: Interaction: specificity_anchor_density * loss_framing_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:34:53]   [GRAPH]     Derived edge added: specificity_anchor_density × loss_framing_density → 'views', depth=2
+[jarvis-runner 00:34:53]   [DONE]      r=0.060 (none positive)
+[jarvis-runner 00:35:50] 
+==================================================
+[jarvis-runner 00:35:50] INDICATOR: retention_recovery_ratio_x_payoff_delay_score
+[jarvis-runner 00:35:50]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:35:50]   [EXPERIMENT] Pearson r=0.042, rho=0.144, p=0.4259, n=370
+[jarvis-runner 00:35:50]   [RESULT]    none positive: Interaction: retention_recovery_ratio * payoff_delay_score. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:35:50]   [GRAPH]     Derived edge added: retention_recovery_ratio × payoff_delay_score → 'views', depth=2
+[jarvis-runner 00:35:50]   [DONE]      r=0.042 (none positive)
+[jarvis-runner 00:36:52] 
+==================================================
+[jarvis-runner 00:36:52] INDICATOR: payoff_delay_score_x_retention_recovery_ratio
+[jarvis-runner 00:36:52]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:36:52]   [EXPERIMENT] Pearson r=0.042, rho=0.144, p=0.4259, n=370
+[jarvis-runner 00:36:52]   [RESULT]    none positive: Interaction: payoff_delay_score * retention_recovery_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:36:52]   [GRAPH]     Derived edge added: payoff_delay_score × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 00:36:52]   [DONE]      r=0.042 (none positive)
+[jarvis-runner 00:37:59] 
+==================================================
+[jarvis-runner 00:37:59] INDICATOR: retention_recovery_ratio_x_setup_duration_s
+[jarvis-runner 00:37:59]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:37:59]   [EXPERIMENT] Pearson r=0.148, rho=0.159, p=0.0043, n=370
+[jarvis-runner 00:37:59]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * setup_duration_s. to increase views.
+[jarvis-runner 00:37:59]   [GRAPH]     Derived edge added: retention_recovery_ratio × setup_duration_s → 'views', depth=2
+[jarvis-runner 00:37:59]   [DONE]      r=0.148 (weak positive)
+[jarvis-runner 00:39:05] 
+==================================================
+[jarvis-runner 00:39:05] INDICATOR: specificity_anchor_density_x_viewer_stakes_count
+[jarvis-runner 00:39:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:39:05]   [EXPERIMENT] Pearson r=0.039, rho=0.041, p=0.4600, n=370
+[jarvis-runner 00:39:05]   [RESULT]    none positive: Interaction: specificity_anchor_density * viewer_stakes_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:39:05]   [GRAPH]     Derived edge added: specificity_anchor_density × viewer_stakes_count → 'views', depth=2
+[jarvis-runner 00:39:05]   [DONE]      r=0.039 (none positive)
+[jarvis-runner 00:40:01] 
+==================================================
+[jarvis-runner 00:40:01] INDICATOR: specificity_anchor_density_x_viewer_stakes_density
+[jarvis-runner 00:40:01]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:40:01]   [EXPERIMENT] Pearson r=0.034, rho=0.041, p=0.5085, n=370
+[jarvis-runner 00:40:01]   [RESULT]    none positive: Interaction: specificity_anchor_density * viewer_stakes_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:40:01]   [GRAPH]     Derived edge added: specificity_anchor_density × viewer_stakes_density → 'views', depth=2
+[jarvis-runner 00:40:01]   [DONE]      r=0.034 (none positive)
+[jarvis-runner 00:40:59] 
+==================================================
+[jarvis-runner 00:40:59] INDICATOR: specificity_anchor_density_x_transformation_arc_count
+[jarvis-runner 00:40:59]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:40:59]   [EXPERIMENT] Pearson r=0.008, rho=0.038, p=0.8799, n=370
+[jarvis-runner 00:40:59]   [RESULT]    none positive: Interaction: specificity_anchor_density * transformation_arc_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:40:59]   [GRAPH]     Derived edge added: specificity_anchor_density × transformation_arc_count → 'views', depth=2
+[jarvis-runner 00:40:59]   [DONE]      r=0.008 (none positive)
+[jarvis-runner 00:41:54] 
+==================================================
+[jarvis-runner 00:41:54] INDICATOR: specificity_anchor_density_x_transformation_arc_density
+[jarvis-runner 00:41:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:41:54]   [EXPERIMENT] Pearson r=0.001, rho=0.038, p=0.9913, n=370
+[jarvis-runner 00:41:54]   [RESULT]    none positive: Interaction: specificity_anchor_density * transformation_arc_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:41:54]   [GRAPH]     Derived edge added: specificity_anchor_density × transformation_arc_density → 'views', depth=2
+[jarvis-runner 00:41:54]   [DONE]      r=0.001 (none positive)
+[jarvis-runner 00:42:54] 
+==================================================
+[jarvis-runner 00:42:54] INDICATOR: specificity_anchor_density_x_social_proof_count
+[jarvis-runner 00:42:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:42:54]   [EXPERIMENT] Pearson r=-0.006, rho=-0.004, p=0.9075, n=370
+[jarvis-runner 00:42:54]   [RESULT]    none negative: Interaction: specificity_anchor_density * social_proof_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:42:54]   [GRAPH]     Derived edge added: specificity_anchor_density × social_proof_count → 'views', depth=2
+[jarvis-runner 00:42:54]   [DONE]      r=-0.006 (none negative)
+[jarvis-runner 00:44:01] 
+==================================================
+[jarvis-runner 00:44:01] INDICATOR: specificity_anchor_density_x_social_proof_density
+[jarvis-runner 00:44:01]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:44:01]   [EXPERIMENT] Pearson r=-0.005, rho=-0.004, p=0.9304, n=370
+[jarvis-runner 00:44:01]   [RESULT]    none negative: Interaction: specificity_anchor_density * social_proof_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:44:01]   [GRAPH]     Derived edge added: specificity_anchor_density × social_proof_density → 'views', depth=2
+[jarvis-runner 00:44:01]   [DONE]      r=-0.005 (none negative)
+[jarvis-runner 00:44:57] 
+==================================================
+[jarvis-runner 00:44:57] INDICATOR: specificity_anchor_density_x_curiosity_gap_count
+[jarvis-runner 00:44:57]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:44:57]   [EXPERIMENT] Pearson r=0.059, rho=0.075, p=0.2569, n=370
+[jarvis-runner 00:44:57]   [RESULT]    none positive: Interaction: specificity_anchor_density * curiosity_gap_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 00:44:57]   [GRAPH]     Derived edge added: specificity_anchor_density × curiosity_gap_count → 'views', depth=2
+[jarvis-runner 00:44:57]   [DONE]      r=0.059 (none positive)
+[jarvis-runner 00:46:00] 
+==================================================
+[jarvis-runner 00:46:00] INDICATOR: setup_duration_s_x_retention_recovery_ratio
+[jarvis-runner 00:46:00]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:46:00]   [EXPERIMENT] Pearson r=0.148, rho=0.159, p=0.0043, n=370
+[jarvis-runner 00:46:00]   [RESULT]    weak positive: Maximize interaction: setup_duration_s * retention_recovery_ratio. to increase views.
+[jarvis-runner 00:46:00]   [GRAPH]     Derived edge added: setup_duration_s × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 00:46:00]   [DONE]      r=0.148 (weak positive)
+[jarvis-runner 00:53:39] 
+==================================================
+[jarvis-runner 00:53:39] INDICATOR: retention_recovery_ratio_x_visual_proof_phrase_count
+[jarvis-runner 00:53:39]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:53:39]   [EXPERIMENT] Pearson r=0.149, rho=0.141, p=0.0040, n=370
+[jarvis-runner 00:53:39]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * visual_proof_phrase_count. to increase views.
+[jarvis-runner 00:53:39]   [GRAPH]     Derived edge added: retention_recovery_ratio × visual_proof_phrase_count → 'views', depth=2
+[jarvis-runner 00:53:39]   [DONE]      r=0.149 (weak positive)
+[jarvis-runner 00:54:37] 
+==================================================
+[jarvis-runner 00:54:37] INDICATOR: visual_proof_phrase_count_x_retention_recovery_ratio
+[jarvis-runner 00:54:37]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 00:54:37]   [EXPERIMENT] Pearson r=0.149, rho=0.141, p=0.0040, n=370
+[jarvis-runner 00:54:37]   [RESULT]    weak positive: Maximize interaction: visual_proof_phrase_count * retention_recovery_ratio. to increase views.
+[jarvis-runner 00:54:37]   [GRAPH]     Derived edge added: visual_proof_phrase_count × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 00:54:37]   [DONE]      r=0.149 (weak positive)
+[jarvis-runner 00:55:38] 
+============================================================
+[jarvis-runner 00:55:38] AUTONOMOUS RUN COMPLETE: auto_20260419000017.
+[jarvis-runner 00:55:38]   Attempted: 70, Completed: 69, Failures: 1
+[jarvis-runner 00:55:38]   Pre: 49/48, Post: 21/21
+[jarvis-runner 00:55:38]   Stop: max_minutes, Top |r|: 0.4007, Elapsed: 55.3m
+[jarvis-runner 00:55:38]   Total indicators: 1852
+[autorun] Complete. stop_reason: undefined
+◇ injected env (42) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+R2: Connected to bucket "business-world-videos"
+[autorun] Starting zygarnik/open-loop run: maxIter=5000 maxMin=55 preRatio=0.70 maxNoSignal=25
+[jarvis-runner 01:32:59] 
+============================================================
+[jarvis-runner 01:32:59] AUTONOMOUS RUN: auto_20260419013259.
+[jarvis-runner 01:32:59]   maxIterations=5000, maxMinutes=55, maxFailures=500, maxNoSignal=25, preuploadRatio=0.7
+[jarvis-runner 01:33:33] Zero-variance filter: skipped 8096 candidates (175 constant-value indicators)
+[jarvis-runner 01:33:33] Pool before bias: 24413 pre, 7549 post
+[jarvis-runner 01:33:33] Candidate pool: 31962 unrun (32297 already done)
+[jarvis-runner 01:33:34] Loaded 370 videos
+[jarvis-runner 01:33:34] 
+==================================================
+[jarvis-runner 01:33:34] INDICATOR: payoff_position_pct_x_challenge_to_resolution_gap_pct
+[jarvis-runner 01:33:34]   [DATASET]   43 videos, 327 skipped
+[jarvis-runner 01:33:34]   Only 43 videos — skip
+[jarvis-runner 01:33:36] 
+==================================================
+[jarvis-runner 01:33:36] INDICATOR: specificity_anchor_density_x_stakes_escalation_count
+[jarvis-runner 01:33:36]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:33:36]   [EXPERIMENT] Pearson r=0.072, rho=0.081, p=0.1698, n=370
+[jarvis-runner 01:33:36]   [RESULT]    none positive: Interaction: specificity_anchor_density * stakes_escalation_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:33:36]   [GRAPH]     Derived edge added: specificity_anchor_density × stakes_escalation_count → 'views', depth=2
+[jarvis-runner 01:33:36]   [DONE]      r=0.072 (none positive)
+[jarvis-runner 01:34:26] 
+==================================================
+[jarvis-runner 01:34:26] INDICATOR: specificity_anchor_density_x_stakes_escalation_density
+[jarvis-runner 01:34:27]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:34:27]   [EXPERIMENT] Pearson r=0.065, rho=0.081, p=0.2120, n=370
+[jarvis-runner 01:34:27]   [RESULT]    none positive: Interaction: specificity_anchor_density * stakes_escalation_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:34:27]   [GRAPH]     Derived edge added: specificity_anchor_density × stakes_escalation_density → 'views', depth=2
+[jarvis-runner 01:34:27]   [DONE]      r=0.065 (none positive)
+[jarvis-runner 01:35:30] 
+==================================================
+[jarvis-runner 01:35:30] INDICATOR: specificity_anchor_density_x_delayed_reveal_count
+[jarvis-runner 01:35:30]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:35:30]   [EXPERIMENT] Pearson r=0.098, rho=0.104, p=0.0586, n=370
+[jarvis-runner 01:35:30]   [RESULT]    none positive: Interaction: specificity_anchor_density * delayed_reveal_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:35:30]   [GRAPH]     Derived edge added: specificity_anchor_density × delayed_reveal_count → 'views', depth=2
+[jarvis-runner 01:35:30]   [DONE]      r=0.098 (none positive)
+[jarvis-runner 01:36:26] 
+==================================================
+[jarvis-runner 01:36:26] INDICATOR: specificity_anchor_density_x_delayed_reveal_density
+[jarvis-runner 01:36:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:36:26]   [EXPERIMENT] Pearson r=0.086, rho=0.103, p=0.1000, n=370
+[jarvis-runner 01:36:26]   [RESULT]    none positive: Interaction: specificity_anchor_density * delayed_reveal_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:36:26]   [GRAPH]     Derived edge added: specificity_anchor_density × delayed_reveal_density → 'views', depth=2
+[jarvis-runner 01:36:26]   [DONE]      r=0.086 (none positive)
+[jarvis-runner 01:37:24] 
+==================================================
+[jarvis-runner 01:37:24] INDICATOR: specificity_anchor_density_x_narrative_anchor_count
+[jarvis-runner 01:37:24]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:37:24]   [EXPERIMENT] Pearson r=0.016, rho=0.021, p=0.7551, n=370
+[jarvis-runner 01:37:24]   [RESULT]    none positive: Interaction: specificity_anchor_density * narrative_anchor_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:37:24]   [GRAPH]     Derived edge added: specificity_anchor_density × narrative_anchor_count → 'views', depth=2
+[jarvis-runner 01:37:24]   [DONE]      r=0.016 (none positive)
+[jarvis-runner 01:38:24] 
+==================================================
+[jarvis-runner 01:38:24] INDICATOR: specificity_anchor_density_x_narrative_anchor_density
+[jarvis-runner 01:38:24]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:38:24]   [EXPERIMENT] Pearson r=-0.000, rho=0.021, p=0.9924, n=370
+[jarvis-runner 01:38:24]   [RESULT]    none negative: Interaction: specificity_anchor_density * narrative_anchor_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:38:24]   [GRAPH]     Derived edge added: specificity_anchor_density × narrative_anchor_density → 'views', depth=2
+[jarvis-runner 01:38:24]   [DONE]      r=-0.000 (none negative)
+[jarvis-runner 01:39:23] 
+==================================================
+[jarvis-runner 01:39:23] INDICATOR: zygarnik_buildup_ratio_x_retention_recovery_ratio
+[jarvis-runner 01:39:23]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:39:23]   [EXPERIMENT] Pearson r=0.094, rho=0.155, p=0.0714, n=370
+[jarvis-runner 01:39:23]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * retention_recovery_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:39:23]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 01:39:23]   [DONE]      r=0.094 (none positive)
+[jarvis-runner 01:40:19] 
+==================================================
+[jarvis-runner 01:40:19] INDICATOR: retention_recovery_ratio_x_open_loop_density
+[jarvis-runner 01:40:19]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:40:19]   [EXPERIMENT] Pearson r=0.152, rho=0.151, p=0.0035, n=370
+[jarvis-runner 01:40:19]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * open_loop_density. to increase views.
+[jarvis-runner 01:40:19]   [GRAPH]     Derived edge added: retention_recovery_ratio × open_loop_density → 'views', depth=2
+[jarvis-runner 01:40:19]   [DONE]      r=0.152 (weak positive)
+[jarvis-runner 01:41:19] 
+==================================================
+[jarvis-runner 01:41:19] INDICATOR: open_loop_density_x_retention_recovery_ratio
+[jarvis-runner 01:41:19]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:41:19]   [EXPERIMENT] Pearson r=0.152, rho=0.151, p=0.0035, n=370
+[jarvis-runner 01:41:19]   [RESULT]    weak positive: Maximize interaction: open_loop_density * retention_recovery_ratio. to increase views.
+[jarvis-runner 01:41:19]   [GRAPH]     Derived edge added: open_loop_density × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 01:41:19]   [DONE]      r=0.152 (weak positive)
+[jarvis-runner 01:42:22] 
+==================================================
+[jarvis-runner 01:42:22] INDICATOR: specificity_anchor_density_x_challenge_statement_count
+[jarvis-runner 01:42:22]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:42:22]   [EXPERIMENT] Pearson r=0.125, rho=0.139, p=0.0163, n=370
+[jarvis-runner 01:42:22]   [RESULT]    weak positive: Maximize interaction: specificity_anchor_density * challenge_statement_count. to increase views.
+[jarvis-runner 01:42:22]   [GRAPH]     Derived edge added: specificity_anchor_density × challenge_statement_count → 'views', depth=2
+[jarvis-runner 01:42:22]   [DONE]      r=0.125 (weak positive)
+[jarvis-runner 01:43:24] 
+==================================================
+[jarvis-runner 01:43:24] INDICATOR: specificity_anchor_density_x_challenge_statement_density
+[jarvis-runner 01:43:24]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:43:24]   [EXPERIMENT] Pearson r=0.084, rho=0.138, p=0.1086, n=370
+[jarvis-runner 01:43:24]   [RESULT]    none positive: Interaction: specificity_anchor_density * challenge_statement_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:43:24]   [GRAPH]     Derived edge added: specificity_anchor_density × challenge_statement_density → 'views', depth=2
+[jarvis-runner 01:43:24]   [DONE]      r=0.084 (none positive)
+[jarvis-runner 01:44:24] 
+==================================================
+[jarvis-runner 01:44:24] INDICATOR: specificity_anchor_density_x_narrative_tension_count
+[jarvis-runner 01:44:24]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:44:24]   [EXPERIMENT] Pearson r=0.113, rho=0.116, p=0.0300, n=370
+[jarvis-runner 01:44:24]   [RESULT]    weak positive: Maximize interaction: specificity_anchor_density * narrative_tension_count. to increase views.
+[jarvis-runner 01:44:24]   [GRAPH]     Derived edge added: specificity_anchor_density × narrative_tension_count → 'views', depth=2
+[jarvis-runner 01:44:24]   [DONE]      r=0.113 (weak positive)
+[jarvis-runner 01:45:31] 
+==================================================
+[jarvis-runner 01:45:31] INDICATOR: specificity_anchor_density_x_narrative_tension_density
+[jarvis-runner 01:45:31]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:45:31]   [EXPERIMENT] Pearson r=0.082, rho=0.115, p=0.1149, n=370
+[jarvis-runner 01:45:31]   [RESULT]    none positive: Interaction: specificity_anchor_density * narrative_tension_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:45:31]   [GRAPH]     Derived edge added: specificity_anchor_density × narrative_tension_density → 'views', depth=2
+[jarvis-runner 01:45:31]   [DONE]      r=0.082 (none positive)
+[jarvis-runner 01:46:33] 
+==================================================
+[jarvis-runner 01:46:33] INDICATOR: specificity_anchor_density_x_payoff_delay_score
+[jarvis-runner 01:46:33]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:46:33]   [EXPERIMENT] Pearson r=0.115, rho=0.116, p=0.0271, n=370
+[jarvis-runner 01:46:33]   [RESULT]    weak positive: Maximize interaction: specificity_anchor_density * payoff_delay_score. to increase views.
+[jarvis-runner 01:46:33]   [GRAPH]     Derived edge added: specificity_anchor_density × payoff_delay_score → 'views', depth=2
+[jarvis-runner 01:46:33]   [DONE]      r=0.115 (weak positive)
+[jarvis-runner 01:47:33] 
+==================================================
+[jarvis-runner 01:47:33] INDICATOR: specificity_anchor_density_x_challenge_to_resolution_gap_pct
+[jarvis-runner 01:47:33]   [DATASET]   109 videos, 261 skipped
+[jarvis-runner 01:47:33]   [EXPERIMENT] Pearson r=-0.155, rho=-0.101, p=0.1069, n=109
+[jarvis-runner 01:47:33]   [RESULT]    weak negative: Minimize interaction: specificity_anchor_density * challenge_to_resolution_gap_pct. to increase views.
+[jarvis-runner 01:47:33]   [GRAPH]     Derived edge added: specificity_anchor_density × challenge_to_resolution_gap_pct → 'views', depth=2
+[jarvis-runner 01:47:33]   [DONE]      r=-0.155 (weak negative)
+[jarvis-runner 01:48:37] 
+==================================================
+[jarvis-runner 01:48:37] INDICATOR: specificity_anchor_density_x_loop_front_half_density
+[jarvis-runner 01:48:37]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 01:48:37]   [EXPERIMENT] Pearson r=0.086, rho=0.084, p=0.0968, n=370
+[jarvis-runner 01:48:37]   [RESULT]    none positive: Interaction: specificity_anchor_density * loop_front_half_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 01:48:37]   [GRAPH]     Derived edge added: specificity_anchor_density × loop_front_half_density → 'views', depth=2
+[jarvis-runner 01:48:37]   [DONE]      r=0.086 (none positive)
+[jarvis-runner 02:00:56] 
+==================================================
+[jarvis-runner 02:00:56] INDICATOR: retention_recovery_ratio_x_dangling_question_ratio
+[jarvis-runner 02:00:56]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:00:56]   [EXPERIMENT] Pearson r=0.101, rho=0.270, p=0.0531, n=370
+[jarvis-runner 02:00:56]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * dangling_question_ratio. to increase views.
+[jarvis-runner 02:00:56]   [GRAPH]     Derived edge added: retention_recovery_ratio × dangling_question_ratio → 'views', depth=2
+[jarvis-runner 02:00:56]   [DONE]      r=0.101 (weak positive)
+◇ injected env (42) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+R2: Connected to bucket "business-world-videos"
+[autorun] Starting zygarnik/open-loop run: maxIter=5000 maxMin=55 preRatio=0.70 maxNoSignal=25
+[jarvis-runner 02:01:42] 
+============================================================
+[jarvis-runner 02:01:42] AUTONOMOUS RUN: auto_20260419020142.
+[jarvis-runner 02:01:42]   maxIterations=5000, maxMinutes=55, maxFailures=500, maxNoSignal=25, preuploadRatio=0.7
+[jarvis-runner 02:02:27] Zero-variance filter: skipped 8096 candidates (175 constant-value indicators)
+[jarvis-runner 02:02:27] Pool before bias: 24400 pre, 7546 post
+[jarvis-runner 02:02:27] Candidate pool: 31946 unrun (32313 already done)
+[jarvis-runner 02:02:28] Loaded 370 videos
+[jarvis-runner 02:02:28] 
+==================================================
+[jarvis-runner 02:02:28] INDICATOR: payoff_position_pct_x_challenge_to_resolution_gap_pct
+[jarvis-runner 02:02:28]   [DATASET]   43 videos, 327 skipped
+[jarvis-runner 02:02:28]   Only 43 videos — skip
+[jarvis-runner 02:02:29] 
+==================================================
+[jarvis-runner 02:02:29] INDICATOR: specificity_anchor_density_x_answer_withhold_density_first_third
+[jarvis-runner 02:02:29]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:02:29]   [EXPERIMENT] Pearson r=0.092, rho=0.096, p=0.0779, n=370
+[jarvis-runner 02:02:29]   [RESULT]    none positive: Interaction: specificity_anchor_density * answer_withhold_density_first_third. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:02:29]   [GRAPH]     Derived edge added: specificity_anchor_density × answer_withhold_density_first_third → 'views', depth=2
+[jarvis-runner 02:02:29]   [DONE]      r=0.092 (none positive)
+[jarvis-runner 02:03:29] 
+==================================================
+[jarvis-runner 02:03:29] INDICATOR: specificity_anchor_density_x_narrative_tension_density_first_half
+[jarvis-runner 02:03:29]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:03:29]   [EXPERIMENT] Pearson r=0.058, rho=0.102, p=0.2673, n=370
+[jarvis-runner 02:03:29]   [RESULT]    none positive: Interaction: specificity_anchor_density * narrative_tension_density_first_half. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:03:29]   [GRAPH]     Derived edge added: specificity_anchor_density × narrative_tension_density_first_half → 'views', depth=2
+[jarvis-runner 02:03:29]   [DONE]      r=0.058 (none positive)
+[jarvis-runner 02:04:27] 
+==================================================
+[jarvis-runner 02:04:27] INDICATOR: specificity_anchor_density_x_challenge_setup_density_first_quarter
+[jarvis-runner 02:04:27]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:04:27]   [EXPERIMENT] Pearson r=0.007, rho=0.061, p=0.9005, n=370
+[jarvis-runner 02:04:27]   [RESULT]    none positive: Interaction: specificity_anchor_density * challenge_setup_density_first_quarter. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:04:27]   [GRAPH]     Derived edge added: specificity_anchor_density × challenge_setup_density_first_quarter → 'views', depth=2
+[jarvis-runner 02:04:27]   [DONE]      r=0.007 (none positive)
+[jarvis-runner 02:05:25] 
+==================================================
+[jarvis-runner 02:05:25] INDICATOR: micro_commitment_density_x_visual_proof_phrase_count
+[jarvis-runner 02:05:25]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:05:25]   [EXPERIMENT] Pearson r=0.046, rho=0.060, p=0.3794, n=370
+[jarvis-runner 02:05:25]   [RESULT]    none positive: Interaction: micro_commitment_density * visual_proof_phrase_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:05:25]   [GRAPH]     Derived edge added: micro_commitment_density × visual_proof_phrase_count → 'views', depth=2
+[jarvis-runner 02:05:25]   [DONE]      r=0.046 (none positive)
+[jarvis-runner 02:06:22] 
+==================================================
+[jarvis-runner 02:06:22] INDICATOR: micro_commitment_density_x_visual_proof_phrase_density
+[jarvis-runner 02:06:22]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:06:22]   [EXPERIMENT] Pearson r=0.022, rho=0.059, p=0.6724, n=370
+[jarvis-runner 02:06:22]   [RESULT]    none positive: Interaction: micro_commitment_density * visual_proof_phrase_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:06:22]   [GRAPH]     Derived edge added: micro_commitment_density × visual_proof_phrase_density → 'views', depth=2
+[jarvis-runner 02:06:22]   [DONE]      r=0.022 (none positive)
+[jarvis-runner 02:07:19] 
+==================================================
+[jarvis-runner 02:07:19] INDICATOR: micro_commitment_density_x_zygarnik_score
+[jarvis-runner 02:07:19]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:07:19]   [EXPERIMENT] Pearson r=0.073, rho=0.054, p=0.1615, n=370
+[jarvis-runner 02:07:19]   [RESULT]    none positive: Interaction: micro_commitment_density * zygarnik_score. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:07:19]   [GRAPH]     Derived edge added: micro_commitment_density × zygarnik_score → 'views', depth=2
+[jarvis-runner 02:07:19]   [DONE]      r=0.073 (none positive)
+[jarvis-runner 02:08:20] 
+==================================================
+[jarvis-runner 02:08:20] INDICATOR: retention_recovery_ratio_x_dangling_question_ratio
+[jarvis-runner 02:08:20]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:08:20]   [EXPERIMENT] Pearson r=0.101, rho=0.270, p=0.0531, n=370
+[jarvis-runner 02:08:20]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * dangling_question_ratio. to increase views.
+[jarvis-runner 02:08:20]   [GRAPH]     Derived edge added: retention_recovery_ratio × dangling_question_ratio → 'views', depth=2
+[jarvis-runner 02:08:20]   [DONE]      r=0.101 (weak positive)
+[jarvis-runner 02:09:23] 
+==================================================
+[jarvis-runner 02:09:23] INDICATOR: dangling_question_ratio_x_retention_recovery_ratio
+[jarvis-runner 02:09:23]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:09:23]   [EXPERIMENT] Pearson r=0.101, rho=0.270, p=0.0531, n=370
+[jarvis-runner 02:09:23]   [RESULT]    weak positive: Maximize interaction: dangling_question_ratio * retention_recovery_ratio. to increase views.
+[jarvis-runner 02:09:23]   [GRAPH]     Derived edge added: dangling_question_ratio × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 02:09:23]   [DONE]      r=0.101 (weak positive)
+[jarvis-runner 02:11:40] 
+==================================================
+[jarvis-runner 02:11:40] INDICATOR: retention_recovery_ratio_x_hook_tension_ratio
+[jarvis-runner 02:11:40]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:11:40]   [EXPERIMENT] Pearson r=0.079, rho=0.068, p=0.1316, n=370
+[jarvis-runner 02:11:40]   [RESULT]    none positive: Interaction: retention_recovery_ratio * hook_tension_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:11:40]   [GRAPH]     Derived edge added: retention_recovery_ratio × hook_tension_ratio → 'views', depth=2
+[jarvis-runner 02:11:40]   [DONE]      r=0.079 (none positive)
+[jarvis-runner 02:12:43] 
+==================================================
+[jarvis-runner 02:12:43] INDICATOR: micro_commitment_density_x_zygarnik_buildup_ratio
+[jarvis-runner 02:12:43]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:12:43]   [EXPERIMENT] Pearson r=0.060, rho=0.054, p=0.2481, n=370
+[jarvis-runner 02:12:43]   [RESULT]    none positive: Interaction: micro_commitment_density * zygarnik_buildup_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:12:43]   [GRAPH]     Derived edge added: micro_commitment_density × zygarnik_buildup_ratio → 'views', depth=2
+[jarvis-runner 02:12:43]   [DONE]      r=0.060 (none positive)
+[jarvis-runner 02:13:46] 
+==================================================
+[jarvis-runner 02:13:46] INDICATOR: micro_commitment_density_x_unresolved_loop_count
+[jarvis-runner 02:13:46]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:13:46]   [EXPERIMENT] Pearson r=0.094, rho=0.053, p=0.0717, n=370
+[jarvis-runner 02:13:46]   [RESULT]    none positive: Interaction: micro_commitment_density * unresolved_loop_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:13:46]   [GRAPH]     Derived edge added: micro_commitment_density × unresolved_loop_count → 'views', depth=2
+[jarvis-runner 02:13:46]   [DONE]      r=0.094 (none positive)
+[jarvis-runner 02:14:48] 
+==================================================
+[jarvis-runner 02:14:48] INDICATOR: micro_commitment_density_x_pre_proof_tension_score
+[jarvis-runner 02:14:48]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:14:48]   [EXPERIMENT] Pearson r=0.091, rho=0.053, p=0.0804, n=370
+[jarvis-runner 02:14:48]   [RESULT]    none positive: Interaction: micro_commitment_density * pre_proof_tension_score. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:14:48]   [GRAPH]     Derived edge added: micro_commitment_density × pre_proof_tension_score → 'views', depth=2
+[jarvis-runner 02:14:48]   [DONE]      r=0.091 (none positive)
+[jarvis-runner 02:15:56] 
+==================================================
+[jarvis-runner 02:15:56] INDICATOR: micro_commitment_density_x_credential_signal_count
+[jarvis-runner 02:15:56]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:15:56]   [EXPERIMENT] Pearson r=0.156, rho=0.144, p=0.0025, n=370
+[jarvis-runner 02:15:56]   [RESULT]    weak positive: Maximize interaction: micro_commitment_density * credential_signal_count. to increase views.
+[jarvis-runner 02:15:56]   [GRAPH]     Derived edge added: micro_commitment_density × credential_signal_count → 'views', depth=2
+[jarvis-runner 02:15:56]   [DONE]      r=0.156 (weak positive)
+[jarvis-runner 02:16:59] 
+==================================================
+[jarvis-runner 02:16:59] INDICATOR: micro_commitment_density_x_credential_signal_density
+[jarvis-runner 02:16:59]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:16:59]   [EXPERIMENT] Pearson r=0.157, rho=0.144, p=0.0025, n=370
+[jarvis-runner 02:16:59]   [RESULT]    weak positive: Maximize interaction: micro_commitment_density * credential_signal_density. to increase views.
+[jarvis-runner 02:16:59]   [GRAPH]     Derived edge added: micro_commitment_density × credential_signal_density → 'views', depth=2
+[jarvis-runner 02:16:59]   [DONE]      r=0.157 (weak positive)
+[jarvis-runner 02:17:58] 
+==================================================
+[jarvis-runner 02:17:58] INDICATOR: micro_commitment_density_x_closure_gap_pct
+[jarvis-runner 02:17:58]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:17:58]   [EXPERIMENT] Pearson r=-0.010, rho=-0.015, p=0.8526, n=370
+[jarvis-runner 02:17:58]   [RESULT]    none negative: Interaction: micro_commitment_density * closure_gap_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:17:58]   [GRAPH]     Derived edge added: micro_commitment_density × closure_gap_pct → 'views', depth=2
+[jarvis-runner 02:17:58]   [DONE]      r=-0.010 (none negative)
+[jarvis-runner 02:19:12] 
+==================================================
+[jarvis-runner 02:19:12] INDICATOR: micro_commitment_density_x_micro_reward_density
+[jarvis-runner 02:19:12]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:19:12]   [EXPERIMENT] Pearson r=0.065, rho=0.069, p=0.2143, n=370
+[jarvis-runner 02:19:12]   [RESULT]    none positive: Interaction: micro_commitment_density * micro_reward_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:19:12]   [GRAPH]     Derived edge added: micro_commitment_density × micro_reward_density → 'views', depth=2
+[jarvis-runner 02:19:12]   [DONE]      r=0.065 (none positive)
+[jarvis-runner 02:20:15] 
+==================================================
+[jarvis-runner 02:20:15] INDICATOR: hook_tension_ratio_x_retention_recovery_ratio
+[jarvis-runner 02:20:15]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:20:15]   [EXPERIMENT] Pearson r=0.079, rho=0.068, p=0.1316, n=370
+[jarvis-runner 02:20:15]   [RESULT]    none positive: Interaction: hook_tension_ratio * retention_recovery_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:20:15]   [GRAPH]     Derived edge added: hook_tension_ratio × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 02:20:15]   [DONE]      r=0.079 (none positive)
+[jarvis-runner 02:21:19] 
+==================================================
+[jarvis-runner 02:21:19] INDICATOR: retention_recovery_ratio_x_gratification_delay_pct
+[jarvis-runner 02:21:19]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:21:19]   [EXPERIMENT] Pearson r=-0.070, rho=0.017, p=0.1797, n=370
+[jarvis-runner 02:21:19]   [RESULT]    none negative: Interaction: retention_recovery_ratio * gratification_delay_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:21:19]   [GRAPH]     Derived edge added: retention_recovery_ratio × gratification_delay_pct → 'views', depth=2
+[jarvis-runner 02:21:19]   [DONE]      r=-0.070 (none negative)
+[jarvis-runner 02:22:23] 
+==================================================
+[jarvis-runner 02:22:23] INDICATOR: gratification_delay_pct_x_retention_recovery_ratio
+[jarvis-runner 02:22:23]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:22:23]   [EXPERIMENT] Pearson r=-0.070, rho=0.017, p=0.1797, n=370
+[jarvis-runner 02:22:23]   [RESULT]    none negative: Interaction: gratification_delay_pct * retention_recovery_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:22:23]   [GRAPH]     Derived edge added: gratification_delay_pct × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 02:22:23]   [DONE]      r=-0.070 (none negative)
+[jarvis-runner 02:23:37] 
+==================================================
+[jarvis-runner 02:23:37] INDICATOR: micro_commitment_density_x_information_drip_ratio
+[jarvis-runner 02:23:37]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:23:37]   [EXPERIMENT] Pearson r=0.060, rho=0.072, p=0.2524, n=370
+[jarvis-runner 02:23:37]   [RESULT]    none positive: Interaction: micro_commitment_density * information_drip_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:23:37]   [GRAPH]     Derived edge added: micro_commitment_density × information_drip_ratio → 'views', depth=2
+[jarvis-runner 02:23:37]   [DONE]      r=0.060 (none positive)
+[jarvis-runner 02:24:58] 
+==================================================
+[jarvis-runner 02:24:58] INDICATOR: micro_commitment_density_x_zygarnik_gradient_pct
+[jarvis-runner 02:24:59]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:24:59]   [EXPERIMENT] Pearson r=0.007, rho=0.055, p=0.8913, n=370
+[jarvis-runner 02:24:59]   [RESULT]    none positive: Interaction: micro_commitment_density * zygarnik_gradient_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:24:59]   [GRAPH]     Derived edge added: micro_commitment_density × zygarnik_gradient_pct → 'views', depth=2
+[jarvis-runner 02:24:59]   [DONE]      r=0.007 (none positive)
+[jarvis-runner 02:26:07] 
+==================================================
+[jarvis-runner 02:26:07] INDICATOR: micro_commitment_density_x_zygarnik_front_load_ratio
+[jarvis-runner 02:26:07]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:26:07]   [EXPERIMENT] Pearson r=0.020, rho=0.050, p=0.7000, n=370
+[jarvis-runner 02:26:07]   [RESULT]    none positive: Interaction: micro_commitment_density * zygarnik_front_load_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:26:07]   [GRAPH]     Derived edge added: micro_commitment_density × zygarnik_front_load_ratio → 'views', depth=2
+[jarvis-runner 02:26:07]   [DONE]      r=0.020 (none positive)
+[jarvis-runner 02:27:24] 
+==================================================
+[jarvis-runner 02:27:24] INDICATOR: micro_commitment_density_x_loop_to_closure_gap_s
+[jarvis-runner 02:27:24]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:27:24]   [EXPERIMENT] Pearson r=0.069, rho=0.037, p=0.1848, n=370
+[jarvis-runner 02:27:24]   [RESULT]    none positive: Interaction: micro_commitment_density * loop_to_closure_gap_s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:27:24]   [GRAPH]     Derived edge added: micro_commitment_density × loop_to_closure_gap_s → 'views', depth=2
+[jarvis-runner 02:27:24]   [DONE]      r=0.069 (none positive)
+[jarvis-runner 02:28:39] 
+==================================================
+[jarvis-runner 02:28:39] INDICATOR: micro_commitment_density_x_ref_to_gratification_gap_pct
+[jarvis-runner 02:28:39]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:28:39]   [EXPERIMENT] Pearson r=0.075, rho=0.068, p=0.1479, n=370
+[jarvis-runner 02:28:39]   [RESULT]    none positive: Interaction: micro_commitment_density * ref_to_gratification_gap_pct. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:28:39]   [GRAPH]     Derived edge added: micro_commitment_density × ref_to_gratification_gap_pct → 'views', depth=2
+[jarvis-runner 02:28:39]   [DONE]      r=0.075 (none positive)
+[jarvis-runner 02:29:46] 
+==================================================
+[jarvis-runner 02:29:46] INDICATOR: micro_commitment_density_x_pre_payoff_tension_index
+[jarvis-runner 02:29:46]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:29:46]   [EXPERIMENT] Pearson r=-0.057, rho=0.006, p=0.2737, n=370
+[jarvis-runner 02:29:46]   [RESULT]    none negative: Interaction: micro_commitment_density * pre_payoff_tension_index. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:29:46]   [GRAPH]     Derived edge added: micro_commitment_density × pre_payoff_tension_index → 'views', depth=2
+[jarvis-runner 02:29:46]   [DONE]      r=-0.057 (none negative)
+[jarvis-runner 02:30:59] 
+==================================================
+[jarvis-runner 02:30:59] INDICATOR: micro_commitment_density_x_early_proof_to_loop_ratio
+[jarvis-runner 02:30:59]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 02:30:59]   [EXPERIMENT] Pearson r=-0.056, rho=-0.044, p=0.2867, n=370
+[jarvis-runner 02:30:59]   [RESULT]    none negative: Interaction: micro_commitment_density * early_proof_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 02:30:59]   [GRAPH]     Derived edge added: micro_commitment_density × early_proof_to_loop_ratio → 'views', depth=2
+[jarvis-runner 02:30:59]   [DONE]      r=-0.056 (none negative)
