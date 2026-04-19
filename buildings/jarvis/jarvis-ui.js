@@ -109,6 +109,7 @@ const JarvisUI = (() => {
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
         { id: 'variables', label: 'Variables' },
+        { id: 'mechanisms', label: 'Mechanisms' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'knowledge', label: 'Knowledge' },
         { id: 'resolution', label: 'Resolution' },
@@ -201,6 +202,12 @@ const JarvisUI = (() => {
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
             case 'variables': return renderVariables();
+            case 'mechanisms':
+                // Top-level shortcut: jump straight into the Knowledge →
+                // Mechanisms surface so the catalog of named mechanisms is
+                // one click away from anywhere in Jarvis.
+                knowledgeSubTab = 'mechanisms';
+                return renderKnowledge();
             case 'autoResearch': return renderAutoResearch();
             case 'knowledge': return renderKnowledge();
             case 'resolution': return renderResolution();
