@@ -30738,7 +30738,11 @@
       "micro_commitment_density_x_stake_loop_product",
       "micro_commitment_density_x_rhetorical_question_count",
       "micro_commitment_density_x_rhetorical_question_density",
-      "micro_commitment_density_x_social_comparison_count"
+      "micro_commitment_density_x_social_comparison_count",
+      "micro_commitment_density_x_social_comparison_density",
+      "micro_commitment_density_x_mystery_setup_count",
+      "micro_commitment_density_x_mystery_setup_density",
+      "micro_commitment_density_x_promise_specificity_count"
     ],
     "depth_in_hierarchy": 0
   },
