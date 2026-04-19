@@ -30586,7 +30586,9 @@
       "retention_zygarnik_arc_x_gratification_delay_pct",
       "vulnerability_density_x_delayed_reveal_density",
       "vulnerability_density_x_narrative_anchor_count",
-      "vulnerability_density_x_narrative_anchor_density"
+      "vulnerability_density_x_narrative_anchor_density",
+      "vulnerability_density_x_challenge_statement_count",
+      "vulnerability_density_x_challenge_statement_density"
     ],
     "depth_in_hierarchy": 0
   },

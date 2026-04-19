@@ -1,40 +1,22 @@
 {
-  "active": true,
+  "active": false,
   "run_id": "auto_20260418230625.",
   "mode": "hybrid_auto",
   "started_at": "2026-04-18T23:06:25.488Z",
-  "updated_at": "2026-04-18T23:30:08.432Z",
-  "finished_at": null,
+  "updated_at": "2026-04-18T23:32:14.093Z",
+  "finished_at": "2026-04-18T23:32:14.093Z",
   "requested_iterations": 3000,
-  "attempted": 24,
-  "completed": 22,
+  "attempted": 25,
+  "completed": 24,
   "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
-  "stop_reason": null,
-  "current_candidate": "vulnerability_density_x_challenge_statement_count",
-  "last_completed_candidate": "vulnerability_density_x_narrative_anchor_density",
-  "last_completed_r": 0.0712,
+  "stop_reason": "max_minutes",
+  "current_candidate": null,
+  "last_completed_candidate": "vulnerability_density_x_challenge_statement_density",
+  "last_completed_r": 0.0713,
   "recent_events": [
-    {
-      "type": "completed",
-      "key": "vulnerability_density_x_reference_callback_count",
-      "r": 0,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-18T23:09:57.963Z"
-    },
-    {
-      "type": "completed",
-      "key": "vulnerability_density_x_reference_callback_density",
-      "r": 0,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-18T23:10:51.554Z"
-    },
     {
       "type": "completed",
       "key": "vulnerability_density_x_visual_credibility_count",
@@ -196,10 +178,28 @@
       "target": "views",
       "layer": "pre",
       "ts": "2026-04-18T23:30:08.012Z"
+    },
+    {
+      "type": "completed",
+      "key": "vulnerability_density_x_challenge_statement_count",
+      "r": 0.0738,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-18T23:31:07.375Z"
+    },
+    {
+      "type": "completed",
+      "key": "vulnerability_density_x_challenge_statement_density",
+      "r": 0.0713,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-18T23:32:13.699Z"
     }
   ],
-  "pre_attempted": 18,
-  "pre_completed": 16,
+  "pre_attempted": 19,
+  "pre_completed": 18,
   "post_attempted": 6,
   "post_completed": 6
 }
