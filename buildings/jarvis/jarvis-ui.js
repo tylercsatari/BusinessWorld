@@ -2509,7 +2509,96 @@ const JarvisUI = (() => {
             ${summaryHtml}
             ${selectedCard}
             ${groupsHtml}
+            ${renderExperimentsVariablesPanel()}
         `;
+    }
+
+    // Embedded variables-catalog panel inside the Experiments tab. Collapsible,
+    // searchable mini-version of the Variables tab — so users can look up the
+    // definition of a metric key without leaving the experiment view.
+    let expVarsPanelOpen = false;
+    let expVarsSearch = '';
+    let expVarsSelectedKey = null;
+
+    function renderExperimentsVariablesPanel() {
+        const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
+
+        // Lazy-load the catalog on first expansion; the panel itself is always
+        // rendered so the toggle stays visible even before data is ready.
+        if (expVarsPanelOpen && (!variablesCatalog || !variablesKnown)) {
+            loadVariablesCatalog().then(() => {
+                const el = container?.querySelector('.jarvis-exp-root');
+                if (el) { el.innerHTML = renderExperimentsV2Content(); bindExperimentsV2Events(); }
+            });
+        }
+
+        const toggleBtn = `<button id="jarvis-exp-vars-toggle" style="
+            background:${expVarsPanelOpen ? '#22d3ee22' : 'rgba(15,23,42,0.6)'};
+            color:${expVarsPanelOpen ? '#22d3ee' : '#94a3b8'};
+            border:1px solid ${expVarsPanelOpen ? '#22d3ee' : '#1e293b'};
+            padding:6px 12px;font-size:11px;border-radius:6px;cursor:pointer;
+            display:inline-flex;align-items:center;gap:6px">
+            <span>${expVarsPanelOpen ? '▾' : '▸'}</span>
+            <span>Variables Catalog</span>
+            <span style="color:#64748b;font-size:10px">${(variablesKnown && variablesKnown.total) ? '(' + variablesKnown.total + ')' : ''}</span>
+        </button>`;
+
+        if (!expVarsPanelOpen) {
+            return `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #1e293b">${toggleBtn}
+                <div style="margin-top:6px;font-size:10px;color:#64748b">Open to search phrase-family metrics, retention windows, composites — same directory as the Variables tab.</div>
+            </div>`;
+        }
+
+        const allVars = (variablesKnown && variablesKnown.variables) || [];
+        const search = (expVarsSearch || '').trim().toLowerCase();
+        const filtered = search
+            ? allVars.filter(v => {
+                const hay = `${v.key || ''} ${v.label || ''} ${v.description || ''} ${v.quantification || ''} ${v.modality || ''} ${v.family || ''}`.toLowerCase();
+                return hay.includes(search);
+              })
+            : allVars;
+        const cap = 200;
+        const overflow = Math.max(0, filtered.length - cap);
+        const shown = filtered.slice(0, cap);
+
+        const rows = shown.map(v => {
+            const selected = expVarsSelectedKey === v.key;
+            return `<div class="jarvis-exp-vars-row" data-exp-var-key="${escapeHtml(v.key)}" style="
+                display:flex;gap:8px;align-items:center;padding:4px 8px;border-radius:5px;cursor:pointer;
+                background:${selected ? '#1e293b' : 'transparent'};border-left:3px solid ${selected ? '#22d3ee' : 'transparent'}">
+                <code style="font-size:10px;color:#22d3ee;flex:0 0 auto;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(v.key)}</code>
+                <span style="flex:1;font-size:10px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(v.label || '')}</span>
+                <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1e293b;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;flex-shrink:0">${escapeHtml((v.source || 'unknown').replace(/_/g,' '))}</span>
+            </div>`;
+        }).join('');
+
+        let selectedHtml = '';
+        if (expVarsSelectedKey) {
+            const def = allVars.find(v => v.key === expVarsSelectedKey) || lookupVariableDefinition(expVarsSelectedKey);
+            if (def) {
+                selectedHtml = `<div style="margin-bottom:8px">
+                    <button id="jarvis-exp-vars-back-btn" style="background:none;border:1px solid #334155;color:#94a3b8;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10px;margin-bottom:6px">&larr; Close detail</button>
+                    ${renderVariableDefinitionRow(def, { accent: '#22d3ee' })}
+                </div>`;
+            }
+        }
+
+        return `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #1e293b">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                ${toggleBtn}
+                <a href="#" id="jarvis-exp-vars-open-tab" style="font-size:10px;color:#64748b;text-decoration:none;margin-left:4px">Open full Variables tab &rarr;</a>
+            </div>
+            <div style="margin-top:10px;background:#05080f;border:1px solid #1e293b;border-radius:8px;padding:10px">
+                <input type="text" id="jarvis-exp-vars-search" placeholder="Search variables (proof_of_work, retention, interaction…)" value="${escapeHtml(expVarsSearch)}" style="
+                    width:100%;background:#0a1628;border:1px solid #1e293b;color:#f1f5f9;
+                    padding:6px 10px;border-radius:6px;font-size:11px;outline:none;margin-bottom:8px" />
+                ${selectedHtml}
+                ${sectionHdr(`Matching variables (${filtered.length}${overflow ? ' — ' + overflow + ' more hidden, narrow search' : ''})`)}
+                <div style="display:flex;flex-direction:column;gap:2px;max-height:280px;overflow-y:auto;padding:2px">
+                    ${rows || '<div style="padding:10px;color:#64748b;font-size:11px;text-align:center">No variables match.</div>'}
+                </div>
+            </div>
+        </div>`;
     }
 
     function bindExperimentsV2Events() {
@@ -2547,6 +2636,50 @@ const JarvisUI = (() => {
                     el.innerHTML = renderExperimentsV2Content();
                     bindExperimentsV2Events();
                 }
+            });
+        }
+
+        const rerender = () => {
+            const el = container?.querySelector('.jarvis-exp-root');
+            if (!el) return;
+            el.innerHTML = renderExperimentsV2Content();
+            bindExperimentsV2Events();
+        };
+        const toggleVars = container?.querySelector('#jarvis-exp-vars-toggle');
+        if (toggleVars) {
+            toggleVars.addEventListener('click', () => {
+                expVarsPanelOpen = !expVarsPanelOpen;
+                if (!expVarsPanelOpen) { expVarsSelectedKey = null; expVarsSearch = ''; }
+                rerender();
+            });
+        }
+        const varsSearch = container?.querySelector('#jarvis-exp-vars-search');
+        if (varsSearch) {
+            varsSearch.addEventListener('input', (e) => {
+                expVarsSearch = e.target.value || '';
+                rerender();
+                const s2 = container?.querySelector('#jarvis-exp-vars-search');
+                if (s2) { s2.focus(); s2.setSelectionRange(expVarsSearch.length, expVarsSearch.length); }
+            });
+        }
+        container?.querySelectorAll('.jarvis-exp-vars-row').forEach(row => {
+            row.addEventListener('click', () => {
+                expVarsSelectedKey = row.dataset.expVarKey;
+                rerender();
+            });
+        });
+        const varsBack = container?.querySelector('#jarvis-exp-vars-back-btn');
+        if (varsBack) {
+            varsBack.addEventListener('click', () => { expVarsSelectedKey = null; rerender(); });
+        }
+        const openVarsTab = container?.querySelector('#jarvis-exp-vars-open-tab');
+        if (openVarsTab) {
+            openVarsTab.addEventListener('click', (e) => {
+                e.preventDefault();
+                activeTab = 'variables';
+                if (expVarsSelectedKey) variablesSelectedKey = expVarsSelectedKey;
+                if (expVarsSearch) variablesSearch = expVarsSearch;
+                render();
             });
         }
     }
