@@ -30742,7 +30742,17 @@
       "micro_commitment_density_x_social_comparison_density",
       "micro_commitment_density_x_mystery_setup_count",
       "micro_commitment_density_x_mystery_setup_density",
-      "micro_commitment_density_x_promise_specificity_count"
+      "micro_commitment_density_x_promise_specificity_count",
+      "micro_commitment_density_x_promise_specificity_density",
+      "micro_commitment_density_x_loss_framing_count",
+      "micro_commitment_density_x_loss_framing_density",
+      "micro_commitment_density_x_viewer_stakes_count",
+      "micro_commitment_density_x_viewer_stakes_density",
+      "micro_commitment_density_x_transformation_arc_count",
+      "non_sub_view_share_x_retention_recovery_ratio",
+      "retention_recovery_ratio_x_title_number_flag",
+      "micro_commitment_density_x_transformation_arc_density",
+      "micro_commitment_density_x_social_proof_count"
     ],
     "depth_in_hierarchy": 0
   },

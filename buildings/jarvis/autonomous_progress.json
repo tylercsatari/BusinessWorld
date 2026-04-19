@@ -1,68 +1,50 @@
 {
-  "active": false,
-  "run_id": "auto_20260419033107.",
+  "active": true,
+  "run_id": "auto_20260419043136.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-19T03:31:07.426Z",
-  "updated_at": "2026-04-19T03:40:39.243Z",
-  "finished_at": "2026-04-19T03:59:52.000Z",
-  "requested_iterations": 5000,
-  "attempted": 6,
-  "completed": 4,
+  "started_at": "2026-04-19T04:31:36.744Z",
+  "updated_at": "2026-04-19T04:34:25.796Z",
+  "finished_at": null,
+  "requested_iterations": 3000,
+  "attempted": 3,
+  "completed": 2,
   "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
-  "stop_reason": "process_exited",
-  "current_candidate": "micro_commitment_density_x_promise_specificity_density",
-  "last_completed_candidate": "micro_commitment_density_x_promise_specificity_count",
-  "last_completed_r": 0.0564,
+  "stop_reason": null,
+  "current_candidate": "micro_commitment_density_x_social_proof_count",
+  "last_completed_candidate": "micro_commitment_density_x_social_proof_count",
+  "last_completed_r": -0.111,
   "recent_events": [
     {
       "type": "failed",
       "key": "payoff_position_pct_x_challenge_to_resolution_gap_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-19T03:32:34.400Z"
+      "ts": "2026-04-19T04:32:18.715Z"
     },
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_social_comparison_density",
-      "r": -0.0128,
+      "key": "micro_commitment_density_x_transformation_arc_density",
+      "r": -0.1133,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T03:35:39.798Z"
+      "ts": "2026-04-19T04:33:16.576Z"
     },
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_mystery_setup_count",
-      "r": -0.0399,
+      "key": "micro_commitment_density_x_social_proof_count",
+      "r": -0.111,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T03:37:04.170Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_mystery_setup_density",
-      "r": -0.0551,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T03:38:49.102Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_promise_specificity_count",
-      "r": 0.0564,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T03:40:38.804Z"
+      "ts": "2026-04-19T04:34:25.796Z"
     }
   ],
-  "pre_attempted": 6,
-  "pre_completed": 4,
+  "pre_attempted": 3,
+  "pre_completed": 2,
   "post_attempted": 0,
   "post_completed": 0
 }
