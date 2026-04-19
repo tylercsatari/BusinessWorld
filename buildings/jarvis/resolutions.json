@@ -31029,7 +31029,9 @@
       "anticipatory_build_density_x_ref_to_gratification_gap_pct",
       "visual_proof_phrase_count_x_visual_proof_phrase_density",
       "visual_proof_phrase_count_x_zygarnik_score",
-      "visual_proof_phrase_count_x_zygarnik_buildup_ratio"
+      "visual_proof_phrase_count_x_zygarnik_buildup_ratio",
+      "visual_proof_phrase_count_x_unresolved_loop_count",
+      "visual_proof_phrase_count_x_pre_proof_tension_score"
     ],
     "depth_in_hierarchy": 0
   },
