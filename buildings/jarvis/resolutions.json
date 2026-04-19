@@ -30960,7 +30960,13 @@
       "revelation_pace_density_x_social_proof_count",
       "revelation_pace_density_x_social_proof_density",
       "revelation_pace_density_x_curiosity_gap_count",
-      "revelation_pace_density_x_curiosity_gap_density"
+      "revelation_pace_density_x_curiosity_gap_density",
+      "revelation_pace_density_x_emotional_peak_count",
+      "revelation_pace_density_x_emotional_peak_density",
+      "revelation_pace_density_x_proof_of_work_count",
+      "revelation_pace_density_x_proof_of_work_density",
+      "revelation_pace_density_x_failure_vulnerability_count",
+      "revelation_pace_density_x_failure_vulnerability_density"
     ],
     "depth_in_hierarchy": 0
   },
