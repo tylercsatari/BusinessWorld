@@ -1,205 +1,205 @@
 {
-  "active": false,
-  "run_id": "auto_20260419192203.",
+  "active": true,
+  "run_id": "auto_20260419194802.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-19T19:22:03.780Z",
-  "updated_at": "2026-04-19T19:47:11.255Z",
-  "finished_at": "2026-04-19T19:47:11.255Z",
+  "started_at": "2026-04-19T19:48:02.412Z",
+  "updated_at": "2026-04-19T20:11:00.554Z",
+  "finished_at": null,
   "requested_iterations": 3000,
-  "attempted": 24,
-  "completed": 24,
+  "attempted": 21,
+  "completed": 20,
   "failures": 0,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 0,
-  "stop_reason": "max_minutes",
-  "current_candidate": null,
-  "last_completed_candidate": "credential_signal_density_x_proof_density_hook",
-  "last_completed_r": -0.0502,
+  "no_signal_streak": 2,
+  "stop_reason": null,
+  "current_candidate": "credential_signal_density_x_failure_vulnerability_density",
+  "last_completed_candidate": "gratification_delay_pct_x_retention_payoff_phase_mean",
+  "last_completed_r": 0.0379,
   "recent_events": [
     {
       "type": "completed",
-      "key": "credential_signal_count_x_narrative_tension_density_first_half",
-      "r": 0.0952,
+      "key": "credential_signal_density_x_stake_loop_product",
+      "r": 0.099,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:27:42.457Z"
+      "ts": "2026-04-19T19:49:51.752Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_count_x_challenge_setup_density_first_quarter",
-      "r": 0.0586,
+      "key": "credential_signal_density_x_rhetorical_question_count",
+      "r": -0.0609,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:28:41.828Z"
+      "ts": "2026-04-19T19:52:11.597Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_closure_gap_pct",
-      "r": 0.0532,
+      "key": "credential_signal_density_x_rhetorical_question_density",
+      "r": -0.0625,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:30:51.485Z"
+      "ts": "2026-04-19T19:53:09.429Z"
     },
     {
       "type": "completed",
-      "key": "retention_payoff_phase_mean_x_zygarnik_score",
-      "r": 0.1233,
+      "key": "credential_signal_density_x_mystery_setup_count",
+      "r": -0.0065,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T19:54:17.125Z"
+    },
+    {
+      "type": "completed",
+      "key": "credential_signal_density_x_mystery_setup_density",
+      "r": -0.0144,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T19:55:14.091Z"
+    },
+    {
+      "type": "completed",
+      "key": "credential_signal_density_x_promise_specificity_count",
+      "r": 0.038,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T19:56:09.785Z"
+    },
+    {
+      "type": "completed",
+      "key": "credential_signal_density_x_promise_specificity_density",
+      "r": 0.0073,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T19:57:08.431Z"
+    },
+    {
+      "type": "completed",
+      "key": "retention_payoff_phase_mean_x_dangling_question_ratio",
+      "r": 0.2803,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T19:31:47.487Z"
+      "ts": "2026-04-19T19:58:14.367Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_score_x_retention_payoff_phase_mean",
-      "r": 0.1233,
+      "key": "dangling_question_ratio_x_retention_payoff_phase_mean",
+      "r": 0.2803,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T19:32:39.693Z"
+      "ts": "2026-04-19T19:59:12.344Z"
     },
     {
       "type": "completed",
-      "key": "retention_payoff_phase_mean_x_zygarnik_buildup_ratio",
-      "r": 0.1126,
+      "key": "retention_payoff_phase_mean_x_hook_tension_ratio",
+      "r": 0.1,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T19:33:38.503Z"
+      "ts": "2026-04-19T20:00:08.418Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_micro_reward_density",
-      "r": 0.0475,
+      "key": "credential_signal_density_x_loss_framing_count",
+      "r": 0.0922,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:34:38.027Z"
+      "ts": "2026-04-19T20:01:04.718Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_zygarnik_gradient_pct",
-      "r": 0.0407,
+      "key": "credential_signal_density_x_loss_framing_density",
+      "r": 0.0759,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:35:32.815Z"
+      "ts": "2026-04-19T20:01:58.370Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_zygarnik_front_load_ratio",
-      "r": 0.0271,
+      "key": "credential_signal_density_x_social_proof_count",
+      "r": 0.0736,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:36:25.335Z"
+      "ts": "2026-04-19T20:03:00.084Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_loop_to_closure_gap_s",
-      "r": 0.0901,
+      "key": "credential_signal_density_x_social_proof_density",
+      "r": 0.0659,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:37:20.135Z"
+      "ts": "2026-04-19T20:04:18.312Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_ref_to_gratification_gap_pct",
-      "r": 0.0435,
+      "key": "credential_signal_density_x_proof_of_work_count",
+      "r": 0.13,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:38:19.000Z"
+      "ts": "2026-04-19T20:05:23.482Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_pre_payoff_tension_index",
-      "r": -0.0482,
+      "key": "credential_signal_density_x_proof_of_work_density",
+      "r": 0.1173,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:39:20.693Z"
+      "ts": "2026-04-19T20:06:24.759Z"
     },
     {
       "type": "completed",
-      "key": "credential_signal_density_x_early_proof_to_loop_ratio",
-      "r": 0.0146,
+      "key": "credential_signal_density_x_failure_vulnerability_count",
+      "r": -0.0241,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T19:40:18.708Z"
+      "ts": "2026-04-19T20:07:29.355Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_buildup_ratio_x_retention_payoff_phase_mean",
-      "r": 0.1126,
+      "key": "hook_tension_ratio_x_retention_payoff_phase_mean",
+      "r": 0.1,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T19:41:18.402Z"
+      "ts": "2026-04-19T20:08:29.786Z"
     },
     {
       "type": "completed",
-      "key": "retention_payoff_phase_mean_x_open_loop_density",
-      "r": 0.179,
+      "key": "retention_payoff_phase_mean_x_gratification_delay_pct",
+      "r": 0.0379,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T19:42:16.666Z"
+      "ts": "2026-04-19T20:09:26.581Z"
     },
     {
       "type": "completed",
-      "key": "open_loop_density_x_retention_payoff_phase_mean",
-      "r": 0.179,
+      "key": "gratification_delay_pct_x_retention_payoff_phase_mean",
+      "r": 0.0379,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T19:43:14.686Z"
-    },
-    {
-      "type": "completed",
-      "key": "credential_signal_density_x_proof_arrival_delay_proxy",
-      "r": 0.1112,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T19:44:12.150Z"
-    },
-    {
-      "type": "completed",
-      "key": "credential_signal_density_x_closure_to_open_ratio_first10s",
-      "r": 0.0338,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T19:45:09.635Z"
-    },
-    {
-      "type": "completed",
-      "key": "credential_signal_density_x_credibility_setup_pct",
-      "r": 0.0169,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T19:46:04.902Z"
-    },
-    {
-      "type": "completed",
-      "key": "credential_signal_density_x_proof_density_hook",
-      "r": -0.0502,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T19:47:10.965Z"
+      "ts": "2026-04-19T20:11:00.205Z"
     }
   ],
-  "pre_attempted": 18,
-  "pre_completed": 18,
+  "pre_attempted": 15,
+  "pre_completed": 14,
   "post_attempted": 6,
   "post_completed": 6
 }
