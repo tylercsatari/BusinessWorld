@@ -1,0 +1,324 @@
+{
+  "brief_summary": {
+    "generated_at": "2026-04-19T17:44:03.369Z",
+    "source_sizes": {
+      "findings_model_history": 8,
+      "principles_total": 312,
+      "bridge_top_count": 25,
+      "components_total": 87,
+      "mechanisms_total": 2444,
+      "videos_in_pool": 372
+    },
+    "headline_model_r2": {
+      "model": "v22",
+      "cv_r2": 0.7,
+      "n_features": 12
+    },
+    "counts": {
+      "top_post_upload_predictors": 7,
+      "top_pre_upload_predictors": 10,
+      "top_bridges": 12,
+      "top_mechanism_principles": 15,
+      "hook_mechanisms": 12,
+      "proven_kept_signals": 14,
+      "top_components": 12,
+      "concept_anchors": 5
+    }
+  },
+  "ideas": [
+    {
+      "rank": 1,
+      "title": "Making X vs Y — Side-By-Side Build, Single Decisive Moment",
+      "one_line_premise": "Build two competing variants in parallel on camera; cut every 2-3 seconds across visual varieties; converge on one decisive test where one fails in the last 5%.",
+      "concept_anchors": [
+        "making",
+        "anticipation_setup"
+      ],
+      "hook_mechanisms": [
+        {
+          "mechanism_id": "compound_frame_close_up_X_segment_setup_at_first_10s",
+          "bucket": "first_10s",
+          "principle_id": "princ_00034",
+          "via_indicator": "swipe_away_rate",
+          "csw": -0.1477,
+          "sign": "negative",
+          "n_videos": 65
+        }
+      ],
+      "narrative_structures": [
+        "dramatic_pacing",
+        "fast_pacing_no_pauses",
+        "golden_final_5pct",
+        "late_peak_arc"
+      ],
+      "duration_band_id": "sweet_spot_46_60",
+      "pre_upload_levers": [
+        "scene_burst_count",
+        "scene_change_count",
+        "frame_cluster_count",
+        "visual_variety_entropy",
+        "beat_count"
+      ],
+      "score_breakdown": {
+        "parts": {
+          "concept": 0.036,
+          "hook": 0.1477,
+          "narrative": 0.15,
+          "duration": 0.05,
+          "bridge": 0.5878
+        },
+        "total": 0.9715
+      },
+      "evidence": [
+        "Concept[making]: pat_making_v2 delta_r2 +0.012 — title contains making/build/creat/construct. 34 videos avg 19.7M views vs 5.6M rest. 'Making' avg $24M (23 videos).",
+        "Concept[anticipation_setup]: 'would happen' bigrams +4.3% retention, 'my body' +3.3%. 46% of videos contain callbacks. anticipatory_frame_pct is top hook_drop_rate reducer (avg_r=-0.401).",
+        "Hook[compound_frame_close_up_X_segment_setup_at_first_10s] via swipe_away_rate (principle princ_00034, n=65, csw=-0.148).",
+        "Structure[dramatic_pacing]: max_cliff_single_drop r_partial=+0.36. deriv_std in v22 model. BIGGER retention drops = MORE views. Pacing complexity beats monotonic decay.",
+        "Structure[fast_pacing_no_pauses]: Speech rate r=+0.24 vs retention. Long pauses >1s: r=-0.22 vs retention. Transition words ('so', 'however') drop -11.2% / -8.6%.",
+        "Structure[golden_final_5pct]: Retention pattern: videos at 95-99% percentile gain +8.0% above baseline vs -0.4% rest. Final 5% is THE differentiator for mega-virality.",
+        "Structure[late_peak_arc]: Retention pattern: videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). 'Late peak = 10x more views'.",
+        "Duration[sweet_spot_46_60]: Duration sweet spot: 46-60s = 28/98 videos hit 10M+, median 2.9M. 15-30s = death zone (0/11, 513K median). 46-60s balances duration×retention.",
+        "Pre-upload lever[scene_burst_count]: r=0.2272, higher → more views.",
+        "Pre-upload lever[scene_change_count]: r=0.2267, higher → more views.",
+        "Pre-upload lever[frame_cluster_count]: r=0.2266, higher → more views.",
+        "Pre-upload lever[visual_variety_entropy]: r=0.2692, higher → more views.",
+        "Pre-upload lever[beat_count]: r=0.2259, higher → more views."
+      ]
+    },
+    {
+      "rank": 2,
+      "title": "Would You Believe ____? — Anticipation-Setup with 10x Late-Peak Reveal",
+      "one_line_premise": "Open on a tight close-up and a spoken anticipation phrase (\"you won't believe what happened when…\"), set up the stakes, and withhold the proof until the 60-80% mark.",
+      "concept_anchors": [
+        "anticipation_setup",
+        "visceral_body"
+      ],
+      "hook_mechanisms": [
+        {
+          "mechanism_id": "compound_frame_close_up_X_segment_setup_at_first_10s",
+          "bucket": "first_10s",
+          "principle_id": "princ_00034",
+          "via_indicator": "swipe_away_rate",
+          "csw": -0.1477,
+          "sign": "negative",
+          "n_videos": 65
+        },
+        {
+          "mechanism_id": "frame_relatability_at_hook_quarter",
+          "bucket": "hook_quarter",
+          "principle_id": "princ_00013",
+          "via_indicator": "duration_s",
+          "csw": 0.2008,
+          "sign": "positive",
+          "n_videos": 36
+        }
+      ],
+      "narrative_structures": [
+        "late_peak_arc",
+        "callback_closure",
+        "dramatic_pacing",
+        "golden_final_5pct"
+      ],
+      "duration_band_id": "sweet_spot_46_60",
+      "pre_upload_levers": [
+        "pivot_word_count",
+        "repeated_phrase_count",
+        "visual_variety_entropy"
+      ],
+      "score_breakdown": {
+        "parts": {
+          "concept": 0.04,
+          "hook": 0.3485,
+          "narrative": 0.145,
+          "duration": 0.05,
+          "bridge": 0.2552
+        },
+        "total": 0.8387
+      },
+      "evidence": [
+        "Concept[anticipation_setup]: 'would happen' bigrams +4.3% retention, 'my body' +3.3%. 46% of videos contain callbacks. anticipatory_frame_pct is top hook_drop_rate reducer (avg_r=-0.401).",
+        "Concept[visceral_body]: Retention patterns: visceral words +5.9% (painful), +4.3% (difference), +2.5% (hurt). 'Late visceral amplification': 'crazy' at Q1=0 → Q4=+0.060.",
+        "Hook[compound_frame_close_up_X_segment_setup_at_first_10s] via swipe_away_rate (principle princ_00034, n=65, csw=-0.148).",
+        "Hook[frame_relatability_at_hook_quarter] via duration_s (principle princ_00013, n=36, csw=0.201).",
+        "Structure[late_peak_arc]: Retention pattern: videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). 'Late peak = 10x more views'.",
+        "Structure[callback_closure]: has_callback r=0.14 vs keep. 46% of videos use callbacks. 'Anticipation phrases retain': would-happen, my-body bigrams.",
+        "Structure[dramatic_pacing]: max_cliff_single_drop r_partial=+0.36. deriv_std in v22 model. BIGGER retention drops = MORE views. Pacing complexity beats monotonic decay.",
+        "Structure[golden_final_5pct]: Retention pattern: videos at 95-99% percentile gain +8.0% above baseline vs -0.4% rest. Final 5% is THE differentiator for mega-virality.",
+        "Duration[sweet_spot_46_60]: Duration sweet spot: 46-60s = 28/98 videos hit 10M+, median 2.9M. 15-30s = death zone (0/11, 513K median). 46-60s balances duration×retention.",
+        "Pre-upload lever[pivot_word_count]: r=0.2412, higher → more views.",
+        "Pre-upload lever[visual_variety_entropy]: r=0.2692, higher → more views."
+      ]
+    },
+    {
+      "rank": 3,
+      "title": "Superhero-Framed Physical Challenge — Direct-Address Hook, Body-On-The-Line Payoff",
+      "one_line_premise": "Cast yourself (or subject) as a superhero-coded challenger; look camera-in in the first 3 seconds, state the premise visibly, and land a painful/visceral reveal past midpoint.",
+      "concept_anchors": [
+        "superhero",
+        "visceral_body"
+      ],
+      "hook_mechanisms": [
+        {
+          "mechanism_id": "compound_frame_close_up_X_segment_setup_at_first_10s",
+          "bucket": "first_10s",
+          "principle_id": "princ_00034",
+          "via_indicator": "swipe_away_rate",
+          "csw": -0.1477,
+          "sign": "negative",
+          "n_videos": 65
+        }
+      ],
+      "narrative_structures": [
+        "late_peak_arc",
+        "visceral_body_language",
+        "fast_pacing_no_pauses",
+        "callback_closure"
+      ],
+      "duration_band_id": "sweet_spot_46_60",
+      "pre_upload_levers": [
+        "visual_variety_entropy",
+        "scene_change_count",
+        "beat_count",
+        "pivot_word_count"
+      ],
+      "score_breakdown": {
+        "parts": {
+          "concept": 0.024,
+          "hook": 0.1477,
+          "narrative": 0.125,
+          "duration": 0.05,
+          "bridge": 0.4815
+        },
+        "total": 0.8282
+      },
+      "evidence": [
+        "Concept[superhero]: cat_superhero included in v9 and v13 models. Concept category delivered the first large step above baseline (+0.09 R²).",
+        "Concept[visceral_body]: Retention patterns: visceral words +5.9% (painful), +4.3% (difference), +2.5% (hurt). 'Late visceral amplification': 'crazy' at Q1=0 → Q4=+0.060.",
+        "Hook[compound_frame_close_up_X_segment_setup_at_first_10s] via swipe_away_rate (principle princ_00034, n=65, csw=-0.148).",
+        "Structure[late_peak_arc]: Retention pattern: videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). 'Late peak = 10x more views'.",
+        "Structure[visceral_body_language]: Retention gain: painful +5.9%, difference +4.3%, hurt +2.5%, 'my body' +3.3%. 'Late visceral amplification': visceral words 60x more effective late.",
+        "Structure[fast_pacing_no_pauses]: Speech rate r=+0.24 vs retention. Long pauses >1s: r=-0.22 vs retention. Transition words ('so', 'however') drop -11.2% / -8.6%.",
+        "Structure[callback_closure]: has_callback r=0.14 vs keep. 46% of videos use callbacks. 'Anticipation phrases retain': would-happen, my-body bigrams.",
+        "Duration[sweet_spot_46_60]: Duration sweet spot: 46-60s = 28/98 videos hit 10M+, median 2.9M. 15-30s = death zone (0/11, 513K median). 46-60s balances duration×retention.",
+        "Pre-upload lever[visual_variety_entropy]: r=0.2692, higher → more views.",
+        "Pre-upload lever[scene_change_count]: r=0.2267, higher → more views.",
+        "Pre-upload lever[beat_count]: r=0.2259, higher → more views.",
+        "Pre-upload lever[pivot_word_count]: r=0.2412, higher → more views."
+      ]
+    },
+    {
+      "rank": 4,
+      "title": "Making Something Indestructible — 60s Stress-Test with Late Visceral Payoff",
+      "one_line_premise": "Build or assemble a seemingly fragile object, narrate a physical stress-test, and deliver the visceral reveal at 75-90% of runtime.",
+      "concept_anchors": [
+        "making",
+        "indestructible"
+      ],
+      "hook_mechanisms": [
+        {
+          "mechanism_id": "compound_frame_close_up_X_segment_setup_at_first_10s",
+          "bucket": "first_10s",
+          "principle_id": "princ_00034",
+          "via_indicator": "swipe_away_rate",
+          "csw": -0.1477,
+          "sign": "negative",
+          "n_videos": 65
+        }
+      ],
+      "narrative_structures": [
+        "late_peak_arc",
+        "dramatic_pacing",
+        "visceral_body_language",
+        "golden_final_5pct"
+      ],
+      "duration_band_id": "sweet_spot_46_60",
+      "pre_upload_levers": [
+        "visual_variety_entropy",
+        "pivot_word_count",
+        "scene_burst_count",
+        "proof_of_work_count",
+        "repeated_phrase_count"
+      ],
+      "score_breakdown": {
+        "parts": {
+          "concept": 0.038,
+          "hook": 0.1477,
+          "narrative": 0.16,
+          "duration": 0.05,
+          "bridge": 0.3688
+        },
+        "total": 0.7645
+      },
+      "evidence": [
+        "Concept[making]: pat_making_v2 delta_r2 +0.012 — title contains making/build/creat/construct. 34 videos avg 19.7M views vs 5.6M rest. 'Making' avg $24M (23 videos).",
+        "Concept[indestructible]: indestructible_x_prev_keep delta_r2 +0.026 — concept × previous keep interaction. Indestructible release after a high-keep video = super-viral.",
+        "Hook[compound_frame_close_up_X_segment_setup_at_first_10s] via swipe_away_rate (principle princ_00034, n=65, csw=-0.148).",
+        "Structure[late_peak_arc]: Retention pattern: videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). 'Late peak = 10x more views'.",
+        "Structure[dramatic_pacing]: max_cliff_single_drop r_partial=+0.36. deriv_std in v22 model. BIGGER retention drops = MORE views. Pacing complexity beats monotonic decay.",
+        "Structure[visceral_body_language]: Retention gain: painful +5.9%, difference +4.3%, hurt +2.5%, 'my body' +3.3%. 'Late visceral amplification': visceral words 60x more effective late.",
+        "Structure[golden_final_5pct]: Retention pattern: videos at 95-99% percentile gain +8.0% above baseline vs -0.4% rest. Final 5% is THE differentiator for mega-virality.",
+        "Duration[sweet_spot_46_60]: Duration sweet spot: 46-60s = 28/98 videos hit 10M+, median 2.9M. 15-30s = death zone (0/11, 513K median). 46-60s balances duration×retention.",
+        "Pre-upload lever[visual_variety_entropy]: r=0.2692, higher → more views.",
+        "Pre-upload lever[pivot_word_count]: r=0.2412, higher → more views.",
+        "Pre-upload lever[scene_burst_count]: r=0.2272, higher → more views."
+      ]
+    },
+    {
+      "rank": 5,
+      "title": "I Made My Body Do ____ — Visceral First-Person Build with Late Painful Reveal",
+      "one_line_premise": "First-person physical construction/modification (visible body, visible effort, proof-of-work props); ramp visceral language in the second half; the last 5% is the \"ow / I felt it\" payoff.",
+      "concept_anchors": [
+        "making",
+        "visceral_body",
+        "indestructible"
+      ],
+      "hook_mechanisms": [
+        {
+          "mechanism_id": "compound_frame_close_up_X_segment_setup_at_first_10s",
+          "bucket": "first_10s",
+          "principle_id": "princ_00034",
+          "via_indicator": "swipe_away_rate",
+          "csw": -0.1477,
+          "sign": "negative",
+          "n_videos": 65
+        }
+      ],
+      "narrative_structures": [
+        "late_peak_arc",
+        "visceral_body_language",
+        "golden_final_5pct",
+        "callback_closure"
+      ],
+      "duration_band_id": "sweet_spot_46_60",
+      "pre_upload_levers": [
+        "proof_of_work_count",
+        "pivot_word_count",
+        "repeated_phrase_count",
+        "visual_variety_entropy"
+      ],
+      "score_breakdown": {
+        "parts": {
+          "concept": 0.054,
+          "hook": 0.1477,
+          "narrative": 0.14,
+          "duration": 0.05,
+          "bridge": 0.2552
+        },
+        "total": 0.6469
+      },
+      "evidence": [
+        "Concept[making]: pat_making_v2 delta_r2 +0.012 — title contains making/build/creat/construct. 34 videos avg 19.7M views vs 5.6M rest. 'Making' avg $24M (23 videos).",
+        "Concept[visceral_body]: Retention patterns: visceral words +5.9% (painful), +4.3% (difference), +2.5% (hurt). 'Late visceral amplification': 'crazy' at Q1=0 → Q4=+0.060.",
+        "Concept[indestructible]: indestructible_x_prev_keep delta_r2 +0.026 — concept × previous keep interaction. Indestructible release after a high-keep video = super-viral.",
+        "Hook[compound_frame_close_up_X_segment_setup_at_first_10s] via swipe_away_rate (principle princ_00034, n=65, csw=-0.148).",
+        "Structure[late_peak_arc]: Retention pattern: videos peaking at 60-80% get ~10x more views than early-peaking (5.2M vs 530K median). 'Late peak = 10x more views'.",
+        "Structure[visceral_body_language]: Retention gain: painful +5.9%, difference +4.3%, hurt +2.5%, 'my body' +3.3%. 'Late visceral amplification': visceral words 60x more effective late.",
+        "Structure[golden_final_5pct]: Retention pattern: videos at 95-99% percentile gain +8.0% above baseline vs -0.4% rest. Final 5% is THE differentiator for mega-virality.",
+        "Structure[callback_closure]: has_callback r=0.14 vs keep. 46% of videos use callbacks. 'Anticipation phrases retain': would-happen, my-body bigrams.",
+        "Duration[sweet_spot_46_60]: Duration sweet spot: 46-60s = 28/98 videos hit 10M+, median 2.9M. 15-30s = death zone (0/11, 513K median). 46-60s balances duration×retention.",
+        "Pre-upload lever[pivot_word_count]: r=0.2412, higher → more views.",
+        "Pre-upload lever[visual_variety_entropy]: r=0.2692, higher → more views."
+      ]
+    }
+  ]
+}

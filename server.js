@@ -23,6 +23,7 @@ const financeService = require('./buildings/finance/finance-service');
 const jarvisStore = require('./buildings/jarvis/jarvis-store');
 const jarvisRunner = require('./buildings/jarvis/jarvis-runner');
 const jarvisVariableCatalog = require('./buildings/jarvis/jarvis-variable-catalog');
+const viralIdeaEngine = require('./buildings/jarvis/viral-idea-engine');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
@@ -3676,6 +3677,35 @@ Respond ONLY as valid JSON (no markdown):
         } catch {
             res.writeHead(200, { 'Content-Type': 'text/plain' });
             res.end('No log file found for loop ' + loopId);
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Jarvis Viral Idea Engine
+    //   GET /api/jarvis/viral-idea-model — compressed structured brief
+    //   GET /api/jarvis/viral-idea-ideas?count=N — N evidence-backed ideas
+    // =========================================
+    if (pathname === '/api/jarvis/viral-idea-model' && req.method === 'GET') {
+        try {
+            const { brief } = viralIdeaEngine.buildModel();
+            const summaryOnly = url.searchParams.get('summary') === '1';
+            const payload = summaryOnly ? viralIdeaEngine.summarizeBrief(brief) : brief;
+            sendJsonGz(req, res, payload);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+    if (pathname === '/api/jarvis/viral-idea-ideas' && req.method === 'GET') {
+        try {
+            const count = Math.max(1, Math.min(20, parseInt(url.searchParams.get('count') || '5', 10)));
+            const payload = viralIdeaEngine.buildIdeas(count);
+            sendJsonGz(req, res, payload);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
         }
         return;
     }
