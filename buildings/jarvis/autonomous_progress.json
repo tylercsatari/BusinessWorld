@@ -1,131 +1,205 @@
 {
   "active": false,
-  "run_id": "auto_20260419152918.",
+  "run_id": "auto_20260419160409.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-19T15:29:18.695Z",
-  "updated_at": "2026-04-19T15:40:47.227Z",
-  "finished_at": "2026-04-19T16:02:53.000Z",
+  "started_at": "2026-04-19T16:04:09.661Z",
+  "updated_at": "2026-04-19T16:29:41.602Z",
+  "finished_at": "2026-04-19T16:29:41.601Z",
   "requested_iterations": 3000,
-  "attempted": 13,
-  "completed": 11,
+  "attempted": 24,
+  "completed": 23,
   "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 0,
-  "stop_reason": "process_died_recovered",
-  "current_candidate": "unresolved_loop_count_x_credential_signal_density",
-  "last_completed_candidate": "unresolved_loop_count_x_credential_signal_count",
-  "last_completed_r": 0.1359,
+  "no_signal_streak": 3,
+  "stop_reason": "max_minutes",
+  "current_candidate": null,
+  "last_completed_candidate": "unresolved_loop_count_x_mystery_setup_count",
+  "last_completed_r": -0.0319,
   "recent_events": [
     {
-      "type": "failed",
-      "key": "payoff_position_pct_x_challenge_to_resolution_gap_pct",
-      "reason": "processIndicator returned null",
-      "layer": "pre",
-      "ts": "2026-04-19T15:30:00.694Z"
-    },
-    {
       "type": "completed",
-      "key": "zygarnik_buildup_ratio_x_narrative_tension_density",
-      "r": 0.0911,
+      "key": "unresolved_loop_count_x_zygarnik_gradient_pct",
+      "r": 0.119,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T15:30:58.125Z"
+      "ts": "2026-04-19T16:08:45.122Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_buildup_ratio_x_payoff_delay_score",
-      "r": 0.0568,
+      "key": "unresolved_loop_count_x_zygarnik_front_load_ratio",
+      "r": 0.0654,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T15:31:58.000Z"
+      "ts": "2026-04-19T16:09:38.234Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_buildup_ratio_x_challenge_to_resolution_gap_pct",
-      "r": 0.036,
+      "key": "unresolved_loop_count_x_loop_to_closure_gap_s",
+      "r": 0.094,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T15:32:54.400Z"
+      "ts": "2026-04-19T16:10:36.217Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_buildup_ratio_x_loop_front_half_density",
-      "r": 0.0512,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T15:33:55.053Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_buildup_ratio_x_narrative_tension_density_first_half",
-      "r": 0.1098,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T15:34:53.098Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_buildup_ratio_x_challenge_setup_density_first_quarter",
-      "r": 0.02,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T15:35:52.004Z"
-    },
-    {
-      "type": "completed",
-      "key": "title_number_flag_x_retention_setup_phase_mean",
-      "r": -0.1588,
+      "key": "retention_setup_phase_mean_x_open_loop_count_first20s",
+      "r": 0.1435,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T15:36:47.760Z"
+      "ts": "2026-04-19T16:11:28.803Z"
     },
     {
       "type": "completed",
-      "key": "retention_setup_phase_mean_x_hook_open_loop_density",
-      "r": 0.095,
+      "key": "open_loop_count_first20s_x_retention_setup_phase_mean",
+      "r": 0.1435,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T15:37:50.609Z"
+      "ts": "2026-04-19T16:12:22.132Z"
     },
     {
       "type": "completed",
-      "key": "hook_open_loop_density_x_retention_setup_phase_mean",
-      "r": 0.095,
+      "key": "retention_open_loop_phase_mean_x_open_loop_count",
+      "r": 0.2374,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T15:38:50.539Z"
+      "ts": "2026-04-19T16:13:17.808Z"
     },
     {
       "type": "completed",
-      "key": "unresolved_loop_count_x_pre_proof_tension_score",
-      "r": 0.1011,
+      "key": "unresolved_loop_count_x_ref_to_gratification_gap_pct",
+      "r": 0.0597,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T15:39:45.896Z"
+      "ts": "2026-04-19T16:14:15.217Z"
     },
     {
       "type": "completed",
-      "key": "unresolved_loop_count_x_credential_signal_count",
-      "r": 0.1359,
+      "key": "unresolved_loop_count_x_pre_payoff_tension_index",
+      "r": -0.0909,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T15:40:46.766Z"
+      "ts": "2026-04-19T16:15:25.488Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_early_proof_to_loop_ratio",
+      "r": 0.0684,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:16:25.237Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_proof_arrival_delay_proxy",
+      "r": 0.1566,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:17:30.601Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_closure_to_open_ratio_first10s",
+      "r": 0.1109,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:18:42.148Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_credibility_setup_pct",
+      "r": 0.0521,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:19:40.332Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_proof_density_hook",
+      "r": -0.0359,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:20:36.048Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_x_retention_open_loop_phase_mean",
+      "r": 0.2374,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T16:21:31.479Z"
+    },
+    {
+      "type": "completed",
+      "key": "retention_open_loop_phase_mean_x_open_loop_to_closure_ratio",
+      "r": 0.1896,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T16:24:20.075Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_to_closure_ratio_x_retention_open_loop_phase_mean",
+      "r": 0.1896,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T16:25:31.333Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_stake_loop_product",
+      "r": 0.0657,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:26:31.283Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_rhetorical_question_count",
+      "r": 0.0407,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:27:41.749Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_rhetorical_question_density",
+      "r": 0.019,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:28:43.740Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_mystery_setup_count",
+      "r": -0.0319,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T16:29:41.145Z"
     }
   ],
-  "pre_attempted": 10,
-  "pre_completed": 8,
-  "post_attempted": 3,
-  "post_completed": 3
+  "pre_attempted": 18,
+  "pre_completed": 17,
+  "post_attempted": 6,
+  "post_completed": 6
 }
