@@ -31604,7 +31604,14 @@
       "closure_gap_pct_x_social_proof_density",
       "closure_gap_pct_x_proof_of_work_count",
       "closure_gap_pct_x_proof_of_work_density",
-      "closure_gap_pct_x_failure_vulnerability_count"
+      "closure_gap_pct_x_failure_vulnerability_count",
+      "closure_gap_pct_x_failure_vulnerability_density",
+      "closure_gap_pct_x_commitment_device_count",
+      "closure_gap_pct_x_commitment_device_density",
+      "closure_gap_pct_x_action_trigger_count",
+      "closure_gap_pct_x_action_trigger_density",
+      "closure_gap_pct_x_reference_callback_count",
+      "closure_gap_pct_x_reference_callback_density"
     ],
     "depth_in_hierarchy": 0
   },
