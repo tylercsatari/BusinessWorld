@@ -1488,15 +1488,225 @@ for (const k of [
 
 // ── get_metric_definition ────────────────────────────────────────────────
 
+// Detailed definitions for non-phrase static keys.
+// Every entry documents: what inputs are read, what computation happens, what comes out.
+const DETAILED_DEFS = {
+    // ── Post-upload: retention curve ──
+    hook_retention_pct:       { d: 'Audience retention at the 10% mark of the video — proportion of viewers still watching.', f: 'retentionCurve[10].retention', s: ['analytics.retentionCurve'], r: '0 to 2.0' },
+    final_5pct_retention:     { d: 'Average retention over the last 5 data points of the retention curve.', f: 'mean(retentionCurve[-5:].retention)', s: ['analytics.retentionCurve'], r: '0 to 2.0' },
+    mid_video_cliff:          { d: 'Maximum single-step drop in the retention curve — the worst cliff.', f: 'max(|retentionCurve[i] - retentionCurve[i-1]|)', s: ['analytics.retentionCurve'], r: '0 to 1.0' },
+    retention_entropy:        { d: 'Shannon entropy of the absolute retention values — measures flatness vs spikiness.', f: 'H = -sum(p_i * log2(p_i)) where p_i = |retention[i]| / sum', s: ['analytics.retentionCurve'], r: '0 to 7' },
+    hook_drop_rate:           { d: 'Linear regression slope of retention over the first 10 data points — how fast viewers leave the hook.', f: 'linregress(retentionCurve[0:10]).slope', s: ['analytics.retentionCurve'], r: '-0.1 to 0.01' },
+    early_momentum:           { d: 'Retention at 25% minus retention at 10% — positive = gaining viewers after hook.', f: 'retentionCurve[25].retention - retentionCurve[10].retention', s: ['analytics.retentionCurve'], r: '-0.3 to 0.3' },
+    retention_25pct:          { d: 'Retention at the 25% mark.', f: 'retentionCurve[25].retention', s: ['analytics.retentionCurve'], r: '0 to 2.0' },
+    retention_50pct:          { d: 'Retention at the 50% mark.', f: 'retentionCurve[50].retention', s: ['analytics.retentionCurve'], r: '0 to 2.0' },
+    retention_75pct:          { d: 'Retention at the 75% mark.', f: 'retentionCurve[75].retention', s: ['analytics.retentionCurve'], r: '0 to 2.0' },
+    retention_90pct:          { d: 'Retention at the 90% mark.', f: 'retentionCurve[90].retention', s: ['analytics.retentionCurve'], r: '0 to 2.0' },
+    above_baseline_mean:      { d: 'Mean of (retention - linear baseline) across curve — how much viewers stay above expected linear decay.', f: 'mean(retention[i] - (1 - i/N)) for each point', s: ['analytics.retentionCurve'], r: '-0.5 to 0.5' },
+    peak_count:               { d: 'Number of local peaks in the retention curve (point higher than both neighbors).', f: 'count(retention[i] > retention[i-1] AND retention[i] > retention[i+1])', s: ['analytics.retentionCurve'], r: '0 to 20' },
+    drop_count:               { d: 'Number of significant drops (> 3%) in the retention curve.', f: 'count(retention[i-1] - retention[i] > 0.03)', s: ['analytics.retentionCurve'], r: '0 to 20' },
+    max_peak_delta:           { d: 'Largest upward jump between consecutive retention points.', f: 'max(retention[i] - retention[i-1]) where diff > 0', s: ['analytics.retentionCurve'], r: '0 to 0.3' },
+    max_drop_delta:           { d: 'Largest downward drop between consecutive retention points.', f: 'max(retention[i-1] - retention[i]) where diff > 0', s: ['analytics.retentionCurve'], r: '0 to 0.3' },
+    retention_variance:       { d: 'Population variance of all retention values — measures overall curve bumpiness.', f: 'var(retentionCurve[*].retention)', s: ['analytics.retentionCurve'], r: '0 to 0.1' },
+    retention_skew:           { d: 'Fisher skewness of the retention curve distribution.', f: 'skew(retentionCurve[*].retention)', s: ['analytics.retentionCurve'], r: '-3 to 3' },
+    end_recovery_score:       { d: 'Retention in the last 5% minus the mean of the preceding 10% — measures end-of-video recovery.', f: 'mean(retention[95:100]) - mean(retention[85:95])', s: ['analytics.retentionCurve'], r: '-0.2 to 0.2' },
+    // ── Post-upload: daily views & engagement ──
+    view_accel_7day:          { d: 'Ratio of views in days 4-7 vs days 1-3 — momentum after launch.', f: 'sum(dailyViews[3:7]) / (sum(dailyViews[0:3]) + 1)', s: ['analytics.dailyViews'], r: '0 to 5' },
+    week1_week2_ratio:        { d: 'Week 1 views divided by week 2 views — velocity decay.', f: 'sum(dailyViews[0:7]) / (sum(dailyViews[7:14]) + 1)', s: ['analytics.dailyViews'], r: '0 to 50' },
+    non_sub_view_share:       { d: 'Non-subscriber views as a fraction of total views.', f: 'nonSubscriberViews / (subscriberViews + nonSubscriberViews)', s: ['analytics.subscriberViews', 'analytics.nonSubscriberViews'], r: '0 to 1' },
+    swipe_away_rate:          { d: 'Fraction of impressions that swiped away without watching.', f: 'analytics.swipedAwayRate', s: ['analytics.swipedAwayRate'], r: '0 to 1' },
+    daily_view_peak_day:      { d: 'Day number when daily views peaked (0 = upload day).', f: 'argmax(dailyViews[*].views)', s: ['analytics.dailyViews'], r: '0 to 30' },
+    like_rate:                { d: 'Likes per 1000 views.', f: 'likes / (totalViews / 1000)', s: ['analytics.likes', 'analytics.totalViews'], r: '0 to 100' },
+    comment_rate:             { d: 'Comments per 1000 views.', f: 'comments / (totalViews / 1000)', s: ['analytics.comments', 'analytics.totalViews'], r: '0 to 50' },
+    share_rate:               { d: 'Shares per 1000 views.', f: 'shares / (totalViews / 1000)', s: ['analytics.shares', 'analytics.totalViews'], r: '0 to 50' },
+    subs_gained_per_view:     { d: 'Subscribers gained per view.', f: 'subscribersGained / totalViews', s: ['analytics.subscribersGained', 'analytics.totalViews'], r: '0 to 0.01' },
+    subs_per_like:            { d: 'Subscribers gained per like.', f: 'subscribersGained / (likes + 1)', s: ['analytics.subscribersGained', 'analytics.likes'], r: '0 to 1' },
+    revenue_per_view:         { d: 'Estimated revenue per view.', f: 'estimatedRevenue / totalViews', s: ['analytics.estimatedRevenue', 'analytics.totalViews'], r: '0 to 0.01' },
+    keep_x_non_sub_share:     { d: 'Product of keep rate and non-subscriber view share (interaction term).', f: 'swipeRatio.stayedToWatch * non_sub_view_share', s: ['analytics.swipeRatio', 'analytics.subscriberViews'], r: '0 to 1' },
+    // ── Pre-upload: transcript stats ──
+    duration_log:             { d: 'Log10 of video duration in seconds.', f: 'log10(metadata.duration)', s: ['metadata.duration'], r: '0 to 4' },
+    transcript_word_count:    { d: 'Total word count of the full transcript.', f: 'transcript.split(/\\s+/).length', s: ['transcript.fullText'], r: '0 to 5000' },
+    speech_rate_wps:          { d: 'Words per second — transcript word count divided by video duration.', f: 'word_count / duration', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 8' },
+    hook_word_count:          { d: 'Word count in the hook (~first 5 seconds estimated by word index).', f: 'words[0 : ceil(N * 5/duration)].length', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 50' },
+    question_count:           { d: 'Total question marks in the transcript.', f: 'count("?" in transcript)', s: ['transcript.fullText'], r: '0 to 50' },
+    transcript_char_count:    { d: 'Total character count of the transcript.', f: 'transcript.length', s: ['transcript.fullText'], r: '0 to 30000' },
+    avg_word_length:          { d: 'Average character length per word.', f: 'sum(word.length) / word_count', s: ['transcript.fullText'], r: '2 to 8' },
+    unique_word_ratio:        { d: 'Unique words / total words — vocabulary diversity.', f: 'Set(words).size / words.length', s: ['transcript.fullText'], r: '0 to 1' },
+    sentence_count:           { d: 'Number of sentences (split on . ! ?).', f: 'transcript.split(/[.!?]+/).length', s: ['transcript.fullText'], r: '0 to 300' },
+    exclamation_count:        { d: 'Total exclamation marks in the transcript.', f: 'count("!" in transcript)', s: ['transcript.fullText'], r: '0 to 50' },
+    uppercase_word_ratio:     { d: 'Fraction of words that are fully uppercase.', f: 'count(word === word.toUpperCase()) / word_count', s: ['transcript.fullText'], r: '0 to 0.3' },
+    hook_question_count:      { d: 'Number of question marks in the hook text (~first 5 seconds by word index).', f: 'count("?" in hookText())', s: ['transcript.fullText'], r: '0 to 5' },
+    hook_word_ratio:          { d: 'Hook word count / total word count.', f: 'hook_word_count / transcript_word_count', s: ['transcript.fullText'], r: '0 to 0.3' },
+    hook_char_count:          { d: 'Character count of the hook text.', f: 'hookText().length', s: ['transcript.fullText'], r: '0 to 300' },
+    transcript_number_count:  { d: 'Count of numeric tokens in the transcript.', f: 'count(word matches /\\d+/) in transcript', s: ['transcript.fullText'], r: '0 to 100' },
+    // ── Pre-upload: metadata ──
+    duration_s:               { d: 'Video duration in seconds.', f: 'metadata.duration', s: ['metadata.duration'], r: '0 to 3600' },
+    title_char_count:         { d: 'Character length of the video title.', f: 'metadata.title.length', s: ['metadata.title'], r: '0 to 100' },
+    title_word_count:         { d: 'Word count of the video title.', f: 'metadata.title.split(/\\s+/).length', s: ['metadata.title'], r: '0 to 20' },
+    title_question_flag:      { d: 'Binary: does the title contain a question mark?', f: 'title.includes("?") ? 1 : 0', s: ['metadata.title'], r: '0 or 1' },
+    title_exclamation_flag:   { d: 'Binary: does the title contain an exclamation mark?', f: 'title.includes("!") ? 1 : 0', s: ['metadata.title'], r: '0 or 1' },
+    title_number_flag:        { d: 'Binary: does the title contain a number?', f: '/\\d/.test(title) ? 1 : 0', s: ['metadata.title'], r: '0 or 1' },
+    // ── Pre-upload: speech & silence ──
+    max_silence_gap_s:        { d: 'Longest gap (seconds) between words in the transcript — estimated from word timestamps or evenly spaced positions.', f: 'max(word[i+1].time - word[i].time) or duration-proportional estimate', s: ['transcript.words', 'metadata.duration'], r: '0 to 30' },
+    opening_speech_rate_3s:   { d: 'Words per second in the first 3 seconds of the video.', f: 'words_in_first_3s / 3', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10' },
+    // ── Zygarnik-derived scalars ──
+    zygarnik_score:           { d: 'Composite curiosity-gap score: (open_loop_count - closure_count + unresolved_ref_count) / word_count * 1000.', f: '(open_loops - closures + unresolved_refs) / word_count * 1000', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '-5 to 20' },
+    zygarnik_buildup_ratio:   { d: 'Ratio of open-loop phrases to closure phrases — high = loops opened but not closed.', f: '(open_loop_count + 1) / (closure_count + 1)', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 10' },
+    zygarnik_gradient_pct:    { d: 'Fraction of transcript where open loops exceed closures cumulatively — higher = sustained tension longer.', f: 'fraction_of_words_where(cumulative_opens > cumulative_closes)', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 1' },
+    zygarnik_front_load_ratio:{ d: 'Open-loop count in first half / second half — measures front-loading of curiosity.', f: '(open_loops_first_half + 0.01) / (open_loops_second_half + 0.01)', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 10' },
+    zygarnik_tension_peak_pct:{ d: 'Position in transcript (0-1) where cumulative (opens - closures) is highest.', f: 'argmax(cumulative_opens - cumulative_closes) / word_count', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 1' },
+    // ── Retention-curve Zygarnik metrics ──
+    retention_zygarnik_arc:   { d: 'Zygarnik-inspired arc score from retention: (drop_25_to_50 + recovery_50_to_75) / retention_25. Measures tension-release pattern.', f: '(retention[25] - retention[50] + max(0, retention[75] - retention[50])) / retention[25]', s: ['analytics.retentionCurve'], r: '0 to 2' },
+    retention_recovery_ratio: { d: 'Retention at 75% / retention at 50% — measures post-midpoint recovery.', f: 'retentionCurve[75].retention / retentionCurve[50].retention', s: ['analytics.retentionCurve'], r: '0 to 2' },
+    retention_late_payoff:    { d: 'Mean retention in last 25% minus mean in 50-75% range — measures end-payoff lift.', f: 'mean(retention[75:100]) - mean(retention[50:75])', s: ['analytics.retentionCurve'], r: '-0.3 to 0.3' },
+    retention_pre_payoff_drop:{ d: 'Mean retention in 25-50% minus retention at 50% — measures pre-midpoint tension dip.', f: 'mean(retention[25:50]) - retention[50]', s: ['analytics.retentionCurve'], r: '-0.3 to 0.3' },
+    retention_hook_to_mid_ratio:{ d: 'Retention at 10% / retention at 50% — how much the hook retains vs mid-video.', f: 'retention[10] / retention[50]', s: ['analytics.retentionCurve'], r: '0.5 to 3' },
+    retention_setup_phase_mean:{ d: 'Mean retention in 0-25% range.', f: 'mean(retentionCurve[0:25].retention)', s: ['analytics.retentionCurve'], r: '0 to 2' },
+    retention_open_loop_phase_mean:{ d: 'Mean retention in 25-50% range.', f: 'mean(retentionCurve[25:50].retention)', s: ['analytics.retentionCurve'], r: '0 to 2' },
+    retention_payoff_phase_mean:{ d: 'Mean retention in 75-100% range.', f: 'mean(retentionCurve[75:100].retention)', s: ['analytics.retentionCurve'], r: '0 to 2' },
+    retention_tension_trough_pct:{ d: 'Position (0-1) of the lowest retention value in the middle 50% of the curve.', f: 'argmin(retentionCurve[25:75].retention) / 100', s: ['analytics.retentionCurve'], r: '0.25 to 0.75' },
+    retention_arc_width:      { d: 'Width (in curve points) of the largest contiguous region where retention exceeds the mean.', f: 'max_contiguous_run(retention[i] > mean_retention)', s: ['analytics.retentionCurve'], r: '0 to 100' },
+    // ── Derived scalars: transcript-based ──
+    open_loop_to_closure_ratio:{ d: 'Open-loop phrase count / (closure phrase count + 1) — how unresolved the content feels.', f: 'open_loop_count / (closure_count + 1)', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 20' },
+    hook_tension_ratio:       { d: 'Open-loop phrases minus closure phrases in the hook, divided by hook word count.', f: '(hook_open_loops - hook_closures) / hook_word_count', s: ['transcript.fullText'], r: '-0.1 to 0.2' },
+    dangling_question_ratio:  { d: 'Question marks in first half / (question marks in second half + 1) — front-loaded curiosity.', f: 'questions_first_half / (questions_second_half + 1)', s: ['transcript.fullText'], r: '0 to 10' },
+    countdown_flag:           { d: 'Binary: does transcript contain a countdown pattern (3,2,1 / ready set / here we go)?', f: '/3.*2.*1|countdown|ready\\s+set|here we go/.test(transcript) ? 1 : 0', s: ['transcript.fullText'], r: '0 or 1' },
+    withheld_outcome_flag:    { d: 'Binary: does the hook mention an outcome that is not revealed until later?', f: '(outcome_ref in hookText AND low closure_density) ? 1 : 0', s: ['transcript.fullText'], r: '0 or 1' },
+    open_loop_before_closure_flag:{ d: 'Binary: does the first open-loop phrase appear before the first closure phrase?', f: 'first_open_loop_index < first_closure_index ? 1 : 0', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 or 1' },
+    open_loop_before_first_third_flag:{ d: 'Binary: does an open-loop phrase appear in the first third of the transcript?', f: 'any(open_loop_phrase in first_third_text) ? 1 : 0', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 or 1' },
+    title_open_loop_flag:     { d: 'Binary: does the title contain an open-loop phrase?', f: 'any(ZYGARNIK_PHRASE_SETS.open_loop phrase in title) ? 1 : 0', s: ['metadata.title', 'ZYGARNIK_PHRASE_SETS.open_loop'], r: '0 or 1' },
+    title_curiosity_gap_flag: { d: 'Binary: does the title contain a question mark OR an open-loop phrase?', f: 'title.includes("?") || open_loop_match_in_title ? 1 : 0', s: ['metadata.title'], r: '0 or 1' },
+    hook_identity_flag:       { d: 'Binary: does the hook text contain an identity_hook phrase ("if you", "have you ever")?', f: 'any(IDENTITY_HOOK_PHRASES in hookText()) ? 1 : 0', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS.identity_hook'], r: '0 or 1' },
+    hook_specificity_score:   { d: 'Ratio of numeric tokens to total words in the hook — measures concrete specificity.', f: 'count(numbers in hookText) / hook_word_count', s: ['transcript.fullText'], r: '0 to 0.3' },
+    gratification_delay_pct:  { d: 'Position (0-1) of the first delayed-gratification phrase in the transcript.', f: 'first_match_word_index(DELAYED_GRATIFICATION_PHRASES) / word_count', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS.delayed_gratification'], r: '0 to 1' },
+    gratification_delay_word_idx:{ d: 'Word index of the first delayed-gratification phrase match.', f: 'first_match_word_index(DELAYED_GRATIFICATION_PHRASES)', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS.delayed_gratification'], r: '0 to 5000' },
+    promise_proof_gap_pct:    { d: 'Gap between first setup/promise phrase and first proof phrase, as fraction of transcript.', f: '(first_proof_position - first_setup_position) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    promise_proof_gap_words:  { d: 'Word distance between first setup/promise phrase and first proof phrase.', f: 'first_proof_word_idx - first_setup_word_idx', s: ['transcript.fullText'], r: '0 to 3000' },
+    first_payoff_position_pct:{ d: 'Position (0-1) of the first payoff/closure phrase in the transcript.', f: 'first_match_word_index(PAYOFF_SIGNAL_PHRASES) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    proof_withheld_duration_pct:{ d: 'Position (0-1) of the first proof/result phrase — higher = proof arrives later.', f: 'first_match_char_index(NEW_PROOF_PHRASES) / transcript.length', s: ['transcript.fullText', 'NEW_PROOF_PHRASES'], r: '0 to 1' },
+    proof_before_midpoint_flag:{ d: 'Binary: does a visual-proof phrase appear in the first half of the transcript?', f: 'any(VISUAL_PROOF_PHRASES in first_half_text) ? 1 : 0', s: ['transcript.fullText', 'NEW_VISUAL_PROOF_PHRASES'], r: '0 or 1' },
+    setup_payoff_ratio:       { d: 'Ratio of setup-phrase density (first third) to payoff-phrase density (last third).', f: 'setup_density_first_third / (payoff_density_last_third + 0.001)', s: ['transcript.fullText'], r: '0 to 20' },
+    setup_to_payoff_ratio:    { d: 'Same as setup_payoff_ratio: setup density in first third / payoff density in last third.', f: 'setup_density_first_third / (payoff_density_last_third + 0.001)', s: ['transcript.fullText'], r: '0 to 20' },
+    pre_proof_tension_score:  { d: 'Product of zygarnik_score and proof-withheld duration — measures sustained tension before evidence.', f: 'zygarnik_score * proof_withheld_duration_pct', s: ['transcript.fullText'], r: '0 to 20' },
+    stakes_early_flag:        { d: 'Binary: does a stakes_high phrase appear in the first 20% of the transcript?', f: 'any(STAKES_HIGH_PHRASES in first_20pct_text) ? 1 : 0', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS.stakes_high'], r: '0 or 1' },
+    social_contrast_hook_flag:{ d: 'Binary: does a social-contrast phrase appear in the hook text?', f: 'any(SOCIAL_CONTRAST_PHRASES in hookText()) ? 1 : 0', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS.social_contrast'], r: '0 or 1' },
+    transformation_arc_flag:  { d: 'Binary: does the transcript contain both a transformation phrase and a proof phrase before midpoint?', f: '(has_transformation_phrase AND proof_before_midpoint) ? 1 : 0', s: ['transcript.fullText'], r: '0 or 1' },
+    vulnerability_before_proof_flag:{ d: 'Binary: does a vulnerability phrase appear before the first proof phrase?', f: 'first_vulnerability_idx < first_proof_idx ? 1 : 0', s: ['transcript.fullText'], r: '0 or 1' },
+    emotional_arc_peak_pct:   { d: 'Position (0-1) of the highest emotional-peak phrase density window in the transcript.', f: 'argmax(windowed_emotional_peak_density) / word_count', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS.emotional_peak'], r: '0 to 1' },
+    tension_arc_score:        { d: 'Combined tension measure: open_loop_count * (1 - first_closure_position_pct) / word_count * 1000.', f: 'open_loops * (1 - first_closure_pct) / word_count * 1000', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 20' },
+    tension_closure_balance:  { d: 'Signed balance: (closure_count - open_loop_count) / word_count * 1000. Positive = more closures, negative = more tension.', f: '(closures - open_loops) / word_count * 1000', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '-10 to 10' },
+    closure_gap_pct:          { d: 'Gap between last open-loop and first closure as fraction of transcript — measures resolution delay.', f: '(first_closure_word_idx - last_open_loop_word_idx) / word_count', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '-1 to 1' },
+    closure_rate_per_min:     { d: 'Closure phrase count divided by video duration in minutes.', f: 'closure_count / (duration / 60)', s: ['transcript.fullText', 'metadata.duration', 'ZYGARNIK_PHRASE_SETS.closure'], r: '0 to 10' },
+    closure_to_open_ratio_first10s:{ d: 'Closure phrases / (open-loop phrases + 1) in the first 10 seconds.', f: 'closure_count_first10s / (open_loop_count_first10s + 1)', s: ['transcript.fullText', 'metadata.duration', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 5' },
+    information_drip_ratio:   { d: 'Ratio of micro-reward phrases to open-loop phrases — measures pacing of small payoffs.', f: 'micro_reward_count / (open_loop_count + 1)', s: ['transcript.fullText'], r: '0 to 5' },
+    loop_density_acceleration:{ d: 'Difference in open-loop density between second half and first half — positive = accelerating tension.', f: 'open_loop_density_second_half - open_loop_density_first_half', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS.open_loop'], r: '-0.05 to 0.05' },
+    loop_resolution_ratio:    { d: 'Open-loop phrases in first half / closure phrases in second half — measures loop-to-resolution balance.', f: 'open_loops_first_half / (closures_second_half + 1)', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 10' },
+    loop_to_closure_gap_s:    { d: 'Estimated time gap (seconds) between first open-loop and first closure phrase.', f: '(first_closure_word_idx - first_open_loop_word_idx) * duration / word_count', s: ['transcript.fullText', 'metadata.duration', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 300' },
+    sustained_tension_word_pct:{ d: 'Fraction of transcript words that fall within open-loop-active regions (between loop open and next closure).', f: 'words_in_open_loop_regions / word_count', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 1' },
+    payoff_delay_score:       { d: 'Product of open-loop count and first-payoff position — high = many loops + late payoff.', f: 'open_loop_count * first_payoff_position_pct', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 50' },
+    hook_phrase_diversity:    { d: 'Number of distinct phrase families present in the hook text.', f: 'count(unique_families_matching_in_hookText)', s: ['transcript.fullText'], r: '0 to 15' },
+    consequence_front_weight: { d: 'Consequence-phrase density in first half / (total consequence density + 0.001).', f: 'consequence_density_first_half / (consequence_density + 0.001)', s: ['transcript.fullText', 'NEW_CONSEQUENCE_PHRASES'], r: '0 to 2' },
+    credibility_setup_pct:    { d: 'Position (0-1) of first credential-signal phrase — measures how early credibility is established.', f: 'first_match_word_index(CREDENTIAL_SIGNAL_PHRASES) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    early_proof_to_loop_ratio:{ d: 'Proof phrases in first 10s / (open-loop phrases in first 10s + 1) — early evidence vs questions.', f: 'proof_count_first10s / (open_loop_count_first10s + 1)', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 5' },
+    proof_arrival_delay_proxy:{ d: 'Fraction of transcript before first visual-proof phrase — higher = proof arrives later.', f: 'first_match_word_index(VISUAL_PROOF_PHRASES) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    proof_arrival_timing_pct: { d: 'Position (0-1) of first proof-arrival phrase in the transcript.', f: 'first_match_word_index(PROOF_ARRIVAL_PHRASES) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    stake_loop_product:       { d: 'Product of personal-stake density and open-loop density — measures combined tension.', f: 'personal_stake_density * open_loop_density', s: ['transcript.fullText'], r: '0 to 0.01' },
+    stakes_to_loop_ratio:     { d: 'Stakes-high density / (open-loop density + 0.001) — stakes pressure relative to curiosity.', f: 'stakes_density / (open_loop_density + 0.001)', s: ['transcript.fullText', 'ZYGARNIK_PHRASE_SETS'], r: '0 to 5' },
+    ref_to_gratification_gap_pct:{ d: 'Gap between first reference-callback and first delayed-gratification phrase, as fraction of transcript.', f: '(first_gratification_idx - first_callback_idx) / word_count', s: ['transcript.fullText'], r: '-1 to 1' },
+    pre_payoff_tension_index: { d: 'Product of zygarnik_score and (1 - setup_duration_pct_estimate) — tension weighted by unresolved portion.', f: 'zygarnik_score * (1 - first_payoff_position_pct)', s: ['transcript.fullText'], r: '0 to 20' },
+    visual_credibility_before_claim_ratio:{ d: 'Visual-credibility phrases before midpoint / total visual-credibility phrases.', f: 'visual_credibility_first_half / (visual_credibility_count + 1)', s: ['transcript.fullText'], r: '0 to 1' },
+    proof_of_work_before_claim_ratio:{ d: 'Proof-of-work phrases before midpoint / total proof-of-work phrases.', f: 'proof_of_work_first_half / (proof_of_work_count + 1)', s: ['transcript.fullText'], r: '0 to 1' },
+    narrative_anchor_peak_pct:{ d: 'Position (0-1) of the peak narrative-anchor phrase density window.', f: 'argmax(windowed_narrative_anchor_density) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    delayed_reveal_setup_ratio:{ d: 'Delayed-reveal phrases in first half / (setup-signal phrases in first half + 1).', f: 'delayed_reveal_first_half / (setup_signal_first_half + 1)', s: ['transcript.fullText'], r: '0 to 5' },
+    delayed_reveal_to_payoff_ratio:{ d: 'Delayed-reveal density / (payoff-signal density + 0.001).', f: 'delayed_reveal_density / (payoff_signal_density + 0.001)', s: ['transcript.fullText'], r: '0 to 10' },
+    setup_to_payoff_signal_gap_pct:{ d: 'Word distance from first setup-signal to first payoff-signal as fraction of transcript.', f: '(first_payoff_signal_idx - first_setup_signal_idx) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    challenge_to_resolution_gap_pct:{ d: 'Word distance from first challenge-statement to first resolution phrase as fraction of transcript.', f: '(first_resolution_idx - first_challenge_idx) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
+    curiosity_resolution_gap_pct:{ d: 'Gap between first curiosity phrase and first resolution/payoff phrase, as fraction of transcript.', f: '(first_payoff_pct - first_curiosity_pct)', s: ['transcript.fullText'], r: '0 to 1' },
+    numeric_specificity_first_half:{ d: 'Count of numeric specificity phrases in the first half of the transcript.', f: 'countPhraseMatches(first_half_text, SPECIFICITY_PHRASES)', s: ['transcript.fullText', 'SPECIFICITY_PHRASES'], r: '0 to 30' },
+};
+
 function getMetricDefinition(key) {
-    // Static keys — simplified definitions (layer is what matters for the runner)
+    // Detailed definitions for individual static keys
+    const dd = DETAILED_DEFS[key];
+    if (dd) {
+        return {
+            description: dd.d,
+            formula: dd.f,
+            expected_range: dd.r || 'varies',
+            data_sources: dd.s || ['analysis'],
+            layer: STATIC_LAYER[key] || 'post',
+        };
+    }
+
+    // Remaining static keys — detect phrase-pattern suffixes and generate detailed defs
     if (STATIC_KEYS.has(key)) {
+        const layer = STATIC_LAYER[key] || 'post';
+
+        // Detect phrase-family patterns: {family}_{suffix}
+        // Suffixes: _count, _density, _count_hook, _density_hook, _count_first_half,
+        //           _count_first_quarter, _count_last_quarter, _count_mid, _front_load_ratio,
+        //           _position_pct, _count_first{N}s, _density_first{N}s, _hook_count,
+        //           _first_half_count, _second_half_count, _count_first_third, etc.
+        let m;
+        m = key.match(/^(.+?)_(count|density)$/);
+        if (m) {
+            const fam = m[1].replace(/_/g, ' ').toUpperCase();
+            const phraseListName = m[1].toUpperCase() + '_PHRASES';
+            if (m[2] === 'count') return { description: `Total count of "${fam}" phrase matches across the full transcript. Lowercases transcript text, scans for each phrase in the family list, counts all substring occurrences.`, formula: `countPhraseMatches(transcript.toLowerCase(), ${phraseListName})`, expected_range: '0 to 100', data_sources: ['transcript.fullText', phraseListName], layer };
+            return { description: `"${fam}" phrase count divided by transcript word count — density (rate per word), independent of video length.`, formula: `countPhraseMatches(transcript.toLowerCase(), ${phraseListName}) / word_count`, expected_range: '0 to 0.05', data_sources: ['transcript.fullText', phraseListName], layer };
+        }
+        m = key.match(/^(.+?)_(count|density)_(hook)$/);
+        if (m) {
+            const fam = m[1].replace(/_/g, ' ').toUpperCase();
+            const phraseListName = m[1].toUpperCase() + '_PHRASES';
+            const measure = m[2];
+            if (measure === 'count') return { description: `Count of "${fam}" phrase matches in the hook (first ~5 seconds by word-index estimate).`, formula: `countPhraseMatches(hookText().toLowerCase(), ${phraseListName})`, expected_range: '0 to 20', data_sources: ['transcript.fullText', 'metadata.duration', phraseListName], layer };
+            return { description: `"${fam}" phrase density in the hook — count / hook word count.`, formula: `countPhraseMatches(hookText().toLowerCase(), ${phraseListName}) / hook_word_count`, expected_range: '0 to 0.1', data_sources: ['transcript.fullText', 'metadata.duration', phraseListName], layer };
+        }
+        m = key.match(/^(.+?)_(count|density)_first(\d+)s$/);
+        if (m) {
+            const fam = m[1].replace(/_/g, ' ').toUpperCase();
+            const phraseListName = m[1].toUpperCase() + '_PHRASES';
+            const [, , measure, secs] = m;
+            if (measure === 'count') return { description: `Count of "${fam}" phrase matches in the first ${secs} seconds of transcript. Text window = words[0 : ceil(word_count * ${secs} / duration)].`, formula: `countPhraseMatches(first_${secs}s_text, ${phraseListName})`, expected_range: '0 to 30', data_sources: ['transcript.fullText', 'metadata.duration', phraseListName], layer };
+            return { description: `"${fam}" phrase density in the first ${secs} seconds — count / words in window.`, formula: `countPhraseMatches(first_${secs}s_text, ${phraseListName}) / words_in_${secs}s`, expected_range: '0 to 0.1', data_sources: ['transcript.fullText', 'metadata.duration', phraseListName], layer };
+        }
+        m = key.match(/^(.+?)_(count|density)_(first_quarter|first_half|first_third|second_half|second_quarter|third_quarter|last_quarter|last_third|mid|mid_third)$/);
+        if (m) {
+            const fam = m[1].replace(/_/g, ' ').toUpperCase();
+            const phraseListName = m[1].toUpperCase() + '_PHRASES';
+            const [, , measure, window] = m;
+            const windowDesc = window.replace(/_/g, ' ');
+            if (measure === 'count') return { description: `Count of "${fam}" phrase matches in the ${windowDesc} of the transcript (by word index).`, formula: `countPhraseMatches(${window}_text, ${phraseListName})`, expected_range: '0 to 50', data_sources: ['transcript.fullText', phraseListName], layer };
+            return { description: `"${fam}" phrase density in the ${windowDesc} of the transcript.`, formula: `countPhraseMatches(${window}_text, ${phraseListName}) / words_in_window`, expected_range: '0 to 0.1', data_sources: ['transcript.fullText', phraseListName], layer };
+        }
+        m = key.match(/^(.+?)_front_load_ratio$/);
+        if (m) {
+            const fam = m[1].replace(/_/g, ' ').toUpperCase();
+            const phraseListName = m[1].toUpperCase() + '_PHRASES';
+            return { description: `"${fam}" front-load ratio: first-half phrase count / (second-half count + 0.0001). > 1 means front-loaded.`, formula: `(count_first_half + 0.0001) / (count_second_half + 0.0001)`, expected_range: '0.1 to 10', data_sources: ['transcript.fullText', phraseListName], layer };
+        }
+        m = key.match(/^(.+?)_position_pct$/);
+        if (m) {
+            const fam = m[1].replace(/_/g, ' ').toUpperCase();
+            return { description: `Position (as fraction of total words) where the first "${fam}" phrase match occurs in the transcript.`, formula: `first_match_word_index / total_words`, expected_range: '0 to 1', data_sources: ['transcript.fullText'], layer };
+        }
+        // Order-flipped: {family}_hook_count, {family}_first_half_count, etc.
+        m = key.match(/^(.+?)_(hook_count|first_half_count|second_half_count)$/);
+        if (m) {
+            const fam = m[1].replace(/_/g, ' ').toUpperCase();
+            const phraseListName = m[1].toUpperCase() + '_PHRASES';
+            const windowDesc = m[2].replace(/_count$/, '').replace(/_/g, ' ');
+            return { description: `Count of "${fam}" phrase matches in the ${windowDesc} of the transcript.`, formula: `countPhraseMatches(${m[2].replace('_count','')}_text, ${phraseListName})`, expected_range: '0 to 50', data_sources: ['transcript.fullText', phraseListName], layer };
+        }
+
+        // Fallback for any unmatched static key
         return {
             description: key.replace(/_/g, ' '),
             formula: key,
             expected_range: 'varies',
             data_sources: ['analysis'],
-            layer: STATIC_LAYER[key] || 'post',
+            layer,
         };
     }
 

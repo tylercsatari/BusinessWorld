@@ -23,6 +23,7 @@ const financeService = require('./buildings/finance/finance-service');
 const jarvisStore = require('./buildings/jarvis/jarvis-store');
 const jarvisRunner = require('./buildings/jarvis/jarvis-runner');
 const jarvisVariableCatalog = require('./buildings/jarvis/jarvis-variable-catalog');
+const jarvisMetrics = require('./buildings/jarvis/jarvis-metrics');
 const viralIdeaEngine = require('./buildings/jarvis/viral-idea-engine');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
@@ -3809,7 +3810,23 @@ Respond ONLY as valid JSON (no markdown):
             const data = await jarvisStore.loadJson('indicators', []);
             const found = data.find(i => i.key === key);
             if (!found) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
-            sendJsonGz(req, res, jarvisVariableCatalog.enrichIndicator(found));
+            const enriched = jarvisVariableCatalog.enrichIndicator(found);
+            // Merge extraction-level detail from jarvis-metrics into metric_definition
+            const metricDef = jarvisMetrics.getMetricDefinition(key);
+            if (metricDef) {
+                if (!enriched.metric_definition || enriched.metric_definition.formula === key) {
+                    enriched.metric_definition = metricDef;
+                }
+                // Also enrich the variable_definition if auto/fallback
+                const vd = enriched.variable_definition;
+                if (vd && (vd.source === 'auto' || vd.source === 'fallback' || vd.formula === key)) {
+                    if (metricDef.description && metricDef.description !== key.replace(/_/g, ' ')) vd.description = metricDef.description;
+                    if (metricDef.formula && metricDef.formula !== key) vd.formula = metricDef.formula;
+                    if (metricDef.data_sources && metricDef.data_sources[0] !== 'analysis') vd.source_fields = metricDef.data_sources;
+                    if (metricDef.expected_range && metricDef.expected_range !== 'varies') vd.expected_range = metricDef.expected_range;
+                }
+            }
+            sendJsonGz(req, res, enriched);
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -3836,6 +3853,14 @@ Respond ONLY as valid JSON (no markdown):
             const key = decodeURIComponent(pathname.slice('/api/jarvis/v2/variable/'.length));
             const def = jarvisVariableCatalog.describeVariable(key);
             if (!def) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
+            // Enrich catalog definition with metric extraction details from jarvis-metrics
+            const metricDef = jarvisMetrics.getMetricDefinition(key);
+            if (metricDef && (def.source === 'auto' || def.source === 'fallback' || def.formula === key)) {
+                if (metricDef.description && metricDef.description !== key.replace(/_/g, ' ')) def.description = metricDef.description;
+                if (metricDef.formula && metricDef.formula !== key) def.formula = metricDef.formula;
+                if (metricDef.data_sources && metricDef.data_sources.length && metricDef.data_sources[0] !== 'analysis') def.source_fields = metricDef.data_sources;
+                if (metricDef.expected_range && metricDef.expected_range !== 'varies') def.expected_range = metricDef.expected_range;
+            }
             sendJsonGz(req, res, def);
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
@@ -3861,8 +3886,16 @@ Respond ONLY as valid JSON (no markdown):
                 if (d && Array.isArray(d.component_keys)) d.component_keys.forEach(k => k && keySet.add(k));
             }
             const variables = Array.from(keySet).sort().map(k => {
-                const def = jarvisVariableCatalog.describeVariable(k);
-                return def || { key: k, source: 'unknown', label: k, description: '' };
+                const def = jarvisVariableCatalog.describeVariable(k) || { key: k, source: 'unknown', label: k, description: '' };
+                // Enrich with extraction details from jarvis-metrics
+                const metricDef = jarvisMetrics.getMetricDefinition(k);
+                if (metricDef && (def.source === 'auto' || def.source === 'fallback' || def.source === 'unknown' || def.formula === k)) {
+                    if (metricDef.description && metricDef.description !== k.replace(/_/g, ' ')) def.description = metricDef.description;
+                    if (metricDef.formula && metricDef.formula !== k) def.formula = metricDef.formula;
+                    if (metricDef.data_sources && metricDef.data_sources.length && metricDef.data_sources[0] !== 'analysis') def.source_fields = metricDef.data_sources;
+                    if (metricDef.expected_range && metricDef.expected_range !== 'varies') def.expected_range = metricDef.expected_range;
+                }
+                return def;
             });
             sendJsonGz(req, res, { total: variables.length, variables });
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }

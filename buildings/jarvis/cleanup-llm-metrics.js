@@ -57,6 +57,12 @@ const REMOVED_KEYS = new Set([
     'proof_density_post_midpoint', 'callback_before_payoff_flag',
     'delayed_gratification_peak_position_pct',
 
+    // 3rd pass: stragglers still in data
+    'anticipatory_frame_pct', 'callback_before_payoff_flag',
+    'demonstration_frame_pct', 'hook_plus_setup_duration_pct',
+    'proof_density_post_midpoint', 'reference_callback_rate_per_min',
+    'setup_duration_pct', 'setup_duration_s', 'early_stakes_flag',
+
     // LLM-scored variables (no extractMetric code, no prompt documented)
     'z_score', 'z_type', 'vz_score', 'vz_type',
     'novelty', 'cognitive_load', 'net_novelty',
