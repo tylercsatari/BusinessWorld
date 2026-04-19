@@ -5593,66 +5593,400 @@ const JarvisUI = (() => {
     function renderIdeaGenerated() {
         const ideas = (ideaModelIdeas && ideaModelIdeas.ideas) || [];
         if (!ideas.length) return ideaSection('Generated Ideas', '— none —', '<div style="font-size:11px;color:#64748b">No ideas generated.</div>');
-        const cards = ideas.map(idea => {
-            const score = idea.score_breakdown || {};
-            const parts = score.parts || {};
-            const partPill = (label, v, color) => `
-                <span style="background:#1e293b;border-radius:4px;padding:2px 6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:${color}">
-                    ${escapeHtml(label)} <b style="color:#f1f5f9">${v != null ? (+v).toFixed(3) : '0'}</b>
-                </span>`;
-            const hooks = (idea.hook_mechanisms || []).map(h =>
-                `<div style="font-size:10px;color:#94a3b8;margin-bottom:2px"><span style="color:#facc15">[${escapeHtml(h.bucket || '')}]</span> <code style="color:#22d3ee">${escapeHtml(h.via_indicator || '')}</code> · csw <b style="color:${rColor(h.csw)}">${h.csw != null ? (+h.csw).toFixed(3) : '—'}</b> · n=${h.n_videos || '—'}</div>`
-            ).join('');
-            const narratives = (idea.narrative_structures || []).map(n =>
-                `<code style="background:#1e293b;color:#a78bfa;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(n)}</code>`
-            ).join('');
-            const levers = (idea.pre_upload_levers || []).map(l =>
-                `<code style="background:#1e293b;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(l)}</code>`
-            ).join('');
-            const concepts = (idea.concept_anchors || []).map(c =>
-                `<code style="background:#1e293b;color:#22d3ee;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(c)}</code>`
-            ).join('');
-            const evidence = (idea.evidence || []).map(e =>
-                `<li style="margin-bottom:3px;color:#94a3b8">${escapeHtml(e)}</li>`
-            ).join('');
-            return `
-                <div style="background:#0d1424;border-radius:8px;padding:14px 16px;border:1px solid rgba(59,130,246,0.25);border-left:3px solid #22d3ee;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.25)">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;flex-wrap:wrap">
-                        <div style="display:flex;gap:8px;align-items:baseline">
-                            <span style="font-size:16px;font-weight:700;color:#facc15">#${idea.rank}</span>
-                            <span style="font-size:14px;font-weight:700;color:#e2e8f0">${escapeHtml(idea.title || '')}</span>
-                        </div>
-                        <div style="font-size:10px;color:#64748b">total score <b style="color:#22d3ee">${score.total != null ? (+score.total).toFixed(3) : '—'}</b></div>
-                    </div>
-                    <div style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-bottom:8px">${escapeHtml(idea.one_line_premise || '')}</div>
-                    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-                        ${partPill('concept', parts.concept, '#22d3ee')}
-                        ${partPill('hook', parts.hook, '#facc15')}
-                        ${partPill('narrative', parts.narrative, '#a78bfa')}
-                        ${partPill('duration', parts.duration, '#f59e0b')}
-                        ${partPill('bridge', parts.bridge, '#ec4899')}
-                    </div>
-                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Concepts</span>${concepts}</div>
-                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Narrative</span>${narratives}</div>
-                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Pre-upload levers</span>${levers}</div>
-                    <div style="margin-bottom:6px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Duration</span><code style="background:#1e293b;color:#f59e0b;padding:1px 6px;border-radius:3px;font-size:10px">${escapeHtml(idea.duration_band_id || '')}</code></div>
-                    ${hooks ? `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #1e293b"><div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Hook mechanisms</div>${hooks}</div>` : ''}
-                    ${evidence ? `<details style="margin-top:8px"><summary style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;cursor:pointer">Evidence (${(idea.evidence || []).length})</summary><ul style="font-size:10px;line-height:1.55;margin:6px 0 0 16px;padding:0">${evidence}</ul></details>` : ''}
-                </div>
-            `;
-        }).join('');
+        const cards = ideas.map(idea => renderBlueprintCard(idea)).join('');
         return `
             <div style="margin-bottom:18px">
                 <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap">
                     <div style="display:flex;align-items:baseline;gap:10px">
-                        <span style="font-size:16px;font-weight:700;color:#22d3ee;letter-spacing:0.03em">✦ Generated Ideas</span>
-                        <span style="font-size:11px;color:#94a3b8">${ideas.length} deterministically scored</span>
+                        <span style="font-size:16px;font-weight:700;color:#22d3ee;letter-spacing:0.03em">✦ Blueprint v2 — High-Resolution Ideas</span>
+                        <span style="font-size:11px;color:#94a3b8">${ideas.length} full blueprints · modeled metrics labeled</span>
                     </div>
                     <span style="font-size:10px;color:#64748b;letter-spacing:0.05em">supporting evidence below ↓</span>
                 </div>
                 ${cards}
             </div>
         `;
+    }
+
+    function renderBlueprintCard(idea) {
+        const score = idea.score_breakdown || {};
+        const parts = score.parts || {};
+        const partPill = (label, v, color) => `
+            <span style="background:#1e293b;border-radius:4px;padding:2px 6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:${color}">
+                ${escapeHtml(label)} <b style="color:#f1f5f9">${v != null ? (+v).toFixed(3) : '0'}</b>
+            </span>`;
+        const concepts = (idea.concept_anchors || []).map(c =>
+            `<code style="background:#1e293b;color:#22d3ee;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(c)}</code>`
+        ).join('');
+        const narratives = (idea.narrative_structures || []).map(n =>
+            `<code style="background:#1e293b;color:#a78bfa;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(n)}</code>`
+        ).join('');
+        const levers = (idea.pre_upload_levers || []).map(l =>
+            `<code style="background:#1e293b;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(l)}</code>`
+        ).join('');
+        const interactions = (idea.interactions_engineered || []).map(i =>
+            `<code style="background:#1e293b;color:#ec4899;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(i)}</code>`
+        ).join('');
+        const hooks = (idea.hook_mechanisms || []).map(h =>
+            `<div style="font-size:10px;color:#94a3b8;margin-bottom:2px"><span style="color:#facc15">[${escapeHtml(h.bucket || '')}]</span> <code style="color:#22d3ee">${escapeHtml(h.via_indicator || '')}</code> · csw <b style="color:${rColor(h.csw)}">${h.csw != null ? (+h.csw).toFixed(3) : '—'}</b> · n=${h.n_videos || '—'}</div>`
+        ).join('');
+        const evidence = (idea.evidence || []).map(e =>
+            `<li style="margin-bottom:3px;color:#94a3b8">${escapeHtml(e)}</li>`
+        ).join('');
+
+        // Concept section
+        const c = idea.concept || {};
+        const conceptBox = `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #22d3ee">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Concept</div>
+                ${c.logline ? `<div style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-bottom:6px">${escapeHtml(c.logline)}</div>` : ''}
+                ${c.promise ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:4px"><b style="color:#facc15">Promise:</b> ${escapeHtml(c.promise)}</div>` : ''}
+                ${c.payoff ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:4px"><b style="color:#22c55e">Payoff:</b> ${escapeHtml(c.payoff)}</div>` : ''}
+                ${c.over_delivery_note ? `<div style="font-size:10px;color:#64748b;font-style:italic">${escapeHtml(c.over_delivery_note)}</div>` : ''}
+            </div>`;
+
+        // Opening section
+        const o = idea.opening || {};
+        const openingBox = `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #facc15">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Opening (first 3-5s — engineered)</div>
+                <div style="display:grid;grid-template-columns:120px 1fr;gap:4px 10px;font-size:11px">
+                    ${o.first_frame ? `<div style="color:#64748b">First frame</div><div style="color:#cbd5e1">${escapeHtml(o.first_frame)}</div>` : ''}
+                    ${o.first_line ? `<div style="color:#64748b">First line</div><div style="color:#e2e8f0;font-style:italic">"${escapeHtml(o.first_line)}"</div>` : ''}
+                    ${o.opening_action ? `<div style="color:#64748b">Opening action</div><div style="color:#cbd5e1">${escapeHtml(o.opening_action)}</div>` : ''}
+                    ${o.opening_speech_rate_wps_target != null ? `<div style="color:#64748b">Speech rate</div><div style="color:#22d3ee">${o.opening_speech_rate_wps_target} w/s target</div>` : ''}
+                    ${o.hook_type ? `<div style="color:#64748b">Hook type</div><div style="color:#a78bfa">${escapeHtml(o.hook_type)}</div>` : ''}
+                    ${o.best_first_word_used ? `<div style="color:#64748b">First word</div><div style="color:#22c55e"><code style="background:#1e293b;padding:1px 5px;border-radius:3px">${escapeHtml(o.best_first_word_used)}</code></div>` : ''}
+                </div>
+            </div>`;
+
+        // Build phases
+        const bp = idea.build_phases || [];
+        const buildBox = bp.length ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #a78bfa">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Build Phases (narrative arc)</div>
+                ${bp.map(p => `
+                    <div style="display:grid;grid-template-columns:60px 1fr;gap:4px 10px;font-size:11px;margin-bottom:4px">
+                        <div style="color:${p.visceral ? '#f87171' : '#64748b'};font-family:monospace;font-weight:600">${escapeHtml(p.zone_pct || '')}%</div>
+                        <div>
+                            <div style="color:#cbd5e1">${escapeHtml(p.beat || '')}${p.visceral ? ' <span style="color:#f87171;font-size:9px">✦ visceral</span>' : ''}</div>
+                            ${p.note ? `<div style="color:#64748b;font-size:10px;margin-top:1px">${escapeHtml(p.note)}</div>` : ''}
+                        </div>
+                    </div>`).join('')}
+            </div>` : '';
+
+        // Climax & payoff
+        const cp = idea.climax_and_payoff || {};
+        const climaxBox = (cp.climax_hint || cp.closing_line_hint) ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #22c55e">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Climax &amp; Payoff</div>
+                ${cp.climax_hint ? `<div style="font-size:11px;color:#cbd5e1;line-height:1.5;margin-bottom:4px"><b style="color:#22c55e">Climax (60-80%):</b> ${escapeHtml(cp.climax_hint)}</div>` : ''}
+                ${cp.closing_line_hint ? `<div style="font-size:11px;color:#cbd5e1;line-height:1.5"><b style="color:#22c55e">Close:</b> ${escapeHtml(cp.closing_line_hint)}</div>` : ''}
+            </div>` : '';
+
+        // Visual prescription
+        const vp = idea.visual_prescription || {};
+        const vpZones = ['first_5s', 'hook_quarter', 'mid', 'late', 'avoid'];
+        const vpBox = (Object.keys(vp).length) ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #ec4899">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Visual Prescription</div>
+                ${vpZones.filter(z => Array.isArray(vp[z]) && vp[z].length).map(z => `
+                    <div style="font-size:11px;margin-bottom:3px">
+                        <span style="color:${z === 'avoid' ? '#f87171' : '#ec4899'};font-weight:600;display:inline-block;min-width:92px">${escapeHtml(z)}:</span>
+                        <span style="color:#cbd5e1">${vp[z].map(s => escapeHtml(s)).join(', ')}</span>
+                    </div>`).join('')}
+            </div>` : '';
+
+        // Vocabulary prescription
+        const voc = idea.vocabulary_prescription || {};
+        const vocBox = (voc.use_peak_words || voc.avoid_material_words || voc.closing_words) ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #fbbf24">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Vocabulary Prescription</div>
+                ${voc.use_peak_words && voc.use_peak_words.length ? `<div style="font-size:11px;margin-bottom:4px"><span style="color:#22c55e;font-weight:600">USE:</span> ${voc.use_peak_words.map(w => `<code style="background:#14291e;color:#86efac;padding:1px 5px;border-radius:3px;margin-right:3px;font-size:10px">${escapeHtml(w)}</code>`).join('')}</div>` : ''}
+                ${voc.avoid_material_words && voc.avoid_material_words.length ? `<div style="font-size:11px;margin-bottom:4px"><span style="color:#f87171;font-weight:600">AVOID:</span> ${voc.avoid_material_words.map(w => `<code style="background:#291414;color:#fca5a5;padding:1px 5px;border-radius:3px;margin-right:3px;font-size:10px">${escapeHtml(w)}</code>`).join('')}</div>` : ''}
+                ${voc.closing_words && voc.closing_words.length ? `<div style="font-size:11px"><span style="color:#facc15;font-weight:600">CLOSE WITH:</span> ${voc.closing_words.map(w => `<code style="background:#292414;color:#fcd34d;padding:1px 5px;border-radius:3px;margin-right:3px;font-size:10px">${escapeHtml(w)}</code>`).join('')}</div>` : ''}
+            </div>` : '';
+
+        // Pacing
+        const pac = idea.pacing || {};
+        const pacBox = Object.keys(pac).length ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #06b6d4">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Pacing</div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px">
+                    ${pac.opening_wps_target != null ? `<div><span style="color:#64748b">open</span> <b style="color:#22d3ee">${pac.opening_wps_target} w/s</b></div>` : ''}
+                    ${pac.peak_wps_target != null ? `<div><span style="color:#64748b">peaks</span> <b style="color:#22c55e">${pac.peak_wps_target} w/s</b></div>` : ''}
+                    ${pac.closing_wps_target != null ? `<div><span style="color:#64748b">close</span> <b style="color:#facc15">${pac.closing_wps_target} w/s</b></div>` : ''}
+                    ${pac.utterance_length_at_peaks_words_target != null ? `<div><span style="color:#64748b">peak utterance</span> <b style="color:#a78bfa">${pac.utterance_length_at_peaks_words_target} words</b></div>` : ''}
+                    ${pac.no_long_pauses ? `<div style="color:#f87171">no pauses &gt;1s</div>` : ''}
+                </div>
+            </div>` : '';
+
+        // Arc
+        const arc = idea.arc || {};
+        const arcBox = Object.keys(arc).length ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #818cf8">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Arc</div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px">
+                    ${arc.arc_shape ? `<div><span style="color:#64748b">shape</span> <b style="color:#818cf8">${escapeHtml(arc.arc_shape)}</b></div>` : ''}
+                    ${arc.shape_encoding_target ? `<div><span style="color:#64748b">encoding</span> <b style="color:#22d3ee">${escapeHtml(arc.shape_encoding_target)}</b></div>` : ''}
+                    ${arc.progression_target ? `<div><span style="color:#64748b">progression</span> <b style="color:#22c55e">${escapeHtml(arc.progression_target)}</b></div>` : ''}
+                    ${arc.nadir_placement_pct != null ? `<div><span style="color:#64748b">nadir at</span> <b style="color:#f87171">${arc.nadir_placement_pct}%</b></div>` : ''}
+                </div>
+            </div>` : '';
+
+        // Estimated metrics
+        const em = idea.estimated_metrics || {};
+        const metricCell = (label, m, color, fmt) => {
+            if (!m) return '';
+            const v = fmt ? fmt(m.modeled_value, m.band_label) : (m.modeled_value != null ? m.modeled_value : '—');
+            const band = m.band || m.band_label || '';
+            const conf = m.confidence || '';
+            const drivers = (m.drivers || []).map(d => `${d.driver}${d.modeled_delta != null ? ` (${(d.modeled_delta >= 0 ? '+' : '')}${(+d.modeled_delta).toFixed(3)})` : ''}`).slice(0, 4).join(' · ');
+            const val = m.validation || null;
+            const valInline = val ? `
+                <details style="margin-top:3px">
+                    <summary style="font-size:9px;color:#22d3ee;cursor:pointer">validated against ${val.indicator_keys_count || 0} indicators (pool ${val.indicators_considered_count || 0})</summary>
+                    <div style="font-size:9px;color:#94a3b8;margin-top:4px;line-height:1.5">
+                        ${val.rationale ? `<div style="color:#cbd5e1;margin-bottom:3px">${escapeHtml(val.rationale)}</div>` : ''}
+                        ${val.filter ? `<div style="color:#64748b;margin-bottom:3px"><b style="color:#94a3b8">filter:</b> <code style="color:#94a3b8">${escapeHtml(val.filter)}</code></div>` : ''}
+                        ${(val.top_indicators || []).slice(0, 5).map(t => `
+                            <div style="padding:3px 5px;background:#0a1628;border-left:2px solid #22d3ee;border-radius:3px;margin-bottom:2px">
+                                <code style="color:#22d3ee;font-size:9px">${escapeHtml(t.key || '')}</code>
+                                ${t.rho != null ? ` · <span style="color:${t.rho >= 0 ? '#22c55e' : '#f87171'}">ρ=${(+t.rho).toFixed(3)}</span>` : ''}
+                                ${t.r_with_views != null ? ` · <span style="color:${t.r_with_views >= 0 ? '#22c55e' : '#f87171'}">r=${(+t.r_with_views).toFixed(3)}</span>` : ''}
+                                ${t.r_partial != null ? ` · <span style="color:${t.r_partial >= 0 ? '#22c55e' : '#f87171'}">rₚ=${(+t.r_partial).toFixed(3)}</span>` : ''}
+                                ${t.csw != null ? ` · <span style="color:#facc15">csw=${(+t.csw).toFixed(3)}</span>` : ''}
+                                ${t.n != null ? ` · <span style="color:#64748b">n=${t.n}</span>` : ''}
+                                ${t.evidence_type ? ` · <span style="color:#94a3b8;font-size:8px">[${escapeHtml(t.evidence_type)}]</span>` : ''}
+                                ${t.quantification ? `<div style="color:#94a3b8;font-size:8.5px;margin-top:1px">⟹ ${escapeHtml(String(t.quantification).slice(0, 160))}</div>` : ''}
+                                ${t.why && !t.quantification ? `<div style="color:#94a3b8;font-size:8.5px;margin-top:1px">⟹ ${escapeHtml(String(t.why).slice(0, 160))}</div>` : ''}
+                            </div>`).join('')}
+                        ${val.evidence_sources && val.evidence_sources.length ? `<div style="color:#64748b;font-size:8.5px;margin-top:3px">sources: ${val.evidence_sources.map(s => `<code style="color:#94a3b8">${escapeHtml(s)}</code>`).join(' · ')}</div>` : ''}
+                    </div>
+                </details>` : '';
+            return `
+                <div style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:8px 10px">
+                    <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:3px">${escapeHtml(label)}</div>
+                    <div style="font-size:15px;font-weight:700;color:${color}">${v}</div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">${escapeHtml(String(band))} · conf <b style="color:#cbd5e1">${escapeHtml(conf)}</b></div>
+                    ${drivers ? `<div style="font-size:9px;color:#64748b;margin-top:2px;line-height:1.4">${escapeHtml(drivers)}</div>` : ''}
+                    ${m.method ? `<details style="margin-top:3px"><summary style="font-size:9px;color:#64748b;cursor:pointer">method</summary><div style="font-size:9px;color:#94a3b8;margin-top:2px;line-height:1.4">${escapeHtml(m.method)}</div></details>` : ''}
+                    ${valInline}
+                </div>`;
+        };
+        const metricsBox = Object.keys(em).length ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #22d3ee">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Estimated Metrics — <span style="color:#f87171">MODELED, not predicted</span></div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px">
+                    ${metricCell('Swipe-away', em.swipe_away_rate, '#22c55e', (v) => v != null ? (v * 100).toFixed(1) + '%' : '—')}
+                    ${metricCell('Retention @ 20s', em.hook_retention_20s, '#22d3ee', (v) => v != null ? (v * 100).toFixed(1) + '%' : '—')}
+                    ${metricCell('Share propensity', em.share_propensity, '#a78bfa', (v) => v != null ? (v * 100).toFixed(1) + '%' : '—')}
+                    ${metricCell('Keep rate', em.keep_rate, '#facc15', (v) => v != null ? (v * 100).toFixed(1) + '%' : '—')}
+                    ${em.view_band ? `
+                        <div style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:8px 10px">
+                            <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:3px">View band</div>
+                            <div style="font-size:13px;font-weight:700;color:#fbbf24">${escapeHtml(em.view_band.band_label || '—')}</div>
+                            <div style="font-size:10px;color:#94a3b8;margin-top:2px">conf <b style="color:#cbd5e1">${escapeHtml(em.view_band.confidence || '')}</b></div>
+                            ${em.view_band.method ? `<details style="margin-top:3px"><summary style="font-size:9px;color:#64748b;cursor:pointer">method</summary><div style="font-size:9px;color:#94a3b8;margin-top:2px;line-height:1.4">${escapeHtml(em.view_band.method)}${em.view_band.note ? '<br><i>' + escapeHtml(em.view_band.note) + '</i>' : ''}</div></details>` : ''}
+                        </div>` : ''}
+                </div>
+            </div>` : '';
+
+        // Scorecard targets
+        const sct = idea.scorecard_targets || {};
+        const sctKeys = Object.keys(sct);
+        const sctBox = sctKeys.length ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #f59e0b">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Scorecard Targets (design intent)</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:4px;font-size:11px">
+                    ${sctKeys.map(k => {
+                        const r = sct[k] || {};
+                        const color = r.status === 'top-decile' ? '#22c55e' : r.status === 'top-quartile' ? '#22d3ee' : r.status === 'above-mean' ? '#fbbf24' : '#f87171';
+                        return `<div style="background:#0a1628;border-radius:4px;padding:5px 8px;border:1px solid #1e293b">
+                            <div style="color:#94a3b8;font-size:9px;text-transform:uppercase;letter-spacing:0.05em">${escapeHtml(k)}</div>
+                            <div style="color:${color};font-weight:700;font-size:13px">${r.target != null ? r.target : '—'}</div>
+                            <div style="color:#64748b;font-size:9px">${escapeHtml(r.status || '')}${r.corpus_mean != null ? ` · µ=${r.corpus_mean}` : ''}</div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>` : '';
+
+        // Risk flags
+        const rf = idea.risk_flags_detected || [];
+        const rfBox = rf.length ? `
+            <div style="background:#1a0a0a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #f87171">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#f87171;margin-bottom:6px">⚠ Risk Flags Detected</div>
+                ${rf.map(r => `
+                    <div style="font-size:11px;color:#fca5a5;margin-bottom:3px">
+                        <b style="color:${r.severity === 'high' ? '#ef4444' : r.severity === 'medium' ? '#f97316' : '#fbbf24'}">[${escapeHtml(r.severity || '')}]</b>
+                        <code style="color:#fca5a5">${escapeHtml(r.flag || '')}</code> — <span style="color:#94a3b8">${escapeHtml(r.rule || '')}</span>
+                    </div>`).join('')}
+            </div>` : '';
+
+        // Why it works
+        const wiw = idea.why_it_works || [];
+        const wiwBox = wiw.length ? `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #14b8a6">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Why it works</div>
+                <ul style="font-size:11px;color:#cbd5e1;margin:0;padding-left:16px;line-height:1.55">
+                    ${wiw.map(w => `<li>${escapeHtml(w)}</li>`).join('')}
+                </ul>
+            </div>` : '';
+
+        // Validation trace — per-section lineage of every blueprint field
+        const validation = idea.validation || null;
+        const validationBox = validation ? renderValidationBox(validation) : '';
+
+        return `
+            <div style="background:#0d1424;border-radius:8px;padding:14px 16px;border:1px solid rgba(59,130,246,0.25);border-left:3px solid #22d3ee;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.25)">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+                    <div style="display:flex;gap:8px;align-items:baseline">
+                        <span style="font-size:16px;font-weight:700;color:#facc15">#${idea.rank}</span>
+                        <span style="font-size:14px;font-weight:700;color:#e2e8f0">${escapeHtml(idea.title || '')}</span>
+                    </div>
+                    <div style="font-size:10px;color:#64748b">design score <b style="color:#22d3ee">${score.total != null ? (+score.total).toFixed(3) : '—'}</b></div>
+                </div>
+
+                ${conceptBox}
+                ${metricsBox}
+                ${openingBox}
+                ${buildBox}
+                ${climaxBox}
+                ${arcBox}
+                ${pacBox}
+                ${vpBox}
+                ${vocBox}
+                ${sctBox}
+                ${rfBox}
+                ${wiwBox}
+                ${validationBox}
+
+                <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
+                    ${partPill('concept', parts.concept, '#22d3ee')}
+                    ${partPill('hook', parts.hook, '#facc15')}
+                    ${partPill('narrative', parts.narrative, '#a78bfa')}
+                    ${partPill('duration', parts.duration, '#f59e0b')}
+                    ${partPill('bridge', parts.bridge, '#ec4899')}
+                    ${partPill('vocab', parts.vocabulary, '#86efac')}
+                    ${partPill('interactions', parts.interactions, '#fb7185')}
+                </div>
+                ${concepts ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Concepts</span>${concepts}</div>` : ''}
+                ${narratives ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Narrative</span>${narratives}</div>` : ''}
+                ${levers ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Pre-upload levers</span>${levers}</div>` : ''}
+                ${interactions ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Interactions engineered</span>${interactions}</div>` : ''}
+                ${hooks ? `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #1e293b"><div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Hook mechanisms</div>${hooks}</div>` : ''}
+                ${evidence ? `<details style="margin-top:8px"><summary style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;cursor:pointer">Evidence (${(idea.evidence || []).length})</summary><ul style="font-size:10px;line-height:1.55;margin:6px 0 0 16px;padding:0">${evidence}</ul></details>` : ''}
+            </div>
+        `;
+    }
+
+    function renderValidationTraceRow(t) {
+        if (!t) return '';
+        const tops = (t.top_indicators || []).slice(0, 6).map(ind => {
+            const chips = [];
+            if (ind.rho != null) chips.push(`<span style="color:${ind.rho >= 0 ? '#22c55e' : '#f87171'}">ρ=${(+ind.rho).toFixed(3)}</span>`);
+            if (ind.r_with_views != null) chips.push(`<span style="color:${ind.r_with_views >= 0 ? '#22c55e' : '#f87171'}">r=${(+ind.r_with_views).toFixed(3)}</span>`);
+            if (ind.r_partial != null) chips.push(`<span style="color:${ind.r_partial >= 0 ? '#22c55e' : '#f87171'}">rₚ=${(+ind.r_partial).toFixed(3)}</span>`);
+            if (ind.r_direct != null) chips.push(`<span style="color:${ind.r_direct >= 0 ? '#22c55e' : '#f87171'}">r=${(+ind.r_direct).toFixed(3)}</span>`);
+            if (ind.r_to_views != null) chips.push(`<span style="color:${ind.r_to_views >= 0 ? '#22c55e' : '#f87171'}">r=${(+ind.r_to_views).toFixed(3)}</span>`);
+            if (ind.csw != null) chips.push(`<span style="color:#facc15">csw=${(+ind.csw).toFixed(3)}</span>`);
+            if (ind.score != null) chips.push(`<span style="color:#a78bfa">s=${(+ind.score).toFixed(2)}</span>`);
+            if (ind.delta != null) chips.push(`<span style="color:${ind.delta >= 0 ? '#22c55e' : '#f87171'}">Δ=${(+ind.delta).toFixed(3)}</span>`);
+            if (ind.n != null) chips.push(`<span style="color:#64748b">n=${ind.n}</span>`);
+            if (ind.outcome_indicator) chips.push(`<span style="color:#94a3b8">→ ${escapeHtml(ind.outcome_indicator)}</span>`);
+            const metaBits = [];
+            if (ind.quantification) metaBits.push(`<b style="color:#94a3b8">quant:</b> ${escapeHtml(String(ind.quantification).slice(0, 180))}`);
+            if (ind.modality) metaBits.push(`<b style="color:#94a3b8">modality:</b> ${escapeHtml(String(ind.modality).slice(0, 140))}`);
+            if (ind.layer) metaBits.push(`<b style="color:#94a3b8">layer:</b> ${escapeHtml(ind.layer)}`);
+            if (ind.signal) metaBits.push(`<b style="color:#94a3b8">signal:</b> ${escapeHtml(String(ind.signal).slice(0, 120))}`);
+            const why = ind.why && !ind.quantification ? `<div style="color:#94a3b8;font-size:9px;margin-top:2px">${escapeHtml(String(ind.why).slice(0, 220))}</div>` : '';
+            const notes = ind.notes ? `<div style="color:#64748b;font-size:9px;margin-top:2px;font-style:italic">${escapeHtml(String(ind.notes).slice(0, 220))}</div>` : '';
+            return `
+                <div style="padding:5px 8px;background:#0a1628;border-left:2px solid #22d3ee;border-radius:3px;margin-bottom:3px">
+                    <div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap">
+                        <code style="color:#22d3ee;font-size:10px">${escapeHtml(ind.key || '')}</code>
+                        ${chips.length ? `<span style="font-size:9px;color:#94a3b8">${chips.join(' · ')}</span>` : ''}
+                        ${ind.evidence_type ? `<span style="font-size:8.5px;color:#64748b">[${escapeHtml(ind.evidence_type)}]</span>` : ''}
+                    </div>
+                    ${metaBits.length ? `<div style="color:#94a3b8;font-size:9px;margin-top:2px;line-height:1.45">${metaBits.join(' · ')}</div>` : ''}
+                    ${why}
+                    ${notes}
+                </div>`;
+        }).join('');
+        const moreKeys = (t.indicator_keys || []).length > 6
+            ? `<div style="color:#64748b;font-size:9px;margin-top:3px">+ ${(t.indicator_keys.length - 6)} more indicator keys</div>` : '';
+        const keysChips = (t.indicator_keys || []).slice(0, 18).map(k => `<code style="background:#0f1a2d;color:#94a3b8;padding:1px 5px;border-radius:3px;font-size:9px;margin:1px">${escapeHtml(String(k))}</code>`).join('');
+        return `
+            <details style="margin-bottom:4px;background:#060d1a;border:1px solid #1e293b;border-radius:5px;padding:6px 10px">
+                <summary style="cursor:pointer;font-size:10.5px;color:#e2e8f0;font-weight:600;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                    <span>${escapeHtml(t.field || '')}</span>
+                    <span style="font-weight:400;color:#94a3b8;font-size:9.5px">${t.indicator_keys_count || 0} used · pool ${t.indicators_considered_count || 0}</span>
+                </summary>
+                <div style="margin-top:6px;font-size:10px;color:#cbd5e1;line-height:1.5">
+                    ${t.rationale ? `<div style="color:#cbd5e1;margin-bottom:4px">${escapeHtml(t.rationale)}</div>` : ''}
+                    ${t.filter ? `<div style="color:#94a3b8;margin-bottom:4px"><b style="color:#64748b">filter:</b> <code style="color:#94a3b8;font-size:9px">${escapeHtml(t.filter)}</code></div>` : ''}
+                    ${tops ? `<div style="margin-top:4px"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">top indicators</div>${tops}</div>` : ''}
+                    ${keysChips ? `<details style="margin-top:4px"><summary style="font-size:9px;color:#64748b;cursor:pointer">all indicator keys (${(t.indicator_keys || []).length})</summary><div style="margin-top:4px;line-height:1.9">${keysChips}${moreKeys}</div></details>` : ''}
+                    ${t.evidence_sources && t.evidence_sources.length ? `<div style="color:#64748b;font-size:9px;margin-top:6px">sources: ${t.evidence_sources.map(s => `<code style="color:#94a3b8">${escapeHtml(s)}</code>`).join(' · ')}</div>` : ''}
+                </div>
+            </details>`;
+    }
+
+    function renderValidationBox(validation) {
+        const corpus = validation.corpus || {};
+        const sections = validation.section_traces || {};
+        const metrics = validation.metric_traces || {};
+        const corpusRow = (label, v) => v != null && v !== 0 ? `<div><span style="color:#64748b">${escapeHtml(label)}</span> <b style="color:#e2e8f0">${typeof v === 'number' ? v.toLocaleString() : escapeHtml(String(v).slice(0, 80))}</b></div>` : '';
+        const sectionOrder = [
+            'first_frame', 'first_line', 'opening_action', 'opening_speech_rate', 'hook_type',
+            'build_phases', 'climax_and_payoff', 'arc', 'pacing',
+            'visual_prescription', 'vocabulary_prescription', 'duration_target',
+            'hook_mechanisms', 'pre_upload_levers', 'risk_flags', 'scorecard_targets',
+        ];
+        const sectionRows = sectionOrder
+            .filter(k => sections[k])
+            .map(k => renderValidationTraceRow(sections[k]))
+            .join('');
+        const metricOrder = ['swipe_away_rate', 'hook_retention_20s', 'share_propensity', 'keep_rate', 'view_band'];
+        const metricRows = metricOrder
+            .filter(k => metrics[k])
+            .map(k => renderValidationTraceRow(metrics[k]))
+            .join('');
+        return `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #22d3ee">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+                    <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#22d3ee;font-weight:700">◆ Validation trace — front-to-back indicator lineage</div>
+                    <div style="font-size:9px;color:#64748b">${Object.keys(sections).length} sections · ${Object.keys(metrics).length} metrics · ${validation.catalog_enrichment ? 'catalog enriched' : 'catalog unavailable'}</div>
+                </div>
+                <div style="background:#0a1628;border:1px solid #1e293b;border-radius:5px;padding:8px 10px;margin-bottom:8px">
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">indicator corpus (filter-before pool sizes)</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px 12px;font-size:10.5px;color:#cbd5e1">
+                        ${corpusRow('Indicator registry', corpus.indicator_registry_total)}
+                        ${corpusRow('Mechanism↔indicator links', corpus.mechanism_indicator_links_total)}
+                        ${corpusRow('|ρ| threshold', corpus.mechanism_indicator_links_threshold_abs_rho)}
+                        ${corpusRow('Min n', corpus.mechanism_indicator_links_min_n)}
+                        ${corpusRow('Principles', corpus.principles_total)}
+                        ${corpusRow('Mechanisms', corpus.mechanisms_total)}
+                        ${corpusRow('Components', corpus.components_total)}
+                        ${corpusRow('Video pool', corpus.video_pool_n)}
+                        ${corpusRow('Video scorecards', corpus.video_scorecards_n)}
+                        ${corpusRow('Word-retention scored', corpus.word_retention_scored)}
+                        ${corpusRow('Candidate families', corpus.candidate_proposal_families)}
+                    </div>
+                    ${corpus.mechanism_indicator_link_outcomes && corpus.mechanism_indicator_link_outcomes.length ? `<div style="font-size:9.5px;color:#64748b;margin-top:4px">link outcome keys: ${corpus.mechanism_indicator_link_outcomes.map(o => `<code style="color:#94a3b8">${escapeHtml(o)}</code>`).join(' · ')}</div>` : ''}
+                    ${corpus.note ? `<div style="font-size:9px;color:#64748b;margin-top:4px;font-style:italic">${escapeHtml(corpus.note)}</div>` : ''}
+                </div>
+                ${sectionRows ? `
+                    <details open style="margin-bottom:6px">
+                        <summary style="cursor:pointer;font-size:10px;color:#e2e8f0;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Section traces (blueprint fields)</summary>
+                        <div style="margin-top:6px">${sectionRows}</div>
+                    </details>` : ''}
+                ${metricRows ? `
+                    <details open style="margin-bottom:2px">
+                        <summary style="cursor:pointer;font-size:10px;color:#e2e8f0;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Metric traces (modeled estimates)</summary>
+                        <div style="margin-top:6px">${metricRows}</div>
+                    </details>` : ''}
+            </div>`;
     }
 
     function bindIdeaModelEvents() {
