@@ -401,6 +401,12 @@ const JarvisUI = (() => {
             ? `<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#1e293b;color:#94a3b8;margin-left:4px">${escapeHtml(def.modality)}</span>`
             : '';
 
+        // Provenance badge — shows whether metric is deterministic or LLM-scored
+        const provType = (opts.provenance && opts.provenance.type) || 'deterministic';
+        const provColor = provType === 'deterministic' ? '#22c55e' : '#f59e0b';
+        const provLabel = provType === 'deterministic' ? 'deterministic' : 'llm-scored';
+        const provenanceBadge = `<span style="font-size:8px;padding:1px 5px;border-radius:3px;background:${provColor}22;color:${provColor};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-left:4px;border:1px solid ${provColor}44">${provLabel}</span>`;
+
         const sourceFieldsHtml = (def.source_fields && def.source_fields.length)
             ? `<div style="margin-top:3px"><span style="color:#64748b">Source fields: </span>${def.source_fields.map(s => `<code style="color:#93c5fd;font-size:10px">${escapeHtml(s)}</code>`).join(' &middot; ')}</div>`
             : '';
@@ -426,7 +432,7 @@ const JarvisUI = (() => {
                 <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:4px">
                     <code style="font-size:11px;color:${accent};font-weight:700">${escapeHtml(def.key || '')}</code>
                     <span style="color:#cbd5e1;font-size:11px">${escapeHtml(title)}</span>
-                    ${badge}${quantBadge}${modalityBadge}
+                    ${badge}${quantBadge}${modalityBadge}${provenanceBadge}
                 </div>
                 ${def.description ? `<div style="color:#94a3b8;line-height:1.5;margin-top:2px">${escapeHtml(def.description)}</div>` : ''}
                 ${def.formula ? `<div style="margin-top:4px"><span style="color:#64748b;font-size:10px">Formula: </span><code style="color:#22d3ee;font-size:10px;white-space:pre-wrap">${escapeHtml(def.formula)}</code></div>` : ''}
@@ -443,7 +449,7 @@ const JarvisUI = (() => {
         const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
         const header = opts.header || 'Variables &amp; Measurement Provenance';
         const sub = opts.sub ? `<div style="font-size:10px;color:#64748b;margin-bottom:6px">${opts.sub}</div>` : '';
-        return `${sectionHdr(header)}${sub}${cleaned.map(d => renderVariableDefinitionRow(d, { accent: opts.accent })).join('')}`;
+        return `${sectionHdr(header)}${sub}${cleaned.map(d => renderVariableDefinitionRow(d, { accent: opts.accent, provenance: opts.provenance })).join('')}`;
     }
 
     function renderExperimentInstanceCard(ind) {
@@ -516,11 +522,12 @@ const JarvisUI = (() => {
                     <div style="margin-top:3px"><span style="color:#64748b">Formula: </span><code style="color:#22d3ee">${metricDef.formula || '—'}</code></div>
                     <div style="margin-top:3px"><span style="color:#64748b">Extracted from: </span>${(metricDef.data_sources || []).join(', ')}</div>
                     <div style="margin-top:3px"><span style="color:#64748b">Resolution: </span>${ind.resolution_id || 'r0'}</div>
+                    <div style="margin-top:3px"><span style="color:#64748b">Provenance: </span><span style="color:${(ind.provenance && ind.provenance.type === 'llm_scored') ? '#f59e0b' : '#22c55e'};font-weight:600">${(ind.provenance && ind.provenance.type) || 'deterministic'}</span></div>
                 </div>
 
                 ${renderVariableDefinitionsSection(
                     [lookupVariableDefinition(ind.key, ind.variable_definition)],
-                    { header: 'Variable Definition &amp; Provenance', sub: 'Exactly how <code style="color:#22d3ee">' + escapeHtml(ind.key) + '</code> is quantified from raw data.', accent: color }
+                    { header: 'Variable Definition &amp; Provenance', sub: 'Exactly how <code style="color:#22d3ee">' + escapeHtml(ind.key) + '</code> is quantified from raw data.', accent: color, provenance: ind.provenance }
                 )}
 
                 ${renderVariableDefinitionsSection(

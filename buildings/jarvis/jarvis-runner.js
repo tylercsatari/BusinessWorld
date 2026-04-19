@@ -330,6 +330,8 @@ function processIndicator(key, videos, existingKeys, resolutions, graph, tools) 
     const isComposite = metrics.isCompositeKey(key);
     const parsed = isComposite ? metrics.parseCompositeKey(key) : null;
 
+    const provenanceType = metrics.getProvenanceType(key);
+
     const indicator = {
         key,
         label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
@@ -339,6 +341,10 @@ function processIndicator(key, videos, existingKeys, resolutions, graph, tools) 
         depth: 1,
         target,
         metric_definition: metricDef,
+        provenance: {
+            type: provenanceType || 'deterministic',
+            // For future llm_scored metrics, add: prompt, model, temperature, timestamp, input_fields
+        },
         dataset,
         experiment: exp,
         result,

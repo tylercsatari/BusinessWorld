@@ -1020,10 +1020,10 @@ const OBJECT_KEYWORDS = [
 
 const INTERACTION_BASES = [
     'retention_pct_50', 'retention_pct_25', 'speech_rate_wps',
-    'face_frame_pct', 'retention_entropy', 'hook_drop_rate',
+    'retention_entropy', 'hook_drop_rate',
     'non_sub_view_share', 'swipe_away_rate', 'like_rate',
-    'unique_word_ratio', 'scene_change_rate', 'hook_duration_pct',
-    'title_word_count', 'avg_segment_duration_s', 'close_up_frame_pct',
+    'unique_word_ratio',
+    'title_word_count',
     'open_loop_count', 'open_loop_density',
     'open_loop_count_first5s', 'open_loop_density_first5s',
     'open_loop_count_first10s',
@@ -1038,16 +1038,14 @@ const INTERACTION_BASES = [
     'gratification_delay_pct', 'promise_proof_gap_pct',
     'hook_tension_ratio', 'dangling_question_ratio',
     'withheld_outcome_flag', 'countdown_flag',
-    'setup_duration_pct', 'payoff_position_pct',
+    // Removed LLM-dependent: setup_duration_pct, payoff_position_pct
     'hook_open_loop_density', 'hook_closure_density',
-    // New Group A indicators
-    'hook_payoff_gap', 'end_recovery_score', 'narrative_arc_completeness',
-    'action_frame_pct', 'max_silence_gap_s', 'opening_speech_rate_3s',
-    // New Group B indicators
+    // New Group A indicators (removed LLM-dependent: hook_payoff_gap, narrative_arc_completeness, action_frame_pct)
+    'end_recovery_score', 'max_silence_gap_s', 'opening_speech_rate_3s',
+    // New Group B indicators (removed LLM-dependent: visual_stake_frame_pct)
     'open_loop_to_closure_ratio', 'zygarnik_tension_peak_pct', 'early_proof_position_pct',
     'hook_stake_density', 'setup_payoff_ratio', 'resolution_density',
     'closure_rate_per_min', 'tension_arc_score', 'pre_payoff_open_loop_density',
-    'visual_stake_frame_pct',
     // New indicator families
     'open_loop_count_first3s',
     'open_loop_count_first15s',
@@ -1082,19 +1080,11 @@ const INTERACTION_BASES = [
     "foreshadow_density_hook",
     "proof_before_midpoint_flag",
     // Group I: Delayed gratification & reference-callback
+    // (Removed segment-transcript metrics: open_loop_density_mid, closure_density_mid, etc.)
     'delayed_gratification_density',
     'reference_callback_density',
     'visual_proof_density',
     'story_stake_density',
-    'open_loop_density_mid',
-    'closure_density_mid',
-    'story_stake_density_first_quarter',
-    'visual_proof_density_hook',
-    'reference_callback_density_mid',
-    'pre_gratification_open_loop_count',
-    'stake_introduction_position_pct',
-    'proof_density_post_midpoint',
-    'callback_before_payoff_flag',
     // Group J: Underused metrics now added as bases
     'title_question_flag',
     'title_number_flag',
@@ -1203,25 +1193,16 @@ const STATIC_KEYS = new Set([
     'like_rate', 'comment_rate', 'share_rate', 'subs_gained_per_view',
     'subs_per_like', 'revenue_per_view',
     'duration_log', 'transcript_word_count', 'speech_rate_wps',
-    'hook_word_count', 'question_count', 'segment_count',
-    'has_hook_segment', 'hook_duration_s',
-    'face_frame_pct', 'text_overlay_frame_pct', 'scene_change_count',
+    'hook_word_count', 'question_count',
     'keep_x_non_sub_share',
     // Pre-upload: transcript
     'transcript_char_count', 'avg_word_length', 'unique_word_ratio',
     'sentence_count', 'exclamation_count', 'uppercase_word_ratio',
     'hook_question_count', 'hook_word_ratio', 'hook_char_count',
     'transcript_number_count',
-    // Pre-upload: structure
-    'hook_duration_pct', 'avg_segment_duration_s', 'longest_segment_duration_s',
-    'shortest_segment_duration_s', 'hook_position_s', 'climax_position_pct',
-    'has_climax_segment', 'hook_to_climax_gap_s',
     // Pre-upload: metadata
     'duration_s', 'title_char_count', 'title_word_count',
     'title_question_flag', 'title_exclamation_flag', 'title_number_flag',
-    // Pre-upload: visual
-    'scene_change_rate', 'unique_scene_ratio', 'visual_technique_count_mean',
-    'close_up_frame_pct', 'hand_presence_frame_pct', 'motion_word_frame_pct',
     // Group U: Cliffhanger / payoff-tease / stakes-reinforcement / viewer-agency / revelation-signal / curiosity-escalation
     'cliffhanger_count', 'cliffhanger_density', 'cliffhanger_first_half_count', 'cliffhanger_hook_count',
     'payoff_tease_count', 'payoff_tease_density', 'payoff_tease_first_half_count', 'payoff_tease_hook_count',
@@ -1250,22 +1231,13 @@ const STATIC_LAYER = {
     keep_x_non_sub_share: 'post',
     // pre-upload
     duration_log: 'pre', transcript_word_count: 'pre', speech_rate_wps: 'pre',
-    hook_word_count: 'pre', question_count: 'pre', segment_count: 'pre',
-    has_hook_segment: 'pre', hook_duration_s: 'pre',
-    face_frame_pct: 'pre', text_overlay_frame_pct: 'pre', scene_change_count: 'pre',
+    hook_word_count: 'pre', question_count: 'pre',
     transcript_char_count: 'pre', avg_word_length: 'pre', unique_word_ratio: 'pre',
     sentence_count: 'pre', exclamation_count: 'pre', uppercase_word_ratio: 'pre',
     hook_question_count: 'pre', hook_word_ratio: 'pre', hook_char_count: 'pre',
     transcript_number_count: 'pre',
-    hook_duration_pct: 'pre', avg_segment_duration_s: 'pre',
-    longest_segment_duration_s: 'pre', shortest_segment_duration_s: 'pre',
-    hook_position_s: 'pre', climax_position_pct: 'pre',
-    has_climax_segment: 'pre', hook_to_climax_gap_s: 'pre',
     duration_s: 'pre', title_char_count: 'pre', title_word_count: 'pre',
     title_question_flag: 'pre', title_exclamation_flag: 'pre', title_number_flag: 'pre',
-    scene_change_rate: 'pre', unique_scene_ratio: 'pre',
-    visual_technique_count_mean: 'pre', close_up_frame_pct: 'pre',
-    hand_presence_frame_pct: 'pre', motion_word_frame_pct: 'pre',
 };
 
 // ── Programmatic registration of Zygarnik keys ──
@@ -1287,8 +1259,8 @@ for (const k of ZYGARNIK_SPECIAL_KEYS) {
 }
 
 // ── New Group A indicators ──
-for (const k of ['hook_payoff_gap', 'narrative_arc_completeness', 'action_frame_pct',
-    'max_silence_gap_s', 'opening_speech_rate_3s']) {
+// Removed LLM-dependent: hook_payoff_gap, narrative_arc_completeness, action_frame_pct
+for (const k of ['max_silence_gap_s', 'opening_speech_rate_3s']) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
 }
@@ -1296,10 +1268,10 @@ STATIC_KEYS.add('end_recovery_score');
 STATIC_LAYER['end_recovery_score'] = 'post';
 
 // ── New Group B indicators ──
+// Removed LLM-dependent: visual_stake_frame_pct
 for (const k of ['open_loop_to_closure_ratio', 'zygarnik_tension_peak_pct', 'early_proof_position_pct',
     'hook_stake_density', 'setup_payoff_ratio', 'resolution_density',
-    'closure_rate_per_min', 'tension_arc_score', 'pre_payoff_open_loop_density',
-    'visual_stake_frame_pct']) {
+    'closure_rate_per_min', 'tension_arc_score', 'pre_payoff_open_loop_density']) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
 }
@@ -1315,7 +1287,7 @@ for (const k of [
     'consequence_density', 'consequence_density_first_half',
     'personal_stake_density', 'personal_stake_density_first10s',
     'stakes_early_flag', 'consequence_front_load_ratio',
-    'first_payoff_position_pct', 'hook_to_payoff_gap_pct',
+    'first_payoff_position_pct',
     'pre_closure_open_loop_count', 'closure_gap_pct',
     'micro_reward_density', 'micro_reward_density_first_quarter',
     'information_drip_ratio', 'early_engagement_density',
@@ -1667,8 +1639,8 @@ function extractMetric(key, analysis) {
     }
 
     function hookText() {
-        const hs = hookSeg();
-        if (hs && hs.transcript) return hs.transcript;
+        // Deterministic: always use word-index estimate (~first 5 seconds by speech rate)
+        // Never use AI-generated segment boundaries (no prompt provenance)
         if (transcript) {
             const dur = meta.duration || 1;
             const words = transcript.split(/\s+/).filter(Boolean);
@@ -4871,9 +4843,7 @@ const DEFAULT_CANDIDATES = [
     'like_rate', 'comment_rate', 'share_rate', 'subs_gained_per_view',
     'subs_per_like', 'revenue_per_view',
     'duration_log', 'transcript_word_count', 'speech_rate_wps',
-    'hook_word_count', 'question_count', 'segment_count',
-    'has_hook_segment', 'hook_duration_s',
-    'face_frame_pct', 'text_overlay_frame_pct', 'scene_change_count',
+    'hook_word_count', 'question_count',
     'keep_x_non_sub_share',
 ];
 
@@ -4927,7 +4897,7 @@ function generateAutonomousCandidates() {
     ];
     const GOOD_ANCHORS = [
         'open_loop_count', 'open_loop_to_closure_ratio', 'payoff_delay_score',
-        'setup_duration_s', 'visual_proof_phrase_count', 'pre_gratification_open_loop_count',
+        'visual_proof_phrase_count', 'pre_gratification_open_loop_count',
         'hook_drop_rate', 'zygarnik_score', 'zygarnik_buildup_ratio',
         'open_loop_density', 'dangling_question_ratio', 'hook_tension_ratio',
         'gratification_delay_pct', 'promise_proof_gap_pct', 'non_sub_view_share',
@@ -4946,16 +4916,9 @@ function generateAutonomousCandidates() {
     for (const k of [
         'pre_gratification_open_loop_count_x_open_loop_to_closure_ratio',
         'pre_gratification_open_loop_count_x_visual_proof_phrase_count',
-        'pre_gratification_open_loop_count_x_setup_duration_s',
-        'open_loop_to_closure_ratio_x_setup_duration_s',
         'open_loop_to_closure_ratio_x_proof_before_midpoint_flag',
-        'open_loop_density_mid_x_visual_proof_phrase_count',
-        'open_loop_density_mid_x_setup_duration_s',
-        'open_loop_density_mid_x_open_loop_to_closure_ratio',
         'pre_closure_open_loop_count_x_visual_proof_phrase_count',
-        'pre_closure_open_loop_count_x_setup_duration_s',
         'open_loop_before_closure_flag_x_visual_proof_phrase_count',
-        'open_loop_before_closure_flag_x_setup_duration_s',
         'zygarnik_gradient_pct_x_open_loop_to_closure_ratio',
         'zygarnik_gradient_pct_x_pre_gratification_open_loop_count',
         'zygarnik_buildup_ratio_x_pre_gratification_open_loop_count',
@@ -4964,11 +4927,7 @@ function generateAutonomousCandidates() {
         'stakes_reinforcement_count_x_open_loop_to_closure_ratio',
         'stakes_reinforcement_count_x_pre_gratification_open_loop_count',
         'proof_before_midpoint_flag_x_pre_gratification_open_loop_count',
-        'proof_before_midpoint_flag_x_open_loop_density_mid',
-        'setup_duration_s_x_pre_gratification_open_loop_count',
-        'setup_duration_s_x_open_loop_density_mid',
         'open_loop_count_first20s_x_visual_proof_phrase_count',
-        'open_loop_count_first20s_x_setup_duration_s',
         // Group Z priority pairs
         'challenge_statement_count_x_open_loop_count',
         'challenge_statement_count_x_pre_gratification_open_loop_count',
@@ -5000,15 +4959,7 @@ function generateAutonomousCandidates() {
         'sentence_count', 'exclamation_count', 'uppercase_word_ratio',
         'hook_question_count', 'hook_word_ratio', 'hook_char_count',
         'transcript_number_count']) candidates.push(k);
-    // Frame
-    for (const k of ['face_frame_pct', 'text_overlay_frame_pct', 'scene_change_count']) candidates.push(k);
-    // Pre-upload visual
-    for (const k of ['scene_change_rate', 'unique_scene_ratio', 'visual_technique_count_mean',
-        'close_up_frame_pct', 'hand_presence_frame_pct', 'motion_word_frame_pct']) candidates.push(k);
-    // Pre-upload structure (climax_position_pct and hook_to_climax_gap_s excluded — require segment data, return null for most videos)
-    for (const k of ['hook_duration_pct', 'avg_segment_duration_s', 'longest_segment_duration_s',
-        'shortest_segment_duration_s', 'hook_position_s',
-        'has_climax_segment']) candidates.push(k);
+    // (Removed: frame-analysis and segment-dependent candidates — no LLM prompt provenance)
     // Pre-upload metadata
     for (const k of ['duration_s', 'title_char_count', 'title_word_count',
         'title_question_flag', 'title_exclamation_flag', 'title_number_flag']) candidates.push(k);
@@ -5041,19 +4992,7 @@ function generateAutonomousCandidates() {
         "open_loop_density_first_quarter", "open_loop_density_last_quarter",
         "tension_closure_balance", "first_closure_position_pct",
         "reward_density_first_half", "foreshadow_density_hook",
-        "demonstration_frame_pct", "result_reveal_frame_pct",
         "proof_before_midpoint_flag",
-    ]) {
-        candidates.push(k);
-    }
-
-    // Group I: New temporal/proof/stake computed keys
-    for (const k of [
-        'open_loop_density_mid', 'closure_density_mid', 'story_stake_density_first_quarter',
-        'visual_proof_density_hook', 'reference_callback_density_mid',
-        'pre_gratification_open_loop_count', 'stake_introduction_position_pct',
-        'proof_density_post_midpoint', 'callback_before_payoff_flag',
-        'delayed_gratification_peak_position_pct',
     ]) {
         candidates.push(k);
     }
@@ -5381,6 +5320,20 @@ function getResolutionForKey(key) {
 }
 
 
+/**
+ * Returns the provenance type for a given metric key.
+ * All currently registered metrics are 'deterministic' (no LLM dependency).
+ * Future LLM-scored metrics must be added with type 'llm_scored' and include
+ * full provenance: { prompt, model, temperature, timestamp, input_fields }.
+ */
+function getProvenanceType(key) {
+    const def = getMetricDefinition(key);
+    if (!def) return null;
+    // All surviving metrics are deterministic (transcript phrase-matching,
+    // retention curve reads, engagement stats, metadata parsing)
+    return 'deterministic';
+}
+
 module.exports = {
     // Stats
     mean, std, variance, linregress, pearsonr, spearmanr, skew,
@@ -5393,6 +5346,8 @@ module.exports = {
     isCompositeKey, parseCompositeKey,
     // Resolution
     INDICATOR_RESOLUTION_MAP, DEFAULT_RESOLUTION_DEFS, getResolutionForKey,
+    // Provenance
+    getProvenanceType,
     // Constants
     RETENTION_POINTS, RETENTION_WINDOWS, DAILY_VIEWS_WINDOWS, DAILY_VIEWS_RATIOS,
     INTERACTION_BASES, STATIC_KEYS,

@@ -31365,7 +31365,16 @@
       "unresolved_loop_count_x_challenge_statement_count",
       "unresolved_loop_count_x_challenge_statement_density",
       "unresolved_loop_count_x_narrative_tension_count",
-      "unresolved_loop_count_x_narrative_tension_density"
+      "unresolved_loop_count_x_narrative_tension_density",
+      "unresolved_loop_count_x_payoff_delay_score",
+      "retention_open_loop_phase_mean_x_pre_gratification_open_loop_count",
+      "pre_gratification_open_loop_count_x_retention_open_loop_phase_mean",
+      "retention_open_loop_phase_mean_x_hook_drop_rate",
+      "unresolved_loop_count_x_challenge_to_resolution_gap_pct",
+      "unresolved_loop_count_x_loop_front_half_density",
+      "unresolved_loop_count_x_narrative_tension_density_first_half",
+      "unresolved_loop_count_x_challenge_setup_density_first_quarter",
+      "pre_proof_tension_score_x_credential_signal_count"
     ],
     "depth_in_hierarchy": 0
   },
