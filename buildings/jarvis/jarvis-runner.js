@@ -503,24 +503,33 @@ async function autoRun(opts = {}) {
 
     let pool = merged.filter(k => !existingKeys.has(k));
 
-    // Filter out candidates whose component indicators are zero-variance (all same value).
-    // These always produce r=0 trivially and waste iterations.
+    // Filter out candidates whose component indicators are zero-variance or sparse.
+    // Zero-variance: all values identical. Sparse: fewer than MIN_NONZERO_COUNT nonzero values.
+    // Both trivially produce r=0 and waste iterations.
+    const MIN_NONZERO_COUNT = 20;
     const zeroVarKeys = new Set();
+    const sparseKeys = new Set();
     for (const ind of indicators) {
         const ds = ind.dataset || [];
         if (!ds.length) continue;
         const vals = ds.map(d => (d && typeof d === 'object') ? d.value : d).filter(v => v != null);
         if (!vals.length) continue;
         const firstVal = String(vals[0]);
-        if (vals.every(v => String(v) === firstVal)) zeroVarKeys.add(ind.key);
+        if (vals.every(v => String(v) === firstVal)) {
+            zeroVarKeys.add(ind.key);
+        } else {
+            const nonzeroCount = vals.filter(v => v !== 0 && v !== 0.0).length;
+            if (nonzeroCount < MIN_NONZERO_COUNT) sparseKeys.add(ind.key);
+        }
     }
-    if (zeroVarKeys.size > 0) {
+    const skipKeys = new Set([...zeroVarKeys, ...sparseKeys]);
+    if (skipKeys.size > 0) {
         const before = pool.length;
         pool = pool.filter(k => {
             const parts = k.split('_x_');
-            return !parts.some(p => zeroVarKeys.has(p));
+            return !parts.some(p => skipKeys.has(p));
         });
-        log(`Zero-variance filter: skipped ${before - pool.length} candidates (${zeroVarKeys.size} constant-value indicators)`);
+        log(`Zero-variance filter: skipped indicators — ${zeroVarKeys.size} constant-value, ${sparseKeys.size} sparse (<${MIN_NONZERO_COUNT} nonzero); removed ${before - pool.length} candidates`);
     }
 
     if (preuploadRatio != null) {
