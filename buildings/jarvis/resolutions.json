@@ -31303,7 +31303,18 @@
       "zygarnik_buildup_ratio_x_narrative_anchor_density",
       "zygarnik_buildup_ratio_x_challenge_statement_count",
       "zygarnik_buildup_ratio_x_challenge_statement_density",
-      "zygarnik_buildup_ratio_x_narrative_tension_count"
+      "zygarnik_buildup_ratio_x_narrative_tension_count",
+      "zygarnik_buildup_ratio_x_narrative_tension_density",
+      "zygarnik_buildup_ratio_x_payoff_delay_score",
+      "zygarnik_buildup_ratio_x_challenge_to_resolution_gap_pct",
+      "zygarnik_buildup_ratio_x_loop_front_half_density",
+      "zygarnik_buildup_ratio_x_narrative_tension_density_first_half",
+      "zygarnik_buildup_ratio_x_challenge_setup_density_first_quarter",
+      "title_number_flag_x_retention_setup_phase_mean",
+      "retention_setup_phase_mean_x_hook_open_loop_density",
+      "hook_open_loop_density_x_retention_setup_phase_mean",
+      "unresolved_loop_count_x_pre_proof_tension_score",
+      "unresolved_loop_count_x_credential_signal_count"
     ],
     "depth_in_hierarchy": 0
   },

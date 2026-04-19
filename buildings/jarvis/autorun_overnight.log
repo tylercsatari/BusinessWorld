@@ -2547,3 +2547,211 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 14:38:03]   [RESULT]    none negative: Interaction: zygarnik_buildup_ratio * social_proof_count. does not meaningfully predict views. Safe to deprioritize.
 [jarvis-runner 14:38:03]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × social_proof_count → 'views', depth=2
 [jarvis-runner 14:38:03]   [DONE]      r=-0.007 (none negative)
+◇ injected env (42) from ../../.env // tip: ⌁ auth for agents [www.vestauth.com]
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 15:02:29] 
+============================================================
+[jarvis-runner 15:02:29] AUTONOMOUS RUN: auto_20260419150229.
+[jarvis-runner 15:02:29]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7
+[jarvis-runner 15:03:09] Zero-variance filter: skipped indicators — 175 constant-value, 450 sparse (<20 nonzero); removed 1531 candidates
+[jarvis-runner 15:03:09] Pool before bias: 16854 pre, 29246 post
+[jarvis-runner 15:03:09] Candidate pool: 46100 unrun (32893 already done)
+[jarvis-runner 15:03:09] Loaded 370 videos
+[jarvis-runner 15:03:10] 
+==================================================
+[jarvis-runner 15:03:10] INDICATOR: payoff_position_pct_x_challenge_to_resolution_gap_pct
+[jarvis-runner 15:03:10]   [DATASET]   43 videos, 327 skipped
+[jarvis-runner 15:03:10]   Only 43 videos — skip
+[jarvis-runner 15:03:11] 
+==================================================
+[jarvis-runner 15:03:11] INDICATOR: zygarnik_buildup_ratio_x_loss_framing_density
+[jarvis-runner 15:03:11]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:03:11]   [EXPERIMENT] Pearson r=0.005, rho=0.111, p=0.9233, n=370
+[jarvis-runner 15:03:11]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * loss_framing_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:03:11]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × loss_framing_density → 'views', depth=2
+[jarvis-runner 15:03:11]   [DONE]      r=0.005 (none positive)
+[jarvis-runner 15:04:05] 
+==================================================
+[jarvis-runner 15:04:05] INDICATOR: zygarnik_buildup_ratio_x_social_proof_count
+[jarvis-runner 15:04:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:04:05]   [EXPERIMENT] Pearson r=-0.007, rho=-0.025, p=0.8989, n=370
+[jarvis-runner 15:04:05]   [RESULT]    none negative: Interaction: zygarnik_buildup_ratio * social_proof_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:04:05]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × social_proof_count → 'views', depth=2
+[jarvis-runner 15:04:05]   [DONE]      r=-0.007 (none negative)
+[jarvis-runner 15:05:01] 
+==================================================
+[jarvis-runner 15:05:01] INDICATOR: zygarnik_buildup_ratio_x_social_proof_density
+[jarvis-runner 15:05:01]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:05:01]   [EXPERIMENT] Pearson r=-0.018, rho=-0.025, p=0.7260, n=370
+[jarvis-runner 15:05:01]   [RESULT]    none negative: Interaction: zygarnik_buildup_ratio * social_proof_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:05:01]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × social_proof_density → 'views', depth=2
+[jarvis-runner 15:05:01]   [DONE]      r=-0.018 (none negative)
+[jarvis-runner 15:06:12] 
+==================================================
+[jarvis-runner 15:06:12] INDICATOR: zygarnik_buildup_ratio_x_proof_of_work_count
+[jarvis-runner 15:06:12]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:06:12]   [EXPERIMENT] Pearson r=0.141, rho=0.171, p=0.0066, n=370
+[jarvis-runner 15:06:12]   [RESULT]    weak positive: Maximize interaction: zygarnik_buildup_ratio * proof_of_work_count. to increase views.
+[jarvis-runner 15:06:12]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × proof_of_work_count → 'views', depth=2
+[jarvis-runner 15:06:12]   [DONE]      r=0.141 (weak positive)
+[jarvis-runner 15:07:13] 
+==================================================
+[jarvis-runner 15:07:13] INDICATOR: zygarnik_buildup_ratio_x_proof_of_work_density
+[jarvis-runner 15:07:13]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:07:13]   [EXPERIMENT] Pearson r=0.113, rho=0.170, p=0.0304, n=370
+[jarvis-runner 15:07:13]   [RESULT]    weak positive: Maximize interaction: zygarnik_buildup_ratio * proof_of_work_density. to increase views.
+[jarvis-runner 15:07:13]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × proof_of_work_density → 'views', depth=2
+[jarvis-runner 15:07:13]   [DONE]      r=0.113 (weak positive)
+[jarvis-runner 15:08:16] 
+==================================================
+[jarvis-runner 15:08:16] INDICATOR: zygarnik_buildup_ratio_x_failure_vulnerability_count
+[jarvis-runner 15:08:16]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:08:16]   [EXPERIMENT] Pearson r=0.036, rho=0.091, p=0.4859, n=370
+[jarvis-runner 15:08:16]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * failure_vulnerability_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:08:16]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × failure_vulnerability_count → 'views', depth=2
+[jarvis-runner 15:08:16]   [DONE]      r=0.036 (none positive)
+[jarvis-runner 15:09:16] 
+==================================================
+[jarvis-runner 15:09:16] INDICATOR: gratification_delay_pct_x_retention_setup_phase_mean
+[jarvis-runner 15:09:16]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:09:16]   [EXPERIMENT] Pearson r=-0.108, rho=0.006, p=0.0377, n=370
+[jarvis-runner 15:09:16]   [RESULT]    weak negative: Minimize interaction: gratification_delay_pct * retention_setup_phase_mean. to increase views.
+[jarvis-runner 15:09:16]   [GRAPH]     Derived edge added: gratification_delay_pct × retention_setup_phase_mean → 'views', depth=2
+[jarvis-runner 15:09:16]   [DONE]      r=-0.108 (weak negative)
+[jarvis-runner 15:10:15] 
+==================================================
+[jarvis-runner 15:10:15] INDICATOR: retention_setup_phase_mean_x_promise_proof_gap_pct
+[jarvis-runner 15:10:15]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:10:15]   [EXPERIMENT] Pearson r=0.111, rho=0.142, p=0.0323, n=370
+[jarvis-runner 15:10:15]   [RESULT]    weak positive: Maximize interaction: retention_setup_phase_mean * promise_proof_gap_pct. to increase views.
+[jarvis-runner 15:10:15]   [GRAPH]     Derived edge added: retention_setup_phase_mean × promise_proof_gap_pct → 'views', depth=2
+[jarvis-runner 15:10:15]   [DONE]      r=0.111 (weak positive)
+[jarvis-runner 15:11:15] 
+==================================================
+[jarvis-runner 15:11:15] INDICATOR: promise_proof_gap_pct_x_retention_setup_phase_mean
+[jarvis-runner 15:11:15]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:11:15]   [EXPERIMENT] Pearson r=0.111, rho=0.142, p=0.0323, n=370
+[jarvis-runner 15:11:15]   [RESULT]    weak positive: Maximize interaction: promise_proof_gap_pct * retention_setup_phase_mean. to increase views.
+[jarvis-runner 15:11:15]   [GRAPH]     Derived edge added: promise_proof_gap_pct × retention_setup_phase_mean → 'views', depth=2
+[jarvis-runner 15:11:15]   [DONE]      r=0.111 (weak positive)
+[jarvis-runner 15:12:13] 
+==================================================
+[jarvis-runner 15:12:13] INDICATOR: zygarnik_buildup_ratio_x_failure_vulnerability_density
+[jarvis-runner 15:12:13]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:12:13]   [EXPERIMENT] Pearson r=0.036, rho=0.091, p=0.4882, n=370
+[jarvis-runner 15:12:13]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * failure_vulnerability_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:12:13]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × failure_vulnerability_density → 'views', depth=2
+[jarvis-runner 15:12:13]   [DONE]      r=0.036 (none positive)
+[jarvis-runner 15:13:16] 
+==================================================
+[jarvis-runner 15:13:16] INDICATOR: zygarnik_buildup_ratio_x_commitment_device_count
+[jarvis-runner 15:13:16]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:13:16]   [EXPERIMENT] Pearson r=0.048, rho=0.051, p=0.3547, n=370
+[jarvis-runner 15:13:16]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * commitment_device_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:13:16]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × commitment_device_count → 'views', depth=2
+[jarvis-runner 15:13:16]   [DONE]      r=0.048 (none positive)
+[jarvis-runner 15:14:18] 
+==================================================
+[jarvis-runner 15:14:18] INDICATOR: zygarnik_buildup_ratio_x_commitment_device_density
+[jarvis-runner 15:14:18]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:14:18]   [EXPERIMENT] Pearson r=0.047, rho=0.051, p=0.3631, n=370
+[jarvis-runner 15:14:18]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * commitment_device_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:14:18]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × commitment_device_density → 'views', depth=2
+[jarvis-runner 15:14:18]   [DONE]      r=0.047 (none positive)
+[jarvis-runner 15:15:21] 
+==================================================
+[jarvis-runner 15:15:21] INDICATOR: zygarnik_buildup_ratio_x_action_trigger_count
+[jarvis-runner 15:15:21]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:15:21]   [EXPERIMENT] Pearson r=-0.007, rho=-0.001, p=0.8971, n=370
+[jarvis-runner 15:15:21]   [RESULT]    none negative: Interaction: zygarnik_buildup_ratio * action_trigger_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:15:21]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × action_trigger_count → 'views', depth=2
+[jarvis-runner 15:15:21]   [DONE]      r=-0.007 (none negative)
+[jarvis-runner 15:16:26] 
+==================================================
+[jarvis-runner 15:16:26] INDICATOR: zygarnik_buildup_ratio_x_action_trigger_density
+[jarvis-runner 15:16:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:16:26]   [EXPERIMENT] Pearson r=-0.020, rho=-0.001, p=0.6964, n=370
+[jarvis-runner 15:16:26]   [RESULT]    none negative: Interaction: zygarnik_buildup_ratio * action_trigger_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:16:26]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × action_trigger_density → 'views', depth=2
+[jarvis-runner 15:16:26]   [DONE]      r=-0.020 (none negative)
+[jarvis-runner 15:17:29] 
+==================================================
+[jarvis-runner 15:17:29] INDICATOR: zygarnik_buildup_ratio_x_stakes_escalation_density
+[jarvis-runner 15:17:29]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:17:29]   [EXPERIMENT] Pearson r=0.050, rho=0.083, p=0.3412, n=370
+[jarvis-runner 15:17:29]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * stakes_escalation_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:17:29]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × stakes_escalation_density → 'views', depth=2
+[jarvis-runner 15:17:29]   [DONE]      r=0.050 (none positive)
+[jarvis-runner 15:18:29] 
+==================================================
+[jarvis-runner 15:18:29] INDICATOR: zygarnik_buildup_ratio_x_delayed_reveal_density
+[jarvis-runner 15:18:29]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:18:29]   [EXPERIMENT] Pearson r=0.028, rho=0.054, p=0.5867, n=370
+[jarvis-runner 15:18:29]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * delayed_reveal_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:18:29]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × delayed_reveal_density → 'views', depth=2
+[jarvis-runner 15:18:29]   [DONE]      r=0.028 (none positive)
+[jarvis-runner 15:19:36] 
+==================================================
+[jarvis-runner 15:19:36] INDICATOR: retention_setup_phase_mean_x_non_sub_view_share
+[jarvis-runner 15:19:36]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:19:36]   [EXPERIMENT] Pearson r=0.397, rho=0.756, p=0.0000, n=370
+[jarvis-runner 15:19:36]   [RESULT]    moderate positive: Maximize interaction: retention_setup_phase_mean * non_sub_view_share. to increase views.
+[jarvis-runner 15:19:36]   [GRAPH]     Derived edge added: retention_setup_phase_mean × non_sub_view_share → 'views', depth=2
+[jarvis-runner 15:19:36]   [DONE]      r=0.397 (moderate positive)
+[jarvis-runner 15:21:54] 
+==================================================
+[jarvis-runner 15:21:54] INDICATOR: non_sub_view_share_x_retention_setup_phase_mean
+[jarvis-runner 15:21:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:21:54]   [EXPERIMENT] Pearson r=0.397, rho=0.756, p=0.0000, n=370
+[jarvis-runner 15:21:54]   [RESULT]    moderate positive: Maximize interaction: non_sub_view_share * retention_setup_phase_mean. to increase views.
+[jarvis-runner 15:21:54]   [GRAPH]     Derived edge added: non_sub_view_share × retention_setup_phase_mean → 'views', depth=2
+[jarvis-runner 15:21:54]   [DONE]      r=0.397 (moderate positive)
+[jarvis-runner 15:22:52] 
+==================================================
+[jarvis-runner 15:22:52] INDICATOR: retention_setup_phase_mean_x_title_number_flag
+[jarvis-runner 15:22:52]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:22:52]   [EXPERIMENT] Pearson r=-0.159, rho=-0.108, p=0.0022, n=370
+[jarvis-runner 15:22:52]   [RESULT]    weak negative: Minimize interaction: retention_setup_phase_mean * title_number_flag. to increase views.
+[jarvis-runner 15:22:52]   [GRAPH]     Derived edge added: retention_setup_phase_mean × title_number_flag → 'views', depth=2
+[jarvis-runner 15:22:52]   [DONE]      r=-0.159 (weak negative)
+[jarvis-runner 15:24:05] 
+==================================================
+[jarvis-runner 15:24:05] INDICATOR: zygarnik_buildup_ratio_x_narrative_anchor_density
+[jarvis-runner 15:24:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:24:05]   [EXPERIMENT] Pearson r=0.052, rho=0.112, p=0.3180, n=370
+[jarvis-runner 15:24:05]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * narrative_anchor_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:24:05]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × narrative_anchor_density → 'views', depth=2
+[jarvis-runner 15:24:05]   [DONE]      r=0.052 (none positive)
+[jarvis-runner 15:25:06] 
+==================================================
+[jarvis-runner 15:25:06] INDICATOR: zygarnik_buildup_ratio_x_challenge_statement_count
+[jarvis-runner 15:25:06]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:25:06]   [EXPERIMENT] Pearson r=0.080, rho=0.158, p=0.1266, n=370
+[jarvis-runner 15:25:06]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * challenge_statement_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:25:06]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × challenge_statement_count → 'views', depth=2
+[jarvis-runner 15:25:06]   [DONE]      r=0.080 (none positive)
+[jarvis-runner 15:26:04] 
+==================================================
+[jarvis-runner 15:26:04] INDICATOR: zygarnik_buildup_ratio_x_challenge_statement_density
+[jarvis-runner 15:26:04]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:26:04]   [EXPERIMENT] Pearson r=0.040, rho=0.154, p=0.4486, n=370
+[jarvis-runner 15:26:04]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * challenge_statement_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:26:04]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × challenge_statement_density → 'views', depth=2
+[jarvis-runner 15:26:04]   [DONE]      r=0.040 (none positive)
+[jarvis-runner 15:27:04] 
+==================================================
+[jarvis-runner 15:27:04] INDICATOR: zygarnik_buildup_ratio_x_narrative_tension_count
+[jarvis-runner 15:27:04]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 15:27:04]   [EXPERIMENT] Pearson r=0.096, rho=0.136, p=0.0646, n=370
+[jarvis-runner 15:27:04]   [RESULT]    none positive: Interaction: zygarnik_buildup_ratio * narrative_tension_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 15:27:04]   [GRAPH]     Derived edge added: zygarnik_buildup_ratio × narrative_tension_count → 'views', depth=2
+[jarvis-runner 15:27:04]   [DONE]      r=0.096 (none positive)
+[jarvis-runner 15:28:07] 
+============================================================
+[jarvis-runner 15:28:07] AUTONOMOUS RUN COMPLETE: auto_20260419150229.
+[jarvis-runner 15:28:07]   Attempted: 24, Completed: 23, Failures: 1
+[jarvis-runner 15:28:07]   Pre: 18/17, Post: 6/6
+[jarvis-runner 15:28:07]   Stop: max_minutes, Top |r|: 0.3972, Elapsed: 25.6m
+[jarvis-runner 15:28:07]   Total indicators: 1852
+[launch-autorun] Complete.
