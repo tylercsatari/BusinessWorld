@@ -5322,8 +5322,8 @@ const JarvisUI = (() => {
         const header = `
             <div style="margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
                 <div>
-                    <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:3px">Idea Model — Evidence-Backed Viral Ideas</div>
-                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">Deterministic compression of Jarvis findings (post-upload predictors, pre→post→views bridges, mechanism principles, concept anchors) into a structured brief — and ${ideaIdeasCount} concrete video ideas scored from that same brief. No LLM calls; all evidence is auditable.</div>
+                    <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:3px">Idea Model — Specific Viral Ideas With Direct Validation</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">${ideaIdeasCount} concrete, shootable video premises — each field (opening, arc, pacing, vocabulary, metrics) validated directly against the underlying metrics, mechanisms, and retention evidence. No category/template layer. No LLM calls; every claim is auditable.</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                     <select id="jarvis-idea-count" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:11px">
@@ -5356,7 +5356,6 @@ const JarvisUI = (() => {
                 + renderIdeaPreUpload()
                 + renderIdeaBridges()
                 + renderIdeaMechanismPrinciples()
-                + renderIdeaConceptAnchors()
                 + renderIdeaHookMechanisms()
                 + renderIdeaComponents();
         } else if (ideaModelError) {
@@ -5516,22 +5515,6 @@ const JarvisUI = (() => {
         return ideaSection('Top Mechanism Principles', 'mechanism → indicator → outcome chains ranked by |CSW|', table);
     }
 
-    function renderIdeaConceptAnchors() {
-        const rows = ideaModelBrief.concept_anchors || [];
-        if (!rows.length) return ideaSection('Concept Anchors', '— no rows —', '<div style="font-size:11px;color:#64748b">No anchors.</div>');
-        const cards = rows.map(c => `
-            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;border:1px solid #1e293b">
-                <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px">
-                    <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#22d3ee22;color:#22d3ee;font-weight:700;text-transform:uppercase">${escapeHtml(c.id || '')}</span>
-                    <span style="font-size:12px;font-weight:700;color:#e2e8f0">${escapeHtml(c.label || '')}</span>
-                </div>
-                <div style="font-size:10px;color:#64748b;margin-bottom:4px">signals: ${(c.signals || []).map(s => `<code style="color:#fbbf24;background:#1e293b;padding:1px 5px;border-radius:3px;margin-right:2px">${escapeHtml(s)}</code>`).join(' ')}</div>
-                <div style="font-size:11px;color:#cbd5e1;line-height:1.5">${escapeHtml(c.evidence || '')}</div>
-            </div>
-        `).join('');
-        return ideaSection('Concept Anchors', 'high-lift concept buckets grounded in proven signals', `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px">${cards}</div>`);
-    }
-
     function renderIdeaHookMechanisms() {
         const rows = ideaModelBrief.hook_mechanisms || [];
         if (!rows.length) return ideaSection('Hook Mechanisms', '— no rows —', '<div style="font-size:11px;color:#64748b">No first-5s/10s mechanisms found.</div>');
@@ -5598,8 +5581,8 @@ const JarvisUI = (() => {
             <div style="margin-bottom:18px">
                 <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap">
                     <div style="display:flex;align-items:baseline;gap:10px">
-                        <span style="font-size:16px;font-weight:700;color:#22d3ee;letter-spacing:0.03em">✦ Blueprint v2 — High-Resolution Ideas</span>
-                        <span style="font-size:11px;color:#94a3b8">${ideas.length} full blueprints · modeled metrics labeled</span>
+                        <span style="font-size:16px;font-weight:700;color:#22d3ee;letter-spacing:0.03em">✦ Specific Ideas — Directly Validated</span>
+                        <span style="font-size:11px;color:#94a3b8">${ideas.length} concrete premises · every field traced to evidence</span>
                     </div>
                     <span style="font-size:10px;color:#64748b;letter-spacing:0.05em">supporting evidence below ↓</span>
                 </div>
@@ -5615,9 +5598,6 @@ const JarvisUI = (() => {
             <span style="background:#1e293b;border-radius:4px;padding:2px 6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:${color}">
                 ${escapeHtml(label)} <b style="color:#f1f5f9">${v != null ? (+v).toFixed(3) : '0'}</b>
             </span>`;
-        const concepts = (idea.concept_anchors || []).map(c =>
-            `<code style="background:#1e293b;color:#22d3ee;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(c)}</code>`
-        ).join('');
         const narratives = (idea.narrative_structures || []).map(n =>
             `<code style="background:#1e293b;color:#a78bfa;padding:1px 6px;border-radius:3px;font-size:10px;margin-right:3px">${escapeHtml(n)}</code>`
         ).join('');
@@ -5862,7 +5842,6 @@ const JarvisUI = (() => {
                 ${validationBox}
 
                 <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
-                    ${partPill('concept', parts.concept, '#22d3ee')}
                     ${partPill('hook', parts.hook, '#facc15')}
                     ${partPill('narrative', parts.narrative, '#a78bfa')}
                     ${partPill('duration', parts.duration, '#f59e0b')}
@@ -5870,7 +5849,6 @@ const JarvisUI = (() => {
                     ${partPill('vocab', parts.vocabulary, '#86efac')}
                     ${partPill('interactions', parts.interactions, '#fb7185')}
                 </div>
-                ${concepts ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Concepts</span>${concepts}</div>` : ''}
                 ${narratives ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Narrative</span>${narratives}</div>` : ''}
                 ${levers ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Pre-upload levers</span>${levers}</div>` : ''}
                 ${interactions ? `<div style="margin-bottom:4px"><span style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-right:6px">Interactions engineered</span>${interactions}</div>` : ''}

@@ -540,55 +540,6 @@ function buildRiskFlags(rp) {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Concept anchors (expanded from v1)
-// ──────────────────────────────────────────────────────────────────────
-
-const CONCEPT_ANCHORS = [
-    {
-        id: 'making',
-        label: 'Making / Building / Construction',
-        signals: ['pat_making_v2'],
-        evidence: "pat_making_v2 delta_r2 +0.012 — title contains making/build/creat/construct. 34 videos avg 19.7M views vs 5.6M rest. 'Making' avg $24M (23 videos).",
-        family: 'concept',
-    },
-    {
-        id: 'indestructible',
-        label: 'Indestructibility / Stress-Test',
-        signals: ['indestructible_x_prev_keep'],
-        evidence: "indestructible_x_prev_keep delta_r2 +0.026 — concept × previous keep interaction. Indestructible release after a high-keep video = super-viral.",
-        family: 'concept',
-    },
-    {
-        id: 'superhero',
-        label: 'Superhero Framing',
-        signals: ['cat_superhero'],
-        evidence: "cat_superhero included in v9 and v13 models. Concept category delivered the first large step above baseline (+0.09 R²).",
-        family: 'concept',
-    },
-    {
-        id: 'visceral_body',
-        label: 'Visceral / Physical Body Challenge',
-        signals: ['pivot_density', 'visceral_words_late'],
-        evidence: "Retention patterns: visceral words +5.9% (painful), +4.3% (difference), +2.5% (hurt). 'Late visceral amplification': 'crazy' at Q1=0 → Q4=+0.060. emotion words in final 10% +0.069.",
-        family: 'concept',
-    },
-    {
-        id: 'anticipation_setup',
-        label: 'Anticipation / Setup-Payoff (Mystery)',
-        signals: ['pivot_density', 'has_callback', 'anticipatory_frame_pct'],
-        evidence: "'would happen' bigrams +4.3% retention, 'my body' +3.3%. 46% of videos contain callbacks. Mystery hook type = 2.20M (#2 best). anticipatory_frame_pct top hook_drop_rate reducer (avg_r=-0.401).",
-        family: 'concept',
-    },
-    {
-        id: 'transformation',
-        label: 'Transformation (best hook taxonomy)',
-        signals: ['concept_virality_score'],
-        evidence: "Hook taxonomy winner: transformation = 2.24M median views (#1). Frame the video as a visible before/after that happens on the subject.",
-        family: 'concept',
-    },
-];
-
-// ──────────────────────────────────────────────────────────────────────
 // Hook mechanisms (first-5s / first-10s / hook-quarter)
 // ──────────────────────────────────────────────────────────────────────
 
@@ -659,7 +610,6 @@ function compress(artifacts) {
         top_mechanism_principles: topMechanismPrinciples(principles, bridgeTop, 15),
         proven_features: provenFeatures(findings),
         top_components: topComponents(components, 12),
-        concept_anchors: CONCEPT_ANCHORS,
 
         // v2 lattice (NEW)
         evidence_lattice: {
@@ -714,221 +664,215 @@ const DURATION_BANDS = [
 function baseBlueprintSeeds() {
     return [
         {
-            id: 'indestructible_body_test',
-            title: 'Indestructible Body Experiment — 52-second stress-test on the presenter’s own limits',
-            logline: 'Build a single wearable contraption, put it on, and use your own body to prove it survives a punishment the audience chose.',
-            promise: 'You will see me wear something I built and prove — on my body, not a dummy — it cannot break.',
-            payoff: 'Final 5% lands the proof with the sharpest visceral beat of the video (the thing people were afraid would happen almost happens, and the device takes it).',
-            over_delivery_note: 'Hook sets up a plausible failure; end exceeds it (proof is bigger than the promise). hook_payoff_gap rewards over-delivery (r=-0.52).',
-            concept_anchors: ['making', 'indestructible', 'visceral_body'],
-            narrative_structures: ['monotonic_rise', 'late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'nadir_before_climax'],
+            id: 'gatsby_ice_bath_34_degrees',
+            title: 'I Read The Great Gatsby Out Loud In A 34° Ice Bath Until My Voice Gave Out',
+            logline: 'I step into a 34° ice bath holding a paperback of The Great Gatsby, start reading aloud from page one, and keep going until my body shuts my voice down mid-sentence.',
+            promise: 'Watch me hold a book in 34° water and try to keep reading — my body decides when the words stop.',
+            payoff: 'Final 5 seconds: voice breaks mid-sentence; the exact chapter and page I reached appears on screen with a single sensation word.',
+            over_delivery_note: 'Hook implies I\'ll make it a chapter or two — payoff reveals the exact chapter+page the body quit (specificity = over-delivery).',
+            narrative_structures: ['late_peak_arc', 'golden_final_5pct', 'comeback_arc', 'visceral_body_language', 'monotonic_rise'],
             duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['indestructible_x_prev_keep', 'making_x_tension', 'keep_sq', 'pat_making_v2', 'deriv_entropy'],
-            interactions_engineered: ['indestructible × prev_keep (release timing)', 'making × tension (narrative coupling)'],
+            pre_upload_levers: ['pivot_word_count', 'visual_variety_entropy', 'repeated_phrase_count', 'beat_count'],
+            interactions_engineered: ['late_early × pacing (r_partial 0.380)', 'keep × pacing (r_partial 0.380)'],
             opening: {
-                first_frame: 'Tight close-up of my hands picking up the finished device on a workbench. Device visible, body not yet visible.',
-                first_line: 'Go — if this fails it breaks my foot.',
-                opening_action: 'Hold device up to camera, then smash it against the table once to prove it’s hard — before it’s strapped to me.',
+                first_frame: 'Tight close-up of my hand holding the paperback half-submerged, water beading on the cover. My breath fogs the air above the bath edge. No text overlay.',
+                first_line: 'Okay — in four. My voice is going to stop before the chapter does.',
+                opening_action: 'My hand plunges the book to eye-level as my shoulders drop under the waterline and I start reading the first sentence aloud.',
                 opening_speech_rate_wps_target: 2.5,
-                hook_type: 'transformation',
-                best_first_word_used: 'go',
+                hook_type: 'mystery',
+                best_first_word_used: 'okay',
             },
             build_phases: [
-                { zone_pct: '0-10', beat: 'device reveal + premise', visceral: false, note: 'Concept stated in first 10% (2.6M vs 476K if delayed past 30%).' },
-                { zone_pct: '10-25', beat: 'put device on body, show prep', visceral: false, note: 'Worst/weakest moment target: ~17% (successful videos place nadir here).' },
-                { zone_pct: '25-60', beat: 'escalation of test severity, sensory narration', visceral: true, note: 'Zone 25-50% acceleration r=+0.44. Start ramping body/pain vocabulary.' },
-                { zone_pct: '60-95', beat: 'peak of impact — slow speech, short sentence, reaction shot→wide reveal', visceral: true, note: '60-80% peak. 7.9-word utterance at peak. Reaction→wide 1.95x enriched.' },
-                { zone_pct: '95-100', beat: 'golden final 5% — land the single biggest visceral beat', visceral: true, note: '80-95% END_RECOVERY r=+0.506. Final 5% payoff words land ab=+0.026.' },
+                { zone_pct: '0-10', beat: 'enter water, start reading page one aloud', visceral: true, note: 'Premise stated in first 10%. Body already visible in water (design_rules_v3 #6).' },
+                { zone_pct: '10-22', beat: 'jaw starts to shake, first skipped word, brief sensation check', visceral: true, note: 'Divergence at 22% — lock in that body is reacting.' },
+                { zone_pct: '22-60', beat: 'reading continues with intermittent sensation updates ("my stomach is numb", "I can\'t feel my skin")', visceral: true, note: 'Sensory vocabulary ramp. Utterances stay under 10 words.' },
+                { zone_pct: '60-90', beat: 'voice slows, pages stick to wet fingers, I slow to 3.0 w/s', visceral: true, note: 'Peak zone 60-80%. Reaction shot on a sentence I can\'t finish.' },
+                { zone_pct: '90-100', beat: 'voice breaks mid-sentence on a specific page; book closes; chapter + page number appears as overlay', visceral: true, note: 'END_RECOVERY 80-95%. Emotion word in final 10% = +0.069.' },
             ],
-            climax_hint: 'The device takes a hit that would have injured the presenter, and the presenter calls out the body sensation ("I could feel the impact in my foot") at the moment of reveal.',
-            closing_line_hint: 'Last word should be an impact word — "insane", "hour", or "right" (best_last_words).',
+            climax_hint: 'I try to finish a single line of dialogue; the word comes out as three syllables, not a word; my mouth stops; the book slowly closes; a single chyron reads "stopped: Ch 3, p. 47" with one sensation word below.',
+            closing_line_hint: 'Close with a feeling word + impact word: "stomach\'s numb — insane."',
             visual_prescription_hints: {
-                first_5s: ['direct_address close-up', 'no text overlay'],
-                hook_quarter: ['action frame', 'avoid face + text overlay trap'],
-                mid: ['reaction → wide transition on each beat'],
-                late: ['close-up on point of impact', 'text overlay for the number/spec reveal'],
-                avoid: ['face + text without physical action', 'material names ("carbon fiber", "plate", "magnets")'],
+                first_5s: ['close-up on hand + book', 'no text overlay', 'book half in water'],
+                hook_quarter: ['face tight', 'breath visible', 'shoulder drop under water'],
+                mid: ['cutaway to jaw / lips / hand on book', 'avoid explanatory overlay'],
+                late: ['wide shot of tub + closed book', 'single chapter/page number overlay at the quit moment'],
+                avoid: ['naming the water temperature in words ("cold", "freezing")', 'face + text explaining thermogenesis'],
             },
             vocabulary_hints: {
-                use_peak_words: ['painful', 'stomach', 'numb', 'skin', 'impact', 'foot', 'curious', 'bigger'],
-                avoid_material_words: ['plastic', 'solid', 'fiber', 'materials', 'carbon', 'plate'],
+                use_peak_words: ['stomach', 'numb', 'skin', 'feeling', 'painful', 'curious', 'bigger'],
+                avoid_material_words: ['plastic', 'fiber', 'materials', 'carbon'],
                 closing_words: ['insane', 'hour', 'right'],
             },
             share_triggers: ['in the comments', 'should i keep', 'i keep going'],
             hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
         },
         {
-            id: 'mystery_body_transformation',
-            title: 'What Happens To My Body If I ____ For 24 Hours — Mystery Transformation with Visible Before/After',
-            logline: 'Document a 24-hour body-first experiment where the audience doesn’t know what the outcome is until the final 10 seconds.',
-            promise: 'You will see what happens to my body after 24 hours of ____ — and I don’t know either.',
-            payoff: 'A visible physical change the audience did not anticipate, shown in the last 5% with a one-sentence description of the body sensation.',
-            over_delivery_note: 'Mystery hook (#2 taxonomy, 2.20M) + transformation (#1, 2.24M). End reveal must exceed the implied severity.',
-            concept_anchors: ['anticipation_setup', 'visceral_body', 'transformation'],
-            narrative_structures: ['comeback_arc', 'late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'monotonic_rise'],
+            id: 'twenty_carolina_reaper_body_quit',
+            title: 'I Ate 20 Carolina Reapers In A Row — My Body Made Me Stop At 14',
+            logline: 'Eat 20 Carolina Reaper peppers back-to-back on camera and narrate every sensation until my body physically refuses to swallow another one.',
+            promise: 'You\'re going to see 20 Carolina Reapers and a timer — the question is which pepper my body quits on.',
+            payoff: 'At 95% of runtime, pepper #14 goes in, comes back out; my body refuses; a timer overlay freezes at the exact second, and a single word appears.',
+            over_delivery_note: 'Setup implies I\'ll make it to 15-18; payoff lands at #14 with the exact second stamped. Hook_payoff_gap over-delivery by specificity.',
+            narrative_structures: ['late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'fast_pacing_no_pauses', 'dramatic_pacing'],
             duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['narrative_x_concept', 'keep_x_pacing', 'late_early_x_pacing', 'keep_sq', 'retention'],
-            interactions_engineered: ['narrative × concept (r_partial 0.369)', 'keep × pacing (r_partial 0.380)'],
+            pre_upload_levers: ['pivot_word_count', 'visual_variety_entropy', 'scene_change_count', 'beat_count', 'proof_of_work_count'],
+            interactions_engineered: ['keep × pacing (r_partial 0.380)', 'late_early × pacing (r_partial 0.380)'],
             opening: {
-                first_frame: 'Close-up of my face neutral, subtly tired, no text overlay. Background is the environment of the experiment (cold room / gym / kitchen).',
-                first_line: 'How my body changes in the next 24 hours is going to surprise me.',
-                opening_action: 'I point the camera at a timer starting at 24:00:00; then the timer fast-cuts to the end state off-screen as a cut-in.',
-                opening_speech_rate_wps_target: 2.8,
-                hook_type: 'mystery',
-                best_first_word_used: 'how',
+                first_frame: 'Close-up: my hand holding pepper #1, a numbered row of 20 peppers lined up on the counter behind it. My jaw is already tensed. No overlay.',
+                first_line: 'Go — 20 in a row. My stomach is going to stop me.',
+                opening_action: 'I bite into pepper #1 immediately and swallow within the first 3 seconds, camera holds on my face.',
+                opening_speech_rate_wps_target: 2.6,
+                hook_type: 'transformation',
+                best_first_word_used: 'go',
             },
             build_phases: [
-                { zone_pct: '0-10', beat: 'mystery stated, concept named', visceral: false, note: 'Concept named in first 10%.' },
-                { zone_pct: '10-22', beat: 'setup + visible baseline body state', visceral: false, note: 'Divergence point is at 22% — top vs bottom videos separate here; hit a beat by 22%.' },
-                { zone_pct: '22-60', beat: 'intermittent body updates, escalating tension, sensory checks', visceral: true, note: 'Tension word accumulation r=+0.23 with above_baseline. Speed accelerates but utterances stay under 10 words.' },
-                { zone_pct: '60-85', beat: 'late-stage body signal — something starts to break', visceral: true, note: 'peak zone. Slow to 3.0 w/s. Reaction shot.' },
-                { zone_pct: '85-100', beat: 'reveal the after-state in a single wide shot + one-sentence sensation', visceral: true, note: 'END_RECOVERY 80-95%. Emotion word in final 10% = +0.069.' },
+                { zone_pct: '0-10', beat: 'pepper #1 bitten, premise named, timer starts', visceral: true, note: 'Concept + physical action in first 10%. Body already reacting.' },
+                { zone_pct: '10-25', beat: 'peppers #2-5 fast cuts, sweat starts, sensation narration', visceral: true, note: 'Scene_change density high early. Sensory word ramp begins.' },
+                { zone_pct: '25-60', beat: 'peppers #6-11, slowing rhythm, eyes watering, body complaints', visceral: true, note: 'Utterances under 10 words. Pauses <1s. "my stomach is bigger now."' },
+                { zone_pct: '60-90', beat: 'peppers #12-13 — slow to 3.0 w/s, visible full-body shiver, reaction shot', visceral: true, note: 'Peak zone. Short sentence at peak. Reaction → wide on #13 going down.' },
+                { zone_pct: '90-100', beat: 'pepper #14: in the mouth, out of the mouth; timer freezes; single word overlay', visceral: true, note: 'Golden final 5%. Body quit moment + exact timestamp = payoff.' },
             ],
-            climax_hint: 'A visible, unmistakable physical change — stated with body language, not materials.',
-            closing_line_hint: 'End on an impact word. Example: "that was insane."',
+            climax_hint: 'Pepper #14 gets halfway down, my body rejects it visibly on camera, a timer overlay freezes at the exact second (e.g., "4:12 — 14 of 20"), I mouth one word.',
+            closing_line_hint: 'End on impact word: "that was insane."',
             visual_prescription_hints: {
-                first_5s: ['close-up direct_address', 'no overlay'],
-                hook_quarter: ['action/movement cut', 'no face + text together'],
-                mid: ['reaction frames of body checks', 'environment wide cuts'],
-                late: ['reveal wide shot', 'single large number overlay for time elapsed'],
-                avoid: ['talking-head with text explaining science', 'naming equipment brands'],
+                first_5s: ['pepper + numbered row in frame', 'direct action — no text'],
+                hook_quarter: ['fast A/B cuts between face + pepper count', 'never face + text overlay alone'],
+                mid: ['sweat / eye-water cutaways', 'reaction shots between bites'],
+                late: ['slow push-in on face at #13', 'wide shot at #14 rejection'],
+                avoid: ['naming pepper-scoville heat in overlay', 'face + explanation text'],
             },
             vocabulary_hints: {
-                use_peak_words: ['curious', 'painful', 'feeling', 'stomach', 'numb', 'skin', 'sleep'],
-                avoid_material_words: ['plastic', 'fiber', 'materials', 'carbon'],
-                closing_words: ['insane', 'days', 'hour'],
+                use_peak_words: ['stomach', 'skin', 'numb', 'painful', 'bigger', 'foot', 'feeling'],
+                avoid_material_words: ['capsaicin', 'plastic', 'carbon', 'fiber', 'materials'],
+                closing_words: ['insane', 'hour', 'right'],
             },
             share_triggers: ['in the comments', 'should i keep', 'i keep going'],
             hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
         },
         {
-            id: 'superhero_body_on_the_line',
-            title: 'I Trained Like a Superhero For 7 Days — Single-Challenge Test on Day 7',
-            logline: 'Superhero-coded training compressed into a 52-second recap ending on a single decisive physical test that proves the transformation.',
-            promise: 'You’ll see someone who looks normal get measurably stronger, and the final 5 seconds is the test that proves it on the body.',
-            payoff: 'Measurable body-feat (hang time, held position, sprint time) delivered in a single shot with the sensation narrated.',
-            over_delivery_note: 'Superhero concept (+0.09 R² step in v9). Transformation hook #1 (2.24M).',
-            concept_anchors: ['superhero', 'visceral_body', 'transformation'],
-            narrative_structures: ['monotonic_rise', 'late_peak_arc', 'golden_final_5pct', 'fast_pacing_no_pauses', 'visceral_body_language'],
+            id: 'treadmill_fifteen_incline_43_minutes',
+            title: 'I Ran On A Treadmill At 15% Incline Until My Legs Gave Out — I Made It 43 Minutes',
+            logline: 'Set a treadmill to 15% incline at 9 mph and run until my legs physically stop working, narrating body sensations in real time.',
+            promise: 'You\'re watching me run at 15% incline until I fall — the question is how long.',
+            payoff: 'At 95% runtime: legs give out, body slides off the back of the treadmill, timer overlay freezes at 43:07.',
+            over_delivery_note: 'Hook implies 20-30 minutes; payoff reveals 43:07 — audience expectation exceeded, specificity of the second locks over-delivery.',
+            narrative_structures: ['monotonic_rise', 'late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'fast_pacing_no_pauses'],
             duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['superhero_x_workshop', 'keep_x_pacing', 'pat_making_v2', 'concept_density', 'hook_intensity'],
-            interactions_engineered: ['superhero × workshop (r_partial 0.194)', 'making × novelty (r_partial 0.199)'],
+            pre_upload_levers: ['scene_burst_count', 'frame_cluster_count', 'beat_count', 'visual_variety_entropy', 'pivot_word_count'],
+            interactions_engineered: ['late_early × pacing (r_partial 0.380)', 'keep × pacing (r_partial 0.380)'],
             opening: {
-                first_frame: 'Action frame: me mid-exercise (pull-up, sprint start). No text overlay. Body in motion.',
-                first_line: 'Train like a superhero — see if my body can handle it.',
-                opening_action: 'First 3 seconds: one complete rep of the hardest movement in the program.',
+                first_frame: 'Action frame: my legs mid-stride on the treadmill at full incline, body angled forward, timer already running at 00:12.',
+                first_line: 'Go — 15 percent. Legs are going to quit before I do.',
+                opening_action: 'The camera is locked on my running feet for the first 3 seconds — no cutaway, just strides.',
                 opening_speech_rate_wps_target: 2.7,
-                hook_type: 'transformation',
-                best_first_word_used: 'train',
+                hook_type: 'mystery',
+                best_first_word_used: 'go',
             },
             build_phases: [
-                { zone_pct: '0-10', beat: 'state the challenge + first rep', visceral: false, note: 'Action in first 3s, concept named inside first 10%.' },
-                { zone_pct: '10-25', beat: 'day 1-2 progress, body complaints', visceral: true, note: 'Sensory vocabulary early-ramp.' },
-                { zone_pct: '25-60', beat: 'day 3-5 montage with failures + retries', visceral: true, note: 'Monotonic rise in visible capability; fast cuts; no pauses.' },
-                { zone_pct: '60-90', beat: 'day 6 final prep + slow breathing shot', visceral: true, note: 'Slow the pace to 3.0 w/s. Short sentences at peaks.' },
-                { zone_pct: '90-100', beat: 'day 7: single decisive test in wide frame', visceral: true, note: 'Golden final 5%. Reaction→wide transition on the result.' },
+                { zone_pct: '0-10', beat: 'running, timer visible, premise named', visceral: true, note: 'Action + concept inside first 10% (design_rules_v3 #6).' },
+                { zone_pct: '10-25', beat: 'minutes 5-12: sweat, first breathing check, "my stomach is bigger"', visceral: true, note: 'Sensory ramp. Utterances <10 words.' },
+                { zone_pct: '25-60', beat: 'minutes 13-30: repeated failure-and-recovery — I grab the rail, release, keep running', visceral: true, note: 'Monotonic rise in visible distress. No pauses >1s.' },
+                { zone_pct: '60-90', beat: 'minute 38-42: legs shake visibly, form collapses, slow to 3 w/s narration', visceral: true, note: 'Peak zone. Short sentence. Reaction → wide on the last fully upright step.' },
+                { zone_pct: '90-100', beat: '43:07 — legs lock out, body slides off the belt; timer freezes; single sensation word', visceral: true, note: 'Golden final 5%. END_RECOVERY payoff word lands +0.026.' },
             ],
-            climax_hint: 'The final body-feat is measurable (hang time in seconds, load in kg, sprint time) — the number appears as text overlay at the moment of reveal.',
-            closing_line_hint: 'End with an impact word ("insane") and the number.',
+            climax_hint: 'Legs lock out, I slide off the belt and collapse against the wall; the overlay freezes at 43:07; I say one word into the camera.',
+            closing_line_hint: 'Close with sensation + impact: "stomach feels insane."',
             visual_prescription_hints: {
-                first_5s: ['action frame', 'direct address prohibited here — action only'],
-                hook_quarter: ['body in motion', 'never face + text alone'],
-                mid: ['reaction shots between attempts', 'tight-to-wide on failure moments'],
-                late: ['wide shot on final attempt', 'number overlay ONLY at reveal'],
-                avoid: ['face + text during explanation', 'naming equipment or programs by brand'],
+                first_5s: ['legs mid-stride', 'timer visible', 'no overlay explaining setup'],
+                hook_quarter: ['body in motion only', 'never face + text alone'],
+                mid: ['alternate feet-pumping cuts with face reaction', 'sweat-drop cutaways'],
+                late: ['slow push-in on shaking quads', 'wide shot at the collapse'],
+                avoid: ['brand-name overlays on treadmill', 'face + text explaining VO2 / heart-rate'],
             },
             vocabulary_hints: {
-                use_peak_words: ['painful', 'numb', 'bigger', 'impact', 'foot', 'stomach', 'sleep', 'feeling'],
-                avoid_material_words: ['plastic', 'fiber', 'carbon', 'solid'],
-                closing_words: ['insane', 'days', 'next'],
+                use_peak_words: ['stomach', 'foot', 'skin', 'numb', 'painful', 'bigger', 'feeling'],
+                avoid_material_words: ['rubber', 'plastic', 'carbon', 'fiber', 'materials'],
+                closing_words: ['insane', 'hour', 'next'],
             },
             share_triggers: ['should i keep', 'i keep going', 'in the comments'],
             hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
         },
         {
-            id: 'two_builds_one_survives',
-            title: 'I Built Two Things That Should Do The Same Job — Only One Survives The Test',
-            logline: 'Parallel build of two competing devices, cut every 2-3 seconds, ending with a single decisive test where exactly one fails at 95% of runtime.',
-            promise: 'Two builds, same test, same body — one of them is about to fail catastrophically.',
-            payoff: 'At 95% the losing device fails visibly and the winning one survives, while I narrate the body sensation of what would have happened.',
-            over_delivery_note: 'The setup implies one small edge — the failure is larger than implied. hook_payoff_gap negative (over-deliver).',
-            concept_anchors: ['making', 'indestructible', 'anticipation_setup'],
-            narrative_structures: ['dramatic_pacing', 'late_peak_arc', 'golden_final_5pct', 'fast_pacing_no_pauses', 'monotonic_rise'],
+            id: 'four_mile_socks_only_hike',
+            title: 'I Hiked Four Miles On A Rocky Trail In Nothing But Socks — My Feet Told The Story',
+            logline: 'Start a four-mile trail hike in socks only, narrate every sensation as the terrain changes, and end on a close-up reveal of the socks at the finish.',
+            promise: 'Four miles, just socks, one trail — and my feet are going to tell you how it went.',
+            payoff: 'Final 5 seconds: I peel the sock back to reveal the foot; single overlay shows the mile count reached and one sensation word.',
+            over_delivery_note: 'Setup primes a "will I make four miles" question; payoff is that the sock itself is the transformation — the foot inside is proof.',
+            narrative_structures: ['comeback_arc', 'late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'monotonic_rise'],
             duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['making_x_tension', 'indestructible_x_tension', 'keep_x_pacing', 'pat_making_v2', 'deriv_entropy'],
-            interactions_engineered: ['making × tension (r_partial 0.351)', 'indestructible × tension (r_partial 0.255)'],
+            pre_upload_levers: ['pivot_word_count', 'repeated_phrase_count', 'visual_variety_entropy', 'beat_count'],
+            interactions_engineered: ['keep × pacing (r_partial 0.380)', 'narrative × concept (r_partial 0.369)'],
             opening: {
-                first_frame: 'Split-frame: two finished builds on the workbench, side by side, lit identically. One is labeled A, one is labeled B. No text explanation yet.',
-                first_line: 'Break time — only one of these survives.',
-                opening_action: 'I place my hand on each of them in turn, signalling ownership; then a fast cut to the setup of the test.',
-                opening_speech_rate_wps_target: 2.6,
+                first_frame: 'Tight close-up of my socked feet at the trailhead marker, one foot half-raised to step onto gravel. Trail sign is in-frame but unreadable.',
+                first_line: 'How four miles feels in a sock — my skin\'s going to tell you.',
+                opening_action: 'My socked foot steps onto the first patch of gravel; camera holds on the foot for the first 3 seconds.',
+                opening_speech_rate_wps_target: 2.5,
                 hook_type: 'mystery',
-                best_first_word_used: 'break',
+                best_first_word_used: 'how',
             },
             build_phases: [
-                { zone_pct: '0-10', beat: 'reveal both builds + stake the test', visceral: false, note: 'Named in first 10%. No material words.' },
-                { zone_pct: '10-25', beat: 'parallel progress — fast cuts A/B/A/B', visceral: false, note: 'cut every 2-3s. Event density high early, low late.' },
-                { zone_pct: '25-60', beat: 'both approach the test, tension word accumulation', visceral: true, note: 'Event count inversely predicts (r=-0.33) — fewer bigger moments > many small.' },
-                { zone_pct: '60-90', beat: 'test begins, slow to 3 w/s, body narration', visceral: true, note: 'Slow speaking at peak. 7.9-word utterances.' },
-                { zone_pct: '90-95', beat: 'nadir: one looks like it is about to break', visceral: true, note: 'best_after_worst: nadir placed just before climax.' },
-                { zone_pct: '95-100', beat: 'catastrophic failure of loser + visible survival of winner', visceral: true, note: 'Golden final 5%. Wide shot reveal.' },
+                { zone_pct: '0-10', beat: 'trailhead step, premise named, mile 0 overlay', visceral: true, note: 'Concept + body inside first 10%.' },
+                { zone_pct: '10-25', beat: 'mile 1 — first pebble hits, first sensation narration ("my foot feels bigger")', visceral: true, note: 'Divergence lock-in at 22%. Body already altered.' },
+                { zone_pct: '25-60', beat: 'miles 2-3: escalating terrain, visible limp develops, sensory updates', visceral: true, note: 'Utterances short. No pauses >1s. Monotonic distress rise.' },
+                { zone_pct: '60-90', beat: 'mile 3.5: near-stop moment, slow to 3 w/s, face reaction', visceral: true, note: 'Peak zone. Short sentence. Reaction → wide on the final switchback.' },
+                { zone_pct: '90-100', beat: 'mile 4 finish: sit down, peel sock back, close-up on the foot underneath + overlay', visceral: true, note: 'Golden final 5%. END_RECOVERY. One sensation word at reveal.' },
             ],
-            climax_hint: 'The failure is a recognizable physical event (bend, snap, fold) with a single body-centric sentence about what would have happened to me.',
-            closing_line_hint: 'End word is impact ("insane"). The number of the test (force, drops, time) appears in overlay.',
+            climax_hint: 'At the trail-end marker I sit down, pull the sock off with one hand, camera cuts to a close-up of the skin underneath; overlay reads "4.00 mi" + one sensation word.',
+            closing_line_hint: 'Close with sensation + impact: "skin is numb — insane."',
             visual_prescription_hints: {
-                first_5s: ['both builds in frame', 'direct-address optional'],
-                hook_quarter: ['A/B parallel cuts, 2-3s each', 'no face + text'],
-                mid: ['close-ups of the builds alternating with reaction shots'],
-                late: ['reaction→wide transition on the failure'],
-                avoid: ['naming materials', 'text overlay explaining why'],
+                first_5s: ['socked foot close-up', 'no text', 'one clean step'],
+                hook_quarter: ['foot-on-terrain cutaways', 'never face + text together'],
+                mid: ['alternate terrain close-ups with face reactions', 'mile-count overlay only at beat moments'],
+                late: ['slow push-in on the last step', 'wide shot at sit-down'],
+                avoid: ['naming trail by brand', 'face + text explaining plantar anatomy'],
             },
             vocabulary_hints: {
-                use_peak_words: ['curious', 'impact', 'foot', 'painful', 'stomach', 'bigger'],
-                avoid_material_words: ['plastic', 'fiber', 'carbon', 'solid', 'plate'],
-                closing_words: ['insane', 'right', 'hour'],
+                use_peak_words: ['foot', 'skin', 'stomach', 'numb', 'painful', 'bigger', 'feeling'],
+                avoid_material_words: ['cotton', 'polyester', 'fiber', 'materials', 'rubber'],
+                closing_words: ['insane', 'hour', 'right'],
             },
             share_triggers: ['should i keep', 'in the comments'],
             hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
         },
         {
-            id: 'body_first_comeback',
-            title: 'The First Time I Felt This In My Body — Comeback Arc in 52 Seconds',
-            logline: 'Start from a visibly negative body state (pain, fatigue, fear) and end on a visibly positive body state — the comeback arc proven on camera.',
-            promise: 'I’m not okay right now. Watch what happens to me in the next 50 seconds.',
-            payoff: 'By the final 5%, the visible negative body state is replaced by a distinct positive body state — audience sees the transition happen to ME.',
-            over_delivery_note: 'Comeback arc (neg→pos) averages 10x views of pos→neg. Q4 end_gap is 14.4% of all separation from Q1.',
-            concept_anchors: ['visceral_body', 'anticipation_setup', 'transformation'],
-            narrative_structures: ['comeback_arc', 'monotonic_rise', 'late_peak_arc', 'golden_final_5pct', 'visceral_body_language'],
+            id: 'gorilla_glue_hand_30_minutes_teeth',
+            title: 'I Glued My Hand To A Wood Board With Gorilla Glue And Pulled It Off With My Teeth In 30 Minutes',
+            logline: 'Pour Gorilla Glue on a pine board, press my hand into it until it sets, then pull the board off using only my teeth within 30 minutes.',
+            promise: 'My right hand is stuck to a pine board — I have 30 minutes and only my teeth.',
+            payoff: 'Final 5 seconds: the board releases with a visible tear of skin, timer freezes at 28:41, single sensation word appears.',
+            over_delivery_note: 'Hook sets up "will it come off?"; payoff delivers the exact minute + the visible skin evidence (specificity beats vague success).',
+            narrative_structures: ['late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'dramatic_pacing', 'nadir_before_climax'],
             duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['keep_x_pacing', 'late_early_x_pacing', 'narrative_x_concept', 'concept_x_prev_keep', 'keep_sq'],
-            interactions_engineered: ['keep × pacing (r_partial 0.380)', 'late_early × pacing (r_partial 0.380)', 'narrative × concept (r_partial 0.369)'],
+            pre_upload_levers: ['pivot_word_count', 'proof_of_work_count', 'visual_variety_entropy', 'repeated_phrase_count', 'beat_count'],
+            interactions_engineered: ['keep × pacing (r_partial 0.380)', 'late_early × pacing (r_partial 0.380)'],
             opening: {
-                first_frame: 'Close-up of my hand on my stomach or face, visibly strained — no text, eyes slightly averted.',
-                first_line: 'Okay — my stomach feels numb right now.',
-                opening_action: 'I press my hand on the affected area and look directly into the camera.',
-                opening_speech_rate_wps_target: 2.4,
-                hook_type: 'transformation',
+                first_frame: 'Tight close-up: my right palm pressed flat onto a pine board, glue still visible at the edges. Timer in-frame at 30:00.',
+                first_line: 'Okay — 30 minutes. Teeth only, no tools.',
+                opening_action: 'I try to lift the board with my free hand first; it won\'t budge; I bring my mouth to the edge in the first 3 seconds.',
+                opening_speech_rate_wps_target: 2.5,
+                hook_type: 'mystery',
                 best_first_word_used: 'okay',
             },
             build_phases: [
-                { zone_pct: '0-10', beat: 'state the negative body state with sensory words, concept named', visceral: true, note: 'Opens negative — comeback arc requires a clear low.' },
-                { zone_pct: '10-22', beat: 'introduce the action/intervention about to be tried', visceral: false, note: 'Divergence at 22% — locked in by now.' },
-                { zone_pct: '22-60', beat: 'intermittent sensory updates, rising energy', visceral: true, note: 'Sensory word ramp. Slow-build velocity.' },
-                { zone_pct: '60-85', beat: 'inflection point — visible change begins', visceral: true, note: 'Peak zone. Slow to 3.0 w/s.' },
-                { zone_pct: '85-100', beat: 'stabilized positive body state + one-sentence description', visceral: true, note: 'END_RECOVERY. Emotion word final 10% = +0.069.' },
+                { zone_pct: '0-10', beat: 'demonstration that the board is stuck, timer starts, premise named', visceral: true, note: 'Action + premise in first 10%.' },
+                { zone_pct: '10-25', beat: 'first bite-and-pull attempt, minor skin pull, first sensation narration', visceral: true, note: 'Body already engaged. Divergence lock-in at 22%.' },
+                { zone_pct: '25-60', beat: 'repeated bite-pull cycles, sweat on forehead, sensory updates ("my skin is bigger")', visceral: true, note: 'Event density inverse — fewer big beats > many small.' },
+                { zone_pct: '60-90', beat: 'nadir at ~85%: the board barely moves, I pause, jaw shakes, slow to 3 w/s', visceral: true, note: 'best_after_worst: nadir before climax = 5x gap.' },
+                { zone_pct: '90-100', beat: 'the board tears free at 28:41; visible skin-pull; timer freezes; one sensation word overlay', visceral: true, note: 'Golden final 5%. END_RECOVERY payoff. Emotion word final 10% = +0.069.' },
             ],
-            climax_hint: 'The transition from negative to positive is visible on the body — facial relaxation, posture change, sensation flip described in one short sentence.',
-            closing_line_hint: 'Close on a feeling word plus an impact word: "feels bigger — insane."',
+            climax_hint: 'With 1:19 left the board finally releases with a sharp crack; the camera cuts to the palm, angry red where the wood was; timer overlay freezes at 28:41; I say one word.',
+            closing_line_hint: 'Close on sensation + impact: "skin\'s numb — insane."',
             visual_prescription_hints: {
-                first_5s: ['close-up on affected body part', 'no text'],
-                hook_quarter: ['tight on face', 'hand-on-body gesture'],
-                mid: ['cutaways to the intervention', 'avoid explanatory text overlay'],
-                late: ['wide shot of stable posture', 'single overlay of elapsed time'],
-                avoid: ['naming the intervention by brand/material', 'face + text explaining mechanism'],
+                first_5s: ['hand pressed on board', 'timer visible', 'no text'],
+                hook_quarter: ['mouth-on-edge close-up', 'never face + text alone'],
+                mid: ['alternate jaw cutaways with palm-side cutaways', 'timer drops only at beat moments'],
+                late: ['slow push-in on the final bite', 'wide shot at the release'],
+                avoid: ['naming glue by brand in overlay', 'face + text explaining cyanoacrylate'],
             },
             vocabulary_hints: {
-                use_peak_words: ['stomach', 'numb', 'painful', 'skin', 'feeling', 'sleep', 'bigger', 'curious'],
-                avoid_material_words: ['plastic', 'carbon', 'fiber', 'materials'],
+                use_peak_words: ['skin', 'stomach', 'numb', 'painful', 'bigger', 'foot', 'feeling'],
+                avoid_material_words: ['cyanoacrylate', 'plastic', 'fiber', 'materials', 'carbon'],
                 closing_words: ['insane', 'hour', 'right'],
             },
             share_triggers: ['should i keep', 'in the comments'],
@@ -961,21 +905,7 @@ function pickHooksForIdea(brief, pref = {}) {
 // ──────────────────────────────────────────────────────────────────────
 
 function scoreIdea(idea, brief) {
-    const parts = { concept: 0, hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0 };
-
-    for (const anchor of idea.concept_anchors) {
-        const row = brief.concept_anchors.find(c => c.id === anchor);
-        if (!row) continue;
-        for (const sig of row.signals) {
-            const kept = brief.proven_features.kept_signals.find(k => k.signal === sig);
-            if (kept) {
-                const delta = parseFloat(String(kept.delta_r2).replace('+', '')) || 0;
-                parts.concept += delta;
-            } else {
-                parts.concept += 0.008;
-            }
-        }
-    }
+    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0 };
 
     for (const hook of idea.hook_mechanisms) parts.hook += Math.abs(hook.csw || 0);
 
@@ -1006,16 +936,12 @@ function scoreIdea(idea, brief) {
         if (rule && rule.r_partial) parts.interactions += Math.abs(rule.r_partial) * 0.1;
     }
 
-    const total = parts.concept + parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions;
+    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions;
     return { parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, round(v, 4)])), total: round(total, 4) };
 }
 
 function evidenceFor(idea, brief) {
     const out = [];
-    for (const anchor of idea.concept_anchors) {
-        const row = brief.concept_anchors.find(c => c.id === anchor);
-        if (row) out.push(`Concept[${row.id}]: ${row.evidence}`);
-    }
     for (const hook of idea.hook_mechanisms) {
         out.push(`Hook[${hook.mechanism_id}] via ${hook.via_indicator} (principle ${hook.principle_id}, n=${hook.n_videos}, csw=${round(hook.csw, 3)}).`);
     }
@@ -1216,11 +1142,6 @@ function estimateKeepRate(idea, brief) {
     const base = 0.68;
     let delta = 0;
     const drivers = [];
-
-    // Concept density of high-lift anchors
-    const anchorBoost = (idea.concept_anchors || []).length * 0.01;
-    delta += anchorBoost;
-    drivers.push({ driver: `concept_anchor_stack_x${idea.concept_anchors.length}`, modeled_delta: round(anchorBoost, 3), source: 'CONCEPT_ANCHORS' });
 
     // Over-delivery structure (late peak + golden final)
     const hasOverDeliver = (idea.narrative_structures || []).includes('late_peak_arc') && (idea.narrative_structures || []).includes('golden_final_5pct');
@@ -1885,11 +1806,10 @@ function buildMetricValidationTraces(brief, ctx) {
             { key: 'HOOK_PAYOFF_GAP', evidence_type: 'top_5_retention_predictors', r_with_views: -0.52, why: 'over-delivery wins (rank #1)' },
             { key: 'progression_pattern_triple_up', evidence_type: 'wave7.quartile_templates', quantification: '↑↑↑ vs ↓↓↓ median views', why: '4.19M vs 222K (19x)' },
             { key: 'best_after_worst', evidence_type: 'wave9_10', quantification: 'median views when nadir precedes climax', why: '5x gap (3.3M vs 650K)' },
-            { key: 'CONCEPT_ANCHORS', evidence_type: 'findings-summary.kept_signals', quantification: 'delta_r2 contribution', why: 'concept stack composes additively' },
         ];
         traces.keep_rate = makeTrace({
             field: 'estimated_metrics.keep_rate',
-            rationale: 'Additive model: corpus mean keep + deltas from concept stack, over-delivery structure, monotonic rise, nadir placement — each grounded in an explicit retention-pattern signal.',
+            rationale: 'Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.',
             evidence_sources: ['retention-patterns.top_5_retention_predictors', 'retention-patterns.wave7_new_signals.quartile_templates', 'retention-patterns.wave9_10_new_signals.best_after_worst', 'findings-summary.kept_signals'],
             indicators_considered_count: top_indicators.length,
             indicator_keys: top_indicators.map(t => t.key),
@@ -2006,7 +1926,6 @@ function assembleBlueprint(seed, brief, rank, artifacts) {
         share_triggers: seed.share_triggers,
         duration_target: dBand ? { seconds: dBand.seconds, band: dBand.id, evidence: dBand.evidence } : null,
         duration_band_id: seed.duration_band_id, // backward-compat
-        concept_anchors: seed.concept_anchors,
         hook_mechanisms: hooks,
         narrative_structures: seed.narrative_structures,
         pre_upload_levers: seed.pre_upload_levers,
@@ -2043,7 +1962,7 @@ function assembleBlueprint(seed, brief, rank, artifacts) {
     const secCount = Object.keys(validation.section_traces || {}).length;
     const metricCount = Object.keys(validation.metric_traces || {}).length;
     idea.why_it_works = [
-        `Concept stack (${seed.concept_anchors.join(' + ')}) is grounded in ${seed.concept_anchors.length} high-lift anchors.`,
+        `Specific premise (${seed.title.length <= 90 ? seed.title : seed.title.slice(0, 87) + '…'}) — every concrete choice (object, timer, endpoint) survives the validation filter below.`,
         `Arc = ${idea.arc.arc_shape} with nadir placed at ~${idea.arc.nadir_placement_pct}% (best_after_worst 5x gap).`,
         `Hook-retention@20s modeled ${idea.estimated_metrics.hook_retention_20s.band} (${(idea.estimated_metrics.hook_retention_20s.modeled_value * 100).toFixed(1)}%) — first-20s is the single strongest view predictor (r=0.6).`,
         `Over-delivery structure: hook promises less than the 95% payoff delivers (hook_payoff_gap rewards over-delivery, r=-0.52).`,
@@ -2096,7 +2015,6 @@ function summarizeBrief(brief) {
             hook_mechanisms: brief.hook_mechanisms.length,
             proven_kept_signals: brief.proven_features.kept_signals.length,
             top_components: brief.top_components.length,
-            concept_anchors: brief.concept_anchors.length,
             lattice_top_words_positive: (l.vocabulary && l.vocabulary.top_words_positive || []).length,
             lattice_top_words_negative: (l.vocabulary && l.vocabulary.top_words_negative || []).length,
             lattice_interaction_rules: (l.interaction_rules || []).length,
