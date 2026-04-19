@@ -5284,21 +5284,23 @@ const JarvisUI = (() => {
         ideaModelLoading = true;
         ideaModelError = null;
         refreshIdeaModelRoot();
-        try {
-            const [briefRes, ideasRes] = await Promise.all([
-                fetch('/api/jarvis/viral-idea-model'),
-                fetch('/api/jarvis/viral-idea-ideas?count=' + ideaIdeasCount),
-            ]);
-            if (!briefRes.ok) throw new Error('brief HTTP ' + briefRes.status);
-            if (!ideasRes.ok) throw new Error('ideas HTTP ' + ideasRes.status);
-            ideaModelBrief = await briefRes.json();
-            ideaModelIdeas = await ideasRes.json();
-        } catch (e) {
-            ideaModelError = e.message || String(e);
-        } finally {
-            ideaModelLoading = false;
-            refreshIdeaModelRoot();
-        }
+        const fetchJson = async (url) => {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        };
+        const [ideasResult, briefResult] = await Promise.allSettled([
+            fetchJson('/api/jarvis/viral-idea-ideas?count=' + ideaIdeasCount),
+            fetchJson('/api/jarvis/viral-idea-model'),
+        ]);
+        if (ideasResult.status === 'fulfilled') ideaModelIdeas = ideasResult.value;
+        if (briefResult.status === 'fulfilled') ideaModelBrief = briefResult.value;
+        const errs = [];
+        if (ideasResult.status === 'rejected') errs.push('ideas: ' + (ideasResult.reason?.message || ideasResult.reason));
+        if (briefResult.status === 'rejected') errs.push('brief: ' + (briefResult.reason?.message || briefResult.reason));
+        ideaModelError = errs.length ? errs.join(' · ') : null;
+        ideaModelLoading = false;
+        refreshIdeaModelRoot();
     }
 
     function refreshIdeaModelRoot() {
@@ -5320,32 +5322,50 @@ const JarvisUI = (() => {
         const header = `
             <div style="margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
                 <div>
-                    <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:3px">Idea Model — Evidence-Backed Viral Ideas</div>
-                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">Deterministic compression of Jarvis findings (post-upload predictors, pre→post→views bridges, mechanism principles, concept anchors) into a structured brief — and 5 concrete video ideas scored from that same brief. No LLM calls; all evidence is auditable.</div>
+                    <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:3px">Idea Model — Evidence-Backed Viral Ideas</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">Deterministic compression of Jarvis findings (post-upload predictors, pre→post→views bridges, mechanism principles, concept anchors) into a structured brief — and ${ideaIdeasCount} concrete video ideas scored from that same brief. No LLM calls; all evidence is auditable.</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <select id="jarvis-idea-count" style="background:#0a1628;color:#cbd5e1;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:11px">
+                    <select id="jarvis-idea-count" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:11px">
                         ${[3,5,8,10].map(n => `<option value="${n}"${n === ideaIdeasCount ? ' selected' : ''}>${n} ideas</option>`).join('')}
                     </select>
-                    <button id="jarvis-idea-refresh" style="background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">
+                    <button id="jarvis-idea-refresh" style="background:#0d1424;color:#cbd5e1;border:1px solid #1e293b;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">
                         ${ideaModelLoading ? 'Loading…' : '↻ Refresh'}
                     </button>
                 </div>
             </div>
         `;
-        if (ideaModelError) return header + loadingBox('Failed to load idea model: ' + ideaModelError, true);
-        if (!ideaModelBrief || !ideaModelIdeas) return header + loadingBox('Loading idea model and generated ideas…');
 
-        return header
-            + renderIdeaOverview()
-            + renderIdeaPostUpload()
-            + renderIdeaPreUpload()
-            + renderIdeaBridges()
-            + renderIdeaMechanismPrinciples()
-            + renderIdeaConceptAnchors()
-            + renderIdeaHookMechanisms()
-            + renderIdeaComponents()
-            + renderIdeaGenerated();
+        const bothMissing = !ideaModelBrief && !ideaModelIdeas;
+        if (ideaModelError && bothMissing) {
+            return header + loadingBox('Failed to load idea model: ' + ideaModelError, true);
+        }
+        if (bothMissing) {
+            return header + loadingBox('Loading idea model and generated ideas…');
+        }
+
+        let body = '';
+        body += ideaModelIdeas
+            ? renderIdeaGenerated()
+            : loadingBox(ideaModelError ? ('Ideas failed: ' + ideaModelError) : 'Loading generated ideas…', !!ideaModelError);
+
+        if (ideaModelBrief) {
+            body += `<div style="margin:18px 0 10px;padding-top:12px;border-top:1px solid #1e293b;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b">Supporting Evidence · Model Brief</div>`;
+            body += renderIdeaOverview()
+                + renderIdeaPostUpload()
+                + renderIdeaPreUpload()
+                + renderIdeaBridges()
+                + renderIdeaMechanismPrinciples()
+                + renderIdeaConceptAnchors()
+                + renderIdeaHookMechanisms()
+                + renderIdeaComponents();
+        } else if (ideaModelError) {
+            body += loadingBox('Model brief failed: ' + ideaModelError, true);
+        } else {
+            body += loadingBox('Loading model brief…');
+        }
+
+        return header + body;
     }
 
     function ideaSection(title, subtitle, bodyHtml) {
@@ -5365,9 +5385,9 @@ const JarvisUI = (() => {
         const s = b.source_sizes || {};
         const h = b.headline_model_r2 || {};
         const card = (label, value, sub, color) => `
-            <div style="background:#0f172a;border-radius:6px;padding:10px 12px;flex:1;min-width:140px">
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;flex:1;min-width:140px;border:1px solid #1e293b">
                 <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">${escapeHtml(label)}</div>
-                <div style="font-size:18px;font-weight:700;color:${color || '#f1f5f9'}">${value}</div>
+                <div style="font-size:18px;font-weight:700;color:${color || '#e2e8f0'}">${value}</div>
                 ${sub ? `<div style="font-size:10px;color:#64748b;margin-top:3px">${escapeHtml(sub)}</div>` : ''}
             </div>`;
         const body = `
@@ -5396,7 +5416,7 @@ const JarvisUI = (() => {
                 </tr></thead>
                 <tbody>
                     ${rows.map((r, i) => `
-                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                        <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.key || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#94a3b8">${escapeHtml(r.family || '')}</td>
                             <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.r_to_views)};font-weight:600">${r.r_to_views != null ? (+r.r_to_views).toFixed(3) : '—'}</td>
@@ -5420,7 +5440,7 @@ const JarvisUI = (() => {
                 </tr></thead>
                 <tbody>
                     ${rows.map((r, i) => `
-                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                        <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.key || '')}</td>
                             <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.r_to_views)};font-weight:600">${r.r_to_views != null ? (+r.r_to_views).toFixed(3) : '—'}</td>
                             <td style="padding:5px 8px;color:#94a3b8">${escapeHtml(r.direction || '')}</td>
@@ -5448,7 +5468,7 @@ const JarvisUI = (() => {
                 </tr></thead>
                 <tbody>
                     ${rows.map((r, i) => `
-                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                        <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.pre || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.post || '')}</td>
                             <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.pre_r)}">${r.pre_r != null ? (+r.pre_r).toFixed(3) : '—'}</td>
@@ -5481,7 +5501,7 @@ const JarvisUI = (() => {
                     ${rows.map((r, i) => {
                         const csw = r.chain_strength_specificity_weighted;
                         return `
-                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                        <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;font-family:monospace;color:#94a3b8;font-size:10px">${escapeHtml(r.principle_id || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1;font-size:10px">${escapeHtml(r.mechanism_id || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#22d3ee">${escapeHtml(r.via_indicator || '')}</td>
@@ -5500,10 +5520,10 @@ const JarvisUI = (() => {
         const rows = ideaModelBrief.concept_anchors || [];
         if (!rows.length) return ideaSection('Concept Anchors', '— no rows —', '<div style="font-size:11px;color:#64748b">No anchors.</div>');
         const cards = rows.map(c => `
-            <div style="background:#0f172a;border-radius:6px;padding:10px 12px;border:1px solid #1e293b">
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;border:1px solid #1e293b">
                 <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px">
                     <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#22d3ee22;color:#22d3ee;font-weight:700;text-transform:uppercase">${escapeHtml(c.id || '')}</span>
-                    <span style="font-size:12px;font-weight:700;color:#f1f5f9">${escapeHtml(c.label || '')}</span>
+                    <span style="font-size:12px;font-weight:700;color:#e2e8f0">${escapeHtml(c.label || '')}</span>
                 </div>
                 <div style="font-size:10px;color:#64748b;margin-bottom:4px">signals: ${(c.signals || []).map(s => `<code style="color:#fbbf24;background:#1e293b;padding:1px 5px;border-radius:3px;margin-right:2px">${escapeHtml(s)}</code>`).join(' ')}</div>
                 <div style="font-size:11px;color:#cbd5e1;line-height:1.5">${escapeHtml(c.evidence || '')}</div>
@@ -5527,7 +5547,7 @@ const JarvisUI = (() => {
                 </tr></thead>
                 <tbody>
                     ${rows.map((r, i) => `
-                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                        <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;font-family:monospace;color:#facc15">${escapeHtml(r.bucket || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1;font-size:10px">${escapeHtml(r.mechanism_id || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#22d3ee">${escapeHtml(r.via_indicator || '')}</td>
@@ -5556,7 +5576,7 @@ const JarvisUI = (() => {
                 </tr></thead>
                 <tbody>
                     ${rows.map((r, i) => `
-                        <tr style="background:${i % 2 === 0 ? '#0f172a' : 'transparent'}">
+                        <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;color:#cbd5e1">${escapeHtml(r.label || r.id || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#a78bfa">${escapeHtml(r.fragment_kind || '')}</td>
                             <td style="padding:5px 8px;font-family:monospace;color:#22d3ee">${escapeHtml(String(r.fragment_value || ''))}</td>
@@ -5596,15 +5616,15 @@ const JarvisUI = (() => {
                 `<li style="margin-bottom:3px;color:#94a3b8">${escapeHtml(e)}</li>`
             ).join('');
             return `
-                <div style="background:#0f172a;border-radius:8px;padding:14px 16px;border:1px solid #1e293b;margin-bottom:10px">
+                <div style="background:#0d1424;border-radius:8px;padding:14px 16px;border:1px solid rgba(59,130,246,0.25);border-left:3px solid #22d3ee;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.25)">
                     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;flex-wrap:wrap">
                         <div style="display:flex;gap:8px;align-items:baseline">
-                            <span style="font-size:14px;font-weight:700;color:#facc15">#${idea.rank}</span>
-                            <span style="font-size:13px;font-weight:700;color:#f1f5f9">${escapeHtml(idea.title || '')}</span>
+                            <span style="font-size:16px;font-weight:700;color:#facc15">#${idea.rank}</span>
+                            <span style="font-size:14px;font-weight:700;color:#e2e8f0">${escapeHtml(idea.title || '')}</span>
                         </div>
                         <div style="font-size:10px;color:#64748b">total score <b style="color:#22d3ee">${score.total != null ? (+score.total).toFixed(3) : '—'}</b></div>
                     </div>
-                    <div style="font-size:11px;color:#cbd5e1;line-height:1.5;margin-bottom:8px">${escapeHtml(idea.one_line_premise || '')}</div>
+                    <div style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-bottom:8px">${escapeHtml(idea.one_line_premise || '')}</div>
                     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
                         ${partPill('concept', parts.concept, '#22d3ee')}
                         ${partPill('hook', parts.hook, '#facc15')}
@@ -5621,7 +5641,18 @@ const JarvisUI = (() => {
                 </div>
             `;
         }).join('');
-        return ideaSection('Generated Ideas', `${ideas.length} deterministically scored`, cards);
+        return `
+            <div style="margin-bottom:18px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap">
+                    <div style="display:flex;align-items:baseline;gap:10px">
+                        <span style="font-size:16px;font-weight:700;color:#22d3ee;letter-spacing:0.03em">✦ Generated Ideas</span>
+                        <span style="font-size:11px;color:#94a3b8">${ideas.length} deterministically scored</span>
+                    </div>
+                    <span style="font-size:10px;color:#64748b;letter-spacing:0.05em">supporting evidence below ↓</span>
+                </div>
+                ${cards}
+            </div>
+        `;
     }
 
     function bindIdeaModelEvents() {
