@@ -1,41 +1,20 @@
 {
   "active": true,
-  "run_id": "auto_20260419030028.",
+  "run_id": "auto_20260419033152.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-19T03:00:28.825Z",
-  "updated_at": "2026-04-19T03:04:02.466Z",
+  "started_at": "2026-04-19T03:31:52.710Z",
+  "updated_at": "2026-04-19T03:31:52.710Z",
   "finished_at": null,
   "requested_iterations": 3000,
-  "attempted": 3,
-  "completed": 1,
-  "failures": 1,
+  "attempted": 0,
+  "completed": 0,
+  "failures": 0,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
   "stop_reason": null,
-  "current_candidate": "micro_commitment_density_x_proof_arrival_delay_proxy",
-  "last_completed_candidate": "micro_commitment_density_x_early_proof_to_loop_ratio",
-  "last_completed_r": -0.0555,
-  "recent_events": [
-    {
-      "type": "failed",
-      "key": "payoff_position_pct_x_challenge_to_resolution_gap_pct",
-      "reason": "processIndicator returned null",
-      "layer": "pre",
-      "ts": "2026-04-19T03:02:23.021Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_early_proof_to_loop_ratio",
-      "r": -0.0555,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T03:04:01.981Z"
-    }
-  ],
-  "pre_attempted": 3,
-  "pre_completed": 1,
-  "post_attempted": 0,
-  "post_completed": 0
+  "current_candidate": null,
+  "last_completed_candidate": null,
+  "last_completed_r": null,
+  "recent_events": []
 }

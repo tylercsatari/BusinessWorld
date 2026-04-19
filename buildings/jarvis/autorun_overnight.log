@@ -1732,3 +1732,106 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 03:04:03]   [RESULT]    none positive: Interaction: micro_commitment_density * proof_arrival_delay_proxy. does not meaningfully predict views. Safe to deprioritize.
 [jarvis-runner 03:04:03]   [GRAPH]     Derived edge added: micro_commitment_density × proof_arrival_delay_proxy → 'views', depth=2
 [jarvis-runner 03:04:03]   [DONE]      r=0.004 (none positive)
+[jarvis-runner 03:06:20] 
+==================================================
+[jarvis-runner 03:06:20] INDICATOR: micro_commitment_density_x_closure_to_open_ratio_first10s
+[jarvis-runner 03:06:20]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:06:20]   [EXPERIMENT] Pearson r=0.006, rho=0.024, p=0.9146, n=370
+[jarvis-runner 03:06:20]   [RESULT]    none positive: Interaction: micro_commitment_density * closure_to_open_ratio_first10s. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:06:20]   [GRAPH]     Derived edge added: micro_commitment_density × closure_to_open_ratio_first10s → 'views', depth=2
+[jarvis-runner 03:06:20]   [DONE]      r=0.006 (none positive)
+[jarvis-runner 03:08:00] 
+==================================================
+[jarvis-runner 03:08:00] INDICATOR: micro_commitment_density_x_credibility_setup_pct
+[jarvis-runner 03:08:00]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:08:00]   [EXPERIMENT] Pearson r=0.113, rho=0.077, p=0.0299, n=370
+[jarvis-runner 03:08:00]   [RESULT]    weak positive: Maximize interaction: micro_commitment_density * credibility_setup_pct. to increase views.
+[jarvis-runner 03:08:00]   [GRAPH]     Derived edge added: micro_commitment_density × credibility_setup_pct → 'views', depth=2
+[jarvis-runner 03:08:00]   [DONE]      r=0.113 (weak positive)
+[jarvis-runner 03:09:38] 
+==================================================
+[jarvis-runner 03:09:38] INDICATOR: micro_commitment_density_x_proof_density_hook
+[jarvis-runner 03:09:38]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:09:38]   [EXPERIMENT] Pearson r=-0.001, rho=-0.005, p=0.9866, n=370
+[jarvis-runner 03:09:38]   [RESULT]    none negative: Interaction: micro_commitment_density * proof_density_hook. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:09:38]   [GRAPH]     Derived edge added: micro_commitment_density × proof_density_hook → 'views', depth=2
+[jarvis-runner 03:09:38]   [DONE]      r=-0.001 (none negative)
+[jarvis-runner 03:11:58] 
+==================================================
+[jarvis-runner 03:11:58] INDICATOR: micro_commitment_density_x_stakes_to_loop_ratio
+[jarvis-runner 03:11:58]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:11:58]   [EXPERIMENT] Pearson r=0.000, rho=0.000, p=1.0000, n=370
+[jarvis-runner 03:11:58]   [RESULT]    none positive: Interaction: micro_commitment_density * stakes_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:11:58]   [GRAPH]     Derived edge added: micro_commitment_density × stakes_to_loop_ratio → 'views', depth=2
+[jarvis-runner 03:11:58]   [DONE]      r=0.000 (none positive)
+[jarvis-runner 03:15:26] 
+==================================================
+[jarvis-runner 03:15:26] INDICATOR: retention_recovery_ratio_x_promise_proof_gap_pct
+[jarvis-runner 03:15:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:15:26]   [EXPERIMENT] Pearson r=0.108, rho=0.142, p=0.0373, n=370
+[jarvis-runner 03:15:26]   [RESULT]    weak positive: Maximize interaction: retention_recovery_ratio * promise_proof_gap_pct. to increase views.
+[jarvis-runner 03:15:26]   [GRAPH]     Derived edge added: retention_recovery_ratio × promise_proof_gap_pct → 'views', depth=2
+[jarvis-runner 03:15:26]   [DONE]      r=0.108 (weak positive)
+[jarvis-runner 03:17:03] 
+==================================================
+[jarvis-runner 03:17:03] INDICATOR: promise_proof_gap_pct_x_retention_recovery_ratio
+[jarvis-runner 03:17:03]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:17:03]   [EXPERIMENT] Pearson r=0.108, rho=0.142, p=0.0373, n=370
+[jarvis-runner 03:17:03]   [RESULT]    weak positive: Maximize interaction: promise_proof_gap_pct * retention_recovery_ratio. to increase views.
+[jarvis-runner 03:17:03]   [GRAPH]     Derived edge added: promise_proof_gap_pct × retention_recovery_ratio → 'views', depth=2
+[jarvis-runner 03:17:03]   [DONE]      r=0.108 (weak positive)
+[jarvis-runner 03:18:40] 
+==================================================
+[jarvis-runner 03:18:40] INDICATOR: retention_recovery_ratio_x_non_sub_view_share
+[jarvis-runner 03:18:40]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:18:40]   [EXPERIMENT] Pearson r=0.745, rho=0.835, p=0.0000, n=370
+[jarvis-runner 03:18:40]   [RESULT]    strong positive: Maximize interaction: retention_recovery_ratio * non_sub_view_share. to increase views.
+[jarvis-runner 03:18:40]   [GRAPH]     Derived edge added: retention_recovery_ratio × non_sub_view_share → 'views', depth=2
+[jarvis-runner 03:18:40]   [DONE]      r=0.745 (strong positive)
+[jarvis-runner 03:20:20] 
+==================================================
+[jarvis-runner 03:20:20] INDICATOR: micro_commitment_density_x_stake_loop_product
+[jarvis-runner 03:20:20]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:20:20]   [EXPERIMENT] Pearson r=0.092, rho=0.039, p=0.0770, n=370
+[jarvis-runner 03:20:20]   [RESULT]    none positive: Interaction: micro_commitment_density * stake_loop_product. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:20:20]   [GRAPH]     Derived edge added: micro_commitment_density × stake_loop_product → 'views', depth=2
+[jarvis-runner 03:20:20]   [DONE]      r=0.092 (none positive)
+[jarvis-runner 03:22:08] 
+==================================================
+[jarvis-runner 03:22:08] INDICATOR: micro_commitment_density_x_rhetorical_question_count
+[jarvis-runner 03:22:08]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:22:08]   [EXPERIMENT] Pearson r=0.050, rho=0.031, p=0.3367, n=370
+[jarvis-runner 03:22:08]   [RESULT]    none positive: Interaction: micro_commitment_density * rhetorical_question_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:22:08]   [GRAPH]     Derived edge added: micro_commitment_density × rhetorical_question_count → 'views', depth=2
+[jarvis-runner 03:22:08]   [DONE]      r=0.050 (none positive)
+[jarvis-runner 03:23:26] 
+==================================================
+[jarvis-runner 03:23:26] INDICATOR: micro_commitment_density_x_rhetorical_question_density
+[jarvis-runner 03:23:26]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:23:26]   [EXPERIMENT] Pearson r=0.061, rho=0.031, p=0.2421, n=370
+[jarvis-runner 03:23:26]   [RESULT]    none positive: Interaction: micro_commitment_density * rhetorical_question_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:23:26]   [GRAPH]     Derived edge added: micro_commitment_density × rhetorical_question_density → 'views', depth=2
+[jarvis-runner 03:23:26]   [DONE]      r=0.061 (none positive)
+[jarvis-runner 03:24:40] 
+==================================================
+[jarvis-runner 03:24:40] INDICATOR: micro_commitment_density_x_social_comparison_count
+[jarvis-runner 03:24:40]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:24:40]   [EXPERIMENT] Pearson r=-0.013, rho=-0.016, p=0.8060, n=370
+[jarvis-runner 03:24:40]   [RESULT]    none negative: Interaction: micro_commitment_density * social_comparison_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:24:40]   [GRAPH]     Derived edge added: micro_commitment_density × social_comparison_count → 'views', depth=2
+[jarvis-runner 03:24:40]   [DONE]      r=-0.013 (none negative)
+[jarvis-runner 03:26:04] 
+============================================================
+[jarvis-runner 03:26:04] AUTONOMOUS RUN COMPLETE: auto_20260419030028.
+[jarvis-runner 03:26:04]   Attempted: 14, Completed: 13, Failures: 1
+[jarvis-runner 03:26:04]   Pre: 11/10, Post: 3/3
+[jarvis-runner 03:26:04]   Stop: max_minutes, Top |r|: 0.7445, Elapsed: 25.6m
+[jarvis-runner 03:26:04]   Total indicators: 1852
+[launch-autorun] Complete.
+◇ injected env (42) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 03:31:52] 
+============================================================
+[jarvis-runner 03:31:52] AUTONOMOUS RUN: auto_20260419033152.
+[jarvis-runner 03:31:52]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7

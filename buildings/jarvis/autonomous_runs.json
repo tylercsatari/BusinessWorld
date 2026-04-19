@@ -19031,5 +19031,43 @@
     "elapsed_minutes": 55.31,
     "total_indicators_after": 1852,
     "total_derived_after": 30943
+  },
+  {
+    "id": "auto_20260419030028.",
+    "started_at": "2026-04-19T03:00:28.824Z",
+    "finished_at": "2026-04-19T03:26:02.864Z",
+    "mode": "hybrid_auto",
+    "llm_proposed": 0,
+    "llm_completed": 0,
+    "attempted": 14,
+    "completed": 13,
+    "failures": 1,
+    "pre_attempted": 11,
+    "pre_completed": 10,
+    "post_attempted": 3,
+    "post_completed": 3,
+    "preupload_ratio_requested": 0.7,
+    "no_signal_streak_end": 1,
+    "stop_reason": "max_minutes",
+    "candidate_keys_processed": [
+      "FAIL:payoff_position_pct_x_challenge_to_resolution_gap_pct",
+      "micro_commitment_density_x_early_proof_to_loop_ratio",
+      "micro_commitment_density_x_proof_arrival_delay_proxy",
+      "micro_commitment_density_x_closure_to_open_ratio_first10s",
+      "micro_commitment_density_x_credibility_setup_pct",
+      "micro_commitment_density_x_proof_density_hook",
+      "micro_commitment_density_x_stakes_to_loop_ratio",
+      "retention_recovery_ratio_x_promise_proof_gap_pct",
+      "promise_proof_gap_pct_x_retention_recovery_ratio",
+      "retention_recovery_ratio_x_non_sub_view_share",
+      "micro_commitment_density_x_stake_loop_product",
+      "micro_commitment_density_x_rhetorical_question_count",
+      "micro_commitment_density_x_rhetorical_question_density",
+      "micro_commitment_density_x_social_comparison_count"
+    ],
+    "top_new_r_abs": 0.7445,
+    "elapsed_minutes": 25.57,
+    "total_indicators_after": 1852,
+    "total_derived_after": 31024
   }
 ]

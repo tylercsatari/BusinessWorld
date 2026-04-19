@@ -30726,7 +30726,19 @@
       "micro_commitment_density_x_loop_to_closure_gap_s",
       "micro_commitment_density_x_ref_to_gratification_gap_pct",
       "micro_commitment_density_x_pre_payoff_tension_index",
-      "micro_commitment_density_x_early_proof_to_loop_ratio"
+      "micro_commitment_density_x_early_proof_to_loop_ratio",
+      "micro_commitment_density_x_proof_arrival_delay_proxy",
+      "micro_commitment_density_x_closure_to_open_ratio_first10s",
+      "micro_commitment_density_x_credibility_setup_pct",
+      "micro_commitment_density_x_proof_density_hook",
+      "micro_commitment_density_x_stakes_to_loop_ratio",
+      "retention_recovery_ratio_x_promise_proof_gap_pct",
+      "promise_proof_gap_pct_x_retention_recovery_ratio",
+      "retention_recovery_ratio_x_non_sub_view_share",
+      "micro_commitment_density_x_stake_loop_product",
+      "micro_commitment_density_x_rhetorical_question_count",
+      "micro_commitment_density_x_rhetorical_question_density",
+      "micro_commitment_density_x_social_comparison_count"
     ],
     "depth_in_hierarchy": 0
   },
