@@ -31019,7 +31019,17 @@
       "anticipatory_build_density_x_credential_signal_density",
       "anticipatory_build_density_x_closure_gap_pct",
       "anticipatory_build_density_x_micro_reward_density",
-      "anticipatory_build_density_x_information_drip_ratio"
+      "anticipatory_build_density_x_information_drip_ratio",
+      "gratification_delay_pct_x_retention_pre_payoff_drop",
+      "retention_pre_payoff_drop_x_promise_proof_gap_pct",
+      "promise_proof_gap_pct_x_retention_pre_payoff_drop",
+      "anticipatory_build_density_x_zygarnik_gradient_pct",
+      "anticipatory_build_density_x_zygarnik_front_load_ratio",
+      "anticipatory_build_density_x_loop_to_closure_gap_s",
+      "anticipatory_build_density_x_ref_to_gratification_gap_pct",
+      "visual_proof_phrase_count_x_visual_proof_phrase_density",
+      "visual_proof_phrase_count_x_zygarnik_score",
+      "visual_proof_phrase_count_x_zygarnik_buildup_ratio"
     ],
     "depth_in_hierarchy": 0
   },
