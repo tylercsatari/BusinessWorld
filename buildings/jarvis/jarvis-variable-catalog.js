@@ -583,6 +583,15 @@ const FAMILY_KEY_STEMS = {
     story_clock: 'story_clock',
     promise_echo: 'promise_echo',
     proof_build: 'proof_build',
+    // ZYGARNIK families previously missing from stems
+    foreshadow: 'foreshadow',
+    identity_hook: 'identity_hook',
+    social_contrast: 'social_contrast',
+    story_stake: 'story_stake',
+    delayed_gratification: 'delayed_gratification',
+    revelation_pace: 'revelation_pace',
+    suspense: 'suspense',
+    outcome_ref: 'outcome_ref',
 };
 
 // Reverse index: stem -> family name (longest stems first to avoid matching
@@ -2025,25 +2034,120 @@ function describeVariable(key, opts = {}) {
         }
     }
 
-    // 4) Fallback — we still try to infer *something* from naming clues.
-    //    Pattern-based inference: look for well-known structural tokens
-    //    (count, density, ratio, pct, first_half, hook, …) and surface
-    //    whatever we can read off the name. Only reaches here when the
-    //    key didn't match any family stem or explicit pattern rule above.
-    const clues = inferStructuralClues(trimmedKey);
+    // 4) Auto-infer definition from key structure.
+    //    Detects modality, quantification, and generates a description
+    //    from well-known prefixes/suffixes in the key name.
+    return inferDefinitionFromKey(trimmedKey);
+}
+
+/**
+ * Auto-generates a variable definition from the key name structure.
+ * Recognizes common prefixes (retention_, hook_, title_, zygarnik_, speech_,
+ * daily_views_) and suffixes (_count, _density, _pct, _ratio, _flag) to
+ * produce accurate modality, formula, quantification, and description.
+ */
+function inferDefinitionFromKey(key) {
+    const label = humanizeKey(key);
+    let modality = 'transcript.fullText';
+    let quantification = 'Scalar';
+    let expected_range = 'varies';
+    let source_fields = [];
+    let description = '';
+    let formula = key;
+    let layer = 'pre';
+
+    // Detect modality from prefix
+    if (key.startsWith('retention_') || key === 'above_baseline_area' || key === 'below_baseline_area'
+        || key === 'early_late_drop_ratio' || key === 'late_drop_severity' || key === 'momentum_zone_length'
+        || key === 'mid_video_cliff' || key === 'hook_retention_pct' || key === 'hook_drop_rate'
+        || key === 'final_5pct_retention') {
+        modality = 'analytics.retentionCurve';
+        source_fields = ['analytics.retentionCurve'];
+        layer = 'post';
+    } else if (key.startsWith('daily_views_') || key.startsWith('view_') || key === 'view_day1_share'
+        || key === 'view_week3_week1_ratio') {
+        modality = 'analytics.dailyViews';
+        source_fields = ['analytics.dailyViews'];
+        layer = 'post';
+    } else if (key.startsWith('title_') || key.startsWith('idea_')) {
+        modality = 'metadata.title';
+        source_fields = ['metadata.title'];
+    } else if (key.startsWith('description_')) {
+        modality = 'metadata.description';
+        source_fields = ['metadata.description'];
+    } else if (key.startsWith('speech_') || key.includes('speech_rate') || key.startsWith('opening_speech')
+        || key.startsWith('closing_speech') || key.startsWith('peak_speech') || key.includes('silence')
+        || key === 'opening_word_latency_s') {
+        modality = 'transcript.fullText + metadata.duration';
+        source_fields = ['transcript.fullText', 'metadata.duration'];
+    } else if (key.startsWith('hook_')) {
+        modality = 'transcript.fullText (hook slice)';
+        source_fields = ['transcript.fullText'];
+    } else if (key.startsWith('zygarnik_')) {
+        modality = 'transcript.fullText (phrase matching)';
+        source_fields = ['transcript.fullText'];
+    } else if (key.includes('like_') || key.includes('comment_') || key.includes('share_')
+        || key.includes('sub_') || key.includes('engaged_') || key.includes('engagement')
+        || key === 'stayed_to_watch_rate' || key === 'is_vertical' || key === 'upload_month') {
+        modality = 'YouTube Analytics';
+        source_fields = ['analytics'];
+        layer = 'post';
+    } else if (key.includes('duration')) {
+        modality = 'metadata.duration';
+        source_fields = ['metadata.duration'];
+    } else {
+        source_fields = ['transcript.fullText'];
+    }
+
+    // Detect quantification from suffix
+    if (key.endsWith('_count') || key.endsWith('_count_hook') || /_count_first\d+s$/.test(key)
+        || key.endsWith('_count_first_quarter') || key.endsWith('_count_first_half')
+        || key.endsWith('_count_mid') || key.endsWith('_count_last_quarter')) {
+        quantification = 'Count';
+        expected_range = '0 to ~100';
+    } else if (key.endsWith('_density') || key.endsWith('_density_hook')
+        || /_density_first\d+s$/.test(key) || key.endsWith('_density_first_quarter')
+        || key.endsWith('_density_first_half') || key.endsWith('_density_first_third')
+        || key.endsWith('_density_second_half') || key.endsWith('_density_mid')
+        || key.endsWith('_density_last_quarter') || key.endsWith('_density_last_third')) {
+        quantification = 'Density (count / words)';
+        expected_range = '0 to 0.1';
+    } else if (key.endsWith('_ratio')) {
+        quantification = 'Ratio';
+        expected_range = '0 to 10';
+    } else if (key.endsWith('_pct')) {
+        quantification = 'Percentage or position (0–1)';
+        expected_range = '0 to 1';
+    } else if (key.endsWith('_flag')) {
+        quantification = 'Binary flag';
+        expected_range = '0 or 1';
+    } else if (key.endsWith('_score')) {
+        quantification = 'Composite score';
+        expected_range = 'varies';
+    } else if (key.endsWith('_s')) {
+        quantification = 'Seconds';
+        expected_range = '0 to 600';
+    } else if (key.endsWith('_wps')) {
+        quantification = 'Words per second';
+        expected_range = '0 to 10';
+    }
+
+    // Generate description from key components
+    const readable = key.replace(/_/g, ' ');
+    description = `Deterministic metric: ${readable}. ` +
+        `Quantified as ${quantification.toLowerCase()} from ${modality.split('(')[0].trim()}.`;
+
     return {
-        key: trimmedKey,
-        source: 'fallback',
-        label: humanizeKey(trimmedKey),
-        description: clues.length
-            ? `No explicit catalog entry for "${trimmedKey}", but the key name contains recognizable clues: ${clues.map(c => c.display).join('; ')}. Best-guess interpretation: ${clues.map(c => c.interpretation).join(' ')}`
-            : `No pattern match for "${trimmedKey}" and no structural clues recognized in the name. Add a static entry or a phrase family to make it self-describing.`,
-        formula: trimmedKey,
-        modality: clues.find(c => c.modality)?.modality || 'unknown',
-        quantification: clues.find(c => c.quantification)?.quantification || 'unknown',
-        source_fields: [],
-        expected_range: clues.find(c => c.expected_range)?.expected_range || 'unknown',
-        structural_clues: clues.map(c => c.token),
+        key,
+        source: 'auto',
+        label,
+        description,
+        formula,
+        modality,
+        quantification,
+        source_fields,
+        expected_range,
+        layer,
     };
 }
 

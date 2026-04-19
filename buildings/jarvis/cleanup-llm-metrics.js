@@ -23,6 +23,18 @@ const REMOVED_KEYS = new Set([
     'close_up_frame_pct', 'hand_presence_frame_pct', 'motion_word_frame_pct',
     'action_frame_pct', 'visual_stake_frame_pct', 'anticipatory_frame_pct',
     'setup_visual_frame_count', 'demonstration_frame_pct', 'result_reveal_frame_pct',
+    // 2nd pass: additional frame-analysis metrics
+    'visual_variety_entropy', 'dramatic_frame_pct', 'face_action_alternation_rate',
+    'face_alone_pct', 'face_intro_delay_frames', 'face_with_action_pct',
+    'frame_cluster_count', 'frame_text_variety', 'object_face_transition_count',
+    'object_focus_pct', 'opening_frame_has_face', 'opening_frame_has_text',
+    'outdoor_frame_pct', 'scene_burst_count', 'scene_transition_spacing_cv',
+    'scene_transition_spacing_mean', 'scene_transition_spacing_variance',
+    'visual_mode_dominant_pct', 'visual_mode_entropy', 'visual_monotony_score',
+    'visual_pacing_variance', 'visual_return_count', 'words_per_scene',
+    'workshop_frame_pct', 'cluster_transition_rate', 'dominant_cluster_pct',
+    'text_density_q1_q4_ratio', 'text_first_appearance_pct', 'text_gap_mean',
+    'text_overlay_burst_count', 'text_overlay_early_pct',
 
     // Segment-label metrics (read from aiAnalysis.segments — LLM-generated, no prompt)
     'segment_count', 'avg_segment_duration_s', 'longest_segment_duration_s',
@@ -31,6 +43,12 @@ const REMOVED_KEYS = new Set([
     'climax_position_pct', 'hook_to_climax_gap_s', 'hook_payoff_gap',
     'narrative_arc_completeness', 'setup_duration_s', 'setup_duration_pct',
     'hook_plus_setup_duration_pct', 'payoff_position_pct', 'hook_to_payoff_gap_pct',
+    // 2nd pass: additional segment-label metrics
+    'has_conclusion_segment', 'has_setup_segment', 'first_segment_duration_pct',
+    'last_segment_duration_pct', 'segment_count_per_minute', 'segment_duration_variance',
+    'segment_length_ratio_max_min', 'segment_type_count', 'hook_body_ratio',
+    'hook_conclusion_combined_pct', 'climax_late_flag', 'golden_ratio_segment_flag',
+    'structural_thirds_balance', 'body_segment_count', 'silence_before_climax_s',
 
     // Segment-transcript metrics (use segment boundaries to slice transcript)
     'open_loop_density_mid', 'closure_density_mid', 'story_stake_density_first_quarter',
