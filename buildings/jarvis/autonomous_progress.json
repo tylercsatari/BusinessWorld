@@ -1,205 +1,205 @@
 {
   "active": false,
-  "run_id": "auto_20260419043136.",
+  "run_id": "auto_20260419050216.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-19T04:31:36.744Z",
-  "updated_at": "2026-04-19T04:57:50.475Z",
-  "finished_at": "2026-04-19T04:57:50.475Z",
+  "started_at": "2026-04-19T05:02:16.943Z",
+  "updated_at": "2026-04-19T05:27:50.063Z",
+  "finished_at": "2026-04-19T05:27:50.063Z",
   "requested_iterations": 3000,
-  "attempted": 23,
-  "completed": 22,
+  "attempted": 25,
+  "completed": 24,
   "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
   "stop_reason": "max_minutes",
   "current_candidate": null,
-  "last_completed_candidate": "micro_commitment_density_x_action_trigger_density",
-  "last_completed_r": -0.0588,
+  "last_completed_candidate": "micro_commitment_density_x_narrative_tension_density",
+  "last_completed_r": 0.0606,
   "recent_events": [
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_social_proof_density",
-      "r": -0.1018,
+      "key": "micro_commitment_density_x_payoff_signal_count",
+      "r": 0.0562,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T04:35:25.958Z"
+      "ts": "2026-04-19T05:07:41.446Z"
     },
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_curiosity_gap_count",
-      "r": 0.0421,
+      "key": "micro_commitment_density_x_payoff_signal_density",
+      "r": 0.051,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T04:37:48.979Z"
+      "ts": "2026-04-19T05:08:37.790Z"
     },
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_curiosity_gap_density",
-      "r": 0.0429,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:38:49.801Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_emotional_peak_count",
-      "r": -0.0901,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:39:49.482Z"
-    },
-    {
-      "type": "completed",
-      "key": "title_number_flag_x_retention_recovery_ratio",
-      "r": -0.1619,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "post",
-      "ts": "2026-04-19T04:40:49.936Z"
-    },
-    {
-      "type": "completed",
-      "key": "retention_recovery_ratio_x_hook_open_loop_density",
-      "r": 0.0936,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "post",
-      "ts": "2026-04-19T04:41:56.384Z"
-    },
-    {
-      "type": "completed",
-      "key": "hook_open_loop_density_x_retention_recovery_ratio",
-      "r": 0.0936,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "post",
-      "ts": "2026-04-19T04:43:03.636Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_proof_of_work_count",
-      "r": 0.1602,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:44:07.017Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_proof_of_work_density",
-      "r": 0.163,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:45:07.217Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_failure_vulnerability_count",
-      "r": -0.0583,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:46:15.405Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_failure_vulnerability_density",
-      "r": -0.0649,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:47:22.885Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_future_self_count",
-      "r": 0,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:48:24.364Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_future_self_density",
-      "r": 0,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:49:36.045Z"
-    },
-    {
-      "type": "completed",
-      "key": "micro_commitment_density_x_commitment_device_count",
-      "r": -0.0097,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:50:38.355Z"
-    },
-    {
-      "type": "completed",
-      "key": "retention_recovery_ratio_x_open_loop_count_first20s",
-      "r": 0.1438,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "post",
-      "ts": "2026-04-19T04:51:37.133Z"
-    },
-    {
-      "type": "completed",
-      "key": "open_loop_count_first20s_x_retention_recovery_ratio",
-      "r": 0.1438,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "post",
-      "ts": "2026-04-19T04:52:38.344Z"
-    },
-    {
-      "type": "completed",
-      "key": "retention_late_payoff_x_open_loop_count",
+      "key": "open_loop_count_x_retention_late_payoff",
       "r": 0.2179,
       "resolution_id": "r0",
       "target": "views",
       "layer": "post",
-      "ts": "2026-04-19T04:53:37.794Z"
+      "ts": "2026-04-19T05:09:33.147Z"
     },
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_commitment_device_density",
-      "r": -0.0222,
+      "key": "retention_late_payoff_x_open_loop_to_closure_ratio",
+      "r": 0.1749,
       "resolution_id": "r0",
       "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:54:37.294Z"
+      "layer": "post",
+      "ts": "2026-04-19T05:10:28.008Z"
     },
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_action_trigger_count",
-      "r": -0.0497,
+      "key": "open_loop_to_closure_ratio_x_retention_late_payoff",
+      "r": 0.1749,
       "resolution_id": "r0",
       "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T04:55:37.588Z"
+      "layer": "post",
+      "ts": "2026-04-19T05:11:22.926Z"
     },
     {
       "type": "completed",
-      "key": "micro_commitment_density_x_action_trigger_density",
-      "r": -0.0588,
+      "key": "micro_commitment_density_x_setup_signal_count",
+      "r": 0.0563,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-19T04:57:50.003Z"
+      "ts": "2026-04-19T05:12:17.812Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_setup_signal_density",
+      "r": 0.0533,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:13:17.257Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_stakes_escalation_count",
+      "r": 0.0856,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:14:18.066Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_stakes_escalation_density",
+      "r": 0.0828,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:15:12.695Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_delayed_reveal_count",
+      "r": 0.0554,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:16:11.921Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_delayed_reveal_density",
+      "r": 0.0494,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:19:03.595Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_narrative_anchor_count",
+      "r": 0.0999,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:19:58.321Z"
+    },
+    {
+      "type": "completed",
+      "key": "retention_late_payoff_x_payoff_delay_score",
+      "r": 0.0747,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T05:20:53.435Z"
+    },
+    {
+      "type": "completed",
+      "key": "payoff_delay_score_x_retention_late_payoff",
+      "r": 0.0747,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T05:21:48.691Z"
+    },
+    {
+      "type": "completed",
+      "key": "retention_late_payoff_x_setup_duration_s",
+      "r": 0.1549,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T05:22:42.557Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_narrative_anchor_density",
+      "r": 0.0966,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:23:39.166Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_challenge_statement_count",
+      "r": 0.0437,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:24:37.846Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_challenge_statement_density",
+      "r": 0.0519,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:25:47.799Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_narrative_tension_count",
+      "r": 0.0514,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:26:48.119Z"
+    },
+    {
+      "type": "completed",
+      "key": "micro_commitment_density_x_narrative_tension_density",
+      "r": 0.0606,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T05:27:49.688Z"
     }
   ],
-  "pre_attempted": 17,
-  "pre_completed": 16,
+  "pre_attempted": 19,
+  "pre_completed": 18,
   "post_attempted": 6,
   "post_completed": 6
 }
