@@ -1,20 +1,86 @@
 {
   "active": true,
-  "run_id": "auto_20260419094930.",
+  "run_id": "auto_20260419095021.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-19T09:49:30.222Z",
-  "updated_at": "2026-04-19T09:50:19.384Z",
+  "started_at": "2026-04-19T09:50:21.640Z",
+  "updated_at": "2026-04-19T10:00:49.768Z",
   "finished_at": null,
   "requested_iterations": 3000,
-  "attempted": 0,
-  "completed": 0,
-  "failures": 0,
+  "attempted": 8,
+  "completed": 6,
+  "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 0,
+  "no_signal_streak": 2,
   "stop_reason": null,
-  "current_candidate": null,
-  "last_completed_candidate": null,
-  "last_completed_r": null,
-  "recent_events": []
+  "current_candidate": "gratification_delay_pct_x_retention_pre_payoff_drop",
+  "last_completed_candidate": "anticipatory_build_density_x_information_drip_ratio",
+  "last_completed_r": 0,
+  "recent_events": [
+    {
+      "type": "failed",
+      "key": "payoff_position_pct_x_challenge_to_resolution_gap_pct",
+      "reason": "processIndicator returned null",
+      "layer": "pre",
+      "ts": "2026-04-19T09:52:39.248Z"
+    },
+    {
+      "type": "completed",
+      "key": "anticipatory_build_density_x_pre_proof_tension_score",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T09:54:20.540Z"
+    },
+    {
+      "type": "completed",
+      "key": "anticipatory_build_density_x_credential_signal_count",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T09:55:33.421Z"
+    },
+    {
+      "type": "completed",
+      "key": "anticipatory_build_density_x_credential_signal_density",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T09:56:37.914Z"
+    },
+    {
+      "type": "completed",
+      "key": "anticipatory_build_density_x_closure_gap_pct",
+      "r": -0.0996,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T09:57:35.676Z"
+    },
+    {
+      "type": "completed",
+      "key": "anticipatory_build_density_x_micro_reward_density",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T09:59:03.932Z"
+    },
+    {
+      "type": "completed",
+      "key": "anticipatory_build_density_x_information_drip_ratio",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T10:00:49.258Z"
+    }
+  ],
+  "pre_attempted": 7,
+  "pre_completed": 6,
+  "post_attempted": 1,
+  "post_completed": 0
 }

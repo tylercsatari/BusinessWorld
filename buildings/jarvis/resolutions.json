@@ -31012,7 +31012,14 @@
       "anticipatory_build_density_x_visual_proof_phrase_count",
       "anticipatory_build_density_x_visual_proof_phrase_density",
       "anticipatory_build_density_x_zygarnik_score",
-      "anticipatory_build_density_x_zygarnik_buildup_ratio"
+      "anticipatory_build_density_x_zygarnik_buildup_ratio",
+      "anticipatory_build_density_x_unresolved_loop_count",
+      "anticipatory_build_density_x_pre_proof_tension_score",
+      "anticipatory_build_density_x_credential_signal_count",
+      "anticipatory_build_density_x_credential_signal_density",
+      "anticipatory_build_density_x_closure_gap_pct",
+      "anticipatory_build_density_x_micro_reward_density",
+      "anticipatory_build_density_x_information_drip_ratio"
     ],
     "depth_in_hierarchy": 0
   },
