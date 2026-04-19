@@ -108,6 +108,7 @@ const JarvisUI = (() => {
         { id: 'analytical', label: 'Analytical' },
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
+        { id: 'variables', label: 'Variables' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'knowledge', label: 'Knowledge' },
         { id: 'resolution', label: 'Resolution' },
@@ -199,6 +200,7 @@ const JarvisUI = (() => {
             case 'analytical': return renderAnalytical();
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
+            case 'variables': return renderVariables();
             case 'autoResearch': return renderAutoResearch();
             case 'knowledge': return renderKnowledge();
             case 'resolution': return renderResolution();
@@ -357,6 +359,86 @@ const JarvisUI = (() => {
             </div>`;
     }
 
+    // ── Variable-definition / provenance block ──
+    // Renders a self-contained card describing one variable's provenance:
+    // plain-English description, formula, source fields/modality, quantification
+    // style, and (for phrase families) the sample phrase list.
+    //
+    // Accepts a definition object produced by jarvis-variable-catalog.js, or
+    // synthesises one on the fly if the browser module is present and no def
+    // was supplied. Never throws — missing fields collapse silently.
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function lookupVariableDefinition(key, supplied) {
+        if (supplied) return supplied;
+        if (typeof window !== 'undefined' && window.JarvisVariableCatalog && typeof window.JarvisVariableCatalog.describeVariable === 'function') {
+            try { return window.JarvisVariableCatalog.describeVariable(key); } catch (e) { return null; }
+        }
+        return null;
+    }
+
+    function renderVariableDefinitionRow(def, opts = {}) {
+        if (!def) return '';
+        const accent = opts.accent || '#22d3ee';
+        const title = def.label || def.key || 'Variable';
+        const badge = def.source
+            ? `<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:${accent}22;color:${accent};font-weight:600;text-transform:uppercase;letter-spacing:0.04em">${escapeHtml(def.source.replace(/_/g,' '))}</span>`
+            : '';
+        const quantBadge = def.quantification
+            ? `<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#334155;color:#cbd5e1;font-weight:500;margin-left:4px">${escapeHtml(def.quantification)}</span>`
+            : '';
+        const modalityBadge = def.modality
+            ? `<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#1e293b;color:#94a3b8;margin-left:4px">${escapeHtml(def.modality)}</span>`
+            : '';
+
+        const sourceFieldsHtml = (def.source_fields && def.source_fields.length)
+            ? `<div style="margin-top:3px"><span style="color:#64748b">Source fields: </span>${def.source_fields.map(s => `<code style="color:#93c5fd;font-size:10px">${escapeHtml(s)}</code>`).join(' &middot; ')}</div>`
+            : '';
+
+        let phraseHtml = '';
+        if (def.phrase_family && def.phrase_family.examples && def.phrase_family.examples.length) {
+            const examples = def.phrase_family.examples.slice(0, 8).map(p => `<code style="background:#1e293b;color:#fbbf24;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px">${escapeHtml(p)}</code>`).join(' ');
+            phraseHtml = `<div style="margin-top:4px;padding:5px 7px;background:#0a1628;border-radius:4px;border-left:2px solid ${accent}">
+                <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Phrase family: <span style="color:#fbbf24">${escapeHtml(def.phrase_family.const_name || def.phrase_family.name)}</span> &mdash; ${escapeHtml(def.phrase_family.signal || '')}</div>
+                <div style="font-size:11px;color:#94a3b8;line-height:1.5">${examples}</div>
+            </div>`;
+        }
+
+        const componentsHtml = (def.component_definitions && def.component_definitions.length)
+            ? `<div style="margin-top:6px;padding-left:8px;border-left:2px dashed #334155">
+                <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px">Component variables (each defined below)</div>
+                ${def.component_definitions.map(cd => renderVariableDefinitionRow(cd, { accent: '#a78bfa', nested: true })).join('')}
+            </div>`
+            : '';
+
+        return `
+            <div style="background:${opts.nested ? '#0a1020' : '#0f172a'};border-radius:6px;padding:8px 10px;font-size:11px;color:#cbd5e1;margin-bottom:6px;border-left:3px solid ${accent}">
+                <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:4px">
+                    <code style="font-size:11px;color:${accent};font-weight:700">${escapeHtml(def.key || '')}</code>
+                    <span style="color:#cbd5e1;font-size:11px">${escapeHtml(title)}</span>
+                    ${badge}${quantBadge}${modalityBadge}
+                </div>
+                ${def.description ? `<div style="color:#94a3b8;line-height:1.5;margin-top:2px">${escapeHtml(def.description)}</div>` : ''}
+                ${def.formula ? `<div style="margin-top:4px"><span style="color:#64748b;font-size:10px">Formula: </span><code style="color:#22d3ee;font-size:10px;white-space:pre-wrap">${escapeHtml(def.formula)}</code></div>` : ''}
+                ${sourceFieldsHtml}
+                ${def.expected_range ? `<div style="margin-top:3px"><span style="color:#64748b;font-size:10px">Expected range: </span><span style="color:#cbd5e1;font-size:10px">${escapeHtml(def.expected_range)}</span></div>` : ''}
+                ${phraseHtml}
+                ${componentsHtml}
+            </div>`;
+    }
+
+    function renderVariableDefinitionsSection(defs, opts = {}) {
+        const cleaned = (defs || []).filter(Boolean);
+        if (!cleaned.length) return '';
+        const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
+        const header = opts.header || 'Variables &amp; Measurement Provenance';
+        const sub = opts.sub ? `<div style="font-size:10px;color:#64748b;margin-bottom:6px">${opts.sub}</div>` : '';
+        return `${sectionHdr(header)}${sub}${cleaned.map(d => renderVariableDefinitionRow(d, { accent: opts.accent })).join('')}`;
+    }
+
     function renderExperimentInstanceCard(ind) {
         const exp = ind.experiment;
         const result = ind.result;
@@ -428,6 +510,11 @@ const JarvisUI = (() => {
                     <div style="margin-top:3px"><span style="color:#64748b">Extracted from: </span>${(metricDef.data_sources || []).join(', ')}</div>
                     <div style="margin-top:3px"><span style="color:#64748b">Resolution: </span>${ind.resolution_id || 'r0'}</div>
                 </div>
+
+                ${renderVariableDefinitionsSection(
+                    [lookupVariableDefinition(ind.key, ind.variable_definition)],
+                    { header: 'Variable Definition &amp; Provenance', sub: 'Exactly how <code style="color:#22d3ee">' + escapeHtml(ind.key) + '</code> is quantified from raw data.', accent: color }
+                )}
 
                 ${sectionHdr('Results')}
                 <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #1e293b;margin-bottom:8px">
@@ -517,6 +604,18 @@ const JarvisUI = (() => {
                     <div style="margin-top:3px"><span style="color:#64748b">Tool: </span>${exp.tool_id || '—'}${exp.tool_version ? ' (v' + exp.tool_version + ')' : ''}</div>
                     ${exp.parameters ? `<div style="margin-top:3px"><span style="color:#64748b">Transform: </span><code>${exp.parameters.transform_target || '—'}</code></div>` : ''}
                 </div>
+
+                ${renderVariableDefinitionsSection(
+                    [lookupVariableDefinition(d.key, d.variable_definition)],
+                    { header: 'Composite Variable Definition', sub: 'How the combined variable <code style="color:#22d3ee">' + escapeHtml(d.key) + '</code> is produced.', accent: cfg.color }
+                )}
+
+                ${renderVariableDefinitionsSection(
+                    (d.component_variable_definitions && d.component_variable_definitions.length
+                        ? d.component_variable_definitions
+                        : comps.map(k => lookupVariableDefinition(k))),
+                    { header: 'Component Variable Definitions', sub: 'Each ingredient of the composite &mdash; how it\'s tracked + quantified.', accent: '#a78bfa' }
+                )}
 
                 ${sectionHdr('Results')}
                 <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #1e293b;margin-bottom:8px">
@@ -2448,6 +2547,199 @@ const JarvisUI = (() => {
                     el.innerHTML = renderExperimentsV2Content();
                     bindExperimentsV2Events();
                 }
+            });
+        }
+    }
+
+    // ══════════════════════════════════════════════════
+    // TAB: VARIABLES — browsable, searchable catalog of every variable +
+    //                  pattern + phrase family the system knows about.
+    // ══════════════════════════════════════════════════
+    let variablesCatalog = null;       // { static_variables, phrase_families, quantification_styles, non_phrase_rules }
+    let variablesKnown = null;         // { total, variables: [ { key, ...def } ] }
+    let variablesSearch = '';
+    let variablesFilter = 'all';       // 'all' | 'static' | 'phrase_family' | 'retention_percentile' | ...
+    let variablesSelectedKey = null;
+
+    async function loadVariablesCatalog() {
+        if (variablesCatalog && variablesKnown) return true;
+        try {
+            const [cRes, kRes] = await Promise.all([
+                fetch('/api/jarvis/v2/variables/catalog'),
+                fetch('/api/jarvis/v2/variables/known'),
+            ]);
+            variablesCatalog = await cRes.json();
+            variablesKnown = await kRes.json();
+            return true;
+        } catch (e) {
+            console.error('Variables catalog load failed:', e);
+            variablesCatalog = variablesCatalog || { static_variables: [], phrase_families: [], quantification_styles: [], non_phrase_rules: [] };
+            variablesKnown = variablesKnown || { total: 0, variables: [] };
+            return false;
+        }
+    }
+
+    function renderVariables() {
+        if (!variablesCatalog || !variablesKnown) {
+            loadVariablesCatalog().then(() => {
+                const el = container?.querySelector('.jarvis-vars-root');
+                if (el) { el.innerHTML = renderVariablesContent(); bindVariablesEvents(); }
+            });
+            return '<div class="jarvis-vars-root"><div class="jarvis-loading" style="padding:20px;color:#64748b">Loading variable catalog…</div></div>';
+        }
+        setTimeout(bindVariablesEvents, 50);
+        return `<div class="jarvis-vars-root">${renderVariablesContent()}</div>`;
+    }
+
+    function renderVariablesContent() {
+        const sectionHdr = text => `<div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:5px;margin-top:12px">${text}</div>`;
+        const allVars = (variablesKnown && variablesKnown.variables) || [];
+        const search = (variablesSearch || '').trim().toLowerCase();
+        const sourceCounts = {};
+        for (const v of allVars) { const s = v.source || 'unknown'; sourceCounts[s] = (sourceCounts[s] || 0) + 1; }
+
+        let filtered = allVars;
+        if (variablesFilter && variablesFilter !== 'all') {
+            filtered = filtered.filter(v => (v.source || 'unknown') === variablesFilter);
+        }
+        if (search) {
+            filtered = filtered.filter(v => {
+                const hay = `${v.key || ''} ${v.label || ''} ${v.description || ''} ${v.quantification || ''} ${v.modality || ''}`.toLowerCase();
+                return hay.includes(search);
+            });
+        }
+        // Cap displayed rows so the DOM stays snappy; user can search to narrow.
+        const cap = 400;
+        const overflow = Math.max(0, filtered.length - cap);
+        filtered = filtered.slice(0, cap);
+
+        const filterPills = ['all', ...Object.keys(sourceCounts).sort()].map(src => {
+            const active = variablesFilter === src;
+            const count = src === 'all' ? allVars.length : (sourceCounts[src] || 0);
+            return `<button class="jarvis-vars-filter" data-src-filter="${src}" style="
+                background:${active ? '#22d3ee22' : 'rgba(15,23,42,0.6)'};
+                color:${active ? '#22d3ee' : '#94a3b8'};
+                border:1px solid ${active ? '#22d3ee' : '#1e293b'};
+                padding:3px 8px;font-size:10px;border-radius:999px;cursor:pointer;margin-right:4px;margin-bottom:4px;
+                text-transform:uppercase;letter-spacing:0.05em">
+                ${src.replace(/_/g,' ')} <span style="color:#64748b">${count}</span>
+            </button>`;
+        }).join('');
+
+        const rows = filtered.map(v => {
+            const selected = variablesSelectedKey === v.key;
+            return `<div class="jarvis-vars-row" data-var-key="${escapeHtml(v.key)}" style="
+                display:flex;gap:8px;align-items:center;padding:5px 10px;border-radius:6px;cursor:pointer;
+                background:${selected ? '#1e293b' : '#0a1628'};border-left:3px solid ${selected ? '#22d3ee' : 'transparent'}">
+                <code style="font-size:11px;color:#22d3ee;flex:0 0 auto;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(v.key)}</code>
+                <span style="flex:1;font-size:11px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(v.label || '')}</span>
+                <span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#1e293b;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;flex-shrink:0">${escapeHtml((v.source || 'unknown').replace(/_/g,' '))}</span>
+            </div>`;
+        }).join('');
+
+        // Selected detail
+        let selectedHtml = '';
+        if (variablesSelectedKey) {
+            const def = (allVars.find(v => v.key === variablesSelectedKey))
+                || lookupVariableDefinition(variablesSelectedKey);
+            if (def) {
+                selectedHtml = `<div style="margin-bottom:12px">
+                    <button id="jarvis-vars-back-btn" style="background:none;border:1px solid #334155;color:#94a3b8;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:8px">&larr; Back to list</button>
+                    ${renderVariableDefinitionRow(def, { accent: '#22d3ee' })}
+                </div>`;
+            }
+        }
+
+        // Phrase-family & pattern reference sections
+        const families = (variablesCatalog && variablesCatalog.phrase_families) || [];
+        const quants = (variablesCatalog && variablesCatalog.quantification_styles) || [];
+
+        const familyHtml = families.map(f => {
+            const examples = (f.examples || []).slice(0, 6).map(p => `<code style="background:#1e293b;color:#fbbf24;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px">${escapeHtml(p)}</code>`).join(' ');
+            return `<div style="background:#0a1628;border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:11px;border-left:3px solid #fbbf24">
+                <div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap">
+                    <code style="color:#fbbf24;font-weight:700">${escapeHtml(f.const_name)}</code>
+                    <span style="color:#94a3b8">&mdash; ${escapeHtml(f.signal || '')}</span>
+                    <span style="color:#64748b;font-size:9px">key stem: <code>${escapeHtml(f.key_stem || f.family)}</code></span>
+                </div>
+                <div style="color:#cbd5e1;margin-top:2px;line-height:1.4">${escapeHtml(f.description || '')}</div>
+                <div style="margin-top:4px">${examples}</div>
+            </div>`;
+        }).join('');
+
+        const quantHtml = quants.map(q => `<div style="background:#0a1628;border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:11px;border-left:3px solid #a78bfa">
+            <div><code style="color:#a78bfa;font-weight:700">${escapeHtml(q.style)}</code> <span style="color:#64748b">${escapeHtml(q.suffix_pattern)}</span></div>
+            <div style="color:#cbd5e1;margin-top:2px">${escapeHtml(typeof q.description === 'string' ? q.description : '')}</div>
+            ${q.formula ? `<div style="margin-top:2px;font-size:10px"><span style="color:#64748b">Formula: </span><code style="color:#22d3ee">${escapeHtml(q.formula)}</code></div>` : ''}
+            ${q.modality ? `<div style="margin-top:2px;font-size:10px"><span style="color:#64748b">Modality: </span>${escapeHtml(q.modality)}</div>` : ''}
+        </div>`).join('');
+
+        return `
+            <div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:6px">
+                Variables <span style="font-weight:400;color:#64748b;font-size:12px">(${allVars.length} tracked &mdash; ${families.length} phrase families &middot; ${quants.length} quantification styles)</span>
+            </div>
+            <div style="color:#64748b;font-size:11px;margin-bottom:10px;line-height:1.5">
+                Every metric key Jarvis can cite, with a plain-English description and the exact measurement it maps to. Search by key, label, or modality.
+            </div>
+
+            ${selectedHtml}
+
+            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <input type="text" id="jarvis-vars-search" placeholder="Search variables (e.g. proof_of_work, retention, interaction…)" value="${escapeHtml(variablesSearch)}" style="
+                    flex:1;min-width:240px;background:#0a1628;border:1px solid #1e293b;color:#f1f5f9;
+                    padding:6px 10px;border-radius:6px;font-size:12px;outline:none" />
+            </div>
+            <div style="margin-bottom:8px">${filterPills}</div>
+
+            ${sectionHdr(`Variables (${filtered.length}${overflow ? ' shown, ' + overflow + ' more hidden — narrow search' : ''})`)}
+            <div style="display:flex;flex-direction:column;gap:3px;max-height:360px;overflow-y:auto;border-radius:6px;border:1px solid #1e293b;background:#05080f;padding:4px">
+                ${rows || '<div style="padding:12px;color:#64748b;font-size:11px;text-align:center">No variables match.</div>'}
+            </div>
+
+            ${sectionHdr('Phrase Families')}
+            <div style="color:#64748b;font-size:10px;margin-bottom:6px">Each family is a list of surface-form phrases; metric keys like <code>proof_of_work_count</code>, <code>proof_of_work_density_hook</code>, <code>proof_of_work_front_load_ratio</code> all reference the same underlying family.</div>
+            ${familyHtml}
+
+            ${sectionHdr('Quantification Styles')}
+            <div style="color:#64748b;font-size:10px;margin-bottom:6px">Applied to a phrase family via a key suffix. Combine any family with any style to produce a metric key.</div>
+            ${quantHtml}
+        `;
+    }
+
+    function bindVariablesEvents() {
+        const searchEl = container?.querySelector('#jarvis-vars-search');
+        if (searchEl) {
+            searchEl.addEventListener('input', (e) => {
+                variablesSearch = e.target.value || '';
+                const el = container?.querySelector('.jarvis-vars-root');
+                if (el) {
+                    el.innerHTML = renderVariablesContent();
+                    bindVariablesEvents();
+                    const s2 = container?.querySelector('#jarvis-vars-search');
+                    if (s2) { s2.focus(); s2.setSelectionRange(variablesSearch.length, variablesSearch.length); }
+                }
+            });
+        }
+        container?.querySelectorAll('.jarvis-vars-filter').forEach(btn => {
+            btn.addEventListener('click', () => {
+                variablesFilter = btn.dataset.srcFilter;
+                const el = container?.querySelector('.jarvis-vars-root');
+                if (el) { el.innerHTML = renderVariablesContent(); bindVariablesEvents(); }
+            });
+        });
+        container?.querySelectorAll('.jarvis-vars-row').forEach(row => {
+            row.addEventListener('click', () => {
+                variablesSelectedKey = row.dataset.varKey;
+                const el = container?.querySelector('.jarvis-vars-root');
+                if (el) { el.innerHTML = renderVariablesContent(); bindVariablesEvents(); }
+            });
+        });
+        const back = container?.querySelector('#jarvis-vars-back-btn');
+        if (back) {
+            back.addEventListener('click', () => {
+                variablesSelectedKey = null;
+                const el = container?.querySelector('.jarvis-vars-root');
+                if (el) { el.innerHTML = renderVariablesContent(); bindVariablesEvents(); }
             });
         }
     }

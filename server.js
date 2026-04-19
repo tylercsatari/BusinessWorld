@@ -22,6 +22,7 @@ const shortsCrawler = require('./shorts-crawler');
 const financeService = require('./buildings/finance/finance-service');
 const jarvisStore = require('./buildings/jarvis/jarvis-store');
 const jarvisRunner = require('./buildings/jarvis/jarvis-runner');
+const jarvisVariableCatalog = require('./buildings/jarvis/jarvis-variable-catalog');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
@@ -3778,7 +3779,7 @@ Respond ONLY as valid JSON (no markdown):
             const data = await jarvisStore.loadJson('indicators', []);
             const found = data.find(i => i.key === key);
             if (!found) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
-            sendJsonGz(req, res, found);
+            sendJsonGz(req, res, jarvisVariableCatalog.enrichIndicator(found));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
@@ -3789,22 +3790,99 @@ Respond ONLY as valid JSON (no markdown):
             const data = await jarvisStore.loadJson('derived_experiments', []);
             const found = data.find(d => d.key === key);
             if (!found) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
-            sendJsonGz(req, res, found);
+            sendJsonGz(req, res, jarvisVariableCatalog.enrichDerivedExperiment(found));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+
+    // Variable catalog: pattern-based provenance layer for any metric key.
+    // GET /api/jarvis/v2/variable/<key>        — describe one variable
+    // GET /api/jarvis/v2/variables/catalog     — full pattern + family index
+    // GET /api/jarvis/v2/variables/known       — describe every key that
+    //                                             currently appears in indicators
+    //                                             + derived-experiment components
+    if (pathname.startsWith('/api/jarvis/v2/variable/') && req.method === 'GET') {
+        try {
+            const key = decodeURIComponent(pathname.slice('/api/jarvis/v2/variable/'.length));
+            const def = jarvisVariableCatalog.describeVariable(key);
+            if (!def) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
+            sendJsonGz(req, res, def);
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/variables/catalog' && req.method === 'GET') {
+        try {
+            sendJsonGz(req, res, jarvisVariableCatalog.listCatalog());
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    if (pathname === '/api/jarvis/v2/variables/known' && req.method === 'GET') {
+        try {
+            const [indicators, derived] = await Promise.all([
+                jarvisStore.loadCompactJson('indicators', []),
+                jarvisStore.loadCompactJson('derived_experiments', []),
+            ]);
+            const keySet = new Set();
+            for (const ind of indicators) {
+                if (ind && ind.key) keySet.add(ind.key);
+            }
+            for (const d of derived) {
+                if (d && d.key) keySet.add(d.key);
+                if (d && Array.isArray(d.component_keys)) d.component_keys.forEach(k => k && keySet.add(k));
+            }
+            const variables = Array.from(keySet).sort().map(k => {
+                const def = jarvisVariableCatalog.describeVariable(k);
+                return def || { key: k, source: 'unknown', label: k, description: '' };
+            });
+            sendJsonGz(req, res, { total: variables.length, variables });
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+    // One-shot catalog + known-variables aggregator for the UI's Variables
+    // section. Returns both the pattern directory and every currently-seen key
+    // in a single response so the UI can render a searchable catalog without
+    // multiple fetches.
+    if (pathname === '/api/jarvis/v2/variables' && req.method === 'GET') {
+        try {
+            const [indicators, derived] = await Promise.all([
+                jarvisStore.loadCompactJson('indicators', []),
+                jarvisStore.loadCompactJson('derived_experiments', []),
+            ]);
+            const keySet = new Set();
+            for (const ind of indicators) { if (ind && ind.key) keySet.add(ind.key); }
+            for (const d of derived) {
+                if (d && d.key) keySet.add(d.key);
+                if (d && Array.isArray(d.component_keys)) d.component_keys.forEach(k => k && keySet.add(k));
+            }
+            const variables = Array.from(keySet).sort().map(k => {
+                const def = jarvisVariableCatalog.describeVariable(k);
+                return def || { key: k, source: 'unknown', label: k };
+            });
+            sendJsonGz(req, res, {
+                total_known: variables.length,
+                catalog: jarvisVariableCatalog.listCatalog(),
+                variables,
+            });
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         return;
     }
 
     // Compact indicators (precomputed mirror — never loads full 71MB file)
+    // Each item is enriched with a mini variable_definition (~200 bytes) so
+    // the UI can render provenance chips without a per-key round-trip.
+    // Pass ?nodef=1 to opt out (legacy callers that don't want the extra field).
     if (pathname === '/api/jarvis/v2/indicators' && req.method === 'GET') {
         try {
+            const wantDef = url.searchParams.get('nodef') !== '1';
+            const enrich = (list) => wantDef ? list.map(jarvisVariableCatalog.enrichIndicatorMini) : list;
             if (url.searchParams.get('full') === '1') {
                 if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('indicators');
                 const data = await jarvisStore.loadJson('indicators', []);
-                sendJsonGz(req, res, data);
+                sendJsonGz(req, res, enrich(data));
             } else {
                 if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCompactCache('indicators');
                 const compact = await jarvisStore.loadCompactJson('indicators', []);
-                sendJsonGz(req, res, compact);
+                sendJsonGz(req, res, enrich(compact));
             }
         } catch { sendJsonGz(req, res, '[]'); }
         return;
@@ -3992,16 +4070,21 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
     // Compact derived experiments (precomputed mirror — never loads full file)
+    // Each item is enriched with mini variable_definition + per-component
+    // mini defs so the UI's experiment detail cards can show provenance
+    // without a separate catalog fetch. Pass ?nodef=1 to opt out.
     if (pathname === '/api/jarvis/v2/derived-experiments' && req.method === 'GET') {
         try {
+            const wantDef = url.searchParams.get('nodef') !== '1';
+            const enrich = (list) => wantDef ? list.map(jarvisVariableCatalog.enrichDerivedExperimentMini) : list;
             if (url.searchParams.get('full') === '1') {
                 if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('derived_experiments');
                 const data = await jarvisStore.loadJson('derived_experiments', []);
-                sendJsonGz(req, res, data);
+                sendJsonGz(req, res, enrich(data));
             } else {
                 if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCompactCache('derived_experiments');
                 const compact = await jarvisStore.loadCompactJson('derived_experiments', []);
-                sendJsonGz(req, res, compact);
+                sendJsonGz(req, res, enrich(compact));
             }
         } catch { sendJsonGz(req, res, '[]'); }
         return;
