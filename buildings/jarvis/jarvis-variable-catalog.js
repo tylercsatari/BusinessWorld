@@ -849,24 +849,54 @@ function listCatalog() {
 }
 
 /**
+ * Resolve the target variable key for a record. Records may state it on:
+ *   - record.target                    (most derived experiments / indicators)
+ *   - record.parameters.target         (atomic indicator experiments)
+ *   - record.experiment.parameters.target   (nested experiment blob)
+ * When none is present the Jarvis pipeline treats the target as `views`, so we
+ * default there too. Returned as a non-empty string.
+ */
+function resolveTargetKey(record) {
+    if (!record) return 'views';
+    const pick = (v) => (typeof v === 'string' && v.trim()) ? v.trim() : null;
+    return pick(record.target)
+        || (record.parameters && pick(record.parameters.target))
+        || (record.experiment && record.experiment.parameters && pick(record.experiment.parameters.target))
+        || 'views';
+}
+
+/**
  * Enrich an indicator record in place (non-destructive — returns a shallow
  * copy with an added `variable_definition` field) so the UI can read a
  * consistent provenance block without re-implementing describeVariable.
+ *
+ * Also attaches `target_variable_definition` (defaulting to `views`) so the
+ * UI always has the target side of the correlation defined, not just the
+ * independent variable.
  */
 function enrichIndicator(ind) {
     if (!ind || !ind.key) return ind;
     const def = describeVariable(ind.key);
-    return { ...ind, variable_definition: def };
+    const targetKey = resolveTargetKey(ind);
+    return {
+        ...ind,
+        variable_definition: def,
+        target_key: targetKey,
+        target_variable_definition: describeVariable(targetKey),
+    };
 }
 
 function enrichDerivedExperiment(d) {
     if (!d || !d.key) return d;
     const selfDef = describeVariable(d.key);
     const components = describeDerivedComponents(d);
+    const targetKey = resolveTargetKey(d);
     return {
         ...d,
         variable_definition: selfDef,
         component_variable_definitions: components,
+        target_key: targetKey,
+        target_variable_definition: describeVariable(targetKey),
     };
 }
 
@@ -898,7 +928,13 @@ function describeVariableMini(key) {
 
 function enrichIndicatorMini(ind) {
     if (!ind || !ind.key) return ind;
-    return { ...ind, variable_definition: describeVariableMini(ind.key) };
+    const targetKey = resolveTargetKey(ind);
+    return {
+        ...ind,
+        variable_definition: describeVariableMini(ind.key),
+        target_key: targetKey,
+        target_variable_definition: describeVariableMini(targetKey),
+    };
 }
 
 function enrichDerivedExperimentMini(d) {
@@ -908,10 +944,13 @@ function enrichDerivedExperimentMini(d) {
         ? d.component_keys
         : inferComponentKeys(d.key || '');
     const components = keys.map((k) => describeVariableMini(k)).filter(Boolean);
+    const targetKey = resolveTargetKey(d);
     return {
         ...d,
         variable_definition: selfDef,
         component_variable_definitions: components,
+        target_key: targetKey,
+        target_variable_definition: describeVariableMini(targetKey),
     };
 }
 
@@ -924,6 +963,7 @@ const api = {
     enrichIndicatorMini,
     enrichDerivedExperiment,
     enrichDerivedExperimentMini,
+    resolveTargetKey,
     // Exposed for tests + the UI, which wants to render family metadata
     // outside of any particular key.
     PHRASE_FAMILIES,

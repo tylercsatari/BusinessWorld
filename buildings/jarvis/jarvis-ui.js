@@ -516,6 +516,14 @@ const JarvisUI = (() => {
                     { header: 'Variable Definition &amp; Provenance', sub: 'Exactly how <code style="color:#22d3ee">' + escapeHtml(ind.key) + '</code> is quantified from raw data.', accent: color }
                 )}
 
+                ${renderVariableDefinitionsSection(
+                    [lookupVariableDefinition(
+                        ind.target_key || (ind.parameters && ind.parameters.target) || (exp && exp.parameters && exp.parameters.target) || 'views',
+                        ind.target_variable_definition
+                    )],
+                    { header: 'Target Variable Definition', sub: 'The dependent variable the correlation is measured against.', accent: '#f59e0b' }
+                )}
+
                 ${sectionHdr('Results')}
                 <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #1e293b;margin-bottom:8px">
                     <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:9px;color:#64748b;text-transform:uppercase">Pearson r</span><span style="font-size:13px">${rStr}</span></div>
@@ -615,6 +623,14 @@ const JarvisUI = (() => {
                         ? d.component_variable_definitions
                         : comps.map(k => lookupVariableDefinition(k))),
                     { header: 'Component Variable Definitions', sub: 'Each ingredient of the composite &mdash; how it\'s tracked + quantified.', accent: '#a78bfa' }
+                )}
+
+                ${renderVariableDefinitionsSection(
+                    [lookupVariableDefinition(
+                        d.target_key || d.target || (d.parameters && d.parameters.target) || (exp && exp.parameters && exp.parameters.target) || 'views',
+                        d.target_variable_definition
+                    )],
+                    { header: 'Target Variable Definition', sub: 'The dependent variable the correlation is measured against (defaults to <code>views</code>).', accent: '#f59e0b' }
                 )}
 
                 ${sectionHdr('Results')}

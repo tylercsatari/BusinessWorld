@@ -4092,6 +4092,9 @@ Respond ONLY as valid JSON (no markdown):
     if (pathname === '/api/jarvis/v2/experiments' && req.method === 'GET') {
         try {
             const full = url.searchParams.get('full') === '1';
+            const wantDef = url.searchParams.get('nodef') !== '1';
+            const enrichAtomic = (list) => wantDef ? list.map(jarvisVariableCatalog.enrichIndicatorMini) : list;
+            const enrichDerived = (list) => wantDef ? list.map(jarvisVariableCatalog.enrichDerivedExperimentMini) : list;
             if (full) {
                 if (url.searchParams.get('fresh') === '1') {
                     jarvisStore.invalidateCache('experiments_log');
@@ -4103,8 +4106,8 @@ Respond ONLY as valid JSON (no markdown):
                 ]);
                 const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
                 sendJsonGz(req, res, {
-                    atomic: taggedAtomic,
-                    derived,
+                    atomic: enrichAtomic(taggedAtomic),
+                    derived: enrichDerived(derived),
                     count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
                 });
             } else {
@@ -4118,8 +4121,8 @@ Respond ONLY as valid JSON (no markdown):
                 ]);
                 const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
                 sendJsonGz(req, res, {
-                    atomic: taggedAtomic,
-                    derived,
+                    atomic: enrichAtomic(taggedAtomic),
+                    derived: enrichDerived(derived),
                     count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
                 });
             }
