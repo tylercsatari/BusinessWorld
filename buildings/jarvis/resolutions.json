@@ -31031,7 +31031,16 @@
       "visual_proof_phrase_count_x_zygarnik_score",
       "visual_proof_phrase_count_x_zygarnik_buildup_ratio",
       "visual_proof_phrase_count_x_unresolved_loop_count",
-      "visual_proof_phrase_count_x_pre_proof_tension_score"
+      "visual_proof_phrase_count_x_pre_proof_tension_score",
+      "visual_proof_phrase_count_x_credential_signal_count",
+      "visual_proof_phrase_count_x_credential_signal_density",
+      "visual_proof_phrase_count_x_closure_gap_pct",
+      "visual_proof_phrase_count_x_micro_reward_density",
+      "visual_proof_phrase_count_x_zygarnik_gradient_pct",
+      "visual_proof_phrase_count_x_zygarnik_front_load_ratio",
+      "retention_pre_payoff_drop_x_non_sub_view_share",
+      "non_sub_view_share_x_retention_pre_payoff_drop",
+      "retention_pre_payoff_drop_x_title_number_flag"
     ],
     "depth_in_hierarchy": 0
   },
