@@ -30725,7 +30725,8 @@
       "micro_commitment_density_x_zygarnik_front_load_ratio",
       "micro_commitment_density_x_loop_to_closure_gap_s",
       "micro_commitment_density_x_ref_to_gratification_gap_pct",
-      "micro_commitment_density_x_pre_payoff_tension_index"
+      "micro_commitment_density_x_pre_payoff_tension_index",
+      "micro_commitment_density_x_early_proof_to_loop_ratio"
     ],
     "depth_in_hierarchy": 0
   },

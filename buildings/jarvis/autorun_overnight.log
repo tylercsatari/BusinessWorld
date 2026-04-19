@@ -1700,3 +1700,35 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 02:30:59]   [RESULT]    none negative: Interaction: micro_commitment_density * early_proof_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
 [jarvis-runner 02:30:59]   [GRAPH]     Derived edge added: micro_commitment_density × early_proof_to_loop_ratio → 'views', depth=2
 [jarvis-runner 02:30:59]   [DONE]      r=-0.056 (none negative)
+◇ injected env (42) from ../../Desktop/BusinessHub/BusinessWorld/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 03:00:28] 
+============================================================
+[jarvis-runner 03:00:28] AUTONOMOUS RUN: auto_20260419030028.
+[jarvis-runner 03:00:28]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7
+[jarvis-runner 03:02:21] Zero-variance filter: skipped 8096 candidates (175 constant-value indicators)
+[jarvis-runner 03:02:21] Pool before bias: 24381 pre, 7540 post
+[jarvis-runner 03:02:21] Candidate pool: 31921 unrun (32338 already done)
+[jarvis-runner 03:02:22] Loaded 370 videos
+[jarvis-runner 03:02:22] 
+==================================================
+[jarvis-runner 03:02:22] INDICATOR: payoff_position_pct_x_challenge_to_resolution_gap_pct
+[jarvis-runner 03:02:23]   [DATASET]   43 videos, 327 skipped
+[jarvis-runner 03:02:23]   Only 43 videos — skip
+[jarvis-runner 03:02:23] 
+==================================================
+[jarvis-runner 03:02:23] INDICATOR: micro_commitment_density_x_early_proof_to_loop_ratio
+[jarvis-runner 03:02:23]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:02:23]   [EXPERIMENT] Pearson r=-0.056, rho=-0.044, p=0.2867, n=370
+[jarvis-runner 03:02:23]   [RESULT]    none negative: Interaction: micro_commitment_density * early_proof_to_loop_ratio. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:02:23]   [GRAPH]     Derived edge added: micro_commitment_density × early_proof_to_loop_ratio → 'views', depth=2
+[jarvis-runner 03:02:24]   [DONE]      r=-0.056 (none negative)
+[jarvis-runner 03:04:03] 
+==================================================
+[jarvis-runner 03:04:03] INDICATOR: micro_commitment_density_x_proof_arrival_delay_proxy
+[jarvis-runner 03:04:03]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:04:03]   [EXPERIMENT] Pearson r=0.004, rho=-0.012, p=0.9457, n=370
+[jarvis-runner 03:04:03]   [RESULT]    none positive: Interaction: micro_commitment_density * proof_arrival_delay_proxy. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:04:03]   [GRAPH]     Derived edge added: micro_commitment_density × proof_arrival_delay_proxy → 'views', depth=2
+[jarvis-runner 03:04:03]   [DONE]      r=0.004 (none positive)
