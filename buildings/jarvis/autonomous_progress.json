@@ -1,47 +1,22 @@
 {
-  "active": true,
+  "active": false,
   "run_id": "auto_20260419165731.",
   "mode": "hybrid_auto",
   "started_at": "2026-04-19T16:57:31.580Z",
-  "updated_at": "2026-04-19T17:05:20.686Z",
-  "finished_at": null,
+  "updated_at": "2026-04-19T17:23:38.529Z",
+  "finished_at": "2026-04-19T17:23:38.529Z",
   "requested_iterations": 3000,
-  "attempted": 7,
-  "completed": 5,
+  "attempted": 23,
+  "completed": 22,
   "failures": 1,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
-  "stop_reason": null,
-  "current_candidate": "unresolved_loop_count_x_payoff_delay_score",
-  "last_completed_candidate": "unresolved_loop_count_x_narrative_tension_density",
-  "last_completed_r": 0.0901,
+  "stop_reason": "max_minutes",
+  "current_candidate": null,
+  "last_completed_candidate": "pre_proof_tension_score_x_zygarnik_front_load_ratio",
+  "last_completed_r": 0.0641,
   "recent_events": [
-    {
-      "type": "failed",
-      "key": "payoff_position_pct_x_challenge_to_resolution_gap_pct",
-      "reason": "processIndicator returned null",
-      "layer": "pre",
-      "ts": "2026-04-19T16:58:26.872Z"
-    },
-    {
-      "type": "completed",
-      "key": "unresolved_loop_count_x_narrative_anchor_density",
-      "r": 0.1014,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T16:59:37.796Z"
-    },
-    {
-      "type": "completed",
-      "key": "unresolved_loop_count_x_challenge_statement_count",
-      "r": 0.1532,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-19T17:00:40.220Z"
-    },
     {
       "type": "completed",
       "key": "unresolved_loop_count_x_challenge_statement_density",
@@ -68,10 +43,163 @@
       "target": "views",
       "layer": "pre",
       "ts": "2026-04-19T17:05:20.073Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_payoff_delay_score",
+      "r": 0.096,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:06:18.590Z"
+    },
+    {
+      "type": "completed",
+      "key": "retention_open_loop_phase_mean_x_pre_gratification_open_loop_count",
+      "r": 0.1965,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T17:07:42.387Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_gratification_open_loop_count_x_retention_open_loop_phase_mean",
+      "r": 0.1965,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T17:08:44.100Z"
+    },
+    {
+      "type": "completed",
+      "key": "retention_open_loop_phase_mean_x_hook_drop_rate",
+      "r": -0.4644,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T17:09:41.463Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_challenge_to_resolution_gap_pct",
+      "r": 0.0794,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:10:41.319Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_loop_front_half_density",
+      "r": 0.0937,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:11:44.355Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_narrative_tension_density_first_half",
+      "r": 0.1266,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:12:47.564Z"
+    },
+    {
+      "type": "completed",
+      "key": "unresolved_loop_count_x_challenge_setup_density_first_quarter",
+      "r": 0.0881,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:13:50.161Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_proof_tension_score_x_credential_signal_count",
+      "r": 0.0898,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:14:47.504Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_proof_tension_score_x_credential_signal_density",
+      "r": 0.063,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:15:42.421Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_proof_tension_score_x_closure_gap_pct",
+      "r": 0.0971,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:16:37.746Z"
+    },
+    {
+      "type": "completed",
+      "key": "hook_drop_rate_x_retention_open_loop_phase_mean",
+      "r": -0.4644,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T17:17:36.803Z"
+    },
+    {
+      "type": "completed",
+      "key": "retention_open_loop_phase_mean_x_zygarnik_score",
+      "r": 0.1171,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T17:18:33.458Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_score_x_retention_open_loop_phase_mean",
+      "r": 0.1171,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-19T17:19:42.812Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_proof_tension_score_x_micro_reward_density",
+      "r": -0.0224,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:21:10.019Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_proof_tension_score_x_zygarnik_gradient_pct",
+      "r": 0.0904,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:22:14.875Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_proof_tension_score_x_zygarnik_front_load_ratio",
+      "r": 0.0641,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-19T17:23:38.040Z"
     }
   ],
-  "pre_attempted": 7,
-  "pre_completed": 5,
-  "post_attempted": 0,
-  "post_completed": 0
+  "pre_attempted": 17,
+  "pre_completed": 16,
+  "post_attempted": 6,
+  "post_completed": 6
 }

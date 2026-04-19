@@ -31374,7 +31374,15 @@
       "unresolved_loop_count_x_loop_front_half_density",
       "unresolved_loop_count_x_narrative_tension_density_first_half",
       "unresolved_loop_count_x_challenge_setup_density_first_quarter",
-      "pre_proof_tension_score_x_credential_signal_count"
+      "pre_proof_tension_score_x_credential_signal_count",
+      "pre_proof_tension_score_x_credential_signal_density",
+      "pre_proof_tension_score_x_closure_gap_pct",
+      "hook_drop_rate_x_retention_open_loop_phase_mean",
+      "retention_open_loop_phase_mean_x_zygarnik_score",
+      "zygarnik_score_x_retention_open_loop_phase_mean",
+      "pre_proof_tension_score_x_micro_reward_density",
+      "pre_proof_tension_score_x_zygarnik_gradient_pct",
+      "pre_proof_tension_score_x_zygarnik_front_load_ratio"
     ],
     "depth_in_hierarchy": 0
   },
