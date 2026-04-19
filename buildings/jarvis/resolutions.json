@@ -31277,7 +31277,10 @@
       "zygarnik_buildup_ratio_x_mystery_setup_density",
       "retention_setup_phase_mean_x_hook_tension_ratio",
       "hook_tension_ratio_x_retention_setup_phase_mean",
-      "retention_setup_phase_mean_x_gratification_delay_pct"
+      "retention_setup_phase_mean_x_gratification_delay_pct",
+      "zygarnik_buildup_ratio_x_promise_specificity_count",
+      "zygarnik_buildup_ratio_x_promise_specificity_density",
+      "zygarnik_buildup_ratio_x_loss_framing_count"
     ],
     "depth_in_hierarchy": 0
   },
