@@ -21531,5 +21531,40 @@
     "elapsed_minutes": 37.34,
     "total_indicators_after": 1852,
     "total_derived_after": 32278
+  },
+  {
+    "id": "auto_20260420100746.",
+    "started_at": "2026-04-20T10:07:46.501Z",
+    "finished_at": "2026-04-20T10:46:06.801Z",
+    "mode": "hybrid_auto",
+    "llm_proposed": 0,
+    "llm_completed": 0,
+    "attempted": 11,
+    "completed": 8,
+    "failures": 3,
+    "pre_attempted": 8,
+    "pre_completed": 8,
+    "post_attempted": 3,
+    "post_completed": 0,
+    "preupload_ratio_requested": 0.7,
+    "no_signal_streak_end": 7,
+    "stop_reason": "max_minutes",
+    "candidate_keys_processed": [
+      "closure_to_open_ratio_first10s_x_promise_specificity_density",
+      "closure_to_open_ratio_first10s_x_loss_framing_count",
+      "closure_to_open_ratio_first10s_x_loss_framing_density",
+      "closure_to_open_ratio_first10s_x_social_proof_count",
+      "closure_to_open_ratio_first10s_x_social_proof_density",
+      "closure_to_open_ratio_first10s_x_proof_of_work_count",
+      "closure_to_open_ratio_first10s_x_proof_of_work_density",
+      "FAIL:early_proof_position_pct_x_above_baseline_area",
+      "FAIL:early_proof_position_pct_x_avg_percent_viewed",
+      "FAIL:early_proof_position_pct_x_avg_view_duration_s",
+      "closure_to_open_ratio_first10s_x_failure_vulnerability_count"
+    ],
+    "top_new_r_abs": 0.0963,
+    "elapsed_minutes": 38.34,
+    "total_indicators_after": 1852,
+    "total_derived_after": 32286
   }
 ]

@@ -31992,7 +31992,15 @@
       "closure_to_open_ratio_first10s_x_rhetorical_question_density",
       "closure_to_open_ratio_first10s_x_mystery_setup_count",
       "closure_to_open_ratio_first10s_x_mystery_setup_density",
-      "closure_to_open_ratio_first10s_x_promise_specificity_count"
+      "closure_to_open_ratio_first10s_x_promise_specificity_count",
+      "closure_to_open_ratio_first10s_x_promise_specificity_density",
+      "closure_to_open_ratio_first10s_x_loss_framing_count",
+      "closure_to_open_ratio_first10s_x_loss_framing_density",
+      "closure_to_open_ratio_first10s_x_social_proof_count",
+      "closure_to_open_ratio_first10s_x_social_proof_density",
+      "closure_to_open_ratio_first10s_x_proof_of_work_count",
+      "closure_to_open_ratio_first10s_x_proof_of_work_density",
+      "closure_to_open_ratio_first10s_x_failure_vulnerability_count"
     ],
     "depth_in_hierarchy": 0
   },
