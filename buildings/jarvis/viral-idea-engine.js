@@ -1488,6 +1488,221 @@ function computeCreatorFit(obj, endpoint, ctx) {
     return { score: round(score, 3), drivers };
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Proof-clarity / mechanism-visibility score (v3.3)
+//
+// Biases toward ideas whose on-camera PROOF MOMENT is single-frame
+// legible — the pattern Tyler flagged: hand-writing 300 letters is
+// specific but the payoff is a stack whose content is untestable; a
+// cardboard boat that rows across a lake OR a potato-only diet with a
+// daily weigh-in both land single-shot visible proof.
+//
+// Every driver cites an on-disk indicator:
+//   - build-test hybrids (verb "built … and rowed/rode/drove …")
+//       → findings.proven_discoveries.title_making_keyword ($24M avg)
+//         + top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks
+//         vs 8% at drops — action frames ARE the proof moment)
+//         + wave11_12.end_begin_ratio (single-shot before/after payoff)
+//   - body-transformation with explicit before/after anchor
+//       → family=body_transformation + weigh-in / same-starting-frame
+//         language → wave11_12.end_begin_ratio
+//   - single-frame numeric endpoint (count / timer / distance)
+//       → HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio (the freeze-frame
+//         IS the proof shot)
+//   - named physical artifact in the motif's first_frame_action /
+//     visual_action_short (counter, stack, tower, bar, scale, overlay)
+//       → HIGH_ENERGY_ACTION_FRAMES (visible artifact in frame)
+// Inverse rewards (penalties):
+//   - mystery_experiment / identity endpoint with NO named artifact
+//     (silent week, phoneless fortnight)
+//       → inverse of HIGH_ENERGY_ACTION_FRAMES + inverse of end_begin_ratio
+//         (payoff is an observation, not a shot)
+//   - repetition_outreach family without a physical-test verb (letters,
+//     portrait stacks)
+//       → stack-of-envelopes is visible but the CONTENT is untestable —
+//         lower end_begin_ratio than build-then-test or body change
+//   - cognitive / head-framed payoff with action_intensity=low (memorize
+//     book, silent)
+//       → inverse of HIGH_ENERGY_ACTION_FRAMES and PHYSICAL_SENSORY_LANGUAGE
+//
+// The score is added to the combo score so the diversity-aware selector
+// and the final blueprint re-rank both reward proof-clarity within each
+// motif family. No hand-picked top-5 list — every weight reads a
+// factual field on the motif atom and cites a corpus indicator.
+function computeProofClarity(obj, endpoint, ctx) {
+    const drivers = [];
+    let score = 0;
+
+    const family = String(obj.family || '').toLowerCase();
+    const titleTpl = String(obj.title_core_tpl || '').toLowerCase();
+    const logline = String(obj.logline_action || '').toLowerCase();
+    const firstFrame = String(obj.first_frame_action || '').toLowerCase();
+    const visual = String(obj.visual_action_short || '').toLowerCase();
+    const bodyPart = String(obj.body_part_phrase || '').toLowerCase();
+    const allText = `${titleTpl} ${logline} ${firstFrame} ${visual}`;
+
+    // A. Build-test hybrid detection — motif copy contains BOTH a build
+    //    verb and a physical-test verb. This unifies make + test in one
+    //    shoot; the strongest visible-proof pattern in the corpus.
+    const BUILD_VERB_RE = /\b(built|build|made|make|constructed|construct|welded|assembled|rigged|crafted|hand-built)\b/;
+    const TEST_VERB_RE = /\b(rowed|row|rode|ride|drove|drive|launched|sailed|flew|flown|fired|tested|test|raced|race|broke|holds until|gives|performs|performed|rowing|riding|driving)\b/;
+    const hasBuildVerb = BUILD_VERB_RE.test(allText);
+    const hasTestVerb = TEST_VERB_RE.test(allText);
+    if (hasBuildVerb && hasTestVerb) {
+        const d = 0.38;
+        score += d;
+        drivers.push({
+            driver: 'build_test_hybrid_in_motif_copy',
+            delta: d,
+            matched_build_verb: (allText.match(BUILD_VERB_RE) || [])[0],
+            matched_test_verb: (allText.match(TEST_VERB_RE) || [])[0],
+            source: 'proven_discoveries.title_making_keyword ($24M avg, 23 videos) + top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops) + wave11_12.end_begin_ratio (single-shot visible payoff)',
+        });
+    }
+
+    // B. Body-transformation with a concrete single-shot proof anchor
+    //    (weigh-in / same starting frame / before-after / same shot).
+    const BODY_PROOF_ANCHOR_RE = /\b(weigh-in|weigh in|weigh|scale|same starting frame|same shot|before\/after|morning weigh-?in|same driveway|same kitchen counter|day \d+ vs|first and last run|first and last)\b/;
+    const isBodyFamily = family === 'body_transformation';
+    const hasBodyProof = BODY_PROOF_ANCHOR_RE.test(allText);
+    if (isBodyFamily && hasBodyProof) {
+        const d = 0.32;
+        score += d;
+        drivers.push({
+            driver: 'body_transformation_with_proof_anchor',
+            delta: d,
+            matched_anchor: (allText.match(BODY_PROOF_ANCHOR_RE) || [])[0],
+            source: 'family=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
+        });
+    } else if (isBodyFamily) {
+        const d = 0.12;
+        score += d;
+        drivers.push({
+            driver: 'body_transformation_without_proof_anchor',
+            delta: d,
+            source: 'family=body_transformation but motif copy lacks a single-shot before/after anchor — partial end_begin_ratio credit',
+        });
+    }
+
+    // C. Single-frame numeric endpoint (counter / timer / distance)
+    //    — the freeze-frame IS the proof. Transformation / build_test
+    //    endpoints carry their own proof via A / B above.
+    if (endpoint.kind === 'count' || endpoint.kind === 'timer' || endpoint.kind === 'distance') {
+        const d = 0.22;
+        score += d;
+        drivers.push({
+            driver: `single_frame_numeric_endpoint_${endpoint.kind}`,
+            delta: d,
+            source: 'top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES + wave11_12.end_begin_ratio — numeric counter freeze is single-shot legible proof',
+        });
+    } else if (endpoint.kind === 'transformation' || endpoint.kind === 'build_test') {
+        const d = 0.14;
+        score += d;
+        drivers.push({
+            driver: `single_shot_qualitative_endpoint_${endpoint.kind}`,
+            delta: d,
+            source: 'wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when motif copy names a concrete artifact (scored in D)',
+        });
+    }
+
+    // D. Named physical artifact / overlay in the motif's first_frame or
+    //    visual_action_short — proof object is in frame.
+    const ARTIFACT_PROOF_RE = /\b(stack|pile|tower|counter|overlay|completion bar|completion %|distance overlay|mile-counter|mile counter|timer overlay|page tally|page grid|finished stack|weigh|scale|ruler|height ruler|envelope|addressed envelopes|finished portraits|crane pile|puzzle pieces|coins|band counter|hull|oars|pedals|bike frame|step-?by-?step)\b/;
+    const hasArtifact = ARTIFACT_PROOF_RE.test(allText);
+    if (hasArtifact) {
+        const d = 0.12;
+        score += d;
+        drivers.push({
+            driver: 'physical_artifact_or_overlay_in_frame',
+            delta: d,
+            matched_artifact: (allText.match(ARTIFACT_PROOF_RE) || [])[0],
+            source: 'first_frame_action / visual_action_short names a physical artifact or overlay — HIGH_ENERGY_ACTION_FRAMES peak cause (artifact visible in the proof shot)',
+        });
+    }
+
+    // E. Abstract-payoff penalty — experiment / identity endpoint with
+    //    no artifact described. Proof requires context or trust.
+    const abstractEndpoint = endpoint.kind === 'experiment' || endpoint.kind === 'identity';
+    if (abstractEndpoint && !hasArtifact) {
+        const d = -0.25;
+        score += d;
+        drivers.push({
+            driver: `abstract_payoff_no_artifact_${endpoint.kind}`,
+            delta: d,
+            source: 'endpoint is experiment/identity and no single-frame artifact is named — inverse of HIGH_ENERGY_ACTION_FRAMES + inverse of end_begin_ratio (payoff reads only with context)',
+        });
+    }
+
+    // F. Cognitive / head-framed payoff with low action intensity.
+    //    head / feeling body_part and action_intensity=low combine into
+    //    a slow-to-prove payoff.
+    if ((bodyPart === 'head' || bodyPart === 'feeling') && obj.action_intensity === 'low') {
+        const d = -0.14;
+        score += d;
+        drivers.push({
+            driver: `low_visual_cognitive_body_part_${bodyPart}`,
+            delta: d,
+            source: 'body_part_phrase ∈ {head, feeling} AND action_intensity=low — inverse of HIGH_ENERGY_ACTION_FRAMES (cognitive change is slow to read on camera)',
+        });
+    }
+
+    // G. repetition_outreach / repetition_patience family without a
+    //    physical-test verb: proof is a stack whose contents are
+    //    untestable to the viewer.
+    if ((family === 'repetition_outreach' || family === 'repetition_patience') && !hasTestVerb) {
+        const d = -0.18;
+        score += d;
+        drivers.push({
+            driver: `${family}_without_physical_test_verb`,
+            delta: d,
+            source: 'family=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs',
+        });
+    }
+
+    // H. Mystery_experiment family without artifact — observation, not
+    //    a shot. Stacks with E but the family-level signal is cleaner.
+    if (family === 'mystery_experiment' && !hasArtifact) {
+        const d = -0.18;
+        score += d;
+        drivers.push({
+            driver: 'mystery_experiment_without_artifact',
+            delta: d,
+            source: 'family=mystery_experiment AND no artifact in frame — inverse of HIGH_ENERGY_ACTION_FRAMES (payoff is an observation)',
+        });
+    }
+
+    // I. Body-transformation OR build_test family × active intensity —
+    //    combo bonus when the family ALREADY implies a visible proof
+    //    axis AND the daily act is itself filmable physical action.
+    if ((isBodyFamily || family === 'build_test') && (obj.action_intensity === 'medium' || obj.action_intensity === 'high')) {
+        const d = 0.08;
+        score += d;
+        drivers.push({
+            driver: `${family}_with_active_intensity`,
+            delta: d,
+            source: 'family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)',
+        });
+    }
+
+    // J. Object-interaction signal — HANDS_VISIBLE regex over
+    //    first_frame + visual. Distinguishes motifs where the viewer
+    //    watches hands manipulate something from motifs where the
+    //    viewer watches a person react (silent, phoneless, boxer-shadow).
+    const HANDS_VISIBLE_RE = /\b(hand|fingers|folding|stacking|wrapping|drawing|writing|tightening|taping|sliding|placing|pressing|stretching|flipping|checkmarks|fold|wrap|slide|press|draw|writ|tape|tighten|stack|place|rowing|pedaling|climbing|carrying|holding)\b/;
+    const handsVisible = HANDS_VISIBLE_RE.test(visual) || HANDS_VISIBLE_RE.test(firstFrame);
+    if (handsVisible) {
+        const d = 0.06;
+        score += d;
+        drivers.push({
+            driver: 'object_interaction_hands_visible_in_frame',
+            delta: d,
+            source: 'HANDS_VISIBLE match in visual_action_short / first_frame_action — indicator_registry.visual_is_workshop axis (hands-on-object framing)',
+        });
+    }
+
+    return { score: round(score, 3), drivers };
+}
+
 function scoreMotifCombo(obj, endpoint, ctx) {
     let score = 0;
     const drivers = [];
@@ -1543,13 +1758,23 @@ function scoreMotifCombo(obj, endpoint, ctx) {
     // DNA already present in the corpus. Added to the combo score so the
     // diversity-aware selector rewards fit within each family.
     const fit = computeCreatorFit(obj, endpoint, ctx);
+
+    // Proof-clarity / mechanism-visibility — rewards combos with a
+    // single-shot legible proof moment (build+test, body before/after,
+    // numeric counter freeze + named artifact) and penalizes abstract
+    // payoffs (experiment/identity observation, cognitive change,
+    // stacks whose contents are untestable).
+    const proof = computeProofClarity(obj, endpoint, ctx);
+
     const core = round(score, 3);
     return {
-        score: round(core + fit.score, 3),
+        score: round(core + fit.score + proof.score, 3),
         drivers,
         core_score: core,
         creator_fit_score: fit.score,
         creator_fit_drivers: fit.drivers,
+        proof_clarity_score: proof.score,
+        proof_clarity_drivers: proof.drivers,
     };
 }
 
@@ -1650,7 +1875,7 @@ function composeTitle(obj, endpoint, scale, bodyPart) {
     return core;
 }
 
-function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creatorFit) {
+function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creatorFit, proofClarity) {
     const scale = pickScale(obj);
     const bodyPart = obj.body_part_phrase || (obj.body_parts && obj.body_parts[0]) || 'body';
     const title = composeTitle(obj, endpoint, scale, bodyPart);
@@ -1785,6 +2010,18 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                 ],
                 note: 'Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies.',
             } : null,
+            proof_clarity: proofClarity ? {
+                score: proofClarity.score,
+                drivers: proofClarity.drivers,
+                derived_from_indicators: [
+                    'retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops — action frames ARE the proof moment)',
+                    'retention-patterns.wave11_12_new_signals.end_begin_ratio (single-shot before/after visible payoff structure)',
+                    'findings.proven_discoveries.title_making_keyword ($24M avg, 23 videos with "Making" — build+test hybrids)',
+                    'retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)',
+                    'indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)',
+                ],
+                note: 'Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed low-action payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator.',
+            } : null,
             object_atom_id: obj.id,
             endpoint_atom_id: endpoint.id,
             scale_kind: scale.kind,
@@ -1801,6 +2038,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                 'pre_upload_levers ← brief.top_pre_upload_predictors',
                 'visual_prescription_hints.* ← mechanism_indicator_links (frame_*) ranked by |rho| per zone',
                 'creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
+                'proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs',
             ],
             still_hardcoded: [
                 'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
@@ -1961,6 +2199,8 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
                 core_score: scored.core_score,
                 creator_fit_score: scored.creator_fit_score,
                 creator_fit_drivers: scored.creator_fit_drivers,
+                proof_clarity_score: scored.proof_clarity_score,
+                proof_clarity_drivers: scored.proof_clarity_drivers,
             });
         }
     }
@@ -1973,6 +2213,9 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
             score: c.creator_fit_score,
             drivers: c.creator_fit_drivers,
             core_score: c.core_score,
+        }, {
+            score: c.proof_clarity_score,
+            drivers: c.proof_clarity_drivers,
         });
         // Attach a seed-level diversity_log entry so the synthesis trace on
         // each final idea records why this slot survived selection.
@@ -2023,7 +2266,7 @@ function pickHooksForIdea(brief, pref = {}) {
 // ──────────────────────────────────────────────────────────────────────
 
 function scoreIdea(idea, brief) {
-    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0, motif: 0, fit: 0 };
+    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0, motif: 0, fit: 0, proof: 0 };
 
     // Motif-synthesis score (lattice-driven object/endpoint alignment)
     if (idea.synthesis_trace && typeof idea.synthesis_trace.motif_score === 'number') {
@@ -2035,6 +2278,14 @@ function scoreIdea(idea, brief) {
     // and the diversity-aware re-rank can trade fit against family spread.
     if (idea.synthesis_trace && idea.synthesis_trace.creator_fit && typeof idea.synthesis_trace.creator_fit.score === 'number') {
         parts.fit += idea.synthesis_trace.creator_fit.score * 0.12;
+    }
+
+    // Proof-clarity / mechanism-visibility — biases toward single-shot
+    // legible proof moments (build+test hybrids, body before/after,
+    // numeric counter freeze + named artifact) and penalizes abstract
+    // payoffs. Shown in score_breakdown so the final re-rank sees it.
+    if (idea.synthesis_trace && idea.synthesis_trace.proof_clarity && typeof idea.synthesis_trace.proof_clarity.score === 'number') {
+        parts.proof += idea.synthesis_trace.proof_clarity.score * 0.14;
     }
 
     for (const hook of idea.hook_mechanisms) parts.hook += Math.abs(hook.csw || 0);
@@ -2066,7 +2317,7 @@ function scoreIdea(idea, brief) {
         if (rule && rule.r_partial) parts.interactions += Math.abs(rule.r_partial) * 0.1;
     }
 
-    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions + parts.motif + parts.fit;
+    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions + parts.motif + parts.fit + parts.proof;
     return { parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, round(v, 4)])), total: round(total, 4) };
 }
 
@@ -2894,6 +3145,52 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         });
     }
 
+    // ── Proof-clarity / mechanism-visibility ─────────────────────
+    {
+        const pc = seed.synthesis_trace && seed.synthesis_trace.proof_clarity;
+        const pcDrivers = (pc && pc.drivers) || [];
+        const indicator_keys = [
+            'HIGH_ENERGY_ACTION_FRAMES',
+            'end_begin_ratio',
+            'title_making_keyword',
+            'PHYSICAL_SENSORY_LANGUAGE',
+            'visual_is_workshop',
+        ];
+        const top_indicators = [
+            { key: 'HIGH_ENERGY_ACTION_FRAMES', evidence_type: 'top_3_peak_causes', modality: 'visual', quantification: 'Action-frame share at best vs worst moments (28% vs 8%)', why: 'the proof MOMENT is an action frame — visible build/test/body/counter state in one shot' },
+            { key: 'end_begin_ratio', evidence_type: 'wave11_12_new_signals', modality: 'retention structure', quantification: 'End-state delta above opening promise', why: 'single-shot before/after / build-test / counter-freeze payoff structure' },
+            { key: 'title_making_keyword', evidence_type: 'proven_discoveries', modality: 'title word', quantification: "'Making' keyword videos avg $24M views (n=23)", why: 'build+test hybrids pattern-align here' },
+            { key: 'PHYSICAL_SENSORY_LANGUAGE', evidence_type: 'top_3_peak_causes', modality: 'transcript', quantification: 'Sensory-rate weight +1.59', why: 'body/physical payoff reads on camera; cognitive payoff does not' },
+            { key: 'visual_is_workshop', evidence_type: 'indicator_registry', r_direct: 0.236, r_partial: 0.219, modality: 'visual frame', quantification: 'hands-on-object framing', why: 'object interaction makes the proof legible vs face-only reaction' },
+        ];
+        traces.proof_clarity = makeTrace({
+            field: 'proof_clarity',
+            rationale: 'Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.',
+            evidence_sources: [
+                'retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES',
+                'retention-patterns.wave11_12_new_signals.end_begin_ratio',
+                'findings-summary.top_discoveries.title_making_keyword',
+                'retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE',
+                'indicator-registry.visual_is_workshop',
+            ],
+            indicators_considered_count: indicator_keys.length,
+            indicator_keys,
+            top_indicators,
+            filter: 'factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites',
+            extra: {
+                proof_clarity_score: pc && pc.score,
+                drivers_triggered: pcDrivers.map(d => ({
+                    driver: d.driver,
+                    delta: d.delta,
+                    matched: d.matched_build_verb || d.matched_test_verb || d.matched_anchor || d.matched_artifact || null,
+                    source: d.source,
+                })),
+                applied_weight_in_scoreIdea: 0.14,
+                selection_effect: 'Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family.',
+            },
+        });
+    }
+
     // ── Scorecard targets ────────────────────────────────────────
     {
         const sd = brief.evidence_lattice && brief.evidence_lattice.scorecard_dimensions;
@@ -3145,12 +3442,15 @@ function assembleBlueprint(seed, brief, rank, artifacts) {
     // Drivers / why-it-works rollup
     const secCount = Object.keys(validation.section_traces || {}).length;
     const metricCount = Object.keys(validation.metric_traces || {}).length;
+    const proofScore = seed.synthesis_trace && seed.synthesis_trace.proof_clarity && seed.synthesis_trace.proof_clarity.score;
+    const proofDriverCount = seed.synthesis_trace && seed.synthesis_trace.proof_clarity && seed.synthesis_trace.proof_clarity.drivers ? seed.synthesis_trace.proof_clarity.drivers.length : 0;
     idea.why_it_works = [
         `Specific premise (${seed.title.length <= 90 ? seed.title : seed.title.slice(0, 87) + '…'}) — every concrete choice (object, timer, endpoint) survives the validation filter below.`,
         `Arc = ${idea.arc.arc_shape} with nadir placed at ~${idea.arc.nadir_placement_pct}% (best_after_worst 5x gap).`,
         `Hook-retention@20s modeled ${idea.estimated_metrics.hook_retention_20s.band} (${(idea.estimated_metrics.hook_retention_20s.modeled_value * 100).toFixed(1)}%) — first-20s is the single strongest view predictor (r=0.6).`,
         `Over-delivery structure: hook promises less than the 95% payoff delivers (hook_payoff_gap rewards over-delivery, r=-0.52).`,
         `Vocabulary: commits to ${((seed.vocabulary_hints && seed.vocabulary_hints.use_peak_words) || []).length} peak words and avoids ${((seed.vocabulary_hints && seed.vocabulary_hints.avoid_material_words) || []).length} material-class words.`,
+        `Proof-clarity: score=${proofScore != null ? proofScore : '—'} from ${proofDriverCount} drivers (build+test hybrid, body before/after anchor, numeric counter + named artifact) — single-shot legible payoff backed by HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio.`,
         `Validation trace: ${secCount} blueprint sections and ${metricCount} modeled metrics carry explicit indicator lineage (pool size, filter, top indicators w/ r/rho/csw and quantification).`,
     ];
     return idea;
