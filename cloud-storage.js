@@ -32,7 +32,8 @@ function initR2() {
         credentials: { accessKeyId, secretAccessKey },
         requestHandler: new NodeHttpHandler({
             connectionTimeout: 8000,
-            requestTimeout: 30000,
+            requestTimeout: 20000,
+            throwOnRequestTimeout: true,
             httpsAgent: agent,
         }),
     });
