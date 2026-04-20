@@ -887,6 +887,12 @@ const PRE_UPLOAD_CREDIBILITY_PHRASES = [
     'here is the thing', 'here is what', 'the thing is',
 ];
 
+const PRE_UPLOAD_MECHANISM_PHRASES = [
+    'how i did it', 'the method', 'the process', 'step by step', 'here is how',
+    'the technique', 'the system', 'what i used', 'the approach', 'here is the secret',
+    'the formula', 'the framework', 'this is how', 'the strategy', 'the blueprint',
+];
+
 const ZYGARNIK_FAMILIES = Object.keys(ZYGARNIK_PHRASE_SETS);
 const ZYGARNIK_EARLY_WINDOWS = [2, 3, 5, 8, 10, 15, 20];
 
@@ -1220,10 +1226,12 @@ const STATIC_KEYS = new Set([
     'viewer_agency_count', 'viewer_agency_density', 'viewer_agency_first_half_count', 'viewer_agency_hook_count',
     'revelation_signal_count', 'revelation_signal_density', 'revelation_signal_first_half_count', 'revelation_signal_hook_count',
     'curiosity_escalation_count', 'curiosity_escalation_density', 'curiosity_escalation_first_half_count', 'curiosity_escalation_hook_count',
-    // Group V: Early proof / social signal / pre-upload credibility
+    // Group V: Early proof / social signal / pre-upload credibility / pre-upload mechanism
     'early_proof_count', 'early_proof_density', 'early_proof_count_hook', 'early_proof_front_load_ratio', 'early_proof_count_first_half',
     'social_signal_count', 'social_signal_density', 'social_signal_count_hook', 'social_signal_front_load_ratio',
     'pre_upload_credibility_count', 'pre_upload_credibility_density', 'pre_upload_credibility_count_hook', 'pre_upload_credibility_front_load_ratio', 'pre_upload_credibility_position_pct',
+    'pre_upload_mechanism_count', 'pre_upload_mechanism_density', 'pre_upload_mechanism_count_hook', 'pre_upload_mechanism_front_load_ratio', 'pre_upload_mechanism_position_pct',
+    'reference_to_gratification_ratio', 'setup_to_payoff_gap',
 ]);
 
 // Layer map for static keys
@@ -1469,7 +1477,7 @@ for (const k of [
     STATIC_LAYER[k] = 'pre';
 }
 // Windowed variants for Group T/V families
-for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal', 'early_proof', 'social_signal', 'pre_upload_credibility']) {
+for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal', 'early_proof', 'social_signal', 'pre_upload_credibility', 'pre_upload_mechanism']) {
     for (const w of ZYGARNIK_EARLY_WINDOWS) {
         for (const variant of ['count', 'density']) {
             STATIC_KEYS.add(`${fam}_${variant}_first${w}s`);
@@ -1491,6 +1499,16 @@ for (const k of [
     'credibility_setup_pct', 'proof_density_hook', 'visual_credibility_density_hook',
     // W5: Story-stake proxies
     'stakes_to_loop_ratio', 'stake_loop_product', 'consequence_front_weight',
+]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+
+// ── New Group X: pre-upload mechanism / reference-to-gratification / setup-to-payoff ──
+for (const k of [
+    'pre_upload_mechanism_count', 'pre_upload_mechanism_density',
+    'pre_upload_mechanism_count_hook', 'pre_upload_mechanism_front_load_ratio', 'pre_upload_mechanism_position_pct',
+    'reference_to_gratification_ratio', 'setup_to_payoff_gap',
 ]) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
@@ -1633,6 +1651,10 @@ const DETAILED_DEFS = {
     challenge_to_resolution_gap_pct:{ d: 'Word distance from first challenge-statement to first resolution phrase as fraction of transcript.', f: '(first_resolution_idx - first_challenge_idx) / word_count', s: ['transcript.fullText'], r: '0 to 1' },
     curiosity_resolution_gap_pct:{ d: 'Gap between first curiosity phrase and first resolution/payoff phrase, as fraction of transcript.', f: '(first_payoff_pct - first_curiosity_pct)', s: ['transcript.fullText'], r: '0 to 1' },
     numeric_specificity_first_half:{ d: 'Count of numeric specificity phrases in the first half of the transcript.', f: 'countPhraseMatches(first_half_text, SPECIFICITY_PHRASES)', s: ['transcript.fullText', 'SPECIFICITY_PHRASES'], r: '0 to 30' },
+    pre_upload_mechanism_count:    { d: 'Count of phrases signaling how the result was achieved — process/methodology transparency signals.', f: 'countPhraseMatches(transcript, PRE_UPLOAD_MECHANISM_PHRASES)', s: ['transcript.fullText', 'PRE_UPLOAD_MECHANISM_PHRASES'], r: '0 to 30' },
+    pre_upload_mechanism_density:  { d: 'Density of process/methodology transparency phrases (count / word_count).', f: 'pre_upload_mechanism_count / word_count', s: ['transcript.fullText', 'PRE_UPLOAD_MECHANISM_PHRASES'], r: '0 to 0.1' },
+    reference_to_gratification_ratio: { d: 'Ratio of reference/callback phrase count to gratification phrase count — measures callback density relative to payoff signaling.', f: 'reference_callback_count / (delayed_gratification_count + 1)', s: ['transcript.fullText', 'REFERENCE_CALLBACK_PHRASES', 'ZYGARNIK_PHRASE_SETS.delayed_gratification'], r: '0 to 10' },
+    setup_to_payoff_gap:           { d: 'Word distance between first setup phrase and first payoff phrase — measures structural gap between problem and resolution.', f: 'first_payoff_word_idx - first_setup_word_idx', s: ['transcript.fullText', 'NEW_SETUP_PHRASES', 'NEW_PAYOFF_PHRASES'], r: '0 to 3000' },
 };
 
 function getMetricDefinition(key) {
@@ -4429,6 +4451,7 @@ function extractMetric(key, analysis) {
             'early_proof':            EARLY_PROOF_PHRASES,
             'social_signal':          SOCIAL_SIGNAL_PHRASES,
             'pre_upload_credibility': PRE_UPLOAD_CREDIBILITY_PHRASES,
+            'pre_upload_mechanism':   PRE_UPLOAD_MECHANISM_PHRASES,
         };
 
         // Per-family count/density/hook/positional keys
@@ -4494,7 +4517,7 @@ function extractMetric(key, analysis) {
         }
 
         // Windowed variants for Group T families
-        const _gtWinRe = /^(reference_callback|visual_credibility|payoff_signal|setup_signal|stakes_escalation|proof_arrival|narrative_anchor|delayed_reveal|early_proof|social_signal|pre_upload_credibility)_(count|density)_first(\d+)s$/;
+        const _gtWinRe = /^(reference_callback|visual_credibility|payoff_signal|setup_signal|stakes_escalation|proof_arrival|narrative_anchor|delayed_reveal|early_proof|social_signal|pre_upload_credibility|pre_upload_mechanism)_(count|density)_first(\d+)s$/;
         const _gtm = key.match(_gtWinRe);
         if (_gtm) {
             if (!transcript) return [null, 'no transcript'];
@@ -4599,6 +4622,37 @@ function extractMetric(key, analysis) {
             const wordCount = tl.split(/\s+/).filter(Boolean).length;
             if (!wordCount) return [null, 'empty transcript'];
             return [dr / wordCount, null];
+        }
+        if (key === 'reference_to_gratification_ratio') {
+            if (!transcript) return [null, 'no transcript'];
+            const tl = transcript.toLowerCase();
+            let refCount = 0, gratCount = 0;
+            for (const ph of REFERENCE_CALLBACK_PHRASES) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { refCount++; i += ph.length; } }
+            for (const ph of ZYGARNIK_PHRASE_SETS.delayed_gratification) { let i = 0; while ((i = tl.indexOf(ph, i)) !== -1) { gratCount++; i += ph.length; } }
+            return [refCount / (gratCount + 1), null];
+        }
+        if (key === 'setup_to_payoff_gap') {
+            if (!transcript) return [null, 'no transcript'];
+            const tl = transcript.toLowerCase();
+            const words = tl.split(/\s+/).filter(Boolean);
+            if (!words.length) return [null, 'empty transcript'];
+            let firstSetupWord = -1, firstPayoffWord = -1;
+            for (const ph of NEW_SETUP_PHRASES) {
+                const pos = tl.indexOf(ph);
+                if (pos >= 0) {
+                    const wb = tl.slice(0, pos).split(/\s+/).filter(Boolean).length;
+                    if (firstSetupWord === -1 || wb < firstSetupWord) firstSetupWord = wb;
+                }
+            }
+            for (const ph of NEW_PAYOFF_PHRASES) {
+                const pos = tl.indexOf(ph);
+                if (pos >= 0) {
+                    const wb = tl.slice(0, pos).split(/\s+/).filter(Boolean).length;
+                    if (firstPayoffWord === -1 || wb < firstPayoffWord) firstPayoffWord = wb;
+                }
+            }
+            if (firstSetupWord === -1 || firstPayoffWord === -1) return [null, 'setup or payoff phrase not found'];
+            return [Math.max(0, firstPayoffWord - firstSetupWord), null];
         }
     }
 
@@ -5523,11 +5577,14 @@ for (const k of [
     'social_signal_count_hook', 'social_signal_front_load_ratio',
     'pre_upload_credibility_count', 'pre_upload_credibility_density',
     'pre_upload_credibility_count_hook', 'pre_upload_credibility_front_load_ratio', 'pre_upload_credibility_position_pct',
+    'pre_upload_mechanism_count', 'pre_upload_mechanism_density',
+    'pre_upload_mechanism_count_hook', 'pre_upload_mechanism_front_load_ratio', 'pre_upload_mechanism_position_pct',
+    'reference_to_gratification_ratio', 'setup_to_payoff_gap',
 ]) {
     INDICATOR_RESOLUTION_MAP[k] = k.includes('hook') ? ['r_hook', 0, 10, null, null] : ['r0', 0, 100, null, null];
 }
 // Group V windowed variant resolution map
-for (const fam of ['early_proof', 'social_signal', 'pre_upload_credibility']) {
+for (const fam of ['early_proof', 'social_signal', 'pre_upload_credibility', 'pre_upload_mechanism']) {
     for (const w of [2, 3, 5, 8, 10, 15, 20]) {
         for (const variant of ['count', 'density']) {
             INDICATOR_RESOLUTION_MAP[`${fam}_${variant}_first${w}s`] = ['r_hook', 0, 10, null, null];
