@@ -2601,7 +2601,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     combos.sort((a, b) => b.score - a.score);
 
     const selection = selectDiverseCombos(combos, maxCount);
-    const { picked, log, family_coverage, diversity_bucket_coverage, endpoint_coverage, proof_surface_coverage, per_family, per_diversity_bucket, per_endpoint, per_proof_surface, alternates_by_motif_id, total_combos_considered, total_families_considered, total_diversity_buckets_considered } = selection;
+    const { picked, log, diversity_bucket_coverage, family_coverage, endpoint_coverage, proof_surface_coverage, per_diversity_bucket, per_family, per_endpoint, per_proof_surface, alternates_by_motif_id, total_combos_considered, total_diversity_buckets_considered, total_families_considered } = selection;
 
     return picked.map((c, i) => {
         const seed = composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers, {
