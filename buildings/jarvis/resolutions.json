@@ -31985,7 +31985,14 @@
       "proof_arrival_delay_proxy_x_loop_front_half_density",
       "proof_arrival_delay_proxy_x_narrative_tension_density_first_half",
       "proof_arrival_delay_proxy_x_challenge_setup_density_first_quarter",
-      "closure_to_open_ratio_first10s_x_credibility_setup_pct"
+      "closure_to_open_ratio_first10s_x_credibility_setup_pct",
+      "closure_to_open_ratio_first10s_x_proof_density_hook",
+      "closure_to_open_ratio_first10s_x_stake_loop_product",
+      "closure_to_open_ratio_first10s_x_rhetorical_question_count",
+      "closure_to_open_ratio_first10s_x_rhetorical_question_density",
+      "closure_to_open_ratio_first10s_x_mystery_setup_count",
+      "closure_to_open_ratio_first10s_x_mystery_setup_density",
+      "closure_to_open_ratio_first10s_x_promise_specificity_count"
     ],
     "depth_in_hierarchy": 0
   },

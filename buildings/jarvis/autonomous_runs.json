@@ -21500,5 +21500,36 @@
     "elapsed_minutes": 30.67,
     "total_indicators_after": 1852,
     "total_derived_after": 32271
+  },
+  {
+    "id": "auto_20260420092921.",
+    "started_at": "2026-04-20T09:29:21.738Z",
+    "finished_at": "2026-04-20T10:06:42.039Z",
+    "mode": "hybrid_auto",
+    "llm_proposed": 0,
+    "llm_completed": 0,
+    "attempted": 7,
+    "completed": 7,
+    "failures": 0,
+    "pre_attempted": 7,
+    "pre_completed": 7,
+    "post_attempted": 0,
+    "post_completed": 0,
+    "preupload_ratio_requested": 0.7,
+    "no_signal_streak_end": 0,
+    "stop_reason": "max_minutes",
+    "candidate_keys_processed": [
+      "closure_to_open_ratio_first10s_x_proof_density_hook",
+      "closure_to_open_ratio_first10s_x_stake_loop_product",
+      "closure_to_open_ratio_first10s_x_rhetorical_question_count",
+      "closure_to_open_ratio_first10s_x_rhetorical_question_density",
+      "closure_to_open_ratio_first10s_x_mystery_setup_count",
+      "closure_to_open_ratio_first10s_x_mystery_setup_density",
+      "closure_to_open_ratio_first10s_x_promise_specificity_count"
+    ],
+    "top_new_r_abs": 0.1018,
+    "elapsed_minutes": 37.34,
+    "total_indicators_after": 1852,
+    "total_derived_after": 32278
   }
 ]
