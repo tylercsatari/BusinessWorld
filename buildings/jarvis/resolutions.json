@@ -31931,7 +31931,21 @@
       "early_proof_to_loop_ratio_x_visual_credibility_density",
       "early_proof_to_loop_ratio_x_stakes_escalation_count",
       "early_proof_to_loop_ratio_x_stakes_escalation_density",
-      "early_proof_to_loop_ratio_x_delayed_reveal_count"
+      "early_proof_to_loop_ratio_x_delayed_reveal_count",
+      "early_proof_to_loop_ratio_x_delayed_reveal_density",
+      "early_proof_to_loop_ratio_x_narrative_anchor_count",
+      "early_proof_to_loop_ratio_x_narrative_anchor_density",
+      "early_proof_to_loop_ratio_x_challenge_statement_count",
+      "early_proof_to_loop_ratio_x_challenge_statement_density",
+      "early_proof_to_loop_ratio_x_narrative_tension_count",
+      "early_proof_to_loop_ratio_x_narrative_tension_density",
+      "early_proof_to_loop_ratio_x_payoff_delay_score",
+      "early_proof_to_loop_ratio_x_challenge_to_resolution_gap_pct",
+      "early_proof_to_loop_ratio_x_loop_front_half_density",
+      "early_proof_to_loop_ratio_x_narrative_tension_density_first_half",
+      "early_proof_to_loop_ratio_x_challenge_setup_density_first_quarter",
+      "proof_arrival_delay_proxy_x_closure_to_open_ratio_first10s",
+      "proof_arrival_delay_proxy_x_credibility_setup_pct"
     ],
     "depth_in_hierarchy": 0
   },
