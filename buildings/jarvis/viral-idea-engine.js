@@ -2591,7 +2591,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     combos.sort((a, b) => b.score - a.score);
 
     const selection = selectDiverseCombos(combos, maxCount);
-    const { picked, log, family_coverage, endpoint_coverage, proof_surface_coverage, per_family, per_endpoint, per_proof_surface, alternates_by_motif_id, total_combos_considered, total_families_considered } = selection;
+    const { picked, log, family_coverage, diversity_bucket_coverage, endpoint_coverage, proof_surface_coverage, per_family, per_diversity_bucket, per_endpoint, per_proof_surface, alternates_by_motif_id, total_combos_considered, total_families_considered, total_diversity_buckets_considered } = selection;
 
     return picked.map((c, i) => {
         const seed = composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers, {
@@ -2610,6 +2610,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         const myLog = log.find(l => l.slot === (i + 1));
         if (seed.synthesis_trace) {
             seed.synthesis_trace.motif_family = c.obj.family || null;
+            seed.synthesis_trace.diversity_bucket = c.obj.family || null;
             seed.synthesis_trace.proof_surface = getProofSurfaceKey(c.obj);
             seed.synthesis_trace.diversity_selection = {
                 phase: myLog && myLog.phase,
@@ -2619,12 +2620,20 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
                 max_similarity_to_earlier_slots: myLog && myLog.max_similarity_to_selected,
                 lambda: myLog && myLog.lambda,
                 slot_family_coverage_at_pick: family_coverage.slice(0, i + 1),
+                slot_diversity_bucket_coverage_at_pick: diversity_bucket_coverage.slice(0, i + 1),
                 slot_endpoint_coverage_at_pick: endpoint_coverage.slice(0, i + 1),
                 slot_proof_surface_coverage_at_pick: proof_surface_coverage.slice(0, i + 1),
-                caps_in_effect: { per_family_cap: 2, per_endpoint_kind_cap: 2 },
+                caps_in_effect: { per_family_cap: 2, per_diversity_bucket_cap: 2, per_endpoint_kind_cap: 2 },
             };
             seed.synthesis_trace.diversity_summary = {
-                per_family, per_endpoint, per_proof_surface, family_coverage, endpoint_coverage, proof_surface_coverage,
+                per_family,
+                per_diversity_bucket,
+                per_endpoint,
+                per_proof_surface,
+                family_coverage,
+                diversity_bucket_coverage,
+                endpoint_coverage,
+                proof_surface_coverage,
             };
             // Auditable alternates: compact record of candidate pressure at
             // seed-selection time. Two nearby rejected neighbors per pick is
@@ -2635,9 +2644,10 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
                 stage: 'seed_selection',
                 candidates_considered: total_combos_considered,
                 families_considered: total_families_considered,
-                caps_in_effect: { per_family_cap: 2, per_endpoint_kind_cap: 2 },
+                diversity_buckets_considered: total_diversity_buckets_considered,
+                caps_in_effect: { per_family_cap: 2, per_diversity_bucket_cap: 2, per_endpoint_kind_cap: 2 },
                 nearby_rejected: myAlternates,
-                note: 'Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: within-family lower raw score, family/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill.',
+                note: 'Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill.',
             };
         }
         return seed;
@@ -4032,9 +4042,10 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         if (idea.synthesis_trace) {
             idea.synthesis_trace.final_rank_diversity = {
                 per_family_in_topN: Object.fromEntries(perFam),
+                per_diversity_bucket_in_topN: Object.fromEntries(perFam),
                 per_endpoint_kind_in_topN: Object.fromEntries(perEnd),
                 per_proof_surface_in_topN: Object.fromEntries(perProofSurface),
-                caps: { per_family_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
+                caps: { per_family_cap: perFamCap, per_diversity_bucket_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
                 mmr_lambda: lambda,
             };
             // Alternates displaced by this idea during final top-N MMR.
@@ -4046,10 +4057,10 @@ function generateIdeas(brief, count = 5, artifacts = null) {
                 stage: 'final_rank',
                 slot: i + 1,
                 ideas_considered: scored.length,
-                caps_in_effect: { per_family_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
+                caps_in_effect: { per_family_cap: perFamCap, per_diversity_bucket_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
                 mmr_lambda: lambda,
                 nearby_displaced: alts,
-                note: 'Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: family cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots.',
+                note: 'Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: diversity-bucket cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots.',
             };
         }
     }

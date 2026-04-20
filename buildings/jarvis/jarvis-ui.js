@@ -6170,7 +6170,7 @@ const JarvisUI = (() => {
                         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:3px">
                             <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#f59e0b">▸ Candidate pressure — why this idea won vs nearby alternates</div>
                             <div style="font-size:9px;color:#64748b">
-                                ${seedAlts && seedAlts.candidates_considered != null ? `<span>seed pool <b style="color:#cbd5e1">${seedAlts.candidates_considered}</b>${seedAlts.families_considered != null ? ` / <b style="color:#cbd5e1">${seedAlts.families_considered}</b> diversity buckets` : ''}</span>` : ''}
+                                ${seedAlts && seedAlts.candidates_considered != null ? `<span>seed pool <b style="color:#cbd5e1">${seedAlts.candidates_considered}</b>${(seedAlts.diversity_buckets_considered != null || seedAlts.families_considered != null) ? ` / <b style="color:#cbd5e1">${seedAlts.diversity_buckets_considered != null ? seedAlts.diversity_buckets_considered : seedAlts.families_considered}</b> diversity buckets` : ''}</span>` : ''}
                                 ${finalAlts && finalAlts.ideas_considered != null ? ` · <span>final pool <b style="color:#cbd5e1">${finalAlts.ideas_considered}</b></span>` : ''}
                             </div>
                         </div>
