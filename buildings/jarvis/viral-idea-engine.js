@@ -1228,7 +1228,7 @@ const ENDPOINT_MOTIFS = [
     { id: 'time_to_target',        kind: 'timer',          reveal_label: 'the timer froze at' },
     { id: 'exact_distance',        kind: 'distance',       reveal_label: 'the mile counter froze at' },
     { id: 'body_quit',             kind: 'body',           reveal_label: 'my body quit at' },
-    // Non-numeric endpoints — the title_core_tpl already carries the reveal frame,
+    // Non-numeric endpoints — the title premise line already carries the reveal frame,
     // so composeTitle returns the core as-is (no " — The Counter Froze At …" suffix).
     { id: 'transformation_reveal', kind: 'transformation', reveal_label: 'the before/after frame landed on' },
     { id: 'experiment_observation',kind: 'experiment',     reveal_label: 'the observation was' },
@@ -1724,7 +1724,7 @@ function computeProofClarity(obj, endpoint, ctx) {
 //        invisible body anchors, and non-physical reveal surface):
 //        head-framed payoff — inverse of
 //        HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE.
-//   V4 — Title-payoff legibility. Parses title_core_tpl for the reveal
+//   V4 — Title-payoff legibility. Parses the title premise line for the reveal
 //        phrase and classifies it:
 //          physical / single-shot  → +0.20  (same shot, weigh-in,
 //            first and last, body did, rowed it, rode it, held until,
@@ -1891,7 +1891,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
         // builtin reveal. That appended phrase IS a single-frame
         // freeze — credit it in V4 so endurance / body_quit / bike
         // motifs are not falsely neutral relative to motifs whose
-        // reveal is hard-coded into the template.
+        // reveal is hard-coded into the title premise line.
         const d = 0.16;
         score += d;
         drivers.push({
@@ -2129,7 +2129,7 @@ function composeTitle(obj, endpoint, scale, bodyPart) {
 
     const revealVal = overDeliveryRevealValue(scale, endpoint);
     // Some motifs (body_transformation, identity, skill_dare) encode their
-    // reveal directly in title_core_tpl (e.g. "— He Told Me When To Stop").
+    // reveal directly in their title premise line (e.g. "— He Told Me When To Stop").
     // Appending a numeric suffix on top of a qualitative reveal reads as a
     // double ending. If the motif signals a builtin reveal, return core.
     if (obj.title_has_builtin_reveal) return core;
@@ -2138,7 +2138,7 @@ function composeTitle(obj, endpoint, scale, bodyPart) {
     if (endpoint.kind === 'distance') return `${core} \u2014 The Mile Counter Froze At ${revealVal}`;
     if (endpoint.kind === 'body')     return `${core} \u2014 My ${capitalize(bodyPart)} Quit First`;
     if (endpoint.kind === 'build_test') return `${core} \u2014 The Build Held Until ${revealVal}`;
-    // transformation / experiment / identity — title_core_tpl already carries the reveal
+    // transformation / experiment / identity — the title premise line already carries the reveal
     return core;
 }
 
