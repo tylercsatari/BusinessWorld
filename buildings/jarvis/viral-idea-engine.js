@@ -2451,7 +2451,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             let reason;
             if (usedMotifIds.has(c.obj.id)) reason = 'motif-id already selected in earlier slot';
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) reason = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
-            else reason = 'lower raw score within family cluster';
+            else reason = 'lower raw score within this diversity bucket';
             alts.push(compactAlt(c, best, { rejection_reason: reason }));
         }
         alternatesByMotifId.set(best.obj.id, alts);
@@ -2462,15 +2462,17 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         perEndpoint.set(best.endpoint.kind, (perEndpoint.get(best.endpoint.kind) || 0) + 1);
         perProofSurface.set(getProofSurfaceKey(best.obj), (perProofSurface.get(getProofSurfaceKey(best.obj)) || 0) + 1);
         log.push({
-            phase: 'family_round_robin',
+            phase: 'diversity_round_robin',
             slot: picked.length,
             family: fam,
+            diversity_bucket: fam,
             motif_id: best.obj.id,
             endpoint_id: best.endpoint.id,
             endpoint_kind: best.endpoint.kind,
             raw_score: best.score,
             family_cluster_size: candidates.length,
-            reason: `first slot for family "${fam}" (highest-scoring motif in cluster; endpoint rotated; motif-id hard-dedup)`,
+            diversity_bucket_size: candidates.length,
+            reason: `first slot for diversity bucket "${fam}" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)`,
         });
     }
 
@@ -2488,7 +2490,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             const c = remaining[i];
             let blocked = null;
             if (usedMotifIds.has(c.obj.id)) blocked = 'motif-id already selected';
-            else if ((perFamily.get(c.obj.family || 'unknown') || 0) >= 2) blocked = `family cap hit (${c.obj.family || 'unknown'}=2)`;
+            else if ((perFamily.get(c.obj.family || 'unknown') || 0) >= 2) blocked = `diversity-bucket cap hit (${c.obj.family || 'unknown'}=2)`;
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) blocked = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             let sim = 0;
             for (const p of picked) sim = Math.max(sim, comboSimilarity(c, p));
@@ -2509,6 +2511,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             .map(m => ({
                 motif_id: m.c.obj.id,
                 family: m.c.obj.family || 'unknown',
+                diversity_bucket: m.c.obj.family || 'unknown',
                 endpoint_id: m.c.endpoint.id,
                 endpoint_kind: m.c.endpoint.kind,
                 proof_surface: getProofSurfaceKey(m.c.obj),
@@ -2539,7 +2542,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             max_similarity_to_selected: round(bestSim, 3),
             mmr_score: round(bestMR, 3),
             lambda,
-            reason: `mmr(score − lambda·max_sim) = ${round(bestMR, 3)}; family cap=2, endpoint-kind cap=2, proof-surface overlap penalty, motif-id hard-dedup`,
+            reason: `mmr(score − lambda·max_sim) = ${round(bestMR, 3)}; diversity-bucket cap=2, endpoint-kind cap=2, proof-surface overlap penalty, motif-id hard-dedup`,
         });
     }
 
@@ -2547,14 +2550,17 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         picked,
         log,
         family_coverage: [...perFamily.keys()],
+        diversity_bucket_coverage: [...perFamily.keys()],
         endpoint_coverage: [...perEndpoint.keys()],
         proof_surface_coverage: [...perProofSurface.keys()],
         per_family: Object.fromEntries(perFamily),
+        per_diversity_bucket: Object.fromEntries(perFamily),
         per_endpoint: Object.fromEntries(perEndpoint),
         per_proof_surface: Object.fromEntries(perProofSurface),
         alternates_by_motif_id: alternatesByMotifId,
         total_combos_considered: combos.length,
         total_families_considered: clusters.size,
+        total_diversity_buckets_considered: clusters.size,
     };
 }
 

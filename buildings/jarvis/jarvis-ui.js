@@ -6116,7 +6116,6 @@ const JarvisUI = (() => {
         const hardcoded = remainingStatic.map(s =>
             `<li style="font-size:10px;color:#fca5a5;line-height:1.5"><code style="color:#fca5a5">${escapeHtml(s)}</code></li>`
         ).join('');
-        const perFam = finalRank.per_family_in_topN ? Object.entries(finalRank.per_family_in_topN).map(([f, n]) => `<code style="color:#a78bfa">${escapeHtml(f)}=${n}</code>`).join(' · ') : '';
         const perEnd = finalRank.per_endpoint_kind_in_topN ? Object.entries(finalRank.per_endpoint_kind_in_topN).map(([e, n]) => `<code style="color:#22d3ee">${escapeHtml(e)}=${n}</code>`).join(' · ') : '';
         const perSurface = finalRank.per_proof_surface_in_topN ? Object.entries(finalRank.per_proof_surface_in_topN).map(([s, n]) => `<code style="color:#fbbf24">${escapeHtml(s)}=${n}</code>`).join(' · ') : '';
 
@@ -6161,18 +6160,17 @@ const JarvisUI = (() => {
                         </div>
                         ${diversity.reason ? `<div style="font-size:10px;color:#cbd5e1;margin-top:3px;line-height:1.5">${escapeHtml(diversity.reason)}</div>` : ''}
                     </div>` : ''}
-                ${(perSurface || perFam || perEnd) ? `
+                ${(perSurface || perEnd) ? `
                     <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">
                         ${perSurface ? `<span style="color:#64748b">top-N proof surfaces:</span> ${perSurface}` : ''}
                         ${perEnd ? ` · <span style="color:#64748b">endpoints:</span> ${perEnd}` : ''}
-                        ${perFam ? ` · <span style="color:#64748b">families:</span> ${perFam}` : ''}
                     </div>` : ''}
                 ${(seedAlts || finalAlts) ? `
                     <div style="background:#0a1628;border-left:2px solid #f59e0b;border-radius:3px;padding:6px 8px;margin-bottom:4px">
                         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:3px">
                             <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#f59e0b">▸ Candidate pressure — why this idea won vs nearby alternates</div>
                             <div style="font-size:9px;color:#64748b">
-                                ${seedAlts && seedAlts.candidates_considered != null ? `<span>seed pool <b style="color:#cbd5e1">${seedAlts.candidates_considered}</b>${seedAlts.families_considered != null ? ` / <b style="color:#cbd5e1">${seedAlts.families_considered}</b> fam` : ''}</span>` : ''}
+                                ${seedAlts && seedAlts.candidates_considered != null ? `<span>seed pool <b style="color:#cbd5e1">${seedAlts.candidates_considered}</b>${seedAlts.families_considered != null ? ` / <b style="color:#cbd5e1">${seedAlts.families_considered}</b> diversity buckets` : ''}</span>` : ''}
                                 ${finalAlts && finalAlts.ideas_considered != null ? ` · <span>final pool <b style="color:#cbd5e1">${finalAlts.ideas_considered}</b></span>` : ''}
                             </div>
                         </div>
