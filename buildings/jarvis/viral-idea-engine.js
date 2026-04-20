@@ -1561,7 +1561,7 @@ function computeProofClarity(obj, endpoint, ctx) {
             driver: 'body_transformation_with_proof_anchor',
             delta: d,
             matched_anchor: (allText.match(BODY_PROOF_ANCHOR_RE) || [])[0],
-            source: 'family=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
+            source: 'diversity bucket=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
         });
     } else if (isBodyFamily) {
         const d = 0.12;
@@ -1569,7 +1569,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: 'body_transformation_without_proof_anchor',
             delta: d,
-            source: 'family=body_transformation but motif copy lacks a single-shot before/after anchor — partial end_begin_ratio credit',
+            source: 'diversity bucket=body_transformation but motif copy lacks a single-shot before/after anchor — partial end_begin_ratio credit',
         });
     }
 
@@ -1649,7 +1649,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: `${family}_without_physical_test_verb`,
             delta: d,
-            source: 'family=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs',
+            source: 'diversity bucket=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs',
         });
     }
 
@@ -1662,7 +1662,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: 'mystery_experiment_without_artifact',
             delta: d,
-            source: 'family=mystery_experiment AND no artifact in frame — inverse of HIGH_ENERGY_ACTION_FRAMES (payoff is an observation)',
+            source: 'diversity bucket=mystery_experiment AND no artifact in frame — inverse of HIGH_ENERGY_ACTION_FRAMES (payoff is an observation)',
         });
     }
 
@@ -1675,7 +1675,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: `${family}_with_active_intensity`,
             delta: d,
-            source: 'family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)',
+            source: 'diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)',
         });
     }
 
@@ -1950,7 +1950,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
         drivers.push({
             driver: `${family}_without_physical_frame_signals`,
             delta: d,
-            source: 'family=mystery_experiment|identity AND no physical verb / gauge / object in frame — observation-only payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
+            source: 'diversity bucket=mystery_experiment|identity AND no physical verb / gauge / object in frame — observation-only payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
         });
     }
 
@@ -3984,7 +3984,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         for (let i = 0; i < remaining.length; i++) {
             const c = remaining[i];
             let blocked = null;
-            if ((perFam.get(c.family) || 0) >= perFamCap) blocked = `family cap hit (${c.family}=${perFamCap})`;
+            if ((perFam.get(c.family) || 0) >= perFamCap) blocked = `diversity-bucket cap hit (${c.family}=${perFamCap})`;
             else if (c.endpoint_kind && (perEnd.get(c.endpoint_kind) || 0) >= perEndCap) blocked = `endpoint-kind cap hit (${c.endpoint_kind}=${perEndCap})`;
             let sim = 0;
             for (const p of ranked) {

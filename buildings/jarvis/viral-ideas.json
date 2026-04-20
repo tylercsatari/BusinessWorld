@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-20T15:22:29.899Z",
+    "generated_at": "2026-04-20T16:23:23.021Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -54,7 +54,7 @@
         "first_frame": "Close on taping the last cardboard seam on a finished hull with the shoreline framing the shot. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on oars pulling as the cardboard boat slides out from the dock for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.59,
+        "opening_speech_rate_wps_target": 2.61,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -104,7 +104,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.59,
+        "opening_wps_target": 2.61,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -329,7 +329,7 @@
             {
               "driver": "build_test_with_active_intensity",
               "delta": 0.08,
-              "source": "family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
+              "source": "diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
             },
             {
               "driver": "object_interaction_hands_visible_in_frame",
@@ -770,7 +770,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.59wps_in_sweet_zone",
+              "driver": "opening_rate_2.61wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -2652,7 +2652,7 @@
                 "driver": "build_test_with_active_intensity",
                 "delta": 0.08,
                 "matched": null,
-                "source": "family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
+                "source": "diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
               },
               {
                 "driver": "object_interaction_hands_visible_in_frame",
@@ -3254,7 +3254,7 @@
         "first_frame": "Close on morning day-1: a plain potato on the plate next to the scale with the reading on screen. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 60 days, and my stomach is going to tell you when it's over.",
         "opening_action": "Camera locked on a cut between identical morning weigh-ins and identical potato plates for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.54,
+        "opening_speech_rate_wps_target": 2.63,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -3304,7 +3304,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.54,
+        "opening_wps_target": 2.63,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -3512,7 +3512,7 @@
               "driver": "body_transformation_with_proof_anchor",
               "delta": 0.32,
               "matched_anchor": "morning weigh-in",
-              "source": "family=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
+              "source": "diversity bucket=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
             },
             {
               "driver": "single_frame_numeric_endpoint_timer",
@@ -3952,7 +3952,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.54wps_in_sweet_zone",
+              "driver": "opening_rate_2.63wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -5811,7 +5811,7 @@
                 "driver": "body_transformation_with_proof_anchor",
                 "delta": 0.32,
                 "matched": "morning weigh-in",
-                "source": "family=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
+                "source": "diversity bucket=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
               },
               {
                 "driver": "single_frame_numeric_endpoint_timer",
@@ -6409,7 +6409,7 @@
         "first_frame": "Close on mid-fold on a crane with a counter and a pile in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on fingers folding paper and adding to a crane pile for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.58,
+        "opening_speech_rate_wps_target": 2.59,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -6459,7 +6459,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.58,
+        "opening_wps_target": 2.59,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -7114,7 +7114,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.58wps_in_sweet_zone",
+              "driver": "opening_rate_2.59wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -9580,7 +9580,7 @@
         "first_frame": "Close on a pro boxer wrapping my hands with his gym behind him in the same frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 days, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on matching his bag work beat for beat with both fighters in the shot for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.57,
+        "opening_speech_rate_wps_target": 2.67,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -9630,7 +9630,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.57,
+        "opening_wps_target": 2.67,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -10279,7 +10279,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.57wps_in_sweet_zone",
+              "driver": "opening_rate_2.67wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -12723,7 +12723,7 @@
         "first_frame": "Close on mid-step on the stairs with a counter overlay. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on running up a flight with foot-on-stair visible for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.62,
+        "opening_speech_rate_wps_target": 2.51,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -12773,7 +12773,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.62,
+        "opening_wps_target": 2.51,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -13421,7 +13421,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.62wps_in_sweet_zone",
+              "driver": "opening_rate_2.51wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -15876,7 +15876,7 @@
         "first_frame": "Close on tightening the last bolt on a plywood frame with a completed 2x4 bike in view. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 5 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on pedals turning on the wooden bike with a mile-counter overlay for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.51,
+        "opening_speech_rate_wps_target": 2.66,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -15926,7 +15926,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.51,
+        "opening_wps_target": 2.66,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -16151,7 +16151,7 @@
             {
               "driver": "build_test_with_active_intensity",
               "delta": 0.08,
-              "source": "family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
+              "source": "diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
             },
             {
               "driver": "object_interaction_hands_visible_in_frame",
@@ -16632,7 +16632,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.51wps_in_sweet_zone",
+              "driver": "opening_rate_2.66wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -18514,7 +18514,7 @@
                 "driver": "build_test_with_active_intensity",
                 "delta": 0.08,
                 "matched": null,
-                "source": "family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
+                "source": "diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
               },
               {
                 "driver": "object_interaction_hands_visible_in_frame",
@@ -19116,7 +19116,7 @@
         "first_frame": "Close on mid-line of handwriting with a finished stack in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 300, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on a hand writing with a stack of addressed envelopes growing for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.58,
+        "opening_speech_rate_wps_target": 2.68,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -19166,7 +19166,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.58,
+        "opening_wps_target": 2.68,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -19383,7 +19383,7 @@
             {
               "driver": "repetition_outreach_without_physical_test_verb",
               "delta": -0.26,
-              "source": "family=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs"
+              "source": "diversity bucket=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs"
             },
             {
               "driver": "object_interaction_hands_visible_in_frame",
@@ -19837,7 +19837,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.58wps_in_sweet_zone",
+              "driver": "opening_rate_2.68wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -21713,7 +21713,7 @@
                 "driver": "repetition_outreach_without_physical_test_verb",
                 "delta": -0.26,
                 "matched": null,
-                "source": "family=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs"
+                "source": "diversity bucket=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs"
               },
               {
                 "driver": "object_interaction_hands_visible_in_frame",
@@ -22315,7 +22315,7 @@
         "first_frame": "Close on the exact same driveway starting frame with a big day-counter label in the corner. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 365 days, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on a cut between two runs at the same starting line on day 1 and day N for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.61,
+        "opening_speech_rate_wps_target": 2.69,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -22365,7 +22365,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.61,
+        "opening_wps_target": 2.69,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -22568,7 +22568,7 @@
               "driver": "body_transformation_with_proof_anchor",
               "delta": 0.32,
               "matched_anchor": "first and last run",
-              "source": "family=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
+              "source": "diversity bucket=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
             },
             {
               "driver": "single_shot_qualitative_endpoint_transformation",
@@ -22584,7 +22584,7 @@
             {
               "driver": "body_transformation_with_active_intensity",
               "delta": 0.08,
-              "source": "family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
+              "source": "diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
             }
           ],
           "derived_from_indicators": [
@@ -23051,7 +23051,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.61wps_in_sweet_zone",
+              "driver": "opening_rate_2.69wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -24905,7 +24905,7 @@
                 "driver": "body_transformation_with_proof_anchor",
                 "delta": 0.32,
                 "matched": "first and last run",
-                "source": "family=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
+                "source": "diversity bucket=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)"
               },
               {
                 "driver": "single_shot_qualitative_endpoint_transformation",
@@ -24923,7 +24923,7 @@
                 "driver": "body_transformation_with_active_intensity",
                 "delta": 0.08,
                 "matched": null,
-                "source": "family=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
+                "source": "diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)"
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
@@ -25509,7 +25509,7 @@
         "first_frame": "Close on sandbag heaved onto my shoulder mid-step. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 10 miles, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on the bag carried step by step with a distance overlay for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.51,
+        "opening_speech_rate_wps_target": 2.62,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -25559,7 +25559,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.51,
+        "opening_wps_target": 2.62,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -26244,7 +26244,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.51wps_in_sweet_zone",
+              "driver": "opening_rate_2.62wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -28700,7 +28700,7 @@
         "first_frame": "Close on a stack of flashcards with a single unfamiliar word on the top card and a count overlay at zero. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 500, and my feeling is going to tell you when it's over.",
         "opening_action": "Camera locked on flashcards moving from an unknown-pile to a known-pile with a running tally for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.55,
+        "opening_speech_rate_wps_target": 2.68,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -28750,7 +28750,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.55,
+        "opening_wps_target": 2.68,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -29421,7 +29421,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.55wps_in_sweet_zone",
+              "driver": "opening_rate_2.68wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -31889,7 +31889,7 @@
         "first_frame": "Close on a firehouse bell ringing while crew members snap into the rig and I run in right behind them. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 24-hour, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on me stepping into gear next to the crew as the truck rolls out for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.61,
+        "opening_speech_rate_wps_target": 2.55,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -31939,7 +31939,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.61,
+        "opening_wps_target": 2.55,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -32602,7 +32602,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.61wps_in_sweet_zone",
+              "driver": "opening_rate_2.55wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -35039,7 +35039,7 @@
         "first_frame": "Close on hands touching the instrument for the very first time with a countdown label in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 3 days, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on a first awkward note progressing into a full clean phrase by the end for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.62,
+        "opening_speech_rate_wps_target": 2.51,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -35089,7 +35089,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.62,
+        "opening_wps_target": 2.51,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -35737,7 +35737,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.62wps_in_sweet_zone",
+              "driver": "opening_rate_2.51wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
