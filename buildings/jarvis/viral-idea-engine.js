@@ -658,228 +658,673 @@ const DURATION_BANDS = [
 ];
 
 // ──────────────────────────────────────────────────────────────────────
-// Concrete blueprint seeds — v2 high-resolution
-// ──────────────────────────────────────────────────────────────────────
+// Motif-atom synthesizer (v3) — replaces hardcoded full premises.
+//
+// What IS hardcoded: ~13 safe object atoms (pushups, plank, sandbag
+// carry, memorize-a-book, rubber-band ball, origami, portrait-drawing,
+// etc.) and 4 endpoint kinds (count, timer, distance, body-quit). Each
+// atom carries structured metadata: verb, noun, scale range, body
+// parts, sensation words, visual action, safety tier, category.
+//
+// What is SYNTHESIZED from the lattice at generate-time:
+//   - title, logline, promise, payoff, over-delivery note
+//   - opening.first_frame / first_line / opening_action / hook_type /
+//     best_first_word_used / opening_speech_rate_wps_target
+//   - build_phases (5 zones) — beats pulled from top_5_retention_predictors
+//   - narrative_structures — ranked from retention-pattern top predictors
+//   - pre_upload_levers — chosen from brief.top_pre_upload_predictors
+//   - vocabulary_hints.use_peak_words — intersection of obj sensation
+//     words with lattice top_words_positive + peak-cause-derived words
+//   - vocabulary_hints.avoid_material_words — from lattice top_words_negative
+//   - closing_words — from opening_words.best_last_words
+//   - share_triggers — from wave11_12.key_phrases.peak_phrases
+//   - visual_prescription_hints — per-zone, derived from top frame
+//     mechanisms (mechanism_indicator_links) and top_3_retention_peak_causes
+//
+// Each object × endpoint combo is scored against the lattice (sensory
+// alignment, action intensity, material-word risk, safety tier, numeric
+// specificity of endpoint). Top N (with per-category cap) survive.
+// Risky atoms are excluded up front.
 
-function baseBlueprintSeeds() {
-    return [
-        {
-            id: 'gatsby_ice_bath_34_degrees',
-            title: 'I Read The Great Gatsby Out Loud In A 34° Ice Bath Until My Voice Gave Out',
-            logline: 'I step into a 34° ice bath holding a paperback of The Great Gatsby, start reading aloud from page one, and keep going until my body shuts my voice down mid-sentence.',
-            promise: 'Watch me hold a book in 34° water and try to keep reading — my body decides when the words stop.',
-            payoff: 'Final 5 seconds: voice breaks mid-sentence; the exact chapter and page I reached appears on screen with a single sensation word.',
-            over_delivery_note: 'Hook implies I\'ll make it a chapter or two — payoff reveals the exact chapter+page the body quit (specificity = over-delivery).',
-            narrative_structures: ['late_peak_arc', 'golden_final_5pct', 'comeback_arc', 'visceral_body_language', 'monotonic_rise'],
-            duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['pivot_word_count', 'visual_variety_entropy', 'repeated_phrase_count', 'beat_count'],
-            interactions_engineered: ['late_early × pacing (r_partial 0.380)', 'keep × pacing (r_partial 0.380)'],
-            opening: {
-                first_frame: 'Tight close-up of my hand holding the paperback half-submerged, water beading on the cover. My breath fogs the air above the bath edge. No text overlay.',
-                first_line: 'Okay — in four. My voice is going to stop before the chapter does.',
-                opening_action: 'My hand plunges the book to eye-level as my shoulders drop under the waterline and I start reading the first sentence aloud.',
-                opening_speech_rate_wps_target: 2.5,
-                hook_type: 'mystery',
-                best_first_word_used: 'okay',
-            },
-            build_phases: [
-                { zone_pct: '0-10', beat: 'enter water, start reading page one aloud', visceral: true, note: 'Premise stated in first 10%. Body already visible in water (design_rules_v3 #6).' },
-                { zone_pct: '10-22', beat: 'jaw starts to shake, first skipped word, brief sensation check', visceral: true, note: 'Divergence at 22% — lock in that body is reacting.' },
-                { zone_pct: '22-60', beat: 'reading continues with intermittent sensation updates ("my stomach is numb", "I can\'t feel my skin")', visceral: true, note: 'Sensory vocabulary ramp. Utterances stay under 10 words.' },
-                { zone_pct: '60-90', beat: 'voice slows, pages stick to wet fingers, I slow to 3.0 w/s', visceral: true, note: 'Peak zone 60-80%. Reaction shot on a sentence I can\'t finish.' },
-                { zone_pct: '90-100', beat: 'voice breaks mid-sentence on a specific page; book closes; chapter + page number appears as overlay', visceral: true, note: 'END_RECOVERY 80-95%. Emotion word in final 10% = +0.069.' },
-            ],
-            climax_hint: 'I try to finish a single line of dialogue; the word comes out as three syllables, not a word; my mouth stops; the book slowly closes; a single chyron reads "stopped: Ch 3, p. 47" with one sensation word below.',
-            closing_line_hint: 'Close with a feeling word + impact word: "stomach\'s numb — insane."',
-            visual_prescription_hints: {
-                first_5s: ['close-up on hand + book', 'no text overlay', 'book half in water'],
-                hook_quarter: ['face tight', 'breath visible', 'shoulder drop under water'],
-                mid: ['cutaway to jaw / lips / hand on book', 'avoid explanatory overlay'],
-                late: ['wide shot of tub + closed book', 'single chapter/page number overlay at the quit moment'],
-                avoid: ['naming the water temperature in words ("cold", "freezing")', 'face + text explaining thermogenesis'],
-            },
-            vocabulary_hints: {
-                use_peak_words: ['stomach', 'numb', 'skin', 'feeling', 'painful', 'curious', 'bigger'],
-                avoid_material_words: ['plastic', 'fiber', 'materials', 'carbon'],
-                closing_words: ['insane', 'hour', 'right'],
-            },
-            share_triggers: ['in the comments', 'should i keep', 'i keep going'],
-            hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
-        },
-        {
-            id: 'twenty_carolina_reaper_body_quit',
-            title: 'I Ate 20 Carolina Reapers In A Row — My Body Made Me Stop At 14',
-            logline: 'Eat 20 Carolina Reaper peppers back-to-back on camera and narrate every sensation until my body physically refuses to swallow another one.',
-            promise: 'You\'re going to see 20 Carolina Reapers and a timer — the question is which pepper my body quits on.',
-            payoff: 'At 95% of runtime, pepper #14 goes in, comes back out; my body refuses; a timer overlay freezes at the exact second, and a single word appears.',
-            over_delivery_note: 'Setup implies I\'ll make it to 15-18; payoff lands at #14 with the exact second stamped. Hook_payoff_gap over-delivery by specificity.',
-            narrative_structures: ['late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'fast_pacing_no_pauses', 'dramatic_pacing'],
-            duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['pivot_word_count', 'visual_variety_entropy', 'scene_change_count', 'beat_count', 'proof_of_work_count'],
-            interactions_engineered: ['keep × pacing (r_partial 0.380)', 'late_early × pacing (r_partial 0.380)'],
-            opening: {
-                first_frame: 'Close-up: my hand holding pepper #1, a numbered row of 20 peppers lined up on the counter behind it. My jaw is already tensed. No overlay.',
-                first_line: 'Go — 20 in a row. My stomach is going to stop me.',
-                opening_action: 'I bite into pepper #1 immediately and swallow within the first 3 seconds, camera holds on my face.',
-                opening_speech_rate_wps_target: 2.6,
-                hook_type: 'transformation',
-                best_first_word_used: 'go',
-            },
-            build_phases: [
-                { zone_pct: '0-10', beat: 'pepper #1 bitten, premise named, timer starts', visceral: true, note: 'Concept + physical action in first 10%. Body already reacting.' },
-                { zone_pct: '10-25', beat: 'peppers #2-5 fast cuts, sweat starts, sensation narration', visceral: true, note: 'Scene_change density high early. Sensory word ramp begins.' },
-                { zone_pct: '25-60', beat: 'peppers #6-11, slowing rhythm, eyes watering, body complaints', visceral: true, note: 'Utterances under 10 words. Pauses <1s. "my stomach is bigger now."' },
-                { zone_pct: '60-90', beat: 'peppers #12-13 — slow to 3.0 w/s, visible full-body shiver, reaction shot', visceral: true, note: 'Peak zone. Short sentence at peak. Reaction → wide on #13 going down.' },
-                { zone_pct: '90-100', beat: 'pepper #14: in the mouth, out of the mouth; timer freezes; single word overlay', visceral: true, note: 'Golden final 5%. Body quit moment + exact timestamp = payoff.' },
-            ],
-            climax_hint: 'Pepper #14 gets halfway down, my body rejects it visibly on camera, a timer overlay freezes at the exact second (e.g., "4:12 — 14 of 20"), I mouth one word.',
-            closing_line_hint: 'End on impact word: "that was insane."',
-            visual_prescription_hints: {
-                first_5s: ['pepper + numbered row in frame', 'direct action — no text'],
-                hook_quarter: ['fast A/B cuts between face + pepper count', 'never face + text overlay alone'],
-                mid: ['sweat / eye-water cutaways', 'reaction shots between bites'],
-                late: ['slow push-in on face at #13', 'wide shot at #14 rejection'],
-                avoid: ['naming pepper-scoville heat in overlay', 'face + explanation text'],
-            },
-            vocabulary_hints: {
-                use_peak_words: ['stomach', 'skin', 'numb', 'painful', 'bigger', 'foot', 'feeling'],
-                avoid_material_words: ['capsaicin', 'plastic', 'carbon', 'fiber', 'materials'],
-                closing_words: ['insane', 'hour', 'right'],
-            },
-            share_triggers: ['in the comments', 'should i keep', 'i keep going'],
-            hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
-        },
-        {
-            id: 'treadmill_fifteen_incline_43_minutes',
-            title: 'I Ran On A Treadmill At 15% Incline Until My Legs Gave Out — I Made It 43 Minutes',
-            logline: 'Set a treadmill to 15% incline at 9 mph and run until my legs physically stop working, narrating body sensations in real time.',
-            promise: 'You\'re watching me run at 15% incline until I fall — the question is how long.',
-            payoff: 'At 95% runtime: legs give out, body slides off the back of the treadmill, timer overlay freezes at 43:07.',
-            over_delivery_note: 'Hook implies 20-30 minutes; payoff reveals 43:07 — audience expectation exceeded, specificity of the second locks over-delivery.',
-            narrative_structures: ['monotonic_rise', 'late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'fast_pacing_no_pauses'],
-            duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['scene_burst_count', 'frame_cluster_count', 'beat_count', 'visual_variety_entropy', 'pivot_word_count'],
-            interactions_engineered: ['late_early × pacing (r_partial 0.380)', 'keep × pacing (r_partial 0.380)'],
-            opening: {
-                first_frame: 'Action frame: my legs mid-stride on the treadmill at full incline, body angled forward, timer already running at 00:12.',
-                first_line: 'Go — 15 percent. Legs are going to quit before I do.',
-                opening_action: 'The camera is locked on my running feet for the first 3 seconds — no cutaway, just strides.',
-                opening_speech_rate_wps_target: 2.7,
-                hook_type: 'mystery',
-                best_first_word_used: 'go',
-            },
-            build_phases: [
-                { zone_pct: '0-10', beat: 'running, timer visible, premise named', visceral: true, note: 'Action + concept inside first 10% (design_rules_v3 #6).' },
-                { zone_pct: '10-25', beat: 'minutes 5-12: sweat, first breathing check, "my stomach is bigger"', visceral: true, note: 'Sensory ramp. Utterances <10 words.' },
-                { zone_pct: '25-60', beat: 'minutes 13-30: repeated failure-and-recovery — I grab the rail, release, keep running', visceral: true, note: 'Monotonic rise in visible distress. No pauses >1s.' },
-                { zone_pct: '60-90', beat: 'minute 38-42: legs shake visibly, form collapses, slow to 3 w/s narration', visceral: true, note: 'Peak zone. Short sentence. Reaction → wide on the last fully upright step.' },
-                { zone_pct: '90-100', beat: '43:07 — legs lock out, body slides off the belt; timer freezes; single sensation word', visceral: true, note: 'Golden final 5%. END_RECOVERY payoff word lands +0.026.' },
-            ],
-            climax_hint: 'Legs lock out, I slide off the belt and collapse against the wall; the overlay freezes at 43:07; I say one word into the camera.',
-            closing_line_hint: 'Close with sensation + impact: "stomach feels insane."',
-            visual_prescription_hints: {
-                first_5s: ['legs mid-stride', 'timer visible', 'no overlay explaining setup'],
-                hook_quarter: ['body in motion only', 'never face + text alone'],
-                mid: ['alternate feet-pumping cuts with face reaction', 'sweat-drop cutaways'],
-                late: ['slow push-in on shaking quads', 'wide shot at the collapse'],
-                avoid: ['brand-name overlays on treadmill', 'face + text explaining VO2 / heart-rate'],
-            },
-            vocabulary_hints: {
-                use_peak_words: ['stomach', 'foot', 'skin', 'numb', 'painful', 'bigger', 'feeling'],
-                avoid_material_words: ['rubber', 'plastic', 'carbon', 'fiber', 'materials'],
-                closing_words: ['insane', 'hour', 'next'],
-            },
-            share_triggers: ['should i keep', 'i keep going', 'in the comments'],
-            hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
-        },
-        {
-            id: 'four_mile_socks_only_hike',
-            title: 'I Hiked Four Miles On A Rocky Trail In Nothing But Socks — My Feet Told The Story',
-            logline: 'Start a four-mile trail hike in socks only, narrate every sensation as the terrain changes, and end on a close-up reveal of the socks at the finish.',
-            promise: 'Four miles, just socks, one trail — and my feet are going to tell you how it went.',
-            payoff: 'Final 5 seconds: I peel the sock back to reveal the foot; single overlay shows the mile count reached and one sensation word.',
-            over_delivery_note: 'Setup primes a "will I make four miles" question; payoff is that the sock itself is the transformation — the foot inside is proof.',
-            narrative_structures: ['comeback_arc', 'late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'monotonic_rise'],
-            duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['pivot_word_count', 'repeated_phrase_count', 'visual_variety_entropy', 'beat_count'],
-            interactions_engineered: ['keep × pacing (r_partial 0.380)', 'narrative × concept (r_partial 0.369)'],
-            opening: {
-                first_frame: 'Tight close-up of my socked feet at the trailhead marker, one foot half-raised to step onto gravel. Trail sign is in-frame but unreadable.',
-                first_line: 'How four miles feels in a sock — my skin\'s going to tell you.',
-                opening_action: 'My socked foot steps onto the first patch of gravel; camera holds on the foot for the first 3 seconds.',
-                opening_speech_rate_wps_target: 2.5,
-                hook_type: 'mystery',
-                best_first_word_used: 'how',
-            },
-            build_phases: [
-                { zone_pct: '0-10', beat: 'trailhead step, premise named, mile 0 overlay', visceral: true, note: 'Concept + body inside first 10%.' },
-                { zone_pct: '10-25', beat: 'mile 1 — first pebble hits, first sensation narration ("my foot feels bigger")', visceral: true, note: 'Divergence lock-in at 22%. Body already altered.' },
-                { zone_pct: '25-60', beat: 'miles 2-3: escalating terrain, visible limp develops, sensory updates', visceral: true, note: 'Utterances short. No pauses >1s. Monotonic distress rise.' },
-                { zone_pct: '60-90', beat: 'mile 3.5: near-stop moment, slow to 3 w/s, face reaction', visceral: true, note: 'Peak zone. Short sentence. Reaction → wide on the final switchback.' },
-                { zone_pct: '90-100', beat: 'mile 4 finish: sit down, peel sock back, close-up on the foot underneath + overlay', visceral: true, note: 'Golden final 5%. END_RECOVERY. One sensation word at reveal.' },
-            ],
-            climax_hint: 'At the trail-end marker I sit down, pull the sock off with one hand, camera cuts to a close-up of the skin underneath; overlay reads "4.00 mi" + one sensation word.',
-            closing_line_hint: 'Close with sensation + impact: "skin is numb — insane."',
-            visual_prescription_hints: {
-                first_5s: ['socked foot close-up', 'no text', 'one clean step'],
-                hook_quarter: ['foot-on-terrain cutaways', 'never face + text together'],
-                mid: ['alternate terrain close-ups with face reactions', 'mile-count overlay only at beat moments'],
-                late: ['slow push-in on the last step', 'wide shot at sit-down'],
-                avoid: ['naming trail by brand', 'face + text explaining plantar anatomy'],
-            },
-            vocabulary_hints: {
-                use_peak_words: ['foot', 'skin', 'stomach', 'numb', 'painful', 'bigger', 'feeling'],
-                avoid_material_words: ['cotton', 'polyester', 'fiber', 'materials', 'rubber'],
-                closing_words: ['insane', 'hour', 'right'],
-            },
-            share_triggers: ['should i keep', 'in the comments'],
-            hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
-        },
-        {
-            id: 'gorilla_glue_hand_30_minutes_teeth',
-            title: 'I Glued My Hand To A Wood Board With Gorilla Glue And Pulled It Off With My Teeth In 30 Minutes',
-            logline: 'Pour Gorilla Glue on a pine board, press my hand into it until it sets, then pull the board off using only my teeth within 30 minutes.',
-            promise: 'My right hand is stuck to a pine board — I have 30 minutes and only my teeth.',
-            payoff: 'Final 5 seconds: the board releases with a visible tear of skin, timer freezes at 28:41, single sensation word appears.',
-            over_delivery_note: 'Hook sets up "will it come off?"; payoff delivers the exact minute + the visible skin evidence (specificity beats vague success).',
-            narrative_structures: ['late_peak_arc', 'golden_final_5pct', 'visceral_body_language', 'dramatic_pacing', 'nadir_before_climax'],
-            duration_band_id: 'sweet_spot_46_60',
-            pre_upload_levers: ['pivot_word_count', 'proof_of_work_count', 'visual_variety_entropy', 'repeated_phrase_count', 'beat_count'],
-            interactions_engineered: ['keep × pacing (r_partial 0.380)', 'late_early × pacing (r_partial 0.380)'],
-            opening: {
-                first_frame: 'Tight close-up: my right palm pressed flat onto a pine board, glue still visible at the edges. Timer in-frame at 30:00.',
-                first_line: 'Okay — 30 minutes. Teeth only, no tools.',
-                opening_action: 'I try to lift the board with my free hand first; it won\'t budge; I bring my mouth to the edge in the first 3 seconds.',
-                opening_speech_rate_wps_target: 2.5,
-                hook_type: 'mystery',
-                best_first_word_used: 'okay',
-            },
-            build_phases: [
-                { zone_pct: '0-10', beat: 'demonstration that the board is stuck, timer starts, premise named', visceral: true, note: 'Action + premise in first 10%.' },
-                { zone_pct: '10-25', beat: 'first bite-and-pull attempt, minor skin pull, first sensation narration', visceral: true, note: 'Body already engaged. Divergence lock-in at 22%.' },
-                { zone_pct: '25-60', beat: 'repeated bite-pull cycles, sweat on forehead, sensory updates ("my skin is bigger")', visceral: true, note: 'Event density inverse — fewer big beats > many small.' },
-                { zone_pct: '60-90', beat: 'nadir at ~85%: the board barely moves, I pause, jaw shakes, slow to 3 w/s', visceral: true, note: 'best_after_worst: nadir before climax = 5x gap.' },
-                { zone_pct: '90-100', beat: 'the board tears free at 28:41; visible skin-pull; timer freezes; one sensation word overlay', visceral: true, note: 'Golden final 5%. END_RECOVERY payoff. Emotion word final 10% = +0.069.' },
-            ],
-            climax_hint: 'With 1:19 left the board finally releases with a sharp crack; the camera cuts to the palm, angry red where the wood was; timer overlay freezes at 28:41; I say one word.',
-            closing_line_hint: 'Close on sensation + impact: "skin\'s numb — insane."',
-            visual_prescription_hints: {
-                first_5s: ['hand pressed on board', 'timer visible', 'no text'],
-                hook_quarter: ['mouth-on-edge close-up', 'never face + text alone'],
-                mid: ['alternate jaw cutaways with palm-side cutaways', 'timer drops only at beat moments'],
-                late: ['slow push-in on the final bite', 'wide shot at the release'],
-                avoid: ['naming glue by brand in overlay', 'face + text explaining cyanoacrylate'],
-            },
-            vocabulary_hints: {
-                use_peak_words: ['skin', 'stomach', 'numb', 'painful', 'bigger', 'foot', 'feeling'],
-                avoid_material_words: ['cyanoacrylate', 'plastic', 'fiber', 'materials', 'carbon'],
-                closing_words: ['insane', 'hour', 'right'],
-            },
-            share_triggers: ['should i keep', 'in the comments'],
-            hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
-        },
-    ];
+const OBJECT_MOTIFS = [
+    {
+        id: 'pushups_one_day',
+        verb_past_phrase: 'Did',
+        verb_present_phrase: 'do',
+        noun_subject_phrase: 'push-ups',
+        title_core_tpl: 'I Did {N} Push-Ups In One Day',
+        logline_action: 'push push-ups out one rep at a time',
+        concrete_kind: 'reps',
+        scales: [500, 1000, 2000, 5000],
+        body_parts: ['shoulders', 'arms', 'chest', 'stomach'],
+        body_part_phrase: 'shoulders',
+        sensation_words: ['numb', 'bigger', 'painful', 'feeling'],
+        first_frame_action: 'mid-rep with the counter visible',
+        visual_action_short: 'a push-up from the top of the motion',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        category: 'repetition_endurance',
+        setting_hint: 'in my garage',
+        endpoint_kinds: ['exact_count', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'plank_hold_hours',
+        verb_past_phrase: 'Held',
+        verb_present_phrase: 'hold',
+        noun_subject_phrase: 'a plank',
+        title_core_tpl: 'I Held A Plank For {D}',
+        logline_action: 'hold a plank flat on the ground',
+        concrete_kind: 'duration',
+        scales: ['1 hour', '2 hours', '3 hours'],
+        body_parts: ['stomach', 'shoulders', 'skin'],
+        body_part_phrase: 'stomach',
+        sensation_words: ['stomach', 'numb', 'bigger', 'painful', 'feeling'],
+        first_frame_action: 'body already in the plank position with timer counting',
+        visual_action_short: 'a plank held flat with a running timer',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'isometric_endurance',
+        setting_hint: 'on gym flooring with a timer overlay',
+        endpoint_kinds: ['time_to_target', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'weighted_backpack_march',
+        verb_past_phrase: 'Marched With',
+        verb_present_phrase: 'march with',
+        noun_subject_phrase: 'a weighted backpack',
+        title_core_tpl: 'I Marched With A Weighted Backpack For {D}',
+        logline_action: 'march with a weighted backpack step by step',
+        concrete_kind: 'distance',
+        scales: ['20 miles', '30 miles', '26.2 miles'],
+        body_parts: ['foot', 'skin', 'stomach'],
+        body_part_phrase: 'foot',
+        sensation_words: ['foot', 'skin', 'numb', 'painful', 'feeling', 'bigger'],
+        first_frame_action: 'boots hitting pavement with a loaded pack on my back',
+        visual_action_short: 'boots in motion with a mile-counter overlay',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'locomotion_endurance',
+        setting_hint: 'on a marked road',
+        endpoint_kinds: ['exact_distance', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'stair_climb_repeats',
+        verb_past_phrase: 'Climbed',
+        verb_present_phrase: 'climb',
+        noun_subject_phrase: 'a single flight of stairs',
+        title_core_tpl: 'I Climbed A Single Flight Of Stairs {N} Times',
+        logline_action: 'run up a single flight of stairs',
+        concrete_kind: 'reps',
+        scales: [500, 1000, 3000],
+        body_parts: ['foot', 'stomach', 'skin'],
+        body_part_phrase: 'foot',
+        sensation_words: ['foot', 'bigger', 'painful', 'numb', 'feeling'],
+        first_frame_action: 'mid-step on the stairs with a counter overlay',
+        visual_action_short: 'running up a flight with foot-on-stair visible',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        category: 'repetition_endurance',
+        setting_hint: 'in a stairwell',
+        endpoint_kinds: ['exact_count', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'jump_rope_day',
+        verb_past_phrase: 'Jumped Rope',
+        verb_present_phrase: 'jump rope',
+        noun_subject_phrase: 'jump rope',
+        title_core_tpl: 'I Jumped Rope {N} Times In One Day',
+        logline_action: 'jump rope non-stop',
+        concrete_kind: 'reps',
+        scales: [5000, 10000, 20000],
+        body_parts: ['foot', 'skin', 'stomach'],
+        body_part_phrase: 'foot',
+        sensation_words: ['foot', 'painful', 'numb', 'bigger', 'feeling'],
+        first_frame_action: 'mid-jump with the rope arcing overhead',
+        visual_action_short: 'rope spinning with feet leaving the ground',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        category: 'repetition_endurance',
+        setting_hint: 'on a driveway',
+        endpoint_kinds: ['exact_count', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'sandbag_carry',
+        verb_past_phrase: 'Carried',
+        verb_present_phrase: 'carry',
+        noun_subject_phrase: 'a 100-lb sandbag',
+        title_core_tpl: 'I Carried A 100-Lb Sandbag For {D}',
+        logline_action: 'carry a 100-lb sandbag on my shoulder',
+        concrete_kind: 'distance',
+        scales: ['5 miles', '10 miles', '15 miles'],
+        body_parts: ['shoulders', 'foot', 'skin', 'stomach'],
+        body_part_phrase: 'foot',
+        sensation_words: ['foot', 'bigger', 'numb', 'painful', 'feeling', 'skin'],
+        first_frame_action: 'sandbag heaved onto my shoulder mid-step',
+        visual_action_short: 'the bag carried step by step with a distance overlay',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        category: 'locomotion_endurance',
+        setting_hint: 'on a long stretch of road',
+        endpoint_kinds: ['exact_distance', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'memorize_book',
+        verb_past_phrase: 'Memorized',
+        verb_present_phrase: 'memorize',
+        noun_subject_phrase: 'a short novel',
+        title_core_tpl: 'I Memorized Every Page Of A Short Novel In {T}',
+        title_core_tpl_reps: 'I Memorized {N} Pages Of A Short Novel In One Day',
+        logline_action: 'memorize pages of a short novel one at a time',
+        concrete_kind: 'pages',
+        scales: [50, 100, 150],
+        body_parts: ['feeling', 'skin'],
+        body_part_phrase: 'head',
+        sensation_words: ['curious', 'feeling', 'numb', 'bigger'],
+        first_frame_action: 'hand flipping to a checked-off page on the page grid',
+        visual_action_short: 'a book flipping with page checkmarks filling in',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'cognitive_endurance',
+        setting_hint: 'at a desk with a page tally on the wall',
+        endpoint_kinds: ['exact_count', 'time_to_target'],
+        implied_material_words: [],
+    },
+    {
+        id: 'handwritten_letters',
+        verb_past_phrase: 'Hand-Wrote',
+        verb_present_phrase: 'hand-write',
+        noun_subject_phrase: 'letters',
+        title_core_tpl: 'I Hand-Wrote {N} Letters — One To Every Contact In My Phone',
+        logline_action: 'hand-write letters — one for every contact in my phone',
+        concrete_kind: 'reps',
+        scales: [100, 300, 500],
+        body_parts: ['skin', 'feeling'],
+        body_part_phrase: 'hand',
+        sensation_words: ['feeling', 'numb', 'painful', 'bigger'],
+        first_frame_action: 'mid-line of handwriting with a finished stack in frame',
+        visual_action_short: 'a hand writing with a stack of addressed envelopes growing',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'repetition_patience',
+        setting_hint: 'at a desk beside a stack of stamped envelopes',
+        endpoint_kinds: ['exact_count', 'time_to_target'],
+        implied_material_words: [],
+    },
+    {
+        id: 'portrait_drawing_strangers',
+        verb_past_phrase: 'Drew Portraits Of',
+        verb_present_phrase: 'draw portraits of',
+        noun_subject_phrase: 'strangers on one street corner',
+        title_core_tpl: 'I Drew Portraits Of {N} Strangers On One Street Corner',
+        logline_action: 'draw a portrait of every stranger who walks past a corner',
+        concrete_kind: 'reps',
+        scales: [100, 300, 500],
+        body_parts: ['skin', 'feeling'],
+        body_part_phrase: 'hand',
+        sensation_words: ['curious', 'feeling', 'bigger', 'painful'],
+        first_frame_action: 'pencil mid-line on a portrait with a finished stack behind it',
+        visual_action_short: 'a hand drawing with a growing stack of finished portraits',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'repetition_social',
+        setting_hint: 'on a busy sidewalk',
+        endpoint_kinds: ['exact_count', 'time_to_target'],
+        implied_material_words: [],
+    },
+    {
+        id: 'rubber_band_ball',
+        verb_past_phrase: 'Built',
+        verb_present_phrase: 'build',
+        noun_subject_phrase: 'a rubber-band ball',
+        title_core_tpl: 'I Built A Rubber-Band Ball Out Of {N} Bands',
+        logline_action: 'wrap rubber bands around a growing ball',
+        concrete_kind: 'reps',
+        scales: [5000, 10000, 25000],
+        body_parts: ['skin', 'feeling'],
+        body_part_phrase: 'hand',
+        sensation_words: ['bigger', 'numb', 'skin', 'painful', 'feeling'],
+        first_frame_action: 'mid-stretch of a rubber band onto a growing ball',
+        visual_action_short: 'hands wrapping rubber bands around a ball',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        category: 'repetition_craft',
+        setting_hint: 'at a desk with a band counter and a ruler against the ball',
+        endpoint_kinds: ['exact_count', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'origami_cranes',
+        verb_past_phrase: 'Folded',
+        verb_present_phrase: 'fold',
+        noun_subject_phrase: 'origami cranes',
+        title_core_tpl: 'I Folded {N} Origami Cranes In One Day',
+        logline_action: 'fold origami cranes one after another',
+        concrete_kind: 'reps',
+        scales: [500, 1000, 1500],
+        body_parts: ['skin', 'feeling'],
+        body_part_phrase: 'hand',
+        sensation_words: ['bigger', 'curious', 'feeling', 'painful'],
+        first_frame_action: 'mid-fold on a crane with a counter and a pile in frame',
+        visual_action_short: 'fingers folding paper and adding to a crane pile',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        category: 'repetition_craft',
+        setting_hint: 'at a table with a growing pile of cranes',
+        endpoint_kinds: ['exact_count', 'time_to_target'],
+        implied_material_words: [],
+    },
+    {
+        id: 'jigsaw_speedrun',
+        verb_past_phrase: 'Solved',
+        verb_present_phrase: 'solve',
+        noun_subject_phrase: 'a jigsaw puzzle',
+        title_core_tpl: 'I Solved A {N}-Piece Jigsaw Puzzle In One Day',
+        logline_action: 'solve a giant jigsaw puzzle piece by piece',
+        concrete_kind: 'pieces',
+        scales: [5000, 10000, 25000],
+        body_parts: ['feeling', 'skin'],
+        body_part_phrase: 'hand',
+        sensation_words: ['curious', 'bigger', 'painful', 'feeling'],
+        first_frame_action: 'hand pressing a piece into place with a completion bar filling',
+        visual_action_short: 'hands sliding puzzle pieces with a completion-% overlay climbing',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        category: 'cognitive_patience',
+        setting_hint: 'at a long puzzle table',
+        endpoint_kinds: ['exact_count', 'time_to_target'],
+        implied_material_words: [],
+    },
+    {
+        id: 'coin_edge_tower',
+        verb_past_phrase: 'Stacked',
+        verb_present_phrase: 'stack',
+        noun_subject_phrase: 'coins on their edges',
+        title_core_tpl: 'I Stacked {N} Coins On Their Edges Into One Tower',
+        logline_action: 'stack coins on their edges one at a time',
+        concrete_kind: 'reps',
+        scales: [200, 500, 1000],
+        body_parts: ['skin', 'feeling'],
+        body_part_phrase: 'hand',
+        sensation_words: ['bigger', 'curious', 'feeling', 'painful'],
+        first_frame_action: 'fingers placing a coin onto the precarious stack',
+        visual_action_short: 'a hand placing coins on a growing, tilting stack',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        category: 'fine_motor_patience',
+        setting_hint: 'at a table with a height ruler taped behind the tower',
+        endpoint_kinds: ['exact_count', 'body_quit'],
+        implied_material_words: [],
+    },
+];
+
+const ENDPOINT_MOTIFS = [
+    { id: 'exact_count',    kind: 'count',    reveal_label: 'the counter froze at' },
+    { id: 'time_to_target', kind: 'timer',    reveal_label: 'the timer froze at' },
+    { id: 'exact_distance', kind: 'distance', reveal_label: 'the mile counter froze at' },
+    { id: 'body_quit',      kind: 'body',     reveal_label: 'my body quit at' },
+];
+
+function deriveMotifContext(brief, artifacts) {
+    const rp = (artifacts && artifacts.retentionPatterns) || {};
+    const lat = brief.evidence_lattice || {};
+    const voc = lat.vocabulary || {};
+    const positiveWords = new Set((voc.top_words_positive || []).map(w => w.word));
+    const negativeWords = new Set((voc.top_words_negative || []).map(w => w.word));
+    const peakWordsRanked = (voc.top_words_positive || []).map(w => w.word);
+    const negWordsRanked = (voc.top_words_negative || []).map(w => w.word);
+    const peakPhrases = voc.peak_phrases || [];
+    const dropPhrases = voc.drop_phrases || [];
+
+    const bestFirstWords = ((rp.opening_words && rp.opening_words.best_first_words) || [])
+        .map(e => String(e).split('(')[0].trim()).filter(Boolean);
+    const worstFirstWords = ((rp.opening_words && rp.opening_words.worst_first_words) || [])
+        .map(e => String(e).split('(')[0].trim()).filter(Boolean);
+    const bestLastWords = ((rp.opening_words && rp.opening_words.best_last_words) || [])
+        .map(e => String(e).split('(')[0].trim()).filter(Boolean);
+
+    const hookTax = rp.wave11_12_new_signals && rp.wave11_12_new_signals.hook_taxonomy;
+    const preferHookTypes = [];
+    if (hookTax) {
+        const best = String(hookTax.best || '').split(/\s|\(/)[0].trim().toLowerCase();
+        const second = String(hookTax.second || '').split(/\s|\(/)[0].trim().toLowerCase();
+        if (best) preferHookTypes.push(best);
+        if (second && second !== best) preferHookTypes.push(second);
+    }
+
+    const peakCauses = (rp.top_3_retention_peak_causes || []).map(c => String(c.cause || ''));
+    const dropCauses = (rp.top_3_retention_drop_causes || []).map(c => String(c.cause || ''));
+
+    // Map top-5 retention predictors to narrative_structures IDs we know.
+    const preds5 = rp.top_5_retention_predictors || [];
+    const predSignals = new Set(preds5.map(p => String(p.signal || '').toUpperCase()));
+    const structureRanked = [];
+    if (predSignals.has('END_RECOVERY')) structureRanked.push('golden_final_5pct');
+    if (predSignals.has('HOOK_PAYOFF_GAP')) structureRanked.push('late_peak_arc');
+    if (predSignals.has('MOMENTUM_ZONES')) structureRanked.push('monotonic_rise');
+    if (peakCauses.some(c => /PHYSICAL|SENSORY/i.test(c))) structureRanked.push('visceral_body_language');
+    if (peakCauses.some(c => /SPEAKING|SLOWER/i.test(c))) structureRanked.push('fast_pacing_no_pauses');
+    const wave9 = rp.wave9_10_new_signals || {};
+    if (wave9.best_after_worst) structureRanked.push('nadir_before_climax');
+    const emo = rp.emotional_trajectory || {};
+    if (emo.best && /neg_to_pos/i.test(String(emo.best))) structureRanked.push('comeback_arc');
+
+    // Frame mechanisms by outcome (zone-specific visual prescription)
+    const mil = (artifacts && artifacts.mechanismIndicatorLinks) || null;
+    const frameMechs = {
+        first_5s: [], first_10s: [], hook_quarter: [], mid: [], late: [],
+    };
+    if (mil && Array.isArray(mil.links)) {
+        for (const l of mil.links) {
+            if (!l.mechanism_id || !l.mechanism_id.startsWith('frame_')) continue;
+            const mid = String(l.mechanism_id);
+            for (const z of Object.keys(frameMechs)) {
+                if (mid.endsWith('_at_' + z)) frameMechs[z].push({ id: mid, rho: l.rho, outcome: l.indicator_key, n: l.n });
+            }
+        }
+        for (const z of Object.keys(frameMechs)) {
+            frameMechs[z].sort((a, b) => Math.abs(b.rho) - Math.abs(a.rho));
+        }
+    }
+
+    // Pre-upload lever pool (from brief)
+    const preLeverPool = (brief.top_pre_upload_predictors || []).map(p => p.key);
+    const interactionPool = (lat.interaction_rules || []).map(r => r.key);
+
+    return {
+        positiveWords, negativeWords,
+        peakWordsRanked, negWordsRanked,
+        peakPhrases, dropPhrases,
+        bestFirstWords, worstFirstWords, bestLastWords,
+        preferHookTypes,
+        peakCauses, dropCauses,
+        structureRanked,
+        frameMechs,
+        preLeverPool, interactionPool,
+    };
 }
+
+function scoreMotifCombo(obj, endpoint, ctx) {
+    let score = 0;
+    const drivers = [];
+
+    // Sensory word alignment (PHYSICAL/SENSORY LANGUAGE peak cause)
+    const sensoryHits = (obj.sensation_words || []).filter(w => ctx.positiveWords.has(w));
+    if (sensoryHits.length) {
+        const d = round(sensoryHits.length * 0.12, 3);
+        score += d; drivers.push({ driver: 'sensory_words_in_corpus_positive_list', delta: d, words: sensoryHits });
+    }
+    const bodyHits = (obj.body_parts || []).filter(w => ctx.positiveWords.has(w));
+    if (bodyHits.length) {
+        const d = round(bodyHits.length * 0.08, 3);
+        score += d; drivers.push({ driver: 'body_parts_in_corpus_positive_list', delta: d, words: bodyHits });
+    }
+    // Material word risk (TECHNICAL/MATERIAL LANGUAGE drop cause)
+    const matHits = (obj.implied_material_words || []).filter(w => ctx.negativeWords.has(w));
+    if (matHits.length) {
+        const d = round(-0.40 * matHits.length, 3);
+        score += d; drivers.push({ driver: 'material_word_risk', delta: d, words: matHits });
+    }
+    // Action intensity (HIGH-ENERGY ACTION FRAMES peak cause)
+    if (obj.action_intensity === 'high') { score += 0.30; drivers.push({ driver: 'action_intensity_high', delta: 0.30 }); }
+    else if (obj.action_intensity === 'medium') { score += 0.18; drivers.push({ driver: 'action_intensity_medium', delta: 0.18 }); }
+    else { score += 0.06; drivers.push({ driver: 'action_intensity_low', delta: 0.06 }); }
+
+    // Safety tier
+    if (obj.safety_tier === 'safe') { score += 0.10; drivers.push({ driver: 'safety_tier_safe', delta: 0.10 }); }
+    else if (obj.safety_tier === 'risky') { score -= 1.0; drivers.push({ driver: 'safety_tier_risky', delta: -1.0 }); }
+
+    // Endpoint specificity — numeric endpoints land the over-delivery payoff
+    if (endpoint.kind === 'count' || endpoint.kind === 'timer' || endpoint.kind === 'distance') {
+        score += 0.20; drivers.push({ driver: 'numeric_specific_endpoint', delta: 0.20 });
+    } else if (endpoint.kind === 'body' && obj.action_intensity !== 'high') {
+        score -= 0.08; drivers.push({ driver: 'body_quit_weak_on_non_intense_action', delta: -0.08 });
+    }
+    return { score: round(score, 3), drivers };
+}
+
+function pickScale(obj) {
+    const scales = obj.scales || [];
+    const idx = Math.min(scales.length - 1, Math.max(0, Math.floor(scales.length / 2)));
+    const val = scales[idx];
+    if (obj.concrete_kind === 'reps' || obj.concrete_kind === 'pages' || obj.concrete_kind === 'pieces') {
+        return { kind: 'count', value: val, display: (val || 0).toLocaleString('en-US') };
+    }
+    if (obj.concrete_kind === 'duration') return { kind: 'duration', value: val, display: String(val) };
+    if (obj.concrete_kind === 'distance') return { kind: 'distance', value: val, display: String(val) };
+    return { kind: 'other', value: val, display: String(val || '') };
+}
+
+function pickFirstWord(obj, ctx) {
+    const wordMap = {
+        'jump rope': 'go', 'march': 'walk', 'carry': 'go', 'climb': 'break',
+        'memorize': 'these', 'hand-write': 'these', 'draw portraits of': 'how',
+        'build': 'how', 'fold': 'these', 'solve': 'these', 'stack': 'these',
+        'do': 'go', 'hold': 'break',
+    };
+    const candidate = wordMap[obj.verb] || (ctx.bestFirstWords[0] || 'go');
+    if (ctx.bestFirstWords.includes(candidate)) return candidate;
+    return ctx.bestFirstWords[0] || 'go';
+}
+
+function capitalize(s) {
+    return String(s || '').replace(/(^|\s|-)([a-z])/g, (_, a, b) => a + b.toUpperCase());
+}
+
+// Compose a specific, over-delivery-flavored reveal number given the scale.
+// For counts/pages/pieces we nudge slightly above the round number; for
+// distances we append the exact tenth; for durations we add an exact second.
+function overDeliveryRevealValue(scale, endpoint) {
+    if (endpoint.kind === 'timer') {
+        if (typeof scale.value === 'string' && /hour/.test(scale.value)) {
+            const hours = parseFloat(String(scale.value).match(/([\d.]+)/)[1]);
+            const sec = 7 + (Math.floor(Math.abs(hours * 11)) % 40);
+            return `${Math.floor(hours)}:${String(Math.floor((hours - Math.floor(hours)) * 60)).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+        }
+        return scale.display;
+    }
+    if (endpoint.kind === 'distance') {
+        // Show precise tenths e.g., "10.3 miles"
+        const m = String(scale.value).match(/([\d.]+)/);
+        if (m) return scale.display.replace(m[1], (parseFloat(m[1]) + 0.3).toFixed(1));
+        return scale.display;
+    }
+    if (endpoint.kind === 'count') {
+        const n = typeof scale.value === 'number' ? scale.value : parseInt(String(scale.value).replace(/,/g, ''), 10);
+        if (!isFinite(n)) return scale.display;
+        // Nudge up by ~3% to make the reveal number non-round (over-delivery flavor)
+        const nudge = Math.max(1, Math.round(n * 0.028));
+        return (n + nudge).toLocaleString('en-US');
+    }
+    return scale.display;
+}
+
+function composeTitle(obj, endpoint, scale, bodyPart) {
+    // Build the core title from the motif's title_core_tpl, substituting {N}/{D}/{T}
+    let core = obj.title_core_tpl || '';
+    if (obj.concrete_kind === 'duration' && obj.title_core_tpl) {
+        core = core.replace('{D}', capitalize(scale.display)).replace('{T}', capitalize(scale.display));
+    } else if (obj.concrete_kind === 'distance' && obj.title_core_tpl) {
+        core = core.replace('{D}', capitalize(scale.display));
+    } else {
+        core = core.replace('{N}', String(scale.display));
+    }
+
+    const revealVal = overDeliveryRevealValue(scale, endpoint);
+    if (endpoint.kind === 'count')    return `${core} — The Counter Froze At ${revealVal}`;
+    if (endpoint.kind === 'timer')    return `${core} — The Timer Hit ${revealVal} Exactly`;
+    if (endpoint.kind === 'distance') return `${core} — The Mile Counter Froze At ${revealVal}`;
+    if (endpoint.kind === 'body')     return `${core} — My ${capitalize(bodyPart)} Quit First`;
+    return core;
+}
+
+function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers) {
+    const scale = pickScale(obj);
+    const bodyPart = obj.body_part_phrase || (obj.body_parts && obj.body_parts[0]) || 'body';
+    const title = composeTitle(obj, endpoint, scale, bodyPart);
+    const revealVal = overDeliveryRevealValue(scale, endpoint);
+
+    const endpointPhrase = endpoint.kind === 'count' ? `the counter freezes at ${revealVal}`
+        : endpoint.kind === 'timer' ? `the timer hits exactly ${revealVal}`
+            : endpoint.kind === 'distance' ? `the mile counter freezes at ${revealVal}`
+                : `my ${bodyPart} quits first`;
+
+    const action = obj.logline_action || `${obj.verb_present_phrase} ${obj.noun_subject_phrase}`;
+    const logline = `I ${action} ${obj.setting_hint}, narrating every sensation in my ${bodyPart} until ${endpointPhrase}.`;
+    const promise = `You\'re watching me ${action} — the question is the exact number where ${endpoint.kind === 'body' ? `my ${bodyPart}` : 'the counter'} lands.`;
+    const payoff = `Final 5% of runtime: ${endpointPhrase}; a single sensation word appears as overlay.`;
+    const overDelivery = `Hook implies a round target (${scale.display}); payoff lands on a specific, non-round value (${revealVal}) — specificity over-delivers vs the rounded promise.`;
+
+    // Narrative structures — pick top 4-5 from ranked lattice list + always include the key three
+    const strBase = ['late_peak_arc', 'golden_final_5pct', 'visceral_body_language'];
+    const more = ctx.structureRanked.filter(s => !strBase.includes(s));
+    if (obj.action_intensity === 'high' && !more.includes('fast_pacing_no_pauses')) more.push('fast_pacing_no_pauses');
+    if (obj.concrete_kind === 'distance' || obj.concrete_kind === 'reps') more.push('monotonic_rise');
+    const narrative = [...new Set([...strBase, ...more])].slice(0, 6);
+
+    // Vocabulary — commit only to peak words that are in corpus positive list + body parts in positive list
+    const useWords = Array.from(new Set([
+        ...(obj.sensation_words || []).filter(w => ctx.positiveWords.has(w)),
+        ...(obj.body_parts || []).filter(w => ctx.positiveWords.has(w)),
+        ...ctx.peakWordsRanked.slice(0, 5),
+    ])).slice(0, 9);
+    const avoidWords = ctx.negWordsRanked.slice(0, 6);
+    const closingWords = ctx.bestLastWords.slice(0, 3);
+
+    // Pre-upload levers — pick top from lattice pool
+    const preLevers = ctx.preLeverPool.slice(0, 4);
+    const interactions = ctx.interactionPool.slice(0, 2);
+
+    // Hook type from taxonomy
+    const hookType = ctx.preferHookTypes[0] || 'transformation';
+    const firstWord = pickFirstWord(obj, ctx);
+
+    // Opening speech rate target — medium density empirical sweet zone
+    const openingRate = 2.5 + Math.random() * 0.2; // 2.5-2.7 wps sweet zone
+
+    // First frame — derive from obj.first_frame_action + top frame mech at first_5s (if POSITIVE rho)
+    const topFirst5 = (ctx.frameMechs.first_5s || []).filter(m => m.outcome === 'log_views' && m.rho > 0)[0];
+    const firstFrameExtras = topFirst5 ? `; composition emphasizes ${topFirst5.id.replace('frame_','').replace('_at_first_5s','').replace(/_/g,' ')} (rho=${round(topFirst5.rho, 3)} vs log_views)` : '';
+    const firstFrame = `Close on ${obj.first_frame_action}. Counter visible. No explanatory overlay${firstFrameExtras}.`;
+    const firstLine = `${capitalize(firstWord)} — ${scale.display}, and my ${bodyPart} is going to tell you when it\'s over.`.replace('shoulders is', 'shoulders are').replace('foot is', 'foot is').replace('hand is', 'hand is');
+    const openingAction = `Camera locked on ${obj.visual_action_short} for the first 3 seconds; I enter motion inside the first second.`;
+
+    // Build phases — template driven by top_5_retention_predictors
+    const buildPhases = [
+        { zone_pct: '0-10', beat: `enter ${obj.setting_hint.replace(/^at |^on |^in /, '')}; ${obj.visual_action_short}; premise named on screen`, visceral: true, note: 'Concept + body inside first 10%. Design rule v3 #6 (5.4x gap).' },
+        { zone_pct: '10-25', beat: `first ${bodyPart} sensation narration ("my ${bodyPart} is bigger"); counter begins to tick`, visceral: true, note: 'Divergence lock-in at ~22%. Sensory-word ramp begins.' },
+        { zone_pct: '25-60', beat: `escalating ${obj.visual_action_short} with sensory updates; utterances < 10 words; no pauses > 1s`, visceral: true, note: 'Monotonic rise in distress / counter. Peak-word density increases.' },
+        { zone_pct: '60-90', beat: `peak zone — slow to 3.0 w/s; short sentence on a single sensation; reaction → wide on the count or distance milestone`, visceral: true, note: 'Peak 60-80%. Peak-speaking-rate 3.86 wps confirmed; utterance 7.9 words.' },
+        { zone_pct: '90-100', beat: `${endpointPhrase}; single-word overlay (sensation); wide shot of the final state`, visceral: true, note: 'Golden final 5% + END_RECOVERY. Emotion word in final 10% = +0.069.' },
+    ];
+
+    const climaxHint = `At 95% of runtime, ${endpointPhrase}; camera holds on the final position; I say one word and the overlay freezes.`;
+    const closingLineHint = `Close with ${bodyPart} + impact word: "${bodyPart}\'s numb — ${closingWords[0] || 'insane'}."`;
+
+    // Visual prescription per zone — derived from top frame mechanisms at each bucket
+    const zoneRec = (zone) => {
+        const mechs = (ctx.frameMechs[zone] || []).filter(m => m.outcome === 'log_views').slice(0, 3);
+        return mechs.length
+            ? mechs.map(m => m.id.replace(`_at_${zone}`, '').replace('frame_', '').replace(/_/g, ' ') + ` (rho=${round(m.rho, 3)})`)
+            : [];
+    };
+    const visualHints = {
+        first_5s: [`${obj.first_frame_action}`, 'no explanatory overlay', 'counter visible', ...zoneRec('first_5s')],
+        hook_quarter: [`${obj.visual_action_short}`, 'body in motion only', ...zoneRec('hook_quarter')],
+        mid: [`alternate ${bodyPart} close-ups with ${obj.visual_action_short}`, 'text overlay at beat moments only', ...zoneRec('mid')],
+        late: [`slow push-in on ${bodyPart}`, 'wide reveal at the endpoint', ...zoneRec('late')],
+        avoid: ['face + text with no action', 'naming materials by brand', 'pauses > 1s'],
+    };
+
+    return {
+        id: `${obj.id}__${endpoint.id}`,
+        title, logline, promise, payoff,
+        over_delivery_note: overDelivery,
+        narrative_structures: narrative,
+        duration_band_id: 'sweet_spot_46_60',
+        pre_upload_levers: preLevers,
+        interactions_engineered: interactions,
+        opening: {
+            first_frame: firstFrame,
+            first_line: firstLine,
+            opening_action: openingAction,
+            opening_speech_rate_wps_target: round(openingRate, 2),
+            hook_type: hookType,
+            best_first_word_used: firstWord,
+        },
+        build_phases: buildPhases,
+        climax_hint: climaxHint,
+        closing_line_hint: closingLineHint,
+        visual_prescription_hints: visualHints,
+        vocabulary_hints: {
+            use_peak_words: useWords,
+            avoid_material_words: avoidWords,
+            closing_words: closingWords,
+        },
+        share_triggers: (ctx.peakPhrases || []).slice(0, 3),
+        hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
+        synthesis_trace: {
+            rank,
+            motif_score: motifScore,
+            motif_drivers: motifDrivers,
+            object_atom_id: obj.id,
+            endpoint_atom_id: endpoint.id,
+            scale_kind: scale.kind,
+            scale_value: scale.value,
+            derived_from_lattice: [
+                'opening.best_first_word_used ← opening_words.best_first_words',
+                'opening.hook_type ← wave11_12.hook_taxonomy',
+                'opening.opening_speech_rate_wps_target ← speaking_patterns.opening_density',
+                'vocabulary_hints.use_peak_words ← top_words_positive ∩ object.sensation_words + body_parts',
+                'vocabulary_hints.avoid_material_words ← top_words_negative',
+                'vocabulary_hints.closing_words ← opening_words.best_last_words',
+                'share_triggers ← wave11_12.key_phrases.peak_phrases',
+                'narrative_structures ← top_5_retention_predictors + peak_causes + wave9_10 + emotional_trajectory',
+                'pre_upload_levers ← brief.top_pre_upload_predictors',
+                'visual_prescription_hints.* ← mechanism_indicator_links (frame_*) ranked by |rho| per zone',
+            ],
+            still_hardcoded: [
+                'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
+                'endpoint-motif kinds (count / timer / distance / body-quit)',
+                'build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)',
+                'duration_band_id default ("sweet_spot_46_60")',
+            ],
+        },
+    };
+}
+
+function synthesizeSeeds(brief, artifacts, maxCount = 12) {
+    const ctx = deriveMotifContext(brief, artifacts);
+    const combos = [];
+    for (const obj of OBJECT_MOTIFS) {
+        if (obj.safety_tier === 'risky') continue;
+        for (const endId of (obj.endpoint_kinds || ['exact_count'])) {
+            const endpoint = ENDPOINT_MOTIFS.find(e => e.id === endId);
+            if (!endpoint) continue;
+            const { score, drivers } = scoreMotifCombo(obj, endpoint, ctx);
+            combos.push({ obj, endpoint, score, drivers });
+        }
+    }
+    combos.sort((a, b) => b.score - a.score);
+    // Diversify: cap 2 per category so a "repetition_endurance" bias doesn't dominate
+    const perCat = {};
+    const picked = [];
+    for (const c of combos) {
+        const cat = c.obj.category;
+        perCat[cat] = perCat[cat] || 0;
+        if (perCat[cat] >= 2) continue;
+        perCat[cat] += 1;
+        picked.push(c);
+        if (picked.length >= maxCount) break;
+    }
+    return picked.map((c, i) => composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers));
+}
+
 
 // ──────────────────────────────────────────────────────────────────────
 // Hook-mechanism picker
@@ -905,7 +1350,12 @@ function pickHooksForIdea(brief, pref = {}) {
 // ──────────────────────────────────────────────────────────────────────
 
 function scoreIdea(idea, brief) {
-    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0 };
+    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0, motif: 0 };
+
+    // Motif-synthesis score (lattice-driven object/endpoint alignment)
+    if (idea.synthesis_trace && typeof idea.synthesis_trace.motif_score === 'number') {
+        parts.motif += idea.synthesis_trace.motif_score * 0.15;
+    }
 
     for (const hook of idea.hook_mechanisms) parts.hook += Math.abs(hook.csw || 0);
 
@@ -936,7 +1386,7 @@ function scoreIdea(idea, brief) {
         if (rule && rule.r_partial) parts.interactions += Math.abs(rule.r_partial) * 0.1;
     }
 
-    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions;
+    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions + parts.motif;
     return { parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, round(v, 4)])), total: round(total, 4) };
 }
 
@@ -1930,6 +2380,7 @@ function assembleBlueprint(seed, brief, rank, artifacts) {
         narrative_structures: seed.narrative_structures,
         pre_upload_levers: seed.pre_upload_levers,
         interactions_engineered: seed.interactions_engineered,
+        synthesis_trace: seed.synthesis_trace || null,
     };
 
     idea.score_breakdown = scoreIdea(idea, brief);
@@ -1981,7 +2432,9 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         artifacts = artifacts || loadAllArtifacts();
         brief = compress(artifacts);
     }
-    const seeds = baseBlueprintSeeds();
+    // Synthesize specific-idea seeds from the artifact lattice (v3).
+    // Pull more than `count` so assembleBlueprint scoring can re-rank.
+    const seeds = synthesizeSeeds(brief, artifacts, Math.max(count * 2, 10));
     const ideas = seeds.map((seed, i) => assembleBlueprint(seed, brief, i + 1, artifacts));
     ideas.sort((a, b) => (b.score_breakdown.total || 0) - (a.score_breakdown.total || 0));
     const topN = ideas.slice(0, count);
