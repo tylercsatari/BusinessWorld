@@ -31843,7 +31843,8 @@
       "ref_to_gratification_gap_pct_x_reference_callback_count",
       "ref_to_gratification_gap_pct_x_reference_callback_density",
       "ref_to_gratification_gap_pct_x_visual_credibility_count",
-      "ref_to_gratification_gap_pct_x_visual_credibility_density"
+      "ref_to_gratification_gap_pct_x_visual_credibility_density",
+      "ref_to_gratification_gap_pct_x_stakes_escalation_count"
     ],
     "depth_in_hierarchy": 0
   },

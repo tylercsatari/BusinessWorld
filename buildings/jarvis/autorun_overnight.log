@@ -3353,3 +3353,15 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 04:18:05]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * stakes_escalation_count. does not meaningfully predict views. Safe to deprioritize.
 [jarvis-runner 04:18:05]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × stakes_escalation_count → 'views', depth=2
 [jarvis-runner 04:18:05]   [DONE]      r=0.036 (none positive)
+jarvis-store: R2 compact write failed for derived_experiments_compact: write EPIPE
+jarvis-store: R2 write failed for resolutions: socket hang up
+jarvis-store: R2 write failed for graph: Client network socket disconnected before secure TLS connection was established
+jarvis-store: R2 write failed for autonomous_progress: socket hang up
+[jarvis-runner 04:31:49] 
+==================================================
+[jarvis-runner 04:31:49] INDICATOR: ref_to_gratification_gap_pct_x_stakes_escalation_density
+[jarvis-runner 04:31:49]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 04:31:49]   [EXPERIMENT] Pearson r=0.016, rho=0.065, p=0.7557, n=370
+[jarvis-runner 04:31:49]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * stakes_escalation_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 04:31:49]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × stakes_escalation_density → 'views', depth=2
+[jarvis-runner 04:31:49]   [DONE]      r=0.016 (none positive)
