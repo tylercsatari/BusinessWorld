@@ -32199,7 +32199,13 @@
       "rhetorical_question_density_x_visual_credibility_density",
       "rhetorical_question_density_x_stakes_escalation_count",
       "rhetorical_question_density_x_stakes_escalation_density",
-      "rhetorical_question_density_x_delayed_reveal_count"
+      "rhetorical_question_density_x_delayed_reveal_count",
+      "rhetorical_question_density_x_delayed_reveal_density",
+      "rhetorical_question_density_x_narrative_anchor_count",
+      "rhetorical_question_density_x_narrative_anchor_density",
+      "rhetorical_question_density_x_challenge_statement_count",
+      "rhetorical_question_density_x_challenge_statement_density",
+      "rhetorical_question_density_x_narrative_tension_count"
     ],
     "depth_in_hierarchy": 0
   },
