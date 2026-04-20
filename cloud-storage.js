@@ -4,6 +4,8 @@
 const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand,
         DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { NodeHttpHandler } = require('@smithy/node-http-handler');
+const https = require('https');
 const fs = require('fs');
 
 // ── R2 Client ──────────────────────────────────────────────
@@ -22,10 +24,17 @@ function initR2() {
         return false;
     }
 
+    // Force IPv4 + short connection timeout to avoid IPv6 ENETUNREACH hangs
+    const agent = new https.Agent({ family: 4 });
     s3 = new S3Client({
         region: 'auto',
         endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-        credentials: { accessKeyId, secretAccessKey }
+        credentials: { accessKeyId, secretAccessKey },
+        requestHandler: new NodeHttpHandler({
+            connectionTimeout: 8000,
+            requestTimeout: 30000,
+            httpsAgent: agent,
+        }),
     });
     console.log(`R2: Connected to bucket "${bucket}"`);
     return true;
