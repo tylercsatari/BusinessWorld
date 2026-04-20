@@ -21309,5 +21309,36 @@
     "elapsed_minutes": 41.96,
     "total_indicators_after": 1852,
     "total_derived_after": 32200
+  },
+  {
+    "id": "auto_20260420072549.",
+    "started_at": "2026-04-20T07:25:49.512Z",
+    "finished_at": "2026-04-20T08:03:07.989Z",
+    "mode": "hybrid_auto",
+    "llm_proposed": 0,
+    "llm_completed": 0,
+    "attempted": 7,
+    "completed": 7,
+    "failures": 0,
+    "pre_attempted": 7,
+    "pre_completed": 7,
+    "post_attempted": 0,
+    "post_completed": 0,
+    "preupload_ratio_requested": 0.7,
+    "no_signal_streak_end": 3,
+    "stop_reason": "max_minutes",
+    "candidate_keys_processed": [
+      "early_proof_to_loop_ratio_x_social_proof_count",
+      "early_proof_to_loop_ratio_x_social_proof_density",
+      "early_proof_to_loop_ratio_x_proof_of_work_count",
+      "early_proof_to_loop_ratio_x_proof_of_work_density",
+      "early_proof_to_loop_ratio_x_failure_vulnerability_count",
+      "early_proof_to_loop_ratio_x_failure_vulnerability_density",
+      "early_proof_to_loop_ratio_x_commitment_device_count"
+    ],
+    "top_new_r_abs": 0.1056,
+    "elapsed_minutes": 37.31,
+    "total_indicators_after": 1852,
+    "total_derived_after": 32207
   }
 ]

@@ -31914,7 +31914,14 @@
       "early_proof_to_loop_ratio_x_promise_specificity_count",
       "early_proof_to_loop_ratio_x_promise_specificity_density",
       "early_proof_to_loop_ratio_x_loss_framing_count",
-      "early_proof_to_loop_ratio_x_loss_framing_density"
+      "early_proof_to_loop_ratio_x_loss_framing_density",
+      "early_proof_to_loop_ratio_x_social_proof_count",
+      "early_proof_to_loop_ratio_x_social_proof_density",
+      "early_proof_to_loop_ratio_x_proof_of_work_count",
+      "early_proof_to_loop_ratio_x_proof_of_work_density",
+      "early_proof_to_loop_ratio_x_failure_vulnerability_count",
+      "early_proof_to_loop_ratio_x_failure_vulnerability_density",
+      "early_proof_to_loop_ratio_x_commitment_device_count"
     ],
     "depth_in_hierarchy": 0
   },
