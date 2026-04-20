@@ -1,61 +1,118 @@
 {
   "active": false,
-  "run_id": "auto_20260420160050.",
+  "run_id": "auto_20260420163548.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-20T16:00:50.129Z",
-  "updated_at": "2026-04-20T16:33:12.251Z",
-  "finished_at": "2026-04-20T16:33:12.251Z",
-  "requested_iterations": 5000,
-  "attempted": 4,
-  "completed": 4,
-  "failures": 0,
+  "started_at": "2026-04-20T16:35:48.583Z",
+  "updated_at": "2026-04-20T17:02:06.315Z",
+  "finished_at": "2026-04-20T17:02:06.315Z",
+  "requested_iterations": 3000,
+  "attempted": 11,
+  "completed": 8,
+  "failures": 3,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 1,
+  "no_signal_streak": 5,
   "stop_reason": "max_minutes",
   "current_candidate": null,
-  "last_completed_candidate": "rhetorical_question_density_x_loop_front_half_density",
-  "last_completed_r": 0.0183,
+  "last_completed_candidate": "mystery_setup_count_x_social_proof_count",
+  "last_completed_r": -0.0028,
   "recent_events": [
     {
       "type": "completed",
-      "key": "rhetorical_question_density_x_narrative_tension_density",
-      "r": 0.0905,
+      "key": "rhetorical_question_density_x_narrative_tension_density_first_half",
+      "r": 0.0986,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T16:10:40.790Z"
+      "ts": "2026-04-20T16:40:41.373Z"
     },
     {
       "type": "completed",
-      "key": "rhetorical_question_density_x_payoff_delay_score",
-      "r": 0.0442,
+      "key": "rhetorical_question_density_x_challenge_setup_density_first_quarter",
+      "r": 0.0717,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T16:23:22.675Z"
+      "ts": "2026-04-20T16:43:29.140Z"
     },
     {
       "type": "completed",
-      "key": "rhetorical_question_density_x_challenge_to_resolution_gap_pct",
-      "r": 0.1146,
+      "key": "mystery_setup_count_x_mystery_setup_density",
+      "r": -0.0861,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T16:29:18.374Z"
+      "ts": "2026-04-20T16:46:13.563Z"
     },
     {
       "type": "completed",
-      "key": "rhetorical_question_density_x_loop_front_half_density",
-      "r": 0.0183,
+      "key": "mystery_setup_count_x_promise_specificity_count",
+      "r": -0.0175,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T16:33:11.810Z"
+      "ts": "2026-04-20T16:48:53.204Z"
+    },
+    {
+      "type": "completed",
+      "key": "mystery_setup_count_x_promise_specificity_density",
+      "r": -0.0123,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T16:51:42.730Z"
+    },
+    {
+      "type": "completed",
+      "key": "mystery_setup_count_x_loss_framing_count",
+      "r": -0.0073,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T16:54:33.203Z"
+    },
+    {
+      "type": "completed",
+      "key": "mystery_setup_count_x_loss_framing_density",
+      "r": -0.0084,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T16:57:52.474Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_above_baseline_area",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T16:59:27.435Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_avg_percent_viewed",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T16:59:28.563Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_avg_view_duration_s",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T16:59:29.418Z"
+    },
+    {
+      "type": "completed",
+      "key": "mystery_setup_count_x_social_proof_count",
+      "r": -0.0028,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T17:02:05.751Z"
     }
   ],
-  "pre_attempted": 4,
-  "pre_completed": 4,
-  "post_attempted": 0,
+  "pre_attempted": 8,
+  "pre_completed": 8,
+  "post_attempted": 3,
   "post_completed": 0
 }

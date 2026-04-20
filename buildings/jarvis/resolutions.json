@@ -32209,7 +32209,15 @@
       "rhetorical_question_density_x_narrative_tension_density",
       "rhetorical_question_density_x_payoff_delay_score",
       "rhetorical_question_density_x_challenge_to_resolution_gap_pct",
-      "rhetorical_question_density_x_loop_front_half_density"
+      "rhetorical_question_density_x_loop_front_half_density",
+      "rhetorical_question_density_x_narrative_tension_density_first_half",
+      "rhetorical_question_density_x_challenge_setup_density_first_quarter",
+      "mystery_setup_count_x_mystery_setup_density",
+      "mystery_setup_count_x_promise_specificity_count",
+      "mystery_setup_count_x_promise_specificity_density",
+      "mystery_setup_count_x_loss_framing_count",
+      "mystery_setup_count_x_loss_framing_density",
+      "mystery_setup_count_x_social_proof_count"
     ],
     "depth_in_hierarchy": 0
   },
