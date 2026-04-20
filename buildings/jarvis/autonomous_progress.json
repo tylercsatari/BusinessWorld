@@ -1,20 +1,193 @@
 {
-  "active": true,
+  "active": false,
   "run_id": "auto_20260420055002.",
   "mode": "hybrid_auto",
   "started_at": "2026-04-20T05:50:02.685Z",
-  "updated_at": "2026-04-20T05:50:02.685Z",
-  "finished_at": null,
+  "updated_at": "2026-04-20T06:15:26.284Z",
+  "finished_at": "2026-04-20T06:15:26.284Z",
   "requested_iterations": 3000,
-  "attempted": 0,
-  "completed": 0,
-  "failures": 0,
+  "attempted": 24,
+  "completed": 18,
+  "failures": 6,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
-  "stop_reason": null,
+  "stop_reason": "max_minutes",
   "current_candidate": null,
-  "last_completed_candidate": null,
-  "last_completed_r": null,
-  "recent_events": []
+  "last_completed_candidate": "pre_payoff_tension_index_x_reference_callback_count",
+  "last_completed_r": -0.0849,
+  "recent_events": [
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_promise_specificity_density",
+      "r": 0.004,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T05:58:42.898Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_loss_framing_count",
+      "r": -0.0993,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T05:59:52.684Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_loss_framing_density",
+      "r": -0.1004,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:01:00.276Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_above_baseline_area",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:01:01.153Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_avg_percent_viewed",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:01:01.953Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_avg_view_duration_s",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:01:02.963Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_social_proof_count",
+      "r": -0.0392,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:02:16.028Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_social_proof_density",
+      "r": -0.0139,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:03:16.940Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_proof_of_work_count",
+      "r": -0.0797,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:04:15.645Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_proof_of_work_density",
+      "r": -0.0672,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:05:28.642Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_failure_vulnerability_count",
+      "r": -0.1183,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:06:37.986Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_failure_vulnerability_density",
+      "r": -0.1187,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:07:44.306Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_commitment_device_count",
+      "r": -0.0434,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:08:54.160Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_avg_word_gap_s",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:08:55.034Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_beat_acceleration",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:08:55.859Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_beat_count",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:08:56.975Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_commitment_device_density",
+      "r": -0.0316,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:10:18.503Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_action_trigger_count",
+      "r": 0.0234,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:11:40.872Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_action_trigger_density",
+      "r": 0.0248,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:12:54.118Z"
+    },
+    {
+      "type": "completed",
+      "key": "pre_payoff_tension_index_x_reference_callback_count",
+      "r": -0.0849,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:15:25.893Z"
+    }
+  ],
+  "pre_attempted": 18,
+  "pre_completed": 18,
+  "post_attempted": 6,
+  "post_completed": 0
 }
