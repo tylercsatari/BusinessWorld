@@ -3210,3 +3210,108 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 23:29:13]   Stop: max_minutes, Top |r|: 0.1340, Elapsed: 26.0m
 [jarvis-runner 23:29:13]   Total indicators: 1852
 [launch-autorun] Complete.
+◇ injected env (42) from ../../.env // tip: ⌘ enable debugging { debug: true }
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 03:34:40] 
+============================================================
+[jarvis-runner 03:34:40] AUTONOMOUS RUN: auto_20260420033440.
+[jarvis-runner 03:34:40]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7
+[jarvis-runner 03:35:47] Zero-variance filter: skipped indicators — 175 constant-value, 450 sparse (<20 nonzero); removed 1531 candidates
+[jarvis-runner 03:35:47] Pool before bias: 12835 pre, 18913 post
+[jarvis-runner 03:35:47] Candidate pool: 31748 unrun (33447 already done)
+[jarvis-runner 03:35:48] Loaded 370 videos
+[jarvis-runner 03:35:48] 
+==================================================
+[jarvis-runner 03:35:48] INDICATOR: ref_to_gratification_gap_pct_x_failure_vulnerability_density
+[jarvis-runner 03:35:48]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:35:48]   [EXPERIMENT] Pearson r=0.035, rho=0.087, p=0.4997, n=370
+[jarvis-runner 03:35:48]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * failure_vulnerability_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:35:48]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × failure_vulnerability_density → 'views', depth=2
+[jarvis-runner 03:35:48]   [DONE]      r=0.035 (none positive)
+[jarvis-runner 03:37:02] 
+==================================================
+[jarvis-runner 03:37:02] INDICATOR: ref_to_gratification_gap_pct_x_commitment_device_count
+[jarvis-runner 03:37:03]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:37:03]   [EXPERIMENT] Pearson r=0.034, rho=0.032, p=0.5179, n=370
+[jarvis-runner 03:37:03]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * commitment_device_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:37:03]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × commitment_device_count → 'views', depth=2
+[jarvis-runner 03:37:03]   [DONE]      r=0.034 (none positive)
+[jarvis-runner 03:38:23] 
+==================================================
+[jarvis-runner 03:38:23] INDICATOR: ref_to_gratification_gap_pct_x_commitment_device_density
+[jarvis-runner 03:38:23]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:38:23]   [EXPERIMENT] Pearson r=0.030, rho=0.032, p=0.5649, n=370
+[jarvis-runner 03:38:23]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * commitment_device_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:38:23]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × commitment_device_density → 'views', depth=2
+[jarvis-runner 03:38:23]   [DONE]      r=0.030 (none positive)
+[jarvis-runner 03:39:42] 
+==================================================
+[jarvis-runner 03:39:42] INDICATOR: ref_to_gratification_gap_pct_x_action_trigger_count
+[jarvis-runner 03:39:42]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:39:42]   [EXPERIMENT] Pearson r=-0.042, rho=-0.022, p=0.4172, n=370
+[jarvis-runner 03:39:42]   [RESULT]    none negative: Interaction: ref_to_gratification_gap_pct * action_trigger_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:39:42]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × action_trigger_count → 'views', depth=2
+[jarvis-runner 03:39:42]   [DONE]      r=-0.042 (none negative)
+[jarvis-runner 03:41:02] 
+==================================================
+[jarvis-runner 03:41:02] INDICATOR: ref_to_gratification_gap_pct_x_action_trigger_density
+[jarvis-runner 03:41:02]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:41:02]   [EXPERIMENT] Pearson r=-0.053, rho=-0.023, p=0.3105, n=370
+[jarvis-runner 03:41:02]   [RESULT]    none negative: Interaction: ref_to_gratification_gap_pct * action_trigger_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:41:02]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × action_trigger_density → 'views', depth=2
+[jarvis-runner 03:41:02]   [DONE]      r=-0.053 (none negative)
+[jarvis-runner 03:42:21] 
+==================================================
+[jarvis-runner 03:42:21] INDICATOR: ref_to_gratification_gap_pct_x_reference_callback_count
+[jarvis-runner 03:42:21]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:42:21]   [EXPERIMENT] Pearson r=0.158, rho=0.157, p=0.0023, n=370
+[jarvis-runner 03:42:21]   [RESULT]    weak positive: Maximize interaction: ref_to_gratification_gap_pct * reference_callback_count. to increase views.
+[jarvis-runner 03:42:21]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × reference_callback_count → 'views', depth=2
+[jarvis-runner 03:42:21]   [DONE]      r=0.158 (weak positive)
+[jarvis-runner 03:43:54] 
+==================================================
+[jarvis-runner 03:43:54] INDICATOR: ref_to_gratification_gap_pct_x_reference_callback_density
+[jarvis-runner 03:43:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:43:54]   [EXPERIMENT] Pearson r=0.145, rho=0.157, p=0.0053, n=370
+[jarvis-runner 03:43:54]   [RESULT]    weak positive: Maximize interaction: ref_to_gratification_gap_pct * reference_callback_density. to increase views.
+[jarvis-runner 03:43:54]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × reference_callback_density → 'views', depth=2
+[jarvis-runner 03:43:54]   [DONE]      r=0.145 (weak positive)
+[jarvis-runner 03:45:21] 
+==================================================
+[jarvis-runner 03:45:21] INDICATOR: early_proof_position_pct_x_above_baseline_area
+[jarvis-runner 03:45:21]   No metric definition — skip
+[jarvis-runner 03:45:22] 
+==================================================
+[jarvis-runner 03:45:22] INDICATOR: early_proof_position_pct_x_avg_percent_viewed
+[jarvis-runner 03:45:22]   No metric definition — skip
+[jarvis-runner 03:45:23] 
+==================================================
+[jarvis-runner 03:45:23] INDICATOR: early_proof_position_pct_x_avg_view_duration_s
+[jarvis-runner 03:45:23]   No metric definition — skip
+[jarvis-runner 03:45:24] 
+==================================================
+[jarvis-runner 03:45:24] INDICATOR: ref_to_gratification_gap_pct_x_visual_credibility_count
+[jarvis-runner 03:45:24]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:45:24]   [EXPERIMENT] Pearson r=0.056, rho=0.079, p=0.2856, n=370
+[jarvis-runner 03:45:24]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * visual_credibility_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:45:24]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × visual_credibility_count → 'views', depth=2
+[jarvis-runner 03:45:24]   [DONE]      r=0.056 (none positive)
+[jarvis-runner 03:46:53] 
+==================================================
+[jarvis-runner 03:46:53] INDICATOR: ref_to_gratification_gap_pct_x_visual_credibility_density
+[jarvis-runner 03:46:54]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:46:54]   [EXPERIMENT] Pearson r=0.035, rho=0.074, p=0.4966, n=370
+[jarvis-runner 03:46:54]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * visual_credibility_density. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:46:54]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × visual_credibility_density → 'views', depth=2
+[jarvis-runner 03:46:54]   [DONE]      r=0.035 (none positive)
+[jarvis-runner 03:49:33] 
+==================================================
+[jarvis-runner 03:49:33] INDICATOR: ref_to_gratification_gap_pct_x_stakes_escalation_count
+[jarvis-runner 03:49:33]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 03:49:33]   [EXPERIMENT] Pearson r=0.036, rho=0.067, p=0.4855, n=370
+[jarvis-runner 03:49:33]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * stakes_escalation_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 03:49:33]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × stakes_escalation_count → 'views', depth=2
+[jarvis-runner 03:49:33]   [DONE]      r=0.036 (none positive)
+jarvis-store: R2 write failed for experiments_log: Expected closing tag 'hr' (opened in line 5, col 1) instead of closing tag 'body'.:6:1
+  Deserialization error: to see the raw response, inspect the hidden field {error}.$response on this object.
