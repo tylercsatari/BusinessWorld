@@ -32205,7 +32205,11 @@
       "rhetorical_question_density_x_narrative_anchor_density",
       "rhetorical_question_density_x_challenge_statement_count",
       "rhetorical_question_density_x_challenge_statement_density",
-      "rhetorical_question_density_x_narrative_tension_count"
+      "rhetorical_question_density_x_narrative_tension_count",
+      "rhetorical_question_density_x_narrative_tension_density",
+      "rhetorical_question_density_x_payoff_delay_score",
+      "rhetorical_question_density_x_challenge_to_resolution_gap_pct",
+      "rhetorical_question_density_x_loop_front_half_density"
     ],
     "depth_in_hierarchy": 0
   },
