@@ -32327,7 +32327,11 @@
       "promise_specificity_density_x_stakes_escalation_count",
       "promise_specificity_density_x_stakes_escalation_density",
       "promise_specificity_density_x_delayed_reveal_count",
-      "promise_specificity_density_x_delayed_reveal_density"
+      "promise_specificity_density_x_delayed_reveal_density",
+      "promise_specificity_density_x_narrative_anchor_count",
+      "promise_specificity_density_x_narrative_anchor_density",
+      "promise_specificity_density_x_challenge_statement_count",
+      "promise_specificity_density_x_challenge_statement_density"
     ],
     "depth_in_hierarchy": 0
   },
