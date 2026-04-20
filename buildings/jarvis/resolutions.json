@@ -32226,7 +32226,9 @@
       "mystery_setup_count_x_commitment_device_count",
       "mystery_setup_count_x_commitment_device_density",
       "mystery_setup_count_x_action_trigger_count",
-      "mystery_setup_count_x_action_trigger_density"
+      "mystery_setup_count_x_action_trigger_density",
+      "mystery_setup_count_x_reference_callback_count",
+      "mystery_setup_count_x_reference_callback_density"
     ],
     "depth_in_hierarchy": 0
   },
