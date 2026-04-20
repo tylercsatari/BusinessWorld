@@ -364,16 +364,16 @@
 .incubator-project-option:last-child {
     border-radius: 0 0 10px 10px;
 }
-.incubator-project-error {
-    color: #ff3b30;
-    font-size: 12px;
-    font-weight: 600;
-    margin-top: 4px;
+.incubator-project-option-none {
+    color: rgba(255,255,255,0.55);
+    font-style: italic;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
 }
-.incubator-required {
-    color: #ff3b30;
+.incubator-optional {
+    color: rgba(255,255,255,0.45);
     font-size: 11px;
     font-weight: 400;
+    font-style: italic;
 }
 
 /* Source idea badge */

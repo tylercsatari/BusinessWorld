@@ -834,13 +834,12 @@ const IncubatorUI = (() => {
                     <label>Video Name</label>
                     <input type="text" id="incubator-name" value="${escAttr(v.name)}" placeholder="Video title...">
 
-                    <label>Project <span class="incubator-required">*required</span></label>
+                    <label>Project <span class="incubator-optional">optional</span></label>
                     <div class="incubator-project-picker" id="incubator-project-picker">
                         <input type="text" class="incubator-project-search" id="incubator-project-search"
-                            placeholder="Search or select project..." value="${escAttr(v.project)}" autocomplete="off" />
+                            placeholder="Search or select project (or leave empty)..." value="${escAttr(v.project)}" autocomplete="off" />
                         <div class="incubator-project-dropdown" id="incubator-project-dropdown"></div>
                     </div>
-                    <div class="incubator-project-error" id="incubator-project-error" style="display:none;">Project is required</div>
 
                     <label>Hook</label>
                     <textarea id="incubator-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
@@ -909,15 +908,15 @@ const IncubatorUI = (() => {
         function showProjectDropdown(query) {
             const q = query.toLowerCase();
             const filtered = q ? projects.filter(p => p.toLowerCase().includes(q)) : projects;
-            if (filtered.length === 0) { dropdown.style.display = 'none'; return; }
-            dropdown.innerHTML = filtered.map(p => `<div class="incubator-project-option" data-project="${escAttr(p)}">${escHtml(p)}</div>`).join('');
+            const noneOption = `<div class="incubator-project-option incubator-project-option-none" data-project="">No project</div>`;
+            const options = noneOption + filtered.map(p => `<div class="incubator-project-option" data-project="${escAttr(p)}">${escHtml(p)}</div>`).join('');
+            dropdown.innerHTML = options;
             dropdown.style.display = 'block';
             dropdown.querySelectorAll('.incubator-project-option').forEach(opt => {
                 opt.addEventListener('mousedown', (e) => {
                     e.preventDefault();
                     searchInput.value = opt.dataset.project;
                     dropdown.style.display = 'none';
-                    document.getElementById('incubator-project-error').style.display = 'none';
                 });
             });
         }
@@ -944,13 +943,6 @@ const IncubatorUI = (() => {
         const hook = document.getElementById('incubator-hook')?.value || '';
         const context = document.getElementById('incubator-context')?.value || '';
 
-        if (!project) {
-            const errEl = document.getElementById('incubator-project-error');
-            if (errEl) errEl.style.display = 'block';
-            document.getElementById('incubator-project-search')?.focus();
-            return;
-        }
-
         const btn = document.getElementById('incubator-save-draft');
         if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
@@ -959,9 +951,11 @@ const IncubatorUI = (() => {
             const video = await VideoService.create({ name, project, hook, context, script: scriptText });
             selectedVideo = video;
             isDraft = false;
-            showEggReveal(project, () => {
+            if (project) {
+                showEggReveal(project, () => showList());
+            } else {
                 showList();
-            });
+            }
         } catch (e) {
             console.warn('Incubator: save draft failed', e);
             alert('Failed to save video. Check connection.');
@@ -990,19 +984,16 @@ const IncubatorUI = (() => {
         const hook = document.getElementById('incubator-hook')?.value || '';
         const context = document.getElementById('incubator-context')?.value || '';
 
-        if (!project) {
-            const errEl = document.getElementById('incubator-project-error');
-            if (errEl) errEl.style.display = 'block';
-            document.getElementById('incubator-project-search')?.focus();
-            return;
-        }
-
         const btn = container.querySelector('.workshop-btn');
         if (btn) { btn.textContent = 'Moving...'; btn.disabled = true; }
 
         try {
             await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, hook, context, status: 'workshop' });
-            showEggReveal(project, () => showList(), 'Moved to Workshop!');
+            if (project) {
+                showEggReveal(project, () => showList(), 'Moved to Workshop!');
+            } else {
+                showList();
+            }
         } catch (e) {
             console.warn('Incubator: move to workshop failed', e);
             alert('Failed to move to Workshop. Check connection.');
