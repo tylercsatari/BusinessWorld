@@ -704,6 +704,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'high',
         safety_tier: 'safe',
         category: 'repetition_endurance',
+        family: 'endurance',
+        preferred_hook_type: 'mystery',
         setting_hint: 'in my garage',
         endpoint_kinds: ['exact_count', 'body_quit'],
         implied_material_words: [],
@@ -725,6 +727,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'medium',
         safety_tier: 'safe',
         category: 'isometric_endurance',
+        family: 'endurance',
+        preferred_hook_type: 'mystery',
         setting_hint: 'on gym flooring with a timer overlay',
         endpoint_kinds: ['time_to_target', 'body_quit'],
         implied_material_words: [],
@@ -746,6 +750,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'medium',
         safety_tier: 'safe',
         category: 'locomotion_endurance',
+        family: 'endurance',
+        preferred_hook_type: 'mystery',
         setting_hint: 'on a marked road',
         endpoint_kinds: ['exact_distance', 'body_quit'],
         implied_material_words: [],
@@ -767,6 +773,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'high',
         safety_tier: 'safe',
         category: 'repetition_endurance',
+        family: 'endurance',
+        preferred_hook_type: 'mystery',
         setting_hint: 'in a stairwell',
         endpoint_kinds: ['exact_count', 'body_quit'],
         implied_material_words: [],
@@ -788,6 +796,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'high',
         safety_tier: 'safe',
         category: 'repetition_endurance',
+        family: 'endurance',
+        preferred_hook_type: 'mystery',
         setting_hint: 'on a driveway',
         endpoint_kinds: ['exact_count', 'body_quit'],
         implied_material_words: [],
@@ -809,6 +819,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'high',
         safety_tier: 'safe',
         category: 'locomotion_endurance',
+        family: 'endurance',
+        preferred_hook_type: 'mystery',
         setting_hint: 'on a long stretch of road',
         endpoint_kinds: ['exact_distance', 'body_quit'],
         implied_material_words: [],
@@ -831,6 +843,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'medium',
         safety_tier: 'safe',
         category: 'cognitive_endurance',
+        family: 'cognitive_feat',
+        preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a page tally on the wall',
         endpoint_kinds: ['exact_count', 'time_to_target'],
         implied_material_words: [],
@@ -852,6 +866,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'medium',
         safety_tier: 'safe',
         category: 'repetition_patience',
+        family: 'repetition_outreach',
+        preferred_hook_type: 'transformation',
         setting_hint: 'at a desk beside a stack of stamped envelopes',
         endpoint_kinds: ['exact_count', 'time_to_target'],
         implied_material_words: [],
@@ -873,6 +889,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'medium',
         safety_tier: 'safe',
         category: 'repetition_social',
+        family: 'repetition_outreach',
+        preferred_hook_type: 'mystery',
         setting_hint: 'on a busy sidewalk',
         endpoint_kinds: ['exact_count', 'time_to_target'],
         implied_material_words: [],
@@ -894,6 +912,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'low',
         safety_tier: 'safe',
         category: 'repetition_craft',
+        family: 'craft_patience',
+        preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a band counter and a ruler against the ball',
         endpoint_kinds: ['exact_count', 'body_quit'],
         implied_material_words: [],
@@ -915,6 +935,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'low',
         safety_tier: 'safe',
         category: 'repetition_craft',
+        family: 'craft_patience',
+        preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a growing pile of cranes',
         endpoint_kinds: ['exact_count', 'time_to_target'],
         implied_material_words: [],
@@ -936,6 +958,8 @@ const OBJECT_MOTIFS = [
         action_intensity: 'low',
         safety_tier: 'safe',
         category: 'cognitive_patience',
+        family: 'cognitive_feat',
+        preferred_hook_type: 'transformation',
         setting_hint: 'at a long puzzle table',
         endpoint_kinds: ['exact_count', 'time_to_target'],
         implied_material_words: [],
@@ -957,17 +981,267 @@ const OBJECT_MOTIFS = [
         action_intensity: 'low',
         safety_tier: 'safe',
         category: 'fine_motor_patience',
+        family: 'craft_patience',
+        preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a height ruler taped behind the tower',
         endpoint_kinds: ['exact_count', 'body_quit'],
+        implied_material_words: [],
+    },
+    // ── build_test family ────────────────────────────────────────────
+    {
+        id: 'cardboard_boat_row',
+        verb_past_phrase: 'Built And Rowed',
+        verb_present_phrase: 'row',
+        noun_subject_phrase: 'a cardboard boat',
+        title_core_tpl: 'I Built A Boat Out Of Only Cardboard And Tape And Rowed It {D}',
+        logline_action: 'build a boat out of only cardboard and packing tape, then row it across a lake as far as the seams hold',
+        concrete_kind: 'distance',
+        scales: ['1 mile', '2 miles', '3 miles'],
+        body_parts: ['shoulders', 'stomach', 'skin'],
+        body_part_phrase: 'shoulders',
+        sensation_words: ['curious', 'feeling', 'bigger', 'numb'],
+        first_frame_action: 'taping the last cardboard seam on a finished hull with the shoreline framing the shot',
+        visual_action_short: 'oars pulling as the cardboard boat slides out from the dock',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'build_test_water',
+        family: 'build_test',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'on a calm shallow lake wearing a life vest',
+        endpoint_kinds: ['exact_distance', 'build_test_outcome'],
+        implied_material_words: [],
+    },
+    {
+        id: 'two_by_four_bike',
+        verb_past_phrase: 'Built And Rode',
+        verb_present_phrase: 'ride',
+        noun_subject_phrase: 'a bike made of 2x4s',
+        title_core_tpl: 'I Built A Bike Out Of 2x4s And Rode It {D} To See What Broke First',
+        logline_action: 'build a working bike out of only 2x4s and hardware, then ride it on pavement until something gives',
+        concrete_kind: 'distance',
+        scales: ['2 miles', '5 miles', '10 miles'],
+        body_parts: ['shoulders', 'foot', 'skin'],
+        body_part_phrase: 'shoulders',
+        sensation_words: ['curious', 'feeling', 'bigger', 'numb'],
+        first_frame_action: 'tightening the last bolt on a plywood frame with a completed 2x4 bike in view',
+        visual_action_short: 'pedals turning on the wooden bike with a mile-counter overlay',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'build_test_vehicle',
+        family: 'build_test',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'on a closed empty parking lot wearing a helmet',
+        endpoint_kinds: ['exact_distance', 'build_test_outcome'],
+        implied_material_words: [],
+    },
+    // ── body_transformation family ───────────────────────────────────
+    {
+        id: 'one_food_thirty_days',
+        verb_past_phrase: 'Ate Only',
+        verb_present_phrase: 'eat only',
+        noun_subject_phrase: 'potatoes',
+        title_core_tpl: 'I Ate Only Potatoes For {D} — My Body Did Something I Didn\u2019t Expect',
+        title_has_builtin_reveal: true,
+        logline_action: 'eat only plain potatoes three times a day and film a morning weigh-in at the same hour every day',
+        concrete_kind: 'duration',
+        scales: ['30 days', '60 days', '90 days'],
+        body_parts: ['stomach', 'skin', 'feeling'],
+        body_part_phrase: 'stomach',
+        sensation_words: ['stomach', 'skin', 'bigger', 'feeling', 'curious', 'numb'],
+        first_frame_action: 'morning day-1: a plain potato on the plate next to the scale with the reading on screen',
+        visual_action_short: 'a cut between identical morning weigh-ins and identical potato plates',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        category: 'body_transformation_diet',
+        family: 'body_transformation',
+        preferred_hook_type: 'transformation',
+        setting_hint: 'at the same kitchen counter every morning',
+        endpoint_kinds: ['transformation_reveal', 'time_to_target'],
+        implied_material_words: [],
+    },
+    {
+        id: 'daily_mile_one_year',
+        verb_past_phrase: 'Ran',
+        verb_present_phrase: 'run',
+        noun_subject_phrase: 'a single mile every day',
+        title_core_tpl: 'I Ran The Same Mile Every Day For {D} — The First And Last Run Are The Same Shot',
+        title_has_builtin_reveal: true,
+        logline_action: 'run the same neighborhood mile every morning and film the same starting frame on day 1 and day N',
+        concrete_kind: 'duration',
+        scales: ['100 days', '365 days'],
+        body_parts: ['foot', 'stomach', 'skin'],
+        body_part_phrase: 'foot',
+        sensation_words: ['foot', 'stomach', 'skin', 'bigger', 'feeling', 'numb'],
+        first_frame_action: 'the exact same driveway starting frame with a big day-counter label in the corner',
+        visual_action_short: 'a cut between two runs at the same starting line on day 1 and day N',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'body_transformation_movement',
+        family: 'body_transformation',
+        preferred_hook_type: 'transformation',
+        setting_hint: 'on the exact same one-mile neighborhood loop',
+        endpoint_kinds: ['transformation_reveal', 'time_to_target'],
+        implied_material_words: [],
+    },
+    // ── mystery_experiment family ────────────────────────────────────
+    {
+        id: 'silent_seven_days',
+        verb_past_phrase: 'Didn\u2019t Speak For',
+        verb_present_phrase: 'stop speaking for',
+        noun_subject_phrase: 'a week',
+        title_core_tpl: 'I Didn\u2019t Speak A Single Word For {D} — Here\u2019s What People Started Assuming About Me',
+        title_has_builtin_reveal: true,
+        logline_action: 'go a full week without saying a single word out loud and film every reaction from the people around me',
+        concrete_kind: 'duration',
+        scales: ['7 days', '14 days', '30 days'],
+        body_parts: ['skin', 'feeling', 'stomach'],
+        body_part_phrase: 'feeling',
+        sensation_words: ['curious', 'feeling', 'bigger', 'numb'],
+        first_frame_action: 'a cashier asking me a question while I point at a notebook that says \u201cday 1, silent\u201d',
+        visual_action_short: 'short encounters where I gesture and people react on camera',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        category: 'mystery_social_experiment',
+        family: 'mystery_experiment',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'in everyday errands around my neighborhood',
+        endpoint_kinds: ['experiment_observation', 'time_to_target'],
+        implied_material_words: [],
+    },
+    {
+        id: 'phoneless_fortnight',
+        verb_past_phrase: 'Left Behind',
+        verb_present_phrase: 'leave behind',
+        noun_subject_phrase: 'my phone',
+        title_core_tpl: 'I Left My Phone At Home For {D} — Every Hour Of My Day Rearranged Itself',
+        title_has_builtin_reveal: true,
+        logline_action: 'leave my phone in a drawer for two weeks and film what fills the hours I used to spend scrolling',
+        concrete_kind: 'duration',
+        scales: ['7 days', '14 days', '30 days'],
+        body_parts: ['feeling', 'skin'],
+        body_part_phrase: 'feeling',
+        sensation_words: ['curious', 'feeling', 'bigger'],
+        first_frame_action: 'placing my phone into a drawer, closing it, and turning a calendar to \u201cday 1\u201d',
+        visual_action_short: 'time-lapse of a day that used to be scrolling and is now something else',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        category: 'mystery_habit_experiment',
+        family: 'mystery_experiment',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'at home, at work, and on public transit where the phone used to live',
+        endpoint_kinds: ['experiment_observation', 'time_to_target'],
+        implied_material_words: [],
+    },
+    // ── identity family ──────────────────────────────────────────────
+    {
+        id: 'pro_boxer_day',
+        verb_past_phrase: 'Trained With',
+        verb_present_phrase: 'train with',
+        noun_subject_phrase: 'a professional boxer',
+        title_core_tpl: 'I Trained With A Pro Boxer For One Full Day — He Told Me When To Stop',
+        title_has_builtin_reveal: true,
+        logline_action: 'shadow a professional boxer through every single thing he does in his training day — warm-up, bag work, sparring, ice, food',
+        concrete_kind: 'duration',
+        scales: ['1 day', '2 days', '7 days'],
+        body_parts: ['foot', 'shoulders', 'stomach', 'skin'],
+        body_part_phrase: 'shoulders',
+        sensation_words: ['foot', 'stomach', 'painful', 'numb', 'feeling', 'bigger'],
+        first_frame_action: 'a pro boxer wrapping my hands with his gym behind him in the same frame',
+        visual_action_short: 'matching his bag work beat for beat with both fighters in the shot',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        category: 'identity_day_in_life',
+        family: 'identity',
+        preferred_hook_type: 'transformation',
+        setting_hint: 'inside a pro fighter\u2019s actual gym',
+        endpoint_kinds: ['identity_dayend', 'body_quit'],
+        implied_material_words: [],
+    },
+    {
+        id: 'firefighter_shift_shadow',
+        verb_past_phrase: 'Shadowed',
+        verb_present_phrase: 'shadow',
+        noun_subject_phrase: 'a firefighter crew',
+        title_core_tpl: 'I Shadowed A Firefighter Crew For An Entire {D} Shift',
+        logline_action: 'shadow a full firehouse crew through every call, drill, meal, and nap across a real working shift',
+        concrete_kind: 'duration',
+        scales: ['12-hour', '24-hour', '48-hour'],
+        body_parts: ['foot', 'shoulders', 'skin', 'stomach'],
+        body_part_phrase: 'foot',
+        sensation_words: ['foot', 'stomach', 'painful', 'bigger', 'numb', 'feeling'],
+        first_frame_action: 'a firehouse bell ringing while crew members snap into the rig and I run in right behind them',
+        visual_action_short: 'me stepping into gear next to the crew as the truck rolls out',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        category: 'identity_ride_along',
+        family: 'identity',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'inside an active firehouse with full crew consent',
+        endpoint_kinds: ['identity_dayend', 'body_quit'],
+        implied_material_words: [],
+    },
+    // ── skill_dare family ────────────────────────────────────────────
+    {
+        id: 'learn_500_words_day',
+        verb_past_phrase: 'Learned',
+        verb_present_phrase: 'learn',
+        noun_subject_phrase: 'words of a new language',
+        title_core_tpl: 'I Tried To Learn {N} Words Of A New Language In One Day — A Native Speaker Tested Me At The End',
+        title_has_builtin_reveal: true,
+        logline_action: 'drill flashcards in a language I don\u2019t speak from morning until night, then sit with a native speaker who quizzes every word',
+        concrete_kind: 'reps',
+        scales: [300, 500, 1000],
+        body_parts: ['feeling', 'skin'],
+        body_part_phrase: 'feeling',
+        sensation_words: ['curious', 'feeling', 'bigger', 'painful', 'numb'],
+        first_frame_action: 'a stack of flashcards with a single unfamiliar word on the top card and a count overlay at zero',
+        visual_action_short: 'flashcards moving from an unknown-pile to a known-pile with a running tally',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'skill_dare_cognitive',
+        family: 'skill_dare',
+        preferred_hook_type: 'transformation',
+        setting_hint: 'at a kitchen table with a native speaker sitting opposite me at dusk',
+        endpoint_kinds: ['exact_count', 'experiment_observation'],
+        implied_material_words: [],
+    },
+    {
+        id: 'learn_song_from_scratch',
+        verb_past_phrase: 'Learned To Play',
+        verb_present_phrase: 'learn to play',
+        noun_subject_phrase: 'a full song on an instrument I\u2019ve never touched',
+        title_core_tpl: 'I Had {T} To Learn A Full Song On An Instrument I\u2019ve Never Touched — I Performed It For A Crowd',
+        title_has_builtin_reveal: true,
+        logline_action: 'pick up an instrument I\u2019ve never held and learn a complete song well enough to perform it for a real audience by the end',
+        concrete_kind: 'duration',
+        scales: ['1 day', '3 days', '7 days'],
+        body_parts: ['skin', 'feeling'],
+        body_part_phrase: 'hand',
+        sensation_words: ['curious', 'painful', 'numb', 'bigger', 'feeling'],
+        first_frame_action: 'hands touching the instrument for the very first time with a countdown label in frame',
+        visual_action_short: 'a first awkward note progressing into a full clean phrase by the end',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        category: 'skill_dare_music',
+        family: 'skill_dare',
+        preferred_hook_type: 'transformation',
+        setting_hint: 'in a practice room, ending on a small stage in front of a real crowd',
+        endpoint_kinds: ['identity_dayend', 'time_to_target'],
         implied_material_words: [],
     },
 ];
 
 const ENDPOINT_MOTIFS = [
-    { id: 'exact_count',    kind: 'count',    reveal_label: 'the counter froze at' },
-    { id: 'time_to_target', kind: 'timer',    reveal_label: 'the timer froze at' },
-    { id: 'exact_distance', kind: 'distance', reveal_label: 'the mile counter froze at' },
-    { id: 'body_quit',      kind: 'body',     reveal_label: 'my body quit at' },
+    { id: 'exact_count',           kind: 'count',          reveal_label: 'the counter froze at' },
+    { id: 'time_to_target',        kind: 'timer',          reveal_label: 'the timer froze at' },
+    { id: 'exact_distance',        kind: 'distance',       reveal_label: 'the mile counter froze at' },
+    { id: 'body_quit',             kind: 'body',           reveal_label: 'my body quit at' },
+    // Non-numeric endpoints — the title_core_tpl already carries the reveal frame,
+    // so composeTitle returns the core as-is (no " — The Counter Froze At …" suffix).
+    { id: 'transformation_reveal', kind: 'transformation', reveal_label: 'the before/after frame landed on' },
+    { id: 'experiment_observation',kind: 'experiment',     reveal_label: 'the observation was' },
+    { id: 'identity_dayend',       kind: 'identity',       reveal_label: 'the day ended with' },
+    { id: 'build_test_outcome',    kind: 'build_test',     reveal_label: 'the build held until' },
 ];
 
 function deriveMotifContext(brief, artifacts) {
@@ -1084,6 +1358,20 @@ function scoreMotifCombo(obj, endpoint, ctx) {
         score += 0.20; drivers.push({ driver: 'numeric_specific_endpoint', delta: 0.20 });
     } else if (endpoint.kind === 'body' && obj.action_intensity !== 'high') {
         score -= 0.08; drivers.push({ driver: 'body_quit_weak_on_non_intense_action', delta: -0.08 });
+    } else if (endpoint.kind === 'transformation' || endpoint.kind === 'experiment' || endpoint.kind === 'identity' || endpoint.kind === 'build_test') {
+        // Qualitative reveals don't carry a numeric freeze-frame, but they do
+        // carry single-shot payoff that matches the end_begin_ratio signal.
+        score += 0.14; drivers.push({ driver: `qualitative_reveal_${endpoint.kind}`, delta: 0.14 });
+    }
+
+    // Hook-taxonomy match bonus: transformation / mystery hooks are the top
+    // two performing labels in the corpus (2.24M / 2.20M vs 1.12M for stakes).
+    // Reward motifs that declare a preferred_hook_type in that top-2 set.
+    const preferred = String(obj.preferred_hook_type || '').toLowerCase();
+    if (preferred && ctx.preferHookTypes && ctx.preferHookTypes.includes(preferred)) {
+        const idx = ctx.preferHookTypes.indexOf(preferred);
+        const d = idx === 0 ? 0.18 : 0.12;
+        score += d; drivers.push({ driver: `hook_taxonomy_match_${preferred}_rank${idx + 1}`, delta: d });
     }
     return { score: round(score, 3), drivers };
 }
@@ -1128,7 +1416,7 @@ function overDeliveryRevealValue(scale, endpoint) {
         }
         return scale.display;
     }
-    if (endpoint.kind === 'distance') {
+    if (endpoint.kind === 'distance' || endpoint.kind === 'build_test') {
         // Show precise tenths e.g., "10.3 miles"
         const m = String(scale.value).match(/([\d.]+)/);
         if (m) return scale.display.replace(m[1], (parseFloat(m[1]) + 0.3).toFixed(1));
@@ -1144,22 +1432,44 @@ function overDeliveryRevealValue(scale, endpoint) {
     return scale.display;
 }
 
+// endpointPhrase drives the logline, promise, payoff, and climax hints. New
+// endpoint kinds (transformation/experiment/identity/build_test) do not land
+// on a numeric reveal — they land on a qualitative payoff tied to the motif.
+function endpointPhraseFor(obj, endpoint, scale, revealVal, bodyPart) {
+    switch (endpoint.kind) {
+        case 'count':    return `the counter freezes at ${revealVal}`;
+        case 'timer':    return `the timer hits exactly ${revealVal}`;
+        case 'distance': return `the mile counter freezes at ${revealVal}`;
+        case 'body':     return `my ${bodyPart} quits first`;
+        case 'transformation': return `the final-${scale.display} frame holds the whole transformation in one shot`;
+        case 'experiment':     return `the observation from the last ${scale.display} lands as a single on-screen sentence`;
+        case 'identity':       return `the person I shadowed decides out loud when my day is over`;
+        case 'build_test':     return `the build holds until ${revealVal} and then visibly gives`;
+        default:               return `the result lands at ${revealVal}`;
+    }
+}
+
 function composeTitle(obj, endpoint, scale, bodyPart) {
     // Build the core title from the motif's title_core_tpl, substituting {N}/{D}/{T}
     let core = obj.title_core_tpl || '';
-    if (obj.concrete_kind === 'duration' && obj.title_core_tpl) {
-        core = core.replace('{D}', capitalize(scale.display)).replace('{T}', capitalize(scale.display));
-    } else if (obj.concrete_kind === 'distance' && obj.title_core_tpl) {
-        core = core.replace('{D}', capitalize(scale.display));
-    } else {
-        core = core.replace('{N}', String(scale.display));
-    }
+    // Always run all three substitutions — some motifs (e.g. memorize_book)
+    // carry {T} in their template even though concrete_kind is 'pages'.
+    core = core.replace('{N}', String(scale.display));
+    core = core.replace('{D}', capitalize(scale.display));
+    core = core.replace('{T}', capitalize(scale.display));
 
     const revealVal = overDeliveryRevealValue(scale, endpoint);
-    if (endpoint.kind === 'count')    return `${core} — The Counter Froze At ${revealVal}`;
-    if (endpoint.kind === 'timer')    return `${core} — The Timer Hit ${revealVal} Exactly`;
-    if (endpoint.kind === 'distance') return `${core} — The Mile Counter Froze At ${revealVal}`;
-    if (endpoint.kind === 'body')     return `${core} — My ${capitalize(bodyPart)} Quit First`;
+    // Some motifs (body_transformation, identity, skill_dare) encode their
+    // reveal directly in title_core_tpl (e.g. "— He Told Me When To Stop").
+    // Appending a numeric suffix on top of a qualitative reveal reads as a
+    // double ending. If the motif signals a builtin reveal, return core.
+    if (obj.title_has_builtin_reveal) return core;
+    if (endpoint.kind === 'count')    return `${core} \u2014 The Counter Froze At ${revealVal}`;
+    if (endpoint.kind === 'timer')    return `${core} \u2014 The Timer Hit ${revealVal} Exactly`;
+    if (endpoint.kind === 'distance') return `${core} \u2014 The Mile Counter Froze At ${revealVal}`;
+    if (endpoint.kind === 'body')     return `${core} \u2014 My ${capitalize(bodyPart)} Quit First`;
+    if (endpoint.kind === 'build_test') return `${core} \u2014 The Build Held Until ${revealVal}`;
+    // transformation / experiment / identity — title_core_tpl already carries the reveal
     return core;
 }
 
@@ -1169,16 +1479,25 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers) {
     const title = composeTitle(obj, endpoint, scale, bodyPart);
     const revealVal = overDeliveryRevealValue(scale, endpoint);
 
-    const endpointPhrase = endpoint.kind === 'count' ? `the counter freezes at ${revealVal}`
-        : endpoint.kind === 'timer' ? `the timer hits exactly ${revealVal}`
-            : endpoint.kind === 'distance' ? `the mile counter freezes at ${revealVal}`
-                : `my ${bodyPart} quits first`;
+    const endpointPhrase = endpointPhraseFor(obj, endpoint, scale, revealVal, bodyPart);
 
     const action = obj.logline_action || `${obj.verb_present_phrase} ${obj.noun_subject_phrase}`;
+    const isQualitativeReveal = ['transformation', 'experiment', 'identity'].includes(endpoint.kind);
     const logline = `I ${action} ${obj.setting_hint}, narrating every sensation in my ${bodyPart} until ${endpointPhrase}.`;
-    const promise = `You\'re watching me ${action} — the question is the exact number where ${endpoint.kind === 'body' ? `my ${bodyPart}` : 'the counter'} lands.`;
-    const payoff = `Final 5% of runtime: ${endpointPhrase}; a single sensation word appears as overlay.`;
-    const overDelivery = `Hook implies a round target (${scale.display}); payoff lands on a specific, non-round value (${revealVal}) — specificity over-delivers vs the rounded promise.`;
+    const promiseTail = endpoint.kind === 'body' ? `my ${bodyPart} gives out`
+        : endpoint.kind === 'transformation' ? 'the before/after lands in one shot'
+        : endpoint.kind === 'experiment' ? 'one observation replaces every assumption'
+        : endpoint.kind === 'identity' ? `the person I shadowed says we\u2019re done`
+        : endpoint.kind === 'build_test' ? 'the build holds or visibly gives'
+        : 'the counter lands on a specific number';
+    const promise = `You\'re watching me ${action} \u2014 the question is where ${promiseTail}.`;
+    const payoffTail = isQualitativeReveal
+        ? 'a single word of reaction lands as overlay.'
+        : 'a single sensation word appears as overlay.';
+    const payoff = `Final 5% of runtime: ${endpointPhrase}; ${payoffTail}`;
+    const overDelivery = isQualitativeReveal
+        ? `Hook implies a legible answer to the premise (${scale.display}); payoff delivers the reveal as one frame/phrase \u2014 specificity of the single shot over-delivers vs the rounded premise.`
+        : `Hook implies a round target (${scale.display}); payoff lands on a specific, non-round value (${revealVal}) \u2014 specificity over-delivers vs the rounded promise.`;
 
     // Narrative structures — pick top 4-5 from ranked lattice list + always include the key three
     const strBase = ['late_peak_arc', 'golden_final_5pct', 'visceral_body_language'];
@@ -1298,6 +1617,138 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers) {
     };
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Diversity-aware seed selection (MMR over motif families + endpoints)
+//
+// The old selector scored all combos globally and capped at 2 per category.
+// That still let four slots fall into near-duplicate
+// endurance/count/countdown ideas (sandbag miles, backpack miles, stairs
+// count, jump rope count, plank timer) because every endurance category
+// under the cap could still fill a slot.
+//
+// The new selector enforces diversity at three levels:
+//   1. Motif family (endurance / build_test / body_transformation /
+//      mystery_experiment / identity / skill_dare / craft_patience /
+//      cognitive_feat / repetition_outreach) — at most 1 per family until
+//      every represented family has been used once.
+//   2. Endpoint kind (count / timer / distance / body / transformation /
+//      experiment / identity / build_test) — penalty for repeats, hard cap
+//      at 2 per kind.
+//   3. Category — soft penalty for repeats within the same category.
+//
+// Selection uses Maximal-Marginal-Relevance:
+//   pick_score(c) = raw_score(c) − λ·similarity(c, already_selected)
+// Similarity combines family, endpoint, and category overlap. Every
+// selection decision is logged to synthesis_trace.diversity_log so the
+// reason each slot was chosen is auditable.
+
+function comboSimilarity(a, b) {
+    let s = 0;
+    if ((a.obj.family || a.obj.category) === (b.obj.family || b.obj.category)) s += 0.60;
+    if (a.endpoint.kind === b.endpoint.kind) s += 0.35;
+    if (a.obj.category === b.obj.category) s += 0.20;
+    return s;
+}
+
+function clusterCombosByFamily(combos) {
+    const clusters = new Map();
+    for (const c of combos) {
+        const fam = c.obj.family || c.obj.category || 'unknown';
+        if (!clusters.has(fam)) clusters.set(fam, []);
+        clusters.get(fam).push(c);
+    }
+    for (const arr of clusters.values()) arr.sort((a, b) => b.score - a.score);
+    return clusters;
+}
+
+function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
+    const clusters = clusterCombosByFamily(combos);
+    const familyOrder = [...clusters.keys()]
+        .map(fam => ({ fam, best: clusters.get(fam)[0] ? clusters.get(fam)[0].score : -Infinity }))
+        .sort((a, b) => b.best - a.best)
+        .map(x => x.fam);
+
+    const picked = [];
+    const log = [];
+    const perFamily = new Map();
+    const perEndpoint = new Map();
+    const perCategory = new Map();
+    const usedMotifIds = new Set();
+
+    // Phase 1: one combo per family, in descending best-family-score order.
+    // This guarantees motif-family coverage before any second slot is taken.
+    for (const fam of familyOrder) {
+        if (picked.length >= maxCount) break;
+        const candidates = clusters.get(fam) || [];
+        let best = null, bestKey = null;
+        for (const c of candidates) {
+            if (usedMotifIds.has(c.obj.id)) continue;
+            if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) continue;
+            // Prefer candidates whose endpoint is not yet represented
+            const key = c.score - 0.25 * (perEndpoint.get(c.endpoint.kind) || 0);
+            if (!best || key > bestKey) { best = c; bestKey = key; }
+        }
+        if (!best) continue;
+        picked.push(best);
+        usedMotifIds.add(best.obj.id);
+        perFamily.set(fam, (perFamily.get(fam) || 0) + 1);
+        perEndpoint.set(best.endpoint.kind, (perEndpoint.get(best.endpoint.kind) || 0) + 1);
+        perCategory.set(best.obj.category, (perCategory.get(best.obj.category) || 0) + 1);
+        log.push({
+            phase: 'family_round_robin',
+            slot: picked.length,
+            family: fam,
+            motif_id: best.obj.id,
+            endpoint_id: best.endpoint.id,
+            endpoint_kind: best.endpoint.kind,
+            raw_score: best.score,
+            reason: `first slot for family "${fam}" (highest-scoring motif in cluster; endpoint rotated; motif-id hard-dedup)`,
+        });
+    }
+
+    // Phase 2: MMR fill — allow second-from-family only when every family
+    // has been represented and the new combo's marginal relevance beats its
+    // similarity penalty against already-picked slots.
+    const alreadyPickedSet = new Set(picked);
+    const remaining = combos.filter(c => !alreadyPickedSet.has(c));
+    while (picked.length < maxCount && remaining.length) {
+        let bestIdx = -1, bestMR = -Infinity, bestSim = 0;
+        for (let i = 0; i < remaining.length; i++) {
+            const c = remaining[i];
+            if (usedMotifIds.has(c.obj.id)) continue;
+            if ((perFamily.get(c.obj.family || c.obj.category) || 0) >= 2) continue;
+            if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) continue;
+            let sim = 0;
+            for (const p of picked) sim = Math.max(sim, comboSimilarity(c, p));
+            const mr = c.score - lambda * sim;
+            if (mr > bestMR) { bestMR = mr; bestIdx = i; bestSim = sim; }
+        }
+        if (bestIdx < 0) break;
+        const chosen = remaining.splice(bestIdx, 1)[0];
+        picked.push(chosen);
+        usedMotifIds.add(chosen.obj.id);
+        const fam = chosen.obj.family || chosen.obj.category;
+        perFamily.set(fam, (perFamily.get(fam) || 0) + 1);
+        perEndpoint.set(chosen.endpoint.kind, (perEndpoint.get(chosen.endpoint.kind) || 0) + 1);
+        perCategory.set(chosen.obj.category, (perCategory.get(chosen.obj.category) || 0) + 1);
+        log.push({
+            phase: 'mmr_fill',
+            slot: picked.length,
+            family: fam,
+            motif_id: chosen.obj.id,
+            endpoint_id: chosen.endpoint.id,
+            endpoint_kind: chosen.endpoint.kind,
+            raw_score: chosen.score,
+            max_similarity_to_selected: round(bestSim, 3),
+            mmr_score: round(bestMR, 3),
+            lambda,
+            reason: `mmr(score − lambda·max_sim) = ${round(bestMR, 3)}; family cap=2, endpoint-kind cap=2, motif-id hard-dedup`,
+        });
+    }
+
+    return { picked, log, family_coverage: [...perFamily.keys()], endpoint_coverage: [...perEndpoint.keys()], per_family: Object.fromEntries(perFamily), per_endpoint: Object.fromEntries(perEndpoint) };
+}
+
 function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     const ctx = deriveMotifContext(brief, artifacts);
     const combos = [];
@@ -1311,18 +1762,33 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         }
     }
     combos.sort((a, b) => b.score - a.score);
-    // Diversify: cap 2 per category so a "repetition_endurance" bias doesn't dominate
-    const perCat = {};
-    const picked = [];
-    for (const c of combos) {
-        const cat = c.obj.category;
-        perCat[cat] = perCat[cat] || 0;
-        if (perCat[cat] >= 2) continue;
-        perCat[cat] += 1;
-        picked.push(c);
-        if (picked.length >= maxCount) break;
-    }
-    return picked.map((c, i) => composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers));
+
+    const { picked, log, family_coverage, endpoint_coverage, per_family, per_endpoint } = selectDiverseCombos(combos, maxCount);
+
+    return picked.map((c, i) => {
+        const seed = composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers);
+        // Attach a seed-level diversity_log entry so the synthesis trace on
+        // each final idea records why this slot survived selection.
+        const myLog = log.find(l => l.slot === (i + 1));
+        if (seed.synthesis_trace) {
+            seed.synthesis_trace.motif_family = c.obj.family || c.obj.category || null;
+            seed.synthesis_trace.diversity_selection = {
+                phase: myLog && myLog.phase,
+                reason: myLog && myLog.reason,
+                raw_score: myLog && myLog.raw_score,
+                mmr_score: myLog && myLog.mmr_score,
+                max_similarity_to_earlier_slots: myLog && myLog.max_similarity_to_selected,
+                lambda: myLog && myLog.lambda,
+                slot_family_coverage_at_pick: family_coverage.slice(0, i + 1),
+                slot_endpoint_coverage_at_pick: endpoint_coverage.slice(0, i + 1),
+                caps_in_effect: { per_family_cap: 2, per_endpoint_kind_cap: 2 },
+            };
+            seed.synthesis_trace.diversity_summary = {
+                per_family, per_endpoint, family_coverage, endpoint_coverage,
+            };
+        }
+        return seed;
+    });
 }
 
 
@@ -2433,12 +2899,76 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         brief = compress(artifacts);
     }
     // Synthesize specific-idea seeds from the artifact lattice (v3).
-    // Pull more than `count` so assembleBlueprint scoring can re-rank.
-    const seeds = synthesizeSeeds(brief, artifacts, Math.max(count * 2, 10));
+    // Pull a wider pool so the post-blueprint diversity re-rank has room.
+    const pool = Math.max(count * 2, 10);
+    const seeds = synthesizeSeeds(brief, artifacts, pool);
     const ideas = seeds.map((seed, i) => assembleBlueprint(seed, brief, i + 1, artifacts));
-    ideas.sort((a, b) => (b.score_breakdown.total || 0) - (a.score_breakdown.total || 0));
-    const topN = ideas.slice(0, count);
+
+    // Diversity-aware re-rank on blueprint scores. The old code sorted by
+    // score_breakdown.total alone, which let one or two families dominate
+    // every top slot because their motif_score advantage propagated. The
+    // new rank applies MMR on blueprint totals with family + endpoint
+    // similarity, then enforces per-family / per-endpoint caps at the
+    // final-output level so the same family cannot take more than ~2 of
+    // the top `count` slots when other families are available.
+    const scored = ideas.map(idea => ({
+        idea,
+        family: (idea.synthesis_trace && idea.synthesis_trace.motif_family) || 'unknown',
+        endpoint_kind: (() => {
+            const eid = idea.synthesis_trace && idea.synthesis_trace.endpoint_atom_id;
+            const e = ENDPOINT_MOTIFS.find(x => x.id === eid);
+            return e ? e.kind : null;
+        })(),
+        total: (idea.score_breakdown && idea.score_breakdown.total) || 0,
+    }));
+    const perFamCap = 2;
+    const perEndCap = 2;
+    const lambda = 0.35;
+    const ranked = [];
+    const remaining = scored.slice();
+    const perFam = new Map();
+    const perEnd = new Map();
+    while (ranked.length < Math.min(count, scored.length) && remaining.length) {
+        let bestIdx = -1, bestMR = -Infinity;
+        for (let i = 0; i < remaining.length; i++) {
+            const c = remaining[i];
+            if ((perFam.get(c.family) || 0) >= perFamCap) continue;
+            if (c.endpoint_kind && (perEnd.get(c.endpoint_kind) || 0) >= perEndCap) continue;
+            let sim = 0;
+            for (const p of ranked) {
+                let s = 0;
+                if (p.family === c.family) s += 0.60;
+                if (p.endpoint_kind && p.endpoint_kind === c.endpoint_kind) s += 0.35;
+                if (s > sim) sim = s;
+            }
+            const mr = c.total - lambda * sim;
+            if (mr > bestMR) { bestMR = mr; bestIdx = i; }
+        }
+        if (bestIdx < 0) {
+            // Fall back: relax caps if no valid candidate remains (shouldn't
+            // happen given the seed pool, but guard against starvation).
+            bestIdx = remaining.findIndex(c => true);
+            if (bestIdx < 0) break;
+        }
+        const chosen = remaining.splice(bestIdx, 1)[0];
+        ranked.push(chosen);
+        perFam.set(chosen.family, (perFam.get(chosen.family) || 0) + 1);
+        if (chosen.endpoint_kind) perEnd.set(chosen.endpoint_kind, (perEnd.get(chosen.endpoint_kind) || 0) + 1);
+    }
+    const topN = ranked.map(r => r.idea);
     topN.forEach((x, i) => { x.rank = i + 1; });
+    // Attach final-rank diversity snapshot to each idea so the audit trail
+    // includes which family/endpoint caps were in effect at top-level rank.
+    for (const idea of topN) {
+        if (idea.synthesis_trace) {
+            idea.synthesis_trace.final_rank_diversity = {
+                per_family_in_topN: Object.fromEntries(perFam),
+                per_endpoint_kind_in_topN: Object.fromEntries(perEnd),
+                caps: { per_family_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
+                mmr_lambda: lambda,
+            };
+        }
+    }
     return topN;
 }
 
