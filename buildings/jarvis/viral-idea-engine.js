@@ -1622,9 +1622,11 @@ function computeProofClarity(obj, endpoint, ctx) {
 
     // E. Abstract-payoff penalty — experiment / identity endpoint with
     //    no artifact described. Proof requires context or trust.
+    //    (v3.4: penalty strengthened -0.25 → -0.38 — observation-only
+    //    payoffs were still surviving diversity selection.)
     const abstractEndpoint = endpoint.kind === 'experiment' || endpoint.kind === 'identity';
     if (abstractEndpoint && !hasArtifact) {
-        const d = -0.25;
+        const d = -0.38;
         score += d;
         drivers.push({
             driver: `abstract_payoff_no_artifact_${endpoint.kind}`,
@@ -1633,24 +1635,27 @@ function computeProofClarity(obj, endpoint, ctx) {
         });
     }
 
-    // F. Cognitive / head-framed payoff with low action intensity.
-    //    head / feeling body_part and action_intensity=low combine into
-    //    a slow-to-prove payoff.
-    if ((bodyPart === 'head' || bodyPart === 'feeling') && obj.action_intensity === 'low') {
-        const d = -0.14;
+    // F. Cognitive / head-framed payoff.
+    //    (v3.4: dropped the action_intensity=low gate — cognitive body
+    //    framing is invisible on camera regardless of hand activity, so
+    //    the old gate let medium-intensity cognitive motifs like language
+    //    drills slip past. Penalty bumped -0.14 → -0.24.)
+    const COGNITIVE_BODY_PARTS_PC = new Set(['head', 'feeling', 'mind', 'brain', 'memory']);
+    if (COGNITIVE_BODY_PARTS_PC.has(bodyPart)) {
+        const d = -0.24;
         score += d;
         drivers.push({
             driver: `low_visual_cognitive_body_part_${bodyPart}`,
             delta: d,
-            source: 'body_part_phrase ∈ {head, feeling} AND action_intensity=low — inverse of HIGH_ENERGY_ACTION_FRAMES (cognitive change is slow to read on camera)',
+            source: 'body_part_phrase ∈ {head, feeling, mind, brain, memory} — inverse of HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE (cognitive change has no legible body surface regardless of action intensity)',
         });
     }
 
     // G. repetition_outreach / repetition_patience family without a
     //    physical-test verb: proof is a stack whose contents are
-    //    untestable to the viewer.
+    //    untestable to the viewer. (v3.4: -0.18 → -0.26.)
     if ((family === 'repetition_outreach' || family === 'repetition_patience') && !hasTestVerb) {
-        const d = -0.18;
+        const d = -0.26;
         score += d;
         drivers.push({
             driver: `${family}_without_physical_test_verb`,
@@ -1661,8 +1666,9 @@ function computeProofClarity(obj, endpoint, ctx) {
 
     // H. Mystery_experiment family without artifact — observation, not
     //    a shot. Stacks with E but the family-level signal is cleaner.
+    //    (v3.4: -0.18 → -0.28.)
     if (family === 'mystery_experiment' && !hasArtifact) {
-        const d = -0.18;
+        const d = -0.28;
         score += d;
         drivers.push({
             driver: 'mystery_experiment_without_artifact',
@@ -1697,6 +1703,263 @@ function computeProofClarity(obj, endpoint, ctx) {
             driver: 'object_interaction_hands_visible_in_frame',
             delta: d,
             source: 'HANDS_VISIBLE match in visual_action_short / first_frame_action — indicator_registry.visual_is_workshop axis (hands-on-object framing)',
+        });
+    }
+
+    return { score: round(score, 3), drivers };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Visual-legibility score (v3.4)
+//
+// Proof-clarity already rewards a single-shot visible payoff at the
+// *endpoint* and penalizes observation/stack payoffs. But cognitive /
+// abstract motifs were still surviving the top-5 by gaming cosmetic
+// proof tokens ("stack of flashcards", "tally", "count overlay") while
+// the actual reveal was a verbal quiz or a social observation. The
+// visual-legibility score reads the motif atom along four axes that
+// are independent of the endpoint kind:
+//
+//   V1 — Invisible body-part penalty (feeling/head/mind/brain/memory):
+//        the payoff has no legible body surface — inverse of
+//        PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES.
+//   V2 — Cognitive verb without a physical-action verb in the motif's
+//        copy (learn/memorize/study/recite/recall/translate with no
+//        row/ride/carry/build/fold/march/etc.):
+//        the action itself is off-camera — inverse of
+//        HIGH_ENERGY_ACTION_FRAMES.
+//   V3 — Cognitive family/category penalty (cognitive_feat,
+//        cognitive_* categories, skill_dare_cognitive, skill_dare_music):
+//        head-framed payoff — inverse of
+//        HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE.
+//   V4 — Title-payoff legibility. Parses title_core_tpl for the reveal
+//        phrase and classifies it:
+//          physical / single-shot  → +0.20  (same shot, weigh-in,
+//            first and last, body did, rowed it, rode it, held until,
+//            broke first, quits first, froze at, told me when to stop,
+//            to see what broke first)
+//          verbal / observational  → -0.28  (tested me, quizzed me,
+//            assuming about me, started assuming, rearranged itself,
+//            people said, what they said, you wouldn't guess, figured
+//            out, rewrote my, changed how).
+//        Grounded in wave11_12.end_begin_ratio: a payoff the viewer
+//        reads from the frame vs. a verdict the viewer has to trust.
+//   V5 — Frame-1 comprehensibility. Requires first_frame_action to
+//        name an action verb AND at least one of an object / gauge.
+//        A motif whose opening frame lacks an action verb cannot be
+//        comprehended in the first second — penalized regardless of
+//        how many proof props appear in the rest of the motif.
+//   V6 — Build-test / before-after contrast visible in
+//        visual_action_short (cut between, day 1 vs day N, growing
+//        pile/stack/tower, slides out, pedals turning, mile-counter,
+//        completion %). A state-A → state-B transform is the signal
+//        wave11_12.end_begin_ratio is quantifying.
+//   V7 — mystery_experiment/identity without physical verb AND without
+//        a gauge or physical object in frame — observation-only cut.
+//
+// Every driver cites an on-disk indicator. No category blacklist; no
+// hand-picked top 5.
+const VL_COGNITIVE_BODY_PARTS = new Set(['feeling', 'head', 'mind', 'brain', 'memory']);
+const VL_COG_VERB_RE = /\b(memoriz|learn|studied|study|studying|recit|recall|translat|remember)\w*\b/;
+// Strong physical-action stems. Purposefully excludes ambiguous "test",
+// "fire", "hold" — they can be verbal ("tested me", "fired me", "hold
+// that thought") and would mislabel cognitive motifs as physical.
+const VL_PHYS_STRONG_RE = /\b(press|slid|slide|pour|hammer|paint|sand|assembl|bolt|tapp|tight|drew|drawing|fold|wrap|writ|flip|stack|plac|lift|heav|squat|stretch|step|walk|march|ran|running|climb|jump|carry|carried|carrying|rowed|rowing|pedal|ride|rode|drove|driving|sail|sailed|launch|race|raced|weigh|pull|push|hit|paddle|throw|threw|roll|kick|cranked|shove|shoved|rig|rigging|unfold|unfolded)\w*\b/;
+const VL_COG_FAMILIES = new Set(['cognitive_feat']);
+const VL_COG_CATEGORIES = new Set(['cognitive_endurance', 'cognitive_patience', 'skill_dare_cognitive', 'skill_dare_music']);
+const VL_TITLE_PHYSICAL_REVEAL_RE = /(same shot|same frame|same starting|first and last|body did|weigh-?in|broke first|broke at|rode it|rowed it|held until|hit exactly|quits first|froze at|to see what broke|let me know it was over|told me when to stop)/;
+const VL_TITLE_ABSTRACT_REVEAL_RE = /(tested me|quizzed me|assuming about me|started assuming|rearranged itself|native speaker|decides when|people said|what they said|you wouldn'?t guess|you'?ll never guess|figured out|rewrote my|changed how i|rewired my|here'?s what people)/;
+const VL_FRAME_ACTION_RE = /\bmid-\w+\b|\b(heav|tighten|tap|flip|plac|press|wrap|fold|draw|writ|pedal|row|carri|carry|carrying|runn|climb|jump|stack|point|ring|step|hold|lift|walk|march|squat|stretch|gestur|hitting|pulling|pushing|slid|pour|hammer|paint|cranked|paddl|rigging|boots hitting|boots in motion|oars pulling|pedals turning)\w*\b/;
+const VL_FRAME_GAUGE_RE = /\b(counter|timer|overlay|scale|ruler|mile-?counter|distance overlay|completion bar|completion %|page tally|page grid|band counter|height ruler|day-?counter|timer overlay|tally|stopwatch)\b/;
+const VL_FRAME_OBJECT_RE = /\b(sandbag|backpack|bag|rope|stairs|plank|boat|bike|hull|oar|oars|pedal|pedals|pages|book|letters|envelope|envelopes|crane|cranes|puzzle|piece|coin|tower|stack|pile|portrait|portraits|bell|rig|gym|truck|drawer|phone|notebook|hammer|wood|cardboard|plate|potato|driveway|shoreline)\b/;
+const VL_CONTRAST_RE = /(cut between|day 1.*day ?\d|starting line.*day ?\d|before.*after|identical.*identical|seams hold|first.*phrase|awkward.*clean|growing.*tower|growing.*pile|growing.*stack|stack of.*growing|held out|slides out|pedals turning|oars pulling|mile-?counter|distance overlay|completion bar|completion %|tally|running counter|counter overlay)/;
+
+function computeVisualLegibility(obj, endpoint, ctx) {
+    const drivers = [];
+    let score = 0;
+
+    const family = String(obj.family || '').toLowerCase();
+    const category = String(obj.category || '').toLowerCase();
+    const titleTpl = String(obj.title_core_tpl || '').toLowerCase();
+    const logline = String(obj.logline_action || '').toLowerCase();
+    const firstFrame = String(obj.first_frame_action || '').toLowerCase();
+    const visual = String(obj.visual_action_short || '').toLowerCase();
+    const bodyPart = String(obj.body_part_phrase || '').toLowerCase();
+    const bodyParts = (obj.body_parts || []).map(p => String(p).toLowerCase());
+    const allText = `${titleTpl} ${logline} ${firstFrame} ${visual}`;
+
+    // V1 — Invisible body_part_phrase penalty (applies regardless of
+    //      action_intensity — cognitive change has no body surface to
+    //      film). Distinct from proof-clarity's F (which applied the
+    //      same axis at a softer weight); kept separate so the driver
+    //      shows up in the visual_legibility trace where its intent is
+    //      "the payoff has nothing to show," not "the endpoint is
+    //      abstract."
+    if (VL_COGNITIVE_BODY_PARTS.has(bodyPart)) {
+        const d = -0.32;
+        score += d;
+        drivers.push({
+            driver: `invisible_body_part_phrase_${bodyPart}`,
+            delta: d,
+            source: 'body_part_phrase ∈ {feeling, head, mind, brain, memory} — no visible body surface for the payoff to land on; inverse of PHYSICAL_SENSORY_LANGUAGE (top peak cause, +1.59 weight) and HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)',
+        });
+    }
+
+    // V1b — Physical body_parts list presence (independent of the
+    //       phrase — body_parts is the array of per-frame anchors the
+    //       motif can cut to; a motif with only cognitive tokens has
+    //       nothing to close on).
+    const physicalBodyParts = bodyParts.filter(p => !VL_COGNITIVE_BODY_PARTS.has(p));
+    if (physicalBodyParts.length === 0) {
+        const d = -0.18;
+        score += d;
+        drivers.push({
+            driver: 'no_physical_body_part_in_list',
+            delta: d,
+            source: 'body_parts lists only invisible tokens — no concrete limb/torso to cut to; inverse of top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE',
+        });
+    } else {
+        const d = round(Math.min(0.12, physicalBodyParts.length * 0.04), 3);
+        score += d;
+        drivers.push({
+            driver: 'physical_body_parts_present',
+            delta: d,
+            count: physicalBodyParts.length,
+            parts: physicalBodyParts,
+            source: 'body_parts lists at least one visible limb/torso — cuts to per-beat close-ups legible; top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE',
+        });
+    }
+
+    // V2 — Cognitive verb without physical-action verb.
+    const hasCogVerb = VL_COG_VERB_RE.test(allText);
+    const hasPhysVerb = VL_PHYS_STRONG_RE.test(allText);
+    if (hasCogVerb && !hasPhysVerb) {
+        const d = -0.30;
+        score += d;
+        drivers.push({
+            driver: 'cognitive_verb_without_physical_action',
+            delta: d,
+            matched_cog_verb: (allText.match(VL_COG_VERB_RE) || [])[0],
+            source: 'verb stem is cognitive (memorize/learn/study/recite/recall/translate) AND motif copy contains no physical-action verb — the act itself is off-camera; inverse of HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)',
+        });
+    } else if (hasPhysVerb) {
+        const d = 0.10;
+        score += d;
+        drivers.push({
+            driver: 'physical_action_verb_in_copy',
+            delta: d,
+            matched_phys_verb: (allText.match(VL_PHYS_STRONG_RE) || [])[0],
+            source: 'physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES',
+        });
+    }
+
+    // V3 — Cognitive family / category.
+    if (VL_COG_FAMILIES.has(family) || VL_COG_CATEGORIES.has(category)) {
+        const d = -0.22;
+        score += d;
+        drivers.push({
+            driver: `cognitive_family_or_category_${category || family}`,
+            delta: d,
+            source: 'family=cognitive_feat OR category ∈ {cognitive_endurance, cognitive_patience, skill_dare_cognitive, skill_dare_music} — payoff is head-framed regardless of endpoint kind; inverse of HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE',
+        });
+    }
+
+    // V4 — Title-payoff legibility. Classifies the reveal in the title
+    //      itself; catches motifs that pass proof-clarity via cosmetic
+    //      artifact tokens (stack/pile/tally) but actually land on a
+    //      verbal / social / cognitive verdict.
+    const absReveal = titleTpl.match(VL_TITLE_ABSTRACT_REVEAL_RE);
+    const physReveal = titleTpl.match(VL_TITLE_PHYSICAL_REVEAL_RE);
+    if (absReveal) {
+        const d = -0.28;
+        score += d;
+        drivers.push({
+            driver: 'title_payoff_abstract_or_verbal',
+            delta: d,
+            matched_reveal: absReveal[0],
+            source: 'title_core_tpl signals a verbal / observational / cognitive reveal — wave11_12.end_begin_ratio requires a single-frame visible payoff, not a verdict the viewer has to trust',
+        });
+    }
+    if (physReveal) {
+        const d = 0.20;
+        score += d;
+        drivers.push({
+            driver: 'title_payoff_physical_reveal',
+            delta: d,
+            matched_reveal: physReveal[0],
+            source: 'title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)',
+        });
+    } else if (!absReveal && !obj.title_has_builtin_reveal && (endpoint.kind === 'count' || endpoint.kind === 'timer' || endpoint.kind === 'distance' || endpoint.kind === 'body' || endpoint.kind === 'build_test')) {
+        // composeTitle() appends "— The Counter Froze At {N}" / "— The
+        // Timer Hit {N} Exactly" / "— The Mile Counter Froze At {N}" /
+        // "— My {Body Part} Quit First" / "— The Build Held Until {N}"
+        // to numeric/body/build_test endpoints when the motif has no
+        // builtin reveal. That appended phrase IS a single-frame
+        // freeze — credit it in V4 so endurance / body_quit / bike
+        // motifs are not falsely neutral relative to motifs whose
+        // reveal is hard-coded into the template.
+        const d = 0.16;
+        score += d;
+        drivers.push({
+            driver: `title_payoff_implicit_freeze_frame_${endpoint.kind}`,
+            delta: d,
+            source: 'endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze ("The Counter Froze At N" / "The Timer Hit N Exactly" / "The Mile Counter Froze At N" / "My {part} Quit First" / "The Build Held Until N"); wave11_12.end_begin_ratio',
+        });
+    }
+
+    // V5 — Frame-1 comprehensibility. Action verb + (gauge OR object).
+    //      A motif whose first_frame_action lacks an action verb has
+    //      no filmable opening — viewer cannot read the challenge at
+    //      t=0s regardless of what appears later in the shot.
+    const hasFrameAction = VL_FRAME_ACTION_RE.test(firstFrame);
+    const hasFrameGauge = VL_FRAME_GAUGE_RE.test(firstFrame);
+    const hasFrameObject = VL_FRAME_OBJECT_RE.test(firstFrame);
+    if (hasFrameAction && (hasFrameGauge || hasFrameObject)) {
+        const d = (hasFrameGauge && hasFrameObject) ? 0.18 : 0.10;
+        score += d;
+        drivers.push({
+            driver: hasFrameGauge && hasFrameObject ? 'frame1_comprehensible_action_object_gauge' : 'frame1_comprehensible_action_plus_one',
+            delta: d,
+            matched: {
+                action: (firstFrame.match(VL_FRAME_ACTION_RE) || [])[0] || null,
+                object: hasFrameObject ? (firstFrame.match(VL_FRAME_OBJECT_RE) || [])[0] : null,
+                gauge: hasFrameGauge ? (firstFrame.match(VL_FRAME_GAUGE_RE) || [])[0] : null,
+            },
+            source: 'first_frame_action names an action verb + at least one of {gauge, physical object} — the challenge is legible at t=0s; HIGH_ENERGY_ACTION_FRAMES peak cause applied at the opening',
+        });
+    } else if (!hasFrameAction && !hasFrameGauge && !hasFrameObject) {
+        const d = -0.12;
+        score += d;
+        drivers.push({
+            driver: 'frame1_not_comprehensible',
+            delta: d,
+            source: 'first_frame_action lacks an action verb, a gauge, AND a physical object — viewer cannot parse the challenge from the first frame; inverse of HIGH_ENERGY_ACTION_FRAMES',
+        });
+    }
+
+    // V6 — Build-test / before-after contrast in visual_action_short.
+    const contrastMatch = visual.match(VL_CONTRAST_RE);
+    if (contrastMatch) {
+        const d = 0.08;
+        score += d;
+        drivers.push({
+            driver: 'visual_action_short_shows_state_contrast',
+            delta: d,
+            matched: contrastMatch[0],
+            source: 'visual_action_short names a state→state change (cut between, day1 vs dayN, growing stack/pile/tower, slides out, pedals turning, mile-counter) — wave11_12.end_begin_ratio (legible progress / before-after)',
+        });
+    }
+
+    // V7 — mystery_experiment / identity with no physical verb AND no
+    //      gauge/object in frame. Observation-only cut that reads only
+    //      with context.
+    if ((family === 'mystery_experiment' || family === 'identity') && !hasPhysVerb && !hasFrameGauge && !hasFrameObject) {
+        const d = -0.18;
+        score += d;
+        drivers.push({
+            driver: `${family}_without_physical_frame_signals`,
+            delta: d,
+            source: 'family=mystery_experiment|identity AND no physical verb / gauge / object in frame — observation-only payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
         });
     }
 
@@ -1766,15 +2029,25 @@ function scoreMotifCombo(obj, endpoint, ctx) {
     // stacks whose contents are untestable).
     const proof = computeProofClarity(obj, endpoint, ctx);
 
+    // Visual-legibility (v3.4) — independent of endpoint kind. Reads
+    // body_part_phrase, verb stems, family/category, title-payoff
+    // phrasing, frame-1 comprehensibility, and state-to-state visual
+    // contrast. Catches motifs that pass proof-clarity via cosmetic
+    // artifact tokens (stack/pile/tally) while actually landing on a
+    // verbal / social / cognitive verdict.
+    const legibility = computeVisualLegibility(obj, endpoint, ctx);
+
     const core = round(score, 3);
     return {
-        score: round(core + fit.score + proof.score, 3),
+        score: round(core + fit.score + proof.score + legibility.score, 3),
         drivers,
         core_score: core,
         creator_fit_score: fit.score,
         creator_fit_drivers: fit.drivers,
         proof_clarity_score: proof.score,
         proof_clarity_drivers: proof.drivers,
+        visual_legibility_score: legibility.score,
+        visual_legibility_drivers: legibility.drivers,
     };
 }
 
@@ -1875,7 +2148,7 @@ function composeTitle(obj, endpoint, scale, bodyPart) {
     return core;
 }
 
-function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creatorFit, proofClarity) {
+function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creatorFit, proofClarity, visualLegibility) {
     const scale = pickScale(obj);
     const bodyPart = obj.body_part_phrase || (obj.body_parts && obj.body_parts[0]) || 'body';
     const title = composeTitle(obj, endpoint, scale, bodyPart);
@@ -2020,7 +2293,19 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                     'retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)',
                     'indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)',
                 ],
-                note: 'Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed low-action payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator.',
+                note: 'Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator.',
+            } : null,
+            visual_legibility: visualLegibility ? {
+                score: visualLegibility.score,
+                drivers: visualLegibility.drivers,
+                derived_from_indicators: [
+                    'retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops — action frame at t=0s IS comprehension)',
+                    'retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (body-surface visibility; sensory-rate weight +1.59)',
+                    'retention-patterns.wave11_12_new_signals.end_begin_ratio (single-frame before/after vs. verdict-the-viewer-trusts)',
+                    'indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)',
+                    'findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)',
+                ],
+                note: 'Visual-legibility is independent of the endpoint kind. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, cognitive family/category, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens ("stack", "tally", "count overlay") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No category blacklist — the six axes are factual fields on the motif and the title string. No hand-picked top 5.',
             } : null,
             object_atom_id: obj.id,
             endpoint_atom_id: endpoint.id,
@@ -2039,6 +2324,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                 'visual_prescription_hints.* ← mechanism_indicator_links (frame_*) ranked by |rho| per zone',
                 'creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
                 'proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs',
+                'visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / cognitive family/category / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts',
             ],
             still_hardcoded: [
                 'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
@@ -2201,6 +2487,8 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
                 creator_fit_drivers: scored.creator_fit_drivers,
                 proof_clarity_score: scored.proof_clarity_score,
                 proof_clarity_drivers: scored.proof_clarity_drivers,
+                visual_legibility_score: scored.visual_legibility_score,
+                visual_legibility_drivers: scored.visual_legibility_drivers,
             });
         }
     }
@@ -2216,6 +2504,9 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         }, {
             score: c.proof_clarity_score,
             drivers: c.proof_clarity_drivers,
+        }, {
+            score: c.visual_legibility_score,
+            drivers: c.visual_legibility_drivers,
         });
         // Attach a seed-level diversity_log entry so the synthesis trace on
         // each final idea records why this slot survived selection.
@@ -2266,7 +2557,7 @@ function pickHooksForIdea(brief, pref = {}) {
 // ──────────────────────────────────────────────────────────────────────
 
 function scoreIdea(idea, brief) {
-    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0, motif: 0, fit: 0, proof: 0 };
+    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0, motif: 0, fit: 0, proof: 0, legibility: 0 };
 
     // Motif-synthesis score (lattice-driven object/endpoint alignment)
     if (idea.synthesis_trace && typeof idea.synthesis_trace.motif_score === 'number') {
@@ -2286,6 +2577,18 @@ function scoreIdea(idea, brief) {
     // payoffs. Shown in score_breakdown so the final re-rank sees it.
     if (idea.synthesis_trace && idea.synthesis_trace.proof_clarity && typeof idea.synthesis_trace.proof_clarity.score === 'number') {
         parts.proof += idea.synthesis_trace.proof_clarity.score * 0.14;
+    }
+
+    // Visual-legibility (v3.4) — independent of endpoint kind. Biases
+    // toward ideas a viewer can comprehend from frame 1 and verify from
+    // the final beat (action verb + gauge/object in frame, decisive
+    // physical reveal in title, state-contrast in the cut-to), and
+    // away from cognitive/abstract motifs that gamed proof-clarity via
+    // cosmetic artifact tokens. Weighted slightly above proof_clarity
+    // because it reads the reveal phrasing directly, not just the
+    // endpoint taxonomy.
+    if (idea.synthesis_trace && idea.synthesis_trace.visual_legibility && typeof idea.synthesis_trace.visual_legibility.score === 'number') {
+        parts.legibility += idea.synthesis_trace.visual_legibility.score * 0.16;
     }
 
     for (const hook of idea.hook_mechanisms) parts.hook += Math.abs(hook.csw || 0);
@@ -2317,7 +2620,7 @@ function scoreIdea(idea, brief) {
         if (rule && rule.r_partial) parts.interactions += Math.abs(rule.r_partial) * 0.1;
     }
 
-    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions + parts.motif + parts.fit + parts.proof;
+    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions + parts.motif + parts.fit + parts.proof + parts.legibility;
     return { parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, round(v, 4)])), total: round(total, 4) };
 }
 
@@ -3191,6 +3494,52 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         });
     }
 
+    // ── Visual-legibility (v3.4) ─────────────────────────────────
+    {
+        const vl = seed.synthesis_trace && seed.synthesis_trace.visual_legibility;
+        const vlDrivers = (vl && vl.drivers) || [];
+        const indicator_keys = [
+            'HIGH_ENERGY_ACTION_FRAMES',
+            'PHYSICAL_SENSORY_LANGUAGE',
+            'end_begin_ratio',
+            'visual_is_workshop',
+            'pat_making_v2',
+        ];
+        const top_indicators = [
+            { key: 'HIGH_ENERGY_ACTION_FRAMES', evidence_type: 'top_3_peak_causes', modality: 'visual', quantification: 'Action frames appear 28% at peaks vs 8% at drops', why: 'frame-1 comprehensibility IS an action frame at t=0s — action verb in first_frame_action is the opening-second proxy for this cause' },
+            { key: 'PHYSICAL_SENSORY_LANGUAGE', evidence_type: 'top_3_peak_causes', modality: 'transcript + framing', quantification: 'Sensory-rate weight +1.59', why: 'visible body_part_phrase (foot/shoulders/stomach/hand) has a surface to film; feeling/head/mind/brain/memory do not' },
+            { key: 'end_begin_ratio', evidence_type: 'wave11_12_new_signals', modality: 'retention structure', quantification: 'End-state delta above opening promise', why: 'title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress' },
+            { key: 'visual_is_workshop', evidence_type: 'indicator_registry', r_direct: 0.236, r_partial: 0.219, modality: 'visual frame', quantification: 'hands-on-object framing', why: 'state-contrast in visual_action_short (cut between, growing stack, slides out, pedals turning) is the hands-on-object axis applied across the build' },
+            { key: 'pat_making_v2', evidence_type: 'findings.kept_signals', delta_r2: 0.012, modality: 'title pattern', quantification: 'Title contains making/build/creat/construct — 34 videos avg 19.7M vs 5.6M', why: 'title_making_keyword family aligns with physical reveal phrasing' },
+        ];
+        traces.visual_legibility = makeTrace({
+            field: 'visual_legibility',
+            rationale: 'Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) cognitive family/category, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens ("stack of flashcards", "tally", "count overlay") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no category blacklist; no hand-picked top 5.',
+            evidence_sources: [
+                'retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES',
+                'retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE',
+                'retention-patterns.wave11_12_new_signals.end_begin_ratio',
+                'indicator-registry.visual_is_workshop',
+                'findings-summary.kept_signals.pat_making_v2',
+            ],
+            indicators_considered_count: indicator_keys.length,
+            indicator_keys,
+            top_indicators,
+            filter: 'six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites',
+            extra: {
+                visual_legibility_score: vl && vl.score,
+                drivers_triggered: vlDrivers.map(d => ({
+                    driver: d.driver,
+                    delta: d.delta,
+                    matched: d.matched_cog_verb || d.matched_phys_verb || d.matched_reveal || d.matched || (d.parts && d.parts.join(',')) || null,
+                    source: d.source,
+                })),
+                applied_weight_in_scoreIdea: 0.16,
+                selection_effect: 'Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned.',
+            },
+        });
+    }
+
     // ── Scorecard targets ────────────────────────────────────────
     {
         const sd = brief.evidence_lattice && brief.evidence_lattice.scorecard_dimensions;
@@ -3444,6 +3793,11 @@ function assembleBlueprint(seed, brief, rank, artifacts) {
     const metricCount = Object.keys(validation.metric_traces || {}).length;
     const proofScore = seed.synthesis_trace && seed.synthesis_trace.proof_clarity && seed.synthesis_trace.proof_clarity.score;
     const proofDriverCount = seed.synthesis_trace && seed.synthesis_trace.proof_clarity && seed.synthesis_trace.proof_clarity.drivers ? seed.synthesis_trace.proof_clarity.drivers.length : 0;
+    const vlTrace = seed.synthesis_trace && seed.synthesis_trace.visual_legibility;
+    const vlScore = vlTrace && vlTrace.score;
+    const vlDrivers = (vlTrace && vlTrace.drivers) || [];
+    const vlPositive = vlDrivers.filter(d => typeof d.delta === 'number' && d.delta > 0).length;
+    const vlNegative = vlDrivers.filter(d => typeof d.delta === 'number' && d.delta < 0).length;
     idea.why_it_works = [
         `Specific premise (${seed.title.length <= 90 ? seed.title : seed.title.slice(0, 87) + '…'}) — every concrete choice (object, timer, endpoint) survives the validation filter below.`,
         `Arc = ${idea.arc.arc_shape} with nadir placed at ~${idea.arc.nadir_placement_pct}% (best_after_worst 5x gap).`,
@@ -3451,6 +3805,7 @@ function assembleBlueprint(seed, brief, rank, artifacts) {
         `Over-delivery structure: hook promises less than the 95% payoff delivers (hook_payoff_gap rewards over-delivery, r=-0.52).`,
         `Vocabulary: commits to ${((seed.vocabulary_hints && seed.vocabulary_hints.use_peak_words) || []).length} peak words and avoids ${((seed.vocabulary_hints && seed.vocabulary_hints.avoid_material_words) || []).length} material-class words.`,
         `Proof-clarity: score=${proofScore != null ? proofScore : '—'} from ${proofDriverCount} drivers (build+test hybrid, body before/after anchor, numeric counter + named artifact) — single-shot legible payoff backed by HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio.`,
+        `Visual-legibility: score=${vlScore != null ? vlScore : '—'} from ${vlDrivers.length} drivers (+${vlPositive}/-${vlNegative}) — frame-1 comprehensibility + decisive physical reveal in title + state-contrast in the cut-to; penalizes invisible body parts, cognitive verbs, and verbal/observational reveals regardless of endpoint kind.`,
         `Validation trace: ${secCount} blueprint sections and ${metricCount} modeled metrics carry explicit indicator lineage (pool size, filter, top indicators w/ r/rho/csw and quantification).`,
     ];
     return idea;
