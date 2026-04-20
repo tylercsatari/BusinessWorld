@@ -31905,7 +31905,16 @@
       "early_proof_to_loop_ratio_x_proof_arrival_delay_proxy",
       "early_proof_to_loop_ratio_x_closure_to_open_ratio_first10s",
       "early_proof_to_loop_ratio_x_credibility_setup_pct",
-      "early_proof_to_loop_ratio_x_proof_density_hook"
+      "early_proof_to_loop_ratio_x_proof_density_hook",
+      "early_proof_to_loop_ratio_x_stake_loop_product",
+      "early_proof_to_loop_ratio_x_rhetorical_question_count",
+      "early_proof_to_loop_ratio_x_rhetorical_question_density",
+      "early_proof_to_loop_ratio_x_mystery_setup_count",
+      "early_proof_to_loop_ratio_x_mystery_setup_density",
+      "early_proof_to_loop_ratio_x_promise_specificity_count",
+      "early_proof_to_loop_ratio_x_promise_specificity_density",
+      "early_proof_to_loop_ratio_x_loss_framing_count",
+      "early_proof_to_loop_ratio_x_loss_framing_density"
     ],
     "depth_in_hierarchy": 0
   },
