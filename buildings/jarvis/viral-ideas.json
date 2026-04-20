@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-20T20:35:30.904Z",
+    "generated_at": "2026-04-20T20:54:52.194Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -55,7 +55,7 @@
         "first_frame": "Close on taping the last cardboard seam on a finished hull with the shoreline framing the shot. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on oars pulling as the cardboard boat slides out from the dock for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.61,
+        "opening_speech_rate_wps_target": 2.66,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -105,7 +105,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.61,
+        "opening_wps_target": 2.66,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -442,17 +442,17 @@
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
-        "motif_family": "build_test",
         "diversity_bucket": "build_test",
+        "motif_family": "build_test",
         "proof_surface": "distance__shoulders",
         "diversity_selection": {
           "phase": "diversity_round_robin",
           "reason": "first slot for diversity bucket \"build_test\" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)",
           "raw_score": 3.42,
-          "slot_family_coverage_at_pick": [
+          "slot_diversity_bucket_coverage_at_pick": [
             "build_test"
           ],
-          "slot_diversity_bucket_coverage_at_pick": [
+          "slot_family_coverage_at_pick": [
             "build_test"
           ],
           "slot_endpoint_coverage_at_pick": [
@@ -462,13 +462,13 @@
             "distance__shoulders"
           ],
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           }
         },
         "diversity_summary": {
-          "per_family": {
+          "per_diversity_bucket": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -478,7 +478,7 @@
             "skill_dare": 1,
             "mystery_experiment": 1
           },
-          "per_diversity_bucket": {
+          "per_family": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -507,7 +507,7 @@
             "duration__feeling": 1,
             "duration__foot": 1
           },
-          "family_coverage": [
+          "diversity_bucket_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -517,7 +517,7 @@
             "skill_dare",
             "mystery_experiment"
           ],
-          "diversity_bucket_coverage": [
+          "family_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -550,18 +550,18 @@
         "seed_alternates": {
           "stage": "seed_selection",
           "candidates_considered": 46,
-          "families_considered": 9,
           "diversity_buckets_considered": 9,
+          "families_considered": 9,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "nearby_rejected": [
             {
               "motif_id": "two_by_four_bike",
-              "family": "build_test",
               "diversity_bucket": "build_test",
+              "family": "build_test",
               "endpoint_id": "exact_distance",
               "endpoint_kind": "distance",
               "proof_surface": "distance__shoulders",
@@ -571,8 +571,8 @@
             },
             {
               "motif_id": "cardboard_boat_row",
-              "family": "build_test",
               "diversity_bucket": "build_test",
+              "family": "build_test",
               "endpoint_id": "build_test_outcome",
               "endpoint_kind": "build_test",
               "proof_surface": "distance__shoulders",
@@ -584,14 +584,14 @@
           "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
         },
         "final_rank_diversity": {
-          "per_family_in_topN": {
+          "per_diversity_bucket_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
             "identity": 1,
             "endurance": 1
           },
-          "per_diversity_bucket_in_topN": {
+          "per_family_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
@@ -612,8 +612,8 @@
             "reps__foot": 1
           },
           "caps": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
@@ -623,8 +623,8 @@
           "slot": 1,
           "ideas_considered": 10,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35,
@@ -632,8 +632,8 @@
             {
               "idea_id": "two_by_four_bike__build_test_outcome",
               "title": "I Built A Bike Out Of 2x4s And Rode It 5 Miles To See What Broke First — The Build Held…",
-              "family": "build_test",
               "diversity_bucket": "build_test",
+              "family": "build_test",
               "endpoint_kind": "build_test",
               "proof_surface": "distance__shoulders",
               "blueprint_total": 1.729,
@@ -646,8 +646,8 @@
             {
               "idea_id": "one_food_thirty_days__time_to_target",
               "title": "I Ate Only Potatoes For 60 Days — My Body Did Something I Didn’t Expect",
-              "family": "body_transformation",
               "diversity_bucket": "body_transformation",
+              "family": "body_transformation",
               "endpoint_kind": "timer",
               "proof_surface": "duration__stomach",
               "blueprint_total": 1.632,
@@ -757,7 +757,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.61wps_in_sweet_zone",
+              "driver": "opening_rate_2.66wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -3607,18 +3607,18 @@
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
-        "motif_family": "body_transformation",
         "diversity_bucket": "body_transformation",
+        "motif_family": "body_transformation",
         "proof_surface": "duration__stomach",
         "diversity_selection": {
           "phase": "diversity_round_robin",
           "reason": "first slot for diversity bucket \"body_transformation\" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)",
           "raw_score": 3.125,
-          "slot_family_coverage_at_pick": [
+          "slot_diversity_bucket_coverage_at_pick": [
             "build_test",
             "body_transformation"
           ],
-          "slot_diversity_bucket_coverage_at_pick": [
+          "slot_family_coverage_at_pick": [
             "build_test",
             "body_transformation"
           ],
@@ -3631,13 +3631,13 @@
             "duration__stomach"
           ],
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           }
         },
         "diversity_summary": {
-          "per_family": {
+          "per_diversity_bucket": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -3647,7 +3647,7 @@
             "skill_dare": 1,
             "mystery_experiment": 1
           },
-          "per_diversity_bucket": {
+          "per_family": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -3676,7 +3676,7 @@
             "duration__feeling": 1,
             "duration__foot": 1
           },
-          "family_coverage": [
+          "diversity_bucket_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -3686,7 +3686,7 @@
             "skill_dare",
             "mystery_experiment"
           ],
-          "diversity_bucket_coverage": [
+          "family_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -3719,18 +3719,18 @@
         "seed_alternates": {
           "stage": "seed_selection",
           "candidates_considered": 46,
-          "families_considered": 9,
           "diversity_buckets_considered": 9,
+          "families_considered": 9,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "nearby_rejected": [
             {
               "motif_id": "one_food_thirty_days",
-              "family": "body_transformation",
               "diversity_bucket": "body_transformation",
+              "family": "body_transformation",
               "endpoint_id": "transformation_reveal",
               "endpoint_kind": "transformation",
               "proof_surface": "duration__stomach",
@@ -3740,8 +3740,8 @@
             },
             {
               "motif_id": "daily_mile_one_year",
-              "family": "body_transformation",
               "diversity_bucket": "body_transformation",
+              "family": "body_transformation",
               "endpoint_id": "time_to_target",
               "endpoint_kind": "timer",
               "proof_surface": "duration__foot",
@@ -3753,14 +3753,14 @@
           "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
         },
         "final_rank_diversity": {
-          "per_family_in_topN": {
+          "per_diversity_bucket_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
             "identity": 1,
             "endurance": 1
           },
-          "per_diversity_bucket_in_topN": {
+          "per_family_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
@@ -3781,8 +3781,8 @@
             "reps__foot": 1
           },
           "caps": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
@@ -3792,8 +3792,8 @@
           "slot": 2,
           "ideas_considered": 10,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35,
@@ -3801,8 +3801,8 @@
             {
               "idea_id": "origami_cranes__exact_count",
               "title": "I Folded 1,000 Origami Cranes In One Day — The Counter Froze At 1,028",
-              "family": "craft_patience",
               "diversity_bucket": "craft_patience",
+              "family": "craft_patience",
               "endpoint_kind": "count",
               "proof_surface": "reps__hand",
               "blueprint_total": 1.6,
@@ -3815,8 +3815,8 @@
             {
               "idea_id": "stair_climb_repeats__exact_count",
               "title": "I Climbed A Single Flight Of Stairs 1,000 Times — The Counter Froze At 1,028",
-              "family": "endurance",
               "diversity_bucket": "endurance",
+              "family": "endurance",
               "endpoint_kind": "count",
               "proof_surface": "reps__foot",
               "blueprint_total": 1.575,
@@ -6748,20 +6748,20 @@
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
-        "motif_family": "craft_patience",
         "diversity_bucket": "craft_patience",
+        "motif_family": "craft_patience",
         "proof_surface": "reps__hand",
         "diversity_selection": {
           "phase": "diversity_round_robin",
           "reason": "first slot for diversity bucket \"craft_patience\" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)",
           "raw_score": 2.88,
-          "slot_family_coverage_at_pick": [
+          "slot_diversity_bucket_coverage_at_pick": [
             "build_test",
             "body_transformation",
             "endurance",
             "craft_patience"
           ],
-          "slot_diversity_bucket_coverage_at_pick": [
+          "slot_family_coverage_at_pick": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -6780,13 +6780,13 @@
             "reps__hand"
           ],
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           }
         },
         "diversity_summary": {
-          "per_family": {
+          "per_diversity_bucket": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -6796,7 +6796,7 @@
             "skill_dare": 1,
             "mystery_experiment": 1
           },
-          "per_diversity_bucket": {
+          "per_family": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -6825,7 +6825,7 @@
             "duration__feeling": 1,
             "duration__foot": 1
           },
-          "family_coverage": [
+          "diversity_bucket_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -6835,7 +6835,7 @@
             "skill_dare",
             "mystery_experiment"
           ],
-          "diversity_bucket_coverage": [
+          "family_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -6868,18 +6868,18 @@
         "seed_alternates": {
           "stage": "seed_selection",
           "candidates_considered": 46,
-          "families_considered": 9,
           "diversity_buckets_considered": 9,
+          "families_considered": 9,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "nearby_rejected": [
             {
               "motif_id": "origami_cranes",
-              "family": "craft_patience",
               "diversity_bucket": "craft_patience",
+              "family": "craft_patience",
               "endpoint_id": "time_to_target",
               "endpoint_kind": "timer",
               "proof_surface": "reps__hand",
@@ -6889,8 +6889,8 @@
             },
             {
               "motif_id": "coin_edge_tower",
-              "family": "craft_patience",
               "diversity_bucket": "craft_patience",
+              "family": "craft_patience",
               "endpoint_id": "exact_count",
               "endpoint_kind": "count",
               "proof_surface": "reps__hand",
@@ -6902,14 +6902,14 @@
           "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
         },
         "final_rank_diversity": {
-          "per_family_in_topN": {
+          "per_diversity_bucket_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
             "identity": 1,
             "endurance": 1
           },
-          "per_diversity_bucket_in_topN": {
+          "per_family_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
@@ -6930,8 +6930,8 @@
             "reps__foot": 1
           },
           "caps": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
@@ -6941,8 +6941,8 @@
           "slot": 3,
           "ideas_considered": 10,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35,
@@ -6950,8 +6950,8 @@
             {
               "idea_id": "stair_climb_repeats__exact_count",
               "title": "I Climbed A Single Flight Of Stairs 1,000 Times — The Counter Froze At 1,028",
-              "family": "endurance",
               "diversity_bucket": "endurance",
+              "family": "endurance",
               "endpoint_kind": "count",
               "proof_surface": "reps__foot",
               "blueprint_total": 1.575,
@@ -6964,8 +6964,8 @@
             {
               "idea_id": "pro_boxer_day__body_quit",
               "title": "I Trained With A Pro Boxer For One Full Day — He Told Me When To Stop",
-              "family": "identity",
               "diversity_bucket": "identity",
+              "family": "identity",
               "endpoint_kind": "body",
               "proof_surface": "duration__shoulders",
               "blueprint_total": 1.491,
@@ -9542,7 +9542,7 @@
         "first_frame": "Close on a pro boxer wrapping my hands with his gym behind him in the same frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 days, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on matching his bag work beat for beat with both fighters in the shot for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.61,
+        "opening_speech_rate_wps_target": 2.52,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -9592,7 +9592,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.61,
+        "opening_wps_target": 2.52,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -9892,14 +9892,14 @@
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
-        "motif_family": "identity",
         "diversity_bucket": "identity",
+        "motif_family": "identity",
         "proof_surface": "duration__shoulders",
         "diversity_selection": {
           "phase": "diversity_round_robin",
           "reason": "first slot for diversity bucket \"identity\" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)",
           "raw_score": 2.655,
-          "slot_family_coverage_at_pick": [
+          "slot_diversity_bucket_coverage_at_pick": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -9907,7 +9907,7 @@
             "repetition_outreach",
             "identity"
           ],
-          "slot_diversity_bucket_coverage_at_pick": [
+          "slot_family_coverage_at_pick": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -9932,13 +9932,13 @@
             "reps__feeling"
           ],
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           }
         },
         "diversity_summary": {
-          "per_family": {
+          "per_diversity_bucket": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -9948,7 +9948,7 @@
             "skill_dare": 1,
             "mystery_experiment": 1
           },
-          "per_diversity_bucket": {
+          "per_family": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -9977,7 +9977,7 @@
             "duration__feeling": 1,
             "duration__foot": 1
           },
-          "family_coverage": [
+          "diversity_bucket_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -9987,7 +9987,7 @@
             "skill_dare",
             "mystery_experiment"
           ],
-          "diversity_bucket_coverage": [
+          "family_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -10020,18 +10020,18 @@
         "seed_alternates": {
           "stage": "seed_selection",
           "candidates_considered": 46,
-          "families_considered": 9,
           "diversity_buckets_considered": 9,
+          "families_considered": 9,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "nearby_rejected": [
             {
               "motif_id": "pro_boxer_day",
-              "family": "identity",
               "diversity_bucket": "identity",
+              "family": "identity",
               "endpoint_id": "identity_dayend",
               "endpoint_kind": "identity",
               "proof_surface": "duration__shoulders",
@@ -10041,8 +10041,8 @@
             },
             {
               "motif_id": "firefighter_shift_shadow",
-              "family": "identity",
               "diversity_bucket": "identity",
+              "family": "identity",
               "endpoint_id": "body_quit",
               "endpoint_kind": "body",
               "proof_surface": "duration__foot",
@@ -10054,14 +10054,14 @@
           "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
         },
         "final_rank_diversity": {
-          "per_family_in_topN": {
+          "per_diversity_bucket_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
             "identity": 1,
             "endurance": 1
           },
-          "per_diversity_bucket_in_topN": {
+          "per_family_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
@@ -10082,8 +10082,8 @@
             "reps__foot": 1
           },
           "caps": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
@@ -10093,8 +10093,8 @@
           "slot": 4,
           "ideas_considered": 10,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35,
@@ -10102,8 +10102,8 @@
             {
               "idea_id": "stair_climb_repeats__exact_count",
               "title": "I Climbed A Single Flight Of Stairs 1,000 Times — The Counter Froze At 1,028",
-              "family": "endurance",
               "diversity_bucket": "endurance",
+              "family": "endurance",
               "endpoint_kind": "count",
               "proof_surface": "reps__foot",
               "blueprint_total": 1.575,
@@ -10116,8 +10116,8 @@
             {
               "idea_id": "two_by_four_bike__build_test_outcome",
               "title": "I Built A Bike Out Of 2x4s And Rode It 5 Miles To See What Broke First — The Build Held…",
-              "family": "build_test",
               "diversity_bucket": "build_test",
+              "family": "build_test",
               "endpoint_kind": "build_test",
               "proof_surface": "distance__shoulders",
               "blueprint_total": 1.729,
@@ -10227,7 +10227,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.61wps_in_sweet_zone",
+              "driver": "opening_rate_2.52wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -12672,7 +12672,7 @@
         "first_frame": "Close on mid-step on the stairs with a counter overlay. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on running up a flight with foot-on-stair visible for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.5,
+        "opening_speech_rate_wps_target": 2.61,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -12722,7 +12722,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.5,
+        "opening_wps_target": 2.61,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -13033,19 +13033,19 @@
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
-        "motif_family": "endurance",
         "diversity_bucket": "endurance",
+        "motif_family": "endurance",
         "proof_surface": "reps__foot",
         "diversity_selection": {
           "phase": "diversity_round_robin",
           "reason": "first slot for diversity bucket \"endurance\" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)",
           "raw_score": 2.95,
-          "slot_family_coverage_at_pick": [
+          "slot_diversity_bucket_coverage_at_pick": [
             "build_test",
             "body_transformation",
             "endurance"
           ],
-          "slot_diversity_bucket_coverage_at_pick": [
+          "slot_family_coverage_at_pick": [
             "build_test",
             "body_transformation",
             "endurance"
@@ -13061,13 +13061,13 @@
             "reps__foot"
           ],
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           }
         },
         "diversity_summary": {
-          "per_family": {
+          "per_diversity_bucket": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -13077,7 +13077,7 @@
             "skill_dare": 1,
             "mystery_experiment": 1
           },
-          "per_diversity_bucket": {
+          "per_family": {
             "build_test": 2,
             "body_transformation": 2,
             "endurance": 1,
@@ -13106,7 +13106,7 @@
             "duration__feeling": 1,
             "duration__foot": 1
           },
-          "family_coverage": [
+          "diversity_bucket_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -13116,7 +13116,7 @@
             "skill_dare",
             "mystery_experiment"
           ],
-          "diversity_bucket_coverage": [
+          "family_coverage": [
             "build_test",
             "body_transformation",
             "endurance",
@@ -13149,18 +13149,18 @@
         "seed_alternates": {
           "stage": "seed_selection",
           "candidates_considered": 46,
-          "families_considered": 9,
           "diversity_buckets_considered": 9,
+          "families_considered": 9,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "nearby_rejected": [
             {
               "motif_id": "sandbag_carry",
-              "family": "endurance",
               "diversity_bucket": "endurance",
+              "family": "endurance",
               "endpoint_id": "exact_distance",
               "endpoint_kind": "distance",
               "proof_surface": "distance__foot",
@@ -13170,8 +13170,8 @@
             },
             {
               "motif_id": "pushups_one_day",
-              "family": "endurance",
               "diversity_bucket": "endurance",
+              "family": "endurance",
               "endpoint_id": "exact_count",
               "endpoint_kind": "count",
               "proof_surface": "reps__shoulders",
@@ -13183,14 +13183,14 @@
           "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
         },
         "final_rank_diversity": {
-          "per_family_in_topN": {
+          "per_diversity_bucket_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
             "identity": 1,
             "endurance": 1
           },
-          "per_diversity_bucket_in_topN": {
+          "per_family_in_topN": {
             "build_test": 1,
             "body_transformation": 1,
             "craft_patience": 1,
@@ -13211,8 +13211,8 @@
             "reps__foot": 1
           },
           "caps": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
@@ -13222,8 +13222,8 @@
           "slot": 5,
           "ideas_considered": 10,
           "caps_in_effect": {
-            "per_family_cap": 2,
             "per_diversity_bucket_cap": 2,
+            "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35,
@@ -13231,8 +13231,8 @@
             {
               "idea_id": "two_by_four_bike__build_test_outcome",
               "title": "I Built A Bike Out Of 2x4s And Rode It 5 Miles To See What Broke First — The Build Held…",
-              "family": "build_test",
               "diversity_bucket": "build_test",
+              "family": "build_test",
               "endpoint_kind": "build_test",
               "proof_surface": "distance__shoulders",
               "blueprint_total": 1.729,
@@ -13245,8 +13245,8 @@
             {
               "idea_id": "handwritten_letters__time_to_target",
               "title": "I Hand-Wrote 300 Letters — One To Every Contact In My Phone — The Timer Hit 300 Exactly",
-              "family": "repetition_outreach",
               "diversity_bucket": "repetition_outreach",
+              "family": "repetition_outreach",
               "endpoint_kind": "timer",
               "proof_surface": "reps__hand",
               "blueprint_total": 1.543,
@@ -13356,7 +13356,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.5wps_in_sweet_zone",
+              "driver": "opening_rate_2.61wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
