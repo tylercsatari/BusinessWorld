@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-20T10:48:00.313Z",
+    "generated_at": "2026-04-20T13:44:59.345Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -54,7 +54,7 @@
         "first_frame": "Close on taping the last cardboard seam on a finished hull with the shoreline framing the shot. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on oars pulling as the cardboard boat slides out from the dock for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.52,
+        "opening_speech_rate_wps_target": 2.57,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -104,7 +104,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.52,
+        "opening_wps_target": 2.57,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -303,7 +303,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.86,
@@ -344,7 +344,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.6,
@@ -370,7 +370,7 @@
               "driver": "title_payoff_physical_reveal",
               "delta": 0.2,
               "matched_reveal": "rowed it",
-              "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+              "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
             },
             {
               "driver": "frame1_comprehensible_action_plus_one",
@@ -402,6 +402,18 @@
         "endpoint_atom_id": "exact_distance",
         "scale_kind": "distance",
         "scale_value": "2 miles",
+        "validated_premise_signature": {
+          "object_atom_id": "cardboard_boat_row",
+          "endpoint_atom_id": "exact_distance",
+          "proof_surface": "distance__shoulders",
+          "title_premise_line": "I Built A Boat Out Of Only Cardboard And Tape And Rowed It {D}",
+          "action_line": "build a boat out of only cardboard and packing tape, then row it across a lake as far as the seams hold",
+          "first_frame_action": "taping the last cardboard seam on a finished hull with the shoreline framing the shot",
+          "setting_hint": "on a calm shallow lake wearing a life vest",
+          "visible_body_anchor": "shoulders",
+          "scale_kind": "distance",
+          "scale_value": "2 miles"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -416,6 +428,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -434,6 +452,9 @@
           ],
           "slot_endpoint_coverage_at_pick": [
             "distance"
+          ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders"
           ],
           "caps_in_effect": {
             "per_family_cap": 2,
@@ -461,6 +482,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -480,6 +513,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -533,6 +578,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -676,7 +732,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.52wps_in_sweet_zone",
+              "driver": "opening_rate_2.57wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -1517,7 +1573,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -2473,11 +2529,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -2568,11 +2624,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -2609,7 +2665,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -2648,7 +2704,7 @@
                 "driver": "title_payoff_physical_reveal",
                 "delta": 0.2,
                 "matched": "rowed it",
-                "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+                "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
               },
               {
                 "driver": "frame1_comprehensible_action_plus_one",
@@ -3160,7 +3216,7 @@
         "first_frame": "Close on morning day-1: a plain potato on the plate next to the scale with the reading on screen. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 60 days, and my stomach is going to tell you when it's over.",
         "opening_action": "Camera locked on a cut between identical morning weigh-ins and identical potato plates for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.63,
+        "opening_speech_rate_wps_target": 2.62,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -3210,7 +3266,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.63,
+        "opening_wps_target": 2.62,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -3409,7 +3465,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.66,
@@ -3439,7 +3495,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.46,
@@ -3464,7 +3520,7 @@
               "driver": "title_payoff_physical_reveal",
               "delta": 0.2,
               "matched_reveal": "body did",
-              "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+              "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
             },
             {
               "driver": "visual_action_short_shows_state_contrast",
@@ -3486,6 +3542,18 @@
         "endpoint_atom_id": "time_to_target",
         "scale_kind": "duration",
         "scale_value": "60 days",
+        "validated_premise_signature": {
+          "object_atom_id": "one_food_thirty_days",
+          "endpoint_atom_id": "time_to_target",
+          "proof_surface": "duration__stomach",
+          "title_premise_line": "I Ate Only Potatoes For {D} — My Body Did Something I Didn’t Expect",
+          "action_line": "eat only plain potatoes three times a day and film a morning weigh-in at the same hour every day",
+          "first_frame_action": "morning day-1: a plain potato on the plate next to the scale with the reading on screen",
+          "setting_hint": "at the same kitchen counter every morning",
+          "visible_body_anchor": "stomach",
+          "scale_kind": "duration",
+          "scale_value": "60 days"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -3500,6 +3568,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -3520,6 +3594,10 @@
           "slot_endpoint_coverage_at_pick": [
             "distance",
             "timer"
+          ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach"
           ],
           "caps_in_effect": {
             "per_family_cap": 2,
@@ -3547,6 +3625,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -3566,6 +3656,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -3619,6 +3721,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -3762,7 +3875,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.63wps_in_sweet_zone",
+              "driver": "opening_rate_2.62wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -4603,7 +4716,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -5554,11 +5667,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -5637,11 +5750,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -5678,7 +5791,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -5717,7 +5830,7 @@
                 "driver": "title_payoff_physical_reveal",
                 "delta": 0.2,
                 "matched": "body did",
-                "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+                "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
               },
               {
                 "driver": "visual_action_short_shows_state_contrast",
@@ -6219,7 +6332,7 @@
         "first_frame": "Close on mid-fold on a crane with a counter and a pile in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on fingers folding paper and adding to a crane pile for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.55,
+        "opening_speech_rate_wps_target": 2.53,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -6269,7 +6382,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.55,
+        "opening_wps_target": 2.53,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -6466,7 +6579,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.4,
@@ -6495,7 +6608,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.48,
@@ -6544,6 +6657,18 @@
         "endpoint_atom_id": "exact_count",
         "scale_kind": "count",
         "scale_value": 1000,
+        "validated_premise_signature": {
+          "object_atom_id": "origami_cranes",
+          "endpoint_atom_id": "exact_count",
+          "proof_surface": "reps__hand",
+          "title_premise_line": "I Folded {N} Origami Cranes In One Day",
+          "action_line": "fold origami cranes one after another",
+          "first_frame_action": "mid-fold on a crane with a counter and a pile in frame",
+          "setting_hint": "at a table with a growing pile of cranes",
+          "visible_body_anchor": "hand",
+          "scale_kind": "count",
+          "scale_value": 1000
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -6558,6 +6683,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -6582,6 +6713,12 @@
             "timer",
             "count",
             "body"
+          ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand"
           ],
           "caps_in_effect": {
             "per_family_cap": 2,
@@ -6609,6 +6746,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -6628,6 +6777,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -6681,6 +6842,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -6824,7 +6996,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.55wps_in_sweet_zone",
+              "driver": "opening_rate_2.53wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -7665,7 +7837,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -8621,11 +8793,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -8704,11 +8876,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -8745,7 +8917,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -9290,7 +9462,7 @@
         "first_frame": "Close on a pro boxer wrapping my hands with his gym behind him in the same frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 days, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on matching his bag work beat for beat with both fighters in the shot for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.64,
+        "opening_speech_rate_wps_target": 2.55,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -9340,7 +9512,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.64,
+        "opening_wps_target": 2.55,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -9530,7 +9702,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.06,
@@ -9548,7 +9720,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.52,
@@ -9575,7 +9747,7 @@
               "driver": "title_payoff_physical_reveal",
               "delta": 0.2,
               "matched_reveal": "told me when to stop",
-              "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+              "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
             },
             {
               "driver": "frame1_comprehensible_action_plus_one",
@@ -9601,6 +9773,18 @@
         "endpoint_atom_id": "body_quit",
         "scale_kind": "duration",
         "scale_value": "2 days",
+        "validated_premise_signature": {
+          "object_atom_id": "pro_boxer_day",
+          "endpoint_atom_id": "body_quit",
+          "proof_surface": "duration__shoulders",
+          "title_premise_line": "I Trained With A Pro Boxer For One Full Day — He Told Me When To Stop",
+          "action_line": "shadow a professional boxer through every single thing he does in his training day — warm-up, bag work, sparring, ice, food",
+          "first_frame_action": "a pro boxer wrapping my hands with his gym behind him in the same frame",
+          "setting_hint": "inside a pro fighter’s actual gym",
+          "visible_body_anchor": "shoulders",
+          "scale_kind": "duration",
+          "scale_value": "2 days"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -9615,6 +9799,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -9644,6 +9834,14 @@
             "experiment",
             "build_test"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -9670,6 +9868,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -9689,6 +9899,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -9742,6 +9964,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -9885,7 +10118,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.64wps_in_sweet_zone",
+              "driver": "opening_rate_2.55wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -10726,7 +10959,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -11672,11 +11905,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -11743,11 +11976,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -11784,7 +12017,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -11823,7 +12056,7 @@
                 "driver": "title_payoff_physical_reveal",
                 "delta": 0.2,
                 "matched": "told me when to stop",
-                "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+                "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
               },
               {
                 "driver": "frame1_comprehensible_action_plus_one",
@@ -12329,7 +12562,7 @@
         "first_frame": "Close on mid-step on the stairs with a counter overlay. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on running up a flight with foot-on-stair visible for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.62,
+        "opening_speech_rate_wps_target": 2.52,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -12379,7 +12612,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.62,
+        "opening_wps_target": 2.52,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -12576,7 +12809,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.34,
@@ -12600,7 +12833,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.56,
@@ -12651,6 +12884,18 @@
         "endpoint_atom_id": "exact_count",
         "scale_kind": "count",
         "scale_value": 1000,
+        "validated_premise_signature": {
+          "object_atom_id": "stair_climb_repeats",
+          "endpoint_atom_id": "exact_count",
+          "proof_surface": "reps__foot",
+          "title_premise_line": "I Climbed A Single Flight Of Stairs {N} Times",
+          "action_line": "run up a single flight of stairs",
+          "first_frame_action": "mid-step on the stairs with a counter overlay",
+          "setting_hint": "in a stairwell",
+          "visible_body_anchor": "foot",
+          "scale_kind": "count",
+          "scale_value": 1000
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -12665,6 +12910,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -12687,6 +12938,11 @@
             "distance",
             "timer",
             "count"
+          ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot"
           ],
           "caps_in_effect": {
             "per_family_cap": 2,
@@ -12714,6 +12970,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -12733,6 +13001,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -12786,6 +13066,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -12929,7 +13220,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.62wps_in_sweet_zone",
+              "driver": "opening_rate_2.52wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -13770,7 +14061,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -14721,11 +15012,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -14798,11 +15089,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -14839,7 +15130,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -15384,7 +15675,7 @@
         "first_frame": "Close on tightening the last bolt on a plywood frame with a completed 2x4 bike in view. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 5 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on pedals turning on the wooden bike with a mile-counter overlay for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.55,
+        "opening_speech_rate_wps_target": 2.52,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -15434,7 +15725,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.55,
+        "opening_wps_target": 2.52,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -15633,7 +15924,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.78,
@@ -15674,7 +15965,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.6,
@@ -15700,7 +15991,7 @@
               "driver": "title_payoff_physical_reveal",
               "delta": 0.2,
               "matched_reveal": "rode it",
-              "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+              "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
             },
             {
               "driver": "frame1_comprehensible_action_plus_one",
@@ -15732,6 +16023,18 @@
         "endpoint_atom_id": "build_test_outcome",
         "scale_kind": "distance",
         "scale_value": "5 miles",
+        "validated_premise_signature": {
+          "object_atom_id": "two_by_four_bike",
+          "endpoint_atom_id": "build_test_outcome",
+          "proof_surface": "distance__shoulders",
+          "title_premise_line": "I Built A Bike Out Of 2x4s And Rode It {D} To See What Broke First",
+          "action_line": "build a working bike out of only 2x4s and hardware, then ride it on pavement until something gives",
+          "first_frame_action": "tightening the last bolt on a plywood frame with a completed 2x4 bike in view",
+          "setting_hint": "on a closed empty parking lot wearing a helmet",
+          "visible_body_anchor": "shoulders",
+          "scale_kind": "distance",
+          "scale_value": "5 miles"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -15746,6 +16049,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -15782,6 +16091,17 @@
             "transformation",
             "identity"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -15808,6 +16128,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -15827,6 +16159,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -15886,6 +16230,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -16029,7 +16384,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.55wps_in_sweet_zone",
+              "driver": "opening_rate_2.52wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -16870,7 +17225,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -17826,11 +18181,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -17921,11 +18276,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -17962,7 +18317,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -18001,7 +18356,7 @@
                 "driver": "title_payoff_physical_reveal",
                 "delta": 0.2,
                 "matched": "rode it",
-                "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+                "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
               },
               {
                 "driver": "frame1_comprehensible_action_plus_one",
@@ -18513,7 +18868,7 @@
         "first_frame": "Close on mid-line of handwriting with a finished stack in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 300, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on a hand writing with a stack of addressed envelopes growing for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.65,
+        "opening_speech_rate_wps_target": 2.68,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -18563,7 +18918,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.65,
+        "opening_wps_target": 2.68,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -18761,7 +19116,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.14,
@@ -18795,7 +19150,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.48,
@@ -18850,6 +19205,18 @@
         "endpoint_atom_id": "time_to_target",
         "scale_kind": "count",
         "scale_value": 300,
+        "validated_premise_signature": {
+          "object_atom_id": "handwritten_letters",
+          "endpoint_atom_id": "time_to_target",
+          "proof_surface": "reps__hand",
+          "title_premise_line": "I Hand-Wrote {N} Letters — One To Every Contact In My Phone",
+          "action_line": "hand-write letters — one for every contact in my phone",
+          "first_frame_action": "mid-line of handwriting with a finished stack in frame",
+          "setting_hint": "at a desk beside a stack of stamped envelopes",
+          "visible_body_anchor": "hand",
+          "scale_kind": "count",
+          "scale_value": 300
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -18864,6 +19231,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -18891,6 +19264,13 @@
             "body",
             "experiment"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -18917,6 +19297,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -18936,6 +19328,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -18989,6 +19393,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -19132,7 +19547,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.65wps_in_sweet_zone",
+              "driver": "opening_rate_2.68wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -19973,7 +20388,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -20929,11 +21344,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -21018,11 +21433,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -21059,7 +21474,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -21610,7 +22025,7 @@
         "first_frame": "Close on the exact same driveway starting frame with a big day-counter label in the corner. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 365 days, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on a cut between two runs at the same starting line on day 1 and day N for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.51,
+        "opening_speech_rate_wps_target": 2.62,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -21660,7 +22075,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.51,
+        "opening_wps_target": 2.62,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -21854,7 +22269,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.66,
@@ -21889,7 +22304,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.5,
@@ -21915,7 +22330,7 @@
               "driver": "title_payoff_physical_reveal",
               "delta": 0.2,
               "matched_reveal": "first and last",
-              "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+              "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
             },
             {
               "driver": "visual_action_short_shows_state_contrast",
@@ -21937,6 +22352,18 @@
         "endpoint_atom_id": "transformation_reveal",
         "scale_kind": "duration",
         "scale_value": "365 days",
+        "validated_premise_signature": {
+          "object_atom_id": "daily_mile_one_year",
+          "endpoint_atom_id": "transformation_reveal",
+          "proof_surface": "duration__foot",
+          "title_premise_line": "I Ran The Same Mile Every Day For {D} — The First And Last Run Are The Same Shot",
+          "action_line": "run the same neighborhood mile every morning and film the same starting frame on day 1 and day N",
+          "first_frame_action": "the exact same driveway starting frame with a big day-counter label in the corner",
+          "setting_hint": "on the exact same one-mile neighborhood loop",
+          "visible_body_anchor": "foot",
+          "scale_kind": "duration",
+          "scale_value": "365 days"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -21951,6 +22378,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -21987,6 +22420,18 @@
             "transformation",
             "identity"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -22013,6 +22458,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -22032,6 +22489,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -22091,6 +22560,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -22234,7 +22714,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.51wps_in_sweet_zone",
+              "driver": "opening_rate_2.62wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -23075,7 +23555,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -24021,11 +24501,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -24110,11 +24590,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -24151,7 +24631,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -24190,7 +24670,7 @@
                 "driver": "title_payoff_physical_reveal",
                 "delta": 0.2,
                 "matched": "first and last",
-                "source": "title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
+                "source": "title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)"
               },
               {
                 "driver": "visual_action_short_shows_state_contrast",
@@ -24692,7 +25172,7 @@
         "first_frame": "Close on sandbag heaved onto my shoulder mid-step. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 10 miles, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on the bag carried step by step with a distance overlay for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.64,
+        "opening_speech_rate_wps_target": 2.58,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -24742,7 +25222,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.64,
+        "opening_wps_target": 2.58,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -24936,7 +25416,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0.34,
@@ -24960,7 +25440,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.56,
@@ -25018,6 +25498,18 @@
         "endpoint_atom_id": "exact_distance",
         "scale_kind": "distance",
         "scale_value": "10 miles",
+        "validated_premise_signature": {
+          "object_atom_id": "sandbag_carry",
+          "endpoint_atom_id": "exact_distance",
+          "proof_surface": "distance__foot",
+          "title_premise_line": "I Carried A 100-Lb Sandbag For {D}",
+          "action_line": "carry a 100-lb sandbag on my shoulder",
+          "first_frame_action": "sandbag heaved onto my shoulder mid-step",
+          "setting_hint": "on a long stretch of road",
+          "visible_body_anchor": "foot",
+          "scale_kind": "distance",
+          "scale_value": "10 miles"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -25032,6 +25524,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -25068,6 +25566,18 @@
             "transformation",
             "identity"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -25094,6 +25604,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -25113,6 +25635,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -25172,6 +25706,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -25315,7 +25860,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.64wps_in_sweet_zone",
+              "driver": "opening_rate_2.58wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -26156,7 +26701,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -27102,11 +27647,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -27179,11 +27724,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -27220,7 +27765,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -27771,7 +28316,7 @@
         "first_frame": "Close on a stack of flashcards with a single unfamiliar word on the top card and a count overlay at zero. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 500, and my feeling is going to tell you when it's over.",
         "opening_action": "Camera locked on flashcards moving from an unknown-pile to a known-pile with a running tally for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.68,
+        "opening_speech_rate_wps_target": 2.66,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -27821,7 +28366,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.68,
+        "opening_wps_target": 2.66,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -28010,7 +28555,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": -0.06,
@@ -28039,7 +28584,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": -0.2,
@@ -28068,7 +28613,7 @@
               "driver": "title_payoff_abstract_or_verbal",
               "delta": -0.28,
               "matched_reveal": "native speaker",
-              "source": "title_core_tpl signals a verbal / observational / cognitive reveal — wave11_12.end_begin_ratio requires a single-frame visible payoff, not a verdict the viewer has to trust"
+              "source": "title premise line signals a verbal / observational / cognitive reveal — wave11_12.end_begin_ratio requires a single-frame visible payoff, not a verdict the viewer has to trust"
             },
             {
               "driver": "frame1_comprehensible_action_object_gauge",
@@ -28100,6 +28645,18 @@
         "endpoint_atom_id": "experiment_observation",
         "scale_kind": "count",
         "scale_value": 500,
+        "validated_premise_signature": {
+          "object_atom_id": "learn_500_words_day",
+          "endpoint_atom_id": "experiment_observation",
+          "proof_surface": "reps__feeling",
+          "title_premise_line": "I Tried To Learn {N} Words Of A New Language In One Day — A Native Speaker Tested Me At The End",
+          "action_line": "drill flashcards in a language I don’t speak from morning until night, then sit with a native speaker who quizzes every word",
+          "first_frame_action": "a stack of flashcards with a single unfamiliar word on the top card and a count overlay at zero",
+          "setting_hint": "at a kitchen table with a native speaker sitting opposite me at dusk",
+          "visible_body_anchor": "feeling",
+          "scale_kind": "count",
+          "scale_value": 500
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -28114,6 +28671,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -28145,6 +28708,15 @@
             "build_test",
             "transformation"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -28171,6 +28743,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -28190,6 +28774,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -28243,6 +28839,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -28386,7 +28993,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.68wps_in_sweet_zone",
+              "driver": "opening_rate_2.66wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -29227,7 +29834,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -30173,11 +30780,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -30256,11 +30863,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -30297,7 +30904,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -30342,7 +30949,7 @@
                 "driver": "title_payoff_abstract_or_verbal",
                 "delta": -0.28,
                 "matched": "native speaker",
-                "source": "title_core_tpl signals a verbal / observational / cognitive reveal — wave11_12.end_begin_ratio requires a single-frame visible payoff, not a verdict the viewer has to trust"
+                "source": "title premise line signals a verbal / observational / cognitive reveal — wave11_12.end_begin_ratio requires a single-frame visible payoff, not a verdict the viewer has to trust"
               },
               {
                 "driver": "frame1_comprehensible_action_object_gauge",
@@ -30854,7 +31461,7 @@
         "first_frame": "Close on a firehouse bell ringing while crew members snap into the rig and I run in right behind them. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 24-hour, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on me stepping into gear next to the crew as the truck rolls out for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.51,
+        "opening_speech_rate_wps_target": 2.59,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -30904,7 +31511,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.51,
+        "opening_wps_target": 2.59,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -31094,7 +31701,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": 0,
@@ -31106,7 +31713,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.48,
@@ -31158,6 +31765,18 @@
         "endpoint_atom_id": "body_quit",
         "scale_kind": "duration",
         "scale_value": "24-hour",
+        "validated_premise_signature": {
+          "object_atom_id": "firefighter_shift_shadow",
+          "endpoint_atom_id": "body_quit",
+          "proof_surface": "duration__foot",
+          "title_premise_line": "I Shadowed A Firefighter Crew For An Entire {D} Shift",
+          "action_line": "shadow a full firehouse crew through every call, drill, meal, and nap across a real working shift",
+          "first_frame_action": "a firehouse bell ringing while crew members snap into the rig and I run in right behind them",
+          "setting_hint": "inside an active firehouse with full crew consent",
+          "visible_body_anchor": "foot",
+          "scale_kind": "duration",
+          "scale_value": "24-hour"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -31172,6 +31791,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -31208,6 +31833,18 @@
             "transformation",
             "identity"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -31234,6 +31871,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -31253,6 +31902,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -31312,6 +31973,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -31455,7 +32127,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.51wps_in_sweet_zone",
+              "driver": "opening_rate_2.59wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -32296,7 +32968,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -33242,11 +33914,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -33306,11 +33978,11 @@
             "proof_clarity_score": 0,
             "drivers_triggered": [],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -33347,7 +34019,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",
@@ -33892,7 +34564,7 @@
         "first_frame": "Close on hands touching the instrument for the very first time with a countdown label in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 3 days, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on a first awkward note progressing into a full clean phrase by the end for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.57,
+        "opening_speech_rate_wps_target": 2.64,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -33942,7 +34614,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.57,
+        "opening_wps_target": 2.64,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -34131,7 +34803,7 @@
             "retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)",
             "retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)"
           ],
-          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
+          "note": "Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies."
         },
         "proof_clarity": {
           "score": -0.38,
@@ -34149,7 +34821,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": -0.3,
@@ -34194,6 +34866,18 @@
         "endpoint_atom_id": "identity_dayend",
         "scale_kind": "duration",
         "scale_value": "3 days",
+        "validated_premise_signature": {
+          "object_atom_id": "learn_song_from_scratch",
+          "endpoint_atom_id": "identity_dayend",
+          "proof_surface": "duration__hand",
+          "title_premise_line": "I Had {T} To Learn A Full Song On An Instrument I’ve Never Touched — I Performed It For A Crowd",
+          "action_line": "pick up an instrument I’ve never held and learn a complete song well enough to perform it for a real audience by the end",
+          "first_frame_action": "hands touching the instrument for the very first time with a countdown label in frame",
+          "setting_hint": "in a practice room, ending on a small stage in front of a real crowd",
+          "visible_body_anchor": "hand",
+          "scale_kind": "duration",
+          "scale_value": "3 days"
+        },
         "derived_from_lattice": [
           "opening.best_first_word_used ← opening_words.best_first_words",
           "opening.hook_type ← wave11_12.hook_taxonomy",
@@ -34208,6 +34892,12 @@
           "creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio",
           "proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs",
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
+        ],
+        "remaining_static_inputs": [
+          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
+          "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
           "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
@@ -34244,6 +34934,18 @@
             "transformation",
             "identity"
           ],
+          "slot_proof_surface_coverage_at_pick": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
+          ],
           "caps_in_effect": {
             "per_family_cap": 2,
             "per_endpoint_kind_cap": 2
@@ -34270,6 +34972,18 @@
             "transformation": 1,
             "identity": 1
           },
+          "per_proof_surface": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__foot": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__feeling": 1,
+            "duration__feeling": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "duration__hand": 1
+          },
           "family_coverage": [
             "build_test",
             "body_transformation",
@@ -34289,6 +35003,18 @@
             "build_test",
             "transformation",
             "identity"
+          ],
+          "proof_surface_coverage": [
+            "distance__shoulders",
+            "duration__stomach",
+            "reps__foot",
+            "reps__hand",
+            "duration__shoulders",
+            "reps__feeling",
+            "duration__feeling",
+            "duration__foot",
+            "distance__foot",
+            "duration__hand"
           ]
         },
         "seed_alternates": {
@@ -34348,6 +35074,17 @@
             "transformation": 1,
             "experiment": 1,
             "identity": 1
+          },
+          "per_proof_surface_in_topN": {
+            "distance__shoulders": 2,
+            "duration__stomach": 1,
+            "reps__hand": 2,
+            "duration__shoulders": 1,
+            "reps__foot": 1,
+            "duration__foot": 2,
+            "distance__foot": 1,
+            "reps__feeling": 1,
+            "duration__hand": 1
           },
           "caps": {
             "per_family_cap": 2,
@@ -34478,7 +35215,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.57wps_in_sweet_zone",
+              "driver": "opening_rate_2.64wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -35319,7 +36056,7 @@
           },
           "build_phases": {
             "field": "build_phases",
-            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.",
+            "rationale": "Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
@@ -36265,11 +37002,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.12,
-            "selection_effect": "Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level."
           },
           "proof_clarity": {
             "field": "proof_clarity",
-            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
+            "rationale": "Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.wave11_12_new_signals.end_begin_ratio",
@@ -36336,11 +37073,11 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.14,
-            "selection_effect": "Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family."
+            "selection_effect": "Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level."
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -36377,7 +37114,7 @@
                 "evidence_type": "wave11_12_new_signals",
                 "modality": "retention structure",
                 "quantification": "End-state delta above opening promise",
-                "why": "title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
+                "why": "title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress"
               },
               {
                 "key": "visual_is_workshop",

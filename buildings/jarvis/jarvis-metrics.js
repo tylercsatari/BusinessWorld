@@ -360,6 +360,9 @@ const ZYGARNIK_PHRASE_SETS = {
         'coming up', 'before I show', 'first let me', 'later in', 'trust me',
         'about to', 'stick around', 'do not skip', 'the result is', 'big reveal',
         'the answer is', 'finally shows', 'almost there', 'hold on',
+        'but first', 'wait for it', 'in a moment', 'before that', 'not yet',
+        'almost', 'soon', 'more on that later', 'we will get to', 'i will show you',
+        'hold that thought', 'remember this', 'keep that in mind',
     ],
     reference_callback: [
         'remember when', 'as I mentioned', 'I said earlier', 'going back to',
@@ -378,6 +381,9 @@ const ZYGARNIK_PHRASE_SETS = {
         'cost me', 'no choice', 'last chance', 'final attempt', 'biggest mistake',
         'if this fails', 'high stakes', 'do or die', 'critical moment',
         'cannot fail', 'must succeed', 'everything on the line', 'nothing to lose',
+        'i had to', 'i needed to', 'had to figure out', 'or i would', 'changed everything',
+        'turned everything around', 'biggest risk', 'scary moment', 'nerve-wracking',
+        'was terrified', 'bet everything', 'could not afford to fail', 'what was at stake',
     ],
     transformation: [
         'used to be', 'turned it around', 'changed everything', 'from zero to',
@@ -987,6 +993,10 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'loop_front_half_density',
     'resolution_density_second_half',
     'challenge_to_resolution_gap_pct',
+    // Group AA: New zygarnik structural metrics
+    'zygarnik_completion_ratio',
+    'stakes_in_hook_flag',
+    'payoff_before_midpoint_flag',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -5034,6 +5044,42 @@ function extractMetric(key, analysis) {
         if (firstChallenge === -1) firstChallenge = 0; // treat video start as implicit challenge
         if (firstPayoff === -1) return [null, 'no payoff signal'];
         return [Math.max(0, (firstPayoff - firstChallenge) / tl.length), null];
+    }
+
+    if (key === 'zygarnik_completion_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const loops_closed = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        const loops_opened = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        return [loops_closed / Math.max(loops_opened, 1), null];
+    }
+
+    if (key === 'stakes_in_hook_flag') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        const hookWords = words.slice(0, Math.max(1, Math.ceil(words.length * 0.1)));
+        const hookLower = hookWords.join(' ').toLowerCase();
+        const extraPhrases = ['on the line', 'last chance', 'must', 'need to', 'have to', 'or else', 'if i don', 'cost me'];
+        const hasStake = ZYGARNIK_PHRASE_SETS.story_stake.some(p => hookLower.includes(p)) ||
+                         extraPhrases.some(p => hookLower.includes(p));
+        return [hasStake ? 1 : 0, null];
+    }
+
+    if (key === 'payoff_before_midpoint_flag') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [0, null];
+        const payoffPhrases = [...ZYGARNIK_PHRASE_SETS.closure, 'result', 'proof', 'here it is', 'the answer', 'and it worked', 'look at this'];
+        let firstPayoffWord = words.length;
+        for (const phrase of payoffPhrases) {
+            const idx = tl.indexOf(phrase);
+            if (idx !== -1) {
+                const wordIdx = tl.slice(0, idx).split(/\s+/).filter(Boolean).length;
+                if (wordIdx < firstPayoffWord) firstPayoffWord = wordIdx;
+            }
+        }
+        return [firstPayoffWord < words.length * 0.5 ? 1 : 0, null];
     }
 
     return [null, `unknown key: ${key}`];

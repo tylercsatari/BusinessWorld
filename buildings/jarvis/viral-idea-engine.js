@@ -664,7 +664,8 @@ const DURATION_BANDS = [
 // carry, memorize-a-book, rubber-band ball, origami, portrait-drawing,
 // etc.) and 4 endpoint kinds (count, timer, distance, body-quit). Each
 // atom carries structured metadata: verb, noun, scale range, body
-// parts, sensation words, visual action, safety tier, category.
+// parts, sensation words, visual action, safety tier, and explicit proof
+// anchors.
 //
 // What is SYNTHESIZED from the lattice at generate-time:
 //   - title, logline, promise, payoff, over-delivery note
@@ -703,7 +704,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a push-up from the top of the motion',
         action_intensity: 'high',
         safety_tier: 'safe',
-        category: 'repetition_endurance',
         family: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'in my garage',
@@ -726,7 +726,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a plank held flat with a running timer',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'isometric_endurance',
         family: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on gym flooring with a timer overlay',
@@ -749,7 +748,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'boots in motion with a mile-counter overlay',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'locomotion_endurance',
         family: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a marked road',
@@ -772,7 +770,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'running up a flight with foot-on-stair visible',
         action_intensity: 'high',
         safety_tier: 'safe',
-        category: 'repetition_endurance',
         family: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'in a stairwell',
@@ -795,7 +792,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'rope spinning with feet leaving the ground',
         action_intensity: 'high',
         safety_tier: 'safe',
-        category: 'repetition_endurance',
         family: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a driveway',
@@ -818,7 +814,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'the bag carried step by step with a distance overlay',
         action_intensity: 'high',
         safety_tier: 'safe',
-        category: 'locomotion_endurance',
         family: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a long stretch of road',
@@ -842,7 +837,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a book flipping with page checkmarks filling in',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'cognitive_endurance',
         family: 'cognitive_feat',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a page tally on the wall',
@@ -865,7 +859,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand writing with a stack of addressed envelopes growing',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'repetition_patience',
         family: 'repetition_outreach',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk beside a stack of stamped envelopes',
@@ -888,7 +881,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand drawing with a growing stack of finished portraits',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'repetition_social',
         family: 'repetition_outreach',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a busy sidewalk',
@@ -911,7 +903,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'hands wrapping rubber bands around a ball',
         action_intensity: 'low',
         safety_tier: 'safe',
-        category: 'repetition_craft',
         family: 'craft_patience',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a band counter and a ruler against the ball',
@@ -934,7 +925,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'fingers folding paper and adding to a crane pile',
         action_intensity: 'low',
         safety_tier: 'safe',
-        category: 'repetition_craft',
         family: 'craft_patience',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a growing pile of cranes',
@@ -957,7 +947,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'hands sliding puzzle pieces with a completion-% overlay climbing',
         action_intensity: 'low',
         safety_tier: 'safe',
-        category: 'cognitive_patience',
         family: 'cognitive_feat',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a long puzzle table',
@@ -980,7 +969,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand placing coins on a growing, tilting stack',
         action_intensity: 'low',
         safety_tier: 'safe',
-        category: 'fine_motor_patience',
         family: 'craft_patience',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a height ruler taped behind the tower',
@@ -1004,7 +992,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'oars pulling as the cardboard boat slides out from the dock',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'build_test_water',
         family: 'build_test',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a calm shallow lake wearing a life vest',
@@ -1027,7 +1014,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'pedals turning on the wooden bike with a mile-counter overlay',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'build_test_vehicle',
         family: 'build_test',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a closed empty parking lot wearing a helmet',
@@ -1052,7 +1038,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a cut between identical morning weigh-ins and identical potato plates',
         action_intensity: 'low',
         safety_tier: 'safe',
-        category: 'body_transformation_diet',
         family: 'body_transformation',
         preferred_hook_type: 'transformation',
         setting_hint: 'at the same kitchen counter every morning',
@@ -1076,7 +1061,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a cut between two runs at the same starting line on day 1 and day N',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'body_transformation_movement',
         family: 'body_transformation',
         preferred_hook_type: 'transformation',
         setting_hint: 'on the exact same one-mile neighborhood loop',
@@ -1101,7 +1085,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'short encounters where I gesture and people react on camera',
         action_intensity: 'low',
         safety_tier: 'safe',
-        category: 'mystery_social_experiment',
         family: 'mystery_experiment',
         preferred_hook_type: 'mystery',
         setting_hint: 'in everyday errands around my neighborhood',
@@ -1125,7 +1108,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'time-lapse of a day that used to be scrolling and is now something else',
         action_intensity: 'low',
         safety_tier: 'safe',
-        category: 'mystery_habit_experiment',
         family: 'mystery_experiment',
         preferred_hook_type: 'mystery',
         setting_hint: 'at home, at work, and on public transit where the phone used to live',
@@ -1150,7 +1132,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'matching his bag work beat for beat with both fighters in the shot',
         action_intensity: 'high',
         safety_tier: 'safe',
-        category: 'identity_day_in_life',
         family: 'identity',
         preferred_hook_type: 'transformation',
         setting_hint: 'inside a pro fighter\u2019s actual gym',
@@ -1173,7 +1154,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'me stepping into gear next to the crew as the truck rolls out',
         action_intensity: 'high',
         safety_tier: 'safe',
-        category: 'identity_ride_along',
         family: 'identity',
         preferred_hook_type: 'mystery',
         setting_hint: 'inside an active firehouse with full crew consent',
@@ -1198,7 +1178,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'flashcards moving from an unknown-pile to a known-pile with a running tally',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'skill_dare_cognitive',
         family: 'skill_dare',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a kitchen table with a native speaker sitting opposite me at dusk',
@@ -1222,7 +1201,6 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a first awkward note progressing into a full clean phrase by the end',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        category: 'skill_dare_music',
         family: 'skill_dare',
         preferred_hook_type: 'transformation',
         setting_hint: 'in a practice room, ending on a small stage in front of a real crowd',
@@ -1230,6 +1208,17 @@ const OBJECT_MOTIFS = [
         implied_material_words: [],
     },
 ];
+
+for (const motif of OBJECT_MOTIFS) {
+    if (!motif.title_premise_line && motif.title_core_tpl) motif.title_premise_line = motif.title_core_tpl;
+    if (!motif.title_premise_line_reps && motif.title_core_tpl_reps) motif.title_premise_line_reps = motif.title_core_tpl_reps;
+}
+
+function getTitlePremiseLine(obj, concreteKind = null) {
+    if (!obj) return '';
+    if ((concreteKind || obj.concrete_kind) === 'pages' && obj.title_premise_line_reps) return obj.title_premise_line_reps;
+    return obj.title_premise_line || obj.title_core_tpl || '';
+}
 
 const ENDPOINT_MOTIFS = [
     { id: 'exact_count',           kind: 'count',          reveal_label: 'the counter froze at' },
@@ -1351,7 +1340,7 @@ function computeCreatorFit(obj, endpoint, ctx) {
     const drivers = [];
     let score = 0;
 
-    const titleTpl = String(obj.title_core_tpl || '').toLowerCase();
+    const titleTpl = String(getTitlePremiseLine(obj)).toLowerCase();
     const verbPast = String(obj.verb_past_phrase || '').toLowerCase();
     const setting = String(obj.setting_hint || '').toLowerCase();
     const visual = String(obj.visual_action_short || '').toLowerCase();
@@ -1534,7 +1523,7 @@ function computeProofClarity(obj, endpoint, ctx) {
     let score = 0;
 
     const family = String(obj.family || '').toLowerCase();
-    const titleTpl = String(obj.title_core_tpl || '').toLowerCase();
+    const titleTpl = String(getTitlePremiseLine(obj)).toLowerCase();
     const logline = String(obj.logline_action || '').toLowerCase();
     const firstFrame = String(obj.first_frame_action || '').toLowerCase();
     const visual = String(obj.visual_action_short || '').toLowerCase();
@@ -1779,7 +1768,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
     let score = 0;
 
     const family = String(obj.family || '').toLowerCase();
-    const titleTpl = String(obj.title_core_tpl || '').toLowerCase();
+    const titleTpl = String(getTitlePremiseLine(obj)).toLowerCase();
     const logline = String(obj.logline_action || '').toLowerCase();
     const firstFrame = String(obj.first_frame_action || '').toLowerCase();
     const visual = String(obj.visual_action_short || '').toLowerCase();
@@ -1879,7 +1868,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
             driver: 'title_payoff_abstract_or_verbal',
             delta: d,
             matched_reveal: absReveal[0],
-            source: 'title_core_tpl signals a verbal / observational / cognitive reveal — wave11_12.end_begin_ratio requires a single-frame visible payoff, not a verdict the viewer has to trust',
+            source: 'title premise line signals a verbal / observational / cognitive reveal — wave11_12.end_begin_ratio requires a single-frame visible payoff, not a verdict the viewer has to trust',
         });
     }
     if (physReveal) {
@@ -1889,7 +1878,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
             driver: 'title_payoff_physical_reveal',
             delta: d,
             matched_reveal: physReveal[0],
-            source: 'title_core_tpl signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)',
+            source: 'title premise line signals a single-frame payoff (same-shot / weigh-in / freeze-frame / break point / call-it moment) — wave11_12.end_begin_ratio (single-shot end-over-start reveal)',
         });
     } else if (!absReveal && !obj.title_has_builtin_reveal && (endpoint.kind === 'count' || endpoint.kind === 'timer' || endpoint.kind === 'distance' || endpoint.kind === 'body' || endpoint.kind === 'build_test')) {
         // composeTitle() appends "— The Counter Froze At {N}" / "— The
@@ -2127,10 +2116,10 @@ function endpointPhraseFor(obj, endpoint, scale, revealVal, bodyPart) {
 }
 
 function composeTitle(obj, endpoint, scale, bodyPart) {
-    // Build the core title from the motif's title_core_tpl, substituting {N}/{D}/{T}
-    let core = obj.title_core_tpl || '';
+    // Build the core title from the motif's validated premise line, substituting {N}/{D}/{T}
+    let core = getTitlePremiseLine(obj, obj.concrete_kind);
     // Always run all three substitutions — some motifs (e.g. memorize_book)
-    // carry {T} in their template even though concrete_kind is 'pages'.
+    // carry {T} in their premise line even though concrete_kind is 'pages'.
     core = core.replace('{N}', String(scale.display));
     core = core.replace('{D}', capitalize(scale.display));
     core = core.replace('{T}', capitalize(scale.display));
@@ -2283,7 +2272,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                     'retention-patterns.top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)',
                     'retention-patterns.wave11_12.end_begin_ratio (single-shot visible payoff structure)',
                 ],
-                note: 'Creator-fit is added to the combo score so the diversity-aware selector rewards fit within each motif family. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies.',
+                note: 'Creator-fit is added to the combo score so the diversity-aware selector rewards maker/body/workshop alignment at the concrete premise level. Weights derived from indicator strengths above — no hand-curated creator taste beyond what the corpus already implies.',
             } : null,
             proof_clarity: proofClarity ? {
                 score: proofClarity.score,
@@ -2295,7 +2284,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                     'retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)',
                     'indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)',
                 ],
-                note: 'Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility within each motif family. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator.',
+                note: 'Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator.',
             } : null,
             visual_legibility: visualLegibility ? {
                 score: visualLegibility.score,
@@ -2313,6 +2302,18 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
             endpoint_atom_id: endpoint.id,
             scale_kind: scale.kind,
             scale_value: scale.value,
+            validated_premise_signature: {
+                object_atom_id: obj.id,
+                endpoint_atom_id: endpoint.id,
+                proof_surface: getProofSurfaceKey(obj),
+                title_premise_line: getTitlePremiseLine(obj, obj.concrete_kind),
+                action_line: obj.logline_action,
+                first_frame_action: obj.first_frame_action,
+                setting_hint: obj.setting_hint,
+                visible_body_anchor: obj.body_part_phrase,
+                scale_kind: scale.kind,
+                scale_value: scale.value,
+            },
             derived_from_lattice: [
                 'opening.best_first_word_used ← opening_words.best_first_words',
                 'opening.hook_type ← wave11_12.hook_taxonomy',
@@ -2327,6 +2328,12 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                 'creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
                 'proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs',
                 'visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts',
+            ],
+            remaining_static_inputs: [
+                'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
+                'endpoint-motif kinds (count / timer / distance / body-quit)',
+                'build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)',
+                'duration_band_id default ("sweet_spot_46_60")',
             ],
             still_hardcoded: [
                 'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
@@ -2541,8 +2548,10 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         log,
         family_coverage: [...perFamily.keys()],
         endpoint_coverage: [...perEndpoint.keys()],
+        proof_surface_coverage: [...perProofSurface.keys()],
         per_family: Object.fromEntries(perFamily),
         per_endpoint: Object.fromEntries(perEndpoint),
+        per_proof_surface: Object.fromEntries(perProofSurface),
         alternates_by_motif_id: alternatesByMotifId,
         total_combos_considered: combos.length,
         total_families_considered: clusters.size,
@@ -2576,7 +2585,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     combos.sort((a, b) => b.score - a.score);
 
     const selection = selectDiverseCombos(combos, maxCount);
-    const { picked, log, family_coverage, endpoint_coverage, per_family, per_endpoint, alternates_by_motif_id, total_combos_considered, total_families_considered } = selection;
+    const { picked, log, family_coverage, endpoint_coverage, proof_surface_coverage, per_family, per_endpoint, per_proof_surface, alternates_by_motif_id, total_combos_considered, total_families_considered } = selection;
 
     return picked.map((c, i) => {
         const seed = composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers, {
@@ -2605,10 +2614,11 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
                 lambda: myLog && myLog.lambda,
                 slot_family_coverage_at_pick: family_coverage.slice(0, i + 1),
                 slot_endpoint_coverage_at_pick: endpoint_coverage.slice(0, i + 1),
+                slot_proof_surface_coverage_at_pick: proof_surface_coverage.slice(0, i + 1),
                 caps_in_effect: { per_family_cap: 2, per_endpoint_kind_cap: 2 },
             };
             seed.synthesis_trace.diversity_summary = {
-                per_family, per_endpoint, family_coverage, endpoint_coverage,
+                per_family, per_endpoint, per_proof_surface, family_coverage, endpoint_coverage, proof_surface_coverage,
             };
             // Auditable alternates: compact record of candidate pressure at
             // seed-selection time. Two nearby rejected neighbors per pick is
@@ -3275,7 +3285,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         }));
         traces.build_phases = makeTrace({
             field: 'build_phases',
-            rationale: 'Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 quartile templates.',
+            rationale: 'Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.',
             evidence_sources: ['retention-patterns.top_5_retention_predictors', 'retention-patterns.narrative_arc_analysis', 'retention-patterns.wave7_new_signals.quartile_templates', 'retention-patterns.wave9_10_new_signals'],
             indicators_considered_count: top5.length,
             indicator_keys: top5.map(r => String(r.signal || '').toLowerCase()),
@@ -3539,7 +3549,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
                 core_motif_score: fit && fit.core_motif_score,
                 drivers_triggered: drivers.map(d => ({ driver: d.driver, delta: d.delta, source: d.source })),
                 applied_weight_in_scoreIdea: 0.12,
-                selection_effect: 'Added to the combo score so family-round-robin and MMR fill both reward maker/body/workshop alignment within each motif family.',
+                selection_effect: 'Added to the combo score so the diversity pass and MMR fill both reward maker/body/workshop alignment at the concrete premise level.',
             },
         });
     }
@@ -3564,7 +3574,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         ];
         traces.proof_clarity = makeTrace({
             field: 'proof_clarity',
-            rationale: 'Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads title_core_tpl, logline_action, first_frame_action, visual_action_short, family, endpoint.kind, action_intensity, and body_part_phrase — not taste.',
+            rationale: 'Proof-clarity rewards ideas with a single-shot legible payoff: build+test hybrids (verb combo match), body-transformation with an explicit before/after anchor (same shot / weigh-in / day 1 vs day N), numeric endpoints with a named artifact in frame (counter/overlay/stack/tower/hull/pedals). Penalizes abstract observation/identity payoffs without artifacts, head/feeling-framed low-action payoffs, and repetition_outreach stacks whose contents are untestable to the viewer. The signal is factual — it reads the title premise line, logline_action, first_frame_action, visual_action_short, endpoint.kind, action_intensity, and body_part_phrase — not taste.',
             evidence_sources: [
                 'retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES',
                 'retention-patterns.wave11_12_new_signals.end_begin_ratio',
@@ -3585,7 +3595,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
                     source: d.source,
                 })),
                 applied_weight_in_scoreIdea: 0.14,
-                selection_effect: 'Added to the combo score so family-round-robin, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof within each motif family.',
+                selection_effect: 'Added to the combo score so the diversity pass, MMR fill, AND the final blueprint re-rank all reward single-shot visible proof at the concrete premise level.',
             },
         });
     }
@@ -3604,13 +3614,13 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         const top_indicators = [
             { key: 'HIGH_ENERGY_ACTION_FRAMES', evidence_type: 'top_3_peak_causes', modality: 'visual', quantification: 'Action frames appear 28% at peaks vs 8% at drops', why: 'frame-1 comprehensibility IS an action frame at t=0s — action verb in first_frame_action is the opening-second proxy for this cause' },
             { key: 'PHYSICAL_SENSORY_LANGUAGE', evidence_type: 'top_3_peak_causes', modality: 'transcript + framing', quantification: 'Sensory-rate weight +1.59', why: 'visible body_part_phrase (foot/shoulders/stomach/hand) has a surface to film; feeling/head/mind/brain/memory do not' },
-            { key: 'end_begin_ratio', evidence_type: 'wave11_12_new_signals', modality: 'retention structure', quantification: 'End-state delta above opening promise', why: 'title_core_tpl reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress' },
+            { key: 'end_begin_ratio', evidence_type: 'wave11_12_new_signals', modality: 'retention structure', quantification: 'End-state delta above opening promise', why: 'title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress' },
             { key: 'visual_is_workshop', evidence_type: 'indicator_registry', r_direct: 0.236, r_partial: 0.219, modality: 'visual frame', quantification: 'hands-on-object framing', why: 'state-contrast in visual_action_short (cut between, growing stack, slides out, pedals turning) is the hands-on-object axis applied across the build' },
             { key: 'pat_making_v2', evidence_type: 'findings.kept_signals', delta_r2: 0.012, modality: 'title pattern', quantification: 'Title contains making/build/creat/construct — 34 videos avg 19.7M vs 5.6M', why: 'title_making_keyword family aligns with physical reveal phrasing' },
         ];
         traces.visual_legibility = makeTrace({
             field: 'visual_legibility',
-            rationale: 'Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens ("stack of flashcards", "tally", "count overlay") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.',
+            rationale: 'Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens ("stack of flashcards", "tally", "count overlay") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.',
             evidence_sources: [
                 'retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES',
                 'retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE',
@@ -3947,6 +3957,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     const remaining = scored.slice();
     const perFam = new Map();
     const perEnd = new Map();
+    const perProofSurface = new Map();
     // Per-idea displaced alternates captured at the moment each slot was
     // picked. Written back onto idea.synthesis_trace.final_rank_alternates
     // so the UI can show "nearby ideas that lost to this one at top-N".
@@ -4004,6 +4015,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         ranked.push(chosen);
         perFam.set(chosen.family, (perFam.get(chosen.family) || 0) + 1);
         if (chosen.endpoint_kind) perEnd.set(chosen.endpoint_kind, (perEnd.get(chosen.endpoint_kind) || 0) + 1);
+        if (chosen.proof_surface) perProofSurface.set(chosen.proof_surface, (perProofSurface.get(chosen.proof_surface) || 0) + 1);
     }
     const topN = ranked.map(r => r.idea);
     topN.forEach((x, i) => { x.rank = i + 1; });
@@ -4015,6 +4027,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
             idea.synthesis_trace.final_rank_diversity = {
                 per_family_in_topN: Object.fromEntries(perFam),
                 per_endpoint_kind_in_topN: Object.fromEntries(perEnd),
+                per_proof_surface_in_topN: Object.fromEntries(perProofSurface),
                 caps: { per_family_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
                 mmr_lambda: lambda,
             };

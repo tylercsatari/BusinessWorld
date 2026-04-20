@@ -6111,24 +6111,41 @@ const JarvisUI = (() => {
         const lattice = (st.derived_from_lattice || []).map(s =>
             `<li style="font-size:10px;color:#cbd5e1;line-height:1.5"><code style="color:#94a3b8">${escapeHtml(s)}</code></li>`
         ).join('');
-        const hardcoded = (st.still_hardcoded || []).map(s =>
+        const premiseSig = st.validated_premise_signature || null;
+        const remainingStatic = st.remaining_static_inputs || st.still_hardcoded || [];
+        const hardcoded = remainingStatic.map(s =>
             `<li style="font-size:10px;color:#fca5a5;line-height:1.5"><code style="color:#fca5a5">${escapeHtml(s)}</code></li>`
         ).join('');
         const perFam = finalRank.per_family_in_topN ? Object.entries(finalRank.per_family_in_topN).map(([f, n]) => `<code style="color:#a78bfa">${escapeHtml(f)}=${n}</code>`).join(' · ') : '';
         const perEnd = finalRank.per_endpoint_kind_in_topN ? Object.entries(finalRank.per_endpoint_kind_in_topN).map(([e, n]) => `<code style="color:#22d3ee">${escapeHtml(e)}=${n}</code>`).join(' · ') : '';
+        const perSurface = finalRank.per_proof_surface_in_topN ? Object.entries(finalRank.per_proof_surface_in_topN).map(([s, n]) => `<code style="color:#fbbf24">${escapeHtml(s)}=${n}</code>`).join(' · ') : '';
 
         return `
             <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #a78bfa">
                 <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
                     <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#a78bfa;font-weight:700">◇ Synthesis derivation — how this idea was selected</div>
                     <div style="font-size:10px;color:#94a3b8">
-                        ${st.motif_family ? `family <b style="color:#a78bfa">${escapeHtml(st.motif_family)}</b>` : ''}
+                        ${st.proof_surface ? `proof surface <b style="color:#fbbf24">${escapeHtml(st.proof_surface)}</b>` : ''}
                         ${st.object_atom_id ? ` · obj <code style="color:#22d3ee">${escapeHtml(st.object_atom_id)}</code>` : ''}
                         ${st.endpoint_atom_id ? ` · end <code style="color:#22c55e">${escapeHtml(st.endpoint_atom_id)}</code>` : ''}
                         ${st.scale_kind ? ` · scale <code style="color:#fbbf24">${escapeHtml(st.scale_kind)}${st.scale_value != null ? '=' + escapeHtml(String(st.scale_value)) : ''}</code>` : ''}
+                        ${st.motif_family ? ` · family <code style="color:#a78bfa">${escapeHtml(st.motif_family)}</code>` : ''}
                     </div>
                 </div>
                 ${chips ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${chips}</div>` : ''}
+                ${premiseSig ? `
+                    <div style="background:#08111f;border-left:2px solid #22c55e;border-radius:4px;padding:7px 8px;margin-bottom:6px">
+                        <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#22c55e;margin-bottom:3px">Validated premise signature</div>
+                        <div style="font-size:10px;color:#cbd5e1;line-height:1.55">
+                            ${premiseSig.proof_surface ? `<span style="color:#94a3b8">proof surface:</span> <code style="color:#fbbf24">${escapeHtml(premiseSig.proof_surface)}</code>` : ''}
+                            ${premiseSig.visible_body_anchor ? ` · <span style="color:#94a3b8">body anchor:</span> <code style="color:#22d3ee">${escapeHtml(premiseSig.visible_body_anchor)}</code>` : ''}
+                            ${premiseSig.scale_kind ? ` · <span style="color:#94a3b8">scale:</span> <code style="color:#22c55e">${escapeHtml(premiseSig.scale_kind)}${premiseSig.scale_value != null ? '=' + escapeHtml(String(premiseSig.scale_value)) : ''}</code>` : ''}
+                            ${premiseSig.title_premise_line ? `<div><span style="color:#94a3b8">premise line:</span> <code style="color:#e2e8f0">${escapeHtml(premiseSig.title_premise_line)}</code></div>` : ''}
+                            ${premiseSig.setting_hint ? `<div><span style="color:#94a3b8">setting:</span> ${escapeHtml(premiseSig.setting_hint)}</div>` : ''}
+                            ${premiseSig.action_line ? `<div><span style="color:#94a3b8">action:</span> ${escapeHtml(premiseSig.action_line)}</div>` : ''}
+                            ${premiseSig.first_frame_action ? `<div><span style="color:#94a3b8">first frame:</span> ${escapeHtml(premiseSig.first_frame_action)}</div>` : ''}
+                        </div>
+                    </div>` : ''}
                 ${signalBlock('Creator fit', '#22d3ee', cf)}
                 ${signalBlock('Proof clarity', '#22c55e', pc)}
                 ${signalBlock('Visual legibility', '#fbbf24', vl)}
@@ -6144,10 +6161,11 @@ const JarvisUI = (() => {
                         </div>
                         ${diversity.reason ? `<div style="font-size:10px;color:#cbd5e1;margin-top:3px;line-height:1.5">${escapeHtml(diversity.reason)}</div>` : ''}
                     </div>` : ''}
-                ${(perFam || perEnd) ? `
+                ${(perSurface || perFam || perEnd) ? `
                     <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">
-                        ${perFam ? `<span style="color:#64748b">top-N families:</span> ${perFam}` : ''}
+                        ${perSurface ? `<span style="color:#64748b">top-N proof surfaces:</span> ${perSurface}` : ''}
                         ${perEnd ? ` · <span style="color:#64748b">endpoints:</span> ${perEnd}` : ''}
+                        ${perFam ? ` · <span style="color:#64748b">families:</span> ${perFam}` : ''}
                     </div>` : ''}
                 ${(seedAlts || finalAlts) ? `
                     <div style="background:#0a1628;border-left:2px solid #f59e0b;border-radius:3px;padding:6px 8px;margin-bottom:4px">
@@ -6182,7 +6200,7 @@ const JarvisUI = (() => {
                     </details>` : ''}
                 ${hardcoded ? `
                     <details style="margin-top:3px">
-                        <summary style="cursor:pointer;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">still hardcoded (${(st.still_hardcoded || []).length})</summary>
+                        <summary style="cursor:pointer;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">remaining static inputs (${remainingStatic.length})</summary>
                         <ul style="margin:4px 0 0 16px;padding:0">${hardcoded}</ul>
                     </details>` : ''}
             </div>`;
