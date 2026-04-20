@@ -3583,3 +3583,22 @@ R2: Connected to bucket "business-world-videos"
 ============================================================
 [jarvis-runner 05:51:04] AUTONOMOUS RUN: auto_20260420055104.
 [jarvis-runner 05:51:04]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7
+◇ injected env (42) from ../../.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 17:59:32] 
+============================================================
+[jarvis-runner 17:59:32] AUTONOMOUS RUN: auto_20260420175932.
+[jarvis-runner 17:59:32]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7
+[jarvis-runner 18:00:27] Zero-variance filter: skipped indicators — 175 constant-value, 451 sparse (<20 nonzero); removed 1531 candidates
+[jarvis-runner 18:00:27] Pool before bias: 12743 pre, 19013 post
+[jarvis-runner 18:00:28] Candidate pool: 31756 unrun (33842 already done)
+[jarvis-runner 18:00:28] Loaded 370 videos
+[jarvis-runner 18:00:28] 
+==================================================
+[jarvis-runner 18:00:28] INDICATOR: mystery_setup_count_x_visual_credibility_count
+[jarvis-runner 18:00:29]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 18:00:29]   [EXPERIMENT] Pearson r=0.016, rho=0.044, p=0.7612, n=370
+[jarvis-runner 18:00:29]   [RESULT]    none positive: Interaction: mystery_setup_count * visual_credibility_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 18:00:29]   [GRAPH]     Derived edge added: mystery_setup_count × visual_credibility_count → 'views', depth=2
+[jarvis-runner 18:00:29]   [DONE]      r=0.016 (none positive)
