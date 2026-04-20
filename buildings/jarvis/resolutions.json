@@ -31724,7 +31724,12 @@
       "zygarnik_gradient_pct_x_loop_front_half_density",
       "zygarnik_gradient_pct_x_narrative_tension_density_first_half",
       "zygarnik_gradient_pct_x_challenge_setup_density_first_quarter",
-      "zygarnik_front_load_ratio_x_loop_to_closure_gap_s"
+      "zygarnik_front_load_ratio_x_loop_to_closure_gap_s",
+      "zygarnik_front_load_ratio_x_ref_to_gratification_gap_pct",
+      "zygarnik_front_load_ratio_x_pre_payoff_tension_index",
+      "zygarnik_front_load_ratio_x_early_proof_to_loop_ratio",
+      "zygarnik_front_load_ratio_x_proof_arrival_delay_proxy",
+      "zygarnik_front_load_ratio_x_closure_to_open_ratio_first10s"
     ],
     "depth_in_hierarchy": 0
   },

@@ -1,193 +1,70 @@
 {
-  "active": false,
-  "run_id": "auto_20260419235642.",
+  "active": true,
+  "run_id": "auto_20260420002345.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-19T23:56:42.465Z",
-  "updated_at": "2026-04-20T00:21:51.405Z",
-  "finished_at": "2026-04-20T00:21:51.405Z",
+  "started_at": "2026-04-20T00:23:45.933Z",
+  "updated_at": "2026-04-20T00:32:27.531Z",
+  "finished_at": null,
   "requested_iterations": 3000,
-  "attempted": 25,
-  "completed": 19,
-  "failures": 6,
+  "attempted": 6,
+  "completed": 5,
+  "failures": 0,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
-  "stop_reason": "max_minutes",
-  "current_candidate": null,
-  "last_completed_candidate": "zygarnik_front_load_ratio_x_loop_to_closure_gap_s",
-  "last_completed_r": 0.0609,
+  "stop_reason": null,
+  "current_candidate": "zygarnik_front_load_ratio_x_credibility_setup_pct",
+  "last_completed_candidate": "zygarnik_front_load_ratio_x_closure_to_open_ratio_first10s",
+  "last_completed_r": 0.0881,
   "recent_events": [
     {
       "type": "completed",
-      "key": "zygarnik_gradient_pct_x_delayed_reveal_count",
-      "r": 0.0664,
+      "key": "zygarnik_front_load_ratio_x_ref_to_gratification_gap_pct",
+      "r": 0.0356,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T00:04:26.974Z"
+      "ts": "2026-04-20T00:26:26.216Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_gradient_pct_x_delayed_reveal_density",
-      "r": 0.0472,
+      "key": "zygarnik_front_load_ratio_x_pre_payoff_tension_index",
+      "r": -0.124,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T00:05:34.717Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_above_baseline_area",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T00:05:35.572Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_avg_percent_viewed",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T00:05:36.452Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_avg_view_duration_s",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T00:05:37.396Z"
+      "ts": "2026-04-20T00:27:49.490Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_gradient_pct_x_narrative_anchor_count",
-      "r": 0.0746,
+      "key": "zygarnik_front_load_ratio_x_early_proof_to_loop_ratio",
+      "r": 0.0421,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T00:06:51.642Z"
+      "ts": "2026-04-20T00:29:29.431Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_gradient_pct_x_narrative_anchor_density",
-      "r": 0.0651,
+      "key": "zygarnik_front_load_ratio_x_proof_arrival_delay_proxy",
+      "r": 0.0784,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T00:08:06.980Z"
+      "ts": "2026-04-20T00:30:56.397Z"
     },
     {
       "type": "completed",
-      "key": "zygarnik_gradient_pct_x_challenge_statement_count",
-      "r": 0.1055,
+      "key": "zygarnik_front_load_ratio_x_closure_to_open_ratio_first10s",
+      "r": 0.0881,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T00:09:14.925Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_challenge_statement_density",
-      "r": 0.0539,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:10:25.025Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_narrative_tension_count",
-      "r": 0.0993,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:11:35.854Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_narrative_tension_density",
-      "r": 0.0811,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:12:40.852Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_payoff_delay_score",
-      "r": 0.0545,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:13:54.639Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_avg_word_gap_s",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T00:13:55.477Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_beat_acceleration",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T00:13:56.373Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_beat_count",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T00:13:57.156Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_challenge_to_resolution_gap_pct",
-      "r": 0.0427,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:15:01.455Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_loop_front_half_density",
-      "r": 0.0932,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:16:23.857Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_narrative_tension_density_first_half",
-      "r": 0.0738,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:17:44.140Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_gradient_pct_x_challenge_setup_density_first_quarter",
-      "r": -0.0072,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:19:05.213Z"
-    },
-    {
-      "type": "completed",
-      "key": "zygarnik_front_load_ratio_x_loop_to_closure_gap_s",
-      "r": 0.0609,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T00:21:50.819Z"
+      "ts": "2026-04-20T00:32:27.047Z"
     }
   ],
-  "pre_attempted": 19,
-  "pre_completed": 19,
-  "post_attempted": 6,
+  "pre_attempted": 6,
+  "pre_completed": 5,
+  "post_attempted": 0,
   "post_completed": 0
 }
