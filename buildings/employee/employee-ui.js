@@ -12,15 +12,6 @@ const EmployeeUI = (() => {
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
 
-    const STAT_KEYS = [
-        { key: 'creativity',  label: 'Creativity' },
-        { key: 'reliability', label: 'Reliability' },
-        { key: 'speed',       label: 'Speed' },
-        { key: 'editing',     label: 'Editing' },
-        { key: 'design',      label: 'Design' },
-        { key: 'leadership',  label: 'Leadership' },
-    ];
-
     function render() {
         container.innerHTML = `
             <div class="employee-panel show-list">
@@ -123,14 +114,6 @@ const EmployeeUI = (() => {
         const emp = EmployeeService.getById(selectedId);
         if (!emp) { showList(); return; }
 
-        const statRows = STAT_KEYS.map(s => `
-            <div class="employee-stat-row">
-                <label class="employee-stat-label">${s.label}</label>
-                <input type="range" min="1" max="5" step="1" value="${emp.stats[s.key] || 3}" data-stat="${s.key}" class="employee-stat-slider">
-                <span class="employee-stat-value" data-stat-value="${s.key}">${emp.stats[s.key] || 3}</span>
-            </div>
-        `).join('');
-
         el.innerHTML = `
             <div class="employee-detail-toolbar">
                 <button class="employee-back-btn" id="employee-back-btn">
@@ -169,9 +152,6 @@ const EmployeeUI = (() => {
                 <label>Traits <span class="employee-hint">comma separated</span></label>
                 <input type="text" id="employee-traits" value="${escAttr(emp.traits)}" placeholder="e.g. detail-oriented, fast, calm under pressure">
 
-                <label>Stat Block</label>
-                <div class="employee-stats">${statRows}</div>
-
                 <label>Notes</label>
                 <textarea id="employee-notes" placeholder="Anything else worth remembering">${escHtml(emp.notes)}</textarea>
 
@@ -196,13 +176,6 @@ const EmployeeUI = (() => {
             const inp = document.getElementById(id);
             if (inp) inp.addEventListener('input', scheduleSave);
         });
-        el.querySelectorAll('.employee-stat-slider').forEach(sl => {
-            sl.addEventListener('input', () => {
-                const valEl = el.querySelector(`[data-stat-value="${sl.dataset.stat}"]`);
-                if (valEl) valEl.textContent = sl.value;
-                scheduleSave();
-            });
-        });
 
         requestAnimationFrame(renderAvatars);
     }
@@ -219,11 +192,6 @@ const EmployeeUI = (() => {
         const emp = EmployeeService.getById(selectedId);
         if (!emp) return null;
         const name = (document.getElementById('employee-name')?.value || '').trim() || emp.name;
-        const stats = {};
-        STAT_KEYS.forEach(s => {
-            const sl = document.querySelector(`.employee-stat-slider[data-stat="${s.key}"]`);
-            if (sl) stats[s.key] = parseInt(sl.value, 10) || 3;
-        });
         return {
             name,
             role: document.getElementById('employee-role')?.value || '',
@@ -233,7 +201,6 @@ const EmployeeUI = (() => {
             traits: document.getElementById('employee-traits')?.value || '',
             notes: document.getElementById('employee-notes')?.value || '',
             colorHex: document.getElementById('employee-color')?.value || emp.colorHex,
-            stats,
         };
     }
 

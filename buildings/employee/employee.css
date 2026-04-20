@@ -145,21 +145,6 @@
 .employee-detail-basics { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .employee-detail-basics label:first-child { margin-top: 0; }
 
-.employee-stats {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px;
-    background: #fff6e6; border: 1px solid #f2e3bf; border-radius: 12px;
-    padding: 14px;
-}
-.employee-stat-row {
-    display: grid; grid-template-columns: 90px 1fr 24px; align-items: center; gap: 10px;
-}
-.employee-stat-label {
-    font-size: 11px; font-weight: 700; color: #866400; text-transform: uppercase;
-    letter-spacing: 0.4px; margin: 0;
-}
-.employee-stat-slider { width: 100%; accent-color: #b47500; }
-.employee-stat-value { font-size: 13px; font-weight: 700; color: #b47500; text-align: center; }
-
 .employee-save-row {
     display: flex; justify-content: flex-end; padding: 10px 0 0;
 }
@@ -167,7 +152,6 @@
 .employee-save-status.saved { color: #00b894; font-style: normal; }
 
 @media (max-width: 640px) {
-    .employee-stats { grid-template-columns: 1fr; }
     .employee-card-top { flex-direction: column; align-items: stretch; }
     .employee-detail-avatar-wrap { align-self: center; }
 }
