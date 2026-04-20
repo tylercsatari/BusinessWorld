@@ -5410,21 +5410,21 @@ const JarvisUI = (() => {
             <table style="width:100%;border-collapse:collapse;font-size:11px">
                 <thead><tr style="color:#64748b;font-size:10px;letter-spacing:0.05em;text-transform:uppercase">
                     <th style="text-align:left;padding:4px 8px">Signal</th>
-                    <th style="text-align:left;padding:4px 8px">Family</th>
+                    <th style="text-align:left;padding:4px 8px">Key pattern</th>
                     <th style="text-align:right;padding:4px 8px">r → log10(views)</th>
                 </tr></thead>
                 <tbody>
                     ${rows.map((r, i) => `
                         <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.key || '')}</td>
-                            <td style="padding:5px 8px;font-family:monospace;color:#94a3b8">${escapeHtml(r.family || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#94a3b8">${escapeHtml(r.key_pattern || r.family || '')}</td>
                             <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.r_to_views)};font-weight:600">${r.r_to_views != null ? (+r.r_to_views).toFixed(3) : '—'}</td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
         `;
-        return ideaSection('Top Post-Upload Predictors', 'deduped by family · direct correlation with views', table);
+        return ideaSection('Top Post-Upload Predictors', 'deduped by key pattern · direct correlation with views', table);
     }
 
     function renderIdeaPreUpload() {
@@ -5997,7 +5997,7 @@ const JarvisUI = (() => {
                         ${corpusRow('Video pool', corpus.video_pool_n)}
                         ${corpusRow('Video scorecards', corpus.video_scorecards_n)}
                         ${corpusRow('Word-retention scored', corpus.word_retention_scored)}
-                        ${corpusRow('Candidate families', corpus.candidate_proposal_families)}
+                        ${corpusRow('Candidate proposal groups', corpus.candidate_proposal_diversity_buckets != null ? corpus.candidate_proposal_diversity_buckets : corpus.candidate_proposal_families)}
                     </div>
                     ${corpus.mechanism_indicator_link_outcomes && corpus.mechanism_indicator_link_outcomes.length ? `<div style="font-size:9.5px;color:#64748b;margin-top:4px">link outcome keys: ${corpus.mechanism_indicator_link_outcomes.map(o => `<code style="color:#94a3b8">${escapeHtml(o)}</code>`).join(' · ')}</div>` : ''}
                     ${corpus.note ? `<div style="font-size:9px;color:#64748b;margin-top:4px;font-style:italic">${escapeHtml(corpus.note)}</div>` : ''}
@@ -6094,9 +6094,10 @@ const JarvisUI = (() => {
             </div>`;
         }).join('') : '';
         const finalAltRows = finalAlts && Array.isArray(finalAlts.nearby_displaced) ? finalAlts.nearby_displaced.map(a => {
+            const altBucket = a.diversity_bucket || a.family;
             return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5;padding:2px 0;border-top:1px dashed #1e293b">
                 <code style="color:#f59e0b">${escapeHtml(a.idea_id || '')}</code>
-                ${a.family ? `<span style="color:#64748b"> · </span><code style="color:#a78bfa;font-size:10px">${escapeHtml(a.family)}</code>` : ''}
+                ${altBucket ? `<span style="color:#64748b"> · </span><code style="color:#a78bfa;font-size:10px" title="diversity bucket">${escapeHtml(altBucket)}</code>` : ''}
                 ${a.endpoint_kind ? `<span style="color:#64748b"> · </span><code style="color:#22c55e;font-size:10px">${escapeHtml(a.endpoint_kind)}</code>` : ''}
                 <div style="font-size:10px;color:#cbd5e1;margin-top:1px">
                     <span style="color:#64748b">total</span> <b style="color:#f1f5f9">${a.blueprint_total != null ? (+a.blueprint_total).toFixed(3) : '—'}</b>
@@ -6176,7 +6177,7 @@ const JarvisUI = (() => {
                         </div>
                         ${seedAltRows ? `
                             <div style="margin-top:3px">
-                                <div style="font-size:9px;color:#f59e0b;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:2px">Seed-stage rejected neighbors (within family / MMR-fill runners-up)</div>
+                                <div style="font-size:9px;color:#f59e0b;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:2px">Seed-stage rejected neighbors (within diversity bucket / MMR-fill runners-up)</div>
                                 ${seedAltRows}
                             </div>` : ''}
                         ${finalAltRows ? `

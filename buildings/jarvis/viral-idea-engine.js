@@ -90,7 +90,7 @@ function topPostUploadPredictors(answers, limit = 8) {
         const family = collapseFamily(row.key);
         if (seen.has(family)) continue;
         seen.add(family);
-        out.push({ key: row.key, family, r_to_views: round(row.r, 4) });
+        out.push({ key: row.key, key_pattern: family, family, r_to_views: round(row.r, 4) });
         if (out.length >= limit) break;
     }
     return out;
@@ -3547,7 +3547,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
             { key: 'title_making_keyword', evidence_type: 'proven_discoveries', modality: 'title word', quantification: "'Making' keyword videos avg $24M views (n=23)", why: 'highest-value single title-word pattern in corpus' },
             { key: 'visual_is_workshop', evidence_type: 'indicator_registry', r_direct: 0.236, r_partial: 0.219, modality: 'visual frame', quantification: 'Video shot in workshop-like environment (42/203 positive, 2.6x)', why: 'r_direct=+0.236 vs log(views)' },
             { key: 'pre_workshop_x_making', evidence_type: 'indicator_registry', r_partial: 0.229, r_direct: 0.235, modality: 'pre-upload composite', quantification: 'Workshop × making title interaction', why: '39/203 positive, 2.7x' },
-            { key: 'tension_x_workshop', evidence_type: 'indicator_registry', r_partial: 0.283, r_direct: 0.222, modality: 'composite', quantification: 'Narrative tension × workshop visual', why: 'strongest workshop-family interaction' },
+            { key: 'tension_x_workshop', evidence_type: 'indicator_registry', r_partial: 0.283, r_direct: 0.222, modality: 'composite', quantification: 'Narrative tension × workshop visual', why: 'strongest workshop-indicator interaction' },
             { key: 'PHYSICAL_SENSORY_LANGUAGE', evidence_type: 'top_3_peak_causes', modality: 'transcript', quantification: 'Sensory-rate weight +1.59 in retention regression', why: 'painful(+0.059), curious(+0.061), numb(+0.050), stomach(+0.051)' },
             { key: 'TECHNICAL_MATERIAL_LANGUAGE', evidence_type: 'top_3_drop_causes', modality: 'transcript', quantification: 'Material-naming words depress above-baseline retention', why: 'plastic=-0.171, solid=-0.163, materials=-0.136' },
             { key: 'HIGH_ENERGY_ACTION_FRAMES', evidence_type: 'top_3_peak_causes', modality: 'visual', quantification: 'Action frames appear 28% at peaks vs 8% at drops', why: 'feasibility-on-camera proxy for visible-proof moments' },
@@ -3642,7 +3642,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
             { key: 'PHYSICAL_SENSORY_LANGUAGE', evidence_type: 'top_3_peak_causes', modality: 'transcript + framing', quantification: 'Sensory-rate weight +1.59', why: 'visible body_part_phrase (foot/shoulders/stomach/hand) has a surface to film; feeling/head/mind/brain/memory do not' },
             { key: 'end_begin_ratio', evidence_type: 'wave11_12_new_signals', modality: 'retention structure', quantification: 'End-state delta above opening promise', why: 'title premise line reveal phrasing classified: physical single-shot reveals align, verbal/observational reveals regress' },
             { key: 'visual_is_workshop', evidence_type: 'indicator_registry', r_direct: 0.236, r_partial: 0.219, modality: 'visual frame', quantification: 'hands-on-object framing', why: 'state-contrast in visual_action_short (cut between, growing stack, slides out, pedals turning) is the hands-on-object axis applied across the build' },
-            { key: 'pat_making_v2', evidence_type: 'findings.kept_signals', delta_r2: 0.012, modality: 'title pattern', quantification: 'Title contains making/build/creat/construct — 34 videos avg 19.7M vs 5.6M', why: 'title_making_keyword family aligns with physical reveal phrasing' },
+            { key: 'pat_making_v2', evidence_type: 'findings.kept_signals', delta_r2: 0.012, modality: 'title pattern', quantification: 'Title contains making/build/creat/construct — 34 videos avg 19.7M vs 5.6M', why: 'title_making_keyword pattern aligns with physical reveal phrasing' },
         ];
         traces.visual_legibility = makeTrace({
             field: 'visual_legibility',
