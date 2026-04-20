@@ -1,136 +1,193 @@
 {
   "active": false,
-  "run_id": "auto_20260420135332.",
+  "run_id": "auto_20260420142200.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-20T13:53:32.164Z",
-  "updated_at": "2026-04-20T14:19:31.957Z",
-  "finished_at": "2026-04-20T14:19:31.957Z",
+  "started_at": "2026-04-20T14:22:00.060Z",
+  "updated_at": "2026-04-20T14:47:02.666Z",
+  "finished_at": "2026-04-20T14:47:02.666Z",
   "requested_iterations": 3000,
-  "attempted": 13,
-  "completed": 10,
-  "failures": 3,
+  "attempted": 47,
+  "completed": 35,
+  "failures": 12,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 0,
+  "no_signal_streak": 4,
   "stop_reason": "max_minutes",
   "current_candidate": null,
-  "last_completed_candidate": "stake_loop_product_x_delayed_reveal_count",
-  "last_completed_r": 0.0757,
+  "last_completed_candidate": "rhetorical_question_count_x_stakes_escalation_density",
+  "last_completed_r": 0.0478,
   "recent_events": [
     {
-      "type": "completed",
-      "key": "stake_loop_product_x_commitment_device_density",
-      "r": 0.0512,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T13:55:10.245Z"
-    },
-    {
-      "type": "completed",
-      "key": "stake_loop_product_x_action_trigger_count",
-      "r": 0.0212,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T13:56:05.919Z"
-    },
-    {
-      "type": "completed",
-      "key": "stake_loop_product_x_action_trigger_density",
-      "r": 0.0223,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T13:56:59.995Z"
-    },
-    {
-      "type": "completed",
-      "key": "stake_loop_product_x_reference_callback_count",
-      "r": 0.092,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T13:57:52.580Z"
-    },
-    {
-      "type": "completed",
-      "key": "stake_loop_product_x_reference_callback_density",
-      "r": 0.0803,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T13:58:51.898Z"
-    },
-    {
-      "type": "completed",
-      "key": "stake_loop_product_x_visual_credibility_count",
-      "r": 0.1448,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T14:08:40.344Z"
-    },
-    {
-      "type": "completed",
-      "key": "stake_loop_product_x_visual_credibility_density",
-      "r": 0.1211,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T14:10:31.088Z"
+      "type": "failed",
+      "key": "early_proof_position_pct_x_beat_density_per_minute",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T14:34:28.424Z"
     },
     {
       "type": "failed",
-      "key": "early_proof_position_pct_x_above_baseline_area",
+      "key": "early_proof_position_pct_x_body_sensation_word_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-20T14:10:31.977Z"
+      "ts": "2026-04-20T14:34:28.797Z"
     },
     {
       "type": "failed",
-      "key": "early_proof_position_pct_x_avg_percent_viewed",
+      "key": "early_proof_position_pct_x_comparison_word_count",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-20T14:10:33.131Z"
+      "ts": "2026-04-20T14:34:29.209Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_proof_of_work_count",
+      "r": 0.0183,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:34:32.076Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_proof_of_work_density",
+      "r": 0.0112,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:34:34.835Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_failure_vulnerability_count",
+      "r": 0.0345,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:34:37.683Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_failure_vulnerability_density",
+      "r": 0.0148,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:34:40.007Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_commitment_device_count",
+      "r": -0.0078,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:34:42.760Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_commitment_device_density",
+      "r": -0.0155,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:34:44.903Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_action_trigger_count",
+      "r": 0.001,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:34:48.321Z"
     },
     {
       "type": "failed",
-      "key": "early_proof_position_pct_x_avg_view_duration_s",
+      "key": "early_proof_position_pct_x_daily_views_entropy",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-20T14:10:34.211Z"
+      "ts": "2026-04-20T14:34:48.617Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_deescalation_speed",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T14:34:48.914Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_description_hashtag_count",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T14:34:49.357Z"
     },
     {
       "type": "completed",
-      "key": "stake_loop_product_x_stakes_escalation_count",
-      "r": 0.0206,
+      "key": "rhetorical_question_count_x_action_trigger_density",
+      "r": -0.0152,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T14:14:57.376Z"
+      "ts": "2026-04-20T14:34:52.072Z"
     },
     {
       "type": "completed",
-      "key": "stake_loop_product_x_stakes_escalation_density",
-      "r": 0.0149,
+      "key": "rhetorical_question_count_x_reference_callback_count",
+      "r": 0.0736,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T14:17:16.005Z"
+      "ts": "2026-04-20T14:36:25.694Z"
     },
     {
       "type": "completed",
-      "key": "stake_loop_product_x_delayed_reveal_count",
-      "r": 0.0757,
+      "key": "rhetorical_question_count_x_reference_callback_density",
+      "r": 0.0736,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T14:19:31.471Z"
+      "ts": "2026-04-20T14:38:40.668Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_visual_credibility_count",
+      "r": 0.0351,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:40:57.034Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_visual_credibility_density",
+      "r": 0.0279,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:42:56.997Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_stakes_escalation_count",
+      "r": 0.0309,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:44:50.648Z"
+    },
+    {
+      "type": "completed",
+      "key": "rhetorical_question_count_x_stakes_escalation_density",
+      "r": 0.0478,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T14:47:02.168Z"
     }
   ],
-  "pre_attempted": 10,
-  "pre_completed": 10,
-  "post_attempted": 3,
+  "pre_attempted": 35,
+  "pre_completed": 35,
+  "post_attempted": 12,
   "post_completed": 0
 }
