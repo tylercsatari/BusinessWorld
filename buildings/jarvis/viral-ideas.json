@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-20T08:15:35.461Z",
+    "generated_at": "2026-04-20T08:50:28.447Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -54,7 +54,7 @@
         "first_frame": "Close on taping the last cardboard seam on a finished hull with the shoreline framing the shot. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on oars pulling as the cardboard boat slides out from the dock for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.58,
+        "opening_speech_rate_wps_target": 2.6,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -104,7 +104,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.58,
+        "opening_wps_target": 2.6,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -479,6 +479,36 @@
             "transformation"
           ]
         },
+        "seed_alternates": {
+          "stage": "seed_selection",
+          "candidates_considered": 46,
+          "families_considered": 9,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "nearby_rejected": [
+            {
+              "motif_id": "two_by_four_bike",
+              "family": "build_test",
+              "endpoint_id": "exact_distance",
+              "endpoint_kind": "distance",
+              "raw_score": 3.42,
+              "score_delta": 0,
+              "rejection_reason": "lower raw score within family cluster"
+            },
+            {
+              "motif_id": "cardboard_boat_row",
+              "family": "build_test",
+              "endpoint_id": "build_test_outcome",
+              "endpoint_kind": "build_test",
+              "raw_score": 3.31,
+              "score_delta": -0.11,
+              "rejection_reason": "lower raw score within family cluster"
+            }
+          ],
+          "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: within-family lower raw score, family/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
+        },
         "final_rank_diversity": {
           "per_family_in_topN": {
             "build_test": 2,
@@ -498,6 +528,43 @@
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
+        },
+        "final_rank_alternates": {
+          "stage": "final_rank",
+          "slot": 1,
+          "ideas_considered": 10,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "mmr_lambda": 0.35,
+          "nearby_displaced": [
+            {
+              "idea_id": "two_by_four_bike__build_test_outcome",
+              "title": "I Built A Bike Out Of 2x4s And Rode It 5 Miles To See What Broke First — The Build Held…",
+              "family": "build_test",
+              "endpoint_kind": "build_test",
+              "blueprint_total": 1.729,
+              "mmr_score": 1.729,
+              "similarity": 0,
+              "total_delta": -0.024,
+              "mmr_delta": -0.024,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            },
+            {
+              "idea_id": "one_food_thirty_days__time_to_target",
+              "title": "I Ate Only Potatoes For 60 Days — My Body Did Something I Didn’t Expect",
+              "family": "body_transformation",
+              "endpoint_kind": "timer",
+              "blueprint_total": 1.632,
+              "mmr_score": 1.632,
+              "similarity": 0,
+              "total_delta": -0.12,
+              "mmr_delta": -0.12,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            }
+          ],
+          "note": "Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: family cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots."
         }
       },
       "score_breakdown": {
@@ -596,7 +663,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.58wps_in_sweet_zone",
+              "driver": "opening_rate_2.6wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -3050,7 +3117,7 @@
         "first_frame": "Close on morning day-1: a plain potato on the plate next to the scale with the reading on screen. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 60 days, and my stomach is going to tell you when it's over.",
         "opening_action": "Camera locked on a cut between identical morning weigh-ins and identical potato plates for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.56,
+        "opening_speech_rate_wps_target": 2.52,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -3100,7 +3167,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.56,
+        "opening_wps_target": 2.52,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -3455,6 +3522,36 @@
             "transformation"
           ]
         },
+        "seed_alternates": {
+          "stage": "seed_selection",
+          "candidates_considered": 46,
+          "families_considered": 9,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "nearby_rejected": [
+            {
+              "motif_id": "one_food_thirty_days",
+              "family": "body_transformation",
+              "endpoint_id": "transformation_reveal",
+              "endpoint_kind": "transformation",
+              "raw_score": 3.015,
+              "score_delta": -0.11,
+              "rejection_reason": "lower raw score within family cluster"
+            },
+            {
+              "motif_id": "daily_mile_one_year",
+              "family": "body_transformation",
+              "endpoint_id": "time_to_target",
+              "endpoint_kind": "timer",
+              "raw_score": 2.945,
+              "score_delta": -0.18,
+              "rejection_reason": "lower raw score within family cluster"
+            }
+          ],
+          "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: within-family lower raw score, family/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
+        },
         "final_rank_diversity": {
           "per_family_in_topN": {
             "build_test": 2,
@@ -3474,6 +3571,43 @@
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
+        },
+        "final_rank_alternates": {
+          "stage": "final_rank",
+          "slot": 2,
+          "ideas_considered": 10,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "mmr_lambda": 0.35,
+          "nearby_displaced": [
+            {
+              "idea_id": "origami_cranes__exact_count",
+              "title": "I Folded 1,000 Origami Cranes In One Day — The Counter Froze At 1,028",
+              "family": "craft_patience",
+              "endpoint_kind": "count",
+              "blueprint_total": 1.6,
+              "mmr_score": 1.6,
+              "similarity": 0,
+              "total_delta": -0.032,
+              "mmr_delta": -0.032,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            },
+            {
+              "idea_id": "stair_climb_repeats__exact_count",
+              "title": "I Climbed A Single Flight Of Stairs 1,000 Times — The Counter Froze At 1,028",
+              "family": "endurance",
+              "endpoint_kind": "count",
+              "blueprint_total": 1.575,
+              "mmr_score": 1.575,
+              "similarity": 0,
+              "total_delta": -0.057,
+              "mmr_delta": -0.057,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            }
+          ],
+          "note": "Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: family cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots."
         }
       },
       "score_breakdown": {
@@ -3572,7 +3706,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.56wps_in_sweet_zone",
+              "driver": "opening_rate_2.52wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -5999,7 +6133,7 @@
         "first_frame": "Close on mid-fold on a crane with a counter and a pile in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on fingers folding paper and adding to a crane pile for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.54,
+        "opening_speech_rate_wps_target": 2.68,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -6049,7 +6183,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.54,
+        "opening_wps_target": 2.68,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -6407,6 +6541,36 @@
             "transformation"
           ]
         },
+        "seed_alternates": {
+          "stage": "seed_selection",
+          "candidates_considered": 46,
+          "families_considered": 9,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "nearby_rejected": [
+            {
+              "motif_id": "origami_cranes",
+              "family": "craft_patience",
+              "endpoint_id": "time_to_target",
+              "endpoint_kind": "timer",
+              "raw_score": 2.88,
+              "score_delta": 0,
+              "rejection_reason": "lower raw score within family cluster"
+            },
+            {
+              "motif_id": "coin_edge_tower",
+              "family": "craft_patience",
+              "endpoint_id": "exact_count",
+              "endpoint_kind": "count",
+              "raw_score": 2.88,
+              "score_delta": 0,
+              "rejection_reason": "lower raw score within family cluster"
+            }
+          ],
+          "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: within-family lower raw score, family/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
+        },
         "final_rank_diversity": {
           "per_family_in_topN": {
             "build_test": 2,
@@ -6426,6 +6590,43 @@
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
+        },
+        "final_rank_alternates": {
+          "stage": "final_rank",
+          "slot": 3,
+          "ideas_considered": 10,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "mmr_lambda": 0.35,
+          "nearby_displaced": [
+            {
+              "idea_id": "stair_climb_repeats__exact_count",
+              "title": "I Climbed A Single Flight Of Stairs 1,000 Times — The Counter Froze At 1,028",
+              "family": "endurance",
+              "endpoint_kind": "count",
+              "blueprint_total": 1.575,
+              "mmr_score": 1.575,
+              "similarity": 0,
+              "total_delta": -0.025,
+              "mmr_delta": -0.025,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            },
+            {
+              "idea_id": "two_by_four_bike__build_test_outcome",
+              "title": "I Built A Bike Out Of 2x4s And Rode It 5 Miles To See What Broke First — The Build Held…",
+              "family": "build_test",
+              "endpoint_kind": "build_test",
+              "blueprint_total": 1.729,
+              "mmr_score": 1.519,
+              "similarity": 0.6,
+              "total_delta": 0.128,
+              "mmr_delta": -0.082,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            }
+          ],
+          "note": "Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: family cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots."
         }
       },
       "score_breakdown": {
@@ -6524,7 +6725,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.54wps_in_sweet_zone",
+              "driver": "opening_rate_2.68wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -8960,7 +9161,7 @@
         "first_frame": "Close on tightening the last bolt on a plywood frame with a completed 2x4 bike in view. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 5 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on pedals turning on the wooden bike with a mile-counter overlay for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.56,
+        "opening_speech_rate_wps_target": 2.59,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -9010,7 +9211,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.56,
+        "opening_wps_target": 2.59,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -9401,6 +9602,42 @@
             "transformation"
           ]
         },
+        "seed_alternates": {
+          "stage": "seed_selection",
+          "candidates_considered": 46,
+          "families_considered": 9,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "nearby_rejected": [
+            {
+              "motif_id": "two_by_four_bike",
+              "family": "build_test",
+              "endpoint_id": "exact_distance",
+              "endpoint_kind": "distance",
+              "raw_score": 3.42,
+              "mmr_score": 2.898,
+              "similarity": 0.95,
+              "score_delta": 0.11,
+              "mmr_delta": -0.083,
+              "rejection_reason": "lower mmr(score − λ·sim) at this slot"
+            },
+            {
+              "motif_id": "cardboard_boat_row",
+              "family": "build_test",
+              "endpoint_id": "build_test_outcome",
+              "endpoint_kind": "build_test",
+              "raw_score": 3.31,
+              "mmr_score": 2.87,
+              "similarity": 0.8,
+              "score_delta": 0,
+              "mmr_delta": -0.11,
+              "rejection_reason": "motif-id already selected"
+            }
+          ],
+          "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: within-family lower raw score, family/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
+        },
         "final_rank_diversity": {
           "per_family_in_topN": {
             "build_test": 2,
@@ -9420,6 +9657,43 @@
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
+        },
+        "final_rank_alternates": {
+          "stage": "final_rank",
+          "slot": 4,
+          "ideas_considered": 10,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "mmr_lambda": 0.35,
+          "nearby_displaced": [
+            {
+              "idea_id": "pro_boxer_day__body_quit",
+              "title": "I Trained With A Pro Boxer For One Full Day — He Told Me When To Stop",
+              "family": "identity",
+              "endpoint_kind": "body",
+              "blueprint_total": 1.491,
+              "mmr_score": 1.491,
+              "similarity": 0,
+              "total_delta": -0.238,
+              "mmr_delta": -0.028,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            },
+            {
+              "idea_id": "stair_climb_repeats__exact_count",
+              "title": "I Climbed A Single Flight Of Stairs 1,000 Times — The Counter Froze At 1,028",
+              "family": "endurance",
+              "endpoint_kind": "count",
+              "blueprint_total": 1.575,
+              "mmr_score": 1.453,
+              "similarity": 0.35,
+              "total_delta": -0.153,
+              "mmr_delta": -0.066,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            }
+          ],
+          "note": "Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: family cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots."
         }
       },
       "score_breakdown": {
@@ -9518,7 +9792,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.56wps_in_sweet_zone",
+              "driver": "opening_rate_2.59wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -12370,6 +12644,36 @@
             "transformation"
           ]
         },
+        "seed_alternates": {
+          "stage": "seed_selection",
+          "candidates_considered": 46,
+          "families_considered": 9,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "nearby_rejected": [
+            {
+              "motif_id": "pro_boxer_day",
+              "family": "identity",
+              "endpoint_id": "identity_dayend",
+              "endpoint_kind": "identity",
+              "raw_score": 2.415,
+              "score_delta": -0.24,
+              "rejection_reason": "lower raw score within family cluster"
+            },
+            {
+              "motif_id": "firefighter_shift_shadow",
+              "family": "identity",
+              "endpoint_id": "body_quit",
+              "endpoint_kind": "body",
+              "raw_score": 2.395,
+              "score_delta": -0.26,
+              "rejection_reason": "lower raw score within family cluster"
+            }
+          ],
+          "note": "Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: within-family lower raw score, family/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill."
+        },
         "final_rank_diversity": {
           "per_family_in_topN": {
             "build_test": 2,
@@ -12389,6 +12693,43 @@
             "per_endpoint_kind_cap": 2
           },
           "mmr_lambda": 0.35
+        },
+        "final_rank_alternates": {
+          "stage": "final_rank",
+          "slot": 5,
+          "ideas_considered": 10,
+          "caps_in_effect": {
+            "per_family_cap": 2,
+            "per_endpoint_kind_cap": 2
+          },
+          "mmr_lambda": 0.35,
+          "nearby_displaced": [
+            {
+              "idea_id": "stair_climb_repeats__exact_count",
+              "title": "I Climbed A Single Flight Of Stairs 1,000 Times — The Counter Froze At 1,028",
+              "family": "endurance",
+              "endpoint_kind": "count",
+              "blueprint_total": 1.575,
+              "mmr_score": 1.453,
+              "similarity": 0.35,
+              "total_delta": 0.085,
+              "mmr_delta": -0.038,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            },
+            {
+              "idea_id": "handwritten_letters__time_to_target",
+              "title": "I Hand-Wrote 300 Letters — One To Every Contact In My Phone — The Timer Hit 300 Exactly",
+              "family": "repetition_outreach",
+              "endpoint_kind": "timer",
+              "blueprint_total": 1.543,
+              "mmr_score": 1.42,
+              "similarity": 0.35,
+              "total_delta": 0.052,
+              "mmr_delta": -0.071,
+              "rejection_reason": "lower mmr(total − λ·sim) at this slot"
+            }
+          ],
+          "note": "Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: family cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots."
         }
       },
       "score_breakdown": {

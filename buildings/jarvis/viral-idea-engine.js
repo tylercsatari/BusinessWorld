@@ -2389,10 +2389,26 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
 
     const picked = [];
     const log = [];
+    // Per-pick alternates: motif-id of picked combo → [up to 2 nearby rejected neighbors].
+    // Each entry records enough for the UI to render "why the winner beat this one"
+    // without dumping the full combo corpus.
+    const alternatesByMotifId = new Map();
     const perFamily = new Map();
     const perEndpoint = new Map();
     const perCategory = new Map();
     const usedMotifIds = new Set();
+
+    function compactAlt(c, chosen, extra) {
+        return {
+            motif_id: c.obj.id,
+            family: c.obj.family || c.obj.category || 'unknown',
+            endpoint_id: c.endpoint.id,
+            endpoint_kind: c.endpoint.kind,
+            raw_score: round(c.score, 3),
+            score_delta: round(c.score - chosen.score, 3),
+            ...extra,
+        };
+    }
 
     // Phase 1: one combo per family, in descending best-family-score order.
     // This guarantees motif-family coverage before any second slot is taken.
@@ -2408,6 +2424,23 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             if (!best || key > bestKey) { best = c; bestKey = key; }
         }
         if (!best) continue;
+
+        // Capture up to 2 nearby within-family alternates before mutating state.
+        // Cross-family alternates get picked on their own round, so limiting
+        // to the same family cluster keeps this audit layer focused on the
+        // actual decision made at this slot.
+        const alts = [];
+        for (const c of candidates) {
+            if (c === best) continue;
+            if (alts.length >= 2) break;
+            let reason;
+            if (usedMotifIds.has(c.obj.id)) reason = 'motif-id already selected in earlier slot';
+            else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) reason = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
+            else reason = 'lower raw score within family cluster';
+            alts.push(compactAlt(c, best, { rejection_reason: reason }));
+        }
+        alternatesByMotifId.set(best.obj.id, alts);
+
         picked.push(best);
         usedMotifIds.add(best.obj.id);
         perFamily.set(fam, (perFamily.get(fam) || 0) + 1);
@@ -2421,6 +2454,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             endpoint_id: best.endpoint.id,
             endpoint_kind: best.endpoint.kind,
             raw_score: best.score,
+            family_cluster_size: candidates.length,
             reason: `first slot for family "${fam}" (highest-scoring motif in cluster; endpoint rotated; motif-id hard-dedup)`,
         });
     }
@@ -2432,18 +2466,46 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
     const remaining = combos.filter(c => !alreadyPickedSet.has(c));
     while (picked.length < maxCount && remaining.length) {
         let bestIdx = -1, bestMR = -Infinity, bestSim = 0;
+        // Score every remaining combo so we can surface the runners-up that
+        // lost to the pick (or were blocked by a cap) — not just find the max.
+        const scoredRemaining = [];
         for (let i = 0; i < remaining.length; i++) {
             const c = remaining[i];
-            if (usedMotifIds.has(c.obj.id)) continue;
-            if ((perFamily.get(c.obj.family || c.obj.category) || 0) >= 2) continue;
-            if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) continue;
+            let blocked = null;
+            if (usedMotifIds.has(c.obj.id)) blocked = 'motif-id already selected';
+            else if ((perFamily.get(c.obj.family || c.obj.category) || 0) >= 2) blocked = `family cap hit (${c.obj.family || c.obj.category}=2)`;
+            else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) blocked = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             let sim = 0;
             for (const p of picked) sim = Math.max(sim, comboSimilarity(c, p));
             const mr = c.score - lambda * sim;
-            if (mr > bestMR) { bestMR = mr; bestIdx = i; bestSim = sim; }
+            scoredRemaining.push({ i, c, mr, sim, blocked });
+            if (!blocked && mr > bestMR) { bestMR = mr; bestIdx = i; bestSim = sim; }
         }
         if (bestIdx < 0) break;
-        const chosen = remaining.splice(bestIdx, 1)[0];
+        const chosen = remaining[bestIdx];
+
+        // Runners-up for this slot: everything except the winner, sorted by
+        // marginal relevance. Blocked neighbors are still ranked and shown
+        // so the "why not this one?" reason is visible.
+        const alts = scoredRemaining
+            .filter(m => m.c !== chosen)
+            .sort((a, b) => b.mr - a.mr)
+            .slice(0, 2)
+            .map(m => ({
+                motif_id: m.c.obj.id,
+                family: m.c.obj.family || m.c.obj.category || 'unknown',
+                endpoint_id: m.c.endpoint.id,
+                endpoint_kind: m.c.endpoint.kind,
+                raw_score: round(m.c.score, 3),
+                mmr_score: round(m.mr, 3),
+                similarity: round(m.sim, 3),
+                score_delta: round(m.c.score - chosen.score, 3),
+                mmr_delta: round(m.mr - bestMR, 3),
+                rejection_reason: m.blocked || 'lower mmr(score − λ·sim) at this slot',
+            }));
+        alternatesByMotifId.set(chosen.obj.id, alts);
+
+        remaining.splice(bestIdx, 1);
         picked.push(chosen);
         usedMotifIds.add(chosen.obj.id);
         const fam = chosen.obj.family || chosen.obj.category;
@@ -2465,7 +2527,17 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         });
     }
 
-    return { picked, log, family_coverage: [...perFamily.keys()], endpoint_coverage: [...perEndpoint.keys()], per_family: Object.fromEntries(perFamily), per_endpoint: Object.fromEntries(perEndpoint) };
+    return {
+        picked,
+        log,
+        family_coverage: [...perFamily.keys()],
+        endpoint_coverage: [...perEndpoint.keys()],
+        per_family: Object.fromEntries(perFamily),
+        per_endpoint: Object.fromEntries(perEndpoint),
+        alternates_by_motif_id: alternatesByMotifId,
+        total_combos_considered: combos.length,
+        total_families_considered: clusters.size,
+    };
 }
 
 function synthesizeSeeds(brief, artifacts, maxCount = 12) {
@@ -2494,7 +2566,8 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     }
     combos.sort((a, b) => b.score - a.score);
 
-    const { picked, log, family_coverage, endpoint_coverage, per_family, per_endpoint } = selectDiverseCombos(combos, maxCount);
+    const selection = selectDiverseCombos(combos, maxCount);
+    const { picked, log, family_coverage, endpoint_coverage, per_family, per_endpoint, alternates_by_motif_id, total_combos_considered, total_families_considered } = selection;
 
     return picked.map((c, i) => {
         const seed = composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers, {
@@ -2526,6 +2599,19 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
             };
             seed.synthesis_trace.diversity_summary = {
                 per_family, per_endpoint, family_coverage, endpoint_coverage,
+            };
+            // Auditable alternates: compact record of candidate pressure at
+            // seed-selection time. Two nearby rejected neighbors per pick is
+            // enough to show "why this one won" without dumping the full
+            // combo corpus back into the UI.
+            const myAlternates = (alternates_by_motif_id && alternates_by_motif_id.get(c.obj.id)) || [];
+            seed.synthesis_trace.seed_alternates = {
+                stage: 'seed_selection',
+                candidates_considered: total_combos_considered,
+                families_considered: total_families_considered,
+                caps_in_effect: { per_family_cap: 2, per_endpoint_kind_cap: 2 },
+                nearby_rejected: myAlternates,
+                note: 'Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: within-family lower raw score, family/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill.',
             };
         }
         return seed;
@@ -3850,12 +3936,18 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     const remaining = scored.slice();
     const perFam = new Map();
     const perEnd = new Map();
+    // Per-idea displaced alternates captured at the moment each slot was
+    // picked. Written back onto idea.synthesis_trace.final_rank_alternates
+    // so the UI can show "nearby ideas that lost to this one at top-N".
+    const finalAlternatesByIdeaId = new Map();
     while (ranked.length < Math.min(count, scored.length) && remaining.length) {
         let bestIdx = -1, bestMR = -Infinity;
+        const scoredRemaining = [];
         for (let i = 0; i < remaining.length; i++) {
             const c = remaining[i];
-            if ((perFam.get(c.family) || 0) >= perFamCap) continue;
-            if (c.endpoint_kind && (perEnd.get(c.endpoint_kind) || 0) >= perEndCap) continue;
+            let blocked = null;
+            if ((perFam.get(c.family) || 0) >= perFamCap) blocked = `family cap hit (${c.family}=${perFamCap})`;
+            else if (c.endpoint_kind && (perEnd.get(c.endpoint_kind) || 0) >= perEndCap) blocked = `endpoint-kind cap hit (${c.endpoint_kind}=${perEndCap})`;
             let sim = 0;
             for (const p of ranked) {
                 let s = 0;
@@ -3864,7 +3956,8 @@ function generateIdeas(brief, count = 5, artifacts = null) {
                 if (s > sim) sim = s;
             }
             const mr = c.total - lambda * sim;
-            if (mr > bestMR) { bestMR = mr; bestIdx = i; }
+            scoredRemaining.push({ i, c, mr, sim, blocked });
+            if (!blocked && mr > bestMR) { bestMR = mr; bestIdx = i; }
         }
         if (bestIdx < 0) {
             // Fall back: relax caps if no valid candidate remains (shouldn't
@@ -3872,7 +3965,29 @@ function generateIdeas(brief, count = 5, artifacts = null) {
             bestIdx = remaining.findIndex(c => true);
             if (bestIdx < 0) break;
         }
-        const chosen = remaining.splice(bestIdx, 1)[0];
+        const chosen = remaining[bestIdx];
+        const chosenMR = bestMR;
+        const alts = scoredRemaining
+            .filter(m => m.c !== chosen)
+            .sort((a, b) => b.mr - a.mr)
+            .slice(0, 2)
+            .map(m => {
+                const t = (m.c.idea && m.c.idea.title) || '';
+                return {
+                    idea_id: m.c.idea && m.c.idea.id,
+                    title: t.length > 90 ? t.slice(0, 87) + '…' : t,
+                    family: m.c.family,
+                    endpoint_kind: m.c.endpoint_kind,
+                    blueprint_total: round(m.c.total, 3),
+                    mmr_score: round(m.mr, 3),
+                    similarity: round(m.sim, 3),
+                    total_delta: round(m.c.total - chosen.total, 3),
+                    mmr_delta: round(m.mr - chosenMR, 3),
+                    rejection_reason: m.blocked || 'lower mmr(total − λ·sim) at this slot',
+                };
+            });
+        if (chosen.idea && chosen.idea.id) finalAlternatesByIdeaId.set(chosen.idea.id, alts);
+        remaining.splice(bestIdx, 1);
         ranked.push(chosen);
         perFam.set(chosen.family, (perFam.get(chosen.family) || 0) + 1);
         if (chosen.endpoint_kind) perEnd.set(chosen.endpoint_kind, (perEnd.get(chosen.endpoint_kind) || 0) + 1);
@@ -3881,13 +3996,28 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     topN.forEach((x, i) => { x.rank = i + 1; });
     // Attach final-rank diversity snapshot to each idea so the audit trail
     // includes which family/endpoint caps were in effect at top-level rank.
-    for (const idea of topN) {
+    for (let i = 0; i < topN.length; i++) {
+        const idea = topN[i];
         if (idea.synthesis_trace) {
             idea.synthesis_trace.final_rank_diversity = {
                 per_family_in_topN: Object.fromEntries(perFam),
                 per_endpoint_kind_in_topN: Object.fromEntries(perEnd),
                 caps: { per_family_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
                 mmr_lambda: lambda,
+            };
+            // Alternates displaced by this idea during final top-N MMR.
+            // Captures candidate pressure at the blueprint-total level so
+            // Tyler can see which nearby blueprints lost — and why — rather
+            // than just the winning slate.
+            const alts = finalAlternatesByIdeaId.get(idea.id) || [];
+            idea.synthesis_trace.final_rank_alternates = {
+                stage: 'final_rank',
+                slot: i + 1,
+                ideas_considered: scored.length,
+                caps_in_effect: { per_family_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
+                mmr_lambda: lambda,
+                nearby_displaced: alts,
+                note: 'Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: family cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots.',
             };
         }
     }

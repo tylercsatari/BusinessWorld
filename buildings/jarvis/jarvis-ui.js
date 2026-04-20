@@ -6031,6 +6031,41 @@ const JarvisUI = (() => {
         };
         const diversity = st.diversity_selection || {};
         const finalRank = st.final_rank_diversity || {};
+        const seedAlts = st.seed_alternates || null;
+        const finalAlts = st.final_rank_alternates || null;
+        const fmtDelta = (d) => {
+            if (d == null || isNaN(+d)) return '';
+            const v = +d;
+            const c = v > 0 ? '#fbbf24' : (v < 0 ? '#f87171' : '#94a3b8');
+            const s = v === 0 ? '0' : (v > 0 ? '+' : '') + v.toFixed(3);
+            return `<span style="color:${c}">${s}</span>`;
+        };
+        const seedAltRows = seedAlts && Array.isArray(seedAlts.nearby_rejected) ? seedAlts.nearby_rejected.map(a => {
+            const endp = a.endpoint_id || a.endpoint_kind || '';
+            return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5;padding:2px 0;border-top:1px dashed #1e293b">
+                <code style="color:#f59e0b">${escapeHtml(a.motif_id || '')}</code>${endp ? `<span style="color:#64748b"> · </span><code style="color:#22c55e;font-size:10px">${escapeHtml(endp)}</code>` : ''}
+                <span style="color:#64748b;margin-left:4px">raw</span> <b style="color:#f1f5f9">${a.raw_score != null ? (+a.raw_score).toFixed(3) : '—'}</b>
+                <span style="color:#64748b;margin-left:4px">Δ</span> ${fmtDelta(a.score_delta)}
+                ${a.mmr_score != null ? ` <span style="color:#64748b;margin-left:4px">mmr</span> <b style="color:#f1f5f9">${(+a.mmr_score).toFixed(3)}</b>` : ''}
+                ${a.similarity != null ? ` <span style="color:#64748b;margin-left:4px">sim</span> <b style="color:#f1f5f9">${(+a.similarity).toFixed(2)}</b>` : ''}
+                <div style="font-size:9px;color:#94a3b8;margin-top:1px">${escapeHtml(a.rejection_reason || '')}</div>
+            </div>`;
+        }).join('') : '';
+        const finalAltRows = finalAlts && Array.isArray(finalAlts.nearby_displaced) ? finalAlts.nearby_displaced.map(a => {
+            return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5;padding:2px 0;border-top:1px dashed #1e293b">
+                <code style="color:#f59e0b">${escapeHtml(a.idea_id || '')}</code>
+                ${a.family ? `<span style="color:#64748b"> · </span><code style="color:#a78bfa;font-size:10px">${escapeHtml(a.family)}</code>` : ''}
+                ${a.endpoint_kind ? `<span style="color:#64748b"> · </span><code style="color:#22c55e;font-size:10px">${escapeHtml(a.endpoint_kind)}</code>` : ''}
+                <div style="font-size:10px;color:#cbd5e1;margin-top:1px">
+                    <span style="color:#64748b">total</span> <b style="color:#f1f5f9">${a.blueprint_total != null ? (+a.blueprint_total).toFixed(3) : '—'}</b>
+                    <span style="color:#64748b;margin-left:4px">Δ</span> ${fmtDelta(a.total_delta)}
+                    ${a.mmr_score != null ? ` <span style="color:#64748b;margin-left:4px">mmr</span> <b style="color:#f1f5f9">${(+a.mmr_score).toFixed(3)}</b>` : ''}
+                    ${a.similarity != null ? ` <span style="color:#64748b;margin-left:4px">sim</span> <b style="color:#f1f5f9">${(+a.similarity).toFixed(2)}</b>` : ''}
+                </div>
+                ${a.title ? `<div style="font-size:9px;color:#cbd5e1;margin-top:1px;font-style:italic">${escapeHtml(a.title)}</div>` : ''}
+                <div style="font-size:9px;color:#94a3b8;margin-top:1px">${escapeHtml(a.rejection_reason || '')}</div>
+            </div>`;
+        }).join('') : '';
         const lattice = (st.derived_from_lattice || []).map(s =>
             `<li style="font-size:10px;color:#cbd5e1;line-height:1.5"><code style="color:#94a3b8">${escapeHtml(s)}</code></li>`
         ).join('');
@@ -6071,6 +6106,32 @@ const JarvisUI = (() => {
                     <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">
                         ${perFam ? `<span style="color:#64748b">top-N families:</span> ${perFam}` : ''}
                         ${perEnd ? ` · <span style="color:#64748b">endpoints:</span> ${perEnd}` : ''}
+                    </div>` : ''}
+                ${(seedAlts || finalAlts) ? `
+                    <div style="background:#0a1628;border-left:2px solid #f59e0b;border-radius:3px;padding:6px 8px;margin-bottom:4px">
+                        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:3px">
+                            <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#f59e0b">▸ Candidate pressure — why this idea won vs nearby alternates</div>
+                            <div style="font-size:9px;color:#64748b">
+                                ${seedAlts && seedAlts.candidates_considered != null ? `<span>seed pool <b style="color:#cbd5e1">${seedAlts.candidates_considered}</b>${seedAlts.families_considered != null ? ` / <b style="color:#cbd5e1">${seedAlts.families_considered}</b> fam` : ''}</span>` : ''}
+                                ${finalAlts && finalAlts.ideas_considered != null ? ` · <span>final pool <b style="color:#cbd5e1">${finalAlts.ideas_considered}</b></span>` : ''}
+                            </div>
+                        </div>
+                        ${seedAltRows ? `
+                            <div style="margin-top:3px">
+                                <div style="font-size:9px;color:#f59e0b;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:2px">Seed-stage rejected neighbors (within family / MMR-fill runners-up)</div>
+                                ${seedAltRows}
+                            </div>` : ''}
+                        ${finalAltRows ? `
+                            <div style="margin-top:5px">
+                                <div style="font-size:9px;color:#f59e0b;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:2px">Final-rank displaced blueprints (top-N MMR)</div>
+                                ${finalAltRows}
+                            </div>` : ''}
+                        ${(seedAlts && seedAlts.note) || (finalAlts && finalAlts.note) ? `
+                            <details style="margin-top:4px">
+                                <summary style="cursor:pointer;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">how this was measured</summary>
+                                ${seedAlts && seedAlts.note ? `<div style="font-size:9px;color:#94a3b8;margin-top:3px;line-height:1.5"><b style="color:#f59e0b">seed:</b> ${escapeHtml(seedAlts.note)}</div>` : ''}
+                                ${finalAlts && finalAlts.note ? `<div style="font-size:9px;color:#94a3b8;margin-top:3px;line-height:1.5"><b style="color:#f59e0b">final:</b> ${escapeHtml(finalAlts.note)}</div>` : ''}
+                            </details>` : ''}
                     </div>` : ''}
                 ${lattice ? `
                     <details style="margin-top:4px">
