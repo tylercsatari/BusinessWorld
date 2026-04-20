@@ -3315,3 +3315,41 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 03:49:33]   [DONE]      r=0.036 (none positive)
 jarvis-store: R2 write failed for experiments_log: Expected closing tag 'hr' (opened in line 5, col 1) instead of closing tag 'body'.:6:1
   Deserialization error: to see the raw response, inspect the hidden field {error}.$response on this object.
+◇ injected env (42) from ../../.env // tip: ◈ encrypted .env [www.dotenvx.com]
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 04:10:11] 
+============================================================
+[jarvis-runner 04:10:11] AUTONOMOUS RUN: auto_20260420041011.
+[jarvis-runner 04:10:11]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7
+[jarvis-runner 04:11:31] Zero-variance filter: skipped indicators — 175 constant-value, 450 sparse (<20 nonzero); removed 1531 candidates
+[jarvis-runner 04:11:31] Pool before bias: 12826 pre, 18913 post
+[jarvis-runner 04:11:31] Candidate pool: 31739 unrun (33456 already done)
+[jarvis-runner 04:11:31] Loaded 370 videos
+[jarvis-runner 04:11:32] 
+==================================================
+[jarvis-runner 04:11:32] INDICATOR: ref_to_gratification_gap_pct_x_stakes_escalation_count
+[jarvis-runner 04:11:32]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 04:11:32]   [EXPERIMENT] Pearson r=0.036, rho=0.067, p=0.4855, n=370
+[jarvis-runner 04:11:32]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * stakes_escalation_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 04:11:32]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × stakes_escalation_count → 'views', depth=2
+[jarvis-runner 04:11:32]   [DONE]      r=0.036 (none positive)
+◇ injected env (42) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+R2: Connected to bucket "business-world-videos"
+[autorun] Starting zygarnik/open-loop run: maxIter=5000 maxMin=55 preRatio=0.70 maxNoSignal=25
+[jarvis-runner 04:17:38] 
+============================================================
+[jarvis-runner 04:17:38] AUTONOMOUS RUN: auto_20260420041738.
+[jarvis-runner 04:17:38]   maxIterations=5000, maxMinutes=55, maxFailures=500, maxNoSignal=25, preuploadRatio=0.7
+[jarvis-runner 04:18:04] Zero-variance filter: skipped indicators — 175 constant-value, 450 sparse (<20 nonzero); removed 1531 candidates
+[jarvis-runner 04:18:04] Pool before bias: 12826 pre, 18913 post
+[jarvis-runner 04:18:04] Candidate pool: 31739 unrun (33456 already done)
+[jarvis-runner 04:18:04] Loaded 370 videos
+[jarvis-runner 04:18:05] 
+==================================================
+[jarvis-runner 04:18:05] INDICATOR: ref_to_gratification_gap_pct_x_stakes_escalation_count
+[jarvis-runner 04:18:05]   [DATASET]   370 videos, 0 skipped
+[jarvis-runner 04:18:05]   [EXPERIMENT] Pearson r=0.036, rho=0.067, p=0.4855, n=370
+[jarvis-runner 04:18:05]   [RESULT]    none positive: Interaction: ref_to_gratification_gap_pct * stakes_escalation_count. does not meaningfully predict views. Safe to deprioritize.
+[jarvis-runner 04:18:05]   [GRAPH]     Derived edge added: ref_to_gratification_gap_pct × stakes_escalation_count → 'views', depth=2
+[jarvis-runner 04:18:05]   [DONE]      r=0.036 (none positive)
