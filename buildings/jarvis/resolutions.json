@@ -32217,7 +32217,16 @@
       "mystery_setup_count_x_promise_specificity_density",
       "mystery_setup_count_x_loss_framing_count",
       "mystery_setup_count_x_loss_framing_density",
-      "mystery_setup_count_x_social_proof_count"
+      "mystery_setup_count_x_social_proof_count",
+      "mystery_setup_count_x_social_proof_density",
+      "mystery_setup_count_x_proof_of_work_count",
+      "mystery_setup_count_x_proof_of_work_density",
+      "mystery_setup_count_x_failure_vulnerability_count",
+      "mystery_setup_count_x_failure_vulnerability_density",
+      "mystery_setup_count_x_commitment_device_count",
+      "mystery_setup_count_x_commitment_device_density",
+      "mystery_setup_count_x_action_trigger_count",
+      "mystery_setup_count_x_action_trigger_density"
     ],
     "depth_in_hierarchy": 0
   },
