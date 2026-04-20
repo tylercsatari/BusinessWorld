@@ -117,6 +117,7 @@
     <link rel="stylesheet" href="buildings/chocolatebar/chocolatebar.css">
     <link rel="stylesheet" href="buildings/jarvis/jarvis.css?v=9">
     <link rel="stylesheet" href="buildings/finance/finance.css">
+    <link rel="stylesheet" href="buildings/employee/employee.css">
 </head>
 <body>
 <div id="hud">
@@ -265,6 +266,8 @@ function hashString(str) {
 <script src="buildings/jarvis/jarvis-variable-catalog.js?v=1"></script>
 <script src="buildings/jarvis/jarvis-ui.js?v=10"></script>
 <script src="buildings/finance/finance-ui.js"></script>
+<script src="buildings/employee/employee-service.js"></script>
+<script src="buildings/employee/employee-ui.js"></script>
 
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -2279,6 +2282,7 @@ function saveLayout() {
         paths: Array.from(pathTiles),
         trees: allTrees.map(t => ({ x: t.position.x, z: t.position.z, s: t.scale.x })),
         employees: employees.map(e => ({ name: e.userData.name, x: e.position.x, z: e.position.z })),
+        employeeRoster: (typeof EmployeeService !== 'undefined') ? EmployeeService.serialize() : undefined,
         penSize: { w: penSize.w, d: penSize.d },
         flags: projectFlags.map(f => ({ name: f.userData.projectName, x: f.position.x, z: f.position.z })),
         finances: finances,
@@ -2305,6 +2309,7 @@ async function loadLayout() {
 }
 window.addEventListener('beforeunload', () => { saveLayout(); });
 setInterval(saveLayout, 30000);
+window.saveLayout = saveLayout;
 
 // --- Async Init: Load models, create buildings, start game ---
 async function init() {
@@ -2332,6 +2337,9 @@ async function init() {
 
     // Load saved layout or use defaults
     const saved = await loadLayout();
+    if (saved && saved.employeeRoster && typeof EmployeeService !== 'undefined') {
+        EmployeeService.hydrate(saved.employeeRoster);
+    }
     if (saved) {
         // Restore building positions
         if (saved.buildings) {

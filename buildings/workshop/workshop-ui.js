@@ -13,7 +13,15 @@ const WorkshopUI = (() => {
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
 
-    const WORKERS = ['You', 'Robin', 'Jordan', 'Tennille'];
+    function getWorkerOptions(currentAssignee) {
+        const names = (window.EmployeeService ? window.EmployeeService.getNames() : ['You', 'Robin', 'Jordan', 'Tennille']);
+        // Preserve backwards compatibility: if a video references a name
+        // that no longer exists in the roster, surface it so it stays visible.
+        if (currentAssignee && !names.includes(currentAssignee)) {
+            return [currentAssignee, ...names];
+        }
+        return names;
+    }
 
     // Render 3D egg snapshots + character avatars onto card canvases after DOM insertion
     async function renderCardAssets() {
@@ -190,7 +198,7 @@ const WorkshopUI = (() => {
                     <label>Assigned To</label>
                     <select id="workshop-assigned">
                         <option value="">Unassigned</option>
-                        ${WORKERS.map(w => `<option value="${escAttr(w)}" ${w === v.assignedTo ? 'selected' : ''}>${escHtml(w)}</option>`).join('')}
+                        ${getWorkerOptions(v.assignedTo).map(w => `<option value="${escAttr(w)}" ${w === v.assignedTo ? 'selected' : ''}>${escHtml(w)}</option>`).join('')}
                     </select>
                     <label>Hook</label>
                     <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>

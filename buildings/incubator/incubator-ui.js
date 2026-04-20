@@ -1329,10 +1329,15 @@ const IncubatorUI = (() => {
 
     const CHARACTER_HEX = { 'You': 0x3498db, 'Robin': 0xe74c3c, 'Jordan': 0x9b59b6, 'Tennille': 0xff69b4 };
 
+    function colorForEmployeeName(name) {
+        if (window.EmployeeService) return window.EmployeeService.colorNumberForName(name);
+        return CHARACTER_HEX[name] || 0x888888;
+    }
+
     function renderCharacterAvatar(name, canvas, size) {
         const T = window.THREE;
         if (!T || !canvas) return;
-        const color = CHARACTER_HEX[name] || 0x888888;
+        const color = colorForEmployeeName(name);
 
         const w = size || 32;
         const res = w * 4;
