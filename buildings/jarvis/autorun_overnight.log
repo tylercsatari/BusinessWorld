@@ -3576,3 +3576,10 @@ R2: Connected to bucket "business-world-videos"
 [jarvis-runner 05:48:36]   Stop: max_minutes, Top |r|: 0.1452, Elapsed: 25.9m
 [jarvis-runner 05:48:36]   Total indicators: 1852
 [launch-autorun] Complete.
+◇ injected env (42) from ../../Desktop/BusinessHub/BusinessWorld/.env // tip: ⌘ enable debugging { debug: true }
+R2: Connected to bucket "business-world-videos"
+[launch-autorun] Starting Group Q run: maxIter=3000 maxMin=25 preRatio=0.70
+[jarvis-runner 05:51:04] 
+============================================================
+[jarvis-runner 05:51:04] AUTONOMOUS RUN: auto_20260420055104.
+[jarvis-runner 05:51:04]   maxIterations=3000, maxMinutes=25, maxFailures=500, maxNoSignal=null, preuploadRatio=0.7

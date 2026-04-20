@@ -683,8 +683,8 @@ const DURATION_BANDS = [
 //
 // Each object × endpoint combo is scored against the lattice (sensory
 // alignment, action intensity, material-word risk, safety tier, numeric
-// specificity of endpoint). Top N (with per-category cap) survive.
-// Risky atoms are excluded up front.
+// specificity of endpoint). Top N survive on explicit motif evidence,
+// not a synthetic category layer. Risky atoms are excluded up front.
 
 const OBJECT_MOTIFS = [
     {
@@ -1728,8 +1728,8 @@ function computeProofClarity(obj, endpoint, ctx) {
 //        row/ride/carry/build/fold/march/etc.):
 //        the action itself is off-camera — inverse of
 //        HIGH_ENERGY_ACTION_FRAMES.
-//   V3 — Cognitive family/category penalty (cognitive_feat,
-//        cognitive_* categories, skill_dare_cognitive, skill_dare_music):
+//   V3 — Cognitive motif-surface penalty (explicitly cognitive copy,
+//        invisible body anchors, and non-physical reveal surface):
 //        head-framed payoff — inverse of
 //        HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE.
 //   V4 — Title-payoff legibility. Parses title_core_tpl for the reveal
@@ -1757,7 +1757,7 @@ function computeProofClarity(obj, endpoint, ctx) {
 //   V7 — mystery_experiment/identity without physical verb AND without
 //        a gauge or physical object in frame — observation-only cut.
 //
-// Every driver cites an on-disk indicator. No category blacklist; no
+// Every driver cites an on-disk indicator. No rejected category layer; no
 // hand-picked top 5.
 const VL_COGNITIVE_BODY_PARTS = new Set(['feeling', 'head', 'mind', 'brain', 'memory']);
 const VL_COG_VERB_RE = /\b(memoriz|learn|studied|study|studying|recit|recall|translat|remember)\w*\b/;
@@ -1766,7 +1766,7 @@ const VL_COG_VERB_RE = /\b(memoriz|learn|studied|study|studying|recit|recall|tra
 // that thought") and would mislabel cognitive motifs as physical.
 const VL_PHYS_STRONG_RE = /\b(press|slid|slide|pour|hammer|paint|sand|assembl|bolt|tapp|tight|drew|drawing|fold|wrap|writ|flip|stack|plac|lift|heav|squat|stretch|step|walk|march|ran|running|climb|jump|carry|carried|carrying|rowed|rowing|pedal|ride|rode|drove|driving|sail|sailed|launch|race|raced|weigh|pull|push|hit|paddle|throw|threw|roll|kick|cranked|shove|shoved|rig|rigging|unfold|unfolded)\w*\b/;
 const VL_COG_FAMILIES = new Set(['cognitive_feat']);
-const VL_COG_CATEGORIES = new Set(['cognitive_endurance', 'cognitive_patience', 'skill_dare_cognitive', 'skill_dare_music']);
+const VL_COGNITIVE_SURFACE_RE = /\b(flashcards?|native speaker|instrument|song|novel|page(?:s)?|book|puzzle|piece(?:s)?|language|memor|learn|study|recit|recall|translate|perform(?:ed)? it)\b/;
 const VL_TITLE_PHYSICAL_REVEAL_RE = /(same shot|same frame|same starting|first and last|body did|weigh-?in|broke first|broke at|rode it|rowed it|held until|hit exactly|quits first|froze at|to see what broke|let me know it was over|told me when to stop)/;
 const VL_TITLE_ABSTRACT_REVEAL_RE = /(tested me|quizzed me|assuming about me|started assuming|rearranged itself|native speaker|decides when|people said|what they said|you wouldn'?t guess|you'?ll never guess|figured out|rewrote my|changed how i|rewired my|here'?s what people)/;
 const VL_FRAME_ACTION_RE = /\bmid-\w+\b|\b(heav|tighten|tap|flip|plac|press|wrap|fold|draw|writ|pedal|row|carri|carry|carrying|runn|climb|jump|stack|point|ring|step|hold|lift|walk|march|squat|stretch|gestur|hitting|pulling|pushing|slid|pour|hammer|paint|cranked|paddl|rigging|boots hitting|boots in motion|oars pulling|pedals turning)\w*\b/;
@@ -1779,7 +1779,6 @@ function computeVisualLegibility(obj, endpoint, ctx) {
     let score = 0;
 
     const family = String(obj.family || '').toLowerCase();
-    const category = String(obj.category || '').toLowerCase();
     const titleTpl = String(obj.title_core_tpl || '').toLowerCase();
     const logline = String(obj.logline_action || '').toLowerCase();
     const firstFrame = String(obj.first_frame_action || '').toLowerCase();
@@ -1853,14 +1852,17 @@ function computeVisualLegibility(obj, endpoint, ctx) {
         });
     }
 
-    // V3 — Cognitive family / category.
-    if (VL_COG_FAMILIES.has(family) || VL_COG_CATEGORIES.has(category)) {
+    // V3 — Cognitive motif surface. This intentionally keys off explicit
+    //      copy + body anchors rather than a synthetic category tag.
+    const hasCognitiveSurface = VL_COG_FAMILIES.has(family)
+        || (!physicalBodyParts.length && (hasCogVerb || VL_COGNITIVE_SURFACE_RE.test(allText)));
+    if (hasCognitiveSurface) {
         const d = -0.22;
         score += d;
         drivers.push({
-            driver: `cognitive_family_or_category_${category || family}`,
+            driver: `cognitive_motif_surface_${family || 'explicit_copy'}`,
             delta: d,
-            source: 'family=cognitive_feat OR category ∈ {cognitive_endurance, cognitive_patience, skill_dare_cognitive, skill_dare_music} — payoff is head-framed regardless of endpoint kind; inverse of HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE',
+            source: 'explicit motif copy/body anchors indicate a cognitive or verbal reveal surface rather than a visible physical payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE',
         });
     }
 
@@ -2030,7 +2032,7 @@ function scoreMotifCombo(obj, endpoint, ctx) {
     const proof = computeProofClarity(obj, endpoint, ctx);
 
     // Visual-legibility (v3.4) — independent of endpoint kind. Reads
-    // body_part_phrase, verb stems, family/category, title-payoff
+    // body_part_phrase, verb stems, explicit motif surface, title-payoff
     // phrasing, frame-1 comprehensibility, and state-to-state visual
     // contrast. Catches motifs that pass proof-clarity via cosmetic
     // artifact tokens (stack/pile/tally) while actually landing on a
@@ -2305,7 +2307,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                     'indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)',
                     'findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)',
                 ],
-                note: 'Visual-legibility is independent of the endpoint kind. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, cognitive family/category, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens ("stack", "tally", "count overlay") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No category blacklist — the six axes are factual fields on the motif and the title string. No hand-picked top 5.',
+                note: 'Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens ("stack", "tally", "count overlay") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5.',
             } : null,
             object_atom_id: obj.id,
             endpoint_atom_id: endpoint.id,
@@ -2324,7 +2326,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                 'visual_prescription_hints.* ← mechanism_indicator_links (frame_*) ranked by |rho| per zone',
                 'creator_fit ← pat_making_v2 + visual_is_workshop + pre_workshop_x_making + tension_x_workshop + PHYSICAL_SENSORY_LANGUAGE vs TECHNICAL_MATERIAL_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
                 'proof_clarity ← HIGH_ENERGY_ACTION_FRAMES (action frames IS the proof shot) + end_begin_ratio (single-shot before/after) + title_making_keyword (build+test hybrids) + inverse on abstract/cognitive/untestable-stack payoffs',
-                'visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / cognitive family/category / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts',
+                'visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts',
             ],
             still_hardcoded: [
                 'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
@@ -2337,15 +2339,12 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Diversity-aware seed selection (MMR over motif families + endpoints)
+// Diversity-aware seed selection (MMR over motif families + explicit proof surfaces)
 //
-// The old selector scored all combos globally and capped at 2 per category.
-// That still let four slots fall into near-duplicate
-// endurance/count/countdown ideas (sandbag miles, backpack miles, stairs
-// count, jump rope count, plank timer) because every endurance category
-// under the cap could still fill a slot.
+// The old selector still carried a category-layer penalty. That kept the
+// ranking orbiting broad buckets instead of concrete validated idea shapes.
 //
-// The new selector enforces diversity at three levels:
+// The current selector enforces diversity at three explicit levels:
 //   1. Motif family (endurance / build_test / body_transformation /
 //      mystery_experiment / identity / skill_dare / craft_patience /
 //      cognitive_feat / repetition_outreach) — at most 1 per family until
@@ -2353,26 +2352,34 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
 //   2. Endpoint kind (count / timer / distance / body / transformation /
 //      experiment / identity / build_test) — penalty for repeats, hard cap
 //      at 2 per kind.
-//   3. Category — soft penalty for repeats within the same category.
+//   3. Proof surface — soft penalty for repeats on the same visible proof
+//      surface (same concrete kind + same body anchor), so the top slate
+//      stays idea-specific rather than bucket-specific.
 //
 // Selection uses Maximal-Marginal-Relevance:
 //   pick_score(c) = raw_score(c) − λ·similarity(c, already_selected)
-// Similarity combines family, endpoint, and category overlap. Every
-// selection decision is logged to synthesis_trace.diversity_log so the
+// Similarity combines family, endpoint, and explicit proof-surface overlap.
+// Every selection decision is logged to synthesis_trace.diversity_log so the
 // reason each slot was chosen is auditable.
+
+function getProofSurfaceKey(obj) {
+    const concrete = String(obj.concrete_kind || 'unknown');
+    const body = String(obj.body_part_phrase || 'none');
+    return `${concrete}__${body}`;
+}
 
 function comboSimilarity(a, b) {
     let s = 0;
-    if ((a.obj.family || a.obj.category) === (b.obj.family || b.obj.category)) s += 0.60;
+    if ((a.obj.family || 'unknown') === (b.obj.family || 'unknown')) s += 0.60;
     if (a.endpoint.kind === b.endpoint.kind) s += 0.35;
-    if (a.obj.category === b.obj.category) s += 0.20;
+    if (getProofSurfaceKey(a.obj) === getProofSurfaceKey(b.obj)) s += 0.20;
     return s;
 }
 
 function clusterCombosByFamily(combos) {
     const clusters = new Map();
     for (const c of combos) {
-        const fam = c.obj.family || c.obj.category || 'unknown';
+        const fam = c.obj.family || 'unknown';
         if (!clusters.has(fam)) clusters.set(fam, []);
         clusters.get(fam).push(c);
     }
@@ -2395,15 +2402,16 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
     const alternatesByMotifId = new Map();
     const perFamily = new Map();
     const perEndpoint = new Map();
-    const perCategory = new Map();
+    const perProofSurface = new Map();
     const usedMotifIds = new Set();
 
     function compactAlt(c, chosen, extra) {
         return {
             motif_id: c.obj.id,
-            family: c.obj.family || c.obj.category || 'unknown',
+            family: c.obj.family || 'unknown',
             endpoint_id: c.endpoint.id,
             endpoint_kind: c.endpoint.kind,
+            proof_surface: getProofSurfaceKey(c.obj),
             raw_score: round(c.score, 3),
             score_delta: round(c.score - chosen.score, 3),
             ...extra,
@@ -2445,7 +2453,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         usedMotifIds.add(best.obj.id);
         perFamily.set(fam, (perFamily.get(fam) || 0) + 1);
         perEndpoint.set(best.endpoint.kind, (perEndpoint.get(best.endpoint.kind) || 0) + 1);
-        perCategory.set(best.obj.category, (perCategory.get(best.obj.category) || 0) + 1);
+        perProofSurface.set(getProofSurfaceKey(best.obj), (perProofSurface.get(getProofSurfaceKey(best.obj)) || 0) + 1);
         log.push({
             phase: 'family_round_robin',
             slot: picked.length,
@@ -2473,7 +2481,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             const c = remaining[i];
             let blocked = null;
             if (usedMotifIds.has(c.obj.id)) blocked = 'motif-id already selected';
-            else if ((perFamily.get(c.obj.family || c.obj.category) || 0) >= 2) blocked = `family cap hit (${c.obj.family || c.obj.category}=2)`;
+            else if ((perFamily.get(c.obj.family || 'unknown') || 0) >= 2) blocked = `family cap hit (${c.obj.family || 'unknown'}=2)`;
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) blocked = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             let sim = 0;
             for (const p of picked) sim = Math.max(sim, comboSimilarity(c, p));
@@ -2493,9 +2501,10 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             .slice(0, 2)
             .map(m => ({
                 motif_id: m.c.obj.id,
-                family: m.c.obj.family || m.c.obj.category || 'unknown',
+                family: m.c.obj.family || 'unknown',
                 endpoint_id: m.c.endpoint.id,
                 endpoint_kind: m.c.endpoint.kind,
+                proof_surface: getProofSurfaceKey(m.c.obj),
                 raw_score: round(m.c.score, 3),
                 mmr_score: round(m.mr, 3),
                 similarity: round(m.sim, 3),
@@ -2508,10 +2517,10 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         remaining.splice(bestIdx, 1);
         picked.push(chosen);
         usedMotifIds.add(chosen.obj.id);
-        const fam = chosen.obj.family || chosen.obj.category;
+        const fam = chosen.obj.family || 'unknown';
         perFamily.set(fam, (perFamily.get(fam) || 0) + 1);
         perEndpoint.set(chosen.endpoint.kind, (perEndpoint.get(chosen.endpoint.kind) || 0) + 1);
-        perCategory.set(chosen.obj.category, (perCategory.get(chosen.obj.category) || 0) + 1);
+        perProofSurface.set(getProofSurfaceKey(chosen.obj), (perProofSurface.get(getProofSurfaceKey(chosen.obj)) || 0) + 1);
         log.push({
             phase: 'mmr_fill',
             slot: picked.length,
@@ -2523,7 +2532,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             max_similarity_to_selected: round(bestSim, 3),
             mmr_score: round(bestMR, 3),
             lambda,
-            reason: `mmr(score − lambda·max_sim) = ${round(bestMR, 3)}; family cap=2, endpoint-kind cap=2, motif-id hard-dedup`,
+            reason: `mmr(score − lambda·max_sim) = ${round(bestMR, 3)}; family cap=2, endpoint-kind cap=2, proof-surface overlap penalty, motif-id hard-dedup`,
         });
     }
 
@@ -2585,7 +2594,8 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         // each final idea records why this slot survived selection.
         const myLog = log.find(l => l.slot === (i + 1));
         if (seed.synthesis_trace) {
-            seed.synthesis_trace.motif_family = c.obj.family || c.obj.category || null;
+            seed.synthesis_trace.motif_family = c.obj.family || null;
+            seed.synthesis_trace.proof_surface = getProofSurfaceKey(c.obj);
             seed.synthesis_trace.diversity_selection = {
                 phase: myLog && myLog.phase,
                 reason: myLog && myLog.reason,
@@ -3600,7 +3610,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         ];
         traces.visual_legibility = makeTrace({
             field: 'visual_legibility',
-            rationale: 'Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) cognitive family/category, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens ("stack of flashcards", "tally", "count overlay") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no category blacklist; no hand-picked top 5.',
+            rationale: 'Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title_core_tpl reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens ("stack of flashcards", "tally", "count overlay") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.',
             evidence_sources: [
                 'retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES',
                 'retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE',
@@ -3915,10 +3925,10 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     // Diversity-aware re-rank on blueprint scores. The old code sorted by
     // score_breakdown.total alone, which let one or two families dominate
     // every top slot because their motif_score advantage propagated. The
-    // new rank applies MMR on blueprint totals with family + endpoint
-    // similarity, then enforces per-family / per-endpoint caps at the
-    // final-output level so the same family cannot take more than ~2 of
-    // the top `count` slots when other families are available.
+    // new rank applies MMR on blueprint totals with family + endpoint +
+    // proof-surface similarity, then enforces per-family / per-endpoint
+    // caps at the final-output level so the same family cannot take more
+    // than ~2 of the top `count` slots when other families are available.
     const scored = ideas.map(idea => ({
         idea,
         family: (idea.synthesis_trace && idea.synthesis_trace.motif_family) || 'unknown',
@@ -3928,6 +3938,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
             return e ? e.kind : null;
         })(),
         total: (idea.score_breakdown && idea.score_breakdown.total) || 0,
+        proof_surface: (idea.synthesis_trace && idea.synthesis_trace.proof_surface) || null,
     }));
     const perFamCap = 2;
     const perEndCap = 2;
@@ -3953,6 +3964,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
                 let s = 0;
                 if (p.family === c.family) s += 0.60;
                 if (p.endpoint_kind && p.endpoint_kind === c.endpoint_kind) s += 0.35;
+                if (p.proof_surface && p.proof_surface === c.proof_surface) s += 0.20;
                 if (s > sim) sim = s;
             }
             const mr = c.total - lambda * sim;
@@ -3978,6 +3990,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
                     title: t.length > 90 ? t.slice(0, 87) + '…' : t,
                     family: m.c.family,
                     endpoint_kind: m.c.endpoint_kind,
+                    proof_surface: m.c.proof_surface,
                     blueprint_total: round(m.c.total, 3),
                     mmr_score: round(m.mr, 3),
                     similarity: round(m.sim, 3),
