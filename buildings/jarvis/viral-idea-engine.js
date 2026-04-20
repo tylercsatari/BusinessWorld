@@ -3971,10 +3971,11 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     // take more than ~2 of the top `count` slots when other buckets remain.
     const scored = ideas.map(idea => ({
         idea,
-        // Diversity-bucket axis. Read from synthesis_trace.motif_family because
-        // that is the on-disk/emission field name; the local uses `bucket` to
-        // reflect the role (diversity axis) rather than the legacy field name.
-        bucket: (idea.synthesis_trace && idea.synthesis_trace.motif_family) || 'unknown',
+        // Diversity-bucket axis. Prefer the alias-first `diversity_bucket`
+        // field on the trace and fall back to the legacy `motif_family` mirror
+        // so older seeds keep working. The local uses `bucket` to reflect the
+        // role (diversity axis) rather than the legacy field name.
+        bucket: (idea.synthesis_trace && (idea.synthesis_trace.diversity_bucket || idea.synthesis_trace.motif_family)) || 'unknown',
         endpoint_kind: (() => {
             const eid = idea.synthesis_trace && idea.synthesis_trace.endpoint_atom_id;
             const e = ENDPOINT_MOTIFS.find(x => x.id === eid);

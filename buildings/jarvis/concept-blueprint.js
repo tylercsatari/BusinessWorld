@@ -16,6 +16,10 @@ const round = (x, n = 4) => Number(Number(x).toFixed(n));
 // ---------- Concept input (the ONLY hardcoded motif-level thing) ----------
 const CONCEPT = {
     id: 'oobleck_egg_drop_paradox',
+    // `topic_bucket` is the alias-first name for the motif-diversity axis this
+    // concept sits on. `topic_family` is kept as a legacy mirror so anything
+    // consuming the older key keeps working.
+    topic_bucket: 'experimentation_paradox',
     topic_family: 'experimentation_paradox',
     hook_line: 'Why does oobleck get hard when you hit it, but also somehow can protect an egg from falling 5 feet off the ground?',
     intro_visual_facts: [
