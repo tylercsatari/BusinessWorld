@@ -116,25 +116,22 @@ async function saveJson(name, data) {
     cache[name] = data;
     cacheTime[name] = Date.now();
 
-    // Write to R2
-    if (isR2Ready()) {
-        try {
-            await uploadToR2(r2Key(name), Buffer.from(jsonStr), 'application/json');
-        } catch (e) {
-            console.warn(`jarvis-store: R2 write failed for ${name}:`, e.message);
-        }
-    }
-
-    // Always write local copy (pipeline compat + safety)
+    // Write to local copy immediately (pipeline compat + safety — never block on network)
     try {
         fs.writeFileSync(localPath(name), jsonStr);
     } catch (e) {
         console.warn(`jarvis-store: local write failed for ${name}:`, e.message);
     }
 
-    // Auto-generate compact mirror
+    // Auto-generate compact mirror (local only, fire immediately)
     if (COMPACT_MIRROR_SOURCES.includes(name)) {
         await saveCompactMirror(name, data);
+    }
+
+    // Fire-and-forget R2 write — never await in the main runner loop
+    if (isR2Ready()) {
+        uploadToR2(r2Key(name), Buffer.from(jsonStr), 'application/json')
+            .catch(e => console.warn(`jarvis-store: R2 write failed for ${name}:`, e.message));
     }
 }
 
@@ -151,12 +148,10 @@ async function saveCompactMirror(name, data) {
     cache[cn] = compact;
     cacheTime[cn] = Date.now();
 
+    // Fire-and-forget compact mirror R2 write
     if (isR2Ready()) {
-        try {
-            await uploadToR2(r2Key(cn), Buffer.from(jsonStr), 'application/json');
-        } catch (e) {
-            console.warn(`jarvis-store: R2 compact write failed for ${cn}:`, e.message);
-        }
+        uploadToR2(r2Key(cn), Buffer.from(jsonStr), 'application/json')
+            .catch(e => console.warn(`jarvis-store: R2 compact write failed for ${cn}:`, e.message));
     }
 
     try {
