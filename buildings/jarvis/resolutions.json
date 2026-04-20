@@ -32096,7 +32096,29 @@
       "proof_density_hook_x_challenge_statement_count",
       "proof_density_hook_x_challenge_statement_density",
       "proof_density_hook_x_narrative_tension_count",
-      "proof_density_hook_x_narrative_tension_density"
+      "proof_density_hook_x_narrative_tension_density",
+      "zygarnik_completion_ratio",
+      "payoff_before_midpoint_flag",
+      "proof_density_hook_x_payoff_delay_score",
+      "proof_density_hook_x_challenge_to_resolution_gap_pct",
+      "proof_density_hook_x_loop_front_half_density",
+      "proof_density_hook_x_narrative_tension_density_first_half",
+      "proof_density_hook_x_challenge_setup_density_first_quarter",
+      "stake_loop_product_x_rhetorical_question_count",
+      "stake_loop_product_x_rhetorical_question_density",
+      "stake_loop_product_x_mystery_setup_count",
+      "stake_loop_product_x_mystery_setup_density",
+      "stake_loop_product_x_promise_specificity_count",
+      "stake_loop_product_x_promise_specificity_density",
+      "stake_loop_product_x_loss_framing_count",
+      "stake_loop_product_x_loss_framing_density",
+      "stake_loop_product_x_social_proof_count",
+      "stake_loop_product_x_social_proof_density",
+      "stake_loop_product_x_proof_of_work_count",
+      "stake_loop_product_x_proof_of_work_density",
+      "stake_loop_product_x_failure_vulnerability_count",
+      "stake_loop_product_x_failure_vulnerability_density",
+      "stake_loop_product_x_commitment_device_count"
     ],
     "depth_in_hierarchy": 0
   },
@@ -32710,7 +32732,8 @@
       "narrative_tension_density_first3s",
       "narrative_tension_density_first5s",
       "narrative_tension_density_first8s",
-      "narrative_tension_density_first10s"
+      "narrative_tension_density_first10s",
+      "stakes_in_hook_flag"
     ],
     "depth_in_hierarchy": 1
   },
