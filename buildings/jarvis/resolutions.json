@@ -32314,7 +32314,20 @@
       "promise_specificity_density_x_social_proof_density",
       "promise_specificity_density_x_proof_of_work_count",
       "promise_specificity_density_x_proof_of_work_density",
-      "promise_specificity_density_x_failure_vulnerability_count"
+      "promise_specificity_density_x_failure_vulnerability_count",
+      "promise_specificity_density_x_failure_vulnerability_density",
+      "promise_specificity_density_x_commitment_device_count",
+      "promise_specificity_density_x_commitment_device_density",
+      "promise_specificity_density_x_action_trigger_count",
+      "promise_specificity_density_x_action_trigger_density",
+      "promise_specificity_density_x_reference_callback_count",
+      "promise_specificity_density_x_reference_callback_density",
+      "promise_specificity_density_x_visual_credibility_count",
+      "promise_specificity_density_x_visual_credibility_density",
+      "promise_specificity_density_x_stakes_escalation_count",
+      "promise_specificity_density_x_stakes_escalation_density",
+      "promise_specificity_density_x_delayed_reveal_count",
+      "promise_specificity_density_x_delayed_reveal_density"
     ],
     "depth_in_hierarchy": 0
   },
