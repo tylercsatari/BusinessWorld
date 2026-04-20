@@ -32124,7 +32124,11 @@
       "stake_loop_product_x_action_trigger_density",
       "stake_loop_product_x_reference_callback_count",
       "stake_loop_product_x_reference_callback_density",
-      "stake_loop_product_x_visual_credibility_count"
+      "stake_loop_product_x_visual_credibility_count",
+      "stake_loop_product_x_visual_credibility_density",
+      "stake_loop_product_x_stakes_escalation_count",
+      "stake_loop_product_x_stakes_escalation_density",
+      "stake_loop_product_x_delayed_reveal_count"
     ],
     "depth_in_hierarchy": 0
   },

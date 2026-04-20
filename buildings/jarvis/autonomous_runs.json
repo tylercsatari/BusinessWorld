@@ -21821,5 +21821,42 @@
     "elapsed_minutes": 25.31,
     "total_indicators_after": 1855,
     "total_derived_after": 32402
+  },
+  {
+    "id": "auto_20260420135332.",
+    "started_at": "2026-04-20T13:53:32.163Z",
+    "finished_at": "2026-04-20T14:19:32.447Z",
+    "mode": "hybrid_auto",
+    "llm_proposed": 0,
+    "llm_completed": 0,
+    "attempted": 13,
+    "completed": 10,
+    "failures": 3,
+    "pre_attempted": 10,
+    "pre_completed": 10,
+    "post_attempted": 3,
+    "post_completed": 0,
+    "preupload_ratio_requested": 0.7,
+    "no_signal_streak_end": 0,
+    "stop_reason": "max_minutes",
+    "candidate_keys_processed": [
+      "stake_loop_product_x_commitment_device_density",
+      "stake_loop_product_x_action_trigger_count",
+      "stake_loop_product_x_action_trigger_density",
+      "stake_loop_product_x_reference_callback_count",
+      "stake_loop_product_x_reference_callback_density",
+      "stake_loop_product_x_visual_credibility_count",
+      "stake_loop_product_x_visual_credibility_density",
+      "FAIL:early_proof_position_pct_x_above_baseline_area",
+      "FAIL:early_proof_position_pct_x_avg_percent_viewed",
+      "FAIL:early_proof_position_pct_x_avg_view_duration_s",
+      "stake_loop_product_x_stakes_escalation_count",
+      "stake_loop_product_x_stakes_escalation_density",
+      "stake_loop_product_x_delayed_reveal_count"
+    ],
+    "top_new_r_abs": 0.1448,
+    "elapsed_minutes": 26,
+    "total_indicators_after": 1855,
+    "total_derived_after": 32412
   }
 ]
