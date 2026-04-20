@@ -588,8 +588,10 @@ function compress(artifacts) {
             mechanisms_total: mechanisms && mechanisms.n_mechanisms,
             videos_in_pool: mechanisms && mechanisms.n_videos_pool,
             indicators_total: indicatorRegistry && indicatorRegistry.total,
-            candidate_proposal_families: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
+            // Primary (diversity-bucket) key; legacy `candidate_proposal_families`
+            // alias retained for readers that still reference the old name.
             candidate_proposal_diversity_buckets: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
+            candidate_proposal_families: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
             mechanism_indicator_links: mechanismIndicatorLinks && mechanismIndicatorLinks.n_links,
             retention_pattern_waves: retentionPatterns && retentionPatterns.analysis_waves,
             word_retention_scored: wordImpact ? Object.keys(wordImpact).length : 0,
@@ -976,7 +978,7 @@ const OBJECT_MOTIFS = [
         endpoint_kinds: ['exact_count', 'body_quit'],
         implied_material_words: [],
     },
-    // ── build_test family ────────────────────────────────────────────
+    // ── build_test bucket ────────────────────────────────────────────
     {
         id: 'cardboard_boat_row',
         verb_past_phrase: 'Built And Rowed',
@@ -1021,7 +1023,7 @@ const OBJECT_MOTIFS = [
         endpoint_kinds: ['exact_distance', 'build_test_outcome'],
         implied_material_words: [],
     },
-    // ── body_transformation family ───────────────────────────────────
+    // ── body_transformation bucket ───────────────────────────────────
     {
         id: 'one_food_thirty_days',
         verb_past_phrase: 'Ate Only',
@@ -1068,7 +1070,7 @@ const OBJECT_MOTIFS = [
         endpoint_kinds: ['transformation_reveal', 'time_to_target'],
         implied_material_words: [],
     },
-    // ── mystery_experiment family ────────────────────────────────────
+    // ── mystery_experiment bucket ────────────────────────────────────
     {
         id: 'silent_seven_days',
         verb_past_phrase: 'Didn\u2019t Speak For',
@@ -1115,7 +1117,7 @@ const OBJECT_MOTIFS = [
         endpoint_kinds: ['experiment_observation', 'time_to_target'],
         implied_material_words: [],
     },
-    // ── identity family ──────────────────────────────────────────────
+    // ── identity bucket ──────────────────────────────────────────────
     {
         id: 'pro_boxer_day',
         verb_past_phrase: 'Trained With',
@@ -1161,7 +1163,7 @@ const OBJECT_MOTIFS = [
         endpoint_kinds: ['identity_dayend', 'body_quit'],
         implied_material_words: [],
     },
-    // ── skill_dare family ────────────────────────────────────────────
+    // ── skill_dare bucket ────────────────────────────────────────────
     {
         id: 'learn_500_words_day',
         verb_past_phrase: 'Learned',
@@ -1494,7 +1496,7 @@ function computeCreatorFit(obj, endpoint, ctx) {
 //         vs 8% at drops — action frames ARE the proof moment)
 //         + wave11_12.end_begin_ratio (single-shot before/after payoff)
 //   - body-transformation with explicit before/after anchor
-//       → family=body_transformation + weigh-in / same-starting-frame
+//       → bucket=body_transformation + weigh-in / same-starting-frame
 //         language → wave11_12.end_begin_ratio
 //   - single-frame numeric endpoint (count / timer / distance)
 //       → HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio (the freeze-frame
@@ -1507,7 +1509,7 @@ function computeCreatorFit(obj, endpoint, ctx) {
 //     (silent week, phoneless fortnight)
 //       → inverse of HIGH_ENERGY_ACTION_FRAMES + inverse of end_begin_ratio
 //         (payoff is an observation, not a shot)
-//   - repetition_outreach family without a physical-test verb (letters,
+//   - repetition_outreach bucket without a physical-test verb (letters,
 //     portrait stacks)
 //       → stack-of-envelopes is visible but the CONTENT is untestable —
 //         lower end_begin_ratio than build-then-test or body change
@@ -2011,7 +2013,7 @@ function scoreMotifCombo(obj, endpoint, ctx) {
 
     // Creator-fit bias — biases toward the strongest maker/body/workshop
     // DNA already present in the corpus. Added to the combo score so the
-    // diversity-aware selector rewards fit within each family.
+    // diversity-aware selector rewards fit within each diversity bucket.
     const fit = computeCreatorFit(obj, endpoint, ctx);
 
     // Proof-clarity / mechanism-visibility — rewards combos with a
@@ -2696,7 +2698,7 @@ function scoreIdea(idea, brief) {
 
     // Creator-fit / production-fit score — biases toward maker/body/workshop
     // DNA. Added as a separate component so it shows up in score_breakdown
-    // and the diversity-aware re-rank can trade fit against family spread.
+    // and the diversity-aware re-rank can trade fit against diversity-bucket spread.
     if (idea.synthesis_trace && idea.synthesis_trace.creator_fit && typeof idea.synthesis_trace.creator_fit.score === 'number') {
         parts.fit += idea.synthesis_trace.creator_fit.score * 0.12;
     }
@@ -3816,8 +3818,11 @@ function buildIndicatorCorpus(brief, ctx) {
         components_total: (brief.source_sizes && brief.source_sizes.components_total) || null,
         mechanisms_total: (brief.source_sizes && brief.source_sizes.mechanisms_total) || null,
         word_retention_scored: (brief.source_sizes && brief.source_sizes.word_retention_scored) || null,
-        candidate_proposal_families: (brief.source_sizes && brief.source_sizes.candidate_proposal_families) || null,
+        // Primary diversity-bucket key; falls back to the legacy `candidate_proposal_families`
+        // source-size so older briefs still populate. `candidate_proposal_families` is
+        // emitted below as the legacy alias for downstream readers.
         candidate_proposal_diversity_buckets: (brief.source_sizes && (brief.source_sizes.candidate_proposal_diversity_buckets || brief.source_sizes.candidate_proposal_families)) || null,
+        candidate_proposal_families: (brief.source_sizes && brief.source_sizes.candidate_proposal_families) || null,
         note: 'Counts represent the candidate pool. Each section trace below enumerates how the pool was filtered and which indicators were actually used.',
     };
 }
@@ -3966,7 +3971,10 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     // take more than ~2 of the top `count` slots when other buckets remain.
     const scored = ideas.map(idea => ({
         idea,
-        family: (idea.synthesis_trace && idea.synthesis_trace.motif_family) || 'unknown',
+        // Diversity-bucket axis. Read from synthesis_trace.motif_family because
+        // that is the on-disk/emission field name; the local uses `bucket` to
+        // reflect the role (diversity axis) rather than the legacy field name.
+        bucket: (idea.synthesis_trace && idea.synthesis_trace.motif_family) || 'unknown',
         endpoint_kind: (() => {
             const eid = idea.synthesis_trace && idea.synthesis_trace.endpoint_atom_id;
             const e = ENDPOINT_MOTIFS.find(x => x.id === eid);
@@ -3975,12 +3983,12 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         total: (idea.score_breakdown && idea.score_breakdown.total) || 0,
         proof_surface: (idea.synthesis_trace && idea.synthesis_trace.proof_surface) || null,
     }));
-    const perFamCap = 2;
+    const perBucketCap = 2;
     const perEndCap = 2;
     const lambda = 0.35;
     const ranked = [];
     const remaining = scored.slice();
-    const perFam = new Map();
+    const perBucket = new Map();
     const perEnd = new Map();
     const perProofSurface = new Map();
     // Per-idea displaced alternates captured at the moment each slot was
@@ -3993,12 +4001,12 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         for (let i = 0; i < remaining.length; i++) {
             const c = remaining[i];
             let blocked = null;
-            if ((perFam.get(c.family) || 0) >= perFamCap) blocked = `diversity-bucket cap hit (${c.family}=${perFamCap})`;
+            if ((perBucket.get(c.bucket) || 0) >= perBucketCap) blocked = `diversity-bucket cap hit (${c.bucket}=${perBucketCap})`;
             else if (c.endpoint_kind && (perEnd.get(c.endpoint_kind) || 0) >= perEndCap) blocked = `endpoint-kind cap hit (${c.endpoint_kind}=${perEndCap})`;
             let sim = 0;
             for (const p of ranked) {
                 let s = 0;
-                if (p.family === c.family) s += 0.60;
+                if (p.bucket === c.bucket) s += 0.60;
                 if (p.endpoint_kind && p.endpoint_kind === c.endpoint_kind) s += 0.35;
                 if (p.proof_surface && p.proof_surface === c.proof_surface) s += 0.20;
                 if (s > sim) sim = s;
@@ -4024,8 +4032,8 @@ function generateIdeas(brief, count = 5, artifacts = null) {
                 return {
                     idea_id: m.c.idea && m.c.idea.id,
                     title: t.length > 90 ? t.slice(0, 87) + '…' : t,
-                    family: m.c.family,
-                    diversity_bucket: m.c.family,
+                    family: m.c.bucket,
+                    diversity_bucket: m.c.bucket,
                     endpoint_kind: m.c.endpoint_kind,
                     proof_surface: m.c.proof_surface,
                     blueprint_total: round(m.c.total, 3),
@@ -4039,23 +4047,23 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         if (chosen.idea && chosen.idea.id) finalAlternatesByIdeaId.set(chosen.idea.id, alts);
         remaining.splice(bestIdx, 1);
         ranked.push(chosen);
-        perFam.set(chosen.family, (perFam.get(chosen.family) || 0) + 1);
+        perBucket.set(chosen.bucket, (perBucket.get(chosen.bucket) || 0) + 1);
         if (chosen.endpoint_kind) perEnd.set(chosen.endpoint_kind, (perEnd.get(chosen.endpoint_kind) || 0) + 1);
         if (chosen.proof_surface) perProofSurface.set(chosen.proof_surface, (perProofSurface.get(chosen.proof_surface) || 0) + 1);
     }
     const topN = ranked.map(r => r.idea);
     topN.forEach((x, i) => { x.rank = i + 1; });
     // Attach final-rank diversity snapshot to each idea so the audit trail
-    // includes which family/endpoint caps were in effect at top-level rank.
+    // includes which diversity-bucket/endpoint caps were in effect at top-level rank.
     for (let i = 0; i < topN.length; i++) {
         const idea = topN[i];
         if (idea.synthesis_trace) {
             idea.synthesis_trace.final_rank_diversity = {
-                per_family_in_topN: Object.fromEntries(perFam),
-                per_diversity_bucket_in_topN: Object.fromEntries(perFam),
+                per_family_in_topN: Object.fromEntries(perBucket),
+                per_diversity_bucket_in_topN: Object.fromEntries(perBucket),
                 per_endpoint_kind_in_topN: Object.fromEntries(perEnd),
                 per_proof_surface_in_topN: Object.fromEntries(perProofSurface),
-                caps: { per_family_cap: perFamCap, per_diversity_bucket_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
+                caps: { per_family_cap: perBucketCap, per_diversity_bucket_cap: perBucketCap, per_endpoint_kind_cap: perEndCap },
                 mmr_lambda: lambda,
             };
             // Alternates displaced by this idea during final top-N MMR.
@@ -4067,7 +4075,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
                 stage: 'final_rank',
                 slot: i + 1,
                 ideas_considered: scored.length,
-                caps_in_effect: { per_family_cap: perFamCap, per_diversity_bucket_cap: perFamCap, per_endpoint_kind_cap: perEndCap },
+                caps_in_effect: { per_family_cap: perBucketCap, per_diversity_bucket_cap: perBucketCap, per_endpoint_kind_cap: perEndCap },
                 mmr_lambda: lambda,
                 nearby_displaced: alts,
                 note: 'Top 2 blueprints that lost to this idea during the final MMR re-rank. Rejection reasons: diversity-bucket cap, endpoint-kind cap, or lower MMR(total − λ·sim) against already-ranked slots.',
