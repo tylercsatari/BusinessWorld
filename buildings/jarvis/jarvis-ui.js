@@ -5914,10 +5914,51 @@ const JarvisUI = (() => {
             </details>`;
     }
 
+    function renderEvidenceSummaryStrip(summary) {
+        if (!summary) return '';
+        const n = (v) => typeof v === 'number' ? v.toLocaleString() : (v != null ? String(v) : '—');
+        const pill = (label, val, color) => `
+            <span style="background:#0f1a2d;border:1px solid ${color}33;border-radius:4px;padding:3px 8px;font-size:10px;color:#cbd5e1;white-space:nowrap">
+                <span style="color:${color};text-transform:uppercase;letter-spacing:0.05em;font-size:9px;margin-right:5px">${escapeHtml(label)}</span>
+                <b style="color:#f1f5f9">${escapeHtml(n(val))}</b>
+            </span>`;
+        const uniqDetail = [];
+        if (summary.unique_indicator_keys_used_in_sections != null) uniqDetail.push(`${n(summary.unique_indicator_keys_used_in_sections)} sec`);
+        if (summary.unique_indicator_keys_used_in_metrics != null) uniqDetail.push(`${n(summary.unique_indicator_keys_used_in_metrics)} metric`);
+        const altsDetail = [];
+        if (summary.nearby_alternates_seed_stage != null) altsDetail.push(`${n(summary.nearby_alternates_seed_stage)} seed`);
+        if (summary.nearby_alternates_final_rank != null) altsDetail.push(`${n(summary.nearby_alternates_final_rank)} final`);
+        const poolBits = [];
+        if (summary.seed_pool_candidates_considered != null) poolBits.push(`seed pool <b style="color:#cbd5e1">${n(summary.seed_pool_candidates_considered)}</b>`);
+        if (summary.final_rank_pool_ideas_considered != null) poolBits.push(`final pool <b style="color:#cbd5e1">${n(summary.final_rank_pool_ideas_considered)}</b>`);
+        return `
+            <div style="background:#0a1628;border:1px solid #1e293b;border-radius:5px;padding:8px 10px;margin-bottom:8px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:5px">
+                    <div style="font-size:9px;color:#22d3ee;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">evidence lineage summary</div>
+                    ${poolBits.length ? `<div style="font-size:9px;color:#94a3b8">${poolBits.join(' · ')}</div>` : ''}
+                </div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap">
+                    ${pill('section traces', summary.section_trace_count, '#22d3ee')}
+                    ${pill('metric traces', summary.metric_trace_count, '#22d3ee')}
+                    ${pill('indicators considered', summary.indicators_considered_total_raw, '#94a3b8')}
+                    ${pill('indicator uses (raw)', summary.indicator_keys_used_total_raw, '#a78bfa')}
+                    ${pill('unique indicators used', summary.unique_indicator_keys_used, '#22c55e')}
+                    ${pill('nearby alternates', summary.nearby_alternates_total, '#f59e0b')}
+                </div>
+                <div style="font-size:9px;color:#64748b;margin-top:4px;line-height:1.5">
+                    ${uniqDetail.length ? `unique split: ${uniqDetail.join(' · ')}` : ''}
+                    ${uniqDetail.length && altsDetail.length ? ' · ' : ''}
+                    ${altsDetail.length ? `alternates split: ${altsDetail.join(' · ')}` : ''}
+                </div>
+                ${summary.note ? `<div style="font-size:9px;color:#64748b;margin-top:2px;font-style:italic">${escapeHtml(summary.note)}</div>` : ''}
+            </div>`;
+    }
+
     function renderValidationBox(validation) {
         const corpus = validation.corpus || {};
         const sections = validation.section_traces || {};
         const metrics = validation.metric_traces || {};
+        const summary = validation.summary || null;
         const corpusRow = (label, v) => v != null && v !== 0 ? `<div><span style="color:#64748b">${escapeHtml(label)}</span> <b style="color:#e2e8f0">${typeof v === 'number' ? v.toLocaleString() : escapeHtml(String(v).slice(0, 80))}</b></div>` : '';
         const blueprintOrder = [
             'first_frame', 'first_line', 'opening_action', 'opening_speech_rate', 'hook_type',
@@ -5942,6 +5983,7 @@ const JarvisUI = (() => {
                     <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#22d3ee;font-weight:700">◆ Validation trace — front-to-back indicator lineage</div>
                     <div style="font-size:9px;color:#64748b">${Object.keys(sections).length} sections · ${Object.keys(metrics).length} metrics · ${validation.catalog_enrichment ? 'catalog enriched' : 'catalog unavailable'}</div>
                 </div>
+                ${renderEvidenceSummaryStrip(summary)}
                 <div style="background:#0a1628;border:1px solid #1e293b;border-radius:5px;padding:8px 10px;margin-bottom:8px">
                     <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">indicator corpus (filter-before pool sizes)</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px 12px;font-size:10.5px;color:#cbd5e1">

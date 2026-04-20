@@ -4021,7 +4021,76 @@ function generateIdeas(brief, count = 5, artifacts = null) {
             };
         }
     }
+    // Per-idea aggregate evidence/lineage summary. Computed last so it can
+    // fold in both seed-stage and final-rank alternates.
+    for (const idea of topN) {
+        const summary = computeEvidenceSummary(idea);
+        if (summary) {
+            idea.evidence_summary = summary;
+            if (idea.validation) idea.validation.summary = summary;
+        }
+    }
     return topN;
+}
+
+// Aggregate per-idea evidence/lineage summary. Rolls the section and metric
+// validation traces (plus seed/final-rank alternates) into a compact top-level
+// block so the UI card can answer "how much evidence supports this idea?"
+// without expanding every trace. Raw totals are reported alongside unique
+// indicator counts so a reader can tell whether an indicator is load-bearing
+// across many sections or only referenced once.
+function computeEvidenceSummary(idea) {
+    const v = idea && idea.validation;
+    if (!v) return null;
+    const sections = v.section_traces || {};
+    const metrics = v.metric_traces || {};
+    let indicatorsConsideredRaw = 0;
+    let indicatorKeysUsedRaw = 0;
+    const uniqSection = new Set();
+    const uniqMetric = new Set();
+    const uniqAll = new Set();
+    for (const s of Object.values(sections)) {
+        indicatorsConsideredRaw += (+s.indicators_considered_count) || 0;
+        const keys = Array.isArray(s.indicator_keys) ? s.indicator_keys : [];
+        indicatorKeysUsedRaw += keys.length;
+        for (const k of keys) {
+            const key = String(k);
+            uniqSection.add(key);
+            uniqAll.add(key);
+        }
+    }
+    for (const m of Object.values(metrics)) {
+        indicatorsConsideredRaw += (+m.indicators_considered_count) || 0;
+        const keys = Array.isArray(m.indicator_keys) ? m.indicator_keys : [];
+        indicatorKeysUsedRaw += keys.length;
+        for (const k of keys) {
+            const key = String(k);
+            uniqMetric.add(key);
+            uniqAll.add(key);
+        }
+    }
+    const st = idea.synthesis_trace || {};
+    const seedAlts = (st.seed_alternates && Array.isArray(st.seed_alternates.nearby_rejected))
+        ? st.seed_alternates.nearby_rejected : [];
+    const finalAlts = (st.final_rank_alternates && Array.isArray(st.final_rank_alternates.nearby_displaced))
+        ? st.final_rank_alternates.nearby_displaced : [];
+    const seedPool = (st.seed_alternates && st.seed_alternates.candidates_considered) || null;
+    const finalPool = (st.final_rank_alternates && st.final_rank_alternates.ideas_considered) || null;
+    return {
+        section_trace_count: Object.keys(sections).length,
+        metric_trace_count: Object.keys(metrics).length,
+        indicators_considered_total_raw: indicatorsConsideredRaw,
+        indicator_keys_used_total_raw: indicatorKeysUsedRaw,
+        unique_indicator_keys_used: uniqAll.size,
+        unique_indicator_keys_used_in_sections: uniqSection.size,
+        unique_indicator_keys_used_in_metrics: uniqMetric.size,
+        nearby_alternates_total: seedAlts.length + finalAlts.length,
+        nearby_alternates_seed_stage: seedAlts.length,
+        nearby_alternates_final_rank: finalAlts.length,
+        seed_pool_candidates_considered: seedPool,
+        final_rank_pool_ideas_considered: finalPool,
+        note: 'Raw totals sum across traces and can double-count indicators reused in multiple sections. "unique_indicator_keys_used" deduplicates.',
+    };
 }
 
 function buildModel() {
