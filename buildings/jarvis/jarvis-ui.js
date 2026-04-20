@@ -5813,6 +5813,9 @@ const JarvisUI = (() => {
                 </ul>
             </div>` : '';
 
+        // Synthesis derivation — compact view of how this idea was selected
+        const synthesisBox = renderSynthesisBox(idea);
+
         // Validation trace — per-section lineage of every blueprint field
         const validation = idea.validation || null;
         const validationBox = validation ? renderValidationBox(validation) : '';
@@ -5839,6 +5842,7 @@ const JarvisUI = (() => {
                 ${sctBox}
                 ${rfBox}
                 ${wiwBox}
+                ${synthesisBox}
                 ${validationBox}
 
                 <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
@@ -5915,21 +5919,23 @@ const JarvisUI = (() => {
         const sections = validation.section_traces || {};
         const metrics = validation.metric_traces || {};
         const corpusRow = (label, v) => v != null && v !== 0 ? `<div><span style="color:#64748b">${escapeHtml(label)}</span> <b style="color:#e2e8f0">${typeof v === 'number' ? v.toLocaleString() : escapeHtml(String(v).slice(0, 80))}</b></div>` : '';
-        const sectionOrder = [
+        const blueprintOrder = [
             'first_frame', 'first_line', 'opening_action', 'opening_speech_rate', 'hook_type',
             'build_phases', 'climax_and_payoff', 'arc', 'pacing',
             'visual_prescription', 'vocabulary_prescription', 'duration_target',
             'hook_mechanisms', 'pre_upload_levers', 'risk_flags', 'scorecard_targets',
         ];
-        const sectionRows = sectionOrder
-            .filter(k => sections[k])
-            .map(k => renderValidationTraceRow(sections[k]))
-            .join('');
+        const synthesisOrder = ['creator_fit', 'proof_clarity', 'visual_legibility'];
+        const knownSections = new Set([...blueprintOrder, ...synthesisOrder]);
+        const extraSectionKeys = Object.keys(sections).filter(k => !knownSections.has(k));
+        const blueprintRows = blueprintOrder.filter(k => sections[k]).map(k => renderValidationTraceRow(sections[k])).join('');
+        const synthesisRows = synthesisOrder.filter(k => sections[k]).map(k => renderValidationTraceRow(sections[k])).join('');
+        const extraSectionRows = extraSectionKeys.map(k => renderValidationTraceRow(sections[k])).join('');
         const metricOrder = ['swipe_away_rate', 'hook_retention_20s', 'share_propensity', 'keep_rate', 'view_band'];
-        const metricRows = metricOrder
-            .filter(k => metrics[k])
-            .map(k => renderValidationTraceRow(metrics[k]))
-            .join('');
+        const knownMetrics = new Set(metricOrder);
+        const extraMetricKeys = Object.keys(metrics).filter(k => !knownMetrics.has(k));
+        const metricRows = metricOrder.filter(k => metrics[k]).map(k => renderValidationTraceRow(metrics[k])).join('');
+        const extraMetricRows = extraMetricKeys.map(k => renderValidationTraceRow(metrics[k])).join('');
         return `
             <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #22d3ee">
                 <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
@@ -5954,15 +5960,127 @@ const JarvisUI = (() => {
                     ${corpus.mechanism_indicator_link_outcomes && corpus.mechanism_indicator_link_outcomes.length ? `<div style="font-size:9.5px;color:#64748b;margin-top:4px">link outcome keys: ${corpus.mechanism_indicator_link_outcomes.map(o => `<code style="color:#94a3b8">${escapeHtml(o)}</code>`).join(' · ')}</div>` : ''}
                     ${corpus.note ? `<div style="font-size:9px;color:#64748b;margin-top:4px;font-style:italic">${escapeHtml(corpus.note)}</div>` : ''}
                 </div>
-                ${sectionRows ? `
+                ${blueprintRows ? `
                     <details open style="margin-bottom:6px">
                         <summary style="cursor:pointer;font-size:10px;color:#e2e8f0;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Section traces (blueprint fields)</summary>
-                        <div style="margin-top:6px">${sectionRows}</div>
+                        <div style="margin-top:6px">${blueprintRows}</div>
+                    </details>` : ''}
+                ${synthesisRows ? `
+                    <details open style="margin-bottom:6px">
+                        <summary style="cursor:pointer;font-size:10px;color:#a78bfa;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Synthesis-derived section traces (fit / proof / legibility)</summary>
+                        <div style="margin-top:6px">${synthesisRows}</div>
+                    </details>` : ''}
+                ${extraSectionRows ? `
+                    <details open style="margin-bottom:6px">
+                        <summary style="cursor:pointer;font-size:10px;color:#fbbf24;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Other section traces (${extraSectionKeys.length})</summary>
+                        <div style="margin-top:6px">${extraSectionRows}</div>
                     </details>` : ''}
                 ${metricRows ? `
                     <details open style="margin-bottom:2px">
                         <summary style="cursor:pointer;font-size:10px;color:#e2e8f0;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Metric traces (modeled estimates)</summary>
                         <div style="margin-top:6px">${metricRows}</div>
+                    </details>` : ''}
+                ${extraMetricRows ? `
+                    <details open style="margin-bottom:2px">
+                        <summary style="cursor:pointer;font-size:10px;color:#fbbf24;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Other metric traces (${extraMetricKeys.length})</summary>
+                        <div style="margin-top:6px">${extraMetricRows}</div>
+                    </details>` : ''}
+            </div>`;
+    }
+
+    function renderSynthesisBox(idea) {
+        const st = idea && idea.synthesis_trace;
+        if (!st) return '';
+        const scoreChip = (label, val, color) => {
+            if (val == null || isNaN(+val)) return '';
+            const v = (+val);
+            return `<span style="background:#0f1a2d;border:1px solid ${color}44;border-radius:4px;padding:2px 7px;font-size:10px;color:#cbd5e1">
+                <span style="color:${color};text-transform:uppercase;letter-spacing:0.05em;font-size:9px;margin-right:4px">${escapeHtml(label)}</span>
+                <b style="color:#f1f5f9">${v.toFixed(3)}</b>
+            </span>`;
+        };
+        const cf = st.creator_fit || null;
+        const pc = st.proof_clarity || null;
+        const vl = st.visual_legibility || null;
+        const chips = [
+            scoreChip('motif', st.motif_score, '#a78bfa'),
+            scoreChip('fit', cf && cf.score, '#22d3ee'),
+            scoreChip('proof', pc && pc.score, '#22c55e'),
+            scoreChip('legibility', vl && vl.score, '#fbbf24'),
+        ].filter(Boolean).join(' ');
+        const driverList = (drivers) => (drivers || []).slice(0, 4).map(d => {
+            const delta = d.delta;
+            const deltaColor = typeof delta === 'number' ? (delta >= 0 ? '#22c55e' : '#f87171') : '#94a3b8';
+            const deltaStr = typeof delta === 'number' ? `${delta >= 0 ? '+' : ''}${delta.toFixed(3)}` : '';
+            return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5">
+                <code style="color:#22d3ee;font-size:10px">${escapeHtml(d.driver || '')}</code>
+                ${deltaStr ? `<span style="color:${deltaColor};font-size:10px;margin-left:4px">${deltaStr}</span>` : ''}
+                ${d.source ? `<span style="color:#64748b;font-size:9px;margin-left:4px">[${escapeHtml(d.source)}]</span>` : ''}
+            </div>`;
+        }).join('');
+        const signalBlock = (label, color, o) => {
+            if (!o) return '';
+            const dcount = (o.drivers || []).length;
+            return `<div style="background:#0a1628;border-left:2px solid ${color};border-radius:3px;padding:6px 8px;margin-bottom:4px">
+                <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:${color};margin-bottom:3px">
+                    ${escapeHtml(label)} <b style="color:#f1f5f9;margin-left:6px">${o.score != null ? (+o.score).toFixed(3) : '—'}</b>
+                    <span style="color:#64748b;font-weight:normal;margin-left:6px">${dcount} driver${dcount === 1 ? '' : 's'}</span>
+                </div>
+                ${driverList(o.drivers)}
+            </div>`;
+        };
+        const diversity = st.diversity_selection || {};
+        const finalRank = st.final_rank_diversity || {};
+        const lattice = (st.derived_from_lattice || []).map(s =>
+            `<li style="font-size:10px;color:#cbd5e1;line-height:1.5"><code style="color:#94a3b8">${escapeHtml(s)}</code></li>`
+        ).join('');
+        const hardcoded = (st.still_hardcoded || []).map(s =>
+            `<li style="font-size:10px;color:#fca5a5;line-height:1.5"><code style="color:#fca5a5">${escapeHtml(s)}</code></li>`
+        ).join('');
+        const perFam = finalRank.per_family_in_topN ? Object.entries(finalRank.per_family_in_topN).map(([f, n]) => `<code style="color:#a78bfa">${escapeHtml(f)}=${n}</code>`).join(' · ') : '';
+        const perEnd = finalRank.per_endpoint_kind_in_topN ? Object.entries(finalRank.per_endpoint_kind_in_topN).map(([e, n]) => `<code style="color:#22d3ee">${escapeHtml(e)}=${n}</code>`).join(' · ') : '';
+
+        return `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #a78bfa">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+                    <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#a78bfa;font-weight:700">◇ Synthesis derivation — how this idea was selected</div>
+                    <div style="font-size:10px;color:#94a3b8">
+                        ${st.motif_family ? `family <b style="color:#a78bfa">${escapeHtml(st.motif_family)}</b>` : ''}
+                        ${st.object_atom_id ? ` · obj <code style="color:#22d3ee">${escapeHtml(st.object_atom_id)}</code>` : ''}
+                        ${st.endpoint_atom_id ? ` · end <code style="color:#22c55e">${escapeHtml(st.endpoint_atom_id)}</code>` : ''}
+                        ${st.scale_kind ? ` · scale <code style="color:#fbbf24">${escapeHtml(st.scale_kind)}${st.scale_value != null ? '=' + escapeHtml(String(st.scale_value)) : ''}</code>` : ''}
+                    </div>
+                </div>
+                ${chips ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${chips}</div>` : ''}
+                ${signalBlock('Creator fit', '#22d3ee', cf)}
+                ${signalBlock('Proof clarity', '#22c55e', pc)}
+                ${signalBlock('Visual legibility', '#fbbf24', vl)}
+                ${diversity.reason || diversity.phase ? `
+                    <div style="background:#0a1628;border-left:2px solid #ec4899;border-radius:3px;padding:6px 8px;margin-bottom:4px">
+                        <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#ec4899;margin-bottom:3px">Diversity selection</div>
+                        <div style="font-size:10px;color:#cbd5e1;line-height:1.5">
+                            <span style="color:#94a3b8">phase:</span> <code style="color:#ec4899">${escapeHtml(diversity.phase || '—')}</code>
+                            ${diversity.raw_score != null ? ` · <span style="color:#94a3b8">raw</span> <b style="color:#f1f5f9">${(+diversity.raw_score).toFixed(3)}</b>` : ''}
+                            ${diversity.mmr_score != null ? ` · <span style="color:#94a3b8">mmr</span> <b style="color:#f1f5f9">${(+diversity.mmr_score).toFixed(3)}</b>` : ''}
+                            ${diversity.max_similarity_to_earlier_slots != null ? ` · <span style="color:#94a3b8">sim</span> <b style="color:#f1f5f9">${(+diversity.max_similarity_to_earlier_slots).toFixed(2)}</b>` : ''}
+                            ${diversity.lambda != null ? ` · <span style="color:#94a3b8">λ</span> <b style="color:#f1f5f9">${escapeHtml(String(diversity.lambda))}</b>` : ''}
+                        </div>
+                        ${diversity.reason ? `<div style="font-size:10px;color:#cbd5e1;margin-top:3px;line-height:1.5">${escapeHtml(diversity.reason)}</div>` : ''}
+                    </div>` : ''}
+                ${(perFam || perEnd) ? `
+                    <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">
+                        ${perFam ? `<span style="color:#64748b">top-N families:</span> ${perFam}` : ''}
+                        ${perEnd ? ` · <span style="color:#64748b">endpoints:</span> ${perEnd}` : ''}
+                    </div>` : ''}
+                ${lattice ? `
+                    <details style="margin-top:4px">
+                        <summary style="cursor:pointer;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">derived from lattice (${(st.derived_from_lattice || []).length})</summary>
+                        <ul style="margin:4px 0 0 16px;padding:0">${lattice}</ul>
+                    </details>` : ''}
+                ${hardcoded ? `
+                    <details style="margin-top:3px">
+                        <summary style="cursor:pointer;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">still hardcoded (${(st.still_hardcoded || []).length})</summary>
+                        <ul style="margin:4px 0 0 16px;padding:0">${hardcoded}</ul>
                     </details>` : ''}
             </div>`;
     }
