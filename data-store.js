@@ -113,12 +113,28 @@ async function getById(name, id) {
     return data.records.find(r => r.id === id) || null;
 }
 
-async function create(name, fields) {
-    const data = await load(name);
-    const record = { id: crypto.randomUUID(), ...fields, createdAt: new Date().toISOString() };
-    data.records.push(record);
-    await flush(name);
-    return record;
+// Per-collection serialization so dedupeBy checks are atomic against concurrent creates.
+const createLocks = {};
+
+async function create(name, fields, options = {}) {
+    const prev = createLocks[name] || Promise.resolve();
+    let release;
+    createLocks[name] = new Promise(r => { release = r; });
+    await prev.catch(() => {});
+    try {
+        const data = await load(name);
+        if (options.dedupeBy && fields && fields[options.dedupeBy]) {
+            const key = options.dedupeBy;
+            const existing = data.records.find(r => r[key] === fields[key]);
+            if (existing) return existing;
+        }
+        const record = { id: crypto.randomUUID(), ...fields, createdAt: new Date().toISOString() };
+        data.records.push(record);
+        await flush(name);
+        return record;
+    } finally {
+        release();
+    }
 }
 
 async function update(name, id, fields) {

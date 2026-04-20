@@ -754,8 +754,14 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 res.end(JSON.stringify(result));
             } else if (req.method === 'POST') {
                 const body = await readBody(req);
-                const record = await dataStore.create(collection, body);
-                res.writeHead(201, { 'Content-Type': 'application/json' });
+                // Idempotent video creation: never produce two videos for the same source idea.
+                const opts = (collection === 'videos' && body && body.sourceIdeaId)
+                    ? { dedupeBy: 'sourceIdeaId' } : undefined;
+                const record = await dataStore.create(collection, body, opts);
+                const status = (opts && record && body.sourceIdeaId === record.sourceIdeaId
+                                && record.createdAt && (Date.now() - new Date(record.createdAt).getTime() > 5000))
+                    ? 200 : 201;
+                res.writeHead(status, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(record));
             } else if (req.method === 'PATCH' && id) {
                 const body = await readBody(req);

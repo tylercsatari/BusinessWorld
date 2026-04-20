@@ -8,6 +8,10 @@ const VideoService = (() => {
     let projects = []; // cached Dropbox project folder names
     let _lastSync = 0;
     let _syncPromise = null;
+    // In-flight create guard, keyed by sourceIdeaId. Prevents double-submit
+    // (two clicks / two tabs) from racing two POSTs before the first response
+    // updates the local cache.
+    const _createInflight = new Map();
 
     async function fetchProjects() {
         if (projects.length > 0) return projects;
@@ -74,28 +78,50 @@ const VideoService = (() => {
 
         // --- CRUD ---
         async create(videoData) {
-            const res = await fetch('/api/data/videos', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: videoData.name || 'Untitled Video',
-                    project: videoData.project || '',
-                    status: videoData.status || 'incubator',
-                    hook: videoData.hook || '',
-                    context: videoData.context || '',
-                    script: videoData.script || '',
-                    assignedTo: videoData.assignedTo || '',
-                    postedDate: videoData.postedDate || '',
-                    links: videoData.links || '',
-                    sourceIdeaId: videoData.sourceIdeaId || '',
-                    youtubeVideoId: videoData.youtubeVideoId || '',
-                    analysisStatus: videoData.analysisStatus || ''
-                })
-            });
-            if (!res.ok) throw new Error(`Create video failed: ${res.status}`);
-            const video = await res.json();
-            videos.push(video);
-            return video;
+            const ideaId = videoData.sourceIdeaId || '';
+
+            // Dedupe by sourceIdeaId: in-flight, then local cache.
+            // Server is also authoritative (idempotent on sourceIdeaId).
+            if (ideaId) {
+                if (_createInflight.has(ideaId)) return _createInflight.get(ideaId);
+                const cached = videos.find(v => v.sourceIdeaId === ideaId);
+                if (cached) return cached;
+            }
+
+            const promise = (async () => {
+                const res = await fetch('/api/data/videos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: videoData.name || 'Untitled Video',
+                        project: videoData.project || '',
+                        status: videoData.status || 'incubator',
+                        hook: videoData.hook || '',
+                        context: videoData.context || '',
+                        script: videoData.script || '',
+                        assignedTo: videoData.assignedTo || '',
+                        postedDate: videoData.postedDate || '',
+                        links: videoData.links || '',
+                        sourceIdeaId: ideaId,
+                        youtubeVideoId: videoData.youtubeVideoId || '',
+                        analysisStatus: videoData.analysisStatus || ''
+                    })
+                });
+                if (!res.ok) throw new Error(`Create video failed: ${res.status}`);
+                const video = await res.json();
+                // Server may return an existing record (200) when deduped — avoid pushing a duplicate locally.
+                const idx = videos.findIndex(v => v.id === video.id);
+                if (idx >= 0) videos[idx] = video;
+                else videos.push(video);
+                return video;
+            })();
+
+            if (ideaId) _createInflight.set(ideaId, promise);
+            try {
+                return await promise;
+            } finally {
+                if (ideaId) _createInflight.delete(ideaId);
+            }
         },
 
         async update(id, changes) {
