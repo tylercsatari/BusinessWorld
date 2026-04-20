@@ -32024,7 +32024,9 @@
       "closure_to_open_ratio_first10s_x_challenge_to_resolution_gap_pct",
       "closure_to_open_ratio_first10s_x_loop_front_half_density",
       "closure_to_open_ratio_first10s_x_narrative_tension_density_first_half",
-      "closure_to_open_ratio_first10s_x_challenge_setup_density_first_quarter"
+      "closure_to_open_ratio_first10s_x_challenge_setup_density_first_quarter",
+      "credibility_setup_pct_x_proof_density_hook",
+      "credibility_setup_pct_x_stake_loop_product"
     ],
     "depth_in_hierarchy": 0
   },
