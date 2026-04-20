@@ -589,6 +589,7 @@ function compress(artifacts) {
             videos_in_pool: mechanisms && mechanisms.n_videos_pool,
             indicators_total: indicatorRegistry && indicatorRegistry.total,
             candidate_proposal_families: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
+            candidate_proposal_diversity_buckets: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
             mechanism_indicator_links: mechanismIndicatorLinks && mechanismIndicatorLinks.n_links,
             retention_pattern_waves: retentionPatterns && retentionPatterns.analysis_waves,
             word_retention_scored: wordImpact ? Object.keys(wordImpact).length : 0,
@@ -1516,8 +1517,8 @@ function computeCreatorFit(obj, endpoint, ctx) {
 //
 // The score is added to the combo score so the diversity-aware selector
 // and the final blueprint re-rank both reward proof-clarity within each
-// motif family. No hand-picked top-5 list — every weight reads a
-// factual field on the motif atom and cites a corpus indicator.
+// motif diversity bucket. No hand-picked top-5 list — every weight reads
+// a factual field on the motif atom and cites a corpus indicator.
 function computeProofClarity(obj, endpoint, ctx) {
     const drivers = [];
     let score = 0;
@@ -1552,9 +1553,9 @@ function computeProofClarity(obj, endpoint, ctx) {
     // B. Body-transformation with a concrete single-shot proof anchor
     //    (weigh-in / same starting frame / before-after / same shot).
     const BODY_PROOF_ANCHOR_RE = /\b(weigh-in|weigh in|weigh|scale|same starting frame|same shot|before\/after|morning weigh-?in|same driveway|same kitchen counter|day \d+ vs|first and last run|first and last)\b/;
-    const isBodyFamily = family === 'body_transformation';
+    const isBodyBucket = family === 'body_transformation';
     const hasBodyProof = BODY_PROOF_ANCHOR_RE.test(allText);
-    if (isBodyFamily && hasBodyProof) {
+    if (isBodyBucket && hasBodyProof) {
         const d = 0.32;
         score += d;
         drivers.push({
@@ -1563,7 +1564,7 @@ function computeProofClarity(obj, endpoint, ctx) {
             matched_anchor: (allText.match(BODY_PROOF_ANCHOR_RE) || [])[0],
             source: 'diversity bucket=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
         });
-    } else if (isBodyFamily) {
+    } else if (isBodyBucket) {
         const d = 0.12;
         score += d;
         drivers.push({
@@ -1640,7 +1641,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         });
     }
 
-    // G. repetition_outreach / repetition_patience family without a
+    // G. repetition_outreach / repetition_patience bucket without a
     //    physical-test verb: proof is a stack whose contents are
     //    untestable to the viewer. (v3.4: -0.18 → -0.26.)
     if ((family === 'repetition_outreach' || family === 'repetition_patience') && !hasTestVerb) {
@@ -1653,8 +1654,8 @@ function computeProofClarity(obj, endpoint, ctx) {
         });
     }
 
-    // H. Mystery_experiment family without artifact — observation, not
-    //    a shot. Stacks with E but the family-level signal is cleaner.
+    // H. Mystery_experiment bucket without artifact — observation, not
+    //    a shot. Stacks with E but the bucket-level signal is cleaner.
     //    (v3.4: -0.18 → -0.28.)
     if (family === 'mystery_experiment' && !hasArtifact) {
         const d = -0.28;
@@ -1666,10 +1667,10 @@ function computeProofClarity(obj, endpoint, ctx) {
         });
     }
 
-    // I. Body-transformation OR build_test family × active intensity —
-    //    combo bonus when the family ALREADY implies a visible proof
-    //    axis AND the daily act is itself filmable physical action.
-    if ((isBodyFamily || family === 'build_test') && (obj.action_intensity === 'medium' || obj.action_intensity === 'high')) {
+    // I. Body-transformation OR build_test bucket × active intensity —
+    //    combo bonus when the diversity bucket ALREADY implies a visible
+    //    proof axis AND the daily act is itself filmable physical action.
+    if ((isBodyBucket || family === 'build_test') && (obj.action_intensity === 'medium' || obj.action_intensity === 'high')) {
         const d = 0.08;
         score += d;
         drivers.push({
@@ -2346,16 +2347,17 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Diversity-aware seed selection (MMR over motif families + explicit proof surfaces)
+// Diversity-aware seed selection (MMR over motif diversity buckets + explicit proof surfaces)
 //
 // The old selector still carried a category-layer penalty. That kept the
 // ranking orbiting broad buckets instead of concrete validated idea shapes.
 //
 // The current selector enforces diversity at three explicit levels:
-//   1. Motif family (endurance / build_test / body_transformation /
+//   1. Motif diversity bucket (stored on each motif as `obj.family` for
+//      legacy reasons; values: endurance / build_test / body_transformation /
 //      mystery_experiment / identity / skill_dare / craft_patience /
-//      cognitive_feat / repetition_outreach) — at most 1 per family until
-//      every represented family has been used once.
+//      cognitive_feat / repetition_outreach) — at most 1 per bucket until
+//      every represented bucket has been used once.
 //   2. Endpoint kind (count / timer / distance / body / transformation /
 //      experiment / identity / build_test) — penalty for repeats, hard cap
 //      at 2 per kind.
@@ -2365,7 +2367,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
 //
 // Selection uses Maximal-Marginal-Relevance:
 //   pick_score(c) = raw_score(c) − λ·similarity(c, already_selected)
-// Similarity combines family, endpoint, and explicit proof-surface overlap.
+// Similarity combines diversity-bucket, endpoint, and proof-surface overlap.
 // Every selection decision is logged to synthesis_trace.diversity_log so the
 // reason each slot was chosen is auditable.
 
@@ -2383,23 +2385,26 @@ function comboSimilarity(a, b) {
     return s;
 }
 
-function clusterCombosByFamily(combos) {
+// Clusters combos by their motif-diversity bucket. The bucket is still read
+// from `obj.family` because that is the on-disk data field; the local name
+// reflects the role (diversity axis) rather than the legacy field name.
+function clusterCombosByDiversityBucket(combos) {
     const clusters = new Map();
     for (const c of combos) {
-        const fam = c.obj.family || 'unknown';
-        if (!clusters.has(fam)) clusters.set(fam, []);
-        clusters.get(fam).push(c);
+        const bucket = c.obj.family || 'unknown';
+        if (!clusters.has(bucket)) clusters.set(bucket, []);
+        clusters.get(bucket).push(c);
     }
     for (const arr of clusters.values()) arr.sort((a, b) => b.score - a.score);
     return clusters;
 }
 
 function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
-    const clusters = clusterCombosByFamily(combos);
-    const familyOrder = [...clusters.keys()]
-        .map(fam => ({ fam, best: clusters.get(fam)[0] ? clusters.get(fam)[0].score : -Infinity }))
+    const clusters = clusterCombosByDiversityBucket(combos);
+    const diversityBucketOrder = [...clusters.keys()]
+        .map(bucket => ({ bucket, best: clusters.get(bucket)[0] ? clusters.get(bucket)[0].score : -Infinity }))
         .sort((a, b) => b.best - a.best)
-        .map(x => x.fam);
+        .map(x => x.bucket);
 
     const picked = [];
     const log = [];
@@ -2407,7 +2412,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
     // Each entry records enough for the UI to render "why the winner beat this one"
     // without dumping the full combo corpus.
     const alternatesByMotifId = new Map();
-    const perFamily = new Map();
+    const perDiversityBucket = new Map();
     const perEndpoint = new Map();
     const perProofSurface = new Map();
     const usedMotifIds = new Set();
@@ -2416,6 +2421,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         return {
             motif_id: c.obj.id,
             family: c.obj.family || 'unknown',
+            diversity_bucket: c.obj.family || 'unknown',
             endpoint_id: c.endpoint.id,
             endpoint_kind: c.endpoint.kind,
             proof_surface: getProofSurfaceKey(c.obj),
@@ -2425,11 +2431,12 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         };
     }
 
-    // Phase 1: one combo per family, in descending best-family-score order.
-    // This guarantees motif-family coverage before any second slot is taken.
-    for (const fam of familyOrder) {
+    // Phase 1: one combo per diversity bucket, in descending best-bucket-score
+    // order. This guarantees diversity-bucket coverage before any second slot
+    // is taken.
+    for (const bucket of diversityBucketOrder) {
         if (picked.length >= maxCount) break;
-        const candidates = clusters.get(fam) || [];
+        const candidates = clusters.get(bucket) || [];
         let best = null, bestKey = null;
         for (const c of candidates) {
             if (usedMotifIds.has(c.obj.id)) continue;
@@ -2440,10 +2447,10 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         }
         if (!best) continue;
 
-        // Capture up to 2 nearby within-family alternates before mutating state.
-        // Cross-family alternates get picked on their own round, so limiting
-        // to the same family cluster keeps this audit layer focused on the
-        // actual decision made at this slot.
+        // Capture up to 2 nearby within-bucket alternates before mutating state.
+        // Cross-bucket alternates get picked on their own round, so limiting
+        // to the same diversity-bucket cluster keeps this audit layer focused
+        // on the actual decision made at this slot.
         const alts = [];
         for (const c of candidates) {
             if (c === best) continue;
@@ -2458,27 +2465,27 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
 
         picked.push(best);
         usedMotifIds.add(best.obj.id);
-        perFamily.set(fam, (perFamily.get(fam) || 0) + 1);
+        perDiversityBucket.set(bucket, (perDiversityBucket.get(bucket) || 0) + 1);
         perEndpoint.set(best.endpoint.kind, (perEndpoint.get(best.endpoint.kind) || 0) + 1);
         perProofSurface.set(getProofSurfaceKey(best.obj), (perProofSurface.get(getProofSurfaceKey(best.obj)) || 0) + 1);
         log.push({
             phase: 'diversity_round_robin',
             slot: picked.length,
-            family: fam,
-            diversity_bucket: fam,
+            family: bucket,
+            diversity_bucket: bucket,
             motif_id: best.obj.id,
             endpoint_id: best.endpoint.id,
             endpoint_kind: best.endpoint.kind,
             raw_score: best.score,
             family_cluster_size: candidates.length,
             diversity_bucket_size: candidates.length,
-            reason: `first slot for diversity bucket "${fam}" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)`,
+            reason: `first slot for diversity bucket "${bucket}" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)`,
         });
     }
 
-    // Phase 2: MMR fill — allow second-from-family only when every family
-    // has been represented and the new combo's marginal relevance beats its
-    // similarity penalty against already-picked slots.
+    // Phase 2: MMR fill — allow a second pick from the same diversity bucket
+    // only after every bucket has been represented and the new combo's
+    // marginal relevance beats its similarity penalty against picked slots.
     const alreadyPickedSet = new Set(picked);
     const remaining = combos.filter(c => !alreadyPickedSet.has(c));
     while (picked.length < maxCount && remaining.length) {
@@ -2490,7 +2497,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             const c = remaining[i];
             let blocked = null;
             if (usedMotifIds.has(c.obj.id)) blocked = 'motif-id already selected';
-            else if ((perFamily.get(c.obj.family || 'unknown') || 0) >= 2) blocked = `diversity-bucket cap hit (${c.obj.family || 'unknown'}=2)`;
+            else if ((perDiversityBucket.get(c.obj.family || 'unknown') || 0) >= 2) blocked = `diversity-bucket cap hit (${c.obj.family || 'unknown'}=2)`;
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) blocked = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             let sim = 0;
             for (const p of picked) sim = Math.max(sim, comboSimilarity(c, p));
@@ -2527,14 +2534,15 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         remaining.splice(bestIdx, 1);
         picked.push(chosen);
         usedMotifIds.add(chosen.obj.id);
-        const fam = chosen.obj.family || 'unknown';
-        perFamily.set(fam, (perFamily.get(fam) || 0) + 1);
+        const bucket = chosen.obj.family || 'unknown';
+        perDiversityBucket.set(bucket, (perDiversityBucket.get(bucket) || 0) + 1);
         perEndpoint.set(chosen.endpoint.kind, (perEndpoint.get(chosen.endpoint.kind) || 0) + 1);
         perProofSurface.set(getProofSurfaceKey(chosen.obj), (perProofSurface.get(getProofSurfaceKey(chosen.obj)) || 0) + 1);
         log.push({
             phase: 'mmr_fill',
             slot: picked.length,
-            family: fam,
+            family: bucket,
+            diversity_bucket: bucket,
             motif_id: chosen.obj.id,
             endpoint_id: chosen.endpoint.id,
             endpoint_kind: chosen.endpoint.kind,
@@ -2549,12 +2557,12 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
     return {
         picked,
         log,
-        family_coverage: [...perFamily.keys()],
-        diversity_bucket_coverage: [...perFamily.keys()],
+        family_coverage: [...perDiversityBucket.keys()],
+        diversity_bucket_coverage: [...perDiversityBucket.keys()],
         endpoint_coverage: [...perEndpoint.keys()],
         proof_surface_coverage: [...perProofSurface.keys()],
-        per_family: Object.fromEntries(perFamily),
-        per_diversity_bucket: Object.fromEntries(perFamily),
+        per_family: Object.fromEntries(perDiversityBucket),
+        per_diversity_bucket: Object.fromEntries(perDiversityBucket),
         per_endpoint: Object.fromEntries(perEndpoint),
         per_proof_surface: Object.fromEntries(perProofSurface),
         alternates_by_motif_id: alternatesByMotifId,
@@ -3809,6 +3817,7 @@ function buildIndicatorCorpus(brief, ctx) {
         mechanisms_total: (brief.source_sizes && brief.source_sizes.mechanisms_total) || null,
         word_retention_scored: (brief.source_sizes && brief.source_sizes.word_retention_scored) || null,
         candidate_proposal_families: (brief.source_sizes && brief.source_sizes.candidate_proposal_families) || null,
+        candidate_proposal_diversity_buckets: (brief.source_sizes && (brief.source_sizes.candidate_proposal_diversity_buckets || brief.source_sizes.candidate_proposal_families)) || null,
         note: 'Counts represent the candidate pool. Each section trace below enumerates how the pool was filtered and which indicators were actually used.',
     };
 }
@@ -3949,12 +3958,12 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     const ideas = seeds.map((seed, i) => assembleBlueprint(seed, brief, i + 1, artifacts));
 
     // Diversity-aware re-rank on blueprint scores. The old code sorted by
-    // score_breakdown.total alone, which let one or two families dominate
-    // every top slot because their motif_score advantage propagated. The
-    // new rank applies MMR on blueprint totals with family + endpoint +
-    // proof-surface similarity, then enforces per-family / per-endpoint
-    // caps at the final-output level so the same family cannot take more
-    // than ~2 of the top `count` slots when other families are available.
+    // score_breakdown.total alone, which let one or two diversity buckets
+    // dominate every top slot because their motif_score advantage propagated.
+    // The new rank applies MMR on blueprint totals with diversity-bucket +
+    // endpoint + proof-surface similarity, then enforces per-bucket /
+    // per-endpoint caps at the final-output level so the same bucket cannot
+    // take more than ~2 of the top `count` slots when other buckets remain.
     const scored = ideas.map(idea => ({
         idea,
         family: (idea.synthesis_trace && idea.synthesis_trace.motif_family) || 'unknown',
@@ -4016,6 +4025,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
                     idea_id: m.c.idea && m.c.idea.id,
                     title: t.length > 90 ? t.slice(0, 87) + '…' : t,
                     family: m.c.family,
+                    diversity_bucket: m.c.family,
                     endpoint_kind: m.c.endpoint_kind,
                     proof_surface: m.c.proof_surface,
                     blueprint_total: round(m.c.total, 3),
