@@ -1,193 +1,193 @@
 {
   "active": false,
-  "run_id": "auto_20260420055002.",
+  "run_id": "auto_20260420061645.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-20T05:50:02.685Z",
-  "updated_at": "2026-04-20T06:15:26.284Z",
-  "finished_at": "2026-04-20T06:15:26.284Z",
+  "started_at": "2026-04-20T06:16:45.086Z",
+  "updated_at": "2026-04-20T06:41:55.491Z",
+  "finished_at": "2026-04-20T06:41:55.491Z",
   "requested_iterations": 3000,
-  "attempted": 24,
-  "completed": 18,
-  "failures": 6,
+  "attempted": 31,
+  "completed": 22,
+  "failures": 9,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 0,
+  "no_signal_streak": 3,
   "stop_reason": "max_minutes",
   "current_candidate": null,
-  "last_completed_candidate": "pre_payoff_tension_index_x_reference_callback_count",
-  "last_completed_r": -0.0849,
+  "last_completed_candidate": "early_proof_to_loop_ratio_x_proof_density_hook",
+  "last_completed_r": -0.0394,
   "recent_events": [
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_promise_specificity_density",
-      "r": 0.004,
+      "key": "pre_payoff_tension_index_x_narrative_anchor_density",
+      "r": -0.0506,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T05:58:42.898Z"
+      "ts": "2026-04-20T06:27:29.251Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_loss_framing_count",
-      "r": -0.0993,
+      "key": "pre_payoff_tension_index_x_challenge_statement_count",
+      "r": -0.1241,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T05:59:52.684Z"
+      "ts": "2026-04-20T06:28:35.652Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_loss_framing_density",
-      "r": -0.1004,
+      "key": "pre_payoff_tension_index_x_challenge_statement_density",
+      "r": -0.0992,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:01:00.276Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_above_baseline_area",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T06:01:01.153Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_avg_percent_viewed",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T06:01:01.953Z"
-    },
-    {
-      "type": "failed",
-      "key": "early_proof_position_pct_x_avg_view_duration_s",
-      "reason": "processIndicator returned null",
-      "layer": "post",
-      "ts": "2026-04-20T06:01:02.963Z"
+      "ts": "2026-04-20T06:29:34.511Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_social_proof_count",
-      "r": -0.0392,
+      "key": "pre_payoff_tension_index_x_narrative_tension_count",
+      "r": -0.1274,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:02:16.028Z"
+      "ts": "2026-04-20T06:30:33.650Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_social_proof_density",
-      "r": -0.0139,
+      "key": "pre_payoff_tension_index_x_narrative_tension_density",
+      "r": -0.1155,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:03:16.940Z"
+      "ts": "2026-04-20T06:31:35.274Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_proof_of_work_count",
-      "r": -0.0797,
+      "key": "pre_payoff_tension_index_x_payoff_delay_score",
+      "r": -0.1269,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:04:15.645Z"
-    },
-    {
-      "type": "completed",
-      "key": "pre_payoff_tension_index_x_proof_of_work_density",
-      "r": -0.0672,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T06:05:28.642Z"
-    },
-    {
-      "type": "completed",
-      "key": "pre_payoff_tension_index_x_failure_vulnerability_count",
-      "r": -0.1183,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T06:06:37.986Z"
-    },
-    {
-      "type": "completed",
-      "key": "pre_payoff_tension_index_x_failure_vulnerability_density",
-      "r": -0.1187,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T06:07:44.306Z"
-    },
-    {
-      "type": "completed",
-      "key": "pre_payoff_tension_index_x_commitment_device_count",
-      "r": -0.0434,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T06:08:54.160Z"
+      "ts": "2026-04-20T06:32:36.370Z"
     },
     {
       "type": "failed",
       "key": "early_proof_position_pct_x_avg_word_gap_s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-20T06:08:55.034Z"
+      "ts": "2026-04-20T06:32:37.217Z"
     },
     {
       "type": "failed",
       "key": "early_proof_position_pct_x_beat_acceleration",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-20T06:08:55.859Z"
+      "ts": "2026-04-20T06:32:38.213Z"
     },
     {
       "type": "failed",
       "key": "early_proof_position_pct_x_beat_count",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-20T06:08:56.975Z"
+      "ts": "2026-04-20T06:32:39.164Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_commitment_device_density",
-      "r": -0.0316,
+      "key": "pre_payoff_tension_index_x_challenge_to_resolution_gap_pct",
+      "r": -0.0656,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:10:18.503Z"
+      "ts": "2026-04-20T06:33:43.212Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_action_trigger_count",
-      "r": 0.0234,
+      "key": "pre_payoff_tension_index_x_loop_front_half_density",
+      "r": -0.0821,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:11:40.872Z"
+      "ts": "2026-04-20T06:35:07.079Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_action_trigger_density",
-      "r": 0.0248,
+      "key": "pre_payoff_tension_index_x_narrative_tension_density_first_half",
+      "r": -0.1284,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:12:54.118Z"
+      "ts": "2026-04-20T06:36:53.724Z"
     },
     {
       "type": "completed",
-      "key": "pre_payoff_tension_index_x_reference_callback_count",
-      "r": -0.0849,
+      "key": "pre_payoff_tension_index_x_challenge_setup_density_first_quarter",
+      "r": -0.1324,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-20T06:15:25.893Z"
+      "ts": "2026-04-20T06:37:53.583Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_to_loop_ratio_x_proof_arrival_delay_proxy",
+      "r": 0.1165,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:38:55.481Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_to_loop_ratio_x_closure_to_open_ratio_first10s",
+      "r": -0.0342,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:39:53.301Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_to_loop_ratio_x_credibility_setup_pct",
+      "r": 0.0273,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:40:57.203Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_beat_density_per_minute",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:40:58.060Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_body_sensation_word_pct",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:40:58.961Z"
+    },
+    {
+      "type": "failed",
+      "key": "early_proof_position_pct_x_comparison_word_count",
+      "reason": "processIndicator returned null",
+      "layer": "post",
+      "ts": "2026-04-20T06:40:59.881Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_to_loop_ratio_x_proof_density_hook",
+      "r": -0.0394,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-20T06:41:55.080Z"
     }
   ],
-  "pre_attempted": 18,
-  "pre_completed": 18,
-  "post_attempted": 6,
+  "pre_attempted": 22,
+  "pre_completed": 22,
+  "post_attempted": 9,
   "post_completed": 0
 }
