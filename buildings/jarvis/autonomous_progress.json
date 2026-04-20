@@ -1,61 +1,20 @@
 {
-  "active": false,
-  "run_id": "auto_20260420202141.",
+  "active": true,
+  "run_id": "auto_20260420205636.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-20T20:21:41.224Z",
-  "updated_at": "2026-04-20T20:52:56.130Z",
-  "finished_at": "2026-04-20T20:52:56.130Z",
+  "started_at": "2026-04-20T20:56:36.725Z",
+  "updated_at": "2026-04-20T20:56:36.725Z",
+  "finished_at": null,
   "requested_iterations": 3000,
-  "attempted": 4,
-  "completed": 4,
+  "attempted": 0,
+  "completed": 0,
   "failures": 0,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 1,
-  "stop_reason": "max_minutes",
+  "no_signal_streak": 0,
+  "stop_reason": null,
   "current_candidate": null,
-  "last_completed_candidate": "promise_specificity_density_x_challenge_statement_density",
-  "last_completed_r": 0.0022,
-  "recent_events": [
-    {
-      "type": "completed",
-      "key": "promise_specificity_density_x_narrative_anchor_count",
-      "r": -0.0097,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T20:31:46.834Z"
-    },
-    {
-      "type": "completed",
-      "key": "promise_specificity_density_x_narrative_anchor_density",
-      "r": -0.046,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T20:37:13.818Z"
-    },
-    {
-      "type": "completed",
-      "key": "promise_specificity_density_x_challenge_statement_count",
-      "r": 0.0593,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T20:43:39.460Z"
-    },
-    {
-      "type": "completed",
-      "key": "promise_specificity_density_x_challenge_statement_density",
-      "r": 0.0022,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-20T20:52:55.610Z"
-    }
-  ],
-  "pre_attempted": 4,
-  "pre_completed": 4,
-  "post_attempted": 0,
-  "post_completed": 0
+  "last_completed_candidate": null,
+  "last_completed_r": null,
+  "recent_events": []
 }
