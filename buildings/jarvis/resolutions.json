@@ -37770,12 +37770,7 @@
       "open_loop_density_first_quarter_x_visual_proof_phrase_density_first20s",
       "open_loop_density_first_quarter_x_withheld_outcome_flag",
       "open_loop_density_first_quarter_x_zygarnik_tension_peak_pct",
-      "open_loop_density_last_quarter_x_action_verb_count",
-      "open_loop_density_last_quarter_x_action_verb_count_first10s",
-      "open_loop_density_last_quarter_x_action_verb_count_first15s",
-      "open_loop_density_last_quarter_x_action_verb_count_first20s",
-      "open_loop_density_last_quarter_x_action_verb_count_first5s",
-      "open_loop_density_last_quarter_x_action_verb_count_first8s"
+      "open_loop_density_last_quarter_x_action_verb_count"
     ],
     "depth_in_hierarchy": 0
   },
