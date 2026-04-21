@@ -36209,7 +36209,19 @@
       "open_loop_count_first5s_x_sensory_count",
       "open_loop_count_first5s_x_sensory_count_first10s",
       "open_loop_count_first5s_x_sensory_count_first15s",
-      "open_loop_count_first5s_x_sensory_count_first20s"
+      "open_loop_count_first5s_x_sensory_count_first20s",
+      "open_loop_count_first5s_x_sensory_count_first3s",
+      "open_loop_count_first5s_x_sensory_density_first15s",
+      "open_loop_count_first5s_x_sensory_density_first20s",
+      "open_loop_count_first5s_x_sentence_count",
+      "open_loop_count_first5s_x_specificity_anchor_count",
+      "open_loop_count_first5s_x_specificity_phrase_count",
+      "open_loop_count_first5s_x_speech_rate_wps",
+      "open_loop_count_first5s_x_speech_rate_wps_x_max_silence_gap_s",
+      "open_loop_count_first5s_x_superlative_count_first10s",
+      "open_loop_count_first5s_x_superlative_count_first15s",
+      "open_loop_count_first5s_x_superlative_count_first20s",
+      "open_loop_count_first5s_x_superlative_count_first2s"
     ],
     "depth_in_hierarchy": 0
   },
