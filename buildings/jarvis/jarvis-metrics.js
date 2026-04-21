@@ -1669,6 +1669,69 @@ const DETAILED_DEFS = {
     pre_upload_mechanism_density:  { d: 'Density of process/methodology transparency phrases (count / word_count).', f: 'pre_upload_mechanism_count / word_count', s: ['transcript.fullText', 'PRE_UPLOAD_MECHANISM_PHRASES'], r: '0 to 0.1' },
     reference_to_gratification_ratio: { d: 'Ratio of reference/callback phrase count to gratification phrase count — measures callback density relative to payoff signaling.', f: 'reference_callback_count / (delayed_gratification_count + 1)', s: ['transcript.fullText', 'REFERENCE_CALLBACK_PHRASES', 'ZYGARNIK_PHRASE_SETS.delayed_gratification'], r: '0 to 10' },
     setup_to_payoff_gap:           { d: 'Word distance between first setup phrase and first payoff phrase — measures structural gap between problem and resolution.', f: 'first_payoff_word_idx - first_setup_word_idx', s: ['transcript.fullText', 'NEW_SETUP_PHRASES', 'NEW_PAYOFF_PHRASES'], r: '0 to 3000' },
+    // ── Group A: Direct Analytics Reads ──
+    above_baseline_area:           { d: 'Sum of max(0, retention - mean_retention) across all curve points.', f: 'sum(max(0, r.retention - mean_retention))', s: ['analytics.retentionCurve'], r: '0 to 50', layer: 'post' },
+    avg_percent_viewed:            { d: 'Average percentage of video viewed per view.', f: 'analytics.avgPercentViewed', s: ['analytics.avgPercentViewed'], r: '0 to 1', layer: 'post' },
+    avg_view_duration_s:           { d: 'Average view duration in seconds.', f: 'analytics.avgViewDuration', s: ['analytics.avgViewDuration'], r: '0 to 3600', layer: 'post' },
+    daily_views_entropy:           { d: 'Shannon entropy of daily views distribution.', f: '-sum(p * log2(p+1e-10))', s: ['analytics.dailyViews'], r: '0 to 8', layer: 'post' },
+    early_late_drop_ratio:         { d: 'Mean retention in first 10% of curve / mean in last 10% — early vs late retention.', f: 'mean(curve[0:10%]) / (mean(curve[90%:]) + 0.001)', s: ['analytics.retentionCurve'], r: '0 to 10', layer: 'post' },
+    engagement_rate:               { d: 'Likes + comments divided by view count — overall engagement ratio.', f: '(likes + comments) / max(viewCount, 1)', s: ['analytics.likes', 'analytics.comments', 'metadata.viewCount'], r: '0 to 0.5', layer: 'post' },
+    late_drop_severity:            { d: 'Mean retention in 50-75% minus mean in 75-100% — higher = bigger late drop.', f: 'mean(curve[50:75]) - mean(curve[75:100])', s: ['analytics.retentionCurve'], r: '-0.3 to 0.3', layer: 'post' },
+    momentum_zone_length:          { d: 'Longest consecutive run of rising retention points / curve.length.', f: 'longest_rising_run / curve.length', s: ['analytics.retentionCurve'], r: '0 to 1', layer: 'post' },
+    retention_concavity:           { d: 'Mean of second differences of retention curve — negative = concave down.', f: 'mean(curve[i+2] - 2*curve[i+1] + curve[i])', s: ['analytics.retentionCurve'], r: '-0.1 to 0.1', layer: 'post' },
+    retention_quartile_spread:     { d: 'Std of [mean_q1, mean_q2, mean_q3, mean_q4] retention quartiles.', f: 'std([mean_q1, mean_q2, mean_q3, mean_q4])', s: ['analytics.retentionCurve'], r: '0 to 0.5', layer: 'post' },
+    retention_variation_raw:       { d: 'Standard deviation of all retention values across the retention curve.', f: 'std(curve.map(p => p.retention))', s: ['analytics.retentionCurve'], r: '0 to 0.5', layer: 'post' },
+    stayed_to_watch_rate:          { d: 'Fraction of impressions that stayed to watch the video.', f: 'analytics.viewedRate', s: ['analytics.viewedRate'], r: '0 to 1', layer: 'post' },
+    sub_nonsub_retention_gap:      { d: 'Subscriber avg percent viewed minus non-subscriber avg percent.', f: 'subscriberAvgPercent - nonSubscriberAvgPercent', s: ['analytics.subscriberAvgPercent', 'analytics.nonSubscriberAvgPercent'], r: '-0.5 to 0.5', layer: 'post' },
+    sub_view_fraction:             { d: 'Subscriber views as fraction of total views.', f: 'subscriberViews / (subscriberViews + nonSubscriberViews + 1)', s: ['analytics.subscriberViews', 'analytics.nonSubscriberViews'], r: '0 to 1', layer: 'post' },
+    view_day1_share:               { d: 'Day 1 views as fraction of total daily views.', f: 'daily[0].views / (sum_daily + 1)', s: ['analytics.dailyViews'], r: '0 to 1', layer: 'post' },
+    view_week3_week1_ratio:        { d: 'Week 3 views (days 14-21) divided by week 1 views (days 0-7).', f: 'sum(daily[14:21]) / (sum(daily[0:7]) + 1)', s: ['analytics.dailyViews'], r: '0 to 5', layer: 'post' },
+    escalation_peak_position_pct:  { d: 'Position (0-1) of maximum retention value in the curve.', f: 'argmax(retention) / (curve.length - 1)', s: ['analytics.retentionCurve'], r: '0 to 1', layer: 'post' },
+    deescalation_speed:            { d: 'Drop from retention peak to final retention value.', f: 'curve[peakIdx].retention - curve[last].retention', s: ['analytics.retentionCurve'], r: '-0.5 to 1', layer: 'post' },
+    emotional_arc_swing:           { d: 'Max minus min retention across the full curve.', f: 'max(retention) - min(retention)', s: ['analytics.retentionCurve'], r: '0 to 1', layer: 'post' },
+    // ── Group B: Metadata Reads ──
+    description_hashtag_count:     { d: 'Count of hashtag tokens (#word) in the video description.', f: 'count(/#+\\w+/g in description)', s: ['metadata.description'], r: '0 to 30', layer: 'post' },
+    description_word_count:        { d: 'Word count of the video description.', f: 'description.trim().split(/\\s+/).length', s: ['metadata.description'], r: '0 to 500', layer: 'post' },
+    duration_optimal_flag:         { d: 'Binary: 1 if duration is in 45-180s sweet spot, else 0.', f: '45 <= duration <= 180 ? 1 : 0', s: ['metadata.duration'], r: '0 or 1', layer: 'post' },
+    duration_sweetspot_distance:   { d: 'Absolute distance of duration from 90s sweet spot.', f: 'Math.abs(duration - 90)', s: ['metadata.duration'], r: '0 to 3500', layer: 'post' },
+    upload_month:                  { d: 'Calendar month (1-12) of the video upload date.', f: 'new Date(uploadDate).getMonth() + 1', s: ['metadata.uploadDate'], r: '1 to 12', layer: 'post' },
+    idea_number_flag:              { d: 'Binary: 1 if title contains a number or listicle pattern.', f: '/\\b\\d+\\b|one|two|three|five|ten/i.test(title) ? 1 : 0', s: ['metadata.title'], r: '0 or 1', layer: 'post' },
+    title_avg_word_length:         { d: 'Mean character length of words in the title.', f: 'mean(title.split(/\\s+/).map(w => w.length))', s: ['metadata.title'], r: '2 to 10', layer: 'post' },
+    title_compression_ratio:       { d: 'Title length divided by sqrt(word_count + 1) — density measure.', f: 'title.length / sqrt(word_count + 1)', s: ['metadata.title'], r: '0 to 30', layer: 'post' },
+    title_contains_making:         { d: 'Binary: 1 if title contains word "making", else 0.', f: '/\\bmaking\\b/i.test(title) ? 1 : 0', s: ['metadata.title'], r: '0 or 1', layer: 'post' },
+    title_specificity_score:       { d: 'Count of numeric tokens in title divided by word count.', f: 'title.match(/\\d+/g).length / word_count', s: ['metadata.title'], r: '0 to 1', layer: 'post' },
+    title_starts_with_action:      { d: 'Binary: 1 if title starts with an action verb (making, building, testing, etc.).', f: 'ACTION_VERBS.includes(first_word) ? 1 : 0', s: ['metadata.title'], r: '0 or 1', layer: 'post' },
+    // ── Group C: Transcript Linguistic Metrics ──
+    avg_word_gap_s:                { d: 'Average gap between words in seconds (duration / word_count).', f: 'duration / word_count', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 1', layer: 'pre' },
+    beat_count:                    { d: 'Count of narrative beat sentences starting with transition words.', f: 'count(sentences starting with So|And then|Now|But then|etc.)', s: ['transcript.fullText'], r: '0 to 50', layer: 'pre' },
+    beat_acceleration:             { d: 'Beat density in 2nd half / beat density in 1st half.', f: 'beat_density_2nd / (beat_density_1st + 0.001)', s: ['transcript.fullText'], r: '0 to 5', layer: 'pre' },
+    body_sensation_word_pct:       { d: 'Fraction of words matching body/sensation vocabulary.', f: 'count(sensation_words) / word_count', s: ['transcript.fullText'], r: '0 to 0.05', layer: 'pre' },
+    comparison_word_count:         { d: 'Count of comparison phrases in the transcript.', f: 'count(like, than, similar to, compared to, etc.)', s: ['transcript.fullText'], r: '0 to 30', layer: 'pre' },
+    first_beat_delay_pct:          { d: 'Position (0-1) of first beat sentence in transcript.', f: 'char_index_of_first_beat / transcript.length', s: ['transcript.fullText'], r: '0 to 1', layer: 'pre' },
+    hapax_legomena_ratio:          { d: 'Words appearing exactly once divided by total unique words.', f: 'hapax_count / unique_word_count', s: ['transcript.fullText'], r: '0 to 1', layer: 'pre' },
+    hook_number_count:             { d: 'Count of numeric tokens in the hook text.', f: '(hookText().match(/\\d+/g) || []).length', s: ['transcript.fullText'], r: '0 to 5', layer: 'pre' },
+    hook_pivot_word_flag:          { d: 'Binary: 1 if hook contains a pivot/contrast word.', f: 'any(pivot_words in hookText()) ? 1 : 0', s: ['transcript.fullText'], r: '0 or 1', layer: 'pre' },
+    hook_speech_rate_wps:          { d: 'Words per second in the hook text.', f: 'hookWords.length / hookDuration', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10', layer: 'pre' },
+    hook_tension_density:          { d: 'Density of tension/problem words in the hook.', f: 'count(tension_words in hook) / hook_word_count', s: ['transcript.fullText'], r: '0 to 0.2', layer: 'pre' },
+    hook_unique_word_ratio:        { d: 'Unique words / total words in hook text.', f: 'Set(hookWords).size / hookWords.length', s: ['transcript.fullText'], r: '0 to 1', layer: 'pre' },
+    long_word_ratio:               { d: 'Fraction of words longer than 7 characters.', f: 'count(word.length > 7) / word_count', s: ['transcript.fullText'], r: '0 to 0.5', layer: 'pre' },
+    pivot_word_density:            { d: 'Density of narrative pivot/contrast words per total words.', f: 'count(pivot_words) / word_count', s: ['transcript.fullText'], r: '0 to 0.05', layer: 'pre' },
+    repeated_phrase_count:         { d: 'Count of distinct 3-word trigrams that appear 2 or more times.', f: 'count(trigrams with freq >= 2)', s: ['transcript.fullText'], r: '0 to 50', layer: 'pre' },
+    resolution_word_density:       { d: 'Density of resolution/conclusion phrases per word count.', f: 'count(resolution_phrases) / word_count', s: ['transcript.fullText'], r: '0 to 0.02', layer: 'pre' },
+    second_person_ratio:           { d: 'Fraction of words that are "you" or "your".', f: 'count(you|your) / word_count', s: ['transcript.fullText'], r: '0 to 0.15', layer: 'pre' },
+    sensory_technical_ratio:       { d: 'Sensory word count / (technical word count + 1).', f: 'sensory_count / (technical_count + 1)', s: ['transcript.fullText'], r: '0 to 10', layer: 'pre' },
+    short_word_ratio:              { d: 'Fraction of words with 3 or fewer characters.', f: 'count(word.length <= 3) / word_count', s: ['transcript.fullText'], r: '0 to 0.5', layer: 'pre' },
+    silence_total_pct:             { d: 'Estimated fraction of video time without speech.', f: '1 - (word_count * 0.3 / duration), clamped [0,1]', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 1', layer: 'pre' },
+    speech_rate_q1:                { d: 'Words per second in the first 25% of the transcript.', f: 'words_in_first_25pct / (0.25 * duration)', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10', layer: 'pre' },
+    speech_rate_q4:                { d: 'Words per second in the last 25% of the transcript.', f: 'words_in_last_25pct / (0.25 * duration)', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10', layer: 'pre' },
+    speech_acceleration:           { d: 'Speech rate in last quarter / speech rate in first quarter.', f: 'speech_rate_q4 / (speech_rate_q1 + 0.001)', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 5', layer: 'pre' },
+    speech_silence_ratio:          { d: 'Estimated speech time / non-speech time.', f: 'speech_time / (duration - speech_time + 0.001)', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10', layer: 'pre' },
+    speech_tempo_range:            { d: 'Range (max - min) of speech rates across four quarters.', f: 'max(q1,q2,q3,q4 rates) - min(q1,q2,q3,q4 rates)', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10', layer: 'pre' },
+    summary_word_count:            { d: 'Count of summary/conclusion phrases in the transcript.', f: 'count(summary phrases in transcript)', s: ['transcript.fullText'], r: '0 to 10', layer: 'pre' },
+    transcript_readability:        { d: 'Flesch reading ease score (higher = more readable).', f: '206.835 - 1.015*(words/sentences) - 84.6*(avg_syllables)', s: ['transcript.fullText'], r: '0 to 120', layer: 'pre' },
+    word_density_variance:         { d: 'Variance of word counts across 10 equal segments of the transcript.', f: 'variance(word_counts_per_segment)', s: ['transcript.fullText'], r: '0 to 500', layer: 'pre' },
+    opening_word_latency_s:        { d: 'Time in seconds before first spoken word.', f: 'transcript.words[0].start or duration * 0.01', s: ['transcript.words', 'metadata.duration'], r: '0 to 10', layer: 'pre' },
+    peak_speech_rate_3s:           { d: 'Maximum words per second in any 3-second window.', f: 'max(chunk_sizes) / 3.0', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10', layer: 'pre' },
 };
 
 function getMetricDefinition(key) {
@@ -3742,6 +3805,504 @@ function extractMetric(key, analysis) {
             return [num / (den + 1), null];
         }
         return [null, 'no daily views or unknown ratio'];
+    }
+
+    // ── Group A: Direct Analytics Reads ──────────────────────────────────────
+
+    if (key === 'above_baseline_area') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        const vals = curve.map(p => p.retention);
+        const mRet = mean(vals);
+        let area = 0;
+        for (const v of vals) area += Math.max(0, v - mRet);
+        return [area, null];
+    }
+
+    if (key === 'avg_percent_viewed') {
+        if (analytics.avgPercentViewed == null) return [null, 'no avgPercentViewed'];
+        return [analytics.avgPercentViewed, null];
+    }
+
+    if (key === 'avg_view_duration_s') {
+        if (analytics.avgViewDuration == null) return [null, 'no avgViewDuration'];
+        return [analytics.avgViewDuration, null];
+    }
+
+    if (key === 'daily_views_entropy') {
+        if (daily.length < 3) return [null, 'not enough daily views'];
+        const views = daily.map(d => d.views || 0);
+        const total = views.reduce((a, b) => a + b, 0);
+        if (total === 0) return [0, null];
+        let h = 0;
+        for (const v of views) { const p = v / total; h -= p * Math.log2(p + 1e-10); }
+        return [h, null];
+    }
+
+    if (key === 'early_late_drop_ratio') {
+        if (curve.length < 10) return [null, 'curve too short'];
+        const n = curve.length;
+        const earlyN = Math.max(1, Math.floor(n * 0.1));
+        const earlyMean = mean(curve.slice(0, earlyN).map(p => p.retention));
+        const lateMean = mean(curve.slice(n - earlyN).map(p => p.retention));
+        return [earlyMean / (lateMean + 0.001), null];
+    }
+
+    if (key === 'engagement_rate') {
+        const lk = analytics.likes, cm = analytics.comments;
+        if (lk == null && cm == null) return [null, 'no likes or comments'];
+        const eng = (lk || 0) + (cm || 0);
+        return [eng / Math.max(meta.viewCount || analytics.totalViews || 1, 1), null];
+    }
+
+    if (key === 'late_drop_severity') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        const n = curve.length;
+        const s1 = curve.slice(Math.floor(n * 0.5), Math.floor(n * 0.75)).map(p => p.retention);
+        const s2 = curve.slice(Math.floor(n * 0.75)).map(p => p.retention);
+        if (!s1.length || !s2.length) return [null, 'segments empty'];
+        return [mean(s1) - mean(s2), null];
+    }
+
+    if (key === 'momentum_zone_length') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        const vals = curve.map(p => p.retention);
+        let maxRun = 0, curRun = 0;
+        for (let i = 1; i < vals.length; i++) {
+            if (vals[i] > vals[i - 1]) { curRun++; maxRun = Math.max(maxRun, curRun); }
+            else curRun = 0;
+        }
+        return [maxRun / curve.length, null];
+    }
+
+    if (key === 'retention_concavity') {
+        if (curve.length < 5) return [null, 'curve too short'];
+        const vals = curve.map(p => p.retention);
+        const diffs = [];
+        for (let i = 0; i < vals.length - 2; i++) diffs.push(vals[i + 2] - 2 * vals[i + 1] + vals[i]);
+        return [mean(diffs), null];
+    }
+
+    if (key === 'retention_quartile_spread') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        const n = curve.length;
+        const q1m = mean(curve.slice(0, Math.floor(n * 0.25)).map(p => p.retention));
+        const q2m = mean(curve.slice(Math.floor(n * 0.25), Math.floor(n * 0.5)).map(p => p.retention));
+        const q3m = mean(curve.slice(Math.floor(n * 0.5), Math.floor(n * 0.75)).map(p => p.retention));
+        const q4m = mean(curve.slice(Math.floor(n * 0.75)).map(p => p.retention));
+        return [std([q1m, q2m, q3m, q4m]), null];
+    }
+
+    if (key === 'retention_variation_raw') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        return [std(curve.map(p => p.retention)), null];
+    }
+
+    if (key === 'stayed_to_watch_rate') {
+        if (analytics.viewedRate == null) return [null, 'no viewedRate'];
+        return [analytics.viewedRate, null];
+    }
+
+    if (key === 'sub_nonsub_retention_gap') {
+        if (analytics.subscriberAvgPercent == null || analytics.nonSubscriberAvgPercent == null) {
+            return [null, 'missing subscriber percentages'];
+        }
+        return [analytics.subscriberAvgPercent - analytics.nonSubscriberAvgPercent, null];
+    }
+
+    if (key === 'sub_view_fraction') {
+        if (analytics.subscriberViews == null) return [null, 'no subscriberViews'];
+        return [analytics.subscriberViews / (analytics.subscriberViews + (analytics.nonSubscriberViews || 0) + 1), null];
+    }
+
+    if (key === 'view_day1_share') {
+        if (daily.length < 1) return [null, 'no daily views'];
+        const total = daily.reduce((s, d) => s + (d.views || 0), 0);
+        return [(daily[0].views || 0) / (total + 1), null];
+    }
+
+    if (key === 'view_week3_week1_ratio') {
+        if (daily.length < 14) return [null, 'not enough daily views'];
+        const w1 = daily.slice(0, 7).reduce((s, d) => s + (d.views || 0), 0);
+        const w3 = daily.slice(14, 21).reduce((s, d) => s + (d.views || 0), 0);
+        return [w3 / (w1 + 1), null];
+    }
+
+    if (key === 'escalation_peak_position_pct') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        const vals = curve.map(p => p.retention);
+        let peakIdx = 0;
+        for (let i = 1; i < vals.length; i++) if (vals[i] > vals[peakIdx]) peakIdx = i;
+        return [peakIdx / Math.max(curve.length - 1, 1), null];
+    }
+
+    if (key === 'deescalation_speed') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        const vals = curve.map(p => p.retention);
+        let peakIdx = 0;
+        for (let i = 1; i < vals.length; i++) if (vals[i] > vals[peakIdx]) peakIdx = i;
+        return [vals[peakIdx] - vals[vals.length - 1], null];
+    }
+
+    if (key === 'emotional_arc_swing') {
+        if (curve.length < 4) return [null, 'curve too short'];
+        const vals = curve.map(p => p.retention);
+        return [Math.max(...vals) - Math.min(...vals), null];
+    }
+
+    // ── Group B: Metadata Reads ───────────────────────────────────────────────
+
+    if (key === 'description_hashtag_count') {
+        const desc = meta.description;
+        if (!desc) return [null, 'no description'];
+        return [(desc.match(/#+\w+/g) || []).length, null];
+    }
+
+    if (key === 'description_word_count') {
+        const desc = meta.description;
+        if (!desc) return [null, 'no description'];
+        const trimmed = desc.trim();
+        return [trimmed ? trimmed.split(/\s+/).length : 0, null];
+    }
+
+    if (key === 'duration_optimal_flag') {
+        if (meta.duration == null) return [null, 'no duration'];
+        return [meta.duration >= 45 && meta.duration <= 180 ? 1 : 0, null];
+    }
+
+    if (key === 'duration_sweetspot_distance') {
+        if (meta.duration == null) return [null, 'no duration'];
+        return [Math.abs(meta.duration - 90), null];
+    }
+
+    if (key === 'upload_month') {
+        if (!meta.uploadDate) return [null, 'no uploadDate'];
+        const s = String(meta.uploadDate);
+        const isoStr = s.length === 8 ? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}` : s;
+        const ud = new Date(isoStr);
+        if (isNaN(ud.getTime())) return [null, 'invalid uploadDate'];
+        return [ud.getMonth() + 1, null];
+    }
+
+    if (key === 'idea_number_flag') {
+        const title = meta.title;
+        if (!title) return [null, 'no title'];
+        const hasNum = /\b\d+\b|\bone\b|\btwo\b|\bthree\b|\bfive\b|\bten\b/i.test(title);
+        const hasList = /\b\d+\s*(ways|things|tips|steps|reasons|tricks|ideas|hacks|mistakes|secrets)/i.test(title);
+        return [hasNum || hasList ? 1 : 0, null];
+    }
+
+    if (key === 'title_avg_word_length') {
+        const title = meta.title;
+        if (!title) return [null, 'no title'];
+        const words = title.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty title'];
+        return [mean(words.map(w => w.length)), null];
+    }
+
+    if (key === 'title_compression_ratio') {
+        const title = meta.title;
+        if (!title) return [null, 'no title'];
+        const wc = title.split(/\s+/).filter(Boolean).length;
+        return [title.length / Math.sqrt(wc + 1), null];
+    }
+
+    if (key === 'title_contains_making') {
+        const title = meta.title;
+        if (!title) return [null, 'no title'];
+        return [/\bmaking\b/i.test(title) ? 1 : 0, null];
+    }
+
+    if (key === 'title_specificity_score') {
+        const title = meta.title;
+        if (!title) return [null, 'no title'];
+        const nums = (title.match(/\d+/g) || []).length;
+        const wc = Math.max(title.split(/\s+/).length, 1);
+        return [nums / wc, null];
+    }
+
+    if (key === 'title_starts_with_action') {
+        const title = meta.title;
+        if (!title) return [null, 'no title'];
+        const actionVerbs = new Set(['making','building','creating','testing','trying','cooking','fixing','growing','training','painting','drawing','designing','editing','filming','learning','showing','using','winning','beating','spending','earning','saving','losing','running','starting','stopping','buying','selling','turning','converting']);
+        const firstWord = title.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '');
+        return [actionVerbs.has(firstWord) ? 1 : 0, null];
+    }
+
+    // ── Group C: Transcript Linguistic Metrics ────────────────────────────────
+
+    if (key === 'avg_word_gap_s') {
+        if (!transcript) return [null, 'no transcript'];
+        const rawTObj = typeof rawT === 'object' && rawT ? rawT : null;
+        if (rawTObj && Array.isArray(rawTObj.words) && rawTObj.words.length > 1) {
+            const starts = rawTObj.words.map(w => w.start).filter(s => s != null);
+            if (starts.length > 1) {
+                const diffs = [];
+                for (let i = 1; i < starts.length; i++) diffs.push(starts[i] - starts[i - 1]);
+                return [mean(diffs), null];
+            }
+        }
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const wc = transcript.split(/\s+/).filter(Boolean).length;
+        return [dur / Math.max(wc, 1), null];
+    }
+
+    if (key === 'beat_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const BEAT_RE = /^(So|And then|Now|But then|Then|After|Before|When|Until|Because|Which means)\b/i;
+        const sentences = transcript.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+        return [sentences.filter(s => BEAT_RE.test(s)).length, null];
+    }
+
+    if (key === 'beat_acceleration') {
+        if (!transcript) return [null, 'no transcript'];
+        const BEAT_RE = /^(So|And then|Now|But then|Then|After|Before|When|Until|Because|Which means)\b/i;
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const mid = Math.floor(words.length / 2);
+        const firstHalf = words.slice(0, mid).join(' ');
+        const secondHalf = words.slice(mid).join(' ');
+        const b1 = firstHalf.split(/[.!?]+/).map(s => s.trim()).filter(s => BEAT_RE.test(s)).length;
+        const b2 = secondHalf.split(/[.!?]+/).map(s => s.trim()).filter(s => BEAT_RE.test(s)).length;
+        const d1 = b1 / (mid / 100 + 0.001);
+        const d2 = b2 / ((words.length - mid) / 100 + 0.001);
+        return [d2 / (d1 + 0.001), null];
+    }
+
+    if (key === 'body_sensation_word_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const SENSATION = new Set(['feel','touch','cold','warm','hot','sharp','rough','smooth','tight','ache','burn','heavy','light','tense','grip','clench','squeeze','tremble','shake','flutter']);
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean);
+        if (words.length < 10) return [null, 'word count < 10'];
+        return [words.filter(w => SENSATION.has(w.replace(/[^a-z]/g, ''))).length / words.length, null];
+    }
+
+    if (key === 'comparison_word_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const CMP = ['like','than','similar to','compared to','unlike','as much','as many','more than','less than','twice as','half as'];
+        return [countPhraseMatches(transcript.toLowerCase(), CMP), null];
+    }
+
+    if (key === 'first_beat_delay_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const BEAT_RE = /^(So|And then|Now|But then|Then|After|Before|When|Until|Because|Which means)\b/i;
+        const sentences = transcript.split(/[.!?]+/);
+        let charPos = 0;
+        for (const s of sentences) {
+            if (BEAT_RE.test(s.trim())) return [charPos / Math.max(transcript.length, 1), null];
+            charPos += s.length + 1;
+        }
+        return [1.0, null];
+    }
+
+    if (key === 'hapax_legomena_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(/[^a-z]/g, '')).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const freq = {};
+        for (const w of words) freq[w] = (freq[w] || 0) + 1;
+        const uniqueWords = Object.keys(freq);
+        return [uniqueWords.length > 0 ? uniqueWords.filter(w => freq[w] === 1).length / uniqueWords.length : 0, null];
+    }
+
+    if (key === 'hook_number_count') {
+        return [(hookText().match(/\d+/g) || []).length, null];
+    }
+
+    if (key === 'hook_pivot_word_flag') {
+        const PIVOTS = ['but','however','yet','although','whereas','while','nevertheless','still','instead','rather','except','despite'];
+        const ht = hookText().toLowerCase();
+        return [PIVOTS.some(p => ht.includes(p)) ? 1 : 0, null];
+    }
+
+    if (key === 'hook_speech_rate_wps') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        const hookEst = Math.max(1, Math.floor(words.length * 5 / dur));
+        const hookWords = words.slice(0, hookEst);
+        const hookDur = (hookWords.length / Math.max(words.length, 1)) * dur;
+        return [hookWords.length / Math.max(hookDur, 0.001), null];
+    }
+
+    if (key === 'hook_tension_density') {
+        const TENSION = ['but','however','wait','actually','problem','issue','mistake','wrong','fail','challenge','struggle'];
+        const ht = hookText().toLowerCase();
+        const hookWords = ht.split(/\s+/).filter(Boolean);
+        if (!hookWords.length) return [0, null];
+        const count = TENSION.reduce((c, tw) => c + hookWords.filter(w => w.replace(/[^a-z]/g, '') === tw).length, 0);
+        return [count / hookWords.length, null];
+    }
+
+    if (key === 'hook_unique_word_ratio') {
+        const ht = hookText();
+        const hookWords = ht.split(/\s+/).filter(Boolean);
+        if (!hookWords.length) return [0, null];
+        return [new Set(hookWords.map(w => w.toLowerCase())).size / hookWords.length, null];
+    }
+
+    if (key === 'long_word_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [words.filter(w => w.length > 7).length / words.length, null];
+    }
+
+    if (key === 'pivot_word_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const PIVOT_WORDS = ['but','however','yet','although','whereas','while','nevertheless','still','instead','rather','except','despite','though','conversely','on the other hand'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), PIVOT_WORDS) / words.length, null];
+    }
+
+    if (key === 'repeated_phrase_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(/[^a-z0-9]/g, ''));
+        if (words.length < 3) return [0, null];
+        const trigrams = {};
+        for (let i = 0; i < words.length - 2; i++) {
+            const tg = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+            trigrams[tg] = (trigrams[tg] || 0) + 1;
+        }
+        return [Object.values(trigrams).filter(c => c >= 2).length, null];
+    }
+
+    if (key === 'resolution_word_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const RES = ['finally','at last','in the end','conclusion','turns out','ultimately','result','so that','which means','therefore','the answer','the solution'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [countPhraseMatches(transcript.toLowerCase(), RES) / words.length, null];
+    }
+
+    if (key === 'second_person_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [(transcript.match(/\byou\b|\byour\b/gi) || []).length / words.length, null];
+    }
+
+    if (key === 'sensory_technical_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const SENSORY_SET = new Set(['feel','touch','cold','warm','hot','sharp','rough','smooth','see','hear','taste','smell','sound','look','texture']);
+        const TECHNICAL_SET = new Set(['algorithm','protocol','parameter','configuration','implementation','architecture','infrastructure','optimization','calibration','synchronization','framework','methodology','systematic','analytical','empirical']);
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean).map(w => w.replace(/[^a-z]/g, ''));
+        return [words.filter(w => SENSORY_SET.has(w)).length / (words.filter(w => TECHNICAL_SET.has(w)).length + 1), null];
+    }
+
+    if (key === 'short_word_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        return [words.filter(w => w.length <= 3).length / words.length, null];
+    }
+
+    if (key === 'silence_total_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const wc = transcript.split(/\s+/).filter(Boolean).length;
+        return [Math.max(0, Math.min(1, 1 - (wc * 0.3 / Math.max(dur, 1)))), null];
+    }
+
+    if (key === 'speech_rate_q1') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        return [words.slice(0, Math.ceil(words.length * 0.25)).length / (0.25 * dur + 0.001), null];
+    }
+
+    if (key === 'speech_rate_q4') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        return [words.slice(Math.floor(words.length * 0.75)).length / (0.25 * dur + 0.001), null];
+    }
+
+    if (key === 'speech_acceleration') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        const q1r = words.slice(0, Math.ceil(words.length * 0.25)).length / (0.25 * dur + 0.001);
+        const q4r = words.slice(Math.floor(words.length * 0.75)).length / (0.25 * dur + 0.001);
+        return [q4r / (q1r + 0.001), null];
+    }
+
+    if (key === 'speech_silence_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const speechTime = transcript.split(/\s+/).filter(Boolean).length * 0.3;
+        return [speechTime / (Math.max(dur, 1) - speechTime + 0.001), null];
+    }
+
+    if (key === 'speech_tempo_range') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        const n = words.length;
+        const rates = [
+            words.slice(0, Math.ceil(n * 0.25)).length / (0.25 * dur + 0.001),
+            words.slice(Math.ceil(n * 0.25), Math.ceil(n * 0.5)).length / (0.25 * dur + 0.001),
+            words.slice(Math.ceil(n * 0.5), Math.ceil(n * 0.75)).length / (0.25 * dur + 0.001),
+            words.slice(Math.ceil(n * 0.75)).length / (0.25 * dur + 0.001),
+        ];
+        return [Math.max(...rates) - Math.min(...rates), null];
+    }
+
+    if (key === 'summary_word_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const SUM = ['in summary','to summarize','in conclusion','to conclude','in short','overall','at the end of the day','the bottom line','the takeaway','the key point','what this means','the lesson'];
+        return [countPhraseMatches(transcript.toLowerCase(), SUM), null];
+    }
+
+    if (key === 'transcript_readability') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (words.length < 20) return [null, 'word count < 20'];
+        const sentCount = Math.max(transcript.split(/[.!?]+/).filter(s => s.trim().length > 0).length, 1);
+        const avgSyl = mean(words.map(w => Math.max(1, w.replace(/[^aeiou]/gi, '').length)));
+        return [206.835 - 1.015 * (words.length / sentCount) - 84.6 * avgSyl, null];
+    }
+
+    if (key === 'word_density_variance') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const segSize = Math.max(1, Math.floor(words.length / 10));
+        const counts = [];
+        for (let i = 0; i < 10; i++) counts.push(words.slice(i * segSize, (i + 1) * segSize).length);
+        return [variance(counts), null];
+    }
+
+    if (key === 'opening_word_latency_s') {
+        const rawTObj = typeof rawT === 'object' && rawT ? rawT : null;
+        if (rawTObj && Array.isArray(rawTObj.words) && rawTObj.words.length > 0 && rawTObj.words[0].start != null) {
+            return [rawTObj.words[0].start, null];
+        }
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        return [dur * 0.01, null];
+    }
+
+    if (key === 'peak_speech_rate_3s') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration;
+        if (!dur) return [null, 'no duration'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (words.length < 3) return [null, 'word count < 3'];
+        const chunkSize = Math.max(1, Math.round(words.length * 3 / dur));
+        let maxChunk = 0;
+        for (let i = 0; i < words.length; i += chunkSize) {
+            maxChunk = Math.max(maxChunk, words.slice(i, i + chunkSize).length);
+        }
+        return [maxChunk / 3.0, null];
     }
 
     // Interaction: keyA_x_keyB
