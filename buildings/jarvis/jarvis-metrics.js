@@ -1193,6 +1193,9 @@ const INTERACTION_BASES = [
     'answer_withhold_density_first_third',
     'narrative_tension_density_first_half',
     'challenge_setup_density_first_quarter',
+    // New transcript-language bases
+    'pivot_word_count', 'sensory_word_density', 'motif_recurrence_score',
+    'beat_density_per_minute', 'escalation_slope', 'title_curiosity_gap_score',
 ];
 // Excluded from cross-metric generation due to sparse video coverage (<50 videos with scores):
 // 'emotional_peak_position_pct', 'revelation_pace_score'
@@ -1232,6 +1235,9 @@ const STATIC_KEYS = new Set([
     'pre_upload_credibility_count', 'pre_upload_credibility_density', 'pre_upload_credibility_count_hook', 'pre_upload_credibility_front_load_ratio', 'pre_upload_credibility_position_pct',
     'pre_upload_mechanism_count', 'pre_upload_mechanism_density', 'pre_upload_mechanism_count_hook', 'pre_upload_mechanism_front_load_ratio', 'pre_upload_mechanism_position_pct',
     'reference_to_gratification_ratio', 'setup_to_payoff_gap',
+    // New transcript-language metrics
+    'pivot_word_count', 'sensory_word_density', 'motif_recurrence_score',
+    'beat_density_per_minute', 'escalation_slope', 'title_curiosity_gap_score',
 ]);
 
 // Layer map for static keys
@@ -1256,6 +1262,8 @@ const STATIC_LAYER = {
     transcript_number_count: 'pre',
     duration_s: 'pre', title_char_count: 'pre', title_word_count: 'pre',
     title_question_flag: 'pre', title_exclamation_flag: 'pre', title_number_flag: 'pre',
+    pivot_word_count: 'pre', sensory_word_density: 'pre', motif_recurrence_score: 'pre',
+    beat_density_per_minute: 'pre', escalation_slope: 'pre', title_curiosity_gap_score: 'pre',
 };
 
 // ── Programmatic registration of Zygarnik keys ──
@@ -1574,6 +1582,12 @@ const DETAILED_DEFS = {
     title_question_flag:      { d: 'Binary: does the title contain a question mark?', f: 'title.includes("?") ? 1 : 0', s: ['metadata.title'], r: '0 or 1' },
     title_exclamation_flag:   { d: 'Binary: does the title contain an exclamation mark?', f: 'title.includes("!") ? 1 : 0', s: ['metadata.title'], r: '0 or 1' },
     title_number_flag:        { d: 'Binary: does the title contain a number?', f: '/\\d/.test(title) ? 1 : 0', s: ['metadata.title'], r: '0 or 1' },
+    pivot_word_count:         { d: "Count of narrative pivot/transition words in transcript (but, however, yet, etc.).", f: "count pivot words in transcript", s: ["transcript.fullText"], r: "0 to 50" },
+    sensory_word_density:     { d: "Density of sensory/visceral words per total word count.", f: "count sensory words / word_count", s: ["transcript.fullText"], r: "0 to 0.05" },
+    motif_recurrence_score:   { d: "Score measuring phrase/theme recurrence: repeated 2+ word phrases per word.", f: "recurring_phrase_count / word_count", s: ["transcript.fullText"], r: "0 to 0.02" },
+    beat_density_per_minute:  { d: "Story beat transitions per minute — sentence-starters that mark new narrative beats.", f: "beat_count / estimated_minutes", s: ["transcript.fullText"], r: "0 to 20" },
+    escalation_slope:         { d: "Slope of tension-word frequency across thirds of transcript (positive = escalating).", f: "(stakes_third3 - stakes_third1) / (word_count/3)", s: ["transcript.fullText", "STAKES_PHRASES"], r: "-0.1 to 0.1" },
+    title_curiosity_gap_score:{ d: "Continuous curiosity-gap score for title: sum of 5 binary signals (0–5).", f: "has_question + has_number + starts_how_why_what + has_you + is_short_title", s: ["metadata.title"], r: "0 to 5" },
     // ── Pre-upload: speech & silence ──
     max_silence_gap_s:        { d: 'Longest gap (seconds) between words in the transcript — estimated from word timestamps or evenly spaced positions.', f: 'max(word[i+1].time - word[i].time) or duration-proportional estimate', s: ['transcript.words', 'metadata.duration'], r: '0 to 30' },
     opening_speech_rate_3s:   { d: 'Words per second in the first 3 seconds of the video.', f: 'words_in_first_3s / 3', s: ['transcript.fullText', 'metadata.duration'], r: '0 to 10' },
@@ -2143,6 +2157,82 @@ function extractMetric(key, analysis) {
     if (key === 'question_count') {
         if (!transcript) return [null, 'no transcript'];
         return [(transcript.match(/\?/g) || []).length, null];
+    }
+    if (key === 'pivot_word_count') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const PIVOT_WORDS = ['but', 'however', 'yet', 'although', 'whereas', 'while', 'nevertheless',
+            'meanwhile', 'despite', 'instead', 'rather', 'conversely', 'nonetheless',
+            'on the other hand', 'in contrast'];
+        let count = 0;
+        for (const p of PIVOT_WORDS) {
+            const re = new RegExp('\\b' + p.replace(/ /g, '\\s+') + '\\b', 'g');
+            count += (tl.match(re) || []).length;
+        }
+        return [count, null];
+    }
+    if (key === 'sensory_word_density') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const SENSORY_WORDS = new Set(['feel', 'touch', 'cold', 'warm', 'hot', 'sharp', 'rough', 'smooth',
+            'loud', 'quiet', 'bright', 'dark', 'smell', 'taste', 'bitter', 'sweet', 'soft', 'hard',
+            'heavy', 'light', 'thick', 'thin', 'pain', 'ache', 'burn', 'tingle']);
+        const ct = words.filter(w => SENSORY_WORDS.has(w.replace(/[^a-z]/g, ''))).length;
+        return [ct / words.length, null];
+    }
+    if (key === 'motif_recurrence_score') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean);
+        if (words.length < 20) return [0, null];
+        const phraseMap = {};
+        for (let i = 0; i < words.length - 1; i++) {
+            const phrase = words[i] + ' ' + words[i + 1];
+            if (!phraseMap[phrase]) phraseMap[phrase] = [];
+            phraseMap[phrase].push(i);
+        }
+        let recurrences = 0;
+        for (const positions of Object.values(phraseMap)) {
+            if (positions.length < 2) continue;
+            for (let i = 1; i < positions.length; i++) {
+                if (positions[i] - positions[i - 1] >= 10) recurrences++;
+            }
+        }
+        return [recurrences / words.length, null];
+    }
+    if (key === 'beat_density_per_minute') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (words.length < 20) return [0, null];
+        const BEAT_STARTERS = /^(So|And\s+then|Now|But\s+then|Then|After|Before|When|Until|Because|Which\s+means)\b/i;
+        const sentences = transcript.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+        const beatCount = sentences.filter(s => BEAT_STARTERS.test(s)).length;
+        const estimatedMinutes = words.length / 130;
+        return [beatCount / estimatedMinutes, null];
+    }
+    if (key === 'escalation_slope') {
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean);
+        if (words.length < 20) return [0, null];
+        const third = Math.floor(words.length / 3);
+        const t1 = words.slice(0, third).join(' ');
+        const t2 = words.slice(third, third * 2).join(' ');
+        const t3 = words.slice(third * 2).join(' ');
+        const c1 = countPhraseMatches(t1, ZYGARNIK_PHRASE_SETS.stakes_high);
+        const c3 = countPhraseMatches(t3, ZYGARNIK_PHRASE_SETS.stakes_high);
+        return [(c3 - c1) / (third + 0.001), null];
+    }
+    if (key === 'title_curiosity_gap_score') {
+        const title = (meta.title || '');
+        if (!title) return [0, null];
+        const titleWords = title.trim().split(/\s+/).filter(Boolean);
+        let score = 0;
+        if (title.includes('?')) score++;
+        if (/\d/.test(title)) score++;
+        if (/^(How|Why|What)\b/i.test(title)) score++;
+        if (/\byou\b|\byour\b/i.test(title)) score++;
+        if (titleWords.length <= 8) score++;
+        return [score, null];
     }
     if (key === 'segment_count') return [segments.length, null];
     if (key === 'has_hook_segment') return [hookSeg() ? 1 : 0, null];
