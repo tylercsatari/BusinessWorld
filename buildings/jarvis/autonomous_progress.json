@@ -1,20 +1,205 @@
 {
   "active": false,
-  "run_id": "auto_20260420223726.",
+  "run_id": "auto_20260421000900.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-20T22:37:26.066Z",
-  "updated_at": "2026-04-20T22:38:16.176Z",
-  "finished_at": "2026-04-20T22:38:16.176Z",
+  "started_at": "2026-04-21T00:09:00.178Z",
+  "updated_at": "2026-04-21T00:13:34.775Z",
+  "finished_at": "2026-04-21T00:33:00.000Z",
   "requested_iterations": 5000,
-  "attempted": 52,
-  "completed": 37,
-  "failures": 15,
+  "attempted": 568,
+  "completed": 498,
+  "failures": 69,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 25,
-  "stop_reason": "max_no_signal",
-  "current_candidate": null,
-  "last_completed_candidate": "social_contrast_density_x_proof_density_hook",
-  "last_completed_r": 0,
-  "recent_events": []
+  "no_signal_streak": 5,
+  "stop_reason": "process_died",
+  "current_candidate": "early_proof_position_pct_x_retention_pct_85",
+  "last_completed_candidate": "zygarnik_gradient_pct_x_emotional_peak_count",
+  "last_completed_r": -0.0351,
+  "recent_events": [
+    {
+      "type": "completed",
+      "key": "early_proof_position_pct_x_retention_pct_70",
+      "r": -0.0358,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T00:13:26.956Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_position_pct_x_retention_pct_72",
+      "r": -0.0343,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T00:13:27.423Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_position_pct_x_retention_pct_75",
+      "r": -0.0072,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T00:13:27.856Z"
+    },
+    {
+      "type": "completed",
+      "key": "information_drip_ratio_x_loop_front_half_density",
+      "r": 0.0548,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:28.221Z"
+    },
+    {
+      "type": "completed",
+      "key": "information_drip_ratio_x_answer_withhold_density_first_third",
+      "r": 0.0394,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:28.586Z"
+    },
+    {
+      "type": "completed",
+      "key": "information_drip_ratio_x_narrative_tension_density_first_half",
+      "r": 0.0787,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:28.956Z"
+    },
+    {
+      "type": "completed",
+      "key": "information_drip_ratio_x_challenge_setup_density_first_quarter",
+      "r": 0.023,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:29.470Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_stakes_to_loop_ratio",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:29.867Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_social_comparison_count",
+      "r": -0.0866,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:30.252Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_social_comparison_density",
+      "r": -0.0922,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:30.636Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_position_pct_x_retention_pct_78",
+      "r": 0.0119,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T00:13:31.012Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_position_pct_x_retention_pct_80",
+      "r": 0.0304,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T00:13:31.384Z"
+    },
+    {
+      "type": "completed",
+      "key": "early_proof_position_pct_x_retention_pct_82",
+      "r": 0.0318,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T00:13:31.752Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_viewer_stakes_count",
+      "r": 0.083,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:32.209Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_viewer_stakes_density",
+      "r": 0.0818,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:32.638Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_transformation_arc_count",
+      "r": 0.0416,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:33.013Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_transformation_arc_density",
+      "r": 0.0356,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:33.398Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_curiosity_gap_count",
+      "r": 0.0246,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:33.783Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_curiosity_gap_density",
+      "r": 0.0182,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:34.350Z"
+    },
+    {
+      "type": "completed",
+      "key": "zygarnik_gradient_pct_x_emotional_peak_count",
+      "r": -0.0351,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-21T00:13:34.774Z"
+    }
+  ],
+  "pre_attempted": 399,
+  "pre_completed": 399,
+  "post_attempted": 169,
+  "post_completed": 99
 }
