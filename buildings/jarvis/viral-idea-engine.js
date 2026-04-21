@@ -3325,7 +3325,6 @@ function buildSectionValidationTraces(seed, brief, ctx) {
                 'retention-patterns.top_5_retention_predictors',
                 'retention-patterns.narrative_arc_analysis',
                 'retention-patterns.wave7_new_signals.progression_patterns',
-                'retention-patterns.wave7_new_signals.quartile_templates',
                 'retention-patterns.wave9_10_new_signals',
             ],
             indicators_considered_count: top5.length,
@@ -3789,7 +3788,6 @@ function buildMetricValidationTraces(brief, ctx) {
             evidence_sources: [
                 'retention-patterns.top_5_retention_predictors',
                 'retention-patterns.wave7_new_signals.progression_patterns',
-                'retention-patterns.wave7_new_signals.quartile_templates',
                 'retention-patterns.wave9_10_new_signals.best_after_worst',
                 'findings-summary.kept_signals',
             ],
