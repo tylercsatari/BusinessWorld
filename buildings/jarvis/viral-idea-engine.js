@@ -611,6 +611,16 @@ function compress(artifacts) {
                     'diversity_bucket_size',
                 ],
             },
+            // Single back-compat anchor for the per-idea keep_rate top_indicators
+            // `legacy_evidence_type: 'wave7.quartile_templates'` alias. Primary is
+            // `evidence_type: 'wave7.progression_patterns'`; the legacy alias is no
+            // longer repeated inside every idea's synthesis_trace.top_indicators.
+            // This entry preserves searchability for callers grepping viral-ideas.json
+            // for the old wave7.quartile_templates name.
+            keep_rate_top_indicators_legacy_evidence_type_alias: {
+                primary: 'wave7.progression_patterns',
+                legacy_removed_per_idea: 'wave7.quartile_templates',
+            },
             mechanism_indicator_links: mechanismIndicatorLinks && mechanismIndicatorLinks.n_links,
             retention_pattern_waves: retentionPatterns && retentionPatterns.analysis_waves,
             word_retention_scored: wordImpact ? Object.keys(wordImpact).length : 0,
@@ -3785,7 +3795,7 @@ function buildMetricValidationTraces(brief, ctx) {
     {
         const top_indicators = [
             { key: 'HOOK_PAYOFF_GAP', evidence_type: 'top_5_retention_predictors', r_with_views: -0.52, why: 'over-delivery wins (rank #1)' },
-            { key: 'progression_pattern_triple_up', evidence_type: 'wave7.progression_patterns', legacy_evidence_type: 'wave7.quartile_templates', quantification: '↑↑↑ vs ↓↓↓ median views', why: '4.19M vs 222K (19x)' },
+            { key: 'progression_pattern_triple_up', evidence_type: 'wave7.progression_patterns', quantification: '↑↑↑ vs ↓↓↓ median views', why: '4.19M vs 222K (19x)' },
             { key: 'best_after_worst', evidence_type: 'wave9_10', quantification: 'median views when nadir precedes climax', why: '5x gap (3.3M vs 650K)' },
         ];
         traces.keep_rate = makeTrace({
