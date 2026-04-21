@@ -39954,9 +39954,7 @@
       "visual_proof_density_x_tension_peak_position_pct",
       "visual_proof_density_x_title_number_count",
       "visual_proof_density_x_title_word_count",
-      "visual_proof_density_x_title_word_count_x_opening_speech_rate_3s",
-      "visual_proof_density_x_transcript_char_count",
-      "visual_proof_density_x_transcript_number_count"
+      "visual_proof_density_x_title_word_count_x_opening_speech_rate_3s"
     ],
     "depth_in_hierarchy": 0
   },
