@@ -23096,9 +23096,9 @@
     "total_derived_after": 90968
   },
   {
-    "id": "auto_20260421200121.",
-    "started_at": "2026-04-21T20:01:21.609Z",
-    "finished_at": "2026-04-21T20:02:30.700Z",
+    "id": "auto_20260421200427.",
+    "started_at": "2026-04-21T20:04:27.224Z",
+    "finished_at": "2026-04-21T20:05:36.301Z",
     "mode": "hybrid_auto",
     "llm_proposed": 0,
     "llm_completed": 0,
