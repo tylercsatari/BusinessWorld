@@ -1,10 +1,10 @@
 {
   "active": false,
-  "run_id": "auto_20260421192803.",
+  "run_id": "auto_20260421193121.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-21T19:28:03.191Z",
-  "updated_at": "2026-04-21T19:29:23.138Z",
-  "finished_at": "2026-04-21T19:29:23.138Z",
+  "started_at": "2026-04-21T19:31:21.543Z",
+  "updated_at": "2026-04-21T19:33:56.903Z",
+  "finished_at": "2026-04-21T19:33:56.903Z",
   "requested_iterations": 3000,
   "attempted": 500,
   "completed": 0,
@@ -22,140 +22,140 @@
       "key": "story_clock_density_first3s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.112Z"
+      "ts": "2026-04-21T19:33:55.995Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_story_clock_density_first3s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.113Z"
+      "ts": "2026-04-21T19:33:55.996Z"
     },
     {
       "type": "failed",
       "key": "story_clock_density_first5s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.113Z"
+      "ts": "2026-04-21T19:33:55.996Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_story_clock_density_first5s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.114Z"
+      "ts": "2026-04-21T19:33:55.997Z"
     },
     {
       "type": "failed",
       "key": "story_clock_density_first8s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.115Z"
+      "ts": "2026-04-21T19:33:55.998Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_story_clock_density_first8s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.116Z"
+      "ts": "2026-04-21T19:33:55.999Z"
     },
     {
       "type": "failed",
       "key": "story_clock_density_first10s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.116Z"
+      "ts": "2026-04-21T19:33:55.999Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_story_clock_density_first10s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.117Z"
+      "ts": "2026-04-21T19:33:56.000Z"
     },
     {
       "type": "failed",
       "key": "story_clock_density_first15s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.118Z"
+      "ts": "2026-04-21T19:33:56.001Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_story_clock_density_first15s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.119Z"
+      "ts": "2026-04-21T19:33:56.002Z"
     },
     {
       "type": "failed",
       "key": "story_clock_density_first20s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.120Z"
+      "ts": "2026-04-21T19:33:56.003Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_story_clock_density_first20s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.120Z"
+      "ts": "2026-04-21T19:33:56.003Z"
     },
     {
       "type": "failed",
       "key": "proof_build_count_first2s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.121Z"
+      "ts": "2026-04-21T19:33:56.004Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_proof_build_count_first2s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.122Z"
+      "ts": "2026-04-21T19:33:56.005Z"
     },
     {
       "type": "failed",
       "key": "proof_build_count_first3s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.122Z"
+      "ts": "2026-04-21T19:33:56.006Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_proof_build_count_first3s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.123Z"
+      "ts": "2026-04-21T19:33:56.007Z"
     },
     {
       "type": "failed",
       "key": "proof_build_count_first8s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.124Z"
+      "ts": "2026-04-21T19:33:56.008Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_proof_build_count_first8s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.125Z"
+      "ts": "2026-04-21T19:33:56.009Z"
     },
     {
       "type": "failed",
       "key": "proof_build_count_first10s_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.126Z"
+      "ts": "2026-04-21T19:33:56.010Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_proof_build_count_first10s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-21T19:29:22.126Z"
+      "ts": "2026-04-21T19:33:56.010Z"
     }
   ],
   "pre_attempted": 0,

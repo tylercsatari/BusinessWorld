@@ -23096,9 +23096,9 @@
     "total_derived_after": 90968
   },
   {
-    "id": "auto_20260421192803.",
-    "started_at": "2026-04-21T19:28:03.190Z",
-    "finished_at": "2026-04-21T19:29:23.139Z",
+    "id": "auto_20260421193121.",
+    "started_at": "2026-04-21T19:31:21.542Z",
+    "finished_at": "2026-04-21T19:33:56.904Z",
     "mode": "hybrid_auto",
     "llm_proposed": 0,
     "llm_completed": 0,
@@ -23315,7 +23315,7 @@
       "FAIL:hook_payoff_gap_x_reference_callback_count_first8s"
     ],
     "top_new_r_abs": 0,
-    "elapsed_minutes": 1.33,
+    "elapsed_minutes": 2.59,
     "total_indicators_after": 1855,
     "total_derived_after": 90968
   }
