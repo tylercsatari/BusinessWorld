@@ -3837,11 +3837,11 @@ function buildIndicatorCorpus(brief, ctx) {
         components_total: (brief.source_sizes && brief.source_sizes.components_total) || null,
         mechanisms_total: (brief.source_sizes && brief.source_sizes.mechanisms_total) || null,
         word_retention_scored: (brief.source_sizes && brief.source_sizes.word_retention_scored) || null,
-        // Primary diversity-bucket key; falls back to the legacy `candidate_proposal_families`
-        // source-size so older briefs still populate. `candidate_proposal_families` is
-        // emitted below as the legacy alias for downstream readers.
+        // Primary diversity-bucket key; falls back to the legacy candidate-proposal-families
+        // source-size so older briefs still populate. The legacy alias is no longer emitted
+        // per-idea — readers that still reference the old name should consult
+        // brief.source_sizes.candidate_proposal_families (retained as the single back-compat spot).
         candidate_proposal_diversity_buckets: (brief.source_sizes && (brief.source_sizes.candidate_proposal_diversity_buckets || brief.source_sizes.candidate_proposal_families)) || null,
-        candidate_proposal_families: (brief.source_sizes && brief.source_sizes.candidate_proposal_families) || null,
         note: 'Counts represent the candidate pool. Each section trace below enumerates how the pool was filtered and which indicators were actually used.',
     };
 }
