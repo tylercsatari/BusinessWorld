@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-21T00:25:31.522Z",
+    "generated_at": "2026-04-21T00:55:26.497Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -55,7 +55,7 @@
         "first_frame": "Close on taping the last cardboard seam on a finished hull with the shoreline framing the shot. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on oars pulling as the cardboard boat slides out from the dock for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.53,
+        "opening_speech_rate_wps_target": 2.57,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -105,7 +105,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.53,
+        "opening_wps_target": 2.57,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -757,7 +757,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.53wps_in_sweet_zone",
+              "driver": "opening_rate_2.57wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -1159,6 +1159,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -1179,7 +1180,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -1604,6 +1606,7 @@
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals"
             ],
@@ -3113,6 +3116,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -3133,7 +3137,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -3243,7 +3248,7 @@
         "first_frame": "Close on morning day-1: a plain potato on the plate next to the scale with the reading on screen. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 60 days, and my stomach is going to tell you when it's over.",
         "opening_action": "Camera locked on a cut between identical morning weigh-ins and identical potato plates for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.64,
+        "opening_speech_rate_wps_target": 2.51,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -3293,7 +3298,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.64,
+        "opening_wps_target": 2.51,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -3927,7 +3932,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.64wps_in_sweet_zone",
+              "driver": "opening_rate_2.51wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -4329,6 +4334,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -4349,7 +4355,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -4774,6 +4781,7 @@
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals"
             ],
@@ -6256,6 +6264,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -6276,7 +6285,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -6386,7 +6396,7 @@
         "first_frame": "Close on mid-fold on a crane with a counter and a pile in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on fingers folding paper and adding to a crane pile for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.54,
+        "opening_speech_rate_wps_target": 2.55,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -6436,7 +6446,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.54,
+        "opening_wps_target": 2.55,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -7077,7 +7087,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.54wps_in_sweet_zone",
+              "driver": "opening_rate_2.55wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -7479,6 +7489,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -7499,7 +7510,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -7924,6 +7936,7 @@
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals"
             ],
@@ -9415,6 +9428,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -9435,7 +9449,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -9545,7 +9560,7 @@
         "first_frame": "Close on a pro boxer wrapping my hands with his gym behind him in the same frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 days, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on matching his bag work beat for beat with both fighters in the shot for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.68,
+        "opening_speech_rate_wps_target": 2.6,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -9595,7 +9610,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.68,
+        "opening_wps_target": 2.6,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -10230,7 +10245,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.68wps_in_sweet_zone",
+              "driver": "opening_rate_2.6wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -10632,6 +10647,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -10652,7 +10668,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -11077,6 +11094,7 @@
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals"
             ],
@@ -12546,6 +12564,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -12566,7 +12585,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -13762,6 +13782,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -13782,7 +13803,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },
@@ -14207,6 +14229,7 @@
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
               "retention-patterns.narrative_arc_analysis",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals"
             ],
@@ -15687,6 +15710,7 @@
             "rationale": "Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.",
             "evidence_sources": [
               "retention-patterns.top_5_retention_predictors",
+              "retention-patterns.wave7_new_signals.progression_patterns",
               "retention-patterns.wave7_new_signals.quartile_templates",
               "retention-patterns.wave9_10_new_signals.best_after_worst",
               "findings-summary.kept_signals"
@@ -15707,7 +15731,8 @@
               },
               {
                 "key": "progression_pattern_triple_up",
-                "evidence_type": "wave7.quartile_templates",
+                "evidence_type": "wave7.progression_patterns",
+                "legacy_evidence_type": "wave7.quartile_templates",
                 "quantification": "↑↑↑ vs ↓↓↓ median views",
                 "why": "4.19M vs 222K (19x)"
               },

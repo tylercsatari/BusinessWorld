@@ -3321,7 +3321,13 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         traces.build_phases = makeTrace({
             field: 'build_phases',
             rationale: 'Build phases are validated against the top-5 retention predictors + narrative_arc_analysis (best/worst arc labels) + wave7 retention-shape evidence.',
-            evidence_sources: ['retention-patterns.top_5_retention_predictors', 'retention-patterns.narrative_arc_analysis', 'retention-patterns.wave7_new_signals.quartile_templates', 'retention-patterns.wave9_10_new_signals'],
+            evidence_sources: [
+                'retention-patterns.top_5_retention_predictors',
+                'retention-patterns.narrative_arc_analysis',
+                'retention-patterns.wave7_new_signals.progression_patterns',
+                'retention-patterns.wave7_new_signals.quartile_templates',
+                'retention-patterns.wave9_10_new_signals',
+            ],
             indicators_considered_count: top5.length,
             indicator_keys: top5.map(r => String(r.signal || '').toLowerCase()),
             top_indicators,
@@ -3774,13 +3780,19 @@ function buildMetricValidationTraces(brief, ctx) {
     {
         const top_indicators = [
             { key: 'HOOK_PAYOFF_GAP', evidence_type: 'top_5_retention_predictors', r_with_views: -0.52, why: 'over-delivery wins (rank #1)' },
-            { key: 'progression_pattern_triple_up', evidence_type: 'wave7.quartile_templates', quantification: '↑↑↑ vs ↓↓↓ median views', why: '4.19M vs 222K (19x)' },
+            { key: 'progression_pattern_triple_up', evidence_type: 'wave7.progression_patterns', legacy_evidence_type: 'wave7.quartile_templates', quantification: '↑↑↑ vs ↓↓↓ median views', why: '4.19M vs 222K (19x)' },
             { key: 'best_after_worst', evidence_type: 'wave9_10', quantification: 'median views when nadir precedes climax', why: '5x gap (3.3M vs 650K)' },
         ];
         traces.keep_rate = makeTrace({
             field: 'estimated_metrics.keep_rate',
             rationale: 'Additive model: corpus mean keep + deltas from over-delivery structure, monotonic rise, and nadir placement — each grounded in an explicit retention-pattern signal.',
-            evidence_sources: ['retention-patterns.top_5_retention_predictors', 'retention-patterns.wave7_new_signals.quartile_templates', 'retention-patterns.wave9_10_new_signals.best_after_worst', 'findings-summary.kept_signals'],
+            evidence_sources: [
+                'retention-patterns.top_5_retention_predictors',
+                'retention-patterns.wave7_new_signals.progression_patterns',
+                'retention-patterns.wave7_new_signals.quartile_templates',
+                'retention-patterns.wave9_10_new_signals.best_after_worst',
+                'findings-summary.kept_signals',
+            ],
             indicators_considered_count: top_indicators.length,
             indicator_keys: top_indicators.map(t => t.key),
             top_indicators,
