@@ -490,6 +490,7 @@ async function autoRun(opts = {}) {
 
     const indicators = await jarvisStore.loadJson('indicators', []);
     const derivedExperiments = await jarvisStore.loadJson('derived_experiments', []);
+    const expLog = await jarvisStore.loadJson('experiments_log', []);
     const tools = await jarvisStore.loadJson('tools', []);
     const resolutions = await jarvisStore.loadJson('resolutions', []);
     const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
@@ -601,7 +602,6 @@ async function autoRun(opts = {}) {
                 } else {
                     indicators.push(result);
                 }
-                const expLog = await jarvisStore.loadJson('experiments_log', []);
                 expLog.push({
                     id: result.experiment.id,
                     indicator_key: key,
@@ -616,17 +616,20 @@ async function autoRun(opts = {}) {
                     source: 'deterministic',
                     kind: isComposite ? 'interaction' : 'atomic',
                 });
-                await jarvisStore.saveJson('experiments_log', expLog);
-                await jarvisStore.saveJson('indicators', indicators);
-                await jarvisStore.saveJson('derived_experiments', derivedExperiments);
-                await jarvisStore.saveJson('resolutions', resolutions);
-                await jarvisStore.saveJson('graph', graph);
                 existingKeys.add(key);
 
                 completed++;
                 if (isPre) preCompleted++; else postCompleted++;
                 consecutiveFailures = 0;
                 processedKeys.push(key);
+
+                if (completed % 25 === 0) {
+                    await jarvisStore.saveJson('experiments_log', expLog);
+                    await jarvisStore.saveJson('indicators', indicators);
+                    await jarvisStore.saveJson('derived_experiments', derivedExperiments);
+                    await jarvisStore.saveJson('resolutions', resolutions);
+                    await jarvisStore.saveJson('graph', graph);
+                }
 
                 const rVal = result.result.primary_r;
                 const rAbs = Math.abs(rVal);
@@ -663,6 +666,12 @@ async function autoRun(opts = {}) {
         log(`CRASH: ${err.message}`);
         await finishProgress(prog, `crashed: ${String(err.message).slice(0, 200)}`);
         throw err;
+    } finally {
+        await jarvisStore.saveJson('experiments_log', expLog);
+        await jarvisStore.saveJson('indicators', indicators);
+        await jarvisStore.saveJson('derived_experiments', derivedExperiments);
+        await jarvisStore.saveJson('resolutions', resolutions);
+        await jarvisStore.saveJson('graph', graph);
     }
 
     await finishProgress(prog, stopReason);
