@@ -2204,7 +2204,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
     const firstLine = `${capitalize(firstWord)} — ${scale.display}, and my ${bodyPart} is going to tell you when it\'s over.`.replace('shoulders is', 'shoulders are').replace('foot is', 'foot is').replace('hand is', 'hand is');
     const openingAction = `Camera locked on ${obj.visual_action_short} for the first 3 seconds; I enter motion inside the first second.`;
 
-    // Build phases — template driven by top_5_retention_predictors
+    // Build phases — retention-pattern driven by top_5_retention_predictors
     const buildPhases = [
         { zone_pct: '0-10', beat: `enter ${obj.setting_hint.replace(/^at |^on |^in /, '')}; ${obj.visual_action_short}; premise named on screen`, visceral: true, note: 'Concept + body inside first 10%. Design rule v3 #6 (5.4x gap).' },
         { zone_pct: '10-25', beat: `first ${bodyPart} sensation narration ("my ${bodyPart} is bigger"); counter begins to tick`, visceral: true, note: 'Divergence lock-in at ~22%. Sensory-word ramp begins.' },
@@ -3270,7 +3270,14 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         traces.opening_speech_rate = makeTrace({
             field: 'opening.opening_speech_rate_wps_target',
             rationale: 'Opening speech rate target is validated against speaking_patterns.opening_density; medium density (1.5–3.0 wps) empirically retains best.',
-            evidence_sources: ['retention-patterns.speaking_patterns.opening_density', 'candidate_proposals.families (opening_speech_rate_3s)'],
+            // Alias-first: `candidate_proposals.diversity_buckets (...)` is the
+            // preferred label; the legacy `candidate_proposals.families (...)`
+            // string is kept alongside so older readers still match on it.
+            evidence_sources: [
+                'retention-patterns.speaking_patterns.opening_density',
+                'candidate_proposals.diversity_buckets (opening_speech_rate_3s)',
+                'candidate_proposals.families (opening_speech_rate_3s)',
+            ],
             indicators_considered_count: indicators.length,
             indicator_keys: indicators,
             top_indicators,

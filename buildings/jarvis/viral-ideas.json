@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-20T20:54:52.194Z",
+    "generated_at": "2026-04-21T00:25:31.522Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -55,7 +55,7 @@
         "first_frame": "Close on taping the last cardboard seam on a finished hull with the shoreline framing the shot. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 miles, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on oars pulling as the cardboard boat slides out from the dock for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.66,
+        "opening_speech_rate_wps_target": 2.53,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -105,7 +105,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.66,
+        "opening_wps_target": 2.53,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -757,7 +757,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.66wps_in_sweet_zone",
+              "driver": "opening_rate_2.53wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -1529,6 +1529,7 @@
             "rationale": "Opening speech rate target is validated against speaking_patterns.opening_density; medium density (1.5–3.0 wps) empirically retains best.",
             "evidence_sources": [
               "retention-patterns.speaking_patterns.opening_density",
+              "candidate_proposals.diversity_buckets (opening_speech_rate_3s)",
               "candidate_proposals.families (opening_speech_rate_3s)"
             ],
             "indicators_considered_count": 2,
@@ -3242,7 +3243,7 @@
         "first_frame": "Close on morning day-1: a plain potato on the plate next to the scale with the reading on screen. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 60 days, and my stomach is going to tell you when it's over.",
         "opening_action": "Camera locked on a cut between identical morning weigh-ins and identical potato plates for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.6,
+        "opening_speech_rate_wps_target": 2.64,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -3292,7 +3293,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.6,
+        "opening_wps_target": 2.64,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -3926,7 +3927,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.6wps_in_sweet_zone",
+              "driver": "opening_rate_2.64wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -4698,6 +4699,7 @@
             "rationale": "Opening speech rate target is validated against speaking_patterns.opening_density; medium density (1.5–3.0 wps) empirically retains best.",
             "evidence_sources": [
               "retention-patterns.speaking_patterns.opening_density",
+              "candidate_proposals.diversity_buckets (opening_speech_rate_3s)",
               "candidate_proposals.families (opening_speech_rate_3s)"
             ],
             "indicators_considered_count": 2,
@@ -6384,7 +6386,7 @@
         "first_frame": "Close on mid-fold on a crane with a counter and a pile in frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my hand is going to tell you when it's over.",
         "opening_action": "Camera locked on fingers folding paper and adding to a crane pile for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.55,
+        "opening_speech_rate_wps_target": 2.54,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -6434,7 +6436,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.55,
+        "opening_wps_target": 2.54,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -7075,7 +7077,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.55wps_in_sweet_zone",
+              "driver": "opening_rate_2.54wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -7847,6 +7849,7 @@
             "rationale": "Opening speech rate target is validated against speaking_patterns.opening_density; medium density (1.5–3.0 wps) empirically retains best.",
             "evidence_sources": [
               "retention-patterns.speaking_patterns.opening_density",
+              "candidate_proposals.diversity_buckets (opening_speech_rate_3s)",
               "candidate_proposals.families (opening_speech_rate_3s)"
             ],
             "indicators_considered_count": 2,
@@ -9542,7 +9545,7 @@
         "first_frame": "Close on a pro boxer wrapping my hands with his gym behind him in the same frame. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 2 days, and my shoulders are going to tell you when it's over.",
         "opening_action": "Camera locked on matching his bag work beat for beat with both fighters in the shot for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.52,
+        "opening_speech_rate_wps_target": 2.68,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -9592,7 +9595,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.52,
+        "opening_wps_target": 2.68,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -10227,7 +10230,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.52wps_in_sweet_zone",
+              "driver": "opening_rate_2.68wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -10999,6 +11002,7 @@
             "rationale": "Opening speech rate target is validated against speaking_patterns.opening_density; medium density (1.5–3.0 wps) empirically retains best.",
             "evidence_sources": [
               "retention-patterns.speaking_patterns.opening_density",
+              "candidate_proposals.diversity_buckets (opening_speech_rate_3s)",
               "candidate_proposals.families (opening_speech_rate_3s)"
             ],
             "indicators_considered_count": 2,
@@ -12672,7 +12676,7 @@
         "first_frame": "Close on mid-step on the stairs with a counter overlay. Counter visible. No explanatory overlay; composition emphasizes direct address (rho=0.14 vs log_views).",
         "first_line": "Go — 1,000, and my foot is going to tell you when it's over.",
         "opening_action": "Camera locked on running up a flight with foot-on-stair visible for the first 3 seconds; I enter motion inside the first second.",
-        "opening_speech_rate_wps_target": 2.61,
+        "opening_speech_rate_wps_target": 2.5,
         "hook_type": "transformation",
         "best_first_word_used": "go"
       },
@@ -12722,7 +12726,7 @@
         "divergence_locked_in_by_pct": 22
       },
       "pacing": {
-        "opening_wps_target": 2.61,
+        "opening_wps_target": 2.5,
         "peak_wps_target": 3,
         "closing_wps_target": 3.2,
         "utterance_length_at_peaks_words_target": 7.9,
@@ -13356,7 +13360,7 @@
               "source": "hook_taxonomy (wave11_12)"
             },
             {
-              "driver": "opening_rate_2.61wps_in_sweet_zone",
+              "driver": "opening_rate_2.5wps_in_sweet_zone",
               "modeled_delta": -0.015,
               "source": "speaking_patterns.opening_density"
             },
@@ -14128,6 +14132,7 @@
             "rationale": "Opening speech rate target is validated against speaking_patterns.opening_density; medium density (1.5–3.0 wps) empirically retains best.",
             "evidence_sources": [
               "retention-patterns.speaking_patterns.opening_density",
+              "candidate_proposals.diversity_buckets (opening_speech_rate_3s)",
               "candidate_proposals.families (opening_speech_rate_3s)"
             ],
             "indicators_considered_count": 2,
