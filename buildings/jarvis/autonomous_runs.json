@@ -22872,22 +22872,22 @@
     "total_derived_after": 40662
   },
   {
-    "id": "auto_20260421191938.",
-    "started_at": "2026-04-21T19:19:38.562Z",
-    "finished_at": "2026-04-21T19:22:11.925Z",
+    "id": "auto_20260421192449.",
+    "started_at": "2026-04-21T19:24:49.581Z",
+    "finished_at": "2026-04-21T19:26:08.882Z",
     "mode": "hybrid_auto",
     "llm_proposed": 0,
     "llm_completed": 0,
-    "attempted": 1710,
-    "completed": 1192,
-    "failures": 518,
+    "attempted": 500,
+    "completed": 0,
+    "failures": 500,
     "pre_attempted": 0,
     "pre_completed": 0,
-    "post_attempted": 1710,
-    "post_completed": 1192,
+    "post_attempted": 500,
+    "post_completed": 0,
     "preupload_ratio_requested": 0.7,
     "no_signal_streak_end": 0,
-    "stop_reason": "exhausted_candidates",
+    "stop_reason": "max_failures",
     "candidate_keys_processed": [
       "FAIL:hook_to_payoff_gap_pct_x_reference_callback_count",
       "FAIL:reference_callback_count_x_hook_to_payoff_gap_pct",
@@ -23090,8 +23090,8 @@
       "FAIL:reference_callback_count_first8s_x_hook_payoff_gap",
       "FAIL:hook_payoff_gap_x_reference_callback_count_first8s"
     ],
-    "top_new_r_abs": 0.1234,
-    "elapsed_minutes": 2.56,
+    "top_new_r_abs": 0,
+    "elapsed_minutes": 1.32,
     "total_indicators_after": 1855,
     "total_derived_after": 90968
   }
