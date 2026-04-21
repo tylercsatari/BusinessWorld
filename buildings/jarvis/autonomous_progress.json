@@ -1,20 +1,205 @@
 {
-  "active": true,
+  "active": false,
   "run_id": "auto_20260421155610.",
   "mode": "hybrid_auto",
   "started_at": "2026-04-21T15:56:10.723Z",
-  "updated_at": "2026-04-21T15:56:10.723Z",
-  "finished_at": null,
+  "updated_at": "2026-04-21T16:00:39.762Z",
+  "finished_at": "2026-04-21T16:00:39.762Z",
   "requested_iterations": 5000,
-  "attempted": 0,
-  "completed": 0,
-  "failures": 0,
+  "attempted": 5000,
+  "completed": 3636,
+  "failures": 1364,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
-  "stop_reason": null,
+  "stop_reason": "max_iterations",
   "current_candidate": null,
-  "last_completed_candidate": null,
-  "last_completed_r": null,
-  "recent_events": []
+  "last_completed_candidate": "open_loop_density_last_quarter_x_retention_pct_80",
+  "last_completed_r": 0.0521,
+  "recent_events": [
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_non_sub_view_share",
+      "r": 0.0712,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:37.826Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_opening_speech_rate_3s",
+      "r": 0.0373,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:37.861Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_pivot_word_count",
+      "r": 0.0818,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:37.897Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_retention_entropy",
+      "r": 0.0428,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:37.927Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_sensory_word_density",
+      "r": 0.02,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:37.987Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_speech_rate_wps",
+      "r": 0.0369,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.029Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_title_word_count",
+      "r": 0.0432,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.072Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_50_x_unique_word_ratio",
+      "r": 0.033,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.107Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_52",
+      "r": 0.0425,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.813Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_55",
+      "r": 0.044,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.849Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_58",
+      "r": 0.0459,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.878Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_60",
+      "r": 0.0472,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.905Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_62",
+      "r": 0.0481,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.932Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_65",
+      "r": 0.0488,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.961Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_68",
+      "r": 0.0498,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:38.989Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_70",
+      "r": 0.0502,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:39.020Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_72",
+      "r": 0.0506,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:39.050Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_75",
+      "r": 0.0514,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:39.077Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_78",
+      "r": 0.0519,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:39.102Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_density_last_quarter_x_retention_pct_80",
+      "r": 0.0521,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-21T16:00:39.126Z"
+    }
+  ],
+  "pre_attempted": 1056,
+  "pre_completed": 1047,
+  "post_attempted": 3944,
+  "post_completed": 2589
 }
