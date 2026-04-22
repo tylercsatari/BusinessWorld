@@ -1,10 +1,10 @@
 {
   "active": false,
-  "run_id": "auto_20260422091341.",
+  "run_id": "auto_20260422091647.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-22T09:13:41.399Z",
-  "updated_at": "2026-04-22T09:14:37.962Z",
-  "finished_at": "2026-04-22T09:14:37.962Z",
+  "started_at": "2026-04-22T09:16:47.331Z",
+  "updated_at": "2026-04-22T09:17:46.246Z",
+  "finished_at": "2026-04-22T09:17:46.246Z",
   "requested_iterations": 3000,
   "attempted": 500,
   "completed": 0,
@@ -22,140 +22,140 @@
       "key": "speech_rate_wps_x_promise_specificity_count_first15s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:36.997Z"
+      "ts": "2026-04-22T09:17:45.350Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_promise_specificity_count_first20s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:36.997Z"
+      "ts": "2026-04-22T09:17:45.351Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_promise_specificity_count_first25s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:36.998Z"
+      "ts": "2026-04-22T09:17:45.352Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_promise_specificity_density_first5s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:36.999Z"
+      "ts": "2026-04-22T09:17:45.353Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_promise_specificity_density_first10s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.000Z"
+      "ts": "2026-04-22T09:17:45.353Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_count_first3s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.001Z"
+      "ts": "2026-04-22T09:17:45.354Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_count_first5s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.002Z"
+      "ts": "2026-04-22T09:17:45.355Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_count_first8s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.002Z"
+      "ts": "2026-04-22T09:17:45.356Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_count_first10s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.003Z"
+      "ts": "2026-04-22T09:17:45.356Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_count_first15s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.004Z"
+      "ts": "2026-04-22T09:17:45.357Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_count_first20s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.005Z"
+      "ts": "2026-04-22T09:17:45.358Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_count_first25s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.005Z"
+      "ts": "2026-04-22T09:17:45.359Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_density_first5s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.006Z"
+      "ts": "2026-04-22T09:17:45.359Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_transformation_arc_density_first10s",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.007Z"
+      "ts": "2026-04-22T09:17:45.360Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.007Z"
+      "ts": "2026-04-22T09:17:45.361Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_cliffhanger_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.008Z"
+      "ts": "2026-04-22T09:17:45.361Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.009Z"
+      "ts": "2026-04-22T09:17:45.362Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_curiosity_to_closure_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.009Z"
+      "ts": "2026-04-22T09:17:45.363Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_loop_payoff_density_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.010Z"
+      "ts": "2026-04-22T09:17:45.364Z"
     },
     {
       "type": "failed",
       "key": "speech_rate_wps_x_revelation_to_cliffhanger_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-22T09:14:37.011Z"
+      "ts": "2026-04-22T09:17:45.364Z"
     }
   ],
   "pre_attempted": 0,
