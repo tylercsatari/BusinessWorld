@@ -6034,7 +6034,7 @@ const JarvisUI = (() => {
                         ${corpusRow('Video pool', corpus.video_pool_n)}
                         ${corpusRow('Video scorecards', corpus.video_scorecards_n)}
                         ${corpusRow('Word-retention scored', corpus.word_retention_scored)}
-                        ${corpusRow('Candidate proposal groups', corpus.candidate_proposal_diversity_buckets != null ? corpus.candidate_proposal_diversity_buckets : corpus.candidate_proposal_families)}
+                        ${corpusRow('Candidate proposal groups', corpus.candidate_proposal_diversity_buckets)}
                     </div>
                     ${corpus.mechanism_indicator_link_outcomes && corpus.mechanism_indicator_link_outcomes.length ? `<div style="font-size:9.5px;color:#64748b;margin-top:4px">link outcome keys: ${corpus.mechanism_indicator_link_outcomes.map(o => `<code style="color:#94a3b8">${escapeHtml(o)}</code>`).join(' · ')}</div>` : ''}
                     ${corpus.note ? `<div style="font-size:9px;color:#64748b;margin-top:4px;font-style:italic">${escapeHtml(corpus.note)}</div>` : ''}

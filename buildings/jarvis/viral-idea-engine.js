@@ -589,10 +589,7 @@ function compress(artifacts) {
             mechanisms_total: mechanisms && mechanisms.n_mechanisms,
             videos_in_pool: mechanisms && mechanisms.n_videos_pool,
             indicators_total: indicatorRegistry && indicatorRegistry.total,
-            // Primary (diversity-bucket) key; legacy `candidate_proposal_families`
-            // alias retained for readers that still reference the old name.
             candidate_proposal_diversity_buckets: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
-            candidate_proposal_families: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
             // Active synthesis traces now use only source-video-led diversity_bucket naming.
             synthesis_trace_primary_diversity_axis: 'diversity_bucket',
             // Single back-compat anchor for the per-idea keep_rate top_indicators
@@ -3548,13 +3545,9 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         traces.opening_speech_rate = makeTrace({
             field: 'opening.opening_speech_rate_wps_target',
             rationale: 'Opening speech rate target is validated against speaking_patterns.opening_density; medium density (1.5–3.0 wps) empirically retains best.',
-            // Alias-first: `candidate_proposals.diversity_buckets (...)` is the
-            // preferred label; the legacy `candidate_proposals.families (...)`
-            // string is kept alongside so older readers still match on it.
             evidence_sources: [
                 'retention-patterns.speaking_patterns.opening_density',
                 'candidate_proposals.diversity_buckets (opening_speech_rate_3s)',
-                'candidate_proposals.families (opening_speech_rate_3s)',
             ],
             indicators_considered_count: indicators.length,
             indicator_keys: indicators,
@@ -4115,11 +4108,7 @@ function buildIndicatorCorpus(brief, ctx) {
         components_total: (brief.source_sizes && brief.source_sizes.components_total) || null,
         mechanisms_total: (brief.source_sizes && brief.source_sizes.mechanisms_total) || null,
         word_retention_scored: (brief.source_sizes && brief.source_sizes.word_retention_scored) || null,
-        // Primary diversity-bucket key; falls back to the legacy candidate-proposal-families
-        // source-size so older briefs still populate. The legacy alias is no longer emitted
-        // per-idea — readers that still reference the old name should consult
-        // brief.source_sizes.candidate_proposal_families (retained as the single back-compat spot).
-        candidate_proposal_diversity_buckets: (brief.source_sizes && (brief.source_sizes.candidate_proposal_diversity_buckets || brief.source_sizes.candidate_proposal_families)) || null,
+        candidate_proposal_diversity_buckets: (brief.source_sizes && brief.source_sizes.candidate_proposal_diversity_buckets) || null,
         note: 'Counts represent the candidate pool. Each section trace below enumerates how the pool was filtered and which indicators were actually used.',
     };
 }
