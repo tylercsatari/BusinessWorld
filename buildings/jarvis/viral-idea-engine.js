@@ -1284,7 +1284,7 @@ const ENDPOINT_MOTIFS = [
 //   - obj_id/endpoint_id still reference predefined motif atoms
 //   - inferMotifFromTitle uses keyword rules (heuristic, not learned)
 //   - VP seeds still use motif atoms internally, but downstream diversity now
-//     buckets them by exact source video instead of motif family
+//     buckets them by exact source video instead of motif diversity buckets
 
 // Deterministic motif inference from a validated source video.
 // Primary signal is title keywords; when title rules fall back to the generic
@@ -1813,7 +1813,7 @@ function computeProofClarity(obj, endpoint, ctx) {
     const drivers = [];
     let score = 0;
 
-    const family = String(obj.diversity_bucket || '').toLowerCase();
+    const bucketKey = String(obj.diversity_bucket || '').toLowerCase();
     const titleTpl = String(getTitlePremiseLine(obj)).toLowerCase();
     const logline = String(obj.logline_action || '').toLowerCase();
     const firstFrame = String(obj.first_frame_action || '').toLowerCase();
@@ -1843,7 +1843,7 @@ function computeProofClarity(obj, endpoint, ctx) {
     // B. Body-transformation with a concrete single-shot proof anchor
     //    (weigh-in / same starting frame / before-after / same shot).
     const BODY_PROOF_ANCHOR_RE = /\b(weigh-in|weigh in|weigh|scale|same starting frame|same shot|before\/after|morning weigh-?in|same driveway|same kitchen counter|day \d+ vs|first and last run|first and last)\b/;
-    const isBodyBucket = family === 'body_transformation';
+    const isBodyBucket = bucketKey === 'body_transformation';
     const hasBodyProof = BODY_PROOF_ANCHOR_RE.test(allText);
     if (isBodyBucket && hasBodyProof) {
         const d = 0.32;
@@ -1934,11 +1934,11 @@ function computeProofClarity(obj, endpoint, ctx) {
     // G. repetition_outreach / repetition_patience bucket without a
     //    physical-test verb: proof is a stack whose contents are
     //    untestable to the viewer. (v3.4: -0.18 → -0.26.)
-    if ((family === 'repetition_outreach' || family === 'repetition_patience') && !hasTestVerb) {
+    if ((bucketKey === 'repetition_outreach' || bucketKey === 'repetition_patience') && !hasTestVerb) {
         const d = -0.26;
         score += d;
         drivers.push({
-            driver: `${family}_without_physical_test_verb`,
+            driver: `${bucketKey}_without_physical_test_verb`,
             delta: d,
             source: 'diversity bucket=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs',
         });
@@ -1947,7 +1947,7 @@ function computeProofClarity(obj, endpoint, ctx) {
     // H. Mystery_experiment bucket without artifact — observation, not
     //    a shot. Stacks with E but the bucket-level signal is cleaner.
     //    (v3.4: -0.18 → -0.28.)
-    if (family === 'mystery_experiment' && !hasArtifact) {
+    if (bucketKey === 'mystery_experiment' && !hasArtifact) {
         const d = -0.28;
         score += d;
         drivers.push({
@@ -1960,11 +1960,11 @@ function computeProofClarity(obj, endpoint, ctx) {
     // I. Body-transformation OR build_test bucket × active intensity —
     //    combo bonus when the diversity bucket ALREADY implies a visible
     //    proof axis AND the daily act is itself filmable physical action.
-    if ((isBodyBucket || family === 'build_test') && (obj.action_intensity === 'medium' || obj.action_intensity === 'high')) {
+    if ((isBodyBucket || bucketKey === 'build_test') && (obj.action_intensity === 'medium' || obj.action_intensity === 'high')) {
         const d = 0.08;
         score += d;
         drivers.push({
-            driver: `${family}_with_active_intensity`,
+            driver: `${bucketKey}_with_active_intensity`,
             delta: d,
             source: 'diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)',
         });
@@ -2045,7 +2045,7 @@ const VL_COG_VERB_RE = /\b(memoriz|learn|studied|study|studying|recit|recall|tra
 // "fire", "hold" — they can be verbal ("tested me", "fired me", "hold
 // that thought") and would mislabel cognitive motifs as physical.
 const VL_PHYS_STRONG_RE = /\b(press|slid|slide|pour|hammer|paint|sand|assembl|bolt|tapp|tight|drew|drawing|fold|wrap|writ|flip|stack|plac|lift|heav|squat|stretch|step|walk|march|ran|running|climb|jump|carry|carried|carrying|rowed|rowing|pedal|ride|rode|drove|driving|sail|sailed|launch|race|raced|weigh|pull|push|hit|paddle|throw|threw|roll|kick|cranked|shove|shoved|rig|rigging|unfold|unfolded)\w*\b/;
-const VL_COG_FAMILIES = new Set(['cognitive_feat']);
+const VL_COG_BUCKETS = new Set(['cognitive_feat']);
 const VL_COGNITIVE_SURFACE_RE = /\b(flashcards?|native speaker|instrument|song|novel|page(?:s)?|book|puzzle|piece(?:s)?|language|memor|learn|study|recit|recall|translate|perform(?:ed)? it)\b/;
 const VL_TITLE_PHYSICAL_REVEAL_RE = /(same shot|same frame|same starting|first and last|body did|weigh-?in|broke first|broke at|rode it|rowed it|held until|hit exactly|quits first|froze at|to see what broke|let me know it was over|told me when to stop)/;
 const VL_TITLE_ABSTRACT_REVEAL_RE = /(tested me|quizzed me|assuming about me|started assuming|rearranged itself|native speaker|decides when|people said|what they said|you wouldn'?t guess|you'?ll never guess|figured out|rewrote my|changed how i|rewired my|here'?s what people)/;
@@ -2058,7 +2058,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
     const drivers = [];
     let score = 0;
 
-    const family = String(obj.diversity_bucket || '').toLowerCase();
+    const bucketKey = String(obj.diversity_bucket || '').toLowerCase();
     const titleTpl = String(getTitlePremiseLine(obj)).toLowerCase();
     const logline = String(obj.logline_action || '').toLowerCase();
     const firstFrame = String(obj.first_frame_action || '').toLowerCase();
@@ -2134,13 +2134,13 @@ function computeVisualLegibility(obj, endpoint, ctx) {
 
     // V3 — Cognitive motif surface. This intentionally keys off explicit
     //      copy + body anchors rather than a synthetic category tag.
-    const hasCognitiveSurface = VL_COG_FAMILIES.has(family)
+    const hasCognitiveSurface = VL_COG_BUCKETS.has(bucketKey)
         || (!physicalBodyParts.length && (hasCogVerb || VL_COGNITIVE_SURFACE_RE.test(allText)));
     if (hasCognitiveSurface) {
         const d = -0.22;
         score += d;
         drivers.push({
-            driver: `cognitive_motif_surface_${family || 'explicit_copy'}`,
+            driver: `cognitive_motif_surface_${bucketKey || 'explicit_copy'}`,
             delta: d,
             source: 'explicit motif copy/body anchors indicate a cognitive or verbal reveal surface rather than a visible physical payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE',
         });
@@ -2235,11 +2235,11 @@ function computeVisualLegibility(obj, endpoint, ctx) {
     // V7 — mystery_experiment / identity with no physical verb AND no
     //      gauge/object in frame. Observation-only cut that reads only
     //      with context.
-    if ((family === 'mystery_experiment' || family === 'identity') && !hasPhysVerb && !hasFrameGauge && !hasFrameObject) {
+    if ((bucketKey === 'mystery_experiment' || bucketKey === 'identity') && !hasPhysVerb && !hasFrameGauge && !hasFrameObject) {
         const d = -0.18;
         score += d;
         drivers.push({
-            driver: `${family}_without_physical_frame_signals`,
+            driver: `${bucketKey}_without_physical_frame_signals`,
             delta: d,
             source: 'diversity bucket=mystery_experiment|identity AND no physical verb / gauge / object in frame — observation-only payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
         });
@@ -4150,7 +4150,7 @@ function buildBlueprintValidation(seed, brief, artifacts) {
 //
 // Matches each generated idea against specific videos in signals-dataset.json
 // using actual title/premise token overlap plus either source-video concept
-// tokens (preferred for VP seeds) or motif-family concept words.
+// tokens (preferred for VP seeds) or motif-bucket concept words.
 // No LLM calls. Returns top 3 anchors with direct evidence fields so every
 // idea card can show which specific real videos validate the format.
 // ──────────────────────────────────────────────────────────────────────
