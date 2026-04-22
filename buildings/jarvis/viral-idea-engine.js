@@ -593,25 +593,8 @@ function compress(artifacts) {
             // alias retained for readers that still reference the old name.
             candidate_proposal_diversity_buckets: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
             candidate_proposal_families: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
-            // Single back-compat anchor for the per-idea synthesis_trace family-axis
-            // mirrors (motif_family / per_family / family_coverage / families_considered
-            // and their *_cap / *_in_topN / slot_family_coverage_at_pick variants).
-            // These mirrors are no longer repeated inside every idea's synthesis_trace;
-            // readers should use the diversity_bucket aliases below. This entry preserves
-            // searchability for callers grepping viral-ideas.json for the old names.
-            synthesis_trace_family_legacy_aliases: {
-                primary_axis: 'diversity_bucket',
-                legacy_removed_per_idea: [
-                    'motif_family', 'per_family', 'family_coverage', 'families_considered',
-                    'per_family_cap', 'per_family_in_topN', 'slot_family_coverage_at_pick',
-                    'family_cluster_size',
-                ],
-                use_instead: [
-                    'diversity_bucket', 'per_diversity_bucket', 'diversity_bucket_coverage', 'diversity_buckets_considered',
-                    'per_diversity_bucket_cap', 'per_diversity_bucket_in_topN', 'slot_diversity_bucket_coverage_at_pick',
-                    'diversity_bucket_size',
-                ],
-            },
+            // Active synthesis traces now use only source-video-led diversity_bucket naming.
+            synthesis_trace_primary_diversity_axis: 'diversity_bucket',
             // Single back-compat anchor for the per-idea keep_rate top_indicators
             // `legacy_evidence_type: 'wave7.quartile_templates'` alias. Primary is
             // `evidence_type: 'wave7.progression_patterns'`; the legacy alias is no
