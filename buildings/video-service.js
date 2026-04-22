@@ -100,6 +100,7 @@ const VideoService = (() => {
                         context: videoData.context || '',
                         script: videoData.script || '',
                         assignedTo: videoData.assignedTo || '',
+                        assignedToList: Array.isArray(videoData.assignedToList) ? videoData.assignedToList : (videoData.assignedTo ? [videoData.assignedTo] : []),
                         postedDate: videoData.postedDate || '',
                         links: videoData.links || '',
                         sourceIdeaId: ideaId,
@@ -148,7 +149,7 @@ const VideoService = (() => {
 
         // --- Status transitions ---
         async moveToIncubator(id) {
-            return this.update(id, { status: 'incubator', assignedTo: '' });
+            return this.update(id, { status: 'incubator', assignedTo: '', assignedToList: [] });
         },
 
         // --- Video Analysis ---

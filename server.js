@@ -3399,12 +3399,17 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         try {
             const assigneeParam = url.searchParams.get('assignee') || '';
             const projectParam = url.searchParams.get('project') || '';
+            const getAssignedPeople = (v) => {
+                const fromList = Array.isArray(v && v.assignedToList) ? v.assignedToList : [];
+                const merged = fromList.length ? fromList : ((v && v.assignedTo) ? [v.assignedTo] : []);
+                return [...new Set(merged.map(name => String(name || '').trim()).filter(Boolean))];
+            };
             let videos = await dataStore.getAll('videos');
             const ideas = await dataStore.getAll('ideas');
             videos = videos.filter(v => v.status === 'workshop');
             if (projectParam) videos = videos.filter(v => v.project === projectParam);
-            if (assigneeParam === 'none') videos = videos.filter(v => !v.assignedTo);
-            else if (assigneeParam) videos = videos.filter(v => v.assignedTo === assigneeParam);
+            if (assigneeParam === 'none') videos = videos.filter(v => getAssignedPeople(v).length === 0);
+            else if (assigneeParam) videos = videos.filter(v => getAssignedPeople(v).includes(assigneeParam));
             const ideasById = {};
             for (const i of ideas) ideasById[i.id] = i;
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -4864,6 +4869,11 @@ function renderShareIdeasPage(ideas, statusFilter, catFilter, getStatus) {
 }
 
 function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasById) {
+    const getAssignedPeople = (v) => {
+        const fromList = Array.isArray(v && v.assignedToList) ? v.assignedToList : [];
+        const merged = fromList.length ? fromList : ((v && v.assignedTo) ? [v.assignedTo] : []);
+        return [...new Set(merged.map(name => String(name || '').trim()).filter(Boolean))];
+    };
     const dotStyle = `<style>
         .share-dots { display: inline-flex; gap: 4px; align-items: center; margin-left: 6px; vertical-align: middle; }
         .share-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #d0cbc2; background: #fff; display: inline-block; }
@@ -4914,7 +4924,7 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
             bodyHtml += '<div class="share-idea-card-name">' + esc(v.name || 'Untitled') + dotHtml + '</div>';
             bodyHtml += '<div class="share-idea-card-meta">';
             if (v.project) bodyHtml += '<span class="share-badge">' + esc(v.project) + '</span>';
-            if (v.assignedTo) bodyHtml += '<span class="share-badge">' + esc(v.assignedTo) + '</span>';
+            for (const person of getAssignedPeople(v)) bodyHtml += '<span class="share-badge">' + esc(person) + '</span>';
             bodyHtml += '</div>';
             if (preview) bodyHtml += '<div class="share-idea-card-preview">' + esc(preview) + (String(v.hook || v.context || '').length > 140 ? '…' : '') + '</div>';
             bodyHtml += '</' + tag + '>';

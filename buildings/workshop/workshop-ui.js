@@ -31,10 +31,12 @@ const WorkshopUI = (() => {
 
     function getWorkerOptions(currentAssignee) {
         const names = (window.EmployeeService ? window.EmployeeService.getNames() : ['You', 'Robin', 'Jordan', 'Tennille']);
+        const currentNames = Array.isArray(currentAssignee) ? currentAssignee : (currentAssignee ? [currentAssignee] : []);
         // Preserve backwards compatibility: if a video references a name
         // that no longer exists in the roster, surface it so it stays visible.
-        if (currentAssignee && !names.includes(currentAssignee)) {
-            return [currentAssignee, ...names];
+        const extras = currentNames.filter(n => n && !names.includes(n));
+        if (extras.length) {
+            return [...extras, ...names];
         }
         return names;
     }
@@ -45,6 +47,47 @@ const WorkshopUI = (() => {
             return window.EmployeeService.colorForName(name);
         }
         return '';
+    }
+
+    function getAssignedPeople(video) {
+        if (!video) return [];
+        const fromList = Array.isArray(video.assignedToList) ? video.assignedToList : [];
+        const merged = fromList.length ? fromList : (video.assignedTo ? [video.assignedTo] : []);
+        return [...new Set(merged.map(v => String(v || '').trim()).filter(Boolean))];
+    }
+
+    function getPrimaryAssignee(video) {
+        return getAssignedPeople(video)[0] || '';
+    }
+
+    function videoHasAssignee(video, name) {
+        return getAssignedPeople(video).includes(name);
+    }
+
+    function renderWorkerPill(name) {
+        if (!name) return '';
+        const workerColor = getWorkerColor(name);
+        const workerStyle = workerColor ? ` style="background:${escAttr(workerColor)}18;color:${escAttr(workerColor)}"` : '';
+        return `<span class="workshop-card-worker"${workerStyle}>${escHtml(name)}</span>`;
+    }
+
+    function renderAssigneePicker(video) {
+        const selected = getAssignedPeople(video);
+        const options = getWorkerOptions(selected);
+        const summary = selected.length ? selected.join(', ') : 'Unassigned';
+        return `
+            <details class="workshop-assignee-picker" id="workshop-assignee-picker">
+                <summary>${escHtml(summary)}</summary>
+                <div class="workshop-assignee-menu">
+                    ${options.map(w => `<label class="workshop-assignee-option"><input type="checkbox" value="${escAttr(w)}" ${selected.includes(w) ? 'checked' : ''}> <span>${escHtml(w)}</span></label>`).join('')}
+                </div>
+            </details>`;
+    }
+
+    function readAssignedPeopleFromPicker() {
+        return [...(container ? container.querySelectorAll('#workshop-assignee-picker input[type="checkbox"]:checked') : [])]
+            .map(input => String(input.value || '').trim())
+            .filter(Boolean);
     }
 
     // Render 3D egg snapshots + character avatars onto card canvases after DOM insertion
@@ -97,13 +140,13 @@ const WorkshopUI = (() => {
 
         // Assignee list: roster names that are actually in use, plus any non-roster names found on cards
         const rosterNames = (window.EmployeeService ? window.EmployeeService.getNames() : []);
-        const usedAssigneesSet = new Set(active.map(v => v.assignedTo || ''));
+        const usedAssigneesSet = new Set(active.flatMap(v => getAssignedPeople(v)));
         const assigneeList = [];
         rosterNames.forEach(n => { if (usedAssigneesSet.has(n)) assigneeList.push(n); });
         [...usedAssigneesSet].forEach(a => {
             if (a && !rosterNames.includes(a) && !assigneeList.includes(a)) assigneeList.push(a);
         });
-        const hasUnassigned = usedAssigneesSet.has('');
+        const hasUnassigned = active.some(v => getAssignedPeople(v).length === 0);
 
         let html = '';
         if (usedProjects.length > 0) {
@@ -120,10 +163,10 @@ const WorkshopUI = (() => {
                 <span class="workshop-filter-row-label">Assignee:</span>
                 <button class="workshop-filter-btn ${!filterAssignee ? 'active' : ''}" data-assignee="">All</button>
                 ${assigneeList.map(a => {
-                    const count = active.filter(v => v.assignedTo === a).length;
+                    const count = active.filter(v => videoHasAssignee(v, a)).length;
                     return `<button class="workshop-filter-btn ${filterAssignee === a ? 'active' : ''}" data-assignee="${escAttr(a)}">${escHtml(a)} (${count})</button>`;
                 }).join('')}
-                ${hasUnassigned ? `<button class="workshop-filter-btn ${filterAssignee === 'none' ? 'active' : ''}" data-assignee="none">Unassigned (${active.filter(v => !v.assignedTo).length})</button>` : ''}
+                ${hasUnassigned ? `<button class="workshop-filter-btn ${filterAssignee === 'none' ? 'active' : ''}" data-assignee="none">Unassigned (${active.filter(v => getAssignedPeople(v).length === 0).length})</button>` : ''}
             </div>`;
         }
         el.innerHTML = html;
@@ -167,8 +210,8 @@ const WorkshopUI = (() => {
         let active = VideoService.getByStatus('workshop');
         if (countEl) countEl.textContent = `${active.length} in progress`;
         if (filterProject) active = active.filter(v => v.project === filterProject);
-        if (filterAssignee === 'none') active = active.filter(v => !v.assignedTo);
-        else if (filterAssignee) active = active.filter(v => v.assignedTo === filterAssignee);
+        if (filterAssignee === 'none') active = active.filter(v => getAssignedPeople(v).length === 0);
+        else if (filterAssignee) active = active.filter(v => videoHasAssignee(v, filterAssignee));
 
         bindShareButton();
 
@@ -178,9 +221,9 @@ const WorkshopUI = (() => {
         }
         el.innerHTML = active.map(v => {
             const preview = (v.hook || v.context || '').trim();
-            const workerColor = getWorkerColor(v.assignedTo);
+            const primaryAssignee = getPrimaryAssignee(v);
+            const workerColor = getWorkerColor(primaryAssignee);
             const nameStyle = workerColor ? ` style="color:${escAttr(workerColor)}"` : '';
-            const workerStyle = workerColor ? ` style="background:${escAttr(workerColor)}18;color:${escAttr(workerColor)}"` : '';
             return `
             <div class="workshop-card" data-id="${v.id}">
                 <div class="workshop-card-egg">
@@ -191,7 +234,7 @@ const WorkshopUI = (() => {
                     ${preview ? `<div class="workshop-card-preview">${escHtml(preview)}</div>` : ''}
                     <div class="workshop-card-meta">
                         ${v.project ? `<span class="workshop-card-project">${escHtml(v.project)}</span>` : ''}
-                        ${v.assignedTo ? `<span class="workshop-card-worker"${workerStyle}>${escHtml(v.assignedTo)}</span>` : ''}
+                        ${getAssignedPeople(v).map(renderWorkerPill).join('')}
                     </div>
                 </div>
             </div>`;
@@ -241,10 +284,11 @@ const WorkshopUI = (() => {
             sourceIdeaHtml = `<div class="workshop-source-idea">Source Idea: ${escHtml(idea ? idea.name : v.sourceIdeaId)}</div>`;
         }
 
-        // Assignee avatar
+        // Assignee avatars
         let assigneeAvatarHtml = '';
-        if (v.assignedTo) {
-            assigneeAvatarHtml = `<canvas class="workshop-detail-avatar" id="workshop-detail-avatar" data-worker="${escAttr(v.assignedTo)}" width="64" height="64"></canvas>`;
+        const assignedPeople = getAssignedPeople(v);
+        if (assignedPeople.length) {
+            assigneeAvatarHtml = `<div class="workshop-detail-avatars">${assignedPeople.map((name, idx) => `<canvas class="workshop-detail-avatar" id="workshop-detail-avatar-${idx}" data-worker="${escAttr(name)}" width="64" height="64"></canvas>`).join('')}</div>`;
         }
 
         el.innerHTML = `
@@ -276,10 +320,7 @@ const WorkshopUI = (() => {
                         ${projects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
                     </select>
                     <label>Assigned To</label>
-                    <select id="workshop-assigned">
-                        <option value="">Unassigned</option>
-                        ${getWorkerOptions(v.assignedTo).map(w => `<option value="${escAttr(w)}" ${w === v.assignedTo ? 'selected' : ''}>${escHtml(w)}</option>`).join('')}
-                    </select>
+                    ${renderAssigneePicker(v)}
                     <label>Hook</label>
                     <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
                     <label>Context</label>
@@ -293,6 +334,19 @@ const WorkshopUI = (() => {
         document.getElementById('workshop-back-btn').addEventListener('click', () => saveAndBack());
         document.getElementById('workshop-post').addEventListener('click', () => postVideo());
         document.getElementById('workshop-to-incubator').addEventListener('click', () => backToIncubator());
+
+        const assigneePicker = document.getElementById('workshop-assignee-picker');
+        if (assigneePicker) {
+            const summaryEl = assigneePicker.querySelector('summary');
+            const updateSummary = () => {
+                const selected = readAssignedPeopleFromPicker();
+                summaryEl.textContent = selected.length ? selected.join(', ') : 'Unassigned';
+            };
+            assigneePicker.querySelectorAll('input[type="checkbox"]').forEach(input => {
+                input.addEventListener('change', updateSummary);
+            });
+            updateSummary();
+        }
 
         // Inline script editor — reads/writes video.script directly
         if (window.EggRenderer) {
@@ -310,11 +364,13 @@ const WorkshopUI = (() => {
         if (v.project && window.EggRenderer) {
             requestAnimationFrame(() => window.EggRenderer.initEggPreview('workshop-detail-egg-canvas', v.project));
         }
-        // Render character avatar in detail
-        if (v.assignedTo && window.EggRenderer) {
+        // Render character avatars in detail
+        if (assignedPeople.length && window.EggRenderer) {
             requestAnimationFrame(() => {
-                const avatarCanvas = document.getElementById('workshop-detail-avatar');
-                if (avatarCanvas) window.EggRenderer.renderCharacterAvatar(v.assignedTo, avatarCanvas, 32);
+                assignedPeople.forEach((name, idx) => {
+                    const avatarCanvas = document.getElementById(`workshop-detail-avatar-${idx}`);
+                    if (avatarCanvas) window.EggRenderer.renderCharacterAvatar(name, avatarCanvas, 32);
+                });
             });
         }
     }
@@ -323,10 +379,11 @@ const WorkshopUI = (() => {
         if (selectedVideo) {
             const name = document.getElementById('workshop-name')?.value.trim() || selectedVideo.name;
             const project = document.getElementById('workshop-project')?.value || '';
-            const assignedTo = document.getElementById('workshop-assigned')?.value || '';
+            const assignedToList = readAssignedPeopleFromPicker();
+            const assignedTo = assignedToList[0] || '';
             const hook = document.getElementById('workshop-hook')?.value || '';
             const context = document.getElementById('workshop-context')?.value || '';
-            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, assignedTo, hook, context });
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, assignedTo, assignedToList, hook, context });
         }
         showList();
     }
@@ -345,11 +402,13 @@ const WorkshopUI = (() => {
 
         const name = document.getElementById('workshop-name')?.value.trim() || selectedVideo.name;
         const project = document.getElementById('workshop-project')?.value || '';
+        const assignedToList = readAssignedPeopleFromPicker();
+        const assignedTo = assignedToList[0] || '';
         const hook = document.getElementById('workshop-hook')?.value || '';
         const context = document.getElementById('workshop-context')?.value || '';
 
         try {
-            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, hook, context, status: 'posted', postedDate: new Date().toISOString() });
+            await VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, assignedTo, assignedToList, hook, context, status: 'posted', postedDate: new Date().toISOString() });
             // Spawn creature in 3D world immediately (skip sync — in-memory cache already updated)
             if (typeof spawnPostedCreatures === 'function') spawnPostedCreatures(true);
             // Notify Pen to auto-refresh if open
@@ -407,11 +466,12 @@ const WorkshopUI = (() => {
             if (currentPage === 'detail' && selectedVideo) {
                 const name = document.getElementById('workshop-name')?.value.trim();
                 const project = document.getElementById('workshop-project')?.value;
-                const assignedTo = document.getElementById('workshop-assigned')?.value;
+                const assignedToList = readAssignedPeopleFromPicker();
+                const assignedTo = assignedToList[0] || '';
                 const hook = document.getElementById('workshop-hook')?.value;
                 const context = document.getElementById('workshop-context')?.value;
                 if (name) {
-                    VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, assignedTo, hook, context }).catch(() => {});
+                    VideoService.saveWithIdeaSync(selectedVideo.id, { name, project, assignedTo, assignedToList, hook, context }).catch(() => {});
                 }
             }
             // Cleanup 3D egg preview
