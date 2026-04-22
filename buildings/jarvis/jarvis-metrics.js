@@ -660,6 +660,30 @@ const ZYGARNIK_PHRASE_SETS = {
         "in just a moment", "stay with me", "keep watching", "almost ready to show you",
         "the payoff is coming", "you are about to see this",
     ],
+
+    // ── Group AE: Loop stacking — multiple simultaneous open questions in hook ──
+    loop_stacking: [
+        "but first", "hold on", "wait but", "one more thing", "before i get to that",
+        "and another thing", "also remember", "oh and", "by the way though",
+        "not to mention", "on top of that", "which reminds me", "speaking of which",
+        "but also", "there is also", "and on top of that", "plus there is",
+        "before we continue", "but before that", "first though", "quick thing first",
+        "one quick note", "there is something else", "another thing i should mention",
+        "and this is important too", "keep that in mind because",
+    ],
+
+    // ── Group AF: Deferred reveal — explicit temporal deferral creating open loops ──
+    deferred_reveal: [
+        "i will explain later", "we will get to that", "more on that in a second",
+        "i will tell you why", "stay tuned for", "coming up", "in a few minutes",
+        "at the end", "before the end", "i promise i will show you",
+        "stick around for", "at the end of this", "i will reveal",
+        "the answer is coming", "i will get to that", "save that for later",
+        "we will come back to that", "hold that thought", "do not go anywhere",
+        "i will explain in a moment", "more on this shortly", "we will unpack that",
+        "details coming up", "i will break it down", "the full story is coming",
+        "you will see why", "it will make sense soon", "all will be revealed",
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
@@ -1589,6 +1613,14 @@ for (const fam of ZYGARNIK_FAMILIES) {
 for (const k of ZYGARNIK_SPECIAL_KEYS) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
+}
+// Hook and front-load ratio variants for all Zygarnik phrase families
+for (const fam of ZYGARNIK_FAMILIES) {
+    for (const variant of ['count_hook', 'front_load_ratio']) {
+        const k = `${fam}_${variant}`;
+        STATIC_KEYS.add(k);
+        STATIC_LAYER[k] = 'pre';
+    }
 }
 
 // ── New Group A indicators ──

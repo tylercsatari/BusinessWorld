@@ -393,6 +393,9 @@ const windowedFamilies = [
     ['authority_stack',           ['count', 'density']],
     ['narrative_stakes_escalation', ['count', 'density']],
     ['payoff_proximity',          ['count', 'density']],
+    // Group AE: new loop stacking / deferred reveal families
+    ['loop_stacking',             ['count', 'density']],
+    ['deferred_reveal',           ['count', 'density']],
 ];
 const windowedAtomics = [];
 for (const [fam, measures] of windowedFamilies) {
@@ -445,7 +448,12 @@ const HIGH_SIGNAL_BASES = [
     'suspense_bridge_count', 'identity_challenge_count',
     'mechanism_reveal_count', 'payoff_proximity_count',
     'narrative_stakes_escalation_count',
-    // Group AE: extended zygarnik hook/ratio variants — top pre-upload focus
+    // Group AE: new families (loop_stacking / deferred_reveal)
+    'loop_stacking_count_hook', 'loop_stacking_front_load_ratio',
+    'loop_stacking_count', 'loop_stacking_density',
+    'deferred_reveal_count_hook', 'deferred_reveal_front_load_ratio',
+    'deferred_reveal_count', 'deferred_reveal_density',
+    // Group AF: extended zygarnik hook/ratio variants — top pre-upload focus
     'open_loop_count_hook', 'open_loop_front_load_ratio',
     'delayed_gratification_count_hook', 'delayed_gratification_front_load_ratio',
     'story_stake_count_hook', 'story_stake_front_load_ratio',
