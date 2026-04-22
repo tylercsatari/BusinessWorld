@@ -39,12 +39,20 @@ const WorkshopUI = (() => {
         return names;
     }
 
+    function getWorkerColor(name) {
+        if (!name) return '';
+        if (window.EmployeeService && window.EmployeeService.colorForName) {
+            return window.EmployeeService.colorForName(name);
+        }
+        return '';
+    }
+
     // Render 3D egg snapshots + character avatars onto card canvases after DOM insertion
     async function renderCardAssets() {
         if (!window.EggRenderer) return;
         const eggPromises = [];
         container.querySelectorAll('.workshop-egg-canvas').forEach(canvas => {
-            eggPromises.push(window.EggRenderer.renderEggSnapshot(canvas.dataset.project, canvas, 50));
+            eggPromises.push(window.EggRenderer.renderEggSnapshot(canvas.dataset.project, canvas, 40));
         });
         container.querySelectorAll('.workshop-avatar-canvas').forEach(canvas => {
             window.EggRenderer.renderCharacterAvatar(canvas.dataset.worker, canvas, 32);
@@ -170,17 +178,20 @@ const WorkshopUI = (() => {
         }
         el.innerHTML = active.map(v => {
             const preview = (v.hook || v.context || '').trim();
+            const workerColor = getWorkerColor(v.assignedTo);
+            const nameStyle = workerColor ? ` style="color:${escAttr(workerColor)}"` : '';
+            const workerStyle = workerColor ? ` style="background:${escAttr(workerColor)}18;color:${escAttr(workerColor)}"` : '';
             return `
             <div class="workshop-card" data-id="${v.id}">
                 <div class="workshop-card-egg">
-                    <canvas class="workshop-egg-canvas" data-project="${escAttr(v.project)}" width="100" height="124"></canvas>
+                    <canvas class="workshop-egg-canvas" data-project="${escAttr(v.project)}" width="80" height="100" style="width:52px;height:64px"></canvas>
                 </div>
                 <div class="workshop-card-info">
-                    <div class="workshop-card-name"><span class="workshop-card-name-text">${escHtml(v.name)}</span>${dotsHtml(v)}</div>
+                    <div class="workshop-card-name"><span class="workshop-card-name-text"${nameStyle}>${escHtml(v.name)}</span>${dotsHtml(v)}</div>
                     ${preview ? `<div class="workshop-card-preview">${escHtml(preview)}</div>` : ''}
                     <div class="workshop-card-meta">
                         ${v.project ? `<span class="workshop-card-project">${escHtml(v.project)}</span>` : ''}
-                        ${v.assignedTo ? `<span class="workshop-card-worker">${escHtml(v.assignedTo)}</span>` : ''}
+                        ${v.assignedTo ? `<span class="workshop-card-worker"${workerStyle}>${escHtml(v.assignedTo)}</span>` : ''}
                     </div>
                 </div>
             </div>`;
