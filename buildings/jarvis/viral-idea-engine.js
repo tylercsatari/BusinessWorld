@@ -1292,55 +1292,85 @@ const ENDPOINT_MOTIFS = [
 //   - VP seeds still use motif atoms internally, but downstream diversity now
 //     buckets them by exact source video instead of motif family
 
-// Deterministic keyword rules to infer the closest obj_id + endpoint_id from
-// a video title. Rules are ordered most-specific-first; first match wins.
-function inferMotifFromTitle(name) {
-    const t = (name || '').toLowerCase();
+// Deterministic motif inference from a validated source video.
+// Primary signal is title keywords; when title rules fall back to the generic
+// default path, lightweight dataset metrics help disambiguate the endpoint.
+function inferMotifFromVideo(video) {
+    const t = ((video && video.name) || '').toLowerCase();
+    const duration = Number(video && video.duration_s) || 0;
+    const keep = Number(video && video.keep) || 0;
+    const novelty = Number(video && video.novelty) || 0;
+    const retentionPerSec = Number(video && video.retention_per_sec) || 0;
 
     let endpoint_id;
+    let endpoint_source = 'title_default';
     if (/\b(days? without|didn'?t speak|no phone|no social|isolated|solitary|silent)\b/.test(t)) {
         endpoint_id = 'experiment_observation';
+        endpoint_source = 'title_keyword';
     } else if (/\b\d+\s*days? (eating only|of only|on only)\b|only \w+ for \d+\s*days?/.test(t)) {
         endpoint_id = 'transformation_reveal';
+        endpoint_source = 'title_keyword';
     } else if (/\b(trained like|became a bodybuilder|lived as|shadowed|survived .{0,20}training)\b/.test(t)) {
         endpoint_id = 'identity_dayend';
+        endpoint_source = 'title_keyword';
     } else if (/\b\d[\d,]*\s*(pushups?|pull.?ups?|squats?|steps?|cranes?|coins?|reps?)\b/.test(t)) {
         endpoint_id = 'exact_count';
+        endpoint_source = 'title_keyword';
     } else if (/\b\d+[\d.]*\s*(miles?|km|kilometers?)\b|marathon/.test(t)) {
         endpoint_id = 'exact_distance';
+        endpoint_source = 'title_keyword';
     } else if (/\b(built?|made?|building|can (this|a|it)|will it|does it|stop a|cut through|proof|testing)\b/.test(t)) {
         endpoint_id = 'build_test_outcome';
+        endpoint_source = 'title_keyword';
     } else if (/\bfor \d+ (hours?|minutes?)\b/.test(t)) {
         endpoint_id = 'time_to_target';
+        endpoint_source = 'title_keyword';
     } else {
         endpoint_id = 'body_quit';
     }
 
+    if (endpoint_source === 'title_default') {
+        if (duration >= 45 && keep >= 70 && novelty >= 7) {
+            endpoint_id = 'identity_dayend';
+            endpoint_source = 'signal_fallback';
+        } else if (duration >= 35 && retentionPerSec <= 3) {
+            endpoint_id = 'experiment_observation';
+            endpoint_source = 'signal_fallback';
+        } else if (duration <= 22 && retentionPerSec >= 4) {
+            endpoint_id = 'exact_count';
+            endpoint_source = 'signal_fallback';
+        } else if (duration <= 28 && novelty >= 8 && keep >= 75) {
+            endpoint_id = 'build_test_outcome';
+            endpoint_source = 'signal_fallback';
+        }
+    }
+
     let obj_id;
-    if (/push.?up/.test(t))                                         obj_id = 'pushups_one_day';
-    else if (/\bplank\b/.test(t))                                   obj_id = 'plank_hold_hours';
-    else if (/\bbackpack\b|ruck.?sack/.test(t))                     obj_id = 'weighted_backpack_march';
-    else if (/\bstair/.test(t))                                     obj_id = 'stair_climb_repeats';
-    else if (/jump.?rope|skipping rope/.test(t))                    obj_id = 'jump_rope_day';
-    else if (/\bsandbag\b/.test(t))                                 obj_id = 'sandbag_carry';
-    else if (/memorize|memoris/.test(t))                            obj_id = 'memorize_book';
-    else if (/\bletters?\b/.test(t))                                obj_id = 'handwritten_letters';
-    else if (/\bportrait/.test(t))                                  obj_id = 'portrait_drawing_strangers';
-    else if (/rubber.?band/.test(t))                                obj_id = 'rubber_band_ball';
-    else if (/origami|\bcrane/.test(t))                             obj_id = 'origami_cranes';
-    else if (/jigsaw|puzzle/.test(t))                               obj_id = 'jigsaw_speedrun';
-    else if (/\bcoin\b/.test(t))                                    obj_id = 'coin_edge_tower';
-    else if (/cardboard.{0,10}boat|boat.{0,10}cardboard/.test(t))  obj_id = 'cardboard_boat_row';
-    else if (/2x4|wooden.{0,5}bike|bike.{0,5}wood/.test(t))        obj_id = 'two_by_four_bike';
-    else if (/laser|bullet.?proof|bulletproof|\bshield\b|\barmor\b/.test(t)) obj_id = 'two_by_four_bike';
-    else if (/only \w+ for \d+\s*days?|ate only|eating only/.test(t)) obj_id = 'one_food_thirty_days';
-    else if (/mile every day|ran every day|daily.{0,5}mile/.test(t)) obj_id = 'daily_mile_one_year';
-    else if (/\bsilent\b|didn'?t speak/.test(t))                    obj_id = 'silent_seven_days';
-    else if (/\bphone\b|\bsmartphone\b/.test(t))                    obj_id = 'phoneless_fortnight';
-    else if (/\bboxer\b|\bboxing\b|\bmma\b/.test(t))                obj_id = 'pro_boxer_day';
-    else if (/firefighter|fireman/.test(t))                         obj_id = 'firefighter_shift_shadow';
-    else if (/\blanguage\b|\bwords of\b/.test(t))                   obj_id = 'learn_500_words_day';
-    else if (/\b(song|instrument|piano|guitar|violin|drums?)\b/.test(t)) obj_id = 'learn_song_from_scratch';
+    let obj_source = 'endpoint_default';
+    if (/push.?up/.test(t))                                         { obj_id = 'pushups_one_day'; obj_source = 'title_keyword'; }
+    else if (/\bplank\b/.test(t))                                   { obj_id = 'plank_hold_hours'; obj_source = 'title_keyword'; }
+    else if (/\bbackpack\b|ruck.?sack/.test(t))                     { obj_id = 'weighted_backpack_march'; obj_source = 'title_keyword'; }
+    else if (/\bstair/.test(t))                                     { obj_id = 'stair_climb_repeats'; obj_source = 'title_keyword'; }
+    else if (/jump.?rope|skipping rope/.test(t))                    { obj_id = 'jump_rope_day'; obj_source = 'title_keyword'; }
+    else if (/\bsandbag\b/.test(t))                                 { obj_id = 'sandbag_carry'; obj_source = 'title_keyword'; }
+    else if (/memorize|memoris/.test(t))                            { obj_id = 'memorize_book'; obj_source = 'title_keyword'; }
+    else if (/\bletters?\b/.test(t))                                { obj_id = 'handwritten_letters'; obj_source = 'title_keyword'; }
+    else if (/\bportrait/.test(t))                                  { obj_id = 'portrait_drawing_strangers'; obj_source = 'title_keyword'; }
+    else if (/rubber.?band/.test(t))                                { obj_id = 'rubber_band_ball'; obj_source = 'title_keyword'; }
+    else if (/origami|\bcrane/.test(t))                             { obj_id = 'origami_cranes'; obj_source = 'title_keyword'; }
+    else if (/jigsaw|puzzle/.test(t))                               { obj_id = 'jigsaw_speedrun'; obj_source = 'title_keyword'; }
+    else if (/\bcoin\b/.test(t))                                    { obj_id = 'coin_edge_tower'; obj_source = 'title_keyword'; }
+    else if (/cardboard.{0,10}boat|boat.{0,10}cardboard/.test(t))  { obj_id = 'cardboard_boat_row'; obj_source = 'title_keyword'; }
+    else if (/2x4|wooden.{0,5}bike|bike.{0,5}wood/.test(t))        { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    else if (/laser|bullet.?proof|bulletproof|\bshield\b|\barmor\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    else if (/only \w+ for \d+\s*days?|ate only|eating only/.test(t)) { obj_id = 'one_food_thirty_days'; obj_source = 'title_keyword'; }
+    else if (/mile every day|ran every day|daily.{0,5}mile/.test(t)) { obj_id = 'daily_mile_one_year'; obj_source = 'title_keyword'; }
+    else if (/\bsilent\b|didn'?t speak/.test(t))                    { obj_id = 'silent_seven_days'; obj_source = 'title_keyword'; }
+    else if (/\bphone\b|\bsmartphone\b/.test(t))                    { obj_id = 'phoneless_fortnight'; obj_source = 'title_keyword'; }
+    else if (/\bboxer\b|\bboxing\b|\bmma\b/.test(t))                { obj_id = 'pro_boxer_day'; obj_source = 'title_keyword'; }
+    else if (/firefighter|fireman/.test(t))                         { obj_id = 'firefighter_shift_shadow'; obj_source = 'title_keyword'; }
+    else if (/\blanguage\b|\bwords of\b/.test(t))                   { obj_id = 'learn_500_words_day'; obj_source = 'title_keyword'; }
+    else if (/\b(song|instrument|piano|guitar|violin|drums?)\b/.test(t)) { obj_id = 'learn_song_from_scratch'; obj_source = 'title_keyword'; }
     else {
         const ENDPOINT_OBJ_DEFAULTS = {
             exact_count:            'stair_climb_repeats',
@@ -1353,9 +1383,10 @@ function inferMotifFromTitle(name) {
             build_test_outcome:     'cardboard_boat_row',
         };
         obj_id = ENDPOINT_OBJ_DEFAULTS[endpoint_id] || 'pushups_one_day';
+        if (endpoint_source === 'signal_fallback') obj_source = 'signal_fallback';
     }
 
-    return { obj_id, endpoint_id };
+    return { obj_id, endpoint_id, endpoint_source, obj_source };
 }
 
 // Ranks all dataset videos by quality_score (z_score × retention/100 × keep/100).
@@ -1367,12 +1398,12 @@ function selectPrototypeVideos(dataset) {
         const quality_score = round(
             (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
         );
-        const motif = inferMotifFromTitle(v.name);
+        const motif = inferMotifFromVideo(v);
         return {
             video: v,
             quality_score,
             motif,
-            prototype_reason: `title_inference:${motif.obj_id}->${motif.endpoint_id}`,
+            prototype_reason: `${motif.endpoint_source}:${motif.endpoint_id};${motif.obj_source}:${motif.obj_id}`,
         };
     }).sort((a, b) => b.quality_score - a.quality_score);
 
