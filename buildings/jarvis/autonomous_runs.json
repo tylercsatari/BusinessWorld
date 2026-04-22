@@ -23096,9 +23096,9 @@
     "total_derived_after": 90968
   },
   {
-    "id": "auto_20260422090853.",
-    "started_at": "2026-04-22T09:08:53.710Z",
-    "finished_at": "2026-04-22T09:12:24.407Z",
+    "id": "auto_20260422091341.",
+    "started_at": "2026-04-22T09:13:41.398Z",
+    "finished_at": "2026-04-22T09:14:37.963Z",
     "mode": "hybrid_auto",
     "llm_proposed": 0,
     "llm_completed": 0,
@@ -23315,7 +23315,7 @@
       "FAIL:retention_pct_25_x_stakes_reinforcement_count_first10s"
     ],
     "top_new_r_abs": 0,
-    "elapsed_minutes": 3.51,
+    "elapsed_minutes": 0.94,
     "total_indicators_after": 1855,
     "total_derived_after": 90968
   }
