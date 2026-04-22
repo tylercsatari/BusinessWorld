@@ -4355,21 +4355,26 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     // endpoint + proof-surface similarity, then enforces per-bucket /
     // per-endpoint caps at the final-output level so the same bucket cannot
     // take more than ~2 of the top `count` slots when other buckets remain.
-    const scored = ideas.map(idea => ({
-        idea,
-        // Diversity-bucket axis. Prefer the alias-first `diversity_bucket`
-        // field on the trace and fall back to the legacy `motif_family` mirror
-        // so older seeds keep working. The local uses `bucket` to reflect the
-        // role (diversity axis) rather than the legacy field name.
-        bucket: (idea.synthesis_trace && (idea.synthesis_trace.diversity_bucket || idea.synthesis_trace.motif_family)) || 'unknown',
-        endpoint_kind: (() => {
-            const eid = idea.synthesis_trace && idea.synthesis_trace.endpoint_atom_id;
-            const e = ENDPOINT_MOTIFS.find(x => x.id === eid);
-            return e ? e.kind : null;
-        })(),
-        total: (idea.score_breakdown && idea.score_breakdown.total) || 0,
-        proof_surface: (idea.synthesis_trace && idea.synthesis_trace.proof_surface) || null,
-    }));
+    const scored = ideas.map(idea => {
+        const seedPath = idea.synthesis_trace && idea.synthesis_trace.seed_path;
+        const vpRankBonus = seedPath === 'video_prototype' ? 0.35 : 0;
+        return {
+            idea,
+            // Diversity-bucket axis. Prefer the alias-first `diversity_bucket`
+            // field on the trace and fall back to the legacy `motif_family` mirror
+            // so older seeds keep working. The local uses `bucket` to reflect the
+            // role (diversity axis) rather than the legacy field name.
+            bucket: (idea.synthesis_trace && (idea.synthesis_trace.diversity_bucket || idea.synthesis_trace.motif_family)) || 'unknown',
+            endpoint_kind: (() => {
+                const eid = idea.synthesis_trace && idea.synthesis_trace.endpoint_atom_id;
+                const e = ENDPOINT_MOTIFS.find(x => x.id === eid);
+                return e ? e.kind : null;
+            })(),
+            total: ((idea.score_breakdown && idea.score_breakdown.total) || 0) + vpRankBonus,
+            proof_surface: (idea.synthesis_trace && idea.synthesis_trace.proof_surface) || null,
+            vpRankBonus,
+        };
+    });
     const perBucketCap = 2;
     const perEndCap = 2;
     const lambda = 0.35;
