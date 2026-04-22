@@ -1640,6 +1640,27 @@ for (const k of ['hook_payoff_gap', 'hook_to_payoff_gap_pct']) {
     STATIC_LAYER[k] = 'pre';
 }
 
+// ── Group V2/W2 windowed phrase-family variants — STATIC_KEYS fix ─────────────────────────────
+// These families are listed in INTERACTION_BASES and have extractMetric implementations,
+// but their windowed firstNs variants were missing from STATIC_KEYS, causing composite
+// candidates to get NO_DEF → processIndicator returns null → max_failures.
+for (const fam of [
+    'curiosity_escalation', 'cliffhanger', 'revelation_signal', 'payoff_tease',
+    'stakes_reinforcement', 'viewer_agency', 'rhetorical_question', 'social_comparison',
+    'mystery_setup', 'viewer_stakes', 'loss_framing', 'promise_specificity', 'transformation_arc',
+]) {
+    for (const w of [2, 3, 5, 8, 10, 15, 20, 25, 30, 45, 60]) {
+        const ck = `${fam}_count_first${w}s`;
+        STATIC_KEYS.add(ck);
+        STATIC_LAYER[ck] = 'pre';
+    }
+    for (const w of [2, 3, 5, 8, 10, 15, 20, 25]) {
+        const dk = `${fam}_density_first${w}s`;
+        STATIC_KEYS.add(dk);
+        STATIC_LAYER[dk] = 'pre';
+    }
+}
+
 // ── get_metric_definition ────────────────────────────────────────────────
 
 // Detailed definitions for non-phrase static keys.
