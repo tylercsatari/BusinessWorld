@@ -89,7 +89,9 @@
 .workshop-dot.dot-logistics.has-logistics { background: #27ae60; border-color: #27ae60; }
 
 .workshop-items {
-    flex: 1; overflow-y: auto; padding: 12px 14px;
+    flex: 1; min-height: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 12px 14px;
     display: flex; flex-direction: column; gap: 8px;
 }
 .workshop-empty {
@@ -99,6 +101,7 @@
 /* Skeleton loading cards */
 .workshop-skeleton-card {
     display: flex; align-items: center; gap: 12px;
+    flex: 0 0 auto;
     background: white; border-radius: 12px; padding: 10px 14px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.04); border: 1px solid #ece8e0;
 }
@@ -124,6 +127,7 @@
 
 .workshop-card {
     display: flex; align-items: center; gap: 12px;
+    flex: 0 0 auto;
     background: white; border-radius: 12px; padding: 10px 14px;
     min-height: 72px;
     cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
