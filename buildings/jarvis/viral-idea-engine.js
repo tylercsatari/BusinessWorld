@@ -62,7 +62,7 @@ function loadAllArtifacts() {
         predictionModel: loadJsonSafe('prediction-model.json'),
         preuploadModel: loadJsonSafe('preupload-model.json'),
         indicatorRegistry: loadJsonSafe('indicator-registry.json'),
-        candidateProposals: loadJsonSafe('candidate_proposals.json'),
+        candidateProposals: normalizeCandidateProposals(loadJsonSafe('candidate_proposals.json')),
         mechanismIndicatorLinks: loadJsonSafe('mechanism_indicator_links.json'),
         signals: loadJsonSafe('signals-dataset.json'),
     };
@@ -71,6 +71,13 @@ function loadAllArtifacts() {
 // ──────────────────────────────────────────────────────────────────────
 // Narrow-predictor helpers (carried over from v1, tightened)
 // ──────────────────────────────────────────────────────────────────────
+
+function normalizeCandidateProposals(data) {
+    if (!data || typeof data !== 'object') return data;
+    if (Array.isArray(data.diversity_buckets)) return data;
+    if (Array.isArray(data.families)) return Object.assign({}, data, { diversity_buckets: data.families });
+    return data;
+}
 
 const TARGET_PROXY = new Set(['views', 'views_log10', 'log_views', 'log10_views']);
 
@@ -245,6 +252,12 @@ function topComponents(components, limit = 12) {
 // Evidence-lattice builders (NEW in v2) — compress richer artifacts
 // ──────────────────────────────────────────────────────────────────────
 
+function getCandidateProposalDiversityBuckets(candidates) {
+    if (!candidates) return [];
+    if (Array.isArray(candidates.diversity_buckets)) return candidates.diversity_buckets;
+    return [];
+}
+
 function buildHookPrescription(rp, candidates) {
     if (!rp) return null;
     const brk = rp.BREAKTHROUGH_WAVE20 || {};
@@ -253,8 +266,9 @@ function buildHookPrescription(rp, candidates) {
     const hookTax = (rp.wave11_12_new_signals && rp.wave11_12_new_signals.hook_taxonomy) || null;
     // Opening speech rate candidate (target)
     let opening_rate_target = null;
-    if (candidates && Array.isArray(candidates.families)) {
-        for (const fam of candidates.families) {
+    const candidateBuckets = getCandidateProposalDiversityBuckets(candidates);
+    if (candidateBuckets.length) {
+        for (const fam of candidateBuckets) {
             for (const c of (fam.candidates || [])) {
                 if (c.key === 'opening_speech_rate_3s') {
                     opening_rate_target = { window: '0-3s', target_wps: '1.5-3.0 medium density', research: c.research_signal };
@@ -589,7 +603,7 @@ function compress(artifacts) {
             mechanisms_total: mechanisms && mechanisms.n_mechanisms,
             videos_in_pool: mechanisms && mechanisms.n_videos_pool,
             indicators_total: indicatorRegistry && indicatorRegistry.total,
-            candidate_proposal_diversity_buckets: candidateProposals && candidateProposals.families ? candidateProposals.families.length : 0,
+            candidate_proposal_diversity_buckets: getCandidateProposalDiversityBuckets(candidateProposals).length,
             // Active synthesis traces now use only source-video-led diversity_bucket naming.
             synthesis_trace_primary_diversity_axis: 'diversity_bucket',
             // Single back-compat anchor for the per-idea keep_rate top_indicators
