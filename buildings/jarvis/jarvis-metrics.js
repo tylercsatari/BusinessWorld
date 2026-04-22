@@ -1196,6 +1196,103 @@ const INTERACTION_BASES = [
     // New transcript-language bases
     'pivot_word_count', 'sensory_word_density', 'motif_recurrence_score',
     'beat_density_per_minute', 'escalation_slope', 'title_curiosity_gap_score',
+    // Group V2: Windowed Group U bases (early-window curiosity/cliffhanger/revelation)
+    'curiosity_escalation_count_first2s', 'curiosity_escalation_count_first3s',
+    'curiosity_escalation_count_first5s', 'curiosity_escalation_count_first8s',
+    'curiosity_escalation_count_first10s', 'curiosity_escalation_count_first15s',
+    'curiosity_escalation_count_first20s',
+    'curiosity_escalation_density_first5s', 'curiosity_escalation_density_first10s',
+    'cliffhanger_count_first2s', 'cliffhanger_count_first3s',
+    'cliffhanger_count_first5s', 'cliffhanger_count_first8s',
+    'cliffhanger_count_first10s', 'cliffhanger_count_first15s',
+    'cliffhanger_count_first20s',
+    'revelation_signal_count_first2s', 'revelation_signal_count_first3s',
+    'revelation_signal_count_first5s', 'revelation_signal_count_first8s',
+    'revelation_signal_count_first10s', 'revelation_signal_count_first15s',
+    'revelation_signal_count_first20s',
+    'payoff_tease_count_first2s', 'payoff_tease_count_first3s',
+    'payoff_tease_count_first5s', 'payoff_tease_count_first8s',
+    'payoff_tease_count_first10s', 'payoff_tease_count_first15s',
+    'payoff_tease_count_first20s',
+    'stakes_reinforcement_count_first2s', 'stakes_reinforcement_count_first5s',
+    'stakes_reinforcement_count_first10s', 'stakes_reinforcement_count_first15s',
+    'stakes_reinforcement_count_first20s',
+    'viewer_agency_count_first5s', 'viewer_agency_count_first10s',
+    'viewer_agency_count_first15s', 'viewer_agency_count_first20s',
+    // Group V2: Windowed Group R bases
+    'rhetorical_question_count_first3s', 'rhetorical_question_count_first5s',
+    'rhetorical_question_count_first8s', 'rhetorical_question_count_first10s',
+    'rhetorical_question_count_first15s', 'rhetorical_question_count_first20s',
+    'social_comparison_count_first3s', 'social_comparison_count_first5s',
+    'social_comparison_count_first10s', 'social_comparison_count_first15s',
+    'mystery_setup_count_first3s', 'mystery_setup_count_first5s',
+    'mystery_setup_count_first10s', 'mystery_setup_count_first15s',
+    'mystery_setup_count_first20s',
+    'viewer_stakes_count_first3s', 'viewer_stakes_count_first5s',
+    'viewer_stakes_count_first10s', 'viewer_stakes_count_first15s',
+    'loss_framing_count_first5s', 'loss_framing_count_first10s',
+    'loss_framing_count_first15s',
+    // Group V2 extended: more window sizes for top families
+    'curiosity_escalation_count_first25s', 'curiosity_escalation_count_first30s',
+    'curiosity_escalation_count_first45s', 'curiosity_escalation_count_first60s',
+    'curiosity_escalation_density_first2s', 'curiosity_escalation_density_first3s',
+    'curiosity_escalation_density_first8s', 'curiosity_escalation_density_first15s',
+    'curiosity_escalation_density_first20s',
+    'cliffhanger_count_first25s', 'cliffhanger_count_first30s',
+    'cliffhanger_count_first45s', 'cliffhanger_count_first60s',
+    'cliffhanger_density_first5s', 'cliffhanger_density_first10s',
+    'cliffhanger_density_first15s', 'cliffhanger_density_first20s',
+    'revelation_signal_count_first25s', 'revelation_signal_count_first30s',
+    'revelation_signal_count_first45s', 'revelation_signal_count_first60s',
+    'revelation_signal_density_first5s', 'revelation_signal_density_first10s',
+    'revelation_signal_density_first15s', 'revelation_signal_density_first20s',
+    'payoff_tease_count_first25s', 'payoff_tease_count_first30s',
+    'payoff_tease_count_first45s', 'payoff_tease_count_first60s',
+    'payoff_tease_density_first5s', 'payoff_tease_density_first10s',
+    'payoff_tease_density_first15s', 'payoff_tease_density_first20s',
+    'stakes_reinforcement_count_first25s', 'stakes_reinforcement_count_first30s',
+    'stakes_reinforcement_count_first45s', 'stakes_reinforcement_count_first60s',
+    'stakes_reinforcement_density_first5s', 'stakes_reinforcement_density_first10s',
+    'stakes_reinforcement_density_first15s', 'stakes_reinforcement_density_first20s',
+    'viewer_agency_count_first2s', 'viewer_agency_count_first3s',
+    'viewer_agency_count_first8s', 'viewer_agency_count_first25s',
+    'viewer_agency_count_first30s',
+    'viewer_agency_density_first5s', 'viewer_agency_density_first10s',
+    'viewer_agency_density_first15s', 'viewer_agency_density_first20s',
+    // Group V2 extended: more Group R windows
+    'rhetorical_question_count_first2s', 'rhetorical_question_count_first25s',
+    'rhetorical_question_count_first30s',
+    'rhetorical_question_density_first5s', 'rhetorical_question_density_first10s',
+    'rhetorical_question_density_first15s',
+    'social_comparison_count_first2s', 'social_comparison_count_first8s',
+    'social_comparison_count_first20s', 'social_comparison_count_first25s',
+    'social_comparison_density_first5s', 'social_comparison_density_first10s',
+    'mystery_setup_count_first2s', 'mystery_setup_count_first25s',
+    'mystery_setup_count_first30s',
+    'mystery_setup_density_first5s', 'mystery_setup_density_first10s',
+    'mystery_setup_density_first15s',
+    'viewer_stakes_count_first2s', 'viewer_stakes_count_first8s',
+    'viewer_stakes_count_first20s', 'viewer_stakes_count_first25s',
+    'viewer_stakes_density_first5s', 'viewer_stakes_density_first10s',
+    'loss_framing_count_first2s', 'loss_framing_count_first3s',
+    'loss_framing_count_first20s', 'loss_framing_count_first25s',
+    'loss_framing_count_first30s',
+    'loss_framing_density_first5s', 'loss_framing_density_first10s',
+    'promise_specificity_count_first3s', 'promise_specificity_count_first5s',
+    'promise_specificity_count_first8s', 'promise_specificity_count_first10s',
+    'promise_specificity_count_first15s', 'promise_specificity_count_first20s',
+    'promise_specificity_count_first25s',
+    'promise_specificity_density_first5s', 'promise_specificity_density_first10s',
+    'transformation_arc_count_first3s', 'transformation_arc_count_first5s',
+    'transformation_arc_count_first8s', 'transformation_arc_count_first10s',
+    'transformation_arc_count_first15s', 'transformation_arc_count_first20s',
+    'transformation_arc_count_first25s',
+    'transformation_arc_density_first5s', 'transformation_arc_density_first10s',
+    // Group W2: New ratio metrics
+    'early_curiosity_escalation_ratio', 'cliffhanger_front_load_ratio',
+    'revelation_front_load_ratio', 'curiosity_to_closure_ratio',
+    'loop_payoff_density_gap', 'revelation_to_cliffhanger_ratio',
+    'payoff_tease_to_delivery_ratio',
 ];
 // Excluded from cross-metric generation due to sparse video coverage (<50 videos with scores):
 // 'emotional_peak_position_pct', 'revelation_pace_score'
@@ -1518,6 +1615,27 @@ for (const k of [
     'pre_upload_mechanism_count_hook', 'pre_upload_mechanism_front_load_ratio', 'pre_upload_mechanism_position_pct',
     'reference_to_gratification_ratio', 'setup_to_payoff_gap',
 ]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+
+// ── Group W2: Curiosity/closure ratios — have extractMetric implementations but were missing from STATIC_KEYS ──
+for (const k of [
+    'revelation_front_load_ratio',
+    'curiosity_to_closure_ratio',
+    'loop_payoff_density_gap',
+    'revelation_to_cliffhanger_ratio',
+    'payoff_tease_to_delivery_ratio',
+    'early_curiosity_escalation_ratio',
+    'cliffhanger_front_load_ratio',
+]) {
+    STATIC_KEYS.add(k);
+    STATIC_LAYER[k] = 'pre';
+}
+
+// ── hook_payoff_gap / hook_to_payoff_gap_pct — have extractMetric implementations (transcript-based fallback),
+//    previously removed from STATIC_KEYS as 'LLM-dependent' but are now transcript-based. ──
+for (const k of ['hook_payoff_gap', 'hook_to_payoff_gap_pct']) {
     STATIC_KEYS.add(k);
     STATIC_LAYER[k] = 'pre';
 }
@@ -5469,6 +5587,78 @@ function extractMetric(key, analysis) {
         return [countPhraseMatches(first10, CURIOSITY_ESCALATION_PHRASES), null];
     }
 
+    // ── Group U: Windowed variants for Group U phrase families ──────────────
+    {
+        const _guRe = /^(cliffhanger|payoff_tease|revelation_signal|curiosity_escalation|stakes_reinforcement|viewer_agency)_(count|density)_first(\d+)s$/;
+        const _gum = key.match(_guRe);
+        if (_gum) {
+            if (!transcript) return [null, 'no transcript'];
+            const dur = meta.duration || 0;
+            const wSec = parseInt(_gum[3]);
+            const fam = _gum[1];
+            const variant = _gum[2];
+            let wText;
+            if (dur) {
+                wText = windowedTranscript(transcript, dur, wSec);
+            } else {
+                const allWords = transcript.split(/\s+/).filter(Boolean);
+                wText = allWords.slice(0, Math.ceil(allWords.length * 0.1)).join(' ');
+            }
+            if (!wText) return [null, 'no text for window'];
+            const wl = wText.toLowerCase();
+            const wWords = wl.split(/\s+/).filter(Boolean);
+            if (!wWords.length) return [0, null];
+            const _guPhraseMap = {
+                'cliffhanger': CLIFFHANGER_PHRASES,
+                'payoff_tease': PAYOFF_TEASE_PHRASES,
+                'revelation_signal': REVELATION_SIGNAL_PHRASES,
+                'curiosity_escalation': CURIOSITY_ESCALATION_PHRASES,
+                'stakes_reinforcement': STAKES_REINFORCEMENT_PHRASES,
+                'viewer_agency': VIEWER_AGENCY_PHRASES,
+            };
+            const phrases = _guPhraseMap[fam];
+            const count = countPhraseMatches(wl, phrases);
+            return variant === 'density' ? [count / wWords.length, null] : [count, null];
+        }
+    }
+
+    // ── Group R: Windowed variants for Group R phrase families ──────────────
+    {
+        const _grRe = /^(rhetorical_question|social_comparison|mystery_setup|viewer_stakes|loss_framing|promise_specificity|transformation_arc)_(count|density)_first(\d+)s$/;
+        const _grm = key.match(_grRe);
+        if (_grm) {
+            if (!transcript) return [null, 'no transcript'];
+            const dur = meta.duration || 0;
+            const wSec = parseInt(_grm[3]);
+            const fam = _grm[1];
+            const variant = _grm[2];
+            let wText;
+            if (dur) {
+                wText = windowedTranscript(transcript, dur, wSec);
+            } else {
+                const allWords = transcript.split(/\s+/).filter(Boolean);
+                wText = allWords.slice(0, Math.ceil(allWords.length * 0.1)).join(' ');
+            }
+            if (!wText) return [null, 'no text for window'];
+            const wl = wText.toLowerCase();
+            const wWords = wl.split(/\s+/).filter(Boolean);
+            if (!wWords.length) return [0, null];
+            const _grPhraseMap = {
+                'rhetorical_question': RHETORICAL_QUESTION_PHRASES,
+                'social_comparison': SOCIAL_COMPARISON_PHRASES,
+                'mystery_setup': MYSTERY_SETUP_PHRASES,
+                'viewer_stakes': VIEWER_STAKES_PHRASES,
+                'loss_framing': LOSS_FRAMING_PHRASES,
+                'promise_specificity': PROMISE_SPECIFICITY_PHRASES,
+                'transformation_arc': TRANSFORMATION_ARC_PHRASES,
+            };
+            const phrases = _grPhraseMap[fam];
+            if (!phrases) return [null, 'no phrase map for ' + fam];
+            const count = countPhraseMatches(wl, phrases);
+            return variant === 'density' ? [count / wWords.length, null] : [count, null];
+        }
+    }
+
     // ── Group W: Zygarnik gradient / ref-to-gratification / proof-closure / credibility / story-stake ──
     if (key === "zygarnik_gradient_pct") {
         const [olFull] = extractMetric('open_loop_count', analysis);
@@ -5785,6 +5975,49 @@ function extractMetric(key, analysis) {
             }
         }
         return [firstPayoffWord < words.length * 0.5 ? 1 : 0, null];
+    }
+
+    // ── Group W2: New curiosity/closure ratio metrics ──
+    if (key === "early_curiosity_escalation_ratio") {
+        const [full] = extractMetric("curiosity_escalation_count", analysis);
+        const [early] = extractMetric("curiosity_escalation_count_first10s", analysis);
+        if (!full || full === 0) return [null, "zero denominator"];
+        return [(early || 0) / full, null];
+    }
+    if (key === "cliffhanger_front_load_ratio") {
+        const [full] = extractMetric("cliffhanger_count", analysis);
+        const [early] = extractMetric("cliffhanger_count_first10s", analysis);
+        if (!full || full === 0) return [null, "zero denominator"];
+        return [(early || 0) / full, null];
+    }
+    if (key === "revelation_front_load_ratio") {
+        const [full] = extractMetric("revelation_signal_count", analysis);
+        const [early] = extractMetric("revelation_signal_count_first10s", analysis);
+        if (!full || full === 0) return [null, "zero denominator"];
+        return [(early || 0) / full, null];
+    }
+    if (key === "curiosity_to_closure_ratio") {
+        const [cesc] = extractMetric("curiosity_escalation_count", analysis);
+        const [clos] = extractMetric("closure_count", analysis);
+        if (!clos || clos === 0) return [(cesc || 0) > 0 ? 2.0 : null, (cesc || 0) > 0 ? null : "no curiosity or closure"];
+        return [(cesc || 0) / clos, null];
+    }
+    if (key === "loop_payoff_density_gap") {
+        const [openDens] = extractMetric("open_loop_density", analysis);
+        const [payoffDens] = extractMetric("payoff_signal_density", analysis);
+        return [Math.max(0, (openDens || 0) - (payoffDens || 0)), null];
+    }
+    if (key === "revelation_to_cliffhanger_ratio") {
+        const [rev] = extractMetric("revelation_signal_count", analysis);
+        const [cliff] = extractMetric("cliffhanger_count", analysis);
+        if (!cliff || cliff === 0) return [(rev || 0) > 0 ? 2.0 : null, (rev || 0) > 0 ? null : "no signals"];
+        return [(rev || 0) / cliff, null];
+    }
+    if (key === "payoff_tease_to_delivery_ratio") {
+        const [tease] = extractMetric("payoff_tease_count", analysis);
+        const [delivery] = extractMetric("payoff_signal_count", analysis);
+        if (!delivery || delivery === 0) return [(tease || 0) > 0 ? 2.0 : null, (tease || 0) > 0 ? null : "no tease or delivery"];
+        return [(tease || 0) / delivery, null];
     }
 
     return [null, `unknown key: ${key}`];
