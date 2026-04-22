@@ -1271,83 +1271,150 @@ const ENDPOINT_MOTIFS = [
 // ──────────────────────────────────────────────────────────────────────
 // Video-prototype seed path
 // ──────────────────────────────────────────────────────────────────────
-// Curated mapping from specific proven videos in signals-dataset.json to
-// the closest OBJECT_MOTIF + ENDPOINT_MOTIF. Seeds derived from this list
-// carry synthesis_trace.seed_path='video_prototype' and
-// synthesis_trace.source_video_prototype with full signal metrics so the
-// selection origin is traceable back to a concrete proven video.
+// Candidate pool: every video in signals-dataset.json (203 entries).
+// Motif assignment is two-tiered:
+//   1. KNOWN_VIDEO_MOTIFS — 18 hand-validated ytId→motif pairs; these
+//      are correct-by-inspection and always win their obj_id slot.
+//   2. inferMotifFromTitle() — deterministic keyword rules applied to
+//      all other dataset videos; they fill the 5 obj_id slots that no
+//      KNOWN video covers, and they appear only after KNOWN entries are
+//      processed so they can never displace a validated mapping.
 //
-// Still motif/template-driven at the structure level (composeSeed produces
-// the same shape). The shift is in SELECTION ORIGIN: these seeds exist
-// BECAUSE specific videos proved out (high z_score, retention, keep),
-// not because a motif scored well against the artifact lattice in isolation.
+// Selection: quality_score = z_score × retention/100 × keep/100.
+// All 203 videos are ranked; dedup by obj_id; slice(0, N) draws the
+// top-performing anchors. Same dataset → same output (deterministic).
 //
 // What remains template-driven after this pass:
-//   - ~1/2 of seeds still come from OBJECT_MOTIFS × scoreMotifCombo (was ~2/3)
+//   - ~1/2 of seeds still come from OBJECT_MOTIFS × scoreMotifCombo
 //   - composeSeed produces the same structure regardless of path
-//   - VP motif/endpoint is the closest structural match, not a
-//     video-native atom (no video-native motif atoms exist yet)
-//   - diversity_bucket on VP seeds is still motif-derived (obj.family),
-//     not a video-native classification — see diversity_bucket_source:'motif'
+//   - obj_id/endpoint_id still reference predefined motif atoms
+//   - KNOWN_VIDEO_MOTIFS: 18 hand-curated ytId→motif pairs remain
+//   - inferMotifFromTitle uses keyword rules (heuristic, not learned)
+//   - diversity_bucket on VP seeds is still motif-derived (obj.family)
 
-// Catalog of proven videos → closest (obj_id, endpoint_id) match.
-// Sorted by quality_score (z_score × retention × keep) inside selectPrototypeVideos,
-// so the highest-performing anchors always seed the VP pool first.
-// Each entry covers a distinct obj_id so no two VP seeds duplicate a motif slot.
-const VIDEO_PROTOTYPE_SPECS = [
-    // endurance — 24-hour stationary challenge; timed body-quit pattern (quality≈5.3)
-    { ytId: '0B4RW7hTluE', obj_id: 'plank_hold_hours',         endpoint_id: 'time_to_target'        },
-    // mystery_experiment — solitary-confinement isolation arc (quality=7.68)
-    { ytId: '8lDFzVul1YA', obj_id: 'phoneless_fortnight',      endpoint_id: 'experiment_observation' },
-    // build_test — can-this-stop-a-bullet; material-resistance experiment (quality=7.33)
-    { ytId: 'URrMQS-pm4E', obj_id: 'cardboard_boat_row',       endpoint_id: 'build_test_outcome'     },
-    // body_transformation — fat-to-bodybuilder arc; 90-day visible-change reveal (quality=6.53)
-    { ytId: 'UmCT36lJy0c', obj_id: 'one_food_thirty_days',     endpoint_id: 'transformation_reveal'  },
-    // skill_dare — world-record with zero practice; zero-baseline-to-count arc (quality=6.57)
-    { ytId: '-V-LELEKkX0', obj_id: 'learn_500_words_day',      endpoint_id: 'exact_count'            },
-    // endurance — marathon in banned/unusual shoes; long-distance constraint (quality=6.15)
-    { ytId: 'Kw2f_ozAkqk', obj_id: 'weighted_backpack_march',  endpoint_id: 'exact_distance'         },
-    // endurance — painful extreme footwear worn until body quits (quality=6.13)
-    { ytId: 'zoJECFeZ5O8', obj_id: 'sandbag_carry',            endpoint_id: 'body_quit'              },
-    // build_test — construct unconventional material then test against stress (quality=6.00)
-    { ytId: 'XfdXalkAdqc', obj_id: 'two_by_four_bike',         endpoint_id: 'build_test_outcome'     },
-    // endurance — impossible pushup variant max-rep challenge (quality=5.96)
-    { ytId: 'A1hNcdAUfy8', obj_id: 'pushups_one_day',          endpoint_id: 'body_quit'              },
-    // identity — marathon with shock collar; survive-extreme-constraint frame (quality=5.87)
-    { ytId: '1k4VQ23I6s0', obj_id: 'pro_boxer_day',            endpoint_id: 'identity_dayend'        },
-    // endurance — 100,000-step walking challenge; exact step count (quality=5.82)
-    { ytId: '4T27oxLkGKg', obj_id: 'stair_climb_repeats',      endpoint_id: 'exact_count'            },
-    // cognitive_feat — timed solve-this puzzle challenge (quality=5.81)
-    { ytId: 'uw8FiiU0G_M', obj_id: 'jigsaw_speedrun',          endpoint_id: 'time_to_target'         },
-    // craft_patience — make a real-life crafted replica; exact-count artifact (quality=5.78)
-    { ytId: 'hl8EGBlRFp8', obj_id: 'origami_cranes',           endpoint_id: 'exact_count'            },
-    // mystery_experiment — electrified-shoes wear pattern; extreme item + observe (quality=5.92)
-    { ytId: 'PaffT8WDjK4', obj_id: 'silent_seven_days',        endpoint_id: 'experiment_observation' },
-    // endurance — barefoot 50,000-step challenge; high-rep lower-body to body-quit (quality=5.74)
-    { ytId: 'fGgEJGfXmeI', obj_id: 'jump_rope_day',            endpoint_id: 'body_quit'              },
-    // identity — military-training shadow; "can I survive their world" frame (quality=6.18)
-    { ytId: 'CysDxfwsJfE', obj_id: 'firefighter_shift_shadow', endpoint_id: 'identity_dayend'        },
-    // skill_dare — world-record with zero practice; zero-baseline-to-performance arc (quality=5.82)
-    { ytId: 'ikGj7hkLUoQ', obj_id: 'learn_song_from_scratch',  endpoint_id: 'identity_dayend'        },
-    // craft_patience — rare-material craft reveal; build-from-exotic-material pattern (quality≈4.9)
-    { ytId: 'M1aiYur7Qns', obj_id: 'rubber_band_ball',         endpoint_id: 'exact_count'            },
-];
+// Hand-validated ytId → closest {obj_id, endpoint_id} for 18 proven videos.
+// Covers 18 of 23 OBJECT_MOTIFS slots. All other dataset videos get motifs
+// via inferMotifFromTitle(). KNOWN entries always win their obj_id slot.
+const KNOWN_VIDEO_MOTIFS = new Map([
+    ['0B4RW7hTluE', { obj_id: 'plank_hold_hours',         endpoint_id: 'time_to_target'        }],
+    ['8lDFzVul1YA', { obj_id: 'phoneless_fortnight',      endpoint_id: 'experiment_observation' }],
+    ['URrMQS-pm4E', { obj_id: 'cardboard_boat_row',       endpoint_id: 'build_test_outcome'     }],
+    ['UmCT36lJy0c', { obj_id: 'one_food_thirty_days',     endpoint_id: 'transformation_reveal'  }],
+    ['-V-LELEKkX0', { obj_id: 'learn_500_words_day',      endpoint_id: 'exact_count'            }],
+    ['Kw2f_ozAkqk', { obj_id: 'weighted_backpack_march',  endpoint_id: 'exact_distance'         }],
+    ['zoJECFeZ5O8', { obj_id: 'sandbag_carry',            endpoint_id: 'body_quit'              }],
+    ['XfdXalkAdqc', { obj_id: 'two_by_four_bike',         endpoint_id: 'build_test_outcome'     }],
+    ['A1hNcdAUfy8', { obj_id: 'pushups_one_day',          endpoint_id: 'body_quit'              }],
+    ['1k4VQ23I6s0', { obj_id: 'pro_boxer_day',            endpoint_id: 'identity_dayend'        }],
+    ['4T27oxLkGKg', { obj_id: 'stair_climb_repeats',      endpoint_id: 'exact_count'            }],
+    ['uw8FiiU0G_M', { obj_id: 'jigsaw_speedrun',          endpoint_id: 'time_to_target'         }],
+    ['hl8EGBlRFp8', { obj_id: 'origami_cranes',           endpoint_id: 'exact_count'            }],
+    ['PaffT8WDjK4', { obj_id: 'silent_seven_days',        endpoint_id: 'experiment_observation' }],
+    ['fGgEJGfXmeI', { obj_id: 'jump_rope_day',            endpoint_id: 'body_quit'              }],
+    ['CysDxfwsJfE', { obj_id: 'firefighter_shift_shadow', endpoint_id: 'identity_dayend'        }],
+    ['ikGj7hkLUoQ', { obj_id: 'learn_song_from_scratch',  endpoint_id: 'identity_dayend'        }],
+    ['M1aiYur7Qns', { obj_id: 'rubber_band_ball',         endpoint_id: 'exact_count'            }],
+]);
 
-// Looks up each VIDEO_PROTOTYPE_SPECS entry in the dataset by ytId, enriches
-// with quality_score, and returns sorted by quality_score descending so that
-// slice(0, vpMax) always draws the highest-performing anchors first.
-// Deterministic: same dataset → same output. No network calls.
+// Deterministic keyword rules to infer the closest obj_id + endpoint_id from
+// a video title. Applied only to dataset videos not in KNOWN_VIDEO_MOTIFS.
+// Rules are ordered most-specific-first; first match wins.
+function inferMotifFromTitle(name) {
+    const t = (name || '').toLowerCase();
+
+    let endpoint_id;
+    if (/\b(days? without|didn'?t speak|no phone|no social|isolated|solitary|silent)\b/.test(t)) {
+        endpoint_id = 'experiment_observation';
+    } else if (/\b\d+\s*days? (eating only|of only|on only)\b|only \w+ for \d+\s*days?/.test(t)) {
+        endpoint_id = 'transformation_reveal';
+    } else if (/\b(trained like|became a bodybuilder|lived as|shadowed|survived .{0,20}training)\b/.test(t)) {
+        endpoint_id = 'identity_dayend';
+    } else if (/\b\d[\d,]*\s*(pushups?|pull.?ups?|squats?|steps?|cranes?|coins?|reps?)\b/.test(t)) {
+        endpoint_id = 'exact_count';
+    } else if (/\b\d+[\d.]*\s*(miles?|km|kilometers?)\b|marathon/.test(t)) {
+        endpoint_id = 'exact_distance';
+    } else if (/\b(built?|made?|building|can (this|a|it)|will it|does it|stop a|cut through|proof|testing)\b/.test(t)) {
+        endpoint_id = 'build_test_outcome';
+    } else if (/\bfor \d+ (hours?|minutes?)\b/.test(t)) {
+        endpoint_id = 'time_to_target';
+    } else {
+        endpoint_id = 'body_quit';
+    }
+
+    let obj_id;
+    if (/push.?up/.test(t))                                         obj_id = 'pushups_one_day';
+    else if (/\bplank\b/.test(t))                                   obj_id = 'plank_hold_hours';
+    else if (/\bbackpack\b|ruck.?sack/.test(t))                     obj_id = 'weighted_backpack_march';
+    else if (/\bstair/.test(t))                                     obj_id = 'stair_climb_repeats';
+    else if (/jump.?rope|skipping rope/.test(t))                    obj_id = 'jump_rope_day';
+    else if (/\bsandbag\b/.test(t))                                 obj_id = 'sandbag_carry';
+    else if (/memorize|memoris/.test(t))                            obj_id = 'memorize_book';
+    else if (/\bletters?\b/.test(t))                                obj_id = 'handwritten_letters';
+    else if (/\bportrait/.test(t))                                  obj_id = 'portrait_drawing_strangers';
+    else if (/rubber.?band/.test(t))                                obj_id = 'rubber_band_ball';
+    else if (/origami|\bcrane/.test(t))                             obj_id = 'origami_cranes';
+    else if (/jigsaw|puzzle/.test(t))                               obj_id = 'jigsaw_speedrun';
+    else if (/\bcoin\b/.test(t))                                    obj_id = 'coin_edge_tower';
+    else if (/cardboard.{0,10}boat|boat.{0,10}cardboard/.test(t))  obj_id = 'cardboard_boat_row';
+    else if (/2x4|wooden.{0,5}bike|bike.{0,5}wood/.test(t))        obj_id = 'two_by_four_bike';
+    else if (/laser|bullet.?proof|bulletproof|\bshield\b|\barmor\b/.test(t)) obj_id = 'two_by_four_bike';
+    else if (/only \w+ for \d+\s*days?|ate only|eating only/.test(t)) obj_id = 'one_food_thirty_days';
+    else if (/mile every day|ran every day|daily.{0,5}mile/.test(t)) obj_id = 'daily_mile_one_year';
+    else if (/\bsilent\b|didn'?t speak/.test(t))                    obj_id = 'silent_seven_days';
+    else if (/\bphone\b|\bsmartphone\b/.test(t))                    obj_id = 'phoneless_fortnight';
+    else if (/\bboxer\b|\bboxing\b|\bmma\b/.test(t))                obj_id = 'pro_boxer_day';
+    else if (/firefighter|fireman/.test(t))                         obj_id = 'firefighter_shift_shadow';
+    else if (/\blanguage\b|\bwords of\b/.test(t))                   obj_id = 'learn_500_words_day';
+    else if (/\b(song|instrument|piano|guitar|violin|drums?)\b/.test(t)) obj_id = 'learn_song_from_scratch';
+    else {
+        const ENDPOINT_OBJ_DEFAULTS = {
+            exact_count:            'stair_climb_repeats',
+            body_quit:              'pushups_one_day',
+            exact_distance:         'weighted_backpack_march',
+            time_to_target:         'plank_hold_hours',
+            transformation_reveal:  'one_food_thirty_days',
+            experiment_observation: 'phoneless_fortnight',
+            identity_dayend:        'pro_boxer_day',
+            build_test_outcome:     'cardboard_boat_row',
+        };
+        obj_id = ENDPOINT_OBJ_DEFAULTS[endpoint_id] || 'pushups_one_day';
+    }
+
+    return { obj_id, endpoint_id };
+}
+
+// Ranks all 203 dataset videos by quality_score (z_score × retention/100 × keep/100).
+// KNOWN entries are processed first so they always claim their obj_id slot before any
+// inferred candidate can; validated mappings are never displaced by inference errors.
+// Inferred videos fill the 5 obj_id slots not covered by KNOWN_VIDEO_MOTIFS.
+// Returns the deduped list sorted by quality_score descending so slice(0, N) always
+// draws the highest-performing anchors. Deterministic: same dataset → same output.
 function selectPrototypeVideos(dataset) {
-    const byYtId = new Map((dataset || []).map(v => [v.ytId, v]));
-    return VIDEO_PROTOTYPE_SPECS.reduce((acc, spec) => {
-        const video = byYtId.get(spec.ytId);
-        if (!video) return acc;
+    const scored = (dataset || []).filter(v => v.ytId).map(v => {
         const quality_score = round(
-            (video.z_score || 0) * (video.retention || 0) / 100 * (video.keep || 0) / 100, 3
+            (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
         );
-        acc.push({ spec, video, quality_score });
-        return acc;
-    }, []).sort((a, b) => b.quality_score - a.quality_score);
+        const known = KNOWN_VIDEO_MOTIFS.get(v.ytId);
+        return { video: v, quality_score, isKnown: !!known, motif: known || inferMotifFromTitle(v.name) };
+    });
+
+    // Tier 0: KNOWN (always processed first to win obj_id slots)
+    // Tier 1: inferred (fills uncovered slots only)
+    // Within each tier, quality_score descending.
+    scored.sort((a, b) => {
+        const ta = a.isKnown ? 0 : 1, tb = b.isKnown ? 0 : 1;
+        if (ta !== tb) return ta - tb;
+        return b.quality_score - a.quality_score;
+    });
+
+    const seenObjIds = new Set();
+    const results = [];
+    for (const { video, quality_score, motif } of scored) {
+        if (seenObjIds.has(motif.obj_id)) continue;
+        seenObjIds.add(motif.obj_id);
+        results.push({ spec: { ytId: video.ytId, ...motif }, video, quality_score });
+    }
+    return results.sort((a, b) => b.quality_score - a.quality_score);
 }
 
 // Generates seeds derived from specific validated videos in signals-dataset.json.
