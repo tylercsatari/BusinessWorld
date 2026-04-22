@@ -40,7 +40,7 @@ const EmployeeUI = (() => {
 
     function avatarHtml(emp, size) {
         const sz = size || 56;
-        return `<canvas class="employee-avatar-canvas" data-worker="${escAttr(emp.name)}" width="${sz}" height="${sz}"></canvas>`;
+        return `<canvas class="employee-avatar-canvas" data-worker="${escAttr(emp.name)}" data-size="${sz}" width="${sz}" height="${sz}"></canvas>`;
     }
 
     function renderGrid() {
@@ -81,7 +81,9 @@ const EmployeeUI = (() => {
     function renderAvatars() {
         if (!window.EggRenderer || !container) return;
         container.querySelectorAll('.employee-avatar-canvas').forEach(canvas => {
-            const size = parseInt(canvas.getAttribute('width'), 10) || 48;
+            // Use data-size (immutable) — canvas.width gets mutated by the renderer
+            // to a higher internal resolution, which would compound on each re-render.
+            const size = parseInt(canvas.dataset.size, 10) || 48;
             window.EggRenderer.renderCharacterAvatar(canvas.dataset.worker, canvas, Math.round(size / 2));
         });
     }
@@ -127,7 +129,7 @@ const EmployeeUI = (() => {
             <div class="employee-card-editor">
                 <div class="employee-card-top">
                     <div class="employee-detail-avatar-wrap">
-                        <canvas class="employee-detail-avatar employee-avatar-canvas" data-worker="${escAttr(emp.name)}" width="120" height="120"></canvas>
+                        <canvas class="employee-detail-avatar employee-avatar-canvas" data-worker="${escAttr(emp.name)}" data-size="120" width="120" height="120"></canvas>
                         <div class="employee-color-row">
                             <label>Avatar color</label>
                             <input type="color" id="employee-color" value="${escAttr(emp.colorHex || '#888888')}">
