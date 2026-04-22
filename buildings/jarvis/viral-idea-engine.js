@@ -1268,6 +1268,126 @@ const ENDPOINT_MOTIFS = [
     { id: 'build_test_outcome',    kind: 'build_test',     reveal_label: 'the build held until' },
 ];
 
+// ──────────────────────────────────────────────────────────────────────
+// Video-prototype seed path
+// ──────────────────────────────────────────────────────────────────────
+// Curated mapping from specific proven videos in signals-dataset.json to
+// the closest OBJECT_MOTIF + ENDPOINT_MOTIF. Seeds derived from this list
+// carry synthesis_trace.seed_path='video_prototype' and
+// synthesis_trace.source_video_prototype with full signal metrics so the
+// selection origin is traceable back to a concrete proven video.
+//
+// Still motif/template-driven at the structure level (composeSeed produces
+// the same shape). The shift is in SELECTION ORIGIN: these seeds exist
+// BECAUSE specific videos proved out (high z_score, retention, keep),
+// not because a motif scored well against the artifact lattice in isolation.
+//
+// What remains template-driven after this pass:
+//   - ~2/3 of seeds still come from OBJECT_MOTIFS × scoreMotifCombo
+//   - composeSeed produces the same structure regardless of path
+//   - VP motif/endpoint is the closest structural match, not a
+//     video-native atom (no video-native motif atoms exist yet)
+
+const VIDEO_PROTOTYPE_SPECS = [
+    // endurance — 24-hour stationary challenge; timed body-quit pattern
+    { ytId: '0B4RW7hTluE', obj_id: 'plank_hold_hours',         endpoint_id: 'time_to_target'        },
+    // body_transformation — fat-to-bodybuilder arc; 90-day visible-change reveal
+    { ytId: 'UmCT36lJy0c', obj_id: 'one_food_thirty_days',     endpoint_id: 'transformation_reveal'  },
+    // mystery_experiment — electrified-shoes wear pattern; extreme item + observe
+    { ytId: 'PaffT8WDjK4', obj_id: 'silent_seven_days',        endpoint_id: 'experiment_observation' },
+    // identity — military-training shadow; "can I survive their world" frame
+    { ytId: 'CysDxfwsJfE', obj_id: 'firefighter_shift_shadow', endpoint_id: 'identity_dayend'        },
+    // build_test — can-this-stop-a-bullet; material-resistance experiment (z=9, ret=96%)
+    { ytId: 'URrMQS-pm4E', obj_id: 'cardboard_boat_row',       endpoint_id: 'build_test_outcome'     },
+    // skill_dare — world-record with zero practice; zero-baseline-to-performance arc
+    { ytId: 'ikGj7hkLUoQ', obj_id: 'learn_song_from_scratch',  endpoint_id: 'identity_dayend'        },
+    // craft_patience — rare-material craft reveal; build-from-exotic-material pattern
+    { ytId: 'M1aiYur7Qns', obj_id: 'rubber_band_ball',         endpoint_id: 'exact_count'            },
+];
+
+// Looks up each VIDEO_PROTOTYPE_SPECS entry in the dataset by ytId and
+// returns enriched objects { spec, video, quality_score }.
+// Deterministic: same dataset → same output. No network calls.
+function selectPrototypeVideos(dataset) {
+    const byYtId = new Map((dataset || []).map(v => [v.ytId, v]));
+    return VIDEO_PROTOTYPE_SPECS.reduce((acc, spec) => {
+        const video = byYtId.get(spec.ytId);
+        if (!video) return acc;
+        const quality_score = round(
+            (video.z_score || 0) * (video.retention || 0) / 100 * (video.keep || 0) / 100, 3
+        );
+        acc.push({ spec, video, quality_score });
+        return acc;
+    }, []);
+}
+
+// Generates seeds derived from specific validated videos in signals-dataset.json.
+// Each seed carries synthesis_trace.seed_path='video_prototype' and
+// synthesis_trace.source_video_prototype with the original video's metrics.
+// Uses composeSeed for structure; the shift is that motif/endpoint choice
+// is driven by what the source video proved out, not by lattice scoring.
+function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
+    const dataset = loadJsonSafe('signals-dataset.json');
+    if (!dataset || !dataset.length) return [];
+    const prototypes = selectPrototypeVideos(dataset).slice(0, maxCount);
+    const ctx = deriveMotifContext(brief, artifacts);
+    const seeds = [];
+    for (const { spec, video, quality_score } of prototypes) {
+        const obj = OBJECT_MOTIFS.find(m => m.id === spec.obj_id);
+        const endpoint = ENDPOINT_MOTIFS.find(e => e.id === spec.endpoint_id);
+        if (!obj || !endpoint) continue;
+        const scored = scoreMotifCombo(obj, endpoint, ctx);
+        const seed = composeSeed(obj, endpoint, ctx, seeds.length + 1, scored.score, scored.drivers, {
+            score: scored.creator_fit_score,
+            drivers: scored.creator_fit_drivers,
+            core_score: scored.core_score,
+        }, {
+            score: scored.proof_clarity_score,
+            drivers: scored.proof_clarity_drivers,
+        }, {
+            score: scored.visual_legibility_score,
+            drivers: scored.visual_legibility_drivers,
+        });
+        if (seed.synthesis_trace) {
+            seed.synthesis_trace.seed_path = 'video_prototype';
+            seed.synthesis_trace.diversity_bucket = obj.family || null;
+            seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
+            seed.synthesis_trace.source_video_prototype = {
+                ytId: video.ytId,
+                name: video.name,
+                views: video.views,
+                keep: video.keep,
+                retention: video.retention,
+                z_score: video.z_score,
+                novelty: video.novelty != null ? video.novelty : null,
+                quality_score,
+            };
+        }
+        seeds.push(seed);
+    }
+    return seeds;
+}
+
+// Interleave vpSeeds into motifSeeds in ~1:2 ratio so video-prototype seeds
+// are distributed throughout the pool.
+// Pattern: [vp, motif, motif, vp, motif, motif, ...] up to maxCount total.
+function interleaveSeeds(vpSeeds, motifSeeds, maxCount) {
+    if (!vpSeeds.length) return motifSeeds.slice(0, maxCount);
+    const result = [];
+    let vi = 0, mi = 0;
+    while (result.length < maxCount) {
+        if (vi < vpSeeds.length) result.push(vpSeeds[vi++]);
+        for (let j = 0; j < 2 && result.length < maxCount && mi < motifSeeds.length; j++) {
+            result.push(motifSeeds[mi++]);
+        }
+        if (vi >= vpSeeds.length) {
+            while (result.length < maxCount && mi < motifSeeds.length) result.push(motifSeeds[mi++]);
+            break;
+        }
+    }
+    return result;
+}
+
 function deriveMotifContext(brief, artifacts) {
     const rp = (artifacts && artifacts.retentionPatterns) || {};
     const lat = brief.evidence_lattice || {};
@@ -2627,7 +2747,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     const selection = selectDiverseCombos(combos, maxCount);
     const { picked, log, diversity_bucket_coverage, endpoint_coverage, proof_surface_coverage, per_diversity_bucket, per_endpoint, per_proof_surface, alternates_by_motif_id, total_combos_considered, total_diversity_buckets_considered } = selection;
 
-    return picked.map((c, i) => {
+    const motifSeeds = picked.map((c, i) => {
         const seed = composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers, {
             score: c.creator_fit_score,
             drivers: c.creator_fit_drivers,
@@ -2678,9 +2798,24 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
                 nearby_rejected: myAlternates,
                 note: 'Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill.',
             };
+            // Template path: this seed came from OBJECT_MOTIFS × ENDPOINT_MOTIFS scoring.
+            seed.synthesis_trace.seed_path = 'motif_template';
         }
         return seed;
     });
+    // Interleave ~1-in-3 video-prototype seeds so final ideas are no longer
+    // purely motif/template-seeded. VP seeds carry source_video_prototype lineage.
+    const vpMax = Math.max(1, Math.ceil(maxCount / 3));
+    const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
+    // Remove motif-template seeds whose obj_id is already covered by a VP seed
+    // so that each motif has only one representative in the pool (VP wins).
+    const vpObjIds = new Set(
+        vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.object_atom_id).filter(Boolean)
+    );
+    const dedupedMotifSeeds = vpObjIds.size
+        ? motifSeeds.filter(s => !vpObjIds.has(s.synthesis_trace && s.synthesis_trace.object_atom_id))
+        : motifSeeds;
+    return interleaveSeeds(vpSeeds, dedupedMotifSeeds, maxCount);
 }
 
 

@@ -6109,6 +6109,7 @@ const JarvisUI = (() => {
         const finalRank = st.final_rank_diversity || {};
         const seedAlts = st.seed_alternates || null;
         const finalAlts = st.final_rank_alternates || null;
+        const svp = st.source_video_prototype || null;
         const fmtDelta = (d) => {
             if (d == null || isNaN(+d)) return '';
             const v = +d;
@@ -6225,6 +6226,21 @@ const JarvisUI = (() => {
                                 ${seedAlts && seedAlts.note ? `<div style="font-size:9px;color:#94a3b8;margin-top:3px;line-height:1.5"><b style="color:#f59e0b">seed:</b> ${escapeHtml(seedAlts.note)}</div>` : ''}
                                 ${finalAlts && finalAlts.note ? `<div style="font-size:9px;color:#94a3b8;margin-top:3px;line-height:1.5"><b style="color:#f59e0b">final:</b> ${escapeHtml(finalAlts.note)}</div>` : ''}
                             </details>` : ''}
+                    </div>` : ''}
+                ${svp ? `
+                    <div style="background:#0a1a0a;border-left:2px solid #4ade80;border-radius:4px;padding:7px 8px;margin-bottom:4px">
+                        <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#4ade80;margin-bottom:3px">▶ Source video prototype</div>
+                        <div style="font-size:10px;color:#cbd5e1;line-height:1.6">
+                            <b style="color:#f1f5f9">${escapeHtml(svp.name || '')}</b>
+                            <span style="color:#64748b;font-size:9px;margin-left:6px">ytId: <code style="color:#94a3b8">${escapeHtml(svp.ytId || '')}</code></span>
+                        </div>
+                        <div style="font-size:9px;color:#94a3b8;margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">
+                            ${svp.z_score != null ? `<span>z_score <b style="color:#4ade80">${svp.z_score}</b></span>` : ''}
+                            ${svp.retention != null ? `<span>retention <b style="color:#22d3ee">${(+svp.retention).toFixed(1)}%</b></span>` : ''}
+                            ${svp.keep != null ? `<span>keep <b style="color:#fbbf24">${svp.keep}%</b></span>` : ''}
+                            ${svp.views != null ? `<span>views <b style="color:#a78bfa">${(+svp.views).toLocaleString()}</b></span>` : ''}
+                            ${svp.quality_score != null ? `<span>quality <b style="color:#4ade80">${svp.quality_score}</b></span>` : ''}
+                        </div>
                     </div>` : ''}
                 ${lattice ? `
                     <details style="margin-top:4px">
