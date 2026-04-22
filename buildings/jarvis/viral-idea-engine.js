@@ -1422,11 +1422,51 @@ function selectPrototypeVideos(dataset) {
     return results;
 }
 
+// Compose one source-video-derived seed. This keeps the existing motif/endpoint
+// structure for compatibility, but the seed is explicitly grounded in a real
+// validated video instead of a synthetic template slot.
+function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, rank, seedPath, sourceKind) {
+    const obj = OBJECT_MOTIFS.find(m => m.id === spec.obj_id);
+    const endpoint = ENDPOINT_MOTIFS.find(e => e.id === spec.endpoint_id);
+    if (!obj || !endpoint) return null;
+    const scored = scoreMotifCombo(obj, endpoint, ctx);
+    const seed = composeSeed(obj, endpoint, ctx, rank, scored.score, scored.drivers, {
+        score: scored.creator_fit_score,
+        drivers: scored.creator_fit_drivers,
+        core_score: scored.core_score,
+    }, {
+        score: scored.proof_clarity_score,
+        drivers: scored.proof_clarity_drivers,
+    }, {
+        score: scored.visual_legibility_score,
+        drivers: scored.visual_legibility_drivers,
+    });
+    if (seed.synthesis_trace) {
+        seed.synthesis_trace.seed_path = seedPath;
+        seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.family || null);
+        seed.synthesis_trace.diversity_bucket_source = video.ytId ? 'source_video' : 'motif';
+        seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
+        seed.synthesis_trace.source_video_prototype = {
+            ytId: video.ytId,
+            name: video.name,
+            views: video.views,
+            keep: video.keep,
+            retention: video.retention,
+            z_score: video.z_score,
+            novelty: video.novelty != null ? video.novelty : null,
+            quality_score,
+            source_kind: sourceKind,
+            inferred_obj_id: spec.obj_id,
+            inferred_endpoint_id: spec.endpoint_id,
+            prototype_reason: source_reason,
+        };
+    }
+    return seed;
+}
+
 // Generates seeds derived from specific validated videos in signals-dataset.json.
 // Each seed carries synthesis_trace.seed_path='video_prototype' and
 // synthesis_trace.source_video_prototype with the original video's metrics.
-// Uses composeSeed for structure; the shift is that motif/endpoint choice
-// is driven by what the source video proved out, not by lattice scoring.
 function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const dataset = loadJsonSafe('signals-dataset.json');
     if (!dataset || !dataset.length) return [];
@@ -1434,58 +1474,56 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const ctx = deriveMotifContext(brief, artifacts);
     const seeds = [];
     for (const { spec, video, quality_score, prototype_reason } of prototypes) {
-        const obj = OBJECT_MOTIFS.find(m => m.id === spec.obj_id);
-        const endpoint = ENDPOINT_MOTIFS.find(e => e.id === spec.endpoint_id);
-        if (!obj || !endpoint) continue;
-        const scored = scoreMotifCombo(obj, endpoint, ctx);
-        const seed = composeSeed(obj, endpoint, ctx, seeds.length + 1, scored.score, scored.drivers, {
-            score: scored.creator_fit_score,
-            drivers: scored.creator_fit_drivers,
-            core_score: scored.core_score,
-        }, {
-            score: scored.proof_clarity_score,
-            drivers: scored.proof_clarity_drivers,
-        }, {
-            score: scored.visual_legibility_score,
-            drivers: scored.visual_legibility_drivers,
-        });
-        if (seed.synthesis_trace) {
-            seed.synthesis_trace.seed_path = 'video_prototype';
-            seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.family || null);
-            seed.synthesis_trace.diversity_bucket_source = video.ytId ? 'source_video' : 'motif';
-            seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
-            seed.synthesis_trace.source_video_prototype = {
-                ytId: video.ytId,
-                name: video.name,
-                views: video.views,
-                keep: video.keep,
-                retention: video.retention,
-                z_score: video.z_score,
-                novelty: video.novelty != null ? video.novelty : null,
-                quality_score,
-                inferred_obj_id: spec.obj_id,
-                inferred_endpoint_id: spec.endpoint_id,
-                prototype_reason,
-            };
-        }
-        seeds.push(seed);
+        const seed = buildVideoDerivedSeed(spec, video, quality_score, prototype_reason, ctx, seeds.length + 1, 'video_prototype', 'prototype');
+        if (seed) seeds.push(seed);
     }
     return seeds;
 }
 
-// Interleave vpSeeds into motifSeeds in a 2:1 ratio so video-prototype seeds
-// occupy about two-thirds of the pool.
-// Pattern: [vp, vp, motif, vp, vp, motif, ...] up to maxCount total.
-function interleaveSeeds(vpSeeds, motifSeeds, maxCount) {
-    if (!vpSeeds.length) return motifSeeds.slice(0, maxCount);
+// Backfill the remaining pool with additional validated videos from the
+// dataset, rather than OBJECT_MOTIFS × ENDPOINT_MOTIFS template slots.
+function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYtIds = new Set()) {
+    const dataset = loadJsonSafe('signals-dataset.json');
+    if (!dataset || !dataset.length) return [];
+    const ctx = deriveMotifContext(brief, artifacts);
+    const candidates = (dataset || [])
+        .filter(v => v && v.ytId && !excludeYtIds.has(v.ytId))
+        .map(v => {
+            const quality_score = round(
+                (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
+            );
+            const spec = inferMotifFromVideo(v);
+            return {
+                spec: { ytId: v.ytId, ...spec },
+                video: v,
+                quality_score,
+                source_reason: `${spec.endpoint_source}:${spec.endpoint_id};${spec.obj_source}:${spec.obj_id}`,
+            };
+        })
+        .sort((a, b) => b.quality_score - a.quality_score)
+        .slice(0, maxCount * 3);
+
+    const seeds = [];
+    for (const row of candidates) {
+        const seed = buildVideoDerivedSeed(row.spec, row.video, row.quality_score, row.source_reason, ctx, seeds.length + 1, 'validated_video', 'validated_video');
+        if (seed) seeds.push(seed);
+        if (seeds.length >= maxCount) break;
+    }
+    return seeds;
+}
+
+// Interleave prototype-led seeds with secondary validated-video seeds in a 2:1
+// ratio so the pool stays grounded in exact validated sources throughout.
+function interleaveSeeds(vpSeeds, secondarySeeds, maxCount) {
+    if (!vpSeeds.length) return secondarySeeds.slice(0, maxCount);
     const result = [];
-    let vi = 0, mi = 0;
+    let vi = 0, si = 0;
     while (result.length < maxCount) {
         if (vi < vpSeeds.length) result.push(vpSeeds[vi++]);
         if (result.length < maxCount && vi < vpSeeds.length) result.push(vpSeeds[vi++]);
-        if (result.length < maxCount && mi < motifSeeds.length) result.push(motifSeeds[mi++]);
+        if (result.length < maxCount && si < secondarySeeds.length) result.push(secondarySeeds[si++]);
         if (vi >= vpSeeds.length) {
-            while (result.length < maxCount && mi < motifSeeds.length) result.push(motifSeeds[mi++]);
+            while (result.length < maxCount && si < secondarySeeds.length) result.push(secondarySeeds[si++]);
             break;
         }
     }
@@ -2907,19 +2945,17 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         }
         return seed;
     });
-    // Interleave ~2-in-3 video-prototype seeds so exact validated videos lead
-    // the pool while motif templates still backfill coverage.
+    // Interleave ~2-in-3 prototype seeds so exact validated videos lead the
+    // pool, then backfill with additional validated videos instead of
+    // motif-template slots.
     const vpMax = Math.ceil(maxCount * 2 / 3);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
-    // Remove motif-template seeds whose obj_id is already covered by a VP seed
-    // so that each motif has only one representative in the pool (VP wins).
-    const vpObjIds = new Set(
-        vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.object_atom_id).filter(Boolean)
+    const vpYtIds = new Set(
+        vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.source_video_prototype && s.synthesis_trace.source_video_prototype.ytId).filter(Boolean)
     );
-    const dedupedMotifSeeds = vpObjIds.size
-        ? motifSeeds.filter(s => !vpObjIds.has(s.synthesis_trace && s.synthesis_trace.object_atom_id))
-        : motifSeeds;
-    return interleaveSeeds(vpSeeds, dedupedMotifSeeds, maxCount);
+    const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, maxCount, vpYtIds);
+    const fallbackSeeds = secondarySeeds.length ? secondarySeeds : motifSeeds;
+    return interleaveSeeds(vpSeeds, fallbackSeeds, maxCount);
 }
 
 
