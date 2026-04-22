@@ -1,20 +1,205 @@
 {
-  "active": true,
-  "run_id": "auto_20260422143213.",
+  "active": false,
+  "run_id": "auto_20260422150544.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-22T14:32:13.144Z",
-  "updated_at": "2026-04-22T14:32:13.144Z",
-  "finished_at": null,
-  "requested_iterations": 3000,
-  "attempted": 0,
-  "completed": 0,
-  "failures": 0,
+  "started_at": "2026-04-22T15:05:44.142Z",
+  "updated_at": "2026-04-22T15:10:21.055Z",
+  "finished_at": "2026-04-22T15:29:57.431Z",
+  "requested_iterations": 5000,
+  "attempted": 2611,
+  "completed": 2588,
+  "failures": 22,
   "llm_proposed": 0,
   "llm_completed": 0,
   "no_signal_streak": 0,
-  "stop_reason": null,
-  "current_candidate": null,
-  "last_completed_candidate": null,
-  "last_completed_r": null,
-  "recent_events": []
+  "stop_reason": "process_crash_recovered",
+  "current_candidate": "open_loop_count_first10s_x_tension_builder_count_first20s",
+  "last_completed_candidate": "hook_drop_rate_x_promise_specificity_count_first5s",
+  "last_completed_r": 0.06,
+  "recent_events": [
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_progressive_reveal_density",
+      "r": 0.0905,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:16.475Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_loop_reinforcer_count",
+      "r": 0.032,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:16.538Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_loop_reinforcer_density",
+      "r": -0.0108,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:16.607Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_consequence_language_count",
+      "r": 0.031,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:16.649Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_consequence_language_density",
+      "r": 0.0282,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:16.692Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_setup_anchor_count",
+      "r": 0.0412,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:16.735Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_setup_anchor_density",
+      "r": 0.0421,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:18.179Z"
+    },
+    {
+      "type": "completed",
+      "key": "hook_drop_rate_x_loss_framing_count_first25s",
+      "r": -0.0779,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-22T15:10:18.245Z"
+    },
+    {
+      "type": "completed",
+      "key": "hook_drop_rate_x_loss_framing_count_first30s",
+      "r": -0.0779,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-22T15:10:18.287Z"
+    },
+    {
+      "type": "completed",
+      "key": "hook_drop_rate_x_loss_framing_density_first5s",
+      "r": -0.0969,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-22T15:10:18.326Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_outcome_tease_count",
+      "r": 0.0337,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:18.371Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_outcome_tease_density",
+      "r": 0.0148,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:20.607Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_proof_signal_count",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:20.739Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_proof_signal_density",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:20.787Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_tension_builder_count_first5s",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:20.829Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_tension_builder_count_first10s",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:20.873Z"
+    },
+    {
+      "type": "completed",
+      "key": "open_loop_count_first10s_x_tension_builder_count_first15s",
+      "r": 0,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-22T15:10:20.918Z"
+    },
+    {
+      "type": "completed",
+      "key": "hook_drop_rate_x_loss_framing_density_first10s",
+      "r": -0.0979,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-22T15:10:20.961Z"
+    },
+    {
+      "type": "completed",
+      "key": "hook_drop_rate_x_promise_specificity_count_first3s",
+      "r": 0.0868,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-22T15:10:21.013Z"
+    },
+    {
+      "type": "completed",
+      "key": "hook_drop_rate_x_promise_specificity_count_first5s",
+      "r": 0.06,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "post",
+      "ts": "2026-04-22T15:10:21.054Z"
+    }
+  ],
+  "pre_attempted": 1828,
+  "pre_completed": 1811,
+  "post_attempted": 783,
+  "post_completed": 777
 }

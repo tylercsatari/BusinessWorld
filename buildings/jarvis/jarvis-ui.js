@@ -5813,6 +5813,10 @@ const JarvisUI = (() => {
                 </ul>
             </div>` : '';
 
+        // Validated video anchors — specific grounding from signals-dataset
+        const anchorFamily = (idea.synthesis_trace && idea.synthesis_trace.diversity_bucket) || '';
+        const anchorsBox = renderValidatedVideoAnchors(idea.validated_video_anchors || [], anchorFamily);
+
         // Synthesis derivation — compact view of how this idea was selected
         const synthesisBox = renderSynthesisBox(idea);
 
@@ -5831,6 +5835,7 @@ const JarvisUI = (() => {
                 </div>
 
                 ${conceptBox}
+                ${anchorsBox}
                 ${metricsBox}
                 ${openingBox}
                 ${buildBox}
@@ -5860,6 +5865,35 @@ const JarvisUI = (() => {
                 ${evidence ? `<details style="margin-top:8px"><summary style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;cursor:pointer">Evidence (${(idea.evidence || []).length})</summary><ul style="font-size:10px;line-height:1.55;margin:6px 0 0 16px;padding:0">${evidence}</ul></details>` : ''}
             </div>
         `;
+    }
+
+    function renderValidatedVideoAnchors(anchors, family) {
+        if (!anchors || !anchors.length) return '';
+        const tierColor = (t) => t === 1 ? '#22c55e' : t === 2 ? '#fbbf24' : t === 3 ? '#94a3b8' : '#64748b';
+        const tierLabel = (t) => t === 1 ? 'strong match' : t === 2 ? 'moderate match' : t === 3 ? 'concept match' : 'metric anchor';
+        const fmtViews = (v) => v == null ? '?' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1000) + 'K';
+        const familyNote = family ? `${escapeHtml(family)}-family concepts` : 'concept overlap';
+        const cards = anchors.map(a => `
+            <div style="background:#0a1628;border-radius:5px;padding:8px 10px;border-left:2px solid ${tierColor(a.match_tier || 4)}">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:3px">
+                    <div style="font-size:11px;font-weight:600;color:#e2e8f0;flex:1">${escapeHtml(a.name || '')}</div>
+                    <span style="font-size:9px;color:${tierColor(a.match_tier || 4)};text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap">${tierLabel(a.match_tier || 4)}</span>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;margin-bottom:3px">
+                    ${a.views != null ? `<span style="color:#94a3b8">${fmtViews(a.views)} views</span>` : ''}
+                    ${a.keep != null ? `<span style="color:#22c55e">keep <b>${a.keep}%</b></span>` : ''}
+                    ${a.retention != null ? `<span style="color:#22d3ee">ret <b>${(+a.retention).toFixed(1)}%</b></span>` : ''}
+                    ${a.z_score != null ? `<span style="color:#a78bfa">z <b>${a.z_score}</b></span>` : ''}
+                    ${a.ytId ? `<a href="https://www.youtube.com/watch?v=${escapeHtml(a.ytId)}" target="_blank" rel="noopener" style="color:#60a5fa;font-size:9px;text-decoration:none">YT ↗</a>` : ''}
+                </div>
+                <div style="font-size:9px;color:#64748b;line-height:1.4">${escapeHtml(a.why_this_matches || '')}</div>
+            </div>`).join('');
+        return `
+            <div style="background:#060d1a;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:2px solid #22c55e">
+                <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#22c55e;margin-bottom:4px;font-weight:700">✦ Validated Video Anchors — Specific Dataset Evidence</div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:7px">Specific analyzed videos that share this idea's structure. Matched on title/premise tokens + ${familyNote}, ranked by z_score × keep_rate.</div>
+                <div style="display:flex;flex-direction:column;gap:5px">${cards}</div>
+            </div>`;
     }
 
     function renderValidationTraceRow(t) {
