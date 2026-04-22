@@ -3400,8 +3400,14 @@ function computeRiskFlagsForIdea(idea, brief) {
 
 function defineIndicator(key) {
     if (!variableCatalog || !variableCatalog.describeVariableMini) return null;
-    try { return variableCatalog.describeVariableMini(key); }
-    catch (e) { return null; }
+    try {
+        const mini = variableCatalog.describeVariableMini(key);
+        if (!mini || typeof mini !== 'object') return mini;
+        if (mini.family && !mini.diversity_bucket) {
+            return Object.assign({}, mini, { diversity_bucket: mini.family });
+        }
+        return mini;
+    } catch (e) { return null; }
 }
 
 function indicatorRegistryIndex(registry) {
@@ -3432,7 +3438,6 @@ function resolveIndicator(key, ctx, extras) {
         if (def.quantification_style) row.quantification_style = def.quantification_style;
         if (def.signal && !row.signal) row.signal = def.signal;
         if (def.diversity_bucket && !row.diversity_bucket) row.diversity_bucket = def.diversity_bucket;
-        else if (def.family && !row.diversity_bucket) row.diversity_bucket = def.family;
         if (def.layer && !row.layer) row.layer = def.layer;
     }
     return row;
