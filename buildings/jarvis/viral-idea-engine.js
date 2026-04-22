@@ -4381,11 +4381,9 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         const vpRankBonus = seedPath === 'video_prototype' ? 0.35 : 0;
         return {
             idea,
-            // Diversity-bucket axis. Prefer the alias-first `diversity_bucket`
-            // field on the trace and fall back to the legacy `motif_family` mirror
-            // so older seeds keep working. The local uses `bucket` to reflect the
-            // role (diversity axis) rather than the legacy field name.
-            bucket: (idea.synthesis_trace && (idea.synthesis_trace.diversity_bucket || idea.synthesis_trace.motif_family)) || 'unknown',
+            // Diversity-bucket axis for final ranking. Active seeds now write
+            // only the source-video-led `diversity_bucket` field here.
+            bucket: (idea.synthesis_trace && idea.synthesis_trace.diversity_bucket) || 'unknown',
             endpoint_kind: (() => {
                 const eid = idea.synthesis_trace && idea.synthesis_trace.endpoint_atom_id;
                 const e = ENDPOINT_MOTIFS.find(x => x.id === eid);

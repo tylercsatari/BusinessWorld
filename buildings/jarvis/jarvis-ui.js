@@ -6167,7 +6167,7 @@ const JarvisUI = (() => {
                         ${st.object_atom_id ? ` · obj <code style="color:#22d3ee">${escapeHtml(st.object_atom_id)}</code>` : ''}
                         ${st.endpoint_atom_id ? ` · end <code style="color:#22c55e">${escapeHtml(st.endpoint_atom_id)}</code>` : ''}
                         ${st.scale_kind ? ` · scale <code style="color:#fbbf24">${escapeHtml(st.scale_kind)}${st.scale_value != null ? '=' + escapeHtml(String(st.scale_value)) : ''}</code>` : ''}
-                        ${(st.diversity_bucket || st.motif_family) ? ` · diversity bucket <code style="color:#a78bfa">${escapeHtml(st.diversity_bucket || st.motif_family)}</code>` : ''}
+                        ${st.diversity_bucket ? ` · diversity bucket <code style="color:#a78bfa">${escapeHtml(st.diversity_bucket)}</code>` : ''}
                     </div>
                 </div>
                 ${chips ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${chips}</div>` : ''}
