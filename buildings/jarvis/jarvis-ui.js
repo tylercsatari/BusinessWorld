@@ -5815,7 +5815,8 @@ const JarvisUI = (() => {
 
         // Validated video anchors — specific grounding from signals-dataset
         const anchorFamily = (idea.synthesis_trace && idea.synthesis_trace.diversity_bucket) || '';
-        const anchorsBox = renderValidatedVideoAnchors(idea.validated_video_anchors || [], anchorFamily);
+        const anchorSourceTitle = idea.synthesis_trace && idea.synthesis_trace.source_video_prototype && idea.synthesis_trace.source_video_prototype.name;
+        const anchorsBox = renderValidatedVideoAnchors(idea.validated_video_anchors || [], anchorFamily, anchorSourceTitle);
 
         // Synthesis derivation — compact view of how this idea was selected
         const synthesisBox = renderSynthesisBox(idea);
@@ -5867,12 +5868,14 @@ const JarvisUI = (() => {
         `;
     }
 
-    function renderValidatedVideoAnchors(anchors, family) {
+    function renderValidatedVideoAnchors(anchors, family, sourceTitle) {
         if (!anchors || !anchors.length) return '';
         const tierColor = (t) => t === 1 ? '#22c55e' : t === 2 ? '#fbbf24' : t === 3 ? '#94a3b8' : '#64748b';
         const tierLabel = (t) => t === 1 ? 'strong match' : t === 2 ? 'moderate match' : t === 3 ? 'concept match' : 'metric anchor';
         const fmtViews = (v) => v == null ? '?' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1000) + 'K';
-        const familyNote = family ? `${escapeHtml(family)}-family concepts` : 'concept overlap';
+        const familyNote = sourceTitle
+            ? `source-video concepts from ${escapeHtml(sourceTitle)}`
+            : (family ? `${escapeHtml(family)}-family concepts` : 'concept overlap');
         const cards = anchors.map(a => `
             <div style="background:#0a1628;border-radius:5px;padding:8px 10px;border-left:2px solid ${tierColor(a.match_tier || 4)}">
                 <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:3px">

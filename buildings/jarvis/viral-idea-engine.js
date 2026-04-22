@@ -4123,7 +4123,8 @@ function buildBlueprintValidation(seed, brief, artifacts) {
 // Validated video anchors — deterministic grounding from signals-dataset
 //
 // Matches each generated idea against specific videos in signals-dataset.json
-// using actual title/premise token overlap + motif-family concept words.
+// using actual title/premise token overlap plus either source-video concept
+// tokens (preferred for VP seeds) or motif-family concept words.
 // No LLM calls. Returns top 3 anchors with direct evidence fields so every
 // idea card can show which specific real videos validate the format.
 // ──────────────────────────────────────────────────────────────────────
@@ -4173,36 +4174,44 @@ function matchValidatedVideoAnchors(idea, seed, dataset) {
     if (!dataset || !Array.isArray(dataset) || !dataset.length) return [];
 
     const family = (seed && seed.synthesis_trace && seed.synthesis_trace.diversity_bucket) || '';
+    const sourceVideo = (seed && seed.synthesis_trace && seed.synthesis_trace.source_video_prototype) || null;
     const ideaTitleTokens = new Set(_anchorTokenize(idea.title || ''));
     const ideaLoglineTokens = new Set(_anchorTokenize((idea.concept && idea.concept.logline) || idea.one_line_premise || ''));
     const familyConcepts = _FAMILY_CONCEPT_TOKENS[family] || [];
+    const sourceConcepts = sourceVideo ? _anchorTokenize(sourceVideo.name || '') : [];
 
     const scored = dataset.map(video => {
         const videoTokens = new Set(_anchorTokenize(video.name || ''));
         const videoNameLower = String(video.name || '').toLowerCase();
+        const exactSourceMatch = !!(sourceVideo && sourceVideo.ytId && video.ytId === sourceVideo.ytId);
 
         const titleOverlap = [...ideaTitleTokens].filter(t => videoTokens.has(t));
         const loglineOverlap = [...ideaLoglineTokens].filter(t => videoTokens.has(t) && !ideaTitleTokens.has(t));
+        const sourceMatched = sourceConcepts.filter(t => videoNameLower.includes(t));
         const familyMatched = familyConcepts.filter(t => videoNameLower.includes(t));
 
         const matchTier =
+            exactSourceMatch ? 1 :
             titleOverlap.length >= 2 ? 1 :
             titleOverlap.length >= 1 ? 2 :
+            sourceMatched.length >= 2 ? 2 :
             familyMatched.length >= 2 ? 2 :
-            loglineOverlap.length >= 1 || familyMatched.length >= 1 ? 3 : 4;
+            loglineOverlap.length >= 1 || sourceMatched.length >= 1 || familyMatched.length >= 1 ? 3 : 4;
 
         // Quality score: z_score and keep_rate are the primary per-video signals in the dataset
         const qualityScore =
             (video.z_score || 0) * 0.4 +
             (video.keep || 0) * 0.03 +
             Math.min(1, Math.log10(Math.max(1, video.views || 1)) / 7) * 2;
-        const textBoost = titleOverlap.length * 3 + loglineOverlap.length + familyMatched.length * 2;
+        const textBoost = titleOverlap.length * 3 + loglineOverlap.length + sourceMatched.length * 2 + familyMatched.length * 2 + (exactSourceMatch ? 6 : 0);
         const score = ([0, 12, 8, 4, 0][matchTier] || 0) + textBoost + qualityScore;
 
         const reasons = [];
+        if (exactSourceMatch) reasons.push('exact source video');
         if (matchTier === 4) reasons.push('top-metric anchor (no title overlap)');
         if (titleOverlap.length) reasons.push(`title match: ${titleOverlap.slice(0, 3).join(', ')}`);
         if (loglineOverlap.length) reasons.push(`premise match: ${loglineOverlap.slice(0, 2).join(', ')}`);
+        if (sourceMatched.length) reasons.push(`source-video overlap: ${sourceMatched.slice(0, 3).join(', ')}`);
         if (familyMatched.length) reasons.push(`${family} concept: ${familyMatched.slice(0, 3).join(', ')}`);
         const vFmt = (v) => v == null ? '?' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1000) + 'K';
         reasons.push(`keep=${video.keep != null ? video.keep + '%' : '?'}, z=${video.z_score != null ? video.z_score : '?'}, ${vFmt(video.views)} views`);
