@@ -1858,6 +1858,15 @@ for (const fam of [
     'curiosity_escalation', 'cliffhanger', 'revelation_signal', 'payoff_tease',
     'stakes_reinforcement', 'viewer_agency', 'rhetorical_question', 'social_comparison',
     'mystery_setup', 'viewer_stakes', 'loss_framing', 'promise_specificity', 'transformation_arc',
+    // All other ZYGARNIK families that need hook/ratio variants in STATIC_KEYS
+    'open_loop', 'closure', 'unresolved_ref', 'temporal_anticipation', 'contrast',
+    'superlative', 'action_verb', 'sensory', 'imperative', 'outcome_ref',
+    'suspense', 'identity_hook', 'social_proof', 'scarcity', 'pattern_interrupt',
+    'foreshadow', 'stakes_high', 'credibility_signal', 'reward_language', 'loss_aversion',
+    'urgency', 'delayed_gratification', 'reference_callback', 'visual_proof', 'story_stake',
+    'transformation', 'vulnerability', 'specificity_anchor', 'micro_commitment', 'emotional_peak',
+    'revelation_pace', 'social_contrast', 'anticipatory_build', 'tension_ratchet', 'promise_echo',
+    'story_clock', 'proof_build',
 ]) {
     for (const w of [2, 3, 5, 8, 10, 15, 20, 25, 30, 45, 60]) {
         const ck = `${fam}_count_first${w}s`;
@@ -1868,6 +1877,12 @@ for (const fam of [
         const dk = `${fam}_density_first${w}s`;
         STATIC_KEYS.add(dk);
         STATIC_LAYER[dk] = 'pre';
+    }
+    // Extended variants now backed by _zyExtRe dispatch
+    for (const sfx of ['count_hook','density_hook','front_load_ratio','count_first_half','density_first_half','position_pct']) {
+        const k = `${fam}_${sfx}`;
+        STATIC_KEYS.add(k);
+        STATIC_LAYER[k] = 'pre';
     }
 }
 
@@ -1883,6 +1898,9 @@ for (const fam of [
     'authority_stack', 'narrative_stakes_escalation', 'payoff_proximity',
     // Group AA (challenge_statement / narrative_tension were missing from V2/W2 loop)
     'challenge_statement', 'narrative_tension',
+    // Group AA phrase families — hook/ratio/first_half variants now backed by _zyExtRe dispatch
+    'tension_builder', 'implicit_promise', 'progressive_reveal', 'loop_reinforcer',
+    'consequence_language', 'setup_anchor', 'outcome_tease', 'proof_signal',
 ]) {
     const baseCount = `${fam}_count`;
     const baseDensity = `${fam}_density`;
@@ -1899,10 +1917,14 @@ for (const fam of [
     const hookDensity = `${fam}_density_hook`;
     const frontLoad   = `${fam}_front_load_ratio`;
     const firstHalf   = `${fam}_count_first_half`;
+    const firstHalfD  = `${fam}_density_first_half`;
+    const posPct      = `${fam}_position_pct`;
     STATIC_KEYS.add(hookCount);   STATIC_LAYER[hookCount]   = 'pre';
     STATIC_KEYS.add(hookDensity); STATIC_LAYER[hookDensity] = 'pre';
     STATIC_KEYS.add(frontLoad);   STATIC_LAYER[frontLoad]   = 'pre';
     STATIC_KEYS.add(firstHalf);   STATIC_LAYER[firstHalf]   = 'pre';
+    STATIC_KEYS.add(firstHalfD);  STATIC_LAYER[firstHalfD]  = 'pre';
+    STATIC_KEYS.add(posPct);      STATIC_LAYER[posPct]      = 'pre';
 }
 
 // ── get_metric_definition ────────────────────────────────────────────────
@@ -2905,6 +2927,59 @@ function extractMetric(key, analysis) {
         if (!words.length) return [null, 'empty text'];
         const count = countPhraseMatches(text.toLowerCase(), ZYGARNIK_PHRASE_SETS[family]);
         return measure === 'count' ? [count, null] : [count / words.length, null];
+    }
+
+    // Extended phrase family metrics: hook-window, front-load ratio, first-half count, density variants
+    // Handles: {fam}_count_hook, {fam}_density_hook, {fam}_front_load_ratio, {fam}_count_first_half,
+    //          {fam}_density_first_half, {fam}_position_pct
+    const _zyExtRe = new RegExp(`^(${ZYGARNIK_FAMILIES.join('|')})_(count_hook|density_hook|front_load_ratio|count_first_half|density_first_half|position_pct)$`);
+    const zyExtMatch = key.match(_zyExtRe);
+    if (zyExtMatch) {
+        const [, family, variant] = zyExtMatch;
+        if (!transcript) return [null, 'no transcript'];
+        const phrases = ZYGARNIK_PHRASE_SETS[family];
+        if (!phrases || !phrases.length) return [null, 'no phrase list'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        if (variant === 'count_hook') {
+            const hookWords = words.slice(0, Math.max(1, Math.ceil(words.length * 0.1)));
+            return [countPhraseMatches(hookWords.join(' '), phrases), null];
+        }
+        if (variant === 'density_hook') {
+            const hookWords = words.slice(0, Math.max(1, Math.ceil(words.length * 0.1)));
+            const hw = hookWords.length || 1;
+            return [countPhraseMatches(hookWords.join(' '), phrases) / hw, null];
+        }
+        if (variant === 'count_first_half') {
+            const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ');
+            return [countPhraseMatches(firstHalf, phrases), null];
+        }
+        if (variant === 'density_first_half') {
+            const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ');
+            const hw = Math.floor(words.length / 2) || 1;
+            return [countPhraseMatches(firstHalf, phrases) / hw, null];
+        }
+        if (variant === 'front_load_ratio') {
+            const mid = Math.floor(words.length / 2);
+            const firstHalf = words.slice(0, mid).join(' ');
+            const secondHalf = words.slice(mid).join(' ');
+            const c1 = countPhraseMatches(firstHalf, phrases);
+            const c2 = countPhraseMatches(secondHalf, phrases);
+            return [(c1 + 0.01) / (c2 + 0.01), null];
+        }
+        if (variant === 'position_pct') {
+            // Position of first phrase match as fraction of transcript
+            for (const ph of phrases) {
+                const idx = tl.indexOf(ph);
+                if (idx >= 0) {
+                    const wordsBefore = tl.slice(0, idx).split(/\s+/).filter(Boolean).length;
+                    return [wordsBefore / words.length, null];
+                }
+            }
+            return [null, 'no phrase found'];
+        }
+        return [null, `unknown variant: ${variant}`];
     }
 
     // Gratification delay: word index of first closure phrase
