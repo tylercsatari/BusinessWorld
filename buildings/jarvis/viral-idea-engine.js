@@ -731,7 +731,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a push-up from the top of the motion',
         action_intensity: 'high',
         safety_tier: 'safe',
-        family: 'endurance',
+        diversity_bucket: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'in my garage',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -753,7 +753,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a plank held flat with a running timer',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'endurance',
+        diversity_bucket: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on gym flooring with a timer overlay',
         endpoint_kinds: ['time_to_target', 'body_quit'],
@@ -775,7 +775,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'boots in motion with a mile-counter overlay',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'endurance',
+        diversity_bucket: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a marked road',
         endpoint_kinds: ['exact_distance', 'body_quit'],
@@ -797,7 +797,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'running up a flight with foot-on-stair visible',
         action_intensity: 'high',
         safety_tier: 'safe',
-        family: 'endurance',
+        diversity_bucket: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'in a stairwell',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -819,7 +819,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'rope spinning with feet leaving the ground',
         action_intensity: 'high',
         safety_tier: 'safe',
-        family: 'endurance',
+        diversity_bucket: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a driveway',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -841,7 +841,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'the bag carried step by step with a distance overlay',
         action_intensity: 'high',
         safety_tier: 'safe',
-        family: 'endurance',
+        diversity_bucket: 'endurance',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a long stretch of road',
         endpoint_kinds: ['exact_distance', 'body_quit'],
@@ -864,7 +864,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a book flipping with page checkmarks filling in',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'cognitive_feat',
+        diversity_bucket: 'cognitive_feat',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a page tally on the wall',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -886,7 +886,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand writing with a stack of addressed envelopes growing',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'repetition_outreach',
+        diversity_bucket: 'repetition_outreach',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk beside a stack of stamped envelopes',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -908,7 +908,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand drawing with a growing stack of finished portraits',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'repetition_outreach',
+        diversity_bucket: 'repetition_outreach',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a busy sidewalk',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -930,7 +930,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'hands wrapping rubber bands around a ball',
         action_intensity: 'low',
         safety_tier: 'safe',
-        family: 'craft_patience',
+        diversity_bucket: 'craft_patience',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a band counter and a ruler against the ball',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -952,7 +952,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'fingers folding paper and adding to a crane pile',
         action_intensity: 'low',
         safety_tier: 'safe',
-        family: 'craft_patience',
+        diversity_bucket: 'craft_patience',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a growing pile of cranes',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -974,7 +974,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'hands sliding puzzle pieces with a completion-% overlay climbing',
         action_intensity: 'low',
         safety_tier: 'safe',
-        family: 'cognitive_feat',
+        diversity_bucket: 'cognitive_feat',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a long puzzle table',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -996,7 +996,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand placing coins on a growing, tilting stack',
         action_intensity: 'low',
         safety_tier: 'safe',
-        family: 'craft_patience',
+        diversity_bucket: 'craft_patience',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a height ruler taped behind the tower',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -1019,7 +1019,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'oars pulling as the cardboard boat slides out from the dock',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'build_test',
+        diversity_bucket: 'build_test',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a calm shallow lake wearing a life vest',
         endpoint_kinds: ['exact_distance', 'build_test_outcome'],
@@ -1041,7 +1041,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'pedals turning on the wooden bike with a mile-counter overlay',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'build_test',
+        diversity_bucket: 'build_test',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a closed empty parking lot wearing a helmet',
         endpoint_kinds: ['exact_distance', 'build_test_outcome'],
@@ -1065,7 +1065,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a cut between identical morning weigh-ins and identical potato plates',
         action_intensity: 'low',
         safety_tier: 'safe',
-        family: 'body_transformation',
+        diversity_bucket: 'body_transformation',
         preferred_hook_type: 'transformation',
         setting_hint: 'at the same kitchen counter every morning',
         endpoint_kinds: ['transformation_reveal', 'time_to_target'],
@@ -1088,7 +1088,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a cut between two runs at the same starting line on day 1 and day N',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'body_transformation',
+        diversity_bucket: 'body_transformation',
         preferred_hook_type: 'transformation',
         setting_hint: 'on the exact same one-mile neighborhood loop',
         endpoint_kinds: ['transformation_reveal', 'time_to_target'],
@@ -1112,7 +1112,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'short encounters where I gesture and people react on camera',
         action_intensity: 'low',
         safety_tier: 'safe',
-        family: 'mystery_experiment',
+        diversity_bucket: 'mystery_experiment',
         preferred_hook_type: 'mystery',
         setting_hint: 'in everyday errands around my neighborhood',
         endpoint_kinds: ['experiment_observation', 'time_to_target'],
@@ -1135,7 +1135,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'time-lapse of a day that used to be scrolling and is now something else',
         action_intensity: 'low',
         safety_tier: 'safe',
-        family: 'mystery_experiment',
+        diversity_bucket: 'mystery_experiment',
         preferred_hook_type: 'mystery',
         setting_hint: 'at home, at work, and on public transit where the phone used to live',
         endpoint_kinds: ['experiment_observation', 'time_to_target'],
@@ -1159,7 +1159,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'matching his bag work beat for beat with both fighters in the shot',
         action_intensity: 'high',
         safety_tier: 'safe',
-        family: 'identity',
+        diversity_bucket: 'identity',
         preferred_hook_type: 'transformation',
         setting_hint: 'inside a pro fighter\u2019s actual gym',
         endpoint_kinds: ['identity_dayend', 'body_quit'],
@@ -1181,7 +1181,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'me stepping into gear next to the crew as the truck rolls out',
         action_intensity: 'high',
         safety_tier: 'safe',
-        family: 'identity',
+        diversity_bucket: 'identity',
         preferred_hook_type: 'mystery',
         setting_hint: 'inside an active firehouse with full crew consent',
         endpoint_kinds: ['identity_dayend', 'body_quit'],
@@ -1205,7 +1205,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'flashcards moving from an unknown-pile to a known-pile with a running tally',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'skill_dare',
+        diversity_bucket: 'skill_dare',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a kitchen table with a native speaker sitting opposite me at dusk',
         endpoint_kinds: ['exact_count', 'experiment_observation'],
@@ -1228,7 +1228,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a first awkward note progressing into a full clean phrase by the end',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        family: 'skill_dare',
+        diversity_bucket: 'skill_dare',
         preferred_hook_type: 'transformation',
         setting_hint: 'in a practice room, ending on a small stage in front of a real crowd',
         endpoint_kinds: ['identity_dayend', 'time_to_target'],
@@ -1437,7 +1437,7 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
     });
     if (seed.synthesis_trace) {
         seed.synthesis_trace.seed_path = seedPath;
-        seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.family || null);
+        seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.diversity_bucket || null);
         seed.synthesis_trace.diversity_bucket_source = video.ytId ? 'source_video' : 'motif';
         seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
         seed.synthesis_trace.source_video_prototype = {
@@ -1813,7 +1813,7 @@ function computeProofClarity(obj, endpoint, ctx) {
     const drivers = [];
     let score = 0;
 
-    const family = String(obj.family || '').toLowerCase();
+    const family = String(obj.diversity_bucket || '').toLowerCase();
     const titleTpl = String(getTitlePremiseLine(obj)).toLowerCase();
     const logline = String(obj.logline_action || '').toLowerCase();
     const firstFrame = String(obj.first_frame_action || '').toLowerCase();
@@ -2058,7 +2058,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
     const drivers = [];
     let score = 0;
 
-    const family = String(obj.family || '').toLowerCase();
+    const family = String(obj.diversity_bucket || '').toLowerCase();
     const titleTpl = String(getTitlePremiseLine(obj)).toLowerCase();
     const logline = String(obj.logline_action || '').toLowerCase();
     const firstFrame = String(obj.first_frame_action || '').toLowerCase();
@@ -2643,7 +2643,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
 // ranking orbiting broad buckets instead of concrete validated idea shapes.
 //
 // The current selector enforces diversity at three explicit levels:
-//   1. Motif diversity bucket (stored on each motif as `obj.family` for
+//   1. Motif diversity bucket (stored on each motif as `obj.diversity_bucket` for
 //      legacy reasons; values: endurance / build_test / body_transformation /
 //      mystery_experiment / identity / skill_dare / craft_patience /
 //      cognitive_feat / repetition_outreach) — at most 1 per bucket until
@@ -2669,19 +2669,19 @@ function getProofSurfaceKey(obj) {
 
 function comboSimilarity(a, b) {
     let s = 0;
-    if ((a.obj.family || 'unknown') === (b.obj.family || 'unknown')) s += 0.60;
+    if ((a.obj.diversity_bucket || 'unknown') === (b.obj.diversity_bucket || 'unknown')) s += 0.60;
     if (a.endpoint.kind === b.endpoint.kind) s += 0.35;
     if (getProofSurfaceKey(a.obj) === getProofSurfaceKey(b.obj)) s += 0.20;
     return s;
 }
 
 // Clusters combos by their motif-diversity bucket. The bucket is still read
-// from `obj.family` because that is the on-disk data field; the local name
+// from `obj.diversity_bucket` because that is the on-disk data field; the local name
 // reflects the role (diversity axis) rather than the legacy field name.
 function clusterCombosByDiversityBucket(combos) {
     const clusters = new Map();
     for (const c of combos) {
-        const bucket = c.obj.family || 'unknown';
+        const bucket = c.obj.diversity_bucket || 'unknown';
         if (!clusters.has(bucket)) clusters.set(bucket, []);
         clusters.get(bucket).push(c);
     }
@@ -2710,7 +2710,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
     function compactAlt(c, chosen, extra) {
         return {
             motif_id: c.obj.id,
-            diversity_bucket: c.obj.family || 'unknown',
+            diversity_bucket: c.obj.diversity_bucket || 'unknown',
             endpoint_id: c.endpoint.id,
             endpoint_kind: c.endpoint.kind,
             proof_surface: getProofSurfaceKey(c.obj),
@@ -2784,7 +2784,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             const c = remaining[i];
             let blocked = null;
             if (usedMotifIds.has(c.obj.id)) blocked = 'motif-id already selected';
-            else if ((perDiversityBucket.get(c.obj.family || 'unknown') || 0) >= 2) blocked = `diversity-bucket cap hit (${c.obj.family || 'unknown'}=2)`;
+            else if ((perDiversityBucket.get(c.obj.diversity_bucket || 'unknown') || 0) >= 2) blocked = `diversity-bucket cap hit (${c.obj.diversity_bucket || 'unknown'}=2)`;
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) blocked = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             let sim = 0;
             for (const p of picked) sim = Math.max(sim, comboSimilarity(c, p));
@@ -2804,7 +2804,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             .slice(0, 2)
             .map(m => ({
                 motif_id: m.c.obj.id,
-                diversity_bucket: m.c.obj.family || 'unknown',
+                diversity_bucket: m.c.obj.diversity_bucket || 'unknown',
                 endpoint_id: m.c.endpoint.id,
                 endpoint_kind: m.c.endpoint.kind,
                 proof_surface: getProofSurfaceKey(m.c.obj),
@@ -2820,7 +2820,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         remaining.splice(bestIdx, 1);
         picked.push(chosen);
         usedMotifIds.add(chosen.obj.id);
-        const bucket = chosen.obj.family || 'unknown';
+        const bucket = chosen.obj.diversity_bucket || 'unknown';
         perDiversityBucket.set(bucket, (perDiversityBucket.get(bucket) || 0) + 1);
         perEndpoint.set(chosen.endpoint.kind, (perEndpoint.get(chosen.endpoint.kind) || 0) + 1);
         perProofSurface.set(getProofSurfaceKey(chosen.obj), (perProofSurface.get(getProofSurfaceKey(chosen.obj)) || 0) + 1);
@@ -2911,7 +2911,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         // each final idea records why this slot survived selection.
         const myLog = log.find(l => l.slot === (i + 1));
         if (seed.synthesis_trace) {
-            seed.synthesis_trace.diversity_bucket = c.obj.family || null;
+            seed.synthesis_trace.diversity_bucket = c.obj.diversity_bucket || null;
             seed.synthesis_trace.proof_surface = getProofSurfaceKey(c.obj);
             seed.synthesis_trace.diversity_selection = {
                 phase: myLog && myLog.phase,
