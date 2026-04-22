@@ -1272,53 +1272,27 @@ const ENDPOINT_MOTIFS = [
 // Video-prototype seed path
 // ──────────────────────────────────────────────────────────────────────
 // Candidate pool: every video in signals-dataset.json (203 entries).
-// Motif assignment is two-tiered:
-//   1. KNOWN_VIDEO_MOTIFS — 18 hand-validated ytId→motif pairs; these
-//      are correct-by-inspection and always win their obj_id slot.
-//   2. inferMotifFromTitle() — deterministic keyword rules applied to
-//      all other dataset videos; they fill the 5 obj_id slots that no
-//      KNOWN video covers, and they appear only after KNOWN entries are
-//      processed so they can never displace a validated mapping.
+// Motif assignment is now fully dataset-derived:
+//   - inferMotifFromTitle() deterministically infers {obj_id, endpoint_id}
+//     from the exact validated source video title.
+//   - selectPrototypeVideos() ranks all dataset videos by quality_score and
+//     dedups by inferred obj_id so each prototype slot still has a concrete
+//     source-video lineage.
 //
 // Selection: quality_score = z_score × retention/100 × keep/100.
-// All 203 videos are ranked; dedup by obj_id; slice(0, N) draws the
-// top-performing anchors. Same dataset → same output (deterministic).
+// All dataset videos are ranked; dedup by inferred obj_id; slice(0, N)
+// draws the highest-performing source-video anchors. Same dataset → same
+// output (deterministic).
 //
 // What remains template-driven after this pass:
 //   - ~1/2 of seeds still come from OBJECT_MOTIFS × scoreMotifCombo
 //   - composeSeed produces the same structure regardless of path
 //   - obj_id/endpoint_id still reference predefined motif atoms
-//   - KNOWN_VIDEO_MOTIFS: 18 hand-curated ytId→motif pairs remain
 //   - inferMotifFromTitle uses keyword rules (heuristic, not learned)
 //   - diversity_bucket on VP seeds is still motif-derived (obj.family)
 
-// Hand-validated ytId → closest {obj_id, endpoint_id} for 18 proven videos.
-// Covers 18 of 23 OBJECT_MOTIFS slots. All other dataset videos get motifs
-// via inferMotifFromTitle(). KNOWN entries always win their obj_id slot.
-const KNOWN_VIDEO_MOTIFS = new Map([
-    ['0B4RW7hTluE', { obj_id: 'plank_hold_hours',         endpoint_id: 'time_to_target'        }],
-    ['8lDFzVul1YA', { obj_id: 'phoneless_fortnight',      endpoint_id: 'experiment_observation' }],
-    ['URrMQS-pm4E', { obj_id: 'cardboard_boat_row',       endpoint_id: 'build_test_outcome'     }],
-    ['UmCT36lJy0c', { obj_id: 'one_food_thirty_days',     endpoint_id: 'transformation_reveal'  }],
-    ['-V-LELEKkX0', { obj_id: 'learn_500_words_day',      endpoint_id: 'exact_count'            }],
-    ['Kw2f_ozAkqk', { obj_id: 'weighted_backpack_march',  endpoint_id: 'exact_distance'         }],
-    ['zoJECFeZ5O8', { obj_id: 'sandbag_carry',            endpoint_id: 'body_quit'              }],
-    ['XfdXalkAdqc', { obj_id: 'two_by_four_bike',         endpoint_id: 'build_test_outcome'     }],
-    ['A1hNcdAUfy8', { obj_id: 'pushups_one_day',          endpoint_id: 'body_quit'              }],
-    ['1k4VQ23I6s0', { obj_id: 'pro_boxer_day',            endpoint_id: 'identity_dayend'        }],
-    ['4T27oxLkGKg', { obj_id: 'stair_climb_repeats',      endpoint_id: 'exact_count'            }],
-    ['uw8FiiU0G_M', { obj_id: 'jigsaw_speedrun',          endpoint_id: 'time_to_target'         }],
-    ['hl8EGBlRFp8', { obj_id: 'origami_cranes',           endpoint_id: 'exact_count'            }],
-    ['PaffT8WDjK4', { obj_id: 'silent_seven_days',        endpoint_id: 'experiment_observation' }],
-    ['fGgEJGfXmeI', { obj_id: 'jump_rope_day',            endpoint_id: 'body_quit'              }],
-    ['CysDxfwsJfE', { obj_id: 'firefighter_shift_shadow', endpoint_id: 'identity_dayend'        }],
-    ['ikGj7hkLUoQ', { obj_id: 'learn_song_from_scratch',  endpoint_id: 'identity_dayend'        }],
-    ['M1aiYur7Qns', { obj_id: 'rubber_band_ball',         endpoint_id: 'exact_count'            }],
-]);
-
 // Deterministic keyword rules to infer the closest obj_id + endpoint_id from
-// a video title. Applied only to dataset videos not in KNOWN_VIDEO_MOTIFS.
-// Rules are ordered most-specific-first; first match wins.
+// a video title. Rules are ordered most-specific-first; first match wins.
 function inferMotifFromTitle(name) {
     const t = (name || '').toLowerCase();
 
@@ -1383,38 +1357,37 @@ function inferMotifFromTitle(name) {
     return { obj_id, endpoint_id };
 }
 
-// Ranks all 203 dataset videos by quality_score (z_score × retention/100 × keep/100).
-// KNOWN entries are processed first so they always claim their obj_id slot before any
-// inferred candidate can; validated mappings are never displaced by inference errors.
-// Inferred videos fill the 5 obj_id slots not covered by KNOWN_VIDEO_MOTIFS.
-// Returns the deduped list sorted by quality_score descending so slice(0, N) always
-// draws the highest-performing anchors. Deterministic: same dataset → same output.
+// Ranks all dataset videos by quality_score (z_score × retention/100 × keep/100).
+// Every prototype assignment is inferred directly from the source video title,
+// then deduped by inferred obj_id so each slot is anchored to a specific
+// validated video instead of a hand-curated ytId map.
 function selectPrototypeVideos(dataset) {
     const scored = (dataset || []).filter(v => v.ytId).map(v => {
         const quality_score = round(
             (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
         );
-        const known = KNOWN_VIDEO_MOTIFS.get(v.ytId);
-        return { video: v, quality_score, isKnown: !!known, motif: known || inferMotifFromTitle(v.name) };
-    });
-
-    // Tier 0: KNOWN (always processed first to win obj_id slots)
-    // Tier 1: inferred (fills uncovered slots only)
-    // Within each tier, quality_score descending.
-    scored.sort((a, b) => {
-        const ta = a.isKnown ? 0 : 1, tb = b.isKnown ? 0 : 1;
-        if (ta !== tb) return ta - tb;
-        return b.quality_score - a.quality_score;
-    });
+        const motif = inferMotifFromTitle(v.name);
+        return {
+            video: v,
+            quality_score,
+            motif,
+            prototype_reason: `title_inference:${motif.obj_id}->${motif.endpoint_id}`,
+        };
+    }).sort((a, b) => b.quality_score - a.quality_score);
 
     const seenObjIds = new Set();
     const results = [];
-    for (const { video, quality_score, motif } of scored) {
-        if (seenObjIds.has(motif.obj_id)) continue;
-        seenObjIds.add(motif.obj_id);
-        results.push({ spec: { ytId: video.ytId, ...motif }, video, quality_score });
+    for (const row of scored) {
+        if (seenObjIds.has(row.motif.obj_id)) continue;
+        seenObjIds.add(row.motif.obj_id);
+        results.push({
+            spec: { ytId: row.video.ytId, ...row.motif },
+            video: row.video,
+            quality_score: row.quality_score,
+            prototype_reason: row.prototype_reason,
+        });
     }
-    return results.sort((a, b) => b.quality_score - a.quality_score);
+    return results;
 }
 
 // Generates seeds derived from specific validated videos in signals-dataset.json.
@@ -1428,7 +1401,7 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const prototypes = selectPrototypeVideos(dataset).slice(0, maxCount);
     const ctx = deriveMotifContext(brief, artifacts);
     const seeds = [];
-    for (const { spec, video, quality_score } of prototypes) {
+    for (const { spec, video, quality_score, prototype_reason } of prototypes) {
         const obj = OBJECT_MOTIFS.find(m => m.id === spec.obj_id);
         const endpoint = ENDPOINT_MOTIFS.find(e => e.id === spec.endpoint_id);
         if (!obj || !endpoint) continue;
@@ -1459,6 +1432,9 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
                 z_score: video.z_score,
                 novelty: video.novelty != null ? video.novelty : null,
                 quality_score,
+                inferred_obj_id: spec.obj_id,
+                inferred_endpoint_id: spec.endpoint_id,
+                prototype_reason,
             };
         }
         seeds.push(seed);
