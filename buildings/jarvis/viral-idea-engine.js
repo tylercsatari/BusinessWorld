@@ -1473,15 +1473,16 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     return seeds;
 }
 
-// Interleave vpSeeds into motifSeeds in 1:1 ratio so video-prototype seeds
-// are distributed throughout the pool at ~half the slots.
-// Pattern: [vp, motif, vp, motif, ...] up to maxCount total.
+// Interleave vpSeeds into motifSeeds in a 2:1 ratio so video-prototype seeds
+// occupy about two-thirds of the pool.
+// Pattern: [vp, vp, motif, vp, vp, motif, ...] up to maxCount total.
 function interleaveSeeds(vpSeeds, motifSeeds, maxCount) {
     if (!vpSeeds.length) return motifSeeds.slice(0, maxCount);
     const result = [];
     let vi = 0, mi = 0;
     while (result.length < maxCount) {
         if (vi < vpSeeds.length) result.push(vpSeeds[vi++]);
+        if (result.length < maxCount && vi < vpSeeds.length) result.push(vpSeeds[vi++]);
         if (result.length < maxCount && mi < motifSeeds.length) result.push(motifSeeds[mi++]);
         if (vi >= vpSeeds.length) {
             while (result.length < maxCount && mi < motifSeeds.length) result.push(motifSeeds[mi++]);
@@ -2906,9 +2907,9 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         }
         return seed;
     });
-    // Interleave ~1-in-2 video-prototype seeds (up from 1-in-3). VP catalog
-    // expanded to 18 entries selected by quality_score from signals-dataset.json.
-    const vpMax = Math.ceil(maxCount / 2);
+    // Interleave ~2-in-3 video-prototype seeds so exact validated videos lead
+    // the pool while motif templates still backfill coverage.
+    const vpMax = Math.ceil(maxCount * 2 / 3);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
     // Remove motif-template seeds whose obj_id is already covered by a VP seed
     // so that each motif has only one representative in the pool (VP wins).
