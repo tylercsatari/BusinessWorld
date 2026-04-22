@@ -95,10 +95,10 @@ function topPostUploadPredictors(answers, limit = 8) {
     const out = [];
     for (const row of raw) {
         if (TARGET_PROXY.has(row.key)) continue;
-        const family = collapseFamily(row.key);
-        if (seen.has(family)) continue;
-        seen.add(family);
-        out.push({ key: row.key, key_pattern: family, family, r_to_views: round(row.r, 4) });
+        const diversityBucket = collapseFamily(row.key);
+        if (seen.has(diversityBucket)) continue;
+        seen.add(diversityBucket);
+        out.push({ key: row.key, key_pattern: diversityBucket, diversity_bucket: diversityBucket, r_to_views: round(row.r, 4) });
         if (out.length >= limit) break;
     }
     return out;
@@ -3431,7 +3431,8 @@ function resolveIndicator(key, ctx, extras) {
         if (def.quantification) row.quantification = def.quantification;
         if (def.quantification_style) row.quantification_style = def.quantification_style;
         if (def.signal && !row.signal) row.signal = def.signal;
-        if (def.family && !row.family) row.family = def.family;
+        if (def.diversity_bucket && !row.diversity_bucket) row.diversity_bucket = def.diversity_bucket;
+        else if (def.family && !row.diversity_bucket) row.diversity_bucket = def.family;
         if (def.layer && !row.layer) row.layer = def.layer;
     }
     return row;

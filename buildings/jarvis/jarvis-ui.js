@@ -5417,7 +5417,7 @@ const JarvisUI = (() => {
                     ${rows.map((r, i) => `
                         <tr style="background:${i % 2 === 0 ? '#060d1a' : 'transparent'}">
                             <td style="padding:5px 8px;font-family:monospace;color:#cbd5e1">${escapeHtml(r.key || '')}</td>
-                            <td style="padding:5px 8px;font-family:monospace;color:#94a3b8">${escapeHtml(r.key_pattern || r.family || '')}</td>
+                            <td style="padding:5px 8px;font-family:monospace;color:#94a3b8">${escapeHtml(r.key_pattern || r.diversity_bucket || '')}</td>
                             <td style="padding:5px 8px;text-align:right;font-family:monospace;color:${rColor(r.r_to_views)};font-weight:600">${r.r_to_views != null ? (+r.r_to_views).toFixed(3) : '—'}</td>
                         </tr>
                     `).join('')}
