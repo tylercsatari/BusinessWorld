@@ -1283,30 +1283,59 @@ const ENDPOINT_MOTIFS = [
 // not because a motif scored well against the artifact lattice in isolation.
 //
 // What remains template-driven after this pass:
-//   - ~2/3 of seeds still come from OBJECT_MOTIFS × scoreMotifCombo
+//   - ~1/2 of seeds still come from OBJECT_MOTIFS × scoreMotifCombo (was ~2/3)
 //   - composeSeed produces the same structure regardless of path
 //   - VP motif/endpoint is the closest structural match, not a
 //     video-native atom (no video-native motif atoms exist yet)
+//   - diversity_bucket on VP seeds is still motif-derived (obj.family),
+//     not a video-native classification — see diversity_bucket_source:'motif'
 
+// Catalog of proven videos → closest (obj_id, endpoint_id) match.
+// Sorted by quality_score (z_score × retention × keep) inside selectPrototypeVideos,
+// so the highest-performing anchors always seed the VP pool first.
+// Each entry covers a distinct obj_id so no two VP seeds duplicate a motif slot.
 const VIDEO_PROTOTYPE_SPECS = [
-    // endurance — 24-hour stationary challenge; timed body-quit pattern
+    // endurance — 24-hour stationary challenge; timed body-quit pattern (quality≈5.3)
     { ytId: '0B4RW7hTluE', obj_id: 'plank_hold_hours',         endpoint_id: 'time_to_target'        },
-    // body_transformation — fat-to-bodybuilder arc; 90-day visible-change reveal
-    { ytId: 'UmCT36lJy0c', obj_id: 'one_food_thirty_days',     endpoint_id: 'transformation_reveal'  },
-    // mystery_experiment — electrified-shoes wear pattern; extreme item + observe
-    { ytId: 'PaffT8WDjK4', obj_id: 'silent_seven_days',        endpoint_id: 'experiment_observation' },
-    // identity — military-training shadow; "can I survive their world" frame
-    { ytId: 'CysDxfwsJfE', obj_id: 'firefighter_shift_shadow', endpoint_id: 'identity_dayend'        },
-    // build_test — can-this-stop-a-bullet; material-resistance experiment (z=9, ret=96%)
+    // mystery_experiment — solitary-confinement isolation arc (quality=7.68)
+    { ytId: '8lDFzVul1YA', obj_id: 'phoneless_fortnight',      endpoint_id: 'experiment_observation' },
+    // build_test — can-this-stop-a-bullet; material-resistance experiment (quality=7.33)
     { ytId: 'URrMQS-pm4E', obj_id: 'cardboard_boat_row',       endpoint_id: 'build_test_outcome'     },
-    // skill_dare — world-record with zero practice; zero-baseline-to-performance arc
+    // body_transformation — fat-to-bodybuilder arc; 90-day visible-change reveal (quality=6.53)
+    { ytId: 'UmCT36lJy0c', obj_id: 'one_food_thirty_days',     endpoint_id: 'transformation_reveal'  },
+    // skill_dare — world-record with zero practice; zero-baseline-to-count arc (quality=6.57)
+    { ytId: '-V-LELEKkX0', obj_id: 'learn_500_words_day',      endpoint_id: 'exact_count'            },
+    // endurance — marathon in banned/unusual shoes; long-distance constraint (quality=6.15)
+    { ytId: 'Kw2f_ozAkqk', obj_id: 'weighted_backpack_march',  endpoint_id: 'exact_distance'         },
+    // endurance — painful extreme footwear worn until body quits (quality=6.13)
+    { ytId: 'zoJECFeZ5O8', obj_id: 'sandbag_carry',            endpoint_id: 'body_quit'              },
+    // build_test — construct unconventional material then test against stress (quality=6.00)
+    { ytId: 'XfdXalkAdqc', obj_id: 'two_by_four_bike',         endpoint_id: 'build_test_outcome'     },
+    // endurance — impossible pushup variant max-rep challenge (quality=5.96)
+    { ytId: 'A1hNcdAUfy8', obj_id: 'pushups_one_day',          endpoint_id: 'body_quit'              },
+    // identity — marathon with shock collar; survive-extreme-constraint frame (quality=5.87)
+    { ytId: '1k4VQ23I6s0', obj_id: 'pro_boxer_day',            endpoint_id: 'identity_dayend'        },
+    // endurance — 100,000-step walking challenge; exact step count (quality=5.82)
+    { ytId: '4T27oxLkGKg', obj_id: 'stair_climb_repeats',      endpoint_id: 'exact_count'            },
+    // cognitive_feat — timed solve-this puzzle challenge (quality=5.81)
+    { ytId: 'uw8FiiU0G_M', obj_id: 'jigsaw_speedrun',          endpoint_id: 'time_to_target'         },
+    // craft_patience — make a real-life crafted replica; exact-count artifact (quality=5.78)
+    { ytId: 'hl8EGBlRFp8', obj_id: 'origami_cranes',           endpoint_id: 'exact_count'            },
+    // mystery_experiment — electrified-shoes wear pattern; extreme item + observe (quality=5.92)
+    { ytId: 'PaffT8WDjK4', obj_id: 'silent_seven_days',        endpoint_id: 'experiment_observation' },
+    // endurance — barefoot 50,000-step challenge; high-rep lower-body to body-quit (quality=5.74)
+    { ytId: 'fGgEJGfXmeI', obj_id: 'jump_rope_day',            endpoint_id: 'body_quit'              },
+    // identity — military-training shadow; "can I survive their world" frame (quality=6.18)
+    { ytId: 'CysDxfwsJfE', obj_id: 'firefighter_shift_shadow', endpoint_id: 'identity_dayend'        },
+    // skill_dare — world-record with zero practice; zero-baseline-to-performance arc (quality=5.82)
     { ytId: 'ikGj7hkLUoQ', obj_id: 'learn_song_from_scratch',  endpoint_id: 'identity_dayend'        },
-    // craft_patience — rare-material craft reveal; build-from-exotic-material pattern
+    // craft_patience — rare-material craft reveal; build-from-exotic-material pattern (quality≈4.9)
     { ytId: 'M1aiYur7Qns', obj_id: 'rubber_band_ball',         endpoint_id: 'exact_count'            },
 ];
 
-// Looks up each VIDEO_PROTOTYPE_SPECS entry in the dataset by ytId and
-// returns enriched objects { spec, video, quality_score }.
+// Looks up each VIDEO_PROTOTYPE_SPECS entry in the dataset by ytId, enriches
+// with quality_score, and returns sorted by quality_score descending so that
+// slice(0, vpMax) always draws the highest-performing anchors first.
 // Deterministic: same dataset → same output. No network calls.
 function selectPrototypeVideos(dataset) {
     const byYtId = new Map((dataset || []).map(v => [v.ytId, v]));
@@ -1318,7 +1347,7 @@ function selectPrototypeVideos(dataset) {
         );
         acc.push({ spec, video, quality_score });
         return acc;
-    }, []);
+    }, []).sort((a, b) => b.quality_score - a.quality_score);
 }
 
 // Generates seeds derived from specific validated videos in signals-dataset.json.
@@ -1351,6 +1380,8 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
         if (seed.synthesis_trace) {
             seed.synthesis_trace.seed_path = 'video_prototype';
             seed.synthesis_trace.diversity_bucket = obj.family || null;
+            // motif-derived: no video-native family taxonomy exists yet
+            seed.synthesis_trace.diversity_bucket_source = 'motif';
             seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
             seed.synthesis_trace.source_video_prototype = {
                 ytId: video.ytId,
@@ -1368,18 +1399,16 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     return seeds;
 }
 
-// Interleave vpSeeds into motifSeeds in ~1:2 ratio so video-prototype seeds
-// are distributed throughout the pool.
-// Pattern: [vp, motif, motif, vp, motif, motif, ...] up to maxCount total.
+// Interleave vpSeeds into motifSeeds in 1:1 ratio so video-prototype seeds
+// are distributed throughout the pool at ~half the slots.
+// Pattern: [vp, motif, vp, motif, ...] up to maxCount total.
 function interleaveSeeds(vpSeeds, motifSeeds, maxCount) {
     if (!vpSeeds.length) return motifSeeds.slice(0, maxCount);
     const result = [];
     let vi = 0, mi = 0;
     while (result.length < maxCount) {
         if (vi < vpSeeds.length) result.push(vpSeeds[vi++]);
-        for (let j = 0; j < 2 && result.length < maxCount && mi < motifSeeds.length; j++) {
-            result.push(motifSeeds[mi++]);
-        }
+        if (result.length < maxCount && mi < motifSeeds.length) result.push(motifSeeds[mi++]);
         if (vi >= vpSeeds.length) {
             while (result.length < maxCount && mi < motifSeeds.length) result.push(motifSeeds[mi++]);
             break;
@@ -2803,9 +2832,9 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         }
         return seed;
     });
-    // Interleave ~1-in-3 video-prototype seeds so final ideas are no longer
-    // purely motif/template-seeded. VP seeds carry source_video_prototype lineage.
-    const vpMax = Math.max(1, Math.ceil(maxCount / 3));
+    // Interleave ~1-in-2 video-prototype seeds (up from 1-in-3). VP catalog
+    // expanded to 18 entries selected by quality_score from signals-dataset.json.
+    const vpMax = Math.ceil(maxCount / 2);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
     // Remove motif-template seeds whose obj_id is already covered by a VP seed
     // so that each motif has only one representative in the pool (VP wins).
