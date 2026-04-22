@@ -551,6 +551,115 @@ const ZYGARNIK_PHRASE_SETS = {
         "actual results not estimates", "real numbers not guesses",
         "i can show you exactly", "hard evidence",
     ],
+
+    // ── Group AB: Expectation-subversion / Knowledge-gap / Momentum / Suspense-bridge ──
+    expectation_subversion: [
+        "you would think", "most people think", "conventional wisdom says",
+        "everyone assumes", "the popular belief is", "what you were taught",
+        "what most people believe", "the common assumption", "you might expect",
+        "logically you would expect", "the obvious answer seems", "at first glance",
+        "on the surface it looks", "most experts say", "the standard advice is",
+        "what they teach you", "the traditional approach", "the old way of thinking",
+        "that is actually backwards", "completely wrong about",
+    ],
+    knowledge_gap: [
+        "most people do not know", "nobody tells you", "what they never teach you",
+        "the secret nobody mentions", "what most miss", "hidden from most",
+        "rarely talked about", "almost no one knows", "kept secret",
+        "what the top people know", "insider knowledge", "the thing they do not tell you",
+        "what i wish i had known", "if only i had known", "the gap nobody fills",
+        "what gets left out", "the missing piece most overlook", "buried in",
+        "not obvious at first", "you have to dig to find",
+    ],
+    momentum_language: [
+        "and then", "suddenly", "at that point", "from there", "everything changed",
+        "that is when", "then it hit me", "next thing i knew", "before i knew it",
+        "one thing led to the next", "and it kept going", "momentum built",
+        "it snowballed", "from that moment", "that was the turning point",
+        "and it got faster", "rapidly", "at a certain point", "without warning",
+        "in no time", "almost immediately", "before long",
+    ],
+    suspense_bridge: [
+        "but here is the thing", "here is where it gets interesting",
+        "that is when i realized", "what nobody expected", "here is the twist",
+        "and this is the part that gets crazy", "but wait", "and then everything changed",
+        "which brings me to the most important part", "this is where it gets good",
+        "now here is the interesting bit", "but here is what surprised me",
+        "this is the part most people skip", "and that is not even the best part",
+        "here is what blew my mind", "which leads to something even bigger",
+        "and here is the kicker", "this is the part nobody expects",
+        "hold on because this gets better", "and the answer will surprise you",
+    ],
+
+    // ── Group AC: Identity-challenge / Before-after-frame / FOMO / Mechanism-reveal ──
+    identity_challenge: [
+        "if you are like most people", "you might be making this mistake",
+        "most creators do this wrong", "are you still doing this",
+        "if you have been struggling with", "you have probably been told",
+        "chances are you have tried", "if this sounds familiar",
+        "you might recognize this", "does this sound like you",
+        "are you guilty of this", "you might be falling into this trap",
+        "this is probably why you", "if you ever wondered why",
+        "i used to be exactly like this", "i made this mistake too",
+        "this was my problem for years", "i understand this because i lived it",
+        "if you watch this and cringe", "you will see yourself in this",
+    ],
+    before_after_frame: [
+        "before i knew this", "i used to", "looking back i can see",
+        "before everything changed", "the old version of me", "i used to think",
+        "i used to believe", "before i figured this out", "before i understood",
+        "in the beginning i", "when i first started", "back when i had no idea",
+        "back then i did not know", "that was before i learned", "a year ago i",
+        "six months ago i", "before this click", "the transformation started when",
+        "i was in your position", "once upon a time",
+    ],
+    fomo_signal: [
+        "while you wait", "others are already", "every day you do not",
+        "you are falling behind", "the ones who acted", "everyone else is doing this",
+        "meanwhile other people", "while most people sit around",
+        "the early movers", "those who started already", "the window is closing",
+        "time sensitive", "do not wait on this", "the longer you wait",
+        "you will wish you had done this sooner", "by the time most people realize",
+        "they are not waiting for", "the gap is widening", "the opportunity will not",
+        "act now before",
+    ],
+    mechanism_reveal: [
+        "the reason this works", "the mechanism is", "what actually drives this",
+        "the underlying cause", "why this actually works", "the root cause",
+        "here is the physics of it", "the real reason behind", "this works because",
+        "it comes down to", "the core of it is", "fundamentally this is about",
+        "at its heart", "stripped down this is", "the engine behind",
+        "what makes this tick", "the why behind the what", "here is the mechanism",
+        "the principle that makes this work", "the science behind",
+    ],
+
+    // ── Group AD: Authority-stack / Narrative-stakes-escalation / Payoff-proximity ──
+    authority_stack: [
+        "after testing with", "from studying", "based on all my data",
+        "having done this myself", "in all my years", "over a decade of",
+        "from all the data i have collected", "after hundreds of", "having worked with",
+        "from my research into", "based on my experiments", "my track record shows",
+        "i have verified this", "i have replicated this", "i have seen this",
+        "across all my testing", "from every test i ran", "every single time",
+        "consistent across", "reproducible results",
+    ],
+    narrative_stakes_escalation: [
+        "the stakes got higher", "it was not just about", "now it was about",
+        "suddenly it mattered more", "the consequences were bigger", "more was on the line",
+        "everything was on the line", "this had real consequences", "this could cost",
+        "the risk was real", "there was no safety net", "point of no return",
+        "could not go back", "all in", "committed completely",
+        "the pressure increased", "i had to figure this out", "failure was not an option",
+        "the clock was ticking", "time was running out",
+    ],
+    payoff_proximity: [
+        "almost there", "getting close", "nearly done", "just a few more",
+        "we are so close", "one more step", "the final piece", "right on the verge",
+        "so close to the answer", "nearly at the end", "just around the corner",
+        "not long now", "almost at the reveal", "coming up very soon",
+        "in just a moment", "stay with me", "keep watching", "almost ready to show you",
+        "the payoff is coming", "you are about to see this",
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
@@ -1760,6 +1869,40 @@ for (const fam of [
         STATIC_KEYS.add(dk);
         STATIC_LAYER[dk] = 'pre';
     }
+}
+
+// ── Group AB/AC/AD windowed phrase-family variants — STATIC_KEYS registration ──────────────────
+// New families added in Groups AB/AC/AD; register their base + windowed variants so
+// the AutoRun system can compute them without NO_DEF failures.
+for (const fam of [
+    // Group AB
+    'expectation_subversion', 'knowledge_gap', 'momentum_language', 'suspense_bridge',
+    // Group AC
+    'identity_challenge', 'before_after_frame', 'fomo_signal', 'mechanism_reveal',
+    // Group AD
+    'authority_stack', 'narrative_stakes_escalation', 'payoff_proximity',
+    // Group AA (challenge_statement / narrative_tension were missing from V2/W2 loop)
+    'challenge_statement', 'narrative_tension',
+]) {
+    const baseCount = `${fam}_count`;
+    const baseDensity = `${fam}_density`;
+    STATIC_KEYS.add(baseCount);   STATIC_LAYER[baseCount]   = 'pre';
+    STATIC_KEYS.add(baseDensity); STATIC_LAYER[baseDensity] = 'pre';
+    for (const w of [2, 3, 5, 8, 10, 15, 20, 25]) {
+        const ck = `${fam}_count_first${w}s`;
+        const dk = `${fam}_density_first${w}s`;
+        STATIC_KEYS.add(ck); STATIC_LAYER[ck] = 'pre';
+        STATIC_KEYS.add(dk); STATIC_LAYER[dk] = 'pre';
+    }
+    // Hook-slice variants
+    const hookCount   = `${fam}_count_hook`;
+    const hookDensity = `${fam}_density_hook`;
+    const frontLoad   = `${fam}_front_load_ratio`;
+    const firstHalf   = `${fam}_count_first_half`;
+    STATIC_KEYS.add(hookCount);   STATIC_LAYER[hookCount]   = 'pre';
+    STATIC_KEYS.add(hookDensity); STATIC_LAYER[hookDensity] = 'pre';
+    STATIC_KEYS.add(frontLoad);   STATIC_LAYER[frontLoad]   = 'pre';
+    STATIC_KEYS.add(firstHalf);   STATIC_LAYER[firstHalf]   = 'pre';
 }
 
 // ── get_metric_definition ────────────────────────────────────────────────
