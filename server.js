@@ -3394,6 +3394,28 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
         return;
     }
 
+    // --- Share workshop (assignee / project filter) ---
+    if (pathname === '/share/workshop' && req.method === 'GET') {
+        try {
+            const assigneeParam = url.searchParams.get('assignee') || '';
+            const projectParam = url.searchParams.get('project') || '';
+            let videos = await dataStore.getAll('videos');
+            const ideas = await dataStore.getAll('ideas');
+            videos = videos.filter(v => v.status === 'workshop');
+            if (projectParam) videos = videos.filter(v => v.project === projectParam);
+            if (assigneeParam === 'none') videos = videos.filter(v => !v.assignedTo);
+            else if (assigneeParam) videos = videos.filter(v => v.assignedTo === assigneeParam);
+            const ideasById = {};
+            for (const i of ideas) ideasById[i.id] = i;
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(renderShareWorkshopPage(videos, assigneeParam, projectParam, ideasById));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(renderSharePage('Error', '<div style="text-align:center;padding:60px 20px;"><h1 style="color:#e74c3c;">Something went wrong</h1></div>'));
+        }
+        return;
+    }
+
     // --- Share ideas list ---
     if (pathname === '/share/ideas' && req.method === 'GET') {
         try {
@@ -4839,6 +4861,69 @@ function renderShareIdeasPage(ideas, statusFilter, catFilter, getStatus) {
 
     bodyHtml += '<div class="share-footer">Powered by BusinessWorld</div></div>';
     return renderSharePage('Ideas — BusinessWorld', bodyHtml);
+}
+
+function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasById) {
+    const dotStyle = `<style>
+        .share-dots { display: inline-flex; gap: 4px; align-items: center; margin-left: 6px; vertical-align: middle; }
+        .share-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #d0cbc2; background: #fff; display: inline-block; }
+        .share-dot.has-context { background: #0984e3; border-color: #0984e3; }
+        .share-dot.dot-script.has-script { background: #e8a020; border-color: #e8a020; }
+        .share-dot.dot-logistics.has-logistics { background: #27ae60; border-color: #27ae60; }
+        .share-dots-legend { font-size: 11px; color: #999; margin: -8px 0 12px; text-align: center; }
+    </style>`;
+
+    let bodyHtml = dotStyle + '<div class="share-container">';
+    bodyHtml += '<div class="share-header"><h1>Workshop</h1></div>';
+
+    bodyHtml += '<div class="share-filter-badges">';
+    if (assigneeFilter === 'none') bodyHtml += '<span class="share-badge">Unassigned</span>';
+    else if (assigneeFilter) bodyHtml += '<span class="share-badge">Assignee: ' + esc(assigneeFilter) + '</span>';
+    if (projectFilter) bodyHtml += '<span class="share-badge">Project: ' + esc(projectFilter) + '</span>';
+    if (!assigneeFilter && !projectFilter) bodyHtml += '<span class="share-badge">All workshop videos</span>';
+    bodyHtml += '<span class="share-badge">' + videos.length + ' in progress</span>';
+    bodyHtml += '</div>';
+
+    bodyHtml += '<div class="share-dots-legend">' +
+        '<span class="share-dot has-context"></span> Context &nbsp; ' +
+        '<span class="share-dot dot-script has-script"></span> Script &nbsp; ' +
+        '<span class="share-dot dot-logistics has-logistics"></span> Logistics' +
+        '</div>';
+
+    if (videos.length === 0) {
+        bodyHtml += '<div class="share-empty">No workshop videos match this filter.</div>';
+    } else {
+        bodyHtml += '<div class="share-ideas-grid">';
+        for (const v of videos) {
+            const idea = v.sourceIdeaId ? ideasById[v.sourceIdeaId] : null;
+            const hasContext = v.context && String(v.context).trim();
+            const hasScript = v.script && String(v.script).trim();
+            const hasLogistics = idea && idea.logistics && Object.keys(idea.logistics).length > 0;
+            const preview = String(v.hook || v.context || '').substring(0, 140);
+            const dotHtml = '<span class="share-dots" title="Context / Script / Logistics">' +
+                '<span class="share-dot' + (hasContext ? ' has-context' : '') + '"></span>' +
+                '<span class="share-dot dot-script' + (hasScript ? ' has-script' : '') + '"></span>' +
+                '<span class="share-dot dot-logistics' + (hasLogistics ? ' has-logistics' : '') + '"></span>' +
+                '</span>';
+
+            // Link to the shared idea page when we have one, otherwise render as a plain card
+            const hasLink = !!(idea && idea.id);
+            const tag = hasLink ? 'a' : 'div';
+            const href = hasLink ? ' href="/share/idea/' + esc(idea.id) + '"' : '';
+            bodyHtml += '<' + tag + ' class="share-idea-card"' + href + '>';
+            bodyHtml += '<div class="share-idea-card-name">' + esc(v.name || 'Untitled') + dotHtml + '</div>';
+            bodyHtml += '<div class="share-idea-card-meta">';
+            if (v.project) bodyHtml += '<span class="share-badge">' + esc(v.project) + '</span>';
+            if (v.assignedTo) bodyHtml += '<span class="share-badge">' + esc(v.assignedTo) + '</span>';
+            bodyHtml += '</div>';
+            if (preview) bodyHtml += '<div class="share-idea-card-preview">' + esc(preview) + (String(v.hook || v.context || '').length > 140 ? '…' : '') + '</div>';
+            bodyHtml += '</' + tag + '>';
+        }
+        bodyHtml += '</div>';
+    }
+
+    bodyHtml += '<div class="share-footer">Powered by BusinessWorld</div></div>';
+    return renderSharePage('Workshop — BusinessWorld', bodyHtml);
 }
 
 // Initialize R2 cloud storage before accepting requests

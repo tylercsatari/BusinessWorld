@@ -9,9 +9,25 @@ const WorkshopUI = (() => {
     let selectedVideo = null;
     let currentPage = 'list';
     let filterProject = '';
+    let filterAssignee = '';
 
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
+
+    function hasContextOn(v) { return !!(v && v.context && v.context.trim().length > 0); }
+    function hasScriptOn(v) { return !!(v && v.script && v.script.trim().length > 0); }
+    function hasLogisticsOn(v) {
+        if (!v || !v.sourceIdeaId || !window.NotesService) return false;
+        const idea = NotesService.getById(v.sourceIdeaId);
+        return !!(idea && idea.logistics && Object.keys(idea.logistics).length > 0);
+    }
+    function dotsHtml(v) {
+        return '<span class="workshop-dots" title="Context / Script / Logistics">' +
+            '<span class="workshop-dot' + (hasContextOn(v) ? ' has-context' : '') + '"></span>' +
+            '<span class="workshop-dot dot-script' + (hasScriptOn(v) ? ' has-script' : '') + '"></span>' +
+            '<span class="workshop-dot dot-logistics' + (hasLogisticsOn(v) ? ' has-logistics' : '') + '"></span>' +
+            '</span>';
+    }
 
     function getWorkerOptions(currentAssignee) {
         const names = (window.EmployeeService ? window.EmployeeService.getNames() : ['You', 'Robin', 'Jordan', 'Tennille']);
@@ -45,6 +61,7 @@ const WorkshopUI = (() => {
                     <div class="workshop-header">
                         <h2>Workshop</h2>
                         <span class="workshop-count" id="workshop-count"></span>
+                        <button class="workshop-share-btn" id="workshop-share-btn" title="Copy share link">Share</button>
                     </div>
                     <div class="workshop-filters" id="workshop-filters"></div>
                     <div class="workshop-items" id="workshop-items">
@@ -69,23 +86,69 @@ const WorkshopUI = (() => {
         if (!el) return;
         const active = VideoService.getByStatus('workshop');
         const usedProjects = [...new Set(active.map(v => v.project).filter(Boolean))].sort();
-        if (usedProjects.length === 0) {
-            el.innerHTML = '';
-            return;
+
+        // Assignee list: roster names that are actually in use, plus any non-roster names found on cards
+        const rosterNames = (window.EmployeeService ? window.EmployeeService.getNames() : []);
+        const usedAssigneesSet = new Set(active.map(v => v.assignedTo || ''));
+        const assigneeList = [];
+        rosterNames.forEach(n => { if (usedAssigneesSet.has(n)) assigneeList.push(n); });
+        [...usedAssigneesSet].forEach(a => {
+            if (a && !rosterNames.includes(a) && !assigneeList.includes(a)) assigneeList.push(a);
+        });
+        const hasUnassigned = usedAssigneesSet.has('');
+
+        let html = '';
+        if (usedProjects.length > 0) {
+            html += `<div class="workshop-filter-row">
+                <button class="workshop-filter-btn ${!filterProject ? 'active' : ''}" data-project="">All (${active.length})</button>
+                ${usedProjects.map(p => {
+                    const count = active.filter(v => v.project === p).length;
+                    return `<button class="workshop-filter-btn ${filterProject === p ? 'active' : ''}" data-project="${escAttr(p)}">${escHtml(p)} (${count})</button>`;
+                }).join('')}
+            </div>`;
         }
-        el.innerHTML = `
-            <button class="workshop-filter-btn ${!filterProject ? 'active' : ''}" data-project="">All (${active.length})</button>
-            ${usedProjects.map(p => {
-                const count = active.filter(v => v.project === p).length;
-                return `<button class="workshop-filter-btn ${filterProject === p ? 'active' : ''}" data-project="${escAttr(p)}">${escHtml(p)} (${count})</button>`;
-            }).join('')}
-        `;
-        el.querySelectorAll('.workshop-filter-btn').forEach(btn => {
+        if (assigneeList.length > 0 || hasUnassigned) {
+            html += `<div class="workshop-filter-row">
+                <span class="workshop-filter-row-label">Assignee:</span>
+                <button class="workshop-filter-btn ${!filterAssignee ? 'active' : ''}" data-assignee="">All</button>
+                ${assigneeList.map(a => {
+                    const count = active.filter(v => v.assignedTo === a).length;
+                    return `<button class="workshop-filter-btn ${filterAssignee === a ? 'active' : ''}" data-assignee="${escAttr(a)}">${escHtml(a)} (${count})</button>`;
+                }).join('')}
+                ${hasUnassigned ? `<button class="workshop-filter-btn ${filterAssignee === 'none' ? 'active' : ''}" data-assignee="none">Unassigned (${active.filter(v => !v.assignedTo).length})</button>` : ''}
+            </div>`;
+        }
+        el.innerHTML = html;
+        el.querySelectorAll('[data-project]').forEach(btn => {
             btn.addEventListener('click', () => {
                 filterProject = btn.dataset.project;
                 renderFilters();
                 renderItems();
             });
+        });
+        el.querySelectorAll('[data-assignee]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterAssignee = btn.dataset.assignee;
+                renderFilters();
+                renderItems();
+            });
+        });
+    }
+
+    function bindShareButton() {
+        const btn = document.getElementById('workshop-share-btn');
+        if (!btn || btn._bound) return;
+        btn._bound = true;
+        btn.addEventListener('click', () => {
+            const params = new URLSearchParams();
+            if (filterAssignee) params.set('assignee', filterAssignee);
+            if (filterProject) params.set('project', filterProject);
+            const qs = params.toString();
+            const shareUrl = window.location.origin + '/share/workshop' + (qs ? '?' + qs : '');
+            const original = btn.textContent;
+            navigator.clipboard.writeText(shareUrl)
+                .then(() => { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = original; }, 1500); })
+                .catch(() => { btn.textContent = 'Copy failed'; setTimeout(() => { btn.textContent = original; }, 1500); });
         });
     }
 
@@ -96,6 +159,10 @@ const WorkshopUI = (() => {
         let active = VideoService.getByStatus('workshop');
         if (countEl) countEl.textContent = `${active.length} in progress`;
         if (filterProject) active = active.filter(v => v.project === filterProject);
+        if (filterAssignee === 'none') active = active.filter(v => !v.assignedTo);
+        else if (filterAssignee) active = active.filter(v => v.assignedTo === filterAssignee);
+
+        bindShareButton();
 
         if (active.length === 0) {
             el.innerHTML = '<div class="workshop-empty">Nothing in the workshop. Move ideas from the Incubator to start working!</div>';
@@ -109,7 +176,7 @@ const WorkshopUI = (() => {
                     <canvas class="workshop-egg-canvas" data-project="${escAttr(v.project)}" width="100" height="124"></canvas>
                 </div>
                 <div class="workshop-card-info">
-                    <div class="workshop-card-name">${escHtml(v.name)}</div>
+                    <div class="workshop-card-name">${escHtml(v.name)}${dotsHtml(v)}</div>
                     <div class="workshop-card-meta">
                         <span class="workshop-card-project">${projBadge}</span>
                         <span class="workshop-card-worker">
@@ -187,7 +254,10 @@ const WorkshopUI = (() => {
                     ${assigneeAvatarHtml}
                 </div>
                 <div class="workshop-detail-fields">
-                    ${sourceIdeaHtml}
+                    <div class="workshop-detail-summary">
+                        ${sourceIdeaHtml}
+                        ${dotsHtml(v)}
+                    </div>
                     <label>Video Name</label>
                     <input type="text" id="workshop-name" value="${escAttr(v.name)}">
                     <label>Project</label>
@@ -342,6 +412,7 @@ const WorkshopUI = (() => {
             selectedVideo = null;
             currentPage = 'list';
             filterProject = '';
+            filterAssignee = '';
         }
     };
 })();
