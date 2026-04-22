@@ -169,19 +169,18 @@ const WorkshopUI = (() => {
             return;
         }
         el.innerHTML = active.map(v => {
-            const projBadge = window.EggRenderer ? window.EggRenderer.projectBadgeHtml(v.project) : escHtml(v.project || 'No project');
+            const preview = (v.hook || v.context || '').trim();
             return `
             <div class="workshop-card" data-id="${v.id}">
                 <div class="workshop-card-egg">
                     <canvas class="workshop-egg-canvas" data-project="${escAttr(v.project)}" width="100" height="124"></canvas>
                 </div>
                 <div class="workshop-card-info">
-                    <div class="workshop-card-name">${escHtml(v.name)}${dotsHtml(v)}</div>
+                    <div class="workshop-card-name"><span class="workshop-card-name-text">${escHtml(v.name)}</span>${dotsHtml(v)}</div>
+                    ${preview ? `<div class="workshop-card-preview">${escHtml(preview)}</div>` : ''}
                     <div class="workshop-card-meta">
-                        <span class="workshop-card-project">${projBadge}</span>
-                        <span class="workshop-card-worker">
-                            ${v.assignedTo ? `<canvas class="workshop-avatar-canvas" data-worker="${escAttr(v.assignedTo)}" width="48" height="48"></canvas>` : ''}
-                        </span>
+                        ${v.project ? `<span class="workshop-card-project">${escHtml(v.project)}</span>` : ''}
+                        ${v.assignedTo ? `<span class="workshop-card-worker">${escHtml(v.assignedTo)}</span>` : ''}
                     </div>
                 </div>
             </div>`;
