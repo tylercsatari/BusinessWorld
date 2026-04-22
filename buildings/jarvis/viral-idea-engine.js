@@ -2861,6 +2861,18 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
 }
 
 function synthesizeSeeds(brief, artifacts, maxCount = 12) {
+    // Preferred path: build the full pool from specific validated videos.
+    // Legacy motif scoring remains only as a dataset-missing fallback.
+    const vpMax = Math.ceil(maxCount * 2 / 3);
+    const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
+    const vpYtIds = new Set(
+        vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.source_video_prototype && s.synthesis_trace.source_video_prototype.ytId).filter(Boolean)
+    );
+    const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, maxCount, vpYtIds);
+    if (vpSeeds.length || secondarySeeds.length) {
+        return interleaveSeeds(vpSeeds, secondarySeeds, maxCount);
+    }
+
     const ctx = deriveMotifContext(brief, artifacts);
     const combos = [];
     for (const obj of OBJECT_MOTIFS) {
@@ -2945,17 +2957,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
         }
         return seed;
     });
-    // Interleave ~2-in-3 prototype seeds so exact validated videos lead the
-    // pool, then backfill with additional validated videos instead of
-    // motif-template slots.
-    const vpMax = Math.ceil(maxCount * 2 / 3);
-    const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
-    const vpYtIds = new Set(
-        vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.source_video_prototype && s.synthesis_trace.source_video_prototype.ytId).filter(Boolean)
-    );
-    const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, maxCount, vpYtIds);
-    const fallbackSeeds = secondarySeeds.length ? secondarySeeds : motifSeeds;
-    return interleaveSeeds(vpSeeds, fallbackSeeds, maxCount);
+    return motifSeeds;
 }
 
 
