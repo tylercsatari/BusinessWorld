@@ -5875,7 +5875,7 @@ const JarvisUI = (() => {
         const fmtViews = (v) => v == null ? '?' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1000) + 'K';
         const familyNote = sourceTitle
             ? `source-video concepts from ${escapeHtml(sourceTitle)}`
-            : (family ? `${escapeHtml(family)}-family concepts` : 'concept overlap');
+            : 'title and premise overlap';
         const cards = anchors.map(a => `
             <div style="background:#0a1628;border-radius:5px;padding:8px 10px;border-left:2px solid ${tierColor(a.match_tier || 4)}">
                 <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:3px">

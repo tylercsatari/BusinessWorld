@@ -4176,28 +4176,6 @@ const _ANCHOR_STOP_WORDS = new Set([
     'some', 'have', 'after',
 ]);
 
-// Family → concept tokens likely present in similar video names
-const _FAMILY_CONCEPT_TOKENS = {
-    endurance:           ['push', 'pushup', 'squat', 'plank', 'exercise', 'workout',
-                          'burpee', 'pullup', 'challenge', 'reps', 'hundred', 'thousand'],
-    build_test:          ['build', 'built', 'made', 'make', 'construct', 'cardboard',
-                          'wood', 'boat', 'bike', 'craft', 'weld', 'assembled'],
-    body_transformation: ['diet', 'food', 'eating', 'weight', 'calories', 'potato',
-                          'fast', 'fasting', 'transformation', 'days', 'month'],
-    craft_patience:      ['origami', 'fold', 'paper', 'draw', 'drawing', 'portrait',
-                          'coin', 'rubber', 'stack', 'band', 'craft', 'jigsaw'],
-    cognitive_feat:      ['memorize', 'learn', 'read', 'book', 'language', 'study',
-                          'recite', 'instrument', 'song', 'memory'],
-    mystery_experiment:  ['experiment', 'silent', 'phone', 'stranger', 'happens',
-                          'asked', 'guess', 'solve', 'puzzle', 'test'],
-    identity:            ['shadow', 'live', 'person', 'routine', 'follow', 'pretend',
-                          'became', 'firefighter', 'boxer', 'week'],
-    skill_dare:          ['learn', 'first', 'time', 'never', 'skill', 'language',
-                          'tried', 'attempt'],
-    repetition_outreach: ['write', 'letter', 'send', 'message', 'stranger', 'wrote'],
-    repetition_patience: ['daily', 'streak', 'weeks', 'months', 'each', 'every', 'days'],
-};
-
 function _anchorTokenize(text) {
     return String(text || '').toLowerCase()
         .split(/[\s\-_,\.!?'"()/\\:;]+/)
@@ -4205,15 +4183,13 @@ function _anchorTokenize(text) {
 }
 
 // Returns up to 3 validated video anchors sorted by match quality then metric quality.
-// match_tier: 1=strong title overlap, 2=moderate overlap, 3=concept/family match, 4=metric anchor
+// match_tier: 1=strong title overlap, 2=moderate overlap, 3=source/premise overlap, 4=metric anchor
 function matchValidatedVideoAnchors(idea, seed, dataset) {
     if (!dataset || !Array.isArray(dataset) || !dataset.length) return [];
 
-    const family = (seed && seed.synthesis_trace && seed.synthesis_trace.diversity_bucket) || '';
     const sourceVideo = (seed && seed.synthesis_trace && seed.synthesis_trace.source_video_prototype) || null;
     const ideaTitleTokens = new Set(_anchorTokenize(idea.title || ''));
     const ideaLoglineTokens = new Set(_anchorTokenize((idea.concept && idea.concept.logline) || idea.one_line_premise || ''));
-    const familyConcepts = _FAMILY_CONCEPT_TOKENS[family] || [];
     const sourceConcepts = sourceVideo ? _anchorTokenize(sourceVideo.name || '') : [];
 
     const scored = dataset.map(video => {
@@ -4224,22 +4200,20 @@ function matchValidatedVideoAnchors(idea, seed, dataset) {
         const titleOverlap = [...ideaTitleTokens].filter(t => videoTokens.has(t));
         const loglineOverlap = [...ideaLoglineTokens].filter(t => videoTokens.has(t) && !ideaTitleTokens.has(t));
         const sourceMatched = sourceConcepts.filter(t => videoNameLower.includes(t));
-        const familyMatched = familyConcepts.filter(t => videoNameLower.includes(t));
 
         const matchTier =
             exactSourceMatch ? 1 :
             titleOverlap.length >= 2 ? 1 :
             titleOverlap.length >= 1 ? 2 :
             sourceMatched.length >= 2 ? 2 :
-            familyMatched.length >= 2 ? 2 :
-            loglineOverlap.length >= 1 || sourceMatched.length >= 1 || familyMatched.length >= 1 ? 3 : 4;
+            loglineOverlap.length >= 1 || sourceMatched.length >= 1 ? 3 : 4;
 
         // Quality score: z_score and keep_rate are the primary per-video signals in the dataset
         const qualityScore =
             (video.z_score || 0) * 0.4 +
             (video.keep || 0) * 0.03 +
             Math.min(1, Math.log10(Math.max(1, video.views || 1)) / 7) * 2;
-        const textBoost = titleOverlap.length * 3 + loglineOverlap.length + sourceMatched.length * 2 + familyMatched.length * 2 + (exactSourceMatch ? 6 : 0);
+        const textBoost = titleOverlap.length * 3 + loglineOverlap.length + sourceMatched.length * 2 + (exactSourceMatch ? 6 : 0);
         const score = ([0, 12, 8, 4, 0][matchTier] || 0) + textBoost + qualityScore;
 
         const reasons = [];
@@ -4248,7 +4222,6 @@ function matchValidatedVideoAnchors(idea, seed, dataset) {
         if (titleOverlap.length) reasons.push(`title match: ${titleOverlap.slice(0, 3).join(', ')}`);
         if (loglineOverlap.length) reasons.push(`premise match: ${loglineOverlap.slice(0, 2).join(', ')}`);
         if (sourceMatched.length) reasons.push(`source-video overlap: ${sourceMatched.slice(0, 3).join(', ')}`);
-        if (familyMatched.length) reasons.push(`${family} concept: ${familyMatched.slice(0, 3).join(', ')}`);
         const vFmt = (v) => v == null ? '?' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1000) + 'K';
         reasons.push(`keep=${video.keep != null ? video.keep + '%' : '?'}, z=${video.z_score != null ? video.z_score : '?'}, ${vFmt(video.views)} views`);
 
