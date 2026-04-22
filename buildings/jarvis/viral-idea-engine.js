@@ -1289,7 +1289,8 @@ const ENDPOINT_MOTIFS = [
 //   - composeSeed produces the same structure regardless of path
 //   - obj_id/endpoint_id still reference predefined motif atoms
 //   - inferMotifFromTitle uses keyword rules (heuristic, not learned)
-//   - diversity_bucket on VP seeds is still motif-derived (obj.family)
+//   - VP seeds still use motif atoms internally, but downstream diversity now
+//     buckets them by exact source video instead of motif family
 
 // Deterministic keyword rules to infer the closest obj_id + endpoint_id from
 // a video title. Rules are ordered most-specific-first; first match wins.
@@ -1419,9 +1420,8 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
         });
         if (seed.synthesis_trace) {
             seed.synthesis_trace.seed_path = 'video_prototype';
-            seed.synthesis_trace.diversity_bucket = obj.family || null;
-            // motif-derived: no video-native family taxonomy exists yet
-            seed.synthesis_trace.diversity_bucket_source = 'motif';
+            seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.family || null);
+            seed.synthesis_trace.diversity_bucket_source = video.ytId ? 'source_video' : 'motif';
             seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
             seed.synthesis_trace.source_video_prototype = {
                 ytId: video.ytId,
