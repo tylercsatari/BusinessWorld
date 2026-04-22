@@ -2952,8 +2952,9 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
                 nearby_rejected: myAlternates,
                 note: 'Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill.',
             };
-            // Template path: this seed came from OBJECT_MOTIFS × ENDPOINT_MOTIFS scoring.
-            seed.synthesis_trace.seed_path = 'motif_template';
+            // Legacy fallback path: only used when source-video seeds are unavailable.
+            seed.synthesis_trace.seed_path = 'legacy_motif_fallback';
+            seed.synthesis_trace.fallback_reason = 'source_video_seed_pool_unavailable';
         }
         return seed;
     });
