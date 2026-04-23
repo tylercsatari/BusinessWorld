@@ -1285,9 +1285,9 @@ const ENDPOINT_MOTIFS = [
 // Motif assignment is now fully dataset-derived:
 //   - inferMotifFromTitle() deterministically infers {obj_id, endpoint_id}
 //     from the exact validated source video title.
-//   - selectPrototypeVideos() ranks all dataset videos by quality_score and
-//     dedups by inferred obj_id so each prototype slot still has a concrete
-//     source-video lineage.
+//   - selectPrototypeVideos() ranks exact dataset videos by quality_score.
+//     No obj_id/category dedup is allowed in prototype selection anymore,
+//     so every retained slot is chosen as a concrete validated video first.
 //
 // Selection: quality_score = z_score × retention/100 × keep/100.
 // All dataset videos are ranked; dedup by inferred obj_id; slice(0, N)
@@ -1401,8 +1401,8 @@ function inferMotifFromVideo(video) {
 
 // Ranks all dataset videos by quality_score (z_score × retention/100 × keep/100).
 // Every prototype assignment is inferred directly from the source video title,
-// then deduped by inferred obj_id so each slot is anchored to a specific
-// validated video instead of a hand-curated ytId map.
+// but selection is done on the exact source video rows themselves, not an
+// inferred obj_id/category surrogate.
 function selectPrototypeVideos(dataset) {
     const scored = (dataset || []).filter(v => v.ytId).map(v => {
         const quality_score = round(
@@ -1410,32 +1410,25 @@ function selectPrototypeVideos(dataset) {
         );
         const motif = inferMotifFromVideo(v);
         return {
+            spec: { ytId: v.ytId, ...motif },
             video: v,
             quality_score,
-            motif,
-            prototype_reason: `${motif.endpoint_source}:${motif.endpoint_id};${motif.obj_source}:${motif.obj_id}`,
+            source_selection_reason: `${motif.endpoint_source}:${motif.endpoint_id};${motif.obj_source}:${motif.obj_id}`,
         };
     }).sort((a, b) => b.quality_score - a.quality_score);
 
-    const seenObjIds = new Set();
-    const results = [];
-    for (const row of scored) {
-        if (seenObjIds.has(row.motif.obj_id)) continue;
-        seenObjIds.add(row.motif.obj_id);
-        results.push({
-            spec: { ytId: row.video.ytId, ...row.motif },
-            video: row.video,
-            quality_score: row.quality_score,
-            prototype_reason: row.prototype_reason,
-        });
-    }
-    return results;
+    const seenYtIds = new Set();
+    return scored.filter(row => {
+        if (seenYtIds.has(row.video.ytId)) return false;
+        seenYtIds.add(row.video.ytId);
+        return true;
+    });
 }
 
 // Compose one source-video-derived seed. This keeps the existing motif/endpoint
 // structure for compatibility, but the seed is explicitly grounded in a real
 // validated video instead of a synthetic template slot.
-function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, rank, seedPath, sourceKind) {
+function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, rank, seedPath, sourceRole) {
     const obj = OBJECT_MOTIFS.find(m => m.id === spec.obj_id);
     const endpoint = ENDPOINT_MOTIFS.find(e => e.id === spec.endpoint_id);
     if (!obj || !endpoint) return null;
@@ -1465,11 +1458,10 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
             z_score: video.z_score,
             novelty: video.novelty != null ? video.novelty : null,
             quality_score,
-            source_kind: sourceKind,
-            source_video_role: sourceKind,
+            source_video_role: sourceRole,
             inferred_obj_id: spec.obj_id,
             inferred_endpoint_id: spec.endpoint_id,
-            prototype_reason: source_reason,
+            source_selection_reason: source_reason,
         };
         seed.synthesis_trace.source_video_lineage = lineage;
     }
@@ -1477,7 +1469,7 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
 }
 
 // Generates seeds derived from specific validated videos in signals-dataset.json.
-// Each seed carries synthesis_trace.seed_path='video_prototype' and
+// Each seed carries synthesis_trace.seed_path='source_video_primary' and
 // synthesis_trace.source_video_lineage with the original video's metrics.
 function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const dataset = loadJsonSafe('signals-dataset.json');
@@ -1485,8 +1477,8 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const prototypes = selectPrototypeVideos(dataset).slice(0, maxCount);
     const ctx = deriveMotifContext(brief, artifacts);
     const seeds = [];
-    for (const { spec, video, quality_score, prototype_reason } of prototypes) {
-        const seed = buildVideoDerivedSeed(spec, video, quality_score, prototype_reason, ctx, seeds.length + 1, 'video_prototype', 'prototype');
+    for (const { spec, video, quality_score, source_selection_reason } of prototypes) {
+        const seed = buildVideoDerivedSeed(spec, video, quality_score, source_selection_reason, ctx, seeds.length + 1, 'source_video_primary', 'primary');
         if (seed) seeds.push(seed);
     }
     return seeds;
@@ -1509,7 +1501,7 @@ function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYt
                 spec: { ytId: v.ytId, ...spec },
                 video: v,
                 quality_score,
-                source_reason: `${spec.endpoint_source}:${spec.endpoint_id};${spec.obj_source}:${spec.obj_id}`,
+                source_selection_reason: `${spec.endpoint_source}:${spec.endpoint_id};${spec.obj_source}:${spec.obj_id}`,
             };
         })
         .sort((a, b) => b.quality_score - a.quality_score)
@@ -1517,7 +1509,7 @@ function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYt
 
     const seeds = [];
     for (const row of candidates) {
-        const seed = buildVideoDerivedSeed(row.spec, row.video, row.quality_score, row.source_reason, ctx, seeds.length + 1, 'validated_video', 'validated_video');
+        const seed = buildVideoDerivedSeed(row.spec, row.video, row.quality_score, row.source_selection_reason, ctx, seeds.length + 1, 'source_video_secondary', 'secondary');
         if (seed) seeds.push(seed);
         if (seeds.length >= maxCount) break;
     }
@@ -4312,7 +4304,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     // take more than ~2 of the top `count` slots when other buckets remain.
     const scored = ideas.map(idea => {
         const seedPath = idea.synthesis_trace && idea.synthesis_trace.seed_path;
-        const vpRankBonus = seedPath === 'video_prototype' ? 0.35 : 0;
+        const vpRankBonus = seedPath === 'source_video_primary' ? 0.35 : 0;
         return {
             idea,
             // Diversity-bucket axis for final ranking. Active seeds now write
