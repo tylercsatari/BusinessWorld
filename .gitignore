@@ -29,3 +29,4 @@ buildings/jarvis/experiments_log_compact.json
 # Large runtime files (>50MB, canonical storage is R2)
 buildings/jarvis/graph.json
 buildings/jarvis/watch-sync.log
+buildings/jarvis/autorun_overnight.log
