@@ -1,10 +1,10 @@
 {
   "active": false,
-  "run_id": "auto_20260423020101.",
+  "run_id": "auto_20260423020445.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-23T02:01:01.830Z",
-  "updated_at": "2026-04-23T02:02:51.959Z",
-  "finished_at": "2026-04-23T02:02:51.959Z",
+  "started_at": "2026-04-23T02:04:45.375Z",
+  "updated_at": "2026-04-23T02:06:51.226Z",
+  "finished_at": "2026-04-23T02:06:51.226Z",
   "requested_iterations": 3000,
   "attempted": 500,
   "completed": 0,
@@ -22,140 +22,140 @@
       "key": "mystery_setup_count_first5s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.320Z"
+      "ts": "2026-04-23T02:06:49.557Z"
     },
     {
       "type": "failed",
       "key": "mystery_setup_count_first5s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.345Z"
+      "ts": "2026-04-23T02:06:49.583Z"
     },
     {
       "type": "failed",
       "key": "mystery_setup_count_first10s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.371Z"
+      "ts": "2026-04-23T02:06:49.608Z"
     },
     {
       "type": "failed",
       "key": "mystery_setup_count_first10s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.397Z"
+      "ts": "2026-04-23T02:06:49.634Z"
     },
     {
       "type": "failed",
       "key": "mystery_setup_count_first15s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.423Z"
+      "ts": "2026-04-23T02:06:49.662Z"
     },
     {
       "type": "failed",
       "key": "mystery_setup_count_first15s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.449Z"
+      "ts": "2026-04-23T02:06:49.688Z"
     },
     {
       "type": "failed",
       "key": "mystery_setup_count_first20s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.476Z"
+      "ts": "2026-04-23T02:06:49.716Z"
     },
     {
       "type": "failed",
       "key": "mystery_setup_count_first20s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.504Z"
+      "ts": "2026-04-23T02:06:49.743Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first3s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.528Z"
+      "ts": "2026-04-23T02:06:49.768Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first3s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.553Z"
+      "ts": "2026-04-23T02:06:49.793Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first5s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.577Z"
+      "ts": "2026-04-23T02:06:49.822Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first5s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.603Z"
+      "ts": "2026-04-23T02:06:49.850Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first10s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.628Z"
+      "ts": "2026-04-23T02:06:49.880Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first10s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.653Z"
+      "ts": "2026-04-23T02:06:49.909Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first15s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.679Z"
+      "ts": "2026-04-23T02:06:49.938Z"
     },
     {
       "type": "failed",
       "key": "viewer_stakes_count_first15s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.706Z"
+      "ts": "2026-04-23T02:06:49.967Z"
     },
     {
       "type": "failed",
       "key": "loss_framing_count_first5s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.731Z"
+      "ts": "2026-04-23T02:06:49.994Z"
     },
     {
       "type": "failed",
       "key": "loss_framing_count_first5s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.756Z"
+      "ts": "2026-04-23T02:06:50.020Z"
     },
     {
       "type": "failed",
       "key": "loss_framing_count_first10s_x_early_curiosity_escalation_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.782Z"
+      "ts": "2026-04-23T02:06:50.047Z"
     },
     {
       "type": "failed",
       "key": "loss_framing_count_first10s_x_revelation_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T02:02:50.810Z"
+      "ts": "2026-04-23T02:06:50.073Z"
     }
   ],
   "pre_attempted": 452,
