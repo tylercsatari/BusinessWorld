@@ -56,7 +56,7 @@ function loadAllArtifacts() {
         components: loadJsonSafe('components.json'),
         mechanisms: loadJsonSafe('mechanisms.json'),
         questions: loadJsonSafe('research_questions.json'),
-        retentionPatterns: loadJsonSafe('retention-patterns.json'),
+        retentionPatterns: normalizeLegacyRetentionPatterns(loadJsonSafe('retention-patterns.json')),
         wordImpact: loadJsonSafe('word-retention-impact.json'),
         videoScorecards: loadJsonSafe('video-scorecards.json'),
         predictionModel: loadJsonSafe('prediction-model.json'),
@@ -82,6 +82,17 @@ function normalizeLegacyBucketFields(data) {
 
 function normalizeCandidateProposals(data) {
     return normalizeLegacyBucketFields(data);
+}
+
+function normalizeLegacyRetentionPatterns(data) {
+    if (!data || typeof data !== 'object') return data;
+    const out = Object.assign({}, data);
+    const wave7 = Object.assign({}, out.wave7_new_signals || {});
+    if (!wave7.progression_patterns && wave7.quartile_templates) {
+        wave7.progression_patterns = wave7.quartile_templates;
+    }
+    out.wave7_new_signals = wave7;
+    return out;
 }
 
 function normalizeLegacySignalKind(data) {
@@ -326,7 +337,7 @@ function buildArcStructure(rp) {
             Q1_bottom: quartile.Q1_bottom,
             key_insight: quartile.key_insight,
         },
-        progression_patterns: wave7.quartile_templates || null,
+        progression_patterns: wave7.progression_patterns || null,
         best_after_worst: wave9.best_after_worst,
         nadir_placement_pct_target: wave9.worst_moment_timing && wave9.worst_moment_timing.design_rule,
         divergence_point_pct: wave9.divergence_point && wave9.divergence_point.first_significant,
@@ -620,16 +631,7 @@ function compress(artifacts) {
             candidate_proposal_diversity_buckets: getCandidateProposalDiversityBuckets(candidateProposals).length,
             // Active synthesis traces now use only source-video-led diversity_bucket naming.
             synthesis_trace_primary_diversity_axis: 'diversity_bucket',
-            // Single back-compat anchor for the per-idea keep_rate top_indicators
-            // `legacy_evidence_type: 'wave7.quartile_templates'` alias. Primary is
-            // `evidence_type: 'wave7.progression_patterns'`; the legacy alias is no
-            // longer repeated inside every idea's synthesis_trace.top_indicators.
-            // This entry preserves searchability for callers grepping viral-ideas.json
-            // for the old wave7.quartile_templates name.
-            keep_rate_top_indicators_legacy_evidence_type_alias: {
-                primary: 'wave7.progression_patterns',
-                legacy_removed_per_idea: 'wave7.quartile_templates',
-            },
+            keep_rate_top_indicators_primary_evidence_type: 'wave7.progression_patterns',
             mechanism_indicator_links: mechanismIndicatorLinks && mechanismIndicatorLinks.n_links,
             retention_pattern_waves: retentionPatterns && retentionPatterns.analysis_waves,
             word_retention_scored: wordImpact ? Object.keys(wordImpact).length : 0,
