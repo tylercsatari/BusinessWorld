@@ -1,10 +1,10 @@
 {
   "active": false,
-  "run_id": "auto_20260423063903.",
+  "run_id": "auto_20260423064335.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-23T06:39:03.826Z",
-  "updated_at": "2026-04-23T06:39:07.543Z",
-  "finished_at": "2026-04-23T06:39:07.543Z",
+  "started_at": "2026-04-23T06:43:35.791Z",
+  "updated_at": "2026-04-23T06:43:39.588Z",
+  "finished_at": "2026-04-23T06:43:39.588Z",
   "requested_iterations": 3000,
   "attempted": 11,
   "completed": 0,
@@ -22,77 +22,77 @@
       "key": "challenge_to_resolution_gap_pct_x_cliffhanger_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.385Z"
+      "ts": "2026-04-23T06:43:37.391Z"
     },
     {
       "type": "failed",
       "key": "challenge_to_resolution_gap_pct_x_revelation_to_cliffhanger_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.430Z"
+      "ts": "2026-04-23T06:43:37.438Z"
     },
     {
       "type": "failed",
       "key": "cliffhanger_front_load_ratio_x_curiosity_to_closure_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.477Z"
+      "ts": "2026-04-23T06:43:37.485Z"
     },
     {
       "type": "failed",
       "key": "cliffhanger_front_load_ratio_x_payoff_tease_to_delivery_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.527Z"
+      "ts": "2026-04-23T06:43:37.536Z"
     },
     {
       "type": "failed",
       "key": "curiosity_to_closure_ratio_x_revelation_to_cliffhanger_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.567Z"
+      "ts": "2026-04-23T06:43:37.577Z"
     },
     {
       "type": "failed",
       "key": "payoff_position_pct_x_revelation_to_cliffhanger_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.595Z"
+      "ts": "2026-04-23T06:43:37.605Z"
     },
     {
       "type": "failed",
       "key": "revelation_to_cliffhanger_ratio_x_payoff_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.622Z"
+      "ts": "2026-04-23T06:43:37.632Z"
     },
     {
       "type": "failed",
       "key": "payoff_position_pct_x_credibility_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.638Z"
+      "ts": "2026-04-23T06:43:37.649Z"
     },
     {
       "type": "failed",
       "key": "credibility_signal_position_pct_x_payoff_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.655Z"
+      "ts": "2026-04-23T06:43:37.665Z"
     },
     {
       "type": "failed",
       "key": "revelation_to_cliffhanger_ratio_x_credibility_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.688Z"
+      "ts": "2026-04-23T06:43:37.699Z"
     },
     {
       "type": "failed",
       "key": "credibility_signal_position_pct_x_revelation_to_cliffhanger_ratio",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-23T06:39:05.720Z"
+      "ts": "2026-04-23T06:43:37.732Z"
     }
   ],
   "pre_attempted": 11,
