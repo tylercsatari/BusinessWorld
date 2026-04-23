@@ -6233,7 +6233,7 @@ const JarvisUI = (() => {
                     </div>` : ''}
                 ${svp ? `
                     <div style="background:#0a1a0a;border-left:2px solid #4ade80;border-radius:4px;padding:7px 8px;margin-bottom:4px">
-                        <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#4ade80;margin-bottom:3px">▶ ${escapeHtml(svp.source_kind === 'validated_video' ? 'Source validated video' : 'Source video prototype')}</div>
+                        <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#4ade80;margin-bottom:3px">▶ ${escapeHtml(svp.source_kind === 'validated_video' ? 'Source validated video' : 'Prototype-ranked validated video')}</div>
                         <div style="font-size:10px;color:#cbd5e1;line-height:1.6">
                             <b style="color:#f1f5f9">${escapeHtml(svp.name || '')}</b>
                             <span style="color:#64748b;font-size:9px;margin-left:6px">ytId: <code style="color:#94a3b8">${escapeHtml(svp.ytId || '')}</code></span>

@@ -1450,7 +1450,7 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
     }, {
         score: scored.visual_legibility_score,
         drivers: scored.visual_legibility_drivers,
-    });
+    }, video);
     if (seed.synthesis_trace) {
         seed.synthesis_trace.seed_path = seedPath;
         seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.diversity_bucket || null);
@@ -2375,6 +2375,18 @@ function pickFirstWord(obj, ctx) {
     return ctx.bestFirstWords[0] || 'go';
 }
 
+function deriveOpeningSpeechRate(obj, sourceVideo) {
+    const duration = Number(sourceVideo && sourceVideo.duration_s) || 0;
+    const keep = Number(sourceVideo && sourceVideo.keep) || 0;
+    const retention = Number(sourceVideo && sourceVideo.retention) || 0;
+    const titleLen = String((sourceVideo && sourceVideo.name) || obj.id || '').length;
+    const hashNudge = ((titleLen % 5) - 2) * 0.01;
+    const durationAdj = duration > 0 ? clamp((42 - duration) / 200, -0.08, 0.08) : 0;
+    const keepAdj = keep > 0 ? clamp((keep - 74) / 150, -0.05, 0.05) : 0;
+    const retentionAdj = retention > 0 ? clamp((retention - 78) / 220, -0.04, 0.04) : 0;
+    return round(clamp(2.58 + durationAdj + keepAdj + retentionAdj + hashNudge, 2.45, 2.72), 2);
+}
+
 function capitalize(s) {
     return String(s || '').replace(/(^|\s|-)([a-z])/g, (_, a, b) => a + b.toUpperCase());
 }
@@ -2448,7 +2460,7 @@ function composeTitle(obj, endpoint, scale, bodyPart) {
     return core;
 }
 
-function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creatorFit, proofClarity, visualLegibility) {
+function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creatorFit, proofClarity, visualLegibility, sourceVideo = null) {
     const scale = pickScale(obj);
     const bodyPart = obj.body_part_phrase || (obj.body_parts && obj.body_parts[0]) || 'body';
     const title = composeTitle(obj, endpoint, scale, bodyPart);
@@ -2498,8 +2510,8 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
     const hookType = ctx.preferHookTypes[0] || 'transformation';
     const firstWord = pickFirstWord(obj, ctx);
 
-    // Opening speech rate target — medium density empirical sweet zone
-    const openingRate = 2.5 + Math.random() * 0.2; // 2.5-2.7 wps sweet zone
+    // Opening speech rate target — deterministic and source-video-informed
+    const openingRate = deriveOpeningSpeechRate(obj, sourceVideo);
 
     // First frame — derive from obj.first_frame_action + top frame mech at first_5s (if POSITIVE rho)
     const topFirst5 = (ctx.frameMechs.first_5s || []).filter(m => m.outcome === 'log_views' && m.rho > 0)[0];
@@ -2642,14 +2654,16 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                 'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
                 'endpoint-motif kinds (count / timer / distance / body-quit)',
                 'build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)',
+                sourceVideo ? null : 'opening speech rate fallback when no source-video metrics exist',
                 'duration_band_id default ("sweet_spot_46_60")',
-            ],
+            ].filter(Boolean),
             still_hardcoded: [
                 'object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)',
                 'endpoint-motif kinds (count / timer / distance / body-quit)',
                 'build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)',
+                sourceVideo ? null : 'opening speech rate fallback when no source-video metrics exist',
                 'duration_band_id default ("sweet_spot_46_60")',
-            ],
+            ].filter(Boolean),
         },
     };
 }
@@ -2873,104 +2887,17 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
 }
 
 function synthesizeSeeds(brief, artifacts, maxCount = 12) {
-    // Preferred path: build the full pool from specific validated videos.
-    // Legacy motif scoring remains only as a dataset-missing fallback.
+    // Exact-source-only path: every emitted seed must stay grounded in a
+    // specific validated video. The rejected motif/category fallback is no
+    // longer allowed to silently repopulate the pool.
     const vpMax = Math.ceil(maxCount * 2 / 3);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
     const vpYtIds = new Set(
         vpSeeds.map(s => s.synthesis_trace && (s.synthesis_trace.source_video_lineage || s.synthesis_trace.source_video_prototype) && (s.synthesis_trace.source_video_lineage || s.synthesis_trace.source_video_prototype).ytId).filter(Boolean)
     );
     const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, maxCount, vpYtIds);
-    if (vpSeeds.length || secondarySeeds.length) {
-        return interleaveSeeds(vpSeeds, secondarySeeds, maxCount);
-    }
-
-    const ctx = deriveMotifContext(brief, artifacts);
-    const combos = [];
-    for (const obj of OBJECT_MOTIFS) {
-        if (obj.safety_tier === 'risky') continue;
-        for (const endId of (obj.endpoint_kinds || ['exact_count'])) {
-            const endpoint = ENDPOINT_MOTIFS.find(e => e.id === endId);
-            if (!endpoint) continue;
-            const scored = scoreMotifCombo(obj, endpoint, ctx);
-            combos.push({
-                obj,
-                endpoint,
-                score: scored.score,
-                drivers: scored.drivers,
-                core_score: scored.core_score,
-                creator_fit_score: scored.creator_fit_score,
-                creator_fit_drivers: scored.creator_fit_drivers,
-                proof_clarity_score: scored.proof_clarity_score,
-                proof_clarity_drivers: scored.proof_clarity_drivers,
-                visual_legibility_score: scored.visual_legibility_score,
-                visual_legibility_drivers: scored.visual_legibility_drivers,
-            });
-        }
-    }
-    combos.sort((a, b) => b.score - a.score);
-
-    const selection = selectDiverseCombos(combos, maxCount);
-    const { picked, log, diversity_bucket_coverage, endpoint_coverage, proof_surface_coverage, per_diversity_bucket, per_endpoint, per_proof_surface, alternates_by_motif_id, total_combos_considered, total_diversity_buckets_considered } = selection;
-
-    const motifSeeds = picked.map((c, i) => {
-        const seed = composeSeed(c.obj, c.endpoint, ctx, i + 1, c.score, c.drivers, {
-            score: c.creator_fit_score,
-            drivers: c.creator_fit_drivers,
-            core_score: c.core_score,
-        }, {
-            score: c.proof_clarity_score,
-            drivers: c.proof_clarity_drivers,
-        }, {
-            score: c.visual_legibility_score,
-            drivers: c.visual_legibility_drivers,
-        });
-        // Attach a seed-level diversity_log entry so the synthesis trace on
-        // each final idea records why this slot survived selection.
-        const myLog = log.find(l => l.slot === (i + 1));
-        if (seed.synthesis_trace) {
-            seed.synthesis_trace.diversity_bucket = c.obj.diversity_bucket || null;
-            seed.synthesis_trace.proof_surface = getProofSurfaceKey(c.obj);
-            seed.synthesis_trace.diversity_selection = {
-                phase: myLog && myLog.phase,
-                reason: myLog && myLog.reason,
-                raw_score: myLog && myLog.raw_score,
-                mmr_score: myLog && myLog.mmr_score,
-                max_similarity_to_earlier_slots: myLog && myLog.max_similarity_to_selected,
-                lambda: myLog && myLog.lambda,
-                slot_diversity_bucket_coverage_at_pick: diversity_bucket_coverage.slice(0, i + 1),
-                slot_endpoint_coverage_at_pick: endpoint_coverage.slice(0, i + 1),
-                slot_proof_surface_coverage_at_pick: proof_surface_coverage.slice(0, i + 1),
-                caps_in_effect: { per_diversity_bucket_cap: 2, per_endpoint_kind_cap: 2 },
-            };
-            seed.synthesis_trace.diversity_summary = {
-                per_diversity_bucket,
-                per_endpoint,
-                per_proof_surface,
-                diversity_bucket_coverage,
-                endpoint_coverage,
-                proof_surface_coverage,
-            };
-            // Auditable alternates: compact record of candidate pressure at
-            // seed-selection time. Two nearby rejected neighbors per pick is
-            // enough to show "why this one won" without dumping the full
-            // combo corpus back into the UI.
-            const myAlternates = (alternates_by_motif_id && alternates_by_motif_id.get(c.obj.id)) || [];
-            seed.synthesis_trace.seed_alternates = {
-                stage: 'seed_selection',
-                candidates_considered: total_combos_considered,
-                diversity_buckets_considered: total_diversity_buckets_considered,
-                caps_in_effect: { per_diversity_bucket_cap: 2, per_endpoint_kind_cap: 2 },
-                nearby_rejected: myAlternates,
-                note: 'Compact view of the 2 nearest combos that lost to this pick at seed selection. Rejection reasons: lower raw score within the same diversity bucket, diversity-bucket/endpoint-kind cap, motif-id dedup, or lower MMR(score − λ·sim) during MMR-fill.',
-            };
-            // Legacy fallback path: only used when source-video seeds are unavailable.
-            seed.synthesis_trace.seed_path = 'legacy_motif_fallback';
-            seed.synthesis_trace.fallback_reason = 'source_video_seed_pool_unavailable';
-        }
-        return seed;
-    });
-    return motifSeeds;
+    return interleaveSeeds(vpSeeds, secondarySeeds, maxCount)
+        .filter(seed => seed && seed.synthesis_trace && (seed.synthesis_trace.source_video_lineage || seed.synthesis_trace.source_video_prototype));
 }
 
 
