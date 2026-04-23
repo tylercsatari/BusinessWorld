@@ -72,11 +72,16 @@ function loadAllArtifacts() {
 // Narrow-predictor helpers (carried over from v1, tightened)
 // ──────────────────────────────────────────────────────────────────────
 
-function normalizeCandidateProposals(data) {
+function normalizeLegacyBucketFields(data) {
     if (!data || typeof data !== 'object') return data;
-    if (Array.isArray(data.diversity_buckets)) return data;
-    if (Array.isArray(data.families)) return Object.assign({}, data, { diversity_buckets: data.families });
-    return data;
+    const out = Object.assign({}, data);
+    if (!out.diversity_bucket && out.family) out.diversity_bucket = out.family;
+    if (!Array.isArray(out.diversity_buckets) && Array.isArray(out.families)) out.diversity_buckets = out.families;
+    return out;
+}
+
+function normalizeCandidateProposals(data) {
+    return normalizeLegacyBucketFields(data);
 }
 
 const TARGET_PROXY = new Set(['views', 'views_log10', 'log_views', 'log10_views']);
@@ -3403,10 +3408,7 @@ function defineIndicator(key) {
     try {
         const mini = variableCatalog.describeVariableMini(key);
         if (!mini || typeof mini !== 'object') return mini;
-        if (mini.family && !mini.diversity_bucket) {
-            return Object.assign({}, mini, { diversity_bucket: mini.family });
-        }
-        return mini;
+        return normalizeLegacyBucketFields(mini);
     } catch (e) { return null; }
 }
 
