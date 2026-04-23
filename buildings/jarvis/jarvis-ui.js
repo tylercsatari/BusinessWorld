@@ -6124,7 +6124,7 @@ const JarvisUI = (() => {
         const seedAltRows = seedAlts && Array.isArray(seedAlts.nearby_rejected) ? seedAlts.nearby_rejected.map(a => {
             const endp = a.endpoint_id || a.endpoint_kind || '';
             return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5;padding:2px 0;border-top:1px dashed #1e293b">
-                <code style="color:#f59e0b">${escapeHtml(a.motif_id || '')}</code>${endp ? `<span style="color:#64748b"> · </span><code style="color:#22c55e;font-size:10px">${escapeHtml(endp)}</code>` : ''}
+                <code style="color:#f59e0b">${escapeHtml(a.premise_id || '')}</code>${endp ? `<span style="color:#64748b"> · </span><code style="color:#22c55e;font-size:10px">${escapeHtml(endp)}</code>` : ''}
                 <span style="color:#64748b;margin-left:4px">raw</span> <b style="color:#f1f5f9">${a.raw_score != null ? (+a.raw_score).toFixed(3) : '—'}</b>
                 <span style="color:#64748b;margin-left:4px">Δ</span> ${fmtDelta(a.score_delta)}
                 ${a.mmr_score != null ? ` <span style="color:#64748b;margin-left:4px">mmr</span> <b style="color:#f1f5f9">${(+a.mmr_score).toFixed(3)}</b>` : ''}

@@ -702,8 +702,8 @@ const DURATION_BANDS = [
 //
 // Each object × endpoint combo is scored against the lattice (sensory
 // alignment, action intensity, material-word risk, safety tier, numeric
-// specificity of endpoint). Top N survive on explicit motif evidence,
-// not a synthetic category layer. Risky atoms are excluded up front.
+// specificity of endpoint). Top N survive on explicit premise evidence,
+// not an abstract classification layer. Risky atoms are excluded up front.
 
 const OBJECT_MOTIFS = [
     {
@@ -1227,11 +1227,11 @@ const OBJECT_MOTIFS = [
     },
 ];
 
-for (const motif of OBJECT_MOTIFS) {
-    if (!motif.title_core_tpl && motif.title_premise_line) motif.title_core_tpl = motif.title_premise_line;
-    if (!motif.title_core_tpl_reps && motif.title_premise_line_reps) motif.title_core_tpl_reps = motif.title_premise_line_reps;
-    if (!motif.title_premise_line && motif.title_core_tpl) motif.title_premise_line = motif.title_core_tpl;
-    if (!motif.title_premise_line_reps && motif.title_core_tpl_reps) motif.title_premise_line_reps = motif.title_core_tpl_reps;
+for (const premiseAtom of OBJECT_MOTIFS) {
+    if (!premiseAtom.title_core_tpl && premiseAtom.title_premise_line) premiseAtom.title_core_tpl = premiseAtom.title_premise_line;
+    if (!premiseAtom.title_core_tpl_reps && premiseAtom.title_premise_line_reps) premiseAtom.title_core_tpl_reps = premiseAtom.title_premise_line_reps;
+    if (!premiseAtom.title_premise_line && premiseAtom.title_core_tpl) premiseAtom.title_premise_line = premiseAtom.title_core_tpl;
+    if (!premiseAtom.title_premise_line_reps && premiseAtom.title_core_tpl_reps) premiseAtom.title_premise_line_reps = premiseAtom.title_core_tpl_reps;
 }
 
 function getTitlePremiseLine(obj, concreteKind = null) {
@@ -1400,7 +1400,7 @@ function selectPrimarySourceVideos(dataset) {
     });
 }
 
-// Compose one source-video-derived seed. This keeps the existing motif/endpoint
+// Compose one source-video-derived seed. This keeps the existing premise/endpoint
 // structure for compatibility, but the seed is explicitly grounded in a real
 // validated video instead of a synthetic template slot.
 function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, rank, seedPath, sourceRole) {
@@ -1422,7 +1422,7 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
     if (seed.synthesis_trace) {
         seed.synthesis_trace.seed_path = seedPath;
         seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.diversity_bucket || null);
-        seed.synthesis_trace.diversity_bucket_source = video.ytId ? 'source_video' : 'motif';
+        seed.synthesis_trace.diversity_bucket_source = video.ytId ? 'source_video' : 'premise_atom';
         seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
         const lineage = {
             ytId: video.ytId,
@@ -1649,7 +1649,7 @@ function computeCreatorFit(obj, endpoint, ctx) {
     // 2. Workshop / tactile / hands-visible frame
     //    Two sub-signals, each evidenced by an indicator-registry row.
     //    Setting regex matches fixed hands-on environments; visual regex
-    //    matches hand-driven action verbs in the motif's own copy.
+    //    matches hand-driven action verbs in the premise copy.
     const WORKSHOP_SETTING_RE = /\b(desk|table|counter|garage|workbench|firehouse|practice room|puzzle table|stairwell|gym|kitchen|flooring)\b/;
     const HANDS_VISIBLE_RE = /\b(hand|fingers|folding|stacking|wrapping|drawing|writing|tightening|taping|sliding|placing|pressing|stretching|flipping|checkmarks|fold|wrap|slide|press|draw|writ|tape|tighten|stack|place)\b/;
     const workshopSetting = WORKSHOP_SETTING_RE.test(setting);
@@ -1698,7 +1698,7 @@ function computeCreatorFit(obj, endpoint, ctx) {
     }
 
     // 5. Technical/material exposure penalty — or a small credit when the
-    //    motif is tactile yet does NOT trigger the drop-cause word list.
+    //    premise is tactile yet does NOT trigger the drop-cause word list.
     const matHits = impliedMat.filter(w => negativeWords.has(w));
     if (matHits.length) {
         const d = round(-0.25 * matHits.length, 3);
@@ -1774,7 +1774,7 @@ function computeCreatorFit(obj, endpoint, ctx) {
 //   - single-frame numeric endpoint (count / timer / distance)
 //       → HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio (the freeze-frame
 //         IS the proof shot)
-//   - named physical artifact in the motif's first_frame_action /
+//   - named physical artifact in the premise's first_frame_action /
 //     visual_action_short (counter, stack, tower, bar, scale, overlay)
 //       → HIGH_ENERGY_ACTION_FRAMES (visible artifact in frame)
 // Inverse rewards (penalties):
@@ -1792,8 +1792,8 @@ function computeCreatorFit(obj, endpoint, ctx) {
 //
 // The score is added to the combo score so the diversity-aware selector
 // and the final blueprint re-rank both reward proof-clarity within each
-// motif diversity bucket. No hand-picked top-5 list — every weight reads
-// a factual field on the motif atom and cites a corpus indicator.
+// premise diversity bucket. No hand-picked top-5 list — every weight reads
+// a factual field on the premise atom and cites a corpus indicator.
 function computeProofClarity(obj, endpoint, ctx) {
     const drivers = [];
     let score = 0;
@@ -1806,7 +1806,7 @@ function computeProofClarity(obj, endpoint, ctx) {
     const bodyPart = String(obj.body_part_phrase || '').toLowerCase();
     const allText = `${titleTpl} ${logline} ${firstFrame} ${visual}`;
 
-    // A. Build-test hybrid detection — motif copy contains BOTH a build
+    // A. Build-test hybrid detection — premise copy contains BOTH a build
     //    verb and a physical-test verb. This unifies make + test in one
     //    shoot; the strongest visible-proof pattern in the corpus.
     const BUILD_VERB_RE = /\b(built|build|made|make|constructed|construct|welded|assembled|rigged|crafted|hand-built)\b/;
@@ -1837,7 +1837,7 @@ function computeProofClarity(obj, endpoint, ctx) {
             driver: 'body_transformation_with_proof_anchor',
             delta: d,
             matched_anchor: (allText.match(BODY_PROOF_ANCHOR_RE) || [])[0],
-            source: 'diversity bucket=body_transformation AND motif copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
+            source: 'diversity bucket=body_transformation AND premise copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
         });
     } else if (isBodyBucket) {
         const d = 0.12;
@@ -1845,7 +1845,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: 'body_transformation_without_proof_anchor',
             delta: d,
-            source: 'diversity bucket=body_transformation but motif copy lacks a single-shot before/after anchor — partial end_begin_ratio credit',
+            source: 'diversity bucket=body_transformation but premise copy lacks a single-shot before/after anchor — partial end_begin_ratio credit',
         });
     }
 
@@ -1870,7 +1870,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         });
     }
 
-    // D. Named physical artifact / overlay in the motif's first_frame or
+    // D. Named physical artifact / overlay in the premise's first_frame or
     //    visual_action_short — proof object is in frame.
     const ARTIFACT_PROOF_RE = /\b(stack|pile|tower|counter|overlay|completion bar|completion %|distance overlay|mile-counter|mile counter|timer overlay|page tally|page grid|finished stack|weigh|scale|ruler|height ruler|envelope|addressed envelopes|finished portraits|crane pile|puzzle pieces|coins|band counter|hull|oars|pedals|bike frame|step-?by-?step)\b/;
     const hasArtifact = ARTIFACT_PROOF_RE.test(allText);
@@ -1903,7 +1903,7 @@ function computeProofClarity(obj, endpoint, ctx) {
     // F. Cognitive / head-framed payoff.
     //    (v3.4: dropped the action_intensity=low gate — cognitive body
     //    framing is invisible on camera regardless of hand activity, so
-    //    the old gate let medium-intensity cognitive motifs like language
+    //    the old gate let medium-intensity cognitive premises like language
     //    drills slip past. Penalty bumped -0.14 → -0.24.)
     const COGNITIVE_BODY_PARTS_PC = new Set(['head', 'feeling', 'mind', 'brain', 'memory']);
     if (COGNITIVE_BODY_PARTS_PC.has(bodyPart)) {
@@ -1925,7 +1925,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: `${bucketKey}_without_physical_test_verb`,
             delta: d,
-            source: 'diversity bucket=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation motifs',
+            source: 'diversity bucket=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation premises',
         });
     }
 
@@ -1956,8 +1956,8 @@ function computeProofClarity(obj, endpoint, ctx) {
     }
 
     // J. Object-interaction signal — HANDS_VISIBLE regex over
-    //    first_frame + visual. Distinguishes motifs where the viewer
-    //    watches hands manipulate something from motifs where the
+    //    first_frame + visual. Distinguishes premises where the viewer
+    //    watches hands manipulate something from premises where the
     //    viewer watches a person react (silent, phoneless, boxer-shadow).
     const HANDS_VISIBLE_RE = /\b(hand|fingers|folding|stacking|wrapping|drawing|writing|tightening|taping|sliding|placing|pressing|stretching|flipping|checkmarks|fold|wrap|slide|press|draw|writ|tape|tighten|stack|place|rowing|pedaling|climbing|carrying|holding)\b/;
     const handsVisible = HANDS_VISIBLE_RE.test(visual) || HANDS_VISIBLE_RE.test(firstFrame);
@@ -1979,21 +1979,21 @@ function computeProofClarity(obj, endpoint, ctx) {
 //
 // Proof-clarity already rewards a single-shot visible payoff at the
 // *endpoint* and penalizes observation/stack payoffs. But cognitive /
-// abstract motifs were still surviving the top-5 by gaming cosmetic
+// abstract premises were still surviving the top-5 by gaming cosmetic
 // proof tokens ("stack of flashcards", "tally", "count overlay") while
 // the actual reveal was a verbal quiz or a social observation. The
-// visual-legibility score reads the motif atom along four axes that
+// visual-legibility score reads the premise atom along four axes that
 // are independent of the endpoint kind:
 //
 //   V1 — Invisible body-part penalty (feeling/head/mind/brain/memory):
 //        the payoff has no legible body surface — inverse of
 //        PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES.
-//   V2 — Cognitive verb without a physical-action verb in the motif's
+//   V2 — Cognitive verb without a physical-action verb in the premise's
 //        copy (learn/memorize/study/recite/recall/translate with no
 //        row/ride/carry/build/fold/march/etc.):
 //        the action itself is off-camera — inverse of
 //        HIGH_ENERGY_ACTION_FRAMES.
-//   V3 — Cognitive motif-surface penalty (explicitly cognitive copy,
+//   V3 — Cognitive premise-surface penalty (explicitly cognitive copy,
 //        invisible body anchors, and non-physical reveal surface):
 //        head-framed payoff — inverse of
 //        HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE.
@@ -2011,9 +2011,9 @@ function computeProofClarity(obj, endpoint, ctx) {
 //        reads from the frame vs. a verdict the viewer has to trust.
 //   V5 — Frame-1 comprehensibility. Requires first_frame_action to
 //        name an action verb AND at least one of an object / gauge.
-//        A motif whose opening frame lacks an action verb cannot be
+//        A premise whose opening frame lacks an action verb cannot be
 //        comprehended in the first second — penalized regardless of
-//        how many proof props appear in the rest of the motif.
+//        how many proof props appear in the rest of the premise.
 //   V6 — Build-test / before-after contrast visible in
 //        visual_action_short (cut between, day 1 vs day N, growing
 //        pile/stack/tower, slides out, pedals turning, mile-counter,
@@ -2022,13 +2022,13 @@ function computeProofClarity(obj, endpoint, ctx) {
 //   V7 — mystery_experiment/identity without physical verb AND without
 //        a gauge or physical object in frame — observation-only cut.
 //
-// Every driver cites an on-disk indicator. No rejected category layer; no
+// Every driver cites an on-disk indicator. No abstract classification layer; no
 // hand-picked top 5.
 const VL_COGNITIVE_BODY_PARTS = new Set(['feeling', 'head', 'mind', 'brain', 'memory']);
 const VL_COG_VERB_RE = /\b(memoriz|learn|studied|study|studying|recit|recall|translat|remember)\w*\b/;
 // Strong physical-action stems. Purposefully excludes ambiguous "test",
 // "fire", "hold" — they can be verbal ("tested me", "fired me", "hold
-// that thought") and would mislabel cognitive motifs as physical.
+// that thought") and would mislabel cognitive premises as physical.
 const VL_PHYS_STRONG_RE = /\b(press|slid|slide|pour|hammer|paint|sand|assembl|bolt|tapp|tight|drew|drawing|fold|wrap|writ|flip|stack|plac|lift|heav|squat|stretch|step|walk|march|ran|running|climb|jump|carry|carried|carrying|rowed|rowing|pedal|ride|rode|drove|driving|sail|sailed|launch|race|raced|weigh|pull|push|hit|paddle|throw|threw|roll|kick|cranked|shove|shoved|rig|rigging|unfold|unfolded)\w*\b/;
 const VL_COG_BUCKETS = new Set(['cognitive_feat']);
 const VL_COGNITIVE_SURFACE_RE = /\b(flashcards?|native speaker|instrument|song|novel|page(?:s)?|book|puzzle|piece(?:s)?|language|memor|learn|study|recit|recall|translate|perform(?:ed)? it)\b/;
@@ -2071,7 +2071,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
 
     // V1b — Physical body_parts list presence (independent of the
     //       phrase — body_parts is the array of per-frame anchors the
-    //       motif can cut to; a motif with only cognitive tokens has
+    //       premise can cut to; a premise with only cognitive tokens has
     //       nothing to close on).
     const physicalBodyParts = bodyParts.filter(p => !VL_COGNITIVE_BODY_PARTS.has(p));
     if (physicalBodyParts.length === 0) {
@@ -2104,7 +2104,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
             driver: 'cognitive_verb_without_physical_action',
             delta: d,
             matched_cog_verb: (allText.match(VL_COG_VERB_RE) || [])[0],
-            source: 'verb stem is cognitive (memorize/learn/study/recite/recall/translate) AND motif copy contains no physical-action verb — the act itself is off-camera; inverse of HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)',
+            source: 'verb stem is cognitive (memorize/learn/study/recite/recall/translate) AND premise copy contains no physical-action verb — the act itself is off-camera; inverse of HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops)',
         });
     } else if (hasPhysVerb) {
         const d = 0.10;
@@ -2117,7 +2117,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
         });
     }
 
-    // V3 — Cognitive motif surface. This intentionally keys off explicit
+    // V3 — Cognitive premise surface. This intentionally keys off explicit
     //      copy + body anchors rather than a synthetic category tag.
     const hasCognitiveSurface = VL_COG_BUCKETS.has(bucketKey)
         || (!physicalBodyParts.length && (hasCogVerb || VL_COGNITIVE_SURFACE_RE.test(allText)));
@@ -2125,14 +2125,14 @@ function computeVisualLegibility(obj, endpoint, ctx) {
         const d = -0.22;
         score += d;
         drivers.push({
-            driver: `cognitive_motif_surface_${bucketKey || 'explicit_copy'}`,
+            driver: `cognitive_premise_surface_${bucketKey || 'explicit_copy'}`,
             delta: d,
-            source: 'explicit motif copy/body anchors indicate a cognitive or verbal reveal surface rather than a visible physical payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE',
+            source: 'explicit premise copy/body anchors indicate a cognitive or verbal reveal surface rather than a visible physical payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + PHYSICAL_SENSORY_LANGUAGE',
         });
     }
 
     // V4 — Title-payoff legibility. Classifies the reveal in the title
-    //      itself; catches motifs that pass proof-clarity via cosmetic
+    //      itself; catches premises that pass proof-clarity via cosmetic
     //      artifact tokens (stack/pile/tally) but actually land on a
     //      verbal / social / cognitive verdict.
     const absReveal = titleTpl.match(VL_TITLE_ABSTRACT_REVEAL_RE);
@@ -2160,10 +2160,10 @@ function computeVisualLegibility(obj, endpoint, ctx) {
         // composeTitle() appends "— The Counter Froze At {N}" / "— The
         // Timer Hit {N} Exactly" / "— The Mile Counter Froze At {N}" /
         // "— My {Body Part} Quit First" / "— The Build Held Until {N}"
-        // to numeric/body/build_test endpoints when the motif has no
+        // to numeric/body/build_test endpoints when the premise has no
         // builtin reveal. That appended phrase IS a single-frame
         // freeze — credit it in V4 so endurance / body_quit / bike
-        // motifs are not falsely neutral relative to motifs whose
+        // premises are not falsely neutral relative to premises whose
         // reveal is hard-coded into the title premise line.
         const d = 0.16;
         score += d;
@@ -2175,7 +2175,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
     }
 
     // V5 — Frame-1 comprehensibility. Action verb + (gauge OR object).
-    //      A motif whose first_frame_action lacks an action verb has
+    //      A premise whose first_frame_action lacks an action verb has
     //      no filmable opening — viewer cannot read the challenge at
     //      t=0s regardless of what appears later in the shot.
     const hasFrameAction = VL_FRAME_ACTION_RE.test(firstFrame);
@@ -2276,7 +2276,7 @@ function scoreMotifCombo(obj, endpoint, ctx) {
 
     // Hook-taxonomy match bonus: transformation / mystery hooks are the top
     // two performing labels in the corpus (2.24M / 2.20M vs 1.12M for stakes).
-    // Reward motifs that declare a preferred_hook_type in that top-2 set.
+    // Reward premises that declare a preferred_hook_type in that top-2 set.
     const preferred = String(obj.preferred_hook_type || '').toLowerCase();
     if (preferred && ctx.preferHookTypes && ctx.preferHookTypes.includes(preferred)) {
         const idx = ctx.preferHookTypes.indexOf(preferred);
@@ -2297,9 +2297,9 @@ function scoreMotifCombo(obj, endpoint, ctx) {
     const proof = computeProofClarity(obj, endpoint, ctx);
 
     // Visual-legibility (v3.4) — independent of endpoint kind. Reads
-    // body_part_phrase, verb stems, explicit motif surface, title-payoff
+    // body_part_phrase, verb stems, explicit premise surface, title-payoff
     // phrasing, frame-1 comprehensibility, and state-to-state visual
-    // contrast. Catches motifs that pass proof-clarity via cosmetic
+    // contrast. Catches premises that pass proof-clarity via cosmetic
     // artifact tokens (stack/pile/tally) while actually landing on a
     // verbal / social / cognitive verdict.
     const legibility = computeVisualLegibility(obj, endpoint, ctx);
@@ -2388,7 +2388,7 @@ function overDeliveryRevealValue(scale, endpoint) {
 
 // endpointPhrase drives the logline, promise, payoff, and climax hints. New
 // endpoint kinds (transformation/experiment/identity/build_test) do not land
-// on a numeric reveal — they land on a qualitative payoff tied to the motif.
+// on a numeric reveal — they land on a qualitative payoff tied to the premise.
 function endpointPhraseFor(obj, endpoint, scale, revealVal, bodyPart) {
     switch (endpoint.kind) {
         case 'count':    return `the counter freezes at ${revealVal}`;
@@ -2404,19 +2404,19 @@ function endpointPhraseFor(obj, endpoint, scale, revealVal, bodyPart) {
 }
 
 function composeTitle(obj, endpoint, scale, bodyPart) {
-    // Build the core title from the motif's validated premise line, substituting {N}/{D}/{T}
+    // Build the core title from the premise atom's validated premise line, substituting {N}/{D}/{T}
     let core = getTitlePremiseLine(obj, obj.concrete_kind);
-    // Always run all three substitutions — some motifs (e.g. memorize_book)
+    // Always run all three substitutions — some premise atoms (e.g. memorize_book)
     // carry {T} in their premise line even though concrete_kind is 'pages'.
     core = core.replace('{N}', String(scale.display));
     core = core.replace('{D}', capitalize(scale.display));
     core = core.replace('{T}', capitalize(scale.display));
 
     const revealVal = overDeliveryRevealValue(scale, endpoint);
-    // Some motifs (body_transformation, identity, skill_dare) encode their
+    // Some premise atoms (body_transformation, identity, skill_dare) encode their
     // reveal directly in their title premise line (e.g. "— He Told Me When To Stop").
     // Appending a numeric suffix on top of a qualitative reveal reads as a
-    // double ending. If the motif signals a builtin reveal, return core.
+    // double ending. If the premise signals a builtin reveal, return core.
     if (obj.title_has_builtin_reveal) return core;
     if (endpoint.kind === 'count')    return `${core} \u2014 The Counter Froze At ${revealVal}`;
     if (endpoint.kind === 'timer')    return `${core} \u2014 The Timer Hit ${revealVal} Exactly`;
@@ -2636,13 +2636,13 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Diversity-aware seed selection (MMR over motif diversity buckets + explicit proof surfaces)
+// Diversity-aware seed selection (MMR over premise diversity buckets + explicit proof surfaces)
 //
 // The old selector still carried a category-layer penalty. That kept the
 // ranking orbiting broad buckets instead of concrete validated idea shapes.
 //
 // The current selector enforces diversity at three explicit levels:
-//   1. Motif diversity bucket (stored on each motif as `obj.diversity_bucket` for
+//   1. Premise diversity bucket (stored on each premise atom as `obj.diversity_bucket` for
 //      legacy reasons; values: endurance / build_test / body_transformation /
 //      mystery_experiment / identity / skill_dare / craft_patience /
 //      cognitive_feat / repetition_outreach) — at most 1 per bucket until
@@ -2674,7 +2674,7 @@ function comboSimilarity(a, b) {
     return s;
 }
 
-// Clusters combos by their motif-diversity bucket. The bucket is still read
+// Clusters combos by their premise-diversity bucket. The bucket is still read
 // from `obj.diversity_bucket` because that is the on-disk data field; the local name
 // reflects the role (diversity axis) rather than the legacy field name.
 function clusterCombosByDiversityBucket(combos) {
@@ -2697,18 +2697,18 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
 
     const picked = [];
     const log = [];
-    // Per-pick alternates: motif-id of picked combo → [up to 2 nearby rejected neighbors].
+    // Per-pick alternates: premise-id of picked combo → [up to 2 nearby rejected neighbors].
     // Each entry records enough for the UI to render "why the winner beat this one"
     // without dumping the full combo corpus.
-    const alternatesByMotifId = new Map();
+    const alternatesByPremiseId = new Map();
     const perDiversityBucket = new Map();
     const perEndpoint = new Map();
     const perProofSurface = new Map();
-    const usedMotifIds = new Set();
+    const usedPremiseIds = new Set();
 
     function compactAlt(c, chosen, extra) {
         return {
-            motif_id: c.obj.id,
+            premise_id: c.obj.id,
             diversity_bucket: c.obj.diversity_bucket || 'unknown',
             endpoint_id: c.endpoint.id,
             endpoint_kind: c.endpoint.kind,
@@ -2727,7 +2727,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         const candidates = clusters.get(bucket) || [];
         let best = null, bestKey = null;
         for (const c of candidates) {
-            if (usedMotifIds.has(c.obj.id)) continue;
+            if (usedPremiseIds.has(c.obj.id)) continue;
             if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) continue;
             // Prefer candidates whose endpoint is not yet represented
             const key = c.score - 0.25 * (perEndpoint.get(c.endpoint.kind) || 0);
@@ -2744,15 +2744,15 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             if (c === best) continue;
             if (alts.length >= 2) break;
             let reason;
-            if (usedMotifIds.has(c.obj.id)) reason = 'motif-id already selected in earlier slot';
+            if (usedPremiseIds.has(c.obj.id)) reason = 'premise-id already selected in earlier slot';
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) reason = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             else reason = 'lower raw score within this diversity bucket';
             alts.push(compactAlt(c, best, { rejection_reason: reason }));
         }
-        alternatesByMotifId.set(best.obj.id, alts);
+        alternatesByPremiseId.set(best.obj.id, alts);
 
         picked.push(best);
-        usedMotifIds.add(best.obj.id);
+        usedPremiseIds.add(best.obj.id);
         perDiversityBucket.set(bucket, (perDiversityBucket.get(bucket) || 0) + 1);
         perEndpoint.set(best.endpoint.kind, (perEndpoint.get(best.endpoint.kind) || 0) + 1);
         perProofSurface.set(getProofSurfaceKey(best.obj), (perProofSurface.get(getProofSurfaceKey(best.obj)) || 0) + 1);
@@ -2760,12 +2760,12 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             phase: 'diversity_round_robin',
             slot: picked.length,
             diversity_bucket: bucket,
-            motif_id: best.obj.id,
+            premise_id: best.obj.id,
             endpoint_id: best.endpoint.id,
             endpoint_kind: best.endpoint.kind,
             raw_score: best.score,
             diversity_bucket_size: candidates.length,
-            reason: `first slot for diversity bucket "${bucket}" (highest-scoring concrete premise in bucket; endpoint rotated; motif-id hard-dedup)`,
+            reason: `first slot for diversity bucket "${bucket}" (highest-scoring concrete premise in bucket; endpoint rotated; premise-id hard-dedup)`,
         });
     }
 
@@ -2782,7 +2782,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         for (let i = 0; i < remaining.length; i++) {
             const c = remaining[i];
             let blocked = null;
-            if (usedMotifIds.has(c.obj.id)) blocked = 'motif-id already selected';
+            if (usedPremiseIds.has(c.obj.id)) blocked = 'premise-id already selected';
             else if ((perDiversityBucket.get(c.obj.diversity_bucket || 'unknown') || 0) >= 2) blocked = `diversity-bucket cap hit (${c.obj.diversity_bucket || 'unknown'}=2)`;
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) blocked = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             let sim = 0;
@@ -2802,7 +2802,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             .sort((a, b) => b.mr - a.mr)
             .slice(0, 2)
             .map(m => ({
-                motif_id: m.c.obj.id,
+                premise_id: m.c.obj.id,
                 diversity_bucket: m.c.obj.diversity_bucket || 'unknown',
                 endpoint_id: m.c.endpoint.id,
                 endpoint_kind: m.c.endpoint.kind,
@@ -2814,11 +2814,11 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
                 mmr_delta: round(m.mr - bestMR, 3),
                 rejection_reason: m.blocked || 'lower mmr(score − λ·sim) at this slot',
             }));
-        alternatesByMotifId.set(chosen.obj.id, alts);
+        alternatesByPremiseId.set(chosen.obj.id, alts);
 
         remaining.splice(bestIdx, 1);
         picked.push(chosen);
-        usedMotifIds.add(chosen.obj.id);
+        usedPremiseIds.add(chosen.obj.id);
         const bucket = chosen.obj.diversity_bucket || 'unknown';
         perDiversityBucket.set(bucket, (perDiversityBucket.get(bucket) || 0) + 1);
         perEndpoint.set(chosen.endpoint.kind, (perEndpoint.get(chosen.endpoint.kind) || 0) + 1);
@@ -2827,14 +2827,14 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             phase: 'mmr_fill',
             slot: picked.length,
             diversity_bucket: bucket,
-            motif_id: chosen.obj.id,
+            premise_id: chosen.obj.id,
             endpoint_id: chosen.endpoint.id,
             endpoint_kind: chosen.endpoint.kind,
             raw_score: chosen.score,
             max_similarity_to_selected: round(bestSim, 3),
             mmr_score: round(bestMR, 3),
             lambda,
-            reason: `mmr(score − lambda·max_sim) = ${round(bestMR, 3)}; diversity-bucket cap=2, endpoint-kind cap=2, proof-surface overlap penalty, motif-id hard-dedup`,
+            reason: `mmr(score − lambda·max_sim) = ${round(bestMR, 3)}; diversity-bucket cap=2, endpoint-kind cap=2, proof-surface overlap penalty, premise-id hard-dedup`,
         });
     }
 
@@ -2847,7 +2847,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         per_diversity_bucket: Object.fromEntries(perDiversityBucket),
         per_endpoint: Object.fromEntries(perEndpoint),
         per_proof_surface: Object.fromEntries(perProofSurface),
-        alternates_by_motif_id: alternatesByMotifId,
+        alternates_by_premise_id: alternatesByPremiseId,
         total_combos_considered: combos.length,
         total_diversity_buckets_considered: clusters.size,
     };
@@ -2855,7 +2855,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
 
 function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     // Exact-source-only path: every emitted seed must stay grounded in a
-    // specific validated video. The rejected motif/category fallback is no
+    // specific validated video. The rejected abstract fallback is no
     // longer allowed to silently repopulate the pool.
     const vpMax = Math.ceil(maxCount * 2 / 3);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
@@ -2918,7 +2918,7 @@ function scoreIdea(idea, brief) {
     // toward ideas a viewer can comprehend from frame 1 and verify from
     // the final beat (action verb + gauge/object in frame, decisive
     // physical reveal in title, state-contrast in the cut-to), and
-    // away from cognitive/abstract motifs that gamed proof-clarity via
+    // away from cognitive/abstract premises that gamed proof-clarity via
     // cosmetic artifact tokens. Weighted slightly above proof_clarity
     // because it reads the reveal phrasing directly, not just the
     // endpoint taxonomy.
@@ -4064,7 +4064,7 @@ function buildBlueprintValidation(seed, brief, artifacts) {
 //
 // Matches each generated idea against specific videos in signals-dataset.json
 // using actual title/premise token overlap plus either source-video concept
-// tokens (preferred for VP seeds) or motif-bucket concept words.
+// tokens (preferred for source-video seeds) or premise-bucket concept words.
 // No LLM calls. Returns top 3 anchors with direct evidence fields so every
 // idea card can show which specific real videos validate the format.
 // ──────────────────────────────────────────────────────────────────────
@@ -4272,7 +4272,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
 
     // Diversity-aware re-rank on blueprint scores. The old code sorted by
     // score_breakdown.total alone, which let one or two diversity buckets
-    // dominate every top slot because their motif_score advantage propagated.
+    // dominate every top slot because their premise_score advantage propagated.
     // The new rank applies MMR on blueprint totals with diversity-bucket +
     // endpoint + proof-surface similarity, then enforces per-bucket /
     // per-endpoint caps at the final-output level so the same bucket cannot
