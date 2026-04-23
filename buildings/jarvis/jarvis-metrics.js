@@ -1011,6 +1011,112 @@ const ZYGARNIK_PHRASE_SETS = {
         'this took a lot', 'i put a lot of', 'a lot of work went into',
         'way more work than', 'harder to make than', 'harder to build than',
     ],
+
+    // ── Group AK: New high-coverage phrase families ────────────────────────────
+
+    // discovery_reveal: signals that a discovery or insight is arriving
+    // ~20% video coverage on Shorts, good variance
+    discovery_reveal: [
+        'turns out', 'it turns out', 'what i found', 'what i discovered',
+        'i realized', 'i noticed that', 'i found out', 'and it turns out',
+        'as it turned out', 'which means', 'that means that', 'here is why',
+        "here's why", 'what that means', 'so that means', 'which is why',
+        'and that is why', 'and that means', 'what i found out', 'i finally figured',
+        'the insight was', 'what clicked for me', 'what i learned was',
+        'the realization was', 'and that is when i realized',
+    ],
+
+    // time_progress: temporal narrative markers showing story progression
+    // ~60% video coverage, high count variance
+    time_progress: [
+        'eventually', 'finally', 'after that', 'after this', 'after a while',
+        'a few days', 'a few weeks', 'a few months', 'over time', 'by the end',
+        'at the end', 'in the end', 'months later', 'weeks later', 'days later',
+        'hours later', 'all along', 'as time went on', 'after some time',
+        'by then', 'soon after', 'not long after', 'a short time later',
+        'the next day', 'the next week', 'the following', 'after completing',
+        'once i finished', 'when it was done', 'when it was over',
+    ],
+
+    // persistence_signal: challenge-and-persistence markers (Zygarnik tension maintenance)
+    // ~20% coverage, conceptually linked to open-loop tension
+    persistence_signal: [
+        'almost gave up', "didn't give up", 'kept going', 'pushed through',
+        'kept trying', 'tried again', 'tried it again', 'never gave up',
+        'wanted to quit', 'almost quit', 'was going to stop', 'so hard',
+        'really hard', 'harder than expected', "wasn't easy", 'not easy',
+        'not giving up', 'kept at it', 'stayed with it', 'refused to quit',
+        'still going', 'kept pushing', 'did not stop', 'would not stop',
+        'still trying', 'one more time', 'tried one more', 'attempt after attempt',
+        'failure after failure', 'setback after setback',
+    ],
+
+    // viewer_promise: explicit viewer commitment / promise to pay off
+    // ~17% coverage, direct delayed-gratification signal
+    viewer_promise: [
+        "i'll show you", 'i will show you', 'let me show you', 'about to show',
+        "you'll see", 'you will see', 'wait for it', 'by the end of this',
+        "i'm going to show", 'going to show you', 'going to tell you',
+        'about to tell you', "i'll tell you", 'i will tell you',
+        'stay until', 'watch until', 'keep watching until', 'before i show',
+        "i'll reveal", 'i will reveal', 'the reveal is', 'coming up',
+        'more on that', 'get to that', 'come back to that', 'talk about that',
+        'explain that in a second', 'get into that', 'cover that',
+    ],
+
+    // gap_tease: information gap teasers (core Zygarnik signal)
+    // targeted sub-set of proof_delay with tighter semantic focus
+    gap_tease: [
+        'but first', 'first though', 'before we get there', 'before i get to that',
+        'before i show you', 'before i explain', 'before i tell you',
+        'first you need to know', 'you need to understand first',
+        'a little context first', 'some context first', 'real quick',
+        'real quick though', 'let me explain first', 'first let me',
+        'first i need to', 'give me a second', 'hold on real quick',
+        'first thing first', 'first things first', 'one thing first',
+        'just to set this up', 'to set this up', 'a bit of context',
+        'give you some background', 'a quick backstory',
+    ],
+
+    // result_signal: result-announcement signals (payoff delivery markers)
+    // ~19% coverage, complements proof_delay (delayed gratification payoff)
+    result_signal: [
+        'the result', 'the results', 'here are the results', 'the answer is',
+        'and the answer is', 'it worked', 'it actually worked', 'it failed',
+        'it actually failed', "here's what happened", 'what happened was',
+        'here is what happened', 'spoiler', 'and here it is', 'here it is',
+        'the final result', 'final count', 'final number', 'final score',
+        'the final answer', 'the verdict is', 'the verdict',
+        'so in the end', 'so at the end', 'after all that',
+        'and after all that', 'and in the end',
+    ],
+
+    // risk_signal: explicit risk / uncertainty framing (stakes signal)
+    // ~11% coverage, stakes-focused
+    risk_signal: [
+        'this could fail', 'this might fail', 'could go wrong',
+        'might not work', 'no guarantee', 'no idea if', "didn't know if",
+        "didn't know whether", 'the risk was', 'risky', 'dangerous',
+        'if this works', 'if this fails', 'if it works', 'if it fails',
+        'the stakes were', 'everything on the line', 'all or nothing',
+        'win or lose', 'make or break', 'sink or swim',
+        'i could lose', 'i might lose', 'could cost me', 'might cost me',
+        'this was a gamble', 'gambled on', 'betting on', 'i bet everything',
+    ],
+
+    // early_proof_signal: spoken evidence presentation in early video
+    // targeted at pre-upload credibility window
+    early_proof_signal: [
+        'as you can see', 'look at this', 'check this out', 'here it is',
+        'see for yourself', 'look at these numbers', 'look at the numbers',
+        'the data shows', 'the numbers show', 'the stats show',
+        'proof that', 'evidence that', 'this proves', 'this shows',
+        'i can prove', 'you can see here', 'right here you can see',
+        'this right here', 'look at this result', 'see these results',
+        'here is the data', 'look at that number', 'look at that result',
+        'this number here', 'that number there', 'look at the before',
+        'look at the after', 'before and after right here',
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
@@ -2324,6 +2430,9 @@ for (const fam of [
     // Group AA phrase families — hook/ratio/first_half variants now backed by _zyExtRe dispatch
     'tension_builder', 'implicit_promise', 'progressive_reveal', 'loop_reinforcer',
     'consequence_language', 'setup_anchor', 'outcome_tease', 'proof_signal',
+    // Group AK: new high-coverage phrase families for zygarnik/open-loop expansion
+    'discovery_reveal', 'time_progress', 'persistence_signal', 'viewer_promise',
+    'gap_tease', 'result_signal', 'risk_signal', 'early_proof_signal',
 ]) {
     const baseCount = `${fam}_count`;
     const baseDensity = `${fam}_density`;
