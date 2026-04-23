@@ -2996,7 +2996,7 @@ const JarvisUI = (() => {
     function renderExperimentsContent(rows) {
         if (!rows || !rows.length) return '<div class="jarvis-error">No experiments found.</div>';
 
-        // Group by category
+        // Group by experiment track
         const groups = {};
         rows.forEach(row => {
             const { cat } = categorizeExperiment(row.experiment_id || '');
@@ -3009,7 +3009,7 @@ const JarvisUI = (() => {
         const keepCount = rows.filter(r => (r.status || '').trim().toLowerCase() === 'keep').length;
         const currentR2 = arModel ? arModel.r2 || 0.147 : 0.147;
 
-        // Category explanation cards
+        // Experiment track explanation cards
         const explanationCards = [
             { cat: 'exp', color: '#3b82f6', title: 'Model Experiments', text: 'These are experiments that tested whether adding a new signal improves the prediction model. The model predicts how many views a video will get. Each experiment adds one new signal, trains the model, and measures the R\u00b2 improvement on a held-out test set. KEPT means it improved predictions. DISCARDED means it added noise or was circular.' },
             { cat: 'loop_b', color: '#f97316', title: 'Signal Discoveries', text: 'These are observations from the data \u2014 things that correlate with views or keep rate. They are NOT yet validated by the prediction model. Think of them as hypotheses: interesting patterns found by exploring the 203-video dataset. Many correlate individually but fail when added to the full model because they\'re already captured by something else.' },
@@ -3021,7 +3021,7 @@ const JarvisUI = (() => {
 
         // Collapsible explanation section
         html += `<div class="jarvis-exp-explain-toggle" id="jarvis-exp-explain-toggle">
-            <span>${expExplainOpen ? '▼' : '▶'}</span> What do these categories mean?
+            <span>${expExplainOpen ? '▼' : '▶'}</span> What do these experiment tracks mean?
         </div>`;
         if (expExplainOpen) {
             html += `<div class="jarvis-exp-explain-cards">
@@ -5323,7 +5323,7 @@ const JarvisUI = (() => {
             <div style="margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
                 <div>
                     <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:3px">Idea Model — Specific Viral Ideas With Direct Validation</div>
-                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">${ideaIdeasCount} concrete, shootable video premises — each field (opening, arc, pacing, vocabulary, metrics) validated directly against the underlying metrics, mechanisms, and retention evidence. No category/template layer. No LLM calls; every claim is auditable.</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">${ideaIdeasCount} concrete, shootable video premises, each grounded directly in specific validated source videos and checked against the underlying metrics, mechanisms, and retention evidence. No surrogate abstraction. No LLM calls, every claim is auditable.</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                     <select id="jarvis-idea-count" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:11px">
@@ -6132,7 +6132,7 @@ const JarvisUI = (() => {
             </div>`;
         }).join('') : '';
         const finalAltRows = finalAlts && Array.isArray(finalAlts.nearby_displaced) ? finalAlts.nearby_displaced.map(a => {
-            const altLane = a.diversity_bucket || a.family;
+            const altLane = a.diversity_bucket || a.family; // legacy fallback for older saved alternates
             return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5;padding:2px 0;border-top:1px dashed #1e293b">
                 <code style="color:#f59e0b">${escapeHtml(a.idea_id || '')}</code>
                 ${altLane ? `<span style="color:#64748b"> · </span><code style="color:#a78bfa;font-size:10px" title="source-video lane">${escapeHtml(altLane)}</code>` : ''}
