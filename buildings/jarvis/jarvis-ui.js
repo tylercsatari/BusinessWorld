@@ -3216,7 +3216,7 @@ const JarvisUI = (() => {
         return `
             <div style="margin-bottom:16px">
                 <div style="font-size:18px;font-weight:700;color:#f1f5f9;margin-bottom:4px">AutoResearch — Hybrid Autonomous Discovery</div>
-                <div style="font-size:12px;color:#64748b;line-height:1.5">Autonomous indicator discovery. Claude proposes novel candidates (upstream LLM), then every downstream step is deterministic: canonicalize, validate, extract, correlate, graph. Gracefully falls back to template-generated candidates if the LLM step fails.</div>
+                <div style="font-size:12px;color:#64748b;line-height:1.5">Autonomous indicator discovery. The candidate pool is generated deterministically, then every downstream step is deterministic: canonicalize, validate, extract, correlate, graph.</div>
             </div>
 
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
@@ -3227,7 +3227,7 @@ const JarvisUI = (() => {
                 <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
                     <div style="font-size:24px;font-weight:700;color:#a78bfa">100+</div>
                     <div style="font-size:11px;color:#64748b">Candidate Space</div>
-                    <div style="font-size:9px;color:#475569;margin-top:2px">(LLM + templates)</div>
+                    <div style="font-size:9px;color:#475569;margin-top:2px">(deterministic candidate generation)</div>
                 </div>
                 <div style="background:#0a1628;border-radius:8px;padding:12px 16px;flex:1;min-width:100px;text-align:center">
                     <div style="font-size:24px;font-weight:700;color:#06b6d4">${resolutions.length}</div>
@@ -3267,7 +3267,7 @@ const JarvisUI = (() => {
                 </div>
                 <div id="ar-run-status" style="margin-top:8px;font-size:11px;min-height:16px"></div>
                 <div id="ar-server-status" style="margin-top:4px;font-size:10px;color:#64748b;min-height:14px"></div>
-                <div style="margin-top:6px;font-size:10px;color:#475569">Hybrid: Claude proposes candidates → deterministic pipeline validates, extracts, correlates, graphs. Falls back to templates if LLM fails.</div>
+                <div style="margin-top:6px;font-size:10px;color:#475569">Deterministic candidate generation feeds a deterministic validation, extraction, correlation, and graph pipeline.</div>
             </div>
 
             <div id="ar-live-progress" style="background:#0a1628;border:1px solid #1e293b;border-radius:8px;padding:14px;margin-bottom:16px;display:none">
@@ -5814,10 +5814,9 @@ const JarvisUI = (() => {
             </div>` : '';
 
         // Validated video anchors — specific grounding from signals-dataset
-        const anchorFamily = (idea.synthesis_trace && idea.synthesis_trace.diversity_bucket) || '';
         const anchorLineage = idea.synthesis_trace && idea.synthesis_trace.source_video_lineage;
         const anchorSourceTitle = anchorLineage && anchorLineage.name;
-        const anchorsBox = renderValidatedVideoAnchors(idea.validated_video_anchors || [], anchorFamily, anchorSourceTitle);
+        const anchorsBox = renderValidatedVideoAnchors(idea.validated_video_anchors || [], anchorSourceTitle);
 
         // Synthesis derivation — compact view of how this idea was selected
         const synthesisBox = renderSynthesisBox(idea);
@@ -5869,7 +5868,7 @@ const JarvisUI = (() => {
         `;
     }
 
-    function renderValidatedVideoAnchors(anchors, family, sourceTitle) {
+    function renderValidatedVideoAnchors(anchors, sourceTitle) {
         if (!anchors || !anchors.length) return '';
         const tierColor = (t) => t === 1 ? '#22c55e' : t === 2 ? '#fbbf24' : t === 3 ? '#94a3b8' : '#64748b';
         const tierLabel = (t) => t === 1 ? 'strong match' : t === 2 ? 'moderate match' : t === 3 ? 'concept match' : 'metric anchor';
@@ -6133,10 +6132,10 @@ const JarvisUI = (() => {
             </div>`;
         }).join('') : '';
         const finalAltRows = finalAlts && Array.isArray(finalAlts.nearby_displaced) ? finalAlts.nearby_displaced.map(a => {
-            const altBucket = a.diversity_bucket || a.family;
+            const altLane = a.diversity_bucket || a.family;
             return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5;padding:2px 0;border-top:1px dashed #1e293b">
                 <code style="color:#f59e0b">${escapeHtml(a.idea_id || '')}</code>
-                ${altBucket ? `<span style="color:#64748b"> · </span><code style="color:#a78bfa;font-size:10px" title="diversity bucket">${escapeHtml(altBucket)}</code>` : ''}
+                ${altLane ? `<span style="color:#64748b"> · </span><code style="color:#a78bfa;font-size:10px" title="source-video lane">${escapeHtml(altLane)}</code>` : ''}
                 ${a.endpoint_kind ? `<span style="color:#64748b"> · </span><code style="color:#22c55e;font-size:10px">${escapeHtml(a.endpoint_kind)}</code>` : ''}
                 <div style="font-size:10px;color:#cbd5e1;margin-top:1px">
                     <span style="color:#64748b">total</span> <b style="color:#f1f5f9">${a.blueprint_total != null ? (+a.blueprint_total).toFixed(3) : '—'}</b>
@@ -6165,10 +6164,10 @@ const JarvisUI = (() => {
                     <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#a78bfa;font-weight:700">◇ Synthesis derivation — how this idea was selected</div>
                     <div style="font-size:10px;color:#94a3b8">
                         ${st.proof_surface ? `proof surface <b style="color:#fbbf24">${escapeHtml(st.proof_surface)}</b>` : ''}
-                        ${st.object_atom_id ? ` · obj <code style="color:#22d3ee">${escapeHtml(st.object_atom_id)}</code>` : ''}
-                        ${st.endpoint_atom_id ? ` · end <code style="color:#22c55e">${escapeHtml(st.endpoint_atom_id)}</code>` : ''}
+                        ${st.object_atom_id ? ` · premise <code style="color:#22d3ee">${escapeHtml(st.object_atom_id)}</code>` : ''}
+                        ${st.endpoint_atom_id ? ` · endpoint <code style="color:#22c55e">${escapeHtml(st.endpoint_atom_id)}</code>` : ''}
                         ${st.scale_kind ? ` · scale <code style="color:#fbbf24">${escapeHtml(st.scale_kind)}${st.scale_value != null ? '=' + escapeHtml(String(st.scale_value)) : ''}</code>` : ''}
-                        ${st.diversity_bucket ? ` · diversity bucket <code style="color:#a78bfa">${escapeHtml(st.diversity_bucket)}</code>` : ''}
+                        ${st.diversity_bucket ? ` · source-video lane <code style="color:#a78bfa">${escapeHtml(st.diversity_bucket)}</code>` : ''}
                     </div>
                 </div>
                 ${chips ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">${chips}</div>` : ''}
@@ -6190,7 +6189,7 @@ const JarvisUI = (() => {
                 ${signalBlock('Visual legibility', '#fbbf24', vl)}
                 ${diversity.reason || diversity.phase ? `
                     <div style="background:#0a1628;border-left:2px solid #ec4899;border-radius:3px;padding:6px 8px;margin-bottom:4px">
-                        <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#ec4899;margin-bottom:3px">Diversity selection</div>
+                        <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#ec4899;margin-bottom:3px">Slate balancing</div>
                         <div style="font-size:10px;color:#cbd5e1;line-height:1.5">
                             <span style="color:#94a3b8">phase:</span> <code style="color:#ec4899">${escapeHtml(diversity.phase || '—')}</code>
                             ${diversity.raw_score != null ? ` · <span style="color:#94a3b8">raw</span> <b style="color:#f1f5f9">${(+diversity.raw_score).toFixed(3)}</b>` : ''}
@@ -6210,13 +6209,13 @@ const JarvisUI = (() => {
                         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:3px">
                             <div style="font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#f59e0b">▸ Candidate pressure — why this idea won vs nearby alternates</div>
                             <div style="font-size:9px;color:#64748b">
-                                ${seedAlts && seedAlts.candidates_considered != null ? `<span>seed pool <b style="color:#cbd5e1">${seedAlts.candidates_considered}</b>${(seedAlts.diversity_buckets_considered != null || seedAlts.families_considered != null) ? ` / <b style="color:#cbd5e1">${seedAlts.diversity_buckets_considered != null ? seedAlts.diversity_buckets_considered : seedAlts.families_considered}</b> diversity buckets` : ''}</span>` : ''}
+                                ${seedAlts && seedAlts.candidates_considered != null ? `<span>seed pool <b style="color:#cbd5e1">${seedAlts.candidates_considered}</b>${(seedAlts.diversity_buckets_considered != null || seedAlts.families_considered != null) ? ` / <b style="color:#cbd5e1">${seedAlts.diversity_buckets_considered != null ? seedAlts.diversity_buckets_considered : seedAlts.families_considered}</b> source-video lanes` : ''}</span>` : ''}
                                 ${finalAlts && finalAlts.ideas_considered != null ? ` · <span>final pool <b style="color:#cbd5e1">${finalAlts.ideas_considered}</b></span>` : ''}
                             </div>
                         </div>
                         ${seedAltRows ? `
                             <div style="margin-top:3px">
-                                <div style="font-size:9px;color:#f59e0b;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:2px">Seed-stage rejected neighbors (within diversity bucket / MMR-fill runners-up)</div>
+                                <div style="font-size:9px;color:#f59e0b;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:2px">Seed-stage rejected neighbors (same lane / MMR-fill runners-up)</div>
                                 ${seedAltRows}
                             </div>` : ''}
                         ${finalAltRows ? `

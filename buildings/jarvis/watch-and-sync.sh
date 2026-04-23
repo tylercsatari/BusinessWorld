@@ -8,16 +8,58 @@ LOG="$JARVIS_DIR/watch-sync.log"
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] watch-and-sync started" >> "$LOG"
 
-# Poll until run is no longer active
+STALE_MINUTES=3
+RUN_STALLED=false
+
+# Poll until run is no longer active or appears stalled
 for i in $(seq 1 60); do
   sleep 30
   ACTIVE=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('active','false'))" 2>/dev/null)
   UPDATED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('updated_at',''))" 2>/dev/null)
   COMPLETED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('completed',0))" 2>/dev/null)
-  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] active=$ACTIVE completed=$COMPLETED updated=$UPDATED" >> "$LOG"
-  
+  RUN_PID=$(pgrep -f "node .*buildings/jarvis/launch-autorun.js" | head -n 1)
+  STALE=$(python3 - <<PY 2>/dev/null
+import json, datetime
+try:
+    d=json.load(open('$JARVIS_DIR/autonomous_progress.json'))
+    updated=d.get('updated_at')
+    if not updated:
+        print('false')
+    else:
+        dt=datetime.datetime.fromisoformat(updated.replace('Z','+00:00'))
+        age=(datetime.datetime.now(datetime.timezone.utc)-dt).total_seconds()/60
+        print('true' if age > $STALE_MINUTES else 'false')
+except Exception:
+    print('false')
+PY
+)
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] active=$ACTIVE completed=$COMPLETED updated=$UPDATED stale=$STALE pid=${RUN_PID:-none}" >> "$LOG"
+
   if [ "$ACTIVE" = "False" ] || [ "$ACTIVE" = "false" ]; then
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Run complete. Syncing R2..." >> "$LOG"
+    break
+  fi
+
+  if [ "$STALE" = "true" ] && [ -z "$RUN_PID" ]; then
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Detected stalled autorun (active=true but stale heartbeat and no launch-autorun pid). Marking run stalled and recovering..." >> "$LOG"
+    python3 - <<PY >> "$LOG" 2>&1
+import json, datetime
+path='$JARVIS_DIR/autonomous_progress.json'
+with open(path) as f:
+    d=json.load(f)
+now=datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z')
+d['active']=False
+if not d.get('finished_at'):
+    d['finished_at']=now
+d['updated_at']=now
+d['stop_reason']='process_died_watchdog'
+d['current_candidate']=None
+with open(path,'w') as f:
+    json.dump(d,f,indent=2)
+    f.write('\n')
+print(f"updated autonomous_progress stop_reason={d['stop_reason']}")
+PY
+    RUN_STALLED=true
     break
   fi
 done

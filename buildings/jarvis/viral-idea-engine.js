@@ -75,7 +75,7 @@ function loadAllArtifacts() {
 function normalizeIndicatorMetadata(data) {
     if (!data || typeof data !== 'object') return data;
     const out = Object.assign({}, data);
-    if (!out.diversity_bucket && typeof out.family === 'string') out.diversity_bucket = out.family;
+    if (!out.diversity_bucket && typeof out.family === 'string') out.diversity_bucket = out.family; // legacy metadata alias
     return out;
 }
 
@@ -1261,7 +1261,7 @@ const ENDPOINT_MOTIFS = [
 //   - inferPremiseSpecFromVideo() deterministically infers {obj_id, endpoint_id}
 //     from the exact validated source video title.
 //   - selectPrimarySourceVideos() ranks exact dataset videos by quality_score.
-//     No surrogate obj/category dedup is allowed in primary source selection,
+//     No surrogate abstraction-layer dedup is allowed in primary source selection,
 //     so every retained slot is chosen as a concrete validated video first.
 //
 // Selection: quality_score = z_score × retention/100 × keep/100.
@@ -1275,7 +1275,7 @@ const ENDPOINT_MOTIFS = [
 //   - obj_id/endpoint_id still reference predefined premise atoms
 //   - inferPremiseSpecFromVideo uses keyword rules (heuristic, not learned)
 //   - source-video seeds still use those atoms internally, but downstream
-//     diversity buckets them by exact source video instead of abstract buckets
+//     balances them by exact source video instead of abstract buckets
 
 // Deterministic premise-spec inference from a validated source video.
 // Primary signal is title keywords; when title rules fall back to the generic
@@ -1377,7 +1377,7 @@ function inferPremiseSpecFromVideo(video) {
 // Ranks all dataset videos by quality_score (z_score × retention/100 × keep/100).
 // Every source-video assignment is inferred directly from the source video title,
 // but selection is done on the exact source video rows themselves, not a
-// surrogate obj/category grouping.
+// surrogate abstraction-layer grouping.
 function selectPrimarySourceVideos(dataset) {
     const scored = (dataset || []).filter(v => v.ytId).map(v => {
         const quality_score = round(
@@ -1402,7 +1402,7 @@ function selectPrimarySourceVideos(dataset) {
 
 // Compose one source-video-derived seed. This keeps the existing premise/endpoint
 // structure for compatibility, but the seed is explicitly grounded in a real
-// validated video instead of a synthetic template slot.
+// validated video instead of a synthetic fallback slot.
 function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, rank, seedPath, sourceRole) {
     const obj = OBJECT_MOTIFS.find(m => m.id === spec.obj_id);
     const endpoint = ENDPOINT_MOTIFS.find(e => e.id === spec.endpoint_id);
@@ -1460,7 +1460,7 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
 }
 
 // Backfill the remaining pool with additional validated videos from the
-// dataset, rather than OBJECT_MOTIFS × ENDPOINT_MOTIFS template slots.
+// dataset, rather than OBJECT_MOTIFS × ENDPOINT_MOTIFS fallback slots.
 function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYtIds = new Set()) {
     const dataset = loadJsonSafe('signals-dataset.json');
     if (!dataset || !dataset.length) return [];
@@ -1790,9 +1790,9 @@ function computeCreatorFit(obj, endpoint, ctx) {
 //     book, silent)
 //       → inverse of HIGH_ENERGY_ACTION_FRAMES and PHYSICAL_SENSORY_LANGUAGE
 //
-// The score is added to the combo score so the diversity-aware selector
+// The score is added to the combo score so the slate-balancing selector
 // and the final blueprint re-rank both reward proof-clarity within each
-// premise diversity bucket. No hand-picked top-5 list — every weight reads
+// premise lane. No hand-picked top-5 list — every weight reads
 // a factual field on the premise atom and cites a corpus indicator.
 function computeProofClarity(obj, endpoint, ctx) {
     const drivers = [];
@@ -1837,7 +1837,7 @@ function computeProofClarity(obj, endpoint, ctx) {
             driver: 'body_transformation_with_proof_anchor',
             delta: d,
             matched_anchor: (allText.match(BODY_PROOF_ANCHOR_RE) || [])[0],
-            source: 'diversity bucket=body_transformation AND premise copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
+            source: 'premise lane=body_transformation AND premise copy names a before/after anchor — wave11_12.end_begin_ratio (single-frame before/after payoff structure)',
         });
     } else if (isBodyBucket) {
         const d = 0.12;
@@ -1845,7 +1845,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: 'body_transformation_without_proof_anchor',
             delta: d,
-            source: 'diversity bucket=body_transformation but premise copy lacks a single-shot before/after anchor — partial end_begin_ratio credit',
+            source: 'premise lane=body_transformation but premise copy lacks a single-shot before/after anchor — partial end_begin_ratio credit',
         });
     }
 
@@ -1925,7 +1925,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: `${bucketKey}_without_physical_test_verb`,
             delta: d,
-            source: 'diversity bucket=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation premises',
+            source: 'premise lane=repetition_outreach/patience AND no test verb — proof is a stack, not a test; lower end_begin_ratio than build_test / body_transformation premises',
         });
     }
 
@@ -1938,12 +1938,12 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: 'mystery_experiment_without_artifact',
             delta: d,
-            source: 'diversity bucket=mystery_experiment AND no artifact in frame — inverse of HIGH_ENERGY_ACTION_FRAMES (payoff is an observation)',
+            source: 'premise lane=mystery_experiment AND no artifact in frame — inverse of HIGH_ENERGY_ACTION_FRAMES (payoff is an observation)',
         });
     }
 
-    // I. Body-transformation OR build_test bucket × active intensity —
-    //    combo bonus when the diversity bucket ALREADY implies a visible
+    // I. Body-transformation OR build_test lane × active intensity —
+    //    combo bonus when the premise lane ALREADY implies a visible
     //    proof axis AND the daily act is itself filmable physical action.
     if ((isBodyBucket || bucketKey === 'build_test') && (obj.action_intensity === 'medium' || obj.action_intensity === 'high')) {
         const d = 0.08;
@@ -1951,7 +1951,7 @@ function computeProofClarity(obj, endpoint, ctx) {
         drivers.push({
             driver: `${bucketKey}_with_active_intensity`,
             delta: d,
-            source: 'diversity bucket=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)',
+            source: 'premise lane=body_transformation|build_test AND action_intensity ≥ medium — PHYSICAL_SENSORY_LANGUAGE + HIGH_ENERGY_ACTION_FRAMES stack (daily act itself is visible action)',
         });
     }
 
@@ -2118,7 +2118,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
     }
 
     // V3 — Cognitive premise surface. This intentionally keys off explicit
-    //      copy + body anchors rather than a synthetic category tag.
+    //      copy + body anchors rather than an abstract taxonomy tag.
     const hasCognitiveSurface = VL_COG_BUCKETS.has(bucketKey)
         || (!physicalBodyParts.length && (hasCogVerb || VL_COGNITIVE_SURFACE_RE.test(allText)));
     if (hasCognitiveSurface) {
@@ -2226,7 +2226,7 @@ function computeVisualLegibility(obj, endpoint, ctx) {
         drivers.push({
             driver: `${bucketKey}_without_physical_frame_signals`,
             delta: d,
-            source: 'diversity bucket=mystery_experiment|identity AND no physical verb / gauge / object in frame — observation-only payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
+            source: 'premise lane=mystery_experiment|identity AND no physical verb / gauge / object in frame — observation-only payoff; inverse of HIGH_ENERGY_ACTION_FRAMES + end_begin_ratio',
         });
     }
 
@@ -2286,7 +2286,7 @@ function scoreMotifCombo(obj, endpoint, ctx) {
 
     // Creator-fit bias — biases toward the strongest maker/body/workshop
     // DNA already present in the corpus. Added to the combo score so the
-    // diversity-aware selector rewards fit within each diversity bucket.
+    // slate-balancing selector rewards fit within each premise lane.
     const fit = computeCreatorFit(obj, endpoint, ctx);
 
     // Proof-clarity / mechanism-visibility — rewards combos with a
@@ -2636,27 +2636,27 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Diversity-aware seed selection (MMR over premise diversity buckets + explicit proof surfaces)
+// Validated-video-first seed selection (MMR over premise lanes + explicit proof surfaces)
 //
-// The old selector still carried a category-layer penalty. That kept the
-// ranking orbiting broad buckets instead of concrete validated idea shapes.
+// The old selector carried abstraction-layer bias. That kept the ranking orbiting
+// broad abstractions instead of concrete validated idea shapes.
 //
-// The current selector enforces diversity at three explicit levels:
-//   1. Premise diversity bucket (stored on each premise atom as `obj.diversity_bucket` for
-//      legacy reasons; values: endurance / build_test / body_transformation /
-//      mystery_experiment / identity / skill_dare / craft_patience /
-//      cognitive_feat / repetition_outreach) — at most 1 per bucket until
-//      every represented bucket has been used once.
+// The current selector balances the slate at three explicit levels:
+//   1. Premise lane (still stored on each premise atom as `obj.diversity_bucket`
+//      for legacy/on-disk compatibility; values: endurance / build_test /
+//      body_transformation / mystery_experiment / identity / skill_dare /
+//      craft_patience / cognitive_feat / repetition_outreach) — at most 1 per
+//      lane until every represented lane has been used once.
 //   2. Endpoint kind (count / timer / distance / body / transformation /
 //      experiment / identity / build_test) — penalty for repeats, hard cap
 //      at 2 per kind.
 //   3. Proof surface — soft penalty for repeats on the same visible proof
 //      surface (same concrete kind + same body anchor), so the top slate
-//      stays idea-specific rather than bucket-specific.
+//      stays idea-specific rather than lane-specific.
 //
 // Selection uses Maximal-Marginal-Relevance:
 //   pick_score(c) = raw_score(c) − λ·similarity(c, already_selected)
-// Similarity combines diversity-bucket, endpoint, and proof-surface overlap.
+// Similarity combines premise-lane, endpoint, and proof-surface overlap.
 // Every selection decision is logged to synthesis_trace.diversity_log so the
 // reason each slot was chosen is auditable.
 
@@ -2674,9 +2674,9 @@ function comboSimilarity(a, b) {
     return s;
 }
 
-// Clusters combos by their premise-diversity bucket. The bucket is still read
-// from `obj.diversity_bucket` because that is the on-disk data field; the local name
-// reflects the role (diversity axis) rather than the legacy field name.
+// Clusters combos by their premise lane. The lane is still read from
+// `obj.diversity_bucket` because that is the on-disk data field; the local name
+// reflects the role rather than the legacy field name.
 function clusterCombosByDiversityBucket(combos) {
     const clusters = new Map();
     for (const c of combos) {
@@ -2719,9 +2719,8 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         };
     }
 
-    // Phase 1: one combo per diversity bucket, in descending best-bucket-score
-    // order. This guarantees diversity-bucket coverage before any second slot
-    // is taken.
+    // Phase 1: one combo per premise lane, in descending best-lane-score
+    // order. This guarantees lane coverage before any second slot is taken.
     for (const bucket of diversityBucketOrder) {
         if (picked.length >= maxCount) break;
         const candidates = clusters.get(bucket) || [];
@@ -2736,9 +2735,9 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
         if (!best) continue;
 
         // Capture up to 2 nearby within-bucket alternates before mutating state.
-        // Cross-bucket alternates get picked on their own round, so limiting
-        // to the same diversity-bucket cluster keeps this audit layer focused
-        // on the actual decision made at this slot.
+        // Cross-lane alternates get picked on their own round, so limiting
+        // to the same lane cluster keeps this audit layer focused on the
+        // actual decision made at this slot.
         const alts = [];
         for (const c of candidates) {
             if (c === best) continue;
@@ -2746,7 +2745,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             let reason;
             if (usedPremiseIds.has(c.obj.id)) reason = 'premise-id already selected in earlier slot';
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) reason = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
-            else reason = 'lower raw score within this diversity bucket';
+            else reason = 'lower raw score within this premise lane';
             alts.push(compactAlt(c, best, { rejection_reason: reason }));
         }
         alternatesByPremiseId.set(best.obj.id, alts);
@@ -2765,12 +2764,12 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             endpoint_kind: best.endpoint.kind,
             raw_score: best.score,
             diversity_bucket_size: candidates.length,
-            reason: `first slot for diversity bucket "${bucket}" (highest-scoring concrete premise in bucket; endpoint rotated; premise-id hard-dedup)`,
+            reason: `first slot for premise lane "${bucket}" (highest-scoring concrete premise in lane; endpoint rotated; premise-id hard-dedup)`,
         });
     }
 
-    // Phase 2: MMR fill — allow a second pick from the same diversity bucket
-    // only after every bucket has been represented and the new combo's
+    // Phase 2: MMR fill — allow a second pick from the same premise lane
+    // only after every lane has been represented and the new combo's
     // marginal relevance beats its similarity penalty against picked slots.
     const alreadyPickedSet = new Set(picked);
     const remaining = combos.filter(c => !alreadyPickedSet.has(c));
@@ -2783,7 +2782,7 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
             const c = remaining[i];
             let blocked = null;
             if (usedPremiseIds.has(c.obj.id)) blocked = 'premise-id already selected';
-            else if ((perDiversityBucket.get(c.obj.diversity_bucket || 'unknown') || 0) >= 2) blocked = `diversity-bucket cap hit (${c.obj.diversity_bucket || 'unknown'}=2)`;
+            else if ((perDiversityBucket.get(c.obj.diversity_bucket || 'unknown') || 0) >= 2) blocked = `premise-lane cap hit (${c.obj.diversity_bucket || 'unknown'}=2)`;
             else if ((perEndpoint.get(c.endpoint.kind) || 0) >= 2) blocked = `endpoint-kind cap hit (${c.endpoint.kind}=2)`;
             let sim = 0;
             for (const p of picked) sim = Math.max(sim, comboSimilarity(c, p));
@@ -4270,19 +4269,19 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     const seeds = synthesizeSeeds(brief, artifacts, pool);
     const ideas = seeds.map((seed, i) => assembleBlueprint(seed, brief, i + 1, artifacts));
 
-    // Diversity-aware re-rank on blueprint scores. The old code sorted by
-    // score_breakdown.total alone, which let one or two diversity buckets
+    // Slate-balancing re-rank on blueprint scores. The old code sorted by
+    // score_breakdown.total alone, which let one or two premise lanes
     // dominate every top slot because their premise_score advantage propagated.
-    // The new rank applies MMR on blueprint totals with diversity-bucket +
-    // endpoint + proof-surface similarity, then enforces per-bucket /
-    // per-endpoint caps at the final-output level so the same bucket cannot
-    // take more than ~2 of the top `count` slots when other buckets remain.
+    // The new rank applies MMR on blueprint totals with premise-lane +
+    // endpoint + proof-surface similarity, then enforces per-lane /
+    // per-endpoint caps at the final-output level so the same lane cannot
+    // take more than ~2 of the top `count` slots when other lanes remain.
     const scored = ideas.map(idea => {
         const seedPath = idea.synthesis_trace && idea.synthesis_trace.seed_path;
         const vpRankBonus = seedPath === 'source_video_primary' ? 0.35 : 0;
         return {
             idea,
-            // Diversity-bucket axis for final ranking. Active seeds now write
+            // Premise-lane axis for final ranking. Active seeds now write
             // only the source-video-led `diversity_bucket` field here.
             bucket: (idea.synthesis_trace && idea.synthesis_trace.diversity_bucket) || 'unknown',
             endpoint_kind: (() => {
