@@ -339,6 +339,12 @@ const baseAtomics = [
     'social_proof_count_hook', 'social_proof_front_load_ratio',
     'reference_callback_count_hook', 'reference_callback_front_load_ratio',
     'visual_proof_count_hook', 'visual_proof_front_load_ratio', 'visual_proof_count_first_half',
+    // Group AH: New zygarnik phrase families
+    'teaser_signal_count_hook', 'teaser_signal_front_load_ratio', 'teaser_signal_count_first_half', 'teaser_signal_position_pct',
+    'anticipation_escalation_count_hook', 'anticipation_escalation_front_load_ratio', 'anticipation_escalation_count_first_half', 'anticipation_escalation_position_pct',
+    'proof_delay_count_hook', 'proof_delay_front_load_ratio', 'proof_delay_count_first_half', 'proof_delay_position_pct',
+    'open_question_setup_count_hook', 'open_question_setup_front_load_ratio', 'open_question_setup_count_first_half', 'open_question_setup_position_pct',
+    'visual_anchor_count_hook', 'visual_anchor_front_load_ratio', 'visual_anchor_count_first_half', 'visual_anchor_position_pct',
 ];
 
 // Windowed variants for count/density families
@@ -396,6 +402,12 @@ const windowedFamilies = [
     // Group AE: new loop stacking / deferred reveal families
     ['loop_stacking',             ['count', 'density']],
     ['deferred_reveal',           ['count', 'density']],
+    // Group AH windowed families
+    ['teaser_signal',             ['count', 'density']],
+    ['anticipation_escalation',   ['count', 'density']],
+    ['proof_delay',               ['count', 'density']],
+    ['open_question_setup',       ['count', 'density']],
+    ['visual_anchor',             ['count', 'density']],
 ];
 const windowedAtomics = [];
 for (const [fam, measures] of windowedFamilies) {
