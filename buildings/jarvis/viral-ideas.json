@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-23T17:54:35.998Z",
+    "generated_at": "2026-04-23T18:27:07.861Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -216,8 +216,8 @@
       ],
       "synthesis_trace": {
         "rank": 1,
-        "motif_score": 3.31,
-        "motif_drivers": [
+        "premise_score": 3.31,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.48,
@@ -293,7 +293,7 @@
               "source": "title_making_keyword ($24M avg for build/test format) + wave11_12.end_begin_ratio (single-shot before/after or build-until-fail visible payoff)"
             }
           ],
-          "core_motif_score": 1.18,
+          "core_premise_score": 1.18,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -311,7 +311,7 @@
           "score": 0.78,
           "drivers": [
             {
-              "driver": "build_test_hybrid_in_motif_copy",
+              "driver": "build_test_hybrid_in_premise_copy",
               "delta": 0.38,
               "matched_build_verb": "built",
               "matched_test_verb": "rode",
@@ -320,7 +320,7 @@
             {
               "driver": "single_shot_qualitative_endpoint_build_test",
               "delta": 0.14,
-              "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when motif copy names a concrete artifact (scored in D)"
+              "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when premise copy names a concrete artifact (scored in D)"
             },
             {
               "driver": "physical_artifact_or_overlay_in_frame",
@@ -346,7 +346,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.6,
@@ -366,7 +366,7 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "rode",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_physical_reveal",
@@ -398,7 +398,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "two_by_four_bike",
         "endpoint_atom_id": "build_test_outcome",
@@ -432,14 +432,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -543,7 +543,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.4965,
+          "premise": 0.4965,
           "fit": 0.09,
           "proof": 0.1092,
           "legibility": 0.096
@@ -2399,7 +2399,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.75,
-            "core_motif_score": 1.18,
+            "core_premise_score": 1.18,
             "drivers_triggered": [
               {
                 "driver": "title_making_keyword_match",
@@ -2488,11 +2488,11 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.78,
             "drivers_triggered": [
               {
-                "driver": "build_test_hybrid_in_motif_copy",
+                "driver": "build_test_hybrid_in_premise_copy",
                 "delta": 0.38,
                 "matched": "built",
                 "source": "proven_discoveries.title_making_keyword ($24M avg, 23 videos) + top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops) + wave11_12.end_begin_ratio (single-shot visible payoff)"
@@ -2501,7 +2501,7 @@
                 "driver": "single_shot_qualitative_endpoint_build_test",
                 "delta": 0.14,
                 "matched": null,
-                "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when motif copy names a concrete artifact (scored in D)"
+                "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when premise copy names a concrete artifact (scored in D)"
               },
               {
                 "driver": "physical_artifact_or_overlay_in_frame",
@@ -2527,7 +2527,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -2584,7 +2584,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.6,
             "drivers_triggered": [
               {
@@ -2597,7 +2597,7 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "rode",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_physical_reveal",
@@ -2623,7 +2623,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -3310,8 +3310,8 @@
       ],
       "synthesis_trace": {
         "rank": 3,
-        "motif_score": 3.31,
-        "motif_drivers": [
+        "premise_score": 3.31,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.48,
@@ -3387,7 +3387,7 @@
               "source": "title_making_keyword ($24M avg for build/test format) + wave11_12.end_begin_ratio (single-shot before/after or build-until-fail visible payoff)"
             }
           ],
-          "core_motif_score": 1.18,
+          "core_premise_score": 1.18,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -3405,7 +3405,7 @@
           "score": 0.78,
           "drivers": [
             {
-              "driver": "build_test_hybrid_in_motif_copy",
+              "driver": "build_test_hybrid_in_premise_copy",
               "delta": 0.38,
               "matched_build_verb": "built",
               "matched_test_verb": "rowed",
@@ -3414,7 +3414,7 @@
             {
               "driver": "single_shot_qualitative_endpoint_build_test",
               "delta": 0.14,
-              "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when motif copy names a concrete artifact (scored in D)"
+              "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when premise copy names a concrete artifact (scored in D)"
             },
             {
               "driver": "physical_artifact_or_overlay_in_frame",
@@ -3440,7 +3440,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.6,
@@ -3460,7 +3460,7 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "rowed",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_physical_reveal",
@@ -3492,7 +3492,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "cardboard_boat_row",
         "endpoint_atom_id": "build_test_outcome",
@@ -3526,14 +3526,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -3637,7 +3637,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.4965,
+          "premise": 0.4965,
           "fit": 0.09,
           "proof": 0.1092,
           "legibility": 0.096
@@ -5493,7 +5493,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.75,
-            "core_motif_score": 1.18,
+            "core_premise_score": 1.18,
             "drivers_triggered": [
               {
                 "driver": "title_making_keyword_match",
@@ -5582,11 +5582,11 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.78,
             "drivers_triggered": [
               {
-                "driver": "build_test_hybrid_in_motif_copy",
+                "driver": "build_test_hybrid_in_premise_copy",
                 "delta": 0.38,
                 "matched": "built",
                 "source": "proven_discoveries.title_making_keyword ($24M avg, 23 videos) + top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES (28% at peaks vs 8% at drops) + wave11_12.end_begin_ratio (single-shot visible payoff)"
@@ -5595,7 +5595,7 @@
                 "driver": "single_shot_qualitative_endpoint_build_test",
                 "delta": 0.14,
                 "matched": null,
-                "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when motif copy names a concrete artifact (scored in D)"
+                "source": "wave11_12.end_begin_ratio — qualitative reveal is single-shot legible when premise copy names a concrete artifact (scored in D)"
               },
               {
                 "driver": "physical_artifact_or_overlay_in_frame",
@@ -5621,7 +5621,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -5678,7 +5678,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.6,
             "drivers_triggered": [
               {
@@ -5691,7 +5691,7 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "rowed",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_physical_reveal",
@@ -5717,7 +5717,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -6404,8 +6404,8 @@
       ],
       "synthesis_trace": {
         "rank": 8,
-        "motif_score": 2.445,
-        "motif_drivers": [
+        "premise_score": 2.445,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.72,
@@ -6476,7 +6476,7 @@
               "source": "HIGH_ENERGY_ACTION_FRAMES peak cause + wave11_12.end_begin_ratio (numeric counter freeze = single-shot visible payoff)"
             }
           ],
-          "core_motif_score": 1.56,
+          "core_premise_score": 1.56,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -6512,7 +6512,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.46,
@@ -6532,12 +6532,12 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "marched",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_implicit_freeze_frame_distance",
               "delta": 0.16,
-              "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+              "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
             },
             {
               "driver": "visual_action_short_shows_state_contrast",
@@ -6553,7 +6553,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "weighted_backpack_march",
         "endpoint_atom_id": "exact_distance",
@@ -6587,14 +6587,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -6698,7 +6698,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.3667,
+          "premise": 0.3667,
           "fit": 0.0102,
           "proof": 0.0476,
           "legibility": 0.0736
@@ -8554,7 +8554,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.085,
-            "core_motif_score": 1.56,
+            "core_premise_score": 1.56,
             "drivers_triggered": [
               {
                 "driver": "generic_outdoor_no_object_penalty",
@@ -8633,7 +8633,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.34,
             "drivers_triggered": [
               {
@@ -8654,7 +8654,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -8711,7 +8711,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.46,
             "drivers_triggered": [
               {
@@ -8724,13 +8724,13 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "marched",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_implicit_freeze_frame_distance",
                 "delta": 0.16,
                 "matched": null,
-                "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+                "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
               },
               {
                 "driver": "visual_action_short_shows_state_contrast",
@@ -8740,7 +8740,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -9427,8 +9427,8 @@
       ],
       "synthesis_trace": {
         "rank": 5,
-        "motif_score": 2.415,
-        "motif_drivers": [
+        "premise_score": 2.415,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.72,
@@ -9499,7 +9499,7 @@
               "source": "tactile frame preserved without triggering TECHNICAL_MATERIAL_LANGUAGE drop cause — sensory > technical axis"
             }
           ],
-          "core_motif_score": 1.68,
+          "core_premise_score": 1.68,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -9534,7 +9534,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.52,
@@ -9555,7 +9555,7 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "wrapping",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_physical_reveal",
@@ -9581,7 +9581,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pro_boxer_day",
         "endpoint_atom_id": "identity_dayend",
@@ -9615,14 +9615,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -9726,7 +9726,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.3623,
+          "premise": 0.3623,
           "fit": 0.0642,
           "proof": -0.0448,
           "legibility": 0.0832
@@ -11582,7 +11582,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.535,
-            "core_motif_score": 1.68,
+            "core_premise_score": 1.68,
             "drivers_triggered": [
               {
                 "driver": "workshop_frame_fit_setting_hands",
@@ -11661,7 +11661,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": -0.32,
             "drivers_triggered": [
               {
@@ -11682,7 +11682,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -11739,7 +11739,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.52,
             "drivers_triggered": [
               {
@@ -11752,7 +11752,7 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "wrapping",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_physical_reveal",
@@ -11772,7 +11772,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -12458,8 +12458,8 @@
       ],
       "synthesis_trace": {
         "rank": 4,
-        "motif_score": 2.015,
-        "motif_drivers": [
+        "premise_score": 2.015,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.48,
@@ -12518,7 +12518,7 @@
               "source": "tactile frame preserved without triggering TECHNICAL_MATERIAL_LANGUAGE drop cause — sensory > technical axis"
             }
           ],
-          "core_motif_score": 1.08,
+          "core_premise_score": 1.08,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -12549,7 +12549,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.48,
@@ -12570,12 +12570,12 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "push",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_implicit_freeze_frame_body",
               "delta": 0.16,
-              "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+              "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
             },
             {
               "driver": "frame1_comprehensible_action_plus_one",
@@ -12595,7 +12595,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pushups_one_day",
         "endpoint_atom_id": "body_quit",
@@ -12629,14 +12629,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -12740,7 +12740,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.3023,
+          "premise": 0.3023,
           "fit": 0.0402,
           "proof": 0.0168,
           "legibility": 0.0768
@@ -14596,7 +14596,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.335,
-            "core_motif_score": 1.08,
+            "core_premise_score": 1.08,
             "drivers_triggered": [
               {
                 "driver": "workshop_frame_fit_setting",
@@ -14675,7 +14675,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.12,
             "drivers_triggered": [
               {
@@ -14690,7 +14690,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -14747,7 +14747,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.48,
             "drivers_triggered": [
               {
@@ -14760,13 +14760,13 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "push",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_implicit_freeze_frame_body",
                 "delta": 0.16,
                 "matched": null,
-                "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+                "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
               },
               {
                 "driver": "frame1_comprehensible_action_plus_one",
@@ -14780,7 +14780,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -15466,8 +15466,8 @@
       ],
       "synthesis_trace": {
         "rank": 12,
-        "motif_score": 1.995,
-        "motif_drivers": [
+        "premise_score": 1.995,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.48,
@@ -15530,7 +15530,7 @@
               "source": "tactile frame preserved without triggering TECHNICAL_MATERIAL_LANGUAGE drop cause — sensory > technical axis"
             }
           ],
-          "core_motif_score": 1.22,
+          "core_premise_score": 1.22,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -15561,7 +15561,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.32,
@@ -15582,7 +15582,7 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "push",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "frame1_comprehensible_action_plus_one",
@@ -15602,7 +15602,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pushups_one_day",
         "endpoint_atom_id": "experiment_observation",
@@ -15636,14 +15636,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -15747,7 +15747,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.2993,
+          "premise": 0.2993,
           "fit": 0.0402,
           "proof": 0.0168,
           "legibility": 0.0512
@@ -17603,7 +17603,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.335,
-            "core_motif_score": 1.22,
+            "core_premise_score": 1.22,
             "drivers_triggered": [
               {
                 "driver": "workshop_frame_fit_setting",
@@ -17682,7 +17682,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.12,
             "drivers_triggered": [
               {
@@ -17697,7 +17697,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -17754,7 +17754,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.32,
             "drivers_triggered": [
               {
@@ -17767,7 +17767,7 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "push",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "frame1_comprehensible_action_plus_one",
@@ -17781,7 +17781,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -18468,8 +18468,8 @@
       ],
       "synthesis_trace": {
         "rank": 4,
-        "motif_score": 2.95,
-        "motif_drivers": [
+        "premise_score": 2.95,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.6,
@@ -18543,7 +18543,7 @@
               "source": "HIGH_ENERGY_ACTION_FRAMES peak cause + wave11_12.end_begin_ratio (numeric counter freeze = single-shot visible payoff)"
             }
           ],
-          "core_motif_score": 1.56,
+          "core_premise_score": 1.56,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -18579,7 +18579,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.56,
@@ -18599,12 +18599,12 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "climbed",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_implicit_freeze_frame_count",
               "delta": 0.16,
-              "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+              "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
             },
             {
               "driver": "frame1_comprehensible_action_object_gauge",
@@ -18624,7 +18624,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "stair_climb_repeats",
         "endpoint_atom_id": "exact_count",
@@ -18658,14 +18658,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -18769,7 +18769,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.4425,
+          "premise": 0.4425,
           "fit": 0.0588,
           "proof": 0.0476,
           "legibility": 0.0896
@@ -20625,7 +20625,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.49,
-            "core_motif_score": 1.56,
+            "core_premise_score": 1.56,
             "drivers_triggered": [
               {
                 "driver": "workshop_frame_fit_setting",
@@ -20709,7 +20709,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.34,
             "drivers_triggered": [
               {
@@ -20730,7 +20730,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -20787,7 +20787,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.56,
             "drivers_triggered": [
               {
@@ -20800,13 +20800,13 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "climbed",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_implicit_freeze_frame_count",
                 "delta": 0.16,
                 "matched": null,
-                "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+                "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
               },
               {
                 "driver": "frame1_comprehensible_action_object_gauge",
@@ -20820,7 +20820,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -21507,8 +21507,8 @@
       ],
       "synthesis_trace": {
         "rank": 7,
-        "motif_score": 2.415,
-        "motif_drivers": [
+        "premise_score": 2.415,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.72,
@@ -21579,7 +21579,7 @@
               "source": "tactile frame preserved without triggering TECHNICAL_MATERIAL_LANGUAGE drop cause — sensory > technical axis"
             }
           ],
-          "core_motif_score": 1.68,
+          "core_premise_score": 1.68,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -21614,7 +21614,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.52,
@@ -21635,7 +21635,7 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "wrapping",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_physical_reveal",
@@ -21661,7 +21661,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pro_boxer_day",
         "endpoint_atom_id": "identity_dayend",
@@ -21695,14 +21695,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -21806,7 +21806,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.3623,
+          "premise": 0.3623,
           "fit": 0.0642,
           "proof": -0.0448,
           "legibility": 0.0832
@@ -23662,7 +23662,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.535,
-            "core_motif_score": 1.68,
+            "core_premise_score": 1.68,
             "drivers_triggered": [
               {
                 "driver": "workshop_frame_fit_setting_hands",
@@ -23741,7 +23741,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": -0.32,
             "drivers_triggered": [
               {
@@ -23762,7 +23762,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -23819,7 +23819,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.52,
             "drivers_triggered": [
               {
@@ -23832,7 +23832,7 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "wrapping",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_physical_reveal",
@@ -23852,7 +23852,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -24539,8 +24539,8 @@
       ],
       "synthesis_trace": {
         "rank": 2,
-        "motif_score": 2.445,
-        "motif_drivers": [
+        "premise_score": 2.445,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.72,
@@ -24611,7 +24611,7 @@
               "source": "HIGH_ENERGY_ACTION_FRAMES peak cause + wave11_12.end_begin_ratio (numeric counter freeze = single-shot visible payoff)"
             }
           ],
-          "core_motif_score": 1.56,
+          "core_premise_score": 1.56,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -24647,7 +24647,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.46,
@@ -24667,12 +24667,12 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "marched",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_implicit_freeze_frame_distance",
               "delta": 0.16,
-              "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+              "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
             },
             {
               "driver": "visual_action_short_shows_state_contrast",
@@ -24688,7 +24688,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "weighted_backpack_march",
         "endpoint_atom_id": "exact_distance",
@@ -24722,14 +24722,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -24833,7 +24833,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.3667,
+          "premise": 0.3667,
           "fit": 0.0102,
           "proof": 0.0476,
           "legibility": 0.0736
@@ -26689,7 +26689,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.085,
-            "core_motif_score": 1.56,
+            "core_premise_score": 1.56,
             "drivers_triggered": [
               {
                 "driver": "generic_outdoor_no_object_penalty",
@@ -26768,7 +26768,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.34,
             "drivers_triggered": [
               {
@@ -26789,7 +26789,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -26846,7 +26846,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.46,
             "drivers_triggered": [
               {
@@ -26859,13 +26859,13 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "marched",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_implicit_freeze_frame_distance",
                 "delta": 0.16,
                 "matched": null,
-                "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+                "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
               },
               {
                 "driver": "visual_action_short_shows_state_contrast",
@@ -26875,7 +26875,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",
@@ -27561,8 +27561,8 @@
       ],
       "synthesis_trace": {
         "rank": 5,
-        "motif_score": 2.015,
-        "motif_drivers": [
+        "premise_score": 2.015,
+        "premise_drivers": [
           {
             "driver": "sensory_words_in_corpus_positive_list",
             "delta": 0.48,
@@ -27621,7 +27621,7 @@
               "source": "tactile frame preserved without triggering TECHNICAL_MATERIAL_LANGUAGE drop cause — sensory > technical axis"
             }
           ],
-          "core_motif_score": 1.08,
+          "core_premise_score": 1.08,
           "derived_from_indicators": [
             "findings.kept_signals.pat_making_v2 (delta_r2=+0.012; 34 videos avg 19.7M vs 5.6M)",
             "proven_discoveries.title_making_keyword ($24M avg, 23 videos with \"Making\")",
@@ -27652,7 +27652,7 @@
             "retention-patterns.top_3_peak_causes.PHYSICAL_SENSORY_LANGUAGE (sensory-rate weight +1.59 — body/physical payoff is readable)",
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)"
           ],
-          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual field on the motif atom and cites a corpus indicator."
+          "note": "Proof-clarity rewards single-shot legible payoffs (build+test hybrids, body before/after anchors, numeric counter freeze + named artifact) and penalizes observation/identity endpoints with no artifact, cognitive/head-framed payoffs, and stacks whose contents are untestable to the viewer. Added to the combo score so the diversity-aware selector and final re-rank both reward mechanism visibility at the concrete premise level. No hand-picked top-5 — every weight reads a factual premise field and cites a corpus indicator."
         },
         "visual_legibility": {
           "score": 0.48,
@@ -27673,12 +27673,12 @@
               "driver": "physical_action_verb_in_copy",
               "delta": 0.1,
               "matched_phys_verb": "push",
-              "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+              "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
             },
             {
               "driver": "title_payoff_implicit_freeze_frame_body",
               "delta": 0.16,
-              "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+              "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
             },
             {
               "driver": "frame1_comprehensible_action_plus_one",
@@ -27698,7 +27698,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the motif atom along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch motifs that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual fields on the motif and the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pushups_one_day",
         "endpoint_atom_id": "body_quit",
@@ -27732,14 +27732,14 @@
           "visual_legibility ← HIGH_ENERGY_ACTION_FRAMES (action verb + gauge/object in frame 1) + PHYSICAL_SENSORY_LANGUAGE (visible body_part_phrase) + end_begin_ratio (title reveal phrasing classified physical vs verbal/observational) + visual_is_workshop (state-contrast in visual_action_short) + inverse on invisible body_parts / cognitive verbs / explicit cognitive-surface copy / verbal-reveal titles / non-comprehensible frame-1 / observation-only identity or mystery cuts"
         ],
         "remaining_static_inputs": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
         "still_hardcoded": [
-          "object-motif atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
-          "endpoint-motif kinds (count / timer / distance / body-quit)",
+          "source-premise atoms (verb/noun/scale/body_parts/sensation_words/safety_tier)",
+          "endpoint atoms (count / timer / distance / body-quit)",
           "build_phases zone boundaries (0-10, 10-25, 25-60, 60-90, 90-100)",
           "duration_band_id default (\"sweet_spot_46_60\")"
         ],
@@ -27843,7 +27843,7 @@
           "bridge": 0.5291,
           "vocabulary": 0,
           "interactions": 0,
-          "motif": 0.3023,
+          "premise": 0.3023,
           "fit": 0.0402,
           "proof": 0.0168,
           "legibility": 0.0768
@@ -29699,7 +29699,7 @@
             ],
             "filter": "indicators with published r/r_partial/delta_r2 in the evidence lattice above a minimum effect threshold",
             "fit_score": 0.335,
-            "core_motif_score": 1.08,
+            "core_premise_score": 1.08,
             "drivers_triggered": [
               {
                 "driver": "workshop_frame_fit_setting",
@@ -29778,7 +29778,7 @@
                 "why": "object interaction makes the proof legible vs face-only reaction"
               }
             ],
-            "filter": "factual fields on the motif atom × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
+            "filter": "factual premise fields × endpoint kind — each driver exposes the matched verb/anchor/artifact and the corpus indicator it cites",
             "proof_clarity_score": 0.12,
             "drivers_triggered": [
               {
@@ -29793,7 +29793,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the motif atom on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch motifs that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -29850,7 +29850,7 @@
                 "why": "title_making_keyword pattern aligns with physical reveal phrasing"
               }
             ],
-            "filter": "six factual axes on the motif atom + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
+            "filter": "six factual premise axes + title string — each driver exposes the matched stem/phrase/body-part and the corpus indicator it cites",
             "visual_legibility_score": 0.48,
             "drivers_triggered": [
               {
@@ -29863,13 +29863,13 @@
                 "driver": "physical_action_verb_in_copy",
                 "delta": 0.1,
                 "matched": "push",
-                "source": "physical-action verb stem present in motif copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
+                "source": "physical-action verb stem present in premise copy — the daily act is filmable action; top_3_peak_causes.HIGH_ENERGY_ACTION_FRAMES"
               },
               {
                 "driver": "title_payoff_implicit_freeze_frame_body",
                 "delta": 0.16,
                 "matched": null,
-                "source": "endpoint is numeric/body/build_test AND motif has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
+                "source": "endpoint is numeric/body/build_test AND the premise has no builtin reveal — composeTitle() appends a single-frame freeze (\"The Counter Froze At N\" / \"The Timer Hit N Exactly\" / \"The Mile Counter Froze At N\" / \"My {part} Quit First\" / \"The Build Held Until N\"); wave11_12.end_begin_ratio"
               },
               {
                 "driver": "frame1_comprehensible_action_plus_one",
@@ -29883,7 +29883,7 @@
               }
             ],
             "applied_weight_in_scoreIdea": 0.16,
-            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal motifs below zero before any top-5 slot is assigned."
+            "selection_effect": "Added to the combo score alongside proof_clarity so the diversity-aware selector, MMR fill, AND the final blueprint re-rank all push cognitive/abstract/verbal-reveal premises below zero before any top-5 slot is assigned."
           },
           "scorecard_targets": {
             "field": "scorecard_targets",

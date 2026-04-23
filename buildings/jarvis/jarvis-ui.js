@@ -6083,7 +6083,7 @@ const JarvisUI = (() => {
         const pc = st.proof_clarity || null;
         const vl = st.visual_legibility || null;
         const chips = [
-            scoreChip('motif', st.motif_score, '#a78bfa'),
+            scoreChip('premise', st.premise_score, '#a78bfa'),
             scoreChip('fit', cf && cf.score, '#22d3ee'),
             scoreChip('proof', pc && pc.score, '#22c55e'),
             scoreChip('legibility', vl && vl.score, '#fbbf24'),
