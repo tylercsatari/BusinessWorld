@@ -56,13 +56,13 @@ function loadAllArtifacts() {
         components: loadJsonSafe('components.json'),
         mechanisms: loadJsonSafe('mechanisms.json'),
         questions: loadJsonSafe('research_questions.json'),
-        retentionPatterns: normalizeLegacyRetentionPatterns(loadJsonSafe('retention-patterns.json')),
+        retentionPatterns: loadJsonSafe('retention-patterns.json'),
         wordImpact: loadJsonSafe('word-retention-impact.json'),
         videoScorecards: loadJsonSafe('video-scorecards.json'),
         predictionModel: loadJsonSafe('prediction-model.json'),
         preuploadModel: loadJsonSafe('preupload-model.json'),
         indicatorRegistry: loadJsonSafe('indicator-registry.json'),
-        candidateProposals: normalizeCandidateProposals(loadJsonSafe('candidate_proposals.json')),
+        candidateProposals: loadJsonSafe('candidate_proposals.json'),
         mechanismIndicatorLinks: loadJsonSafe('mechanism_indicator_links.json'),
         signals: loadJsonSafe('signals-dataset.json'),
     };
@@ -72,33 +72,11 @@ function loadAllArtifacts() {
 // Narrow-predictor helpers (carried over from v1, tightened)
 // ──────────────────────────────────────────────────────────────────────
 
-function normalizeLegacyBucketFields(data) {
+function normalizeIndicatorMetadata(data) {
     if (!data || typeof data !== 'object') return data;
     const out = Object.assign({}, data);
-    if (!out.diversity_bucket && out.family) out.diversity_bucket = out.family;
-    if (!Array.isArray(out.diversity_buckets) && Array.isArray(out.families)) out.diversity_buckets = out.families;
+    if (!out.diversity_bucket && typeof out.family === 'string') out.diversity_bucket = out.family;
     return out;
-}
-
-function normalizeCandidateProposals(data) {
-    return normalizeLegacyBucketFields(data);
-}
-
-function normalizeLegacyRetentionPatterns(data) {
-    if (!data || typeof data !== 'object') return data;
-    const out = Object.assign({}, data);
-    const wave7 = Object.assign({}, out.wave7_new_signals || {});
-    if (!wave7.progression_patterns && wave7.quartile_templates) {
-        wave7.progression_patterns = wave7.quartile_templates;
-    }
-    out.wave7_new_signals = wave7;
-    return out;
-}
-
-function normalizeLegacySignalKind(data) {
-    if (!data || typeof data !== 'object') return data;
-    if (!data.signal_kind && data.category) return Object.assign({}, data, { signal_kind: data.category });
-    return data;
 }
 
 const TARGET_PROXY = new Set(['views', 'views_log10', 'log_views', 'log10_views']);
@@ -237,15 +215,12 @@ function topMechanismPrinciples(principles, bridgeTop, limit = 15) {
 
 function provenFeatures(findings) {
     if (!findings) return { kept_signals: [], discoveries: [], retention_patterns: [], concept_signals: [] };
-    const kept = (findings.kept_signals || []).map(s => {
-        const sig = normalizeLegacySignalKind(s);
-        return {
-            signal: sig.signal,
-            delta_r2: sig.delta_r2,
-            meaning: sig.meaning,
-            signal_kind: sig.signal_kind,
-        };
-    });
+    const kept = (findings.kept_signals || []).map(sig => ({
+        signal: sig.signal,
+        delta_r2: sig.delta_r2,
+        meaning: sig.meaning,
+        signal_kind: sig.signal_kind,
+    }));
     const discoveries = (findings.top_discoveries || [])
         .filter(d => d.r_partial === null || Math.abs(d.r_partial) >= 0.2)
         .map(d => ({ discovery: d.discovery, r_partial: d.r_partial, meaning: d.meaning }));
@@ -1279,33 +1254,33 @@ const ENDPOINT_MOTIFS = [
 ];
 
 // ──────────────────────────────────────────────────────────────────────
-// Video-prototype seed path
+// Source-video seed path
 // ──────────────────────────────────────────────────────────────────────
 // Candidate pool: every video in signals-dataset.json (203 entries).
-// Motif assignment is now fully dataset-derived:
-//   - inferMotifFromTitle() deterministically infers {obj_id, endpoint_id}
+// Premise-spec assignment is fully dataset-derived:
+//   - inferPremiseSpecFromVideo() deterministically infers {obj_id, endpoint_id}
 //     from the exact validated source video title.
-//   - selectPrototypeVideos() ranks exact dataset videos by quality_score.
-//     No obj_id/category dedup is allowed in prototype selection anymore,
+//   - selectPrimarySourceVideos() ranks exact dataset videos by quality_score.
+//     No surrogate obj/category dedup is allowed in primary source selection,
 //     so every retained slot is chosen as a concrete validated video first.
 //
 // Selection: quality_score = z_score × retention/100 × keep/100.
-// All dataset videos are ranked; dedup by inferred obj_id; slice(0, N)
+// All dataset videos are ranked and deduped only by ytId; slice(0, N)
 // draws the highest-performing source-video anchors. Same dataset → same
 // output (deterministic).
 //
-// What remains template-driven after this pass:
+// What remains predefined after this pass:
 //   - ~1/2 of seeds still come from OBJECT_MOTIFS × scoreMotifCombo
 //   - composeSeed produces the same structure regardless of path
-//   - obj_id/endpoint_id still reference predefined motif atoms
-//   - inferMotifFromTitle uses keyword rules (heuristic, not learned)
-//   - VP seeds still use motif atoms internally, but downstream diversity now
-//     buckets them by exact source video instead of motif diversity buckets
+//   - obj_id/endpoint_id still reference predefined premise atoms
+//   - inferPremiseSpecFromVideo uses keyword rules (heuristic, not learned)
+//   - source-video seeds still use those atoms internally, but downstream
+//     diversity buckets them by exact source video instead of abstract buckets
 
-// Deterministic motif inference from a validated source video.
+// Deterministic premise-spec inference from a validated source video.
 // Primary signal is title keywords; when title rules fall back to the generic
 // default path, lightweight dataset metrics help disambiguate the endpoint.
-function inferMotifFromVideo(video) {
+function inferPremiseSpecFromVideo(video) {
     const t = ((video && video.name) || '').toLowerCase();
     const duration = Number(video && video.duration_s) || 0;
     const keep = Number(video && video.keep) || 0;
@@ -1400,20 +1375,20 @@ function inferMotifFromVideo(video) {
 }
 
 // Ranks all dataset videos by quality_score (z_score × retention/100 × keep/100).
-// Every prototype assignment is inferred directly from the source video title,
-// but selection is done on the exact source video rows themselves, not an
-// inferred obj_id/category surrogate.
-function selectPrototypeVideos(dataset) {
+// Every source-video assignment is inferred directly from the source video title,
+// but selection is done on the exact source video rows themselves, not a
+// surrogate obj/category grouping.
+function selectPrimarySourceVideos(dataset) {
     const scored = (dataset || []).filter(v => v.ytId).map(v => {
         const quality_score = round(
             (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
         );
-        const motif = inferMotifFromVideo(v);
+        const spec = inferPremiseSpecFromVideo(v);
         return {
-            spec: { ytId: v.ytId, ...motif },
+            spec: { ytId: v.ytId, ...spec },
             video: v,
             quality_score,
-            source_selection_reason: `${motif.endpoint_source}:${motif.endpoint_id};${motif.obj_source}:${motif.obj_id}`,
+            source_selection_reason: `${spec.endpoint_source}:${spec.endpoint_id};${spec.obj_source}:${spec.obj_id}`,
         };
     }).sort((a, b) => b.quality_score - a.quality_score);
 
@@ -1474,10 +1449,10 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
 function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const dataset = loadJsonSafe('signals-dataset.json');
     if (!dataset || !dataset.length) return [];
-    const prototypes = selectPrototypeVideos(dataset).slice(0, maxCount);
+    const primarySourceVideos = selectPrimarySourceVideos(dataset).slice(0, maxCount);
     const ctx = deriveMotifContext(brief, artifacts);
     const seeds = [];
-    for (const { spec, video, quality_score, source_selection_reason } of prototypes) {
+    for (const { spec, video, quality_score, source_selection_reason } of primarySourceVideos) {
         const seed = buildVideoDerivedSeed(spec, video, quality_score, source_selection_reason, ctx, seeds.length + 1, 'source_video_primary', 'primary');
         if (seed) seeds.push(seed);
     }
@@ -1496,7 +1471,7 @@ function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYt
             const quality_score = round(
                 (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
             );
-            const spec = inferMotifFromVideo(v);
+            const spec = inferPremiseSpecFromVideo(v);
             return {
                 spec: { ytId: v.ytId, ...spec },
                 video: v,
@@ -1516,7 +1491,7 @@ function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYt
     return seeds;
 }
 
-// Interleave prototype-led seeds with secondary validated-video seeds in a 2:1
+// Interleave primary source-video seeds with secondary validated-video seeds in a 2:1
 // ratio so the pool stays grounded in exact validated sources throughout.
 function interleaveSeeds(vpSeeds, secondarySeeds, maxCount) {
     if (!vpSeeds.length) return secondarySeeds.slice(0, maxCount);
@@ -2452,7 +2427,7 @@ function composeTitle(obj, endpoint, scale, bodyPart) {
     return core;
 }
 
-function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creatorFit, proofClarity, visualLegibility, sourceVideo = null) {
+function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, creatorFit, proofClarity, visualLegibility, sourceVideo = null) {
     const scale = pickScale(obj);
     const bodyPart = obj.body_part_phrase || (obj.body_parts && obj.body_parts[0]) || 'body';
     const title = composeTitle(obj, endpoint, scale, bodyPart);
@@ -2568,8 +2543,8 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
         hook_bucket_preference: { need_bucket_first_5s: true, need_bucket_first_10s: true },
         synthesis_trace: {
             rank,
-            premise_score: motifScore,
-            premise_drivers: motifDrivers,
+            premise_score: premiseScore,
+            premise_drivers: premiseDrivers,
             creator_fit: creatorFit ? {
                 score: creatorFit.score,
                 drivers: creatorFit.drivers,
@@ -2609,7 +2584,7 @@ function composeSeed(obj, endpoint, ctx, rank, motifScore, motifDrivers, creator
                     'indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)',
                     'findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)',
                 ],
-                note: 'Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens ("stack", "tally", "count overlay") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5.',
+                note: 'Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens ("stack", "tally", "count overlay") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5.',
             } : null,
             object_atom_id: obj.id,
             endpoint_atom_id: endpoint.id,
@@ -3340,7 +3315,7 @@ function defineIndicator(key) {
     try {
         const mini = variableCatalog.describeVariableMini(key);
         if (!mini || typeof mini !== 'object') return mini;
-        return normalizeLegacyBucketFields(mini);
+        return normalizeIndicatorMetadata(mini);
     } catch (e) { return null; }
 }
 
@@ -3885,7 +3860,7 @@ function buildSectionValidationTraces(seed, brief, ctx) {
         ];
         traces.visual_legibility = makeTrace({
             field: 'visual_legibility',
-            rationale: 'Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens ("stack of flashcards", "tally", "count overlay") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.',
+            rationale: 'Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens ("stack of flashcards", "tally", "count overlay") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.',
             evidence_sources: [
                 'retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES',
                 'retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE',

@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-23T18:27:07.861Z",
+    "generated_at": "2026-04-23T18:54:27.039Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -398,7 +398,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "two_by_four_bike",
         "endpoint_atom_id": "build_test_outcome",
@@ -2527,7 +2527,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -3492,7 +3492,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "cardboard_boat_row",
         "endpoint_atom_id": "build_test_outcome",
@@ -5621,7 +5621,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -6553,7 +6553,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "weighted_backpack_march",
         "endpoint_atom_id": "exact_distance",
@@ -8654,7 +8654,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -9581,7 +9581,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pro_boxer_day",
         "endpoint_atom_id": "identity_dayend",
@@ -11682,7 +11682,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -12595,7 +12595,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pushups_one_day",
         "endpoint_atom_id": "body_quit",
@@ -14690,7 +14690,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -15602,7 +15602,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pushups_one_day",
         "endpoint_atom_id": "experiment_observation",
@@ -17697,7 +17697,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -18624,7 +18624,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "stair_climb_repeats",
         "endpoint_atom_id": "exact_count",
@@ -20730,7 +20730,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -21661,7 +21661,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pro_boxer_day",
         "endpoint_atom_id": "identity_dayend",
@@ -23762,7 +23762,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -24688,7 +24688,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "weighted_backpack_march",
         "endpoint_atom_id": "exact_distance",
@@ -26789,7 +26789,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
@@ -27698,7 +27698,7 @@
             "indicator_registry.visual_is_workshop r_direct=+0.236 (hands-on-object framing axis)",
             "findings.kept_signals.pat_making_v2 delta_r2=+0.012 (build/test framing in title)"
           ],
-          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No rejected category layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
+          "note": "Visual-legibility is endpoint-independent. It reads the concrete premise along six axes (invisible body part, cognitive verb without physical action, explicit cognitive surface, title-payoff phrasing, frame-1 comprehensibility, and visual state-contrast) plus an identity/mystery frame-signal check. Designed to catch premises that pass proof-clarity via cosmetic artifact tokens (\"stack\", \"tally\", \"count overlay\") while the actual reveal is a verbal quiz, a social observation, or a cognitive verdict. No abstract classification layer — the six axes are factual premise fields plus the title string. No hand-picked top 5."
         },
         "object_atom_id": "pushups_one_day",
         "endpoint_atom_id": "body_quit",
@@ -29793,7 +29793,7 @@
           },
           "visual_legibility": {
             "field": "visual_legibility",
-            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no rejected category layer; no hand-picked top 5.",
+            "rationale": "Visual-legibility is endpoint-independent. It reads the concrete premise on six axes — (1) invisible body_part_phrase, (2) cognitive verb without a physical-action verb, (3) explicit cognitive-surface copy, (4) title premise line reveal phrasing classified physical-reveal vs verbal/observational, (5) frame-1 comprehensibility (action verb + gauge/object in first_frame_action), (6) state-contrast in visual_action_short — plus a mystery/identity frame-signal check. Designed to catch premises that gamed proof-clarity via cosmetic proof tokens (\"stack of flashcards\", \"tally\", \"count overlay\") while the actual reveal was a verbal quiz, a social observation, or a cognitive verdict. Every driver exposes the matched phrase or stem and cites an on-disk corpus indicator; no abstract classification layer; no hand-picked top 5.",
             "evidence_sources": [
               "retention-patterns.top_3_retention_peak_causes.HIGH_ENERGY_ACTION_FRAMES",
               "retention-patterns.top_3_retention_peak_causes.PHYSICAL_SENSORY_LANGUAGE",
