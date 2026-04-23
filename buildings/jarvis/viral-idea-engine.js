@@ -1456,7 +1456,7 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
         seed.synthesis_trace.diversity_bucket = video.ytId ? `video:${video.ytId}` : (obj.diversity_bucket || null);
         seed.synthesis_trace.diversity_bucket_source = video.ytId ? 'source_video' : 'motif';
         seed.synthesis_trace.proof_surface = getProofSurfaceKey(obj);
-        seed.synthesis_trace.source_video_prototype = {
+        const lineage = {
             ytId: video.ytId,
             name: video.name,
             views: video.views,
@@ -1470,13 +1470,15 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
             inferred_endpoint_id: spec.endpoint_id,
             prototype_reason: source_reason,
         };
+        seed.synthesis_trace.source_video_lineage = lineage;
+        seed.synthesis_trace.source_video_prototype = lineage;
     }
     return seed;
 }
 
 // Generates seeds derived from specific validated videos in signals-dataset.json.
 // Each seed carries synthesis_trace.seed_path='video_prototype' and
-// synthesis_trace.source_video_prototype with the original video's metrics.
+// synthesis_trace.source_video_lineage with the original video's metrics.
 function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const dataset = loadJsonSafe('signals-dataset.json');
     if (!dataset || !dataset.length) return [];
@@ -2876,7 +2878,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     const vpMax = Math.ceil(maxCount * 2 / 3);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
     const vpYtIds = new Set(
-        vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.source_video_prototype && s.synthesis_trace.source_video_prototype.ytId).filter(Boolean)
+        vpSeeds.map(s => s.synthesis_trace && (s.synthesis_trace.source_video_lineage || s.synthesis_trace.source_video_prototype) && (s.synthesis_trace.source_video_lineage || s.synthesis_trace.source_video_prototype).ytId).filter(Boolean)
     );
     const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, maxCount, vpYtIds);
     if (vpSeeds.length || secondarySeeds.length) {
@@ -4195,7 +4197,7 @@ function _anchorTokenize(text) {
 function matchValidatedVideoAnchors(idea, seed, dataset) {
     if (!dataset || !Array.isArray(dataset) || !dataset.length) return [];
 
-    const sourceVideo = (seed && seed.synthesis_trace && seed.synthesis_trace.source_video_prototype) || null;
+    const sourceVideo = (seed && seed.synthesis_trace && (seed.synthesis_trace.source_video_lineage || seed.synthesis_trace.source_video_prototype)) || null;
     const ideaTitleTokens = new Set(_anchorTokenize(idea.title || ''));
     const ideaLoglineTokens = new Set(_anchorTokenize((idea.concept && idea.concept.logline) || idea.one_line_premise || ''));
     const sourceConcepts = sourceVideo ? _anchorTokenize(sourceVideo.name || '') : [];

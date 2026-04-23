@@ -26,3 +26,6 @@ buildings/jarvis/derived_experiments_full_backup.json
 buildings/jarvis/indicators_compact.json
 buildings/jarvis/derived_experiments_compact.json
 buildings/jarvis/experiments_log_compact.json
+# Large runtime files (>50MB, canonical storage is R2)
+buildings/jarvis/graph.json
+buildings/jarvis/watch-sync.log
