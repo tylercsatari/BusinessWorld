@@ -84,6 +84,12 @@ function normalizeCandidateProposals(data) {
     return normalizeLegacyBucketFields(data);
 }
 
+function normalizeLegacySignalKind(data) {
+    if (!data || typeof data !== 'object') return data;
+    if (!data.signal_kind && data.category) return Object.assign({}, data, { signal_kind: data.category });
+    return data;
+}
+
 const TARGET_PROXY = new Set(['views', 'views_log10', 'log_views', 'log10_views']);
 
 function collapseFamily(key) {
@@ -220,12 +226,15 @@ function topMechanismPrinciples(principles, bridgeTop, limit = 15) {
 
 function provenFeatures(findings) {
     if (!findings) return { kept_signals: [], discoveries: [], retention_patterns: [], concept_signals: [] };
-    const kept = (findings.kept_signals || []).map(s => ({
-        signal: s.signal,
-        delta_r2: s.delta_r2,
-        meaning: s.meaning,
-        signal_kind: s.signal_kind || s.category,
-    }));
+    const kept = (findings.kept_signals || []).map(s => {
+        const sig = normalizeLegacySignalKind(s);
+        return {
+            signal: sig.signal,
+            delta_r2: sig.delta_r2,
+            meaning: sig.meaning,
+            signal_kind: sig.signal_kind,
+        };
+    });
     const discoveries = (findings.top_discoveries || [])
         .filter(d => d.r_partial === null || Math.abs(d.r_partial) >= 0.2)
         .map(d => ({ discovery: d.discovery, r_partial: d.r_partial, meaning: d.meaning }));
