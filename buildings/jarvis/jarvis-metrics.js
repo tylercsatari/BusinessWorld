@@ -2200,6 +2200,28 @@ for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 
             STATIC_LAYER[`${fam}_${variant}_first${w}s`] = 'pre';
         }
     }
+    // Extended half/position variants (backed by _zyExtRe dispatch in extractMetric)
+    for (const sfx of ['count_first_half', 'density_first_half', 'position_pct']) {
+        const k = `${fam}_${sfx}`;
+        STATIC_KEYS.add(k);
+        STATIC_LAYER[k] = 'pre';
+    }
+}
+
+// ── Group AJ / INTERACTION_BASES fixes: keys present in INTERACTION_BASES but missing from STATIC_KEYS ──
+// These cause processIndicator → null for both atomic and cross-product candidates.
+for (const k of [
+    // Group AJ phrase-family variants (extractMetric dispatch works via ZYGARNIK_FAMILIES/_zyExtRe)
+    'zygarnik_open_loop_count_first_half', 'zygarnik_open_loop_density_first_half', 'zygarnik_open_loop_position_pct',
+    'gratification_delay_phrase_count_first_half', 'gratification_delay_phrase_density_first_half', 'gratification_delay_phrase_position_pct',
+    'story_stake_signal_count_first_half', 'story_stake_signal_density_first_half', 'story_stake_signal_position_pct',
+    // retention_pct_N pattern variants (pattern-matched in getMetricDefinition when in STATIC_KEYS)
+    'retention_pct_10', 'retention_pct_25', 'retention_pct_50',
+]) {
+    if (!STATIC_KEYS.has(k)) {
+        STATIC_KEYS.add(k);
+        STATIC_LAYER[k] = k.startsWith('retention_pct_') ? 'post' : 'pre';
+    }
 }
 
 
