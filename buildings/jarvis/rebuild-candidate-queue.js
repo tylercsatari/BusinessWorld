@@ -345,6 +345,49 @@ const baseAtomics = [
     'proof_delay_count_hook', 'proof_delay_front_load_ratio', 'proof_delay_count_first_half', 'proof_delay_position_pct',
     'open_question_setup_count_hook', 'open_question_setup_front_load_ratio', 'open_question_setup_count_first_half', 'open_question_setup_position_pct',
     'visual_anchor_count_hook', 'visual_anchor_front_load_ratio', 'visual_anchor_count_first_half', 'visual_anchor_position_pct',
+    // Group AK: add count/density base forms as atomics too
+    'discovery_reveal_count', 'discovery_reveal_density',
+    'time_progress_count', 'time_progress_density',
+    'persistence_signal_count', 'persistence_signal_density',
+    'viewer_promise_count', 'viewer_promise_density',
+    'gap_tease_count', 'gap_tease_density',
+    'result_signal_count', 'result_signal_density',
+    'risk_signal_count', 'risk_signal_density',
+    'early_proof_signal_count', 'early_proof_signal_density',
+    // Group AL base count/density
+    'tension_hold_count', 'tension_hold_density',
+    'payoff_anticipation_count', 'payoff_anticipation_density',
+    'callback_setup_count', 'callback_setup_density',
+    'proof_framing_count', 'proof_framing_density',
+    'effort_signal_count', 'effort_signal_density',
+    'curiosity_trigger_count', 'curiosity_trigger_density',
+    'narrative_clock_count', 'narrative_clock_density',
+    'visual_proof_signal_count', 'visual_proof_signal_density',
+    // Group AL: New zygarnik/reference-to-gratification/pre-upload families
+    'tension_hold_count', 'tension_hold_density',
+    'tension_hold_count_first5s', 'tension_hold_count_first10s', 'tension_hold_count_first15s', 'tension_hold_count_first20s',
+    'tension_hold_count_hook', 'tension_hold_front_load_ratio', 'tension_hold_count_first_half', 'tension_hold_position_pct',
+    'payoff_anticipation_count', 'payoff_anticipation_density',
+    'payoff_anticipation_count_first5s', 'payoff_anticipation_count_first10s', 'payoff_anticipation_count_first15s', 'payoff_anticipation_count_first20s',
+    'payoff_anticipation_count_hook', 'payoff_anticipation_front_load_ratio', 'payoff_anticipation_count_first_half', 'payoff_anticipation_position_pct',
+    'callback_setup_count', 'callback_setup_density',
+    'callback_setup_count_first5s', 'callback_setup_count_first10s', 'callback_setup_count_first15s', 'callback_setup_count_first20s',
+    'callback_setup_count_hook', 'callback_setup_front_load_ratio', 'callback_setup_count_first_half', 'callback_setup_position_pct',
+    'proof_framing_count', 'proof_framing_density',
+    'proof_framing_count_first5s', 'proof_framing_count_first10s', 'proof_framing_count_first15s', 'proof_framing_count_first20s',
+    'proof_framing_count_hook', 'proof_framing_front_load_ratio', 'proof_framing_count_first_half', 'proof_framing_position_pct',
+    'effort_signal_count', 'effort_signal_density',
+    'effort_signal_count_first5s', 'effort_signal_count_first10s', 'effort_signal_count_first15s', 'effort_signal_count_first20s',
+    'effort_signal_count_hook', 'effort_signal_front_load_ratio', 'effort_signal_count_first_half', 'effort_signal_position_pct',
+    'curiosity_trigger_count', 'curiosity_trigger_density',
+    'curiosity_trigger_count_first5s', 'curiosity_trigger_count_first10s', 'curiosity_trigger_count_first15s', 'curiosity_trigger_count_first20s',
+    'curiosity_trigger_count_hook', 'curiosity_trigger_front_load_ratio', 'curiosity_trigger_count_first_half', 'curiosity_trigger_position_pct',
+    'narrative_clock_count', 'narrative_clock_density',
+    'narrative_clock_count_first5s', 'narrative_clock_count_first10s', 'narrative_clock_count_first15s', 'narrative_clock_count_first20s',
+    'narrative_clock_count_hook', 'narrative_clock_front_load_ratio', 'narrative_clock_count_first_half', 'narrative_clock_position_pct',
+    'visual_proof_signal_count', 'visual_proof_signal_density',
+    'visual_proof_signal_count_first5s', 'visual_proof_signal_count_first10s', 'visual_proof_signal_count_first15s', 'visual_proof_signal_count_first20s',
+    'visual_proof_signal_count_hook', 'visual_proof_signal_front_load_ratio', 'visual_proof_signal_count_first_half', 'visual_proof_signal_position_pct',
 ];
 
 // Windowed variants for count/density families
@@ -408,6 +451,24 @@ const windowedFamilies = [
     ['proof_delay',               ['count', 'density']],
     ['open_question_setup',       ['count', 'density']],
     ['visual_anchor',             ['count', 'density']],
+    // Group AK windowed families
+    ['discovery_reveal',    ['count', 'density']],
+    ['time_progress',       ['count', 'density']],
+    ['persistence_signal',  ['count', 'density']],
+    ['viewer_promise',      ['count', 'density']],
+    ['gap_tease',           ['count', 'density']],
+    ['result_signal',       ['count', 'density']],
+    ['risk_signal',         ['count', 'density']],
+    ['early_proof_signal',  ['count', 'density']],
+    // Group AL windowed families
+    ['tension_hold',              ['count', 'density']],
+    ['payoff_anticipation',       ['count', 'density']],
+    ['callback_setup',            ['count', 'density']],
+    ['proof_framing',             ['count', 'density']],
+    ['effort_signal',             ['count', 'density']],
+    ['curiosity_trigger',         ['count', 'density']],
+    ['narrative_clock',           ['count', 'density']],
+    ['visual_proof_signal',       ['count', 'density']],
 ];
 const windowedAtomics = [];
 for (const [fam, measures] of windowedFamilies) {
@@ -476,6 +537,24 @@ const HIGH_SIGNAL_BASES = [
     'vulnerability_count_hook', 'vulnerability_front_load_ratio',
     'stakes_high_count_hook', 'stakes_high_front_load_ratio',
     'reward_language_count_hook', 'reward_language_front_load_ratio',
+    // Group AK high-signal bases
+    'discovery_reveal_count_hook', 'discovery_reveal_front_load_ratio',
+    'time_progress_count_hook', 'time_progress_front_load_ratio',
+    'persistence_signal_count_hook', 'persistence_signal_front_load_ratio',
+    'viewer_promise_count_hook', 'viewer_promise_front_load_ratio',
+    'gap_tease_count_hook', 'gap_tease_front_load_ratio',
+    'result_signal_count_hook', 'result_signal_front_load_ratio',
+    'risk_signal_count_hook', 'risk_signal_front_load_ratio',
+    'early_proof_signal_count_hook', 'early_proof_signal_front_load_ratio',
+    // Group AL high-signal bases
+    'tension_hold_count', 'tension_hold_density', 'tension_hold_count_hook', 'tension_hold_front_load_ratio',
+    'payoff_anticipation_count', 'payoff_anticipation_density', 'payoff_anticipation_count_hook', 'payoff_anticipation_front_load_ratio',
+    'callback_setup_count', 'callback_setup_density', 'callback_setup_count_hook', 'callback_setup_front_load_ratio',
+    'proof_framing_count', 'proof_framing_density', 'proof_framing_count_hook', 'proof_framing_front_load_ratio',
+    'effort_signal_count', 'effort_signal_density', 'effort_signal_count_hook', 'effort_signal_front_load_ratio',
+    'curiosity_trigger_count', 'curiosity_trigger_density', 'curiosity_trigger_count_hook', 'curiosity_trigger_front_load_ratio',
+    'narrative_clock_count', 'narrative_clock_density', 'narrative_clock_count_hook', 'narrative_clock_front_load_ratio',
+    'visual_proof_signal_count', 'visual_proof_signal_density', 'visual_proof_signal_count_hook', 'visual_proof_signal_front_load_ratio',
 ];
 
 // Excluded keys — always return null
@@ -487,6 +566,24 @@ const EXCLUDED = new Set([
     'emotional_peak_density_first_quarter', 'emotional_peak_density_last_quarter',
     'revelation_pace_density_mid', 'social_contrast_density_hook',
     'anticipatory_build_density_hook',
+    // Group AH position_pct variants — always return null
+    'teaser_signal_position_pct', 'anticipation_escalation_position_pct',
+    'proof_delay_position_pct', 'open_question_setup_position_pct',
+    'visual_anchor_position_pct',
+    // Group AK position_pct variants — always return null
+    'discovery_reveal_position_pct', 'time_progress_position_pct',
+    'persistence_signal_position_pct', 'viewer_promise_position_pct',
+    'gap_tease_position_pct', 'result_signal_position_pct',
+    'risk_signal_position_pct', 'early_proof_signal_position_pct',
+    // Group AL position_pct variants — always return null
+    'tension_hold_position_pct', 'payoff_anticipation_position_pct',
+    'callback_setup_position_pct', 'proof_framing_position_pct',
+    'effort_signal_position_pct', 'curiosity_trigger_position_pct',
+    'narrative_clock_position_pct', 'visual_proof_signal_position_pct',
+    // Other known null position_pct keys
+    'closure_position_pct', 'credibility_signal_position_pct',
+    'delayed_gratification_position_pct', 'story_stake_position_pct',
+    'delayed_gratification_peak_position_pct',
 ]);
 
 // ── Build pre-upload pool ────────────────────────────────────────────────
@@ -520,13 +617,21 @@ const allNew = [...new Set([...preUpload, ...postUpload])];
 // Final sanity filter: remove anything already computed
 const finalQueue = allNew.filter(k => !existingKeys.has(k));
 
+// Filter out position_pct cross-composites that always return null
+const POSITION_PCT_NULL_RE = /^(teaser_signal|anticipation_escalation|proof_delay|open_question_setup|visual_anchor|discovery_reveal|time_progress|persistence_signal|viewer_promise|gap_tease|result_signal|risk_signal|early_proof_signal|tension_hold|payoff_anticipation|callback_setup|proof_framing|effort_signal|curiosity_trigger|narrative_clock|visual_proof_signal|closure|credibility_signal|delayed_gratification|story_stake|delayed_gratification_peak)_position_pct$/;
+const cleanQueue = finalQueue.filter(k => {
+    const parts = k.split('_x_');
+    return !parts.some(p => POSITION_PCT_NULL_RE.test(p));
+});
+
 // ── Write output ─────────────────────────────────────────────────────────
 fs.writeFileSync(
     path.join(DIR, 'candidate_queue.json'),
-    JSON.stringify(finalQueue, null, 2),
+    JSON.stringify(cleanQueue, null, 2),
     'utf8'
 );
 
 console.log(`Pre-upload new atomics:    ${preUpload.length}`);
 console.log(`Post-upload composites:    ${postUpload.length}`);
 console.log(`Total (deduplicated):      ${finalQueue.length}`);
+console.log(`After position_pct filter: ${cleanQueue.length}`);
