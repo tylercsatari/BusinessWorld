@@ -684,6 +684,50 @@ const ZYGARNIK_PHRASE_SETS = {
         "details coming up", "i will break it down", "the full story is coming",
         "you will see why", "it will make sense soon", "all will be revealed",
     ],
+
+    teaser_signal: [
+        'coming up', 'coming up next', 'wait until you see', 'wait until',
+        'before i show you', "i'll show you", 'what you are about to see',
+        "what you're about to see", 'stay tuned', 'stick around', 'keep watching',
+        'watch until the end', 'by the end of this', 'at the end',
+        'at the end of this', 'before the end', "i'll reveal", 'i will reveal',
+        "i'll share", "i'll tell you", "i'll explain", 'the reveal is coming',
+        'big reveal', 'the surprise',
+    ],
+    anticipation_escalation: [
+        'it gets better', 'even better', 'but wait', "but that's not all",
+        'and it gets worse', "and here's where", "now here's the thing",
+        'wait there\'s more', 'and this is just the beginning',
+        "but here's the best part", "here's the crazy part", "here's the thing",
+        'and then it gets', 'this is where it gets', 'now watch what happens',
+        'and then something', 'the crazy thing is', "here's what's wild",
+        'and get this', "and here's the kicker",
+    ],
+    proof_delay: [
+        "i'll show you later", "you'll see", 'by the end of this video',
+        'stick around for', 'keep watching to see', 'wait for the reveal',
+        'the proof is coming', "here's what happened", 'the results are',
+        'and the answer is', 'the final result', 'and the final',
+        'to see if it works', 'the outcome', "i'll let you know",
+        'more on that later', "we'll see", 'stay for the results',
+        'results at the end', 'check out the results', 'the ending surprised me',
+    ],
+    open_question_setup: [
+        'have you ever', 'did you know', 'what if i told you', 'what if you could',
+        'what would happen if', 'could you', 'would you', 'have you tried',
+        'do you think', 'do you know', 'can you guess', 'guess what',
+        'you know what', 'want to know', 'want to see', 'want to find out',
+        'curious about', 'ever wonder', 'ever wondered', 'i had a question',
+        'the question everyone asks', 'one question changed', 'this one question',
+    ],
+    visual_anchor: [
+        'look at this', 'check this out', 'here it is', 'see this',
+        'take a look', 'look right here', 'right here', 'see right here',
+        'look at these', 'look at these numbers', 'check these numbers',
+        'see these results', 'here are the results', 'as you can see here',
+        'look at what happened', "here's what it looks like", 'see what i mean',
+        'you can see', 'notice how', 'see how',
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
@@ -1573,6 +1617,17 @@ const STATIC_KEYS = new Set([
     // New transcript-language metrics
     'pivot_word_count', 'sensory_word_density', 'motif_recurrence_score',
     'beat_density_per_minute', 'escalation_slope', 'title_curiosity_gap_score',
+    // Group AH bases: New zygarnik phrase families (teaser/anticipation/proof-delay/open-question/visual-anchor)
+    'teaser_signal_count', 'teaser_signal_density',
+    'teaser_signal_front_load_ratio',
+    'anticipation_escalation_count', 'anticipation_escalation_density',
+    'anticipation_escalation_front_load_ratio',
+    'proof_delay_count', 'proof_delay_density',
+    'proof_delay_front_load_ratio',
+    'open_question_setup_count', 'open_question_setup_density',
+    'open_question_setup_front_load_ratio',
+    'visual_anchor_count', 'visual_anchor_density',
+    'visual_anchor_front_load_ratio',
 ]);
 
 // Layer map for static keys
@@ -1828,7 +1883,7 @@ for (const k of [
     STATIC_LAYER[k] = 'pre';
 }
 // Windowed variants for Group T/V families
-for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal', 'early_proof', 'social_signal', 'pre_upload_credibility', 'pre_upload_mechanism']) {
+for (const fam of ['reference_callback', 'visual_credibility', 'payoff_signal', 'setup_signal', 'stakes_escalation', 'proof_arrival', 'narrative_anchor', 'delayed_reveal', 'early_proof', 'social_signal', 'pre_upload_credibility', 'pre_upload_mechanism', 'teaser_signal', 'anticipation_escalation', 'proof_delay', 'open_question_setup', 'visual_anchor']) {
     for (const w of ZYGARNIK_EARLY_WINDOWS) {
         for (const variant of ['count', 'density']) {
             STATIC_KEYS.add(`${fam}_${variant}_first${w}s`);
@@ -6872,7 +6927,7 @@ for (const k of [
     INDICATOR_RESOLUTION_MAP[k] = k.includes('hook') ? ['r_hook', 0, 10, null, null] : ['r0', 0, 100, null, null];
 }
 // Group V windowed variant resolution map
-for (const fam of ['early_proof', 'social_signal', 'pre_upload_credibility', 'pre_upload_mechanism']) {
+for (const fam of ['early_proof', 'social_signal', 'pre_upload_credibility', 'pre_upload_mechanism', 'teaser_signal', 'anticipation_escalation', 'proof_delay', 'open_question_setup', 'visual_anchor']) {
     for (const w of [2, 3, 5, 8, 10, 15, 20]) {
         for (const variant of ['count', 'density']) {
             INDICATOR_RESOLUTION_MAP[`${fam}_${variant}_first${w}s`] = ['r_hook', 0, 10, null, null];
