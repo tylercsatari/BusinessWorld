@@ -224,13 +224,13 @@ function provenFeatures(findings) {
         signal: s.signal,
         delta_r2: s.delta_r2,
         meaning: s.meaning,
-        category: s.category,
+        signal_kind: s.signal_kind || s.category,
     }));
     const discoveries = (findings.top_discoveries || [])
         .filter(d => d.r_partial === null || Math.abs(d.r_partial) >= 0.2)
         .map(d => ({ discovery: d.discovery, r_partial: d.r_partial, meaning: d.meaning }));
     const retention = (findings.retention_patterns || []).map(p => ({ pattern: p.pattern, evidence: p.evidence }));
-    const conceptSignals = kept.filter(s => s.category === 'concept' || s.category === 'content');
+    const conceptSignals = kept.filter(s => s.signal_kind === 'concept' || s.signal_kind === 'content');
     return { kept_signals: kept, discoveries, retention_patterns: retention, concept_signals: conceptSignals };
 }
 
