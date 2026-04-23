@@ -62,7 +62,9 @@ function localPath(name) { return path.join(JARVIS_DIR, `${name}.json`); }
 
 /**
  * Load JSON data by name.
- * Priority: cache (TTL) → R2 → local file → fallback.
+ * Priority: cache (TTL) → local file → R2 → fallback.
+ * Local-first: the runner always has current local files (R2 sync happens post-run),
+ * so reading from R2 on startup wastes time downloading 200MB+ unnecessarily.
  */
 async function loadJson(name, fallback) {
     const fb = fallback !== undefined ? fallback : (DEFAULTS[name] ?? null);
@@ -73,7 +75,20 @@ async function loadJson(name, fallback) {
         return cache[name];
     }
 
-    // Try R2
+    // Prefer local file (always current — R2 sync is post-run, not pre-run)
+    const lp = localPath(name);
+    try {
+        if (fs.existsSync(lp)) {
+            const data = JSON.parse(fs.readFileSync(lp, 'utf8'));
+            cache[name] = data;
+            cacheTime[name] = now;
+            return data;
+        }
+    } catch (e) {
+        console.warn(`jarvis-store: local read failed for ${name}:`, e.message);
+    }
+
+    // Fall back to R2 only if local file missing
     if (isR2Ready()) {
         try {
             const buf = await downloadFromR2(r2Key(name));
@@ -86,19 +101,6 @@ async function loadJson(name, fallback) {
         } catch (e) {
             console.warn(`jarvis-store: R2 read failed for ${name}:`, e.message);
         }
-    }
-
-    // Fallback to local file
-    const lp = localPath(name);
-    try {
-        if (fs.existsSync(lp)) {
-            const data = JSON.parse(fs.readFileSync(lp, 'utf8'));
-            cache[name] = data;
-            cacheTime[name] = now;
-            return data;
-        }
-    } catch (e) {
-        console.warn(`jarvis-store: local read failed for ${name}:`, e.message);
     }
 
     return fb;
