@@ -1500,8 +1500,12 @@ const INTERACTION_BASES = [
     'transformation_arc_count_first25s',
     'transformation_arc_density_first5s', 'transformation_arc_density_first10s',
     // Group W2: New ratio metrics
-    'early_curiosity_escalation_ratio', 'cliffhanger_front_load_ratio',
-    'revelation_front_load_ratio', 'curiosity_to_closure_ratio',
+    // NOTE: early_curiosity_escalation_ratio and revelation_front_load_ratio removed from INTERACTION_BASES
+    // because they return null for ~90%+ of videos (zero denominator: curiosity_escalation_count=0 or
+    // revelation_signal_count=0 for most shorts). Every cross-product with them fails, causing max_failures
+    // on every run. They remain in STATIC_KEYS as standalone indicators.
+    'cliffhanger_front_load_ratio',
+    'curiosity_to_closure_ratio',
     'loop_payoff_density_gap', 'revelation_to_cliffhanger_ratio',
     'payoff_tease_to_delivery_ratio',
     // Group AA: New phrase-family bases (tension_builder / implicit_promise / progressive_reveal / loop_reinforcer / consequence_language / setup_anchor / outcome_tease / proof_signal)
