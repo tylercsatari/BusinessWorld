@@ -1117,6 +1117,114 @@ const ZYGARNIK_PHRASE_SETS = {
         'this number here', 'that number there', 'look at the before',
         'look at the after', 'before and after right here',
     ],
+
+    // ── Group AL: New zygarnik/reference-to-gratification/pre-upload families ──
+
+    // tension_hold: phrases that signal sustained tension without resolution
+    tension_hold: [
+        'still waiting', 'waiting to find out', 'not yet', 'still havent', 'still have not',
+        'still dont know', 'still do not know', 'no answer yet', 'no resolution yet',
+        'mystery continues', 'still unsolved', 'still a mystery', 'still wondering',
+        'still no answer', 'still not sure', 'i still dont', 'i still do not',
+        'have not figured out', 'havent figured out', 'not resolved',
+        'still building', 'still going', 'not done yet', 'not finished yet',
+        'still in progress', 'long way to go', 'nowhere near done',
+        'weeks to go', 'days to go', 'months to go',
+        'still have to', 'still need to', 'havent gotten to', 'have not gotten to',
+    ],
+
+    // payoff_anticipation: explicit anticipation of a coming payoff
+    payoff_anticipation: [
+        'the moment of truth', 'here we go', 'this is it', 'about to find out',
+        'about to see', 'right now', 'watch what happens', 'watch this',
+        'this is where', 'this is the part', 'this is the moment',
+        'time to find out', 'lets find out', 'let us find out', 'time to see',
+        'lets see if', 'let us see if', 'here is the test', 'testing time',
+        'see if it works', 'see if this works', 'does it work',
+        'and now', 'the time has come', 'finally time', 'ready to see',
+        'ready to find out', 'prepare yourself', 'get ready for',
+    ],
+
+    // callback_setup: sets up a reference that will be resolved later (Zygarnik anchor)
+    callback_setup: [
+        'remember when', 'remember that', 'earlier i mentioned', 'earlier i said',
+        'i mentioned earlier', 'i said earlier', 'as i said', 'as i mentioned',
+        'going back to', 'back to what i said', 'referring back',
+        'the thing i told you', 'what i told you earlier', 'you may remember',
+        'you might remember', 'going back', 'circle back to',
+        'we talked about', 'i talked about', 'as we discussed',
+        'earlier in the video', 'from earlier', 'like i said',
+        'as you saw', 'as you may have noticed',
+    ],
+
+    // proof_framing: explicit framing of incoming evidence/proof
+    proof_framing: [
+        'i can prove it', 'i have proof', 'here is the proof', 'the proof is',
+        'here is the evidence', 'the evidence shows', 'look at the evidence',
+        'i have evidence', 'real data', 'actual data', 'raw numbers',
+        'the actual numbers', 'the real numbers', 'the data proves',
+        'statistics show', 'studies show', 'research shows',
+        'studies prove', 'this study', 'a study found', 'science says',
+        'science shows', 'scientifically proven', 'proven method',
+        'it is proven', 'proven to work', 'clinically', 'measurably',
+        'objectively', 'factually', 'statistically',
+    ],
+
+    // effort_signal: explicit display of effort/investment (story stake)
+    effort_signal: [
+        'i spent', 'spent hours', 'spent days', 'spent weeks', 'spent months',
+        'took hours', 'took days', 'took weeks', 'took months',
+        'countless hours', 'so many hours', 'non stop', 'nonstop',
+        'stayed up', 'woke up early', 'lost sleep', 'gave up my',
+        'sacrificed', 'gave everything', 'all in', 'went all in',
+        'dedicated', 'committed', 'poured everything', 'put everything',
+        'worked so hard', 'worked tirelessly', 'relentlessly',
+        'did not stop', 'would not stop', 'refused to stop',
+        'not giving up', 'keeping going', 'kept pushing',
+    ],
+
+    // curiosity_trigger: questions that open explicit information gaps
+    curiosity_trigger: [
+        'what if i told you', 'what if i said', 'did you know that',
+        'you probably did not know', 'you probably dont know', 'bet you did not know',
+        'bet you dont know', 'most people do not know', 'most people dont know',
+        'nobody talks about', 'nobody tells you', 'they do not tell you',
+        'they dont tell you', 'the truth is', 'the real truth', 'the secret is',
+        'here is the secret', 'the real secret', 'what they wont tell you',
+        'what nobody tells you', 'the hidden', 'the untold',
+        'the real reason', 'the actual reason', 'here is why really',
+        'the truth about', 'the real story', 'the real answer',
+    ],
+
+    // narrative_clock: temporal urgency markers that create setup-to-payoff tension
+    narrative_clock: [
+        'day one', 'day two', 'day three', 'day four', 'day five',
+        'week one', 'week two', 'week three', 'week four',
+        'hour one', 'hour two', 'hour three',
+        'day 1', 'day 2', 'day 3', 'day 4', 'day 5', 'day 6', 'day 7',
+        'week 1', 'week 2', 'week 3', 'week 4',
+        'round one', 'round two', 'round three',
+        'attempt one', 'attempt two', 'attempt three',
+        'first attempt', 'second attempt', 'third attempt',
+        'try one', 'try two', 'try three',
+        'hour 1', 'hour 2', 'hour 3',
+        'phase one', 'phase two', 'phase three',
+        'step one', 'step two', 'step three',
+        'stage one', 'stage two', 'stage three',
+    ],
+
+    // visual_proof_signal: spoken phrases pointing to visual proof being shown
+    visual_proof_signal: [
+        'you can see', 'as you can see', 'look at that', 'look at this',
+        'see right there', 'right there', 'see that', 'check that out',
+        'notice how', 'see how', 'look how', 'look at the screen',
+        'on screen', 'on screen right now', 'on camera',
+        'in the video', 'here on camera', 'as shown', 'shown here',
+        'this footage', 'this clip', 'the footage shows',
+        'the video shows', 'the camera caught', 'caught on camera',
+        'this image', 'this photo', 'this screenshot',
+        'look at this screenshot', 'look at this photo',
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
@@ -2433,6 +2541,9 @@ for (const fam of [
     // Group AK: new high-coverage phrase families for zygarnik/open-loop expansion
     'discovery_reveal', 'time_progress', 'persistence_signal', 'viewer_promise',
     'gap_tease', 'result_signal', 'risk_signal', 'early_proof_signal',
+    // Group AL: new zygarnik/reference-to-gratification/pre-upload families
+    'tension_hold', 'payoff_anticipation', 'callback_setup', 'proof_framing',
+    'effort_signal', 'curiosity_trigger', 'narrative_clock', 'visual_proof_signal',
 ]) {
     const baseCount = `${fam}_count`;
     const baseDensity = `${fam}_density`;
