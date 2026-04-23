@@ -5815,7 +5815,7 @@ const JarvisUI = (() => {
 
         // Validated video anchors — specific grounding from signals-dataset
         const anchorFamily = (idea.synthesis_trace && idea.synthesis_trace.diversity_bucket) || '';
-        const anchorLineage = idea.synthesis_trace && (idea.synthesis_trace.source_video_lineage || idea.synthesis_trace.source_video_prototype);
+        const anchorLineage = idea.synthesis_trace && idea.synthesis_trace.source_video_lineage;
         const anchorSourceTitle = anchorLineage && anchorLineage.name;
         const anchorsBox = renderValidatedVideoAnchors(idea.validated_video_anchors || [], anchorFamily, anchorSourceTitle);
 
@@ -6113,7 +6113,7 @@ const JarvisUI = (() => {
         const finalRank = st.final_rank_diversity || {};
         const seedAlts = st.seed_alternates || null;
         const finalAlts = st.final_rank_alternates || null;
-        const svp = st.source_video_lineage || st.source_video_prototype || null;
+        const svp = st.source_video_lineage || null;
         const fmtDelta = (d) => {
             if (d == null || isNaN(+d)) return '';
             const v = +d;

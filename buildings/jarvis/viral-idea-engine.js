@@ -1466,12 +1466,12 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
             novelty: video.novelty != null ? video.novelty : null,
             quality_score,
             source_kind: sourceKind,
+            source_video_role: sourceKind,
             inferred_obj_id: spec.obj_id,
             inferred_endpoint_id: spec.endpoint_id,
             prototype_reason: source_reason,
         };
         seed.synthesis_trace.source_video_lineage = lineage;
-        seed.synthesis_trace.source_video_prototype = lineage;
     }
     return seed;
 }
@@ -2893,11 +2893,11 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
     const vpMax = Math.ceil(maxCount * 2 / 3);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
     const vpYtIds = new Set(
-        vpSeeds.map(s => s.synthesis_trace && (s.synthesis_trace.source_video_lineage || s.synthesis_trace.source_video_prototype) && (s.synthesis_trace.source_video_lineage || s.synthesis_trace.source_video_prototype).ytId).filter(Boolean)
+        vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.source_video_lineage && s.synthesis_trace.source_video_lineage.ytId).filter(Boolean)
     );
     const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, maxCount, vpYtIds);
     return interleaveSeeds(vpSeeds, secondarySeeds, maxCount)
-        .filter(seed => seed && seed.synthesis_trace && (seed.synthesis_trace.source_video_lineage || seed.synthesis_trace.source_video_prototype));
+        .filter(seed => seed && seed.synthesis_trace && seed.synthesis_trace.source_video_lineage);
 }
 
 
@@ -4124,7 +4124,7 @@ function _anchorTokenize(text) {
 function matchValidatedVideoAnchors(idea, seed, dataset) {
     if (!dataset || !Array.isArray(dataset) || !dataset.length) return [];
 
-    const sourceVideo = (seed && seed.synthesis_trace && (seed.synthesis_trace.source_video_lineage || seed.synthesis_trace.source_video_prototype)) || null;
+    const sourceVideo = (seed && seed.synthesis_trace && seed.synthesis_trace.source_video_lineage) || null;
     const ideaTitleTokens = new Set(_anchorTokenize(idea.title || ''));
     const ideaLoglineTokens = new Set(_anchorTokenize((idea.concept && idea.concept.logline) || idea.one_line_premise || ''));
     const sourceConcepts = sourceVideo ? _anchorTokenize(sourceVideo.name || '') : [];
