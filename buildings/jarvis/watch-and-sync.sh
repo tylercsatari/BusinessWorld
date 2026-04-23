@@ -5,6 +5,14 @@
 JARVIS_DIR="/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis"
 REPO_DIR="/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld"
 LOG="$JARVIS_DIR/watch-sync.log"
+LOCKDIR="$JARVIS_DIR/.watch-and-sync.lock"
+LAUNCH_CMD="node $JARVIS_DIR/launch-autorun.js"
+
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] watch-and-sync exiting: another watcher already holds $LOCKDIR" >> "$LOG"
+  exit 0
+fi
+trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] watch-and-sync started" >> "$LOG"
 
@@ -17,7 +25,7 @@ for i in $(seq 1 60); do
   ACTIVE=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('active','false'))" 2>/dev/null)
   UPDATED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('updated_at',''))" 2>/dev/null)
   COMPLETED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('completed',0))" 2>/dev/null)
-  RUN_PID=$(pgrep -f "node .*buildings/jarvis/launch-autorun.js" | head -n 1)
+  RUN_PID=$(pgrep -f "^${LAUNCH_CMD}$" | head -n 1)
   STALE=$(python3 - <<PY 2>/dev/null
 import json, datetime
 try:
@@ -101,7 +109,7 @@ echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] watch-and-sync complete." >> "$LOG"
 
 # Relaunch next bounded run
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Relaunching next autorun..." >> "$LOG"
-nohup node "$JARVIS_DIR/launch-autorun.js" >> "$LOG" 2>&1 &
+nohup $LAUNCH_CMD >> "$LOG" 2>&1 &
 RL_PID=$!
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Relaunch pid=$RL_PID" >> "$LOG"
 

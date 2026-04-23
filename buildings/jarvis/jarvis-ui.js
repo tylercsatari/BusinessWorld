@@ -5323,7 +5323,7 @@ const JarvisUI = (() => {
             <div style="margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
                 <div>
                     <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:3px">Idea Model — Specific Viral Ideas With Direct Validation</div>
-                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">${ideaIdeasCount} concrete, shootable video premises, each grounded directly in specific validated source videos and checked against the underlying metrics, mechanisms, and retention evidence. No surrogate abstraction. No LLM calls, every claim is auditable.</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">${ideaIdeasCount} concrete, shootable video premises, each grounded directly in specific validated source videos and checked against the underlying metrics, mechanisms, and retention evidence. No proxy grouping. No LLM calls, every claim is auditable.</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                     <select id="jarvis-idea-count" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:6px;padding:6px 10px;font-size:11px">
