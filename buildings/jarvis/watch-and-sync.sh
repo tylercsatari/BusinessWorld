@@ -26,7 +26,9 @@ for i in $(seq 1 60); do
   ACTIVE=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('active','false'))" 2>/dev/null)
   UPDATED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('updated_at',''))" 2>/dev/null)
   COMPLETED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('completed',0))" 2>/dev/null)
-  RUN_PID=$(pgrep -f "^${LAUNCH_CMD}$" | head -n 1)
+  RUN_PIDS=$(pgrep -f "^${LAUNCH_CMD}$" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+  RUN_PID=$(printf '%s' "$RUN_PIDS" | awk '{print $1}')
+  RUN_PID_COUNT=$(printf '%s\n' "$RUN_PIDS" | awk '{print NF}')
   AGE_STATE=$(python3 - <<PY 2>/dev/null
 import json, datetime
 try:
@@ -45,7 +47,7 @@ PY
 )
   STALE=$(printf '%s' "$AGE_STATE" | awk '{print $1}')
   AGE_SECONDS=$(printf '%s' "$AGE_STATE" | awk '{print $2}')
-  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] active=$ACTIVE completed=$COMPLETED updated=$UPDATED age_seconds=$AGE_SECONDS stale=$STALE pid=${RUN_PID:-none}" >> "$LOG"
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] active=$ACTIVE completed=$COMPLETED updated=$UPDATED age_seconds=$AGE_SECONDS stale=$STALE pid_count=${RUN_PID_COUNT:-0} pids=${RUN_PIDS:-none}" >> "$LOG"
 
   if [ "$ACTIVE" = "False" ] || [ "$ACTIVE" = "false" ]; then
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Run complete. Syncing R2..." >> "$LOG"
@@ -58,8 +60,18 @@ print('true' if age > $PID_MISSING_GRACE_SECONDS else 'false')
 PY
 )
 
-  if [ -z "$RUN_PID" ] && { [ "$STALE" = "true" ] || [ "$PID_MISSING_STALE" = "true" ]; }; then
-    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Detected stalled autorun (active=true, no launch-autorun pid, age_seconds=$AGE_SECONDS). Marking run stalled and recovering..." >> "$LOG"
+  if [ "${RUN_PID_COUNT:-0}" -gt 1 ]; then
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Duplicate launchers detected (pids=${RUN_PIDS}). Killing extras before continuing..." >> "$LOG"
+    printf '%s\n' "$RUN_PIDS" | awk '{for (i=2;i<=NF;i++) print $i}' | xargs -r kill >/dev/null 2>&1 || true
+    sleep 1
+    RUN_PIDS=$(pgrep -f "^${LAUNCH_CMD}$" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+    RUN_PID=$(printf '%s' "$RUN_PIDS" | awk '{print $1}')
+    RUN_PID_COUNT=$(printf '%s\n' "$RUN_PIDS" | awk '{print NF}')
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] After duplicate cleanup: pid_count=${RUN_PID_COUNT:-0} pids=${RUN_PIDS:-none}" >> "$LOG"
+  fi
+
+  if [ "$STALE" = "true" ] || { [ -z "$RUN_PID" ] && [ "$PID_MISSING_STALE" = "true" ]; }; then
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Detected stalled autorun (active=true, age_seconds=$AGE_SECONDS, pid_count=${RUN_PID_COUNT:-0}, pids=${RUN_PIDS:-none}). Marking run stalled and recovering..." >> "$LOG"
     python3 - <<PY >> "$LOG" 2>&1
 import json, datetime
 path='$JARVIS_DIR/autonomous_progress.json'

@@ -35,13 +35,38 @@ const CANONICAL_FILES = [
 
 // Files that get precomputed compact mirrors (strip heavy dataset arrays)
 const COMPACT_MIRROR_SOURCES = ['indicators', 'derived_experiments', 'experiments_log'];
+const LARGE_JSON_KEYS = new Set(['indicators', 'derived_experiments', 'experiments_log', 'graph']);
 
 function compactMirrorName(name) { return `${name}_compact`; }
 
-function compactProject(item) {
+function shouldCache(name) {
+    return !LARGE_JSON_KEYS.has(name) && !LARGE_JSON_KEYS.has(String(name).replace(/_compact$/, ''));
+}
+
+function stringifyForStore(name, data) {
+    return LARGE_JSON_KEYS.has(name) ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+}
+
+function compactProject(name, item) {
     if (!item) return item;
-    const { dataset, ...rest } = item;
-    return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+    if (name === 'indicators') {
+        const { dataset, ...rest } = item;
+        return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+    }
+    if (name === 'experiments_log') {
+        return {
+            id: item.id,
+            indicator_key: item.indicator_key,
+            target: item.target,
+            n_videos: item.n_videos,
+            status: item.status,
+            ran_at: item.ran_at,
+            kind: item.kind,
+            source: item.source,
+            r: item.outputs && typeof item.outputs.r === 'number' ? item.outputs.r : null,
+        };
+    }
+    return item;
 }
 
 // Default fallback values per file (matches existing behavior)
@@ -71,7 +96,7 @@ async function loadJson(name, fallback) {
 
     // Cache hit
     const now = Date.now();
-    if (cache[name] && cacheTime[name] && (now - cacheTime[name]) < TTL_MS) {
+    if (shouldCache(name) && cache[name] && cacheTime[name] && (now - cacheTime[name]) < TTL_MS) {
         return cache[name];
     }
 
@@ -80,8 +105,10 @@ async function loadJson(name, fallback) {
     try {
         if (fs.existsSync(lp)) {
             const data = JSON.parse(fs.readFileSync(lp, 'utf8'));
-            cache[name] = data;
-            cacheTime[name] = now;
+            if (shouldCache(name)) {
+                cache[name] = data;
+                cacheTime[name] = now;
+            }
             return data;
         }
     } catch (e) {
@@ -94,8 +121,10 @@ async function loadJson(name, fallback) {
             const buf = await downloadFromR2(r2Key(name));
             if (buf) {
                 const data = JSON.parse(buf.toString('utf8'));
-                cache[name] = data;
-                cacheTime[name] = now;
+                if (shouldCache(name)) {
+                    cache[name] = data;
+                    cacheTime[name] = now;
+                }
                 return data;
             }
         } catch (e) {
@@ -112,11 +141,16 @@ async function loadJson(name, fallback) {
  * Auto-generates compact mirror for eligible files.
  */
 async function saveJson(name, data) {
-    const jsonStr = JSON.stringify(data, null, 2);
+    const jsonStr = stringifyForStore(name, data);
 
-    // Update cache immediately
-    cache[name] = data;
-    cacheTime[name] = Date.now();
+    // Update cache immediately for smaller files only
+    if (shouldCache(name)) {
+        cache[name] = data;
+        cacheTime[name] = Date.now();
+    } else {
+        delete cache[name];
+        delete cacheTime[name];
+    }
 
     // Write to local copy immediately (pipeline compat + safety — never block on network)
     try {
@@ -143,12 +177,17 @@ async function saveJson(name, data) {
 async function saveCompactMirror(name, data) {
     if (!Array.isArray(data)) return;
 
-    const compact = data.map(compactProject);
+    const compact = data.map(item => compactProject(name, item));
     const cn = compactMirrorName(name);
-    const jsonStr = JSON.stringify(compact);
+    const jsonStr = stringifyForStore(name, compact);
 
-    cache[cn] = compact;
-    cacheTime[cn] = Date.now();
+    if (shouldCache(cn)) {
+        cache[cn] = compact;
+        cacheTime[cn] = Date.now();
+    } else {
+        delete cache[cn];
+        delete cacheTime[cn];
+    }
 
     // Fire-and-forget compact mirror R2 write
     if (isR2Ready()) {
@@ -172,7 +211,7 @@ async function loadCompactJson(name, fallback) {
     const fb = fallback !== undefined ? fallback : [];
 
     const now = Date.now();
-    if (cache[cn] && cacheTime[cn] && (now - cacheTime[cn]) < TTL_MS) {
+    if (shouldCache(cn) && cache[cn] && cacheTime[cn] && (now - cacheTime[cn]) < TTL_MS) {
         return cache[cn];
     }
 
@@ -181,8 +220,10 @@ async function loadCompactJson(name, fallback) {
             const buf = await downloadFromR2(r2Key(cn));
             if (buf) {
                 const data = JSON.parse(buf.toString('utf8'));
-                cache[cn] = data;
-                cacheTime[cn] = now;
+                if (shouldCache(cn)) {
+                    cache[cn] = data;
+                    cacheTime[cn] = now;
+                }
                 return data;
             }
         } catch (e) {
@@ -194,8 +235,10 @@ async function loadCompactJson(name, fallback) {
     try {
         if (fs.existsSync(lp)) {
             const data = JSON.parse(fs.readFileSync(lp, 'utf8'));
-            cache[cn] = data;
-            cacheTime[cn] = now;
+            if (shouldCache(cn)) {
+                cache[cn] = data;
+                cacheTime[cn] = now;
+            }
             return data;
         }
     } catch (e) {
