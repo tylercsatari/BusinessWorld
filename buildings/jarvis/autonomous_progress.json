@@ -1,10 +1,10 @@
 {
   "active": false,
-  "run_id": "auto_20260424220332.",
+  "run_id": "auto_20260424221510.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-24T22:03:32.446Z",
-  "updated_at": "2026-04-24T22:12:07.343818Z",
-  "finished_at": "2026-04-24T22:12:07.343818Z",
+  "started_at": "2026-04-24T22:15:10.470Z",
+  "updated_at": "2026-04-24T22:24:15.605120Z",
+  "finished_at": "2026-04-24T22:24:15.605120Z",
   "requested_iterations": 3000,
   "attempted": 2471,
   "completed": 1724,
@@ -14,176 +14,176 @@
   "no_signal_streak": 0,
   "stop_reason": "process_died_watchdog",
   "current_candidate": null,
-  "last_completed_candidate": "narrative_investment_count_x_open_question_setup_count_first5s",
-  "last_completed_r": 0.0747,
+  "last_completed_candidate": "open_question_setup_density_first15s_x_open_loop_count",
+  "last_completed_r": 0.0963,
   "recent_events": [
     {
       "type": "completed",
-      "key": "open_question_setup_count_first5s_x_visual_proof_signal_front_load_ratio",
-      "r": 0.0327,
+      "key": "proof_withholding_count_x_open_question_setup_density_first10s",
+      "r": 0.0204,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:02.731Z"
+      "ts": "2026-04-24T22:22:54.373Z"
     },
     {
       "type": "completed",
-      "key": "visual_proof_signal_front_load_ratio_x_open_question_setup_count_first5s",
-      "r": 0.0327,
+      "key": "open_question_setup_density_first10s_x_proof_withholding_front_load_ratio",
+      "r": 0.0219,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:02.891Z"
+      "ts": "2026-04-24T22:22:54.530Z"
     },
     {
       "type": "completed",
-      "key": "open_question_setup_count_first5s_x_tension_release_count",
-      "r": 0.0165,
+      "key": "proof_withholding_front_load_ratio_x_open_question_setup_density_first10s",
+      "r": 0.0219,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:03.041Z"
+      "ts": "2026-04-24T22:22:54.687Z"
     },
     {
       "type": "completed",
-      "key": "tension_release_count_x_open_question_setup_count_first5s",
-      "r": 0.0165,
+      "key": "open_question_setup_density_first10s_x_story_momentum_count",
+      "r": 0.0384,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:03.196Z"
+      "ts": "2026-04-24T22:22:54.839Z"
     },
     {
       "type": "completed",
-      "key": "open_question_setup_count_first5s_x_tension_release_count_hook",
-      "r": -0.0057,
+      "key": "story_momentum_count_x_open_question_setup_density_first10s",
+      "r": 0.0384,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:03.344Z"
+      "ts": "2026-04-24T22:22:54.994Z"
     },
     {
       "type": "completed",
-      "key": "tension_release_count_hook_x_open_question_setup_count_first5s",
-      "r": -0.0057,
+      "key": "open_question_setup_density_first10s_x_story_momentum_front_load_ratio",
+      "r": 0.0294,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:03.490Z"
+      "ts": "2026-04-24T22:22:55.154Z"
     },
     {
       "type": "completed",
-      "key": "open_question_setup_count_first5s_x_tension_release_front_load_ratio",
-      "r": -0.0021,
+      "key": "story_momentum_front_load_ratio_x_open_question_setup_density_first10s",
+      "r": 0.0294,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:03.645Z"
+      "ts": "2026-04-24T22:22:55.310Z"
     },
     {
       "type": "failed",
       "key": "curiosity_resolution_count_hook_x_early_commitment_count_first_half",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-24T22:11:03.646Z"
+      "ts": "2026-04-24T22:22:55.311Z"
     },
     {
       "type": "failed",
       "key": "early_commitment_count_first_half_x_curiosity_resolution_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-24T22:11:03.646Z"
+      "ts": "2026-04-24T22:22:55.311Z"
     },
     {
       "type": "failed",
       "key": "curiosity_resolution_front_load_ratio_x_early_commitment_count_first_half",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-24T22:11:03.646Z"
+      "ts": "2026-04-24T22:22:55.312Z"
     },
     {
       "type": "completed",
-      "key": "tension_release_front_load_ratio_x_open_question_setup_count_first5s",
-      "r": -0.0021,
+      "key": "open_question_setup_density_first10s_x_payoff_framing_count",
+      "r": 0.0615,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:03.940Z"
+      "ts": "2026-04-24T22:22:55.465Z"
     },
     {
       "type": "completed",
-      "key": "open_question_setup_count_first5s_x_early_commitment_count",
-      "r": 0,
+      "key": "payoff_framing_count_x_open_question_setup_density_first10s",
+      "r": 0.0615,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:04.090Z"
+      "ts": "2026-04-24T22:22:55.617Z"
     },
     {
       "type": "completed",
-      "key": "early_commitment_count_x_open_question_setup_count_first5s",
-      "r": 0,
+      "key": "open_question_setup_density_first10s_x_payoff_framing_count_hook",
+      "r": 0.0662,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:04.239Z"
+      "ts": "2026-04-24T22:22:55.761Z"
     },
     {
       "type": "completed",
-      "key": "open_question_setup_count_first5s_x_early_commitment_front_load_ratio",
-      "r": 0.0697,
+      "key": "payoff_framing_count_hook_x_open_question_setup_density_first10s",
+      "r": 0.0662,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:04.390Z"
+      "ts": "2026-04-24T22:22:55.909Z"
     },
     {
       "type": "completed",
-      "key": "early_commitment_front_load_ratio_x_open_question_setup_count_first5s",
-      "r": 0.0697,
+      "key": "open_question_setup_density_first10s_x_payoff_framing_front_load_ratio",
+      "r": -0.0334,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:04.541Z"
+      "ts": "2026-04-24T22:22:56.071Z"
     },
     {
       "type": "completed",
-      "key": "open_question_setup_count_first5s_x_narrative_investment_count",
-      "r": 0.0747,
+      "key": "payoff_framing_front_load_ratio_x_open_question_setup_density_first10s",
+      "r": -0.0334,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:04.692Z"
+      "ts": "2026-04-24T22:22:56.226Z"
     },
     {
       "type": "completed",
-      "key": "narrative_investment_count_x_open_question_setup_count_first5s",
-      "r": 0.0747,
+      "key": "open_question_setup_density_first15s_x_open_loop_count",
+      "r": 0.0963,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T22:11:04.841Z"
+      "ts": "2026-04-24T22:22:56.382Z"
     },
     {
       "type": "failed",
       "key": "early_commitment_count_first_half_x_viewer_sunk_cost_count",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-24T22:11:04.842Z"
+      "ts": "2026-04-24T22:22:56.383Z"
     },
     {
       "type": "failed",
       "key": "viewer_sunk_cost_count_x_early_commitment_count_first_half",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-24T22:11:04.842Z"
+      "ts": "2026-04-24T22:22:56.383Z"
     },
     {
       "type": "failed",
       "key": "early_commitment_count_first_half_x_proof_withholding_count",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-24T22:11:04.842Z"
+      "ts": "2026-04-24T22:22:56.383Z"
     }
   ],
   "pre_attempted": 1730,
