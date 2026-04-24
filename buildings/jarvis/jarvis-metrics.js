@@ -1374,6 +1374,38 @@ const ZYGARNIK_PHRASE_SETS = {
         'the transformation', 'the final result', 'and there you have it',
         'here is the proof', 'and it is', 'turns out it',
     ],
+
+    // Group AN phrase families
+    delayed_payoff_signal: [
+        'the reveal is at the end', 'save the best for last', 'worth the wait',
+        'building to something', 'hold that thought', 'before i show you the result',
+        'keep watching', 'stay for the payoff', 'the good stuff is coming',
+        'you will not want to miss', 'the best part is later', 'ending with this',
+        'i saved the best', 'i am building to this', 'the conclusion will surprise you',
+        'wait for it', 'the finale', 'the punchline comes later', 'hang tight',
+        'the reveal waits', 'i am saving that', 'the big moment comes',
+        'saving the best for last', 'the payoff is at the end',
+    ],
+    open_question_density: [
+        'but why', 'the question is', 'what you dont know', 'here is the thing',
+        'you are probably wondering', 'what if i told you', 'here is what nobody tells you',
+        'the real answer', 'but what about', 'have you ever wondered',
+        'the bigger question', 'but here is the problem', 'what really happens',
+        'nobody asks', 'the question nobody asks', 'why does this happen',
+        'how is this possible', 'but the real question', 'what is actually going on',
+        'and you might ask', 'you may be wondering', 'i get asked all the time',
+        'the answer surprises most people', 'most people never ask',
+    ],
+    proof_withhold_early: [
+        'i wont show you yet', 'first you need to understand', 'before the numbers',
+        'before we get to the results', 'context first', 'setup first',
+        'you need to see this part first', 'spoiler warning', 'first let me explain',
+        'before we get there', 'before the reveal', 'i will get to that',
+        'that comes later', 'hold that thought', 'before the answer',
+        'i am getting there', 'patience', 'the result is coming', 'trust me first',
+        'once you understand this', 'after i show you this',
+        'before i give you the results', 'the proof comes at the end',
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
