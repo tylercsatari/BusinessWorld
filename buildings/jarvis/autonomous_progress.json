@@ -1,205 +1,205 @@
 {
-  "active": true,
+  "active": false,
   "run_id": "auto_20260424054126.",
   "mode": "hybrid_auto",
   "started_at": "2026-04-24T05:41:26.183Z",
-  "updated_at": "2026-04-24T05:42:03.062Z",
-  "finished_at": null,
+  "updated_at": "2026-04-24T05:47:14.324303Z",
+  "finished_at": "2026-04-24T05:47:14.324303Z",
   "requested_iterations": 3000,
-  "attempted": 142,
-  "completed": 136,
+  "attempted": 1105,
+  "completed": 1099,
   "failures": 5,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 28,
-  "stop_reason": null,
-  "current_candidate": "proof_signal_count_x_tension_hold_count",
-  "last_completed_candidate": "early_proof_signal_count_hook_x_proof_signal_count",
-  "last_completed_r": -0.047,
+  "no_signal_streak": 6,
+  "stop_reason": "process_died_watchdog",
+  "current_candidate": null,
+  "last_completed_candidate": "implicit_promise_density_x_expectation_subversion_density",
+  "last_completed_r": -0.0248,
   "recent_events": [
     {
       "type": "completed",
-      "key": "proof_signal_count_x_tension_ratchet_count_hook",
+      "key": "expectation_subversion_count_x_proof_framing_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:57.641Z"
+      "ts": "2026-04-24T05:46:24.115Z"
     },
     {
       "type": "completed",
-      "key": "tension_ratchet_count_hook_x_proof_signal_count",
+      "key": "proof_framing_count_hook_x_expectation_subversion_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:57.770Z"
+      "ts": "2026-04-24T05:46:24.244Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_proof_build_count_hook",
-      "r": -0.047,
+      "key": "expectation_subversion_count_x_proof_framing_front_load_ratio",
+      "r": 0.0319,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:57.900Z"
+      "ts": "2026-04-24T05:46:24.380Z"
     },
     {
       "type": "completed",
-      "key": "proof_build_count_hook_x_proof_signal_count",
-      "r": -0.047,
+      "key": "proof_framing_front_load_ratio_x_expectation_subversion_count",
+      "r": 0.0319,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:58.029Z"
+      "ts": "2026-04-24T05:46:24.515Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_vulnerability_count_hook",
+      "key": "expectation_subversion_count_x_effort_signal_count_hook",
+      "r": 0.0028,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T05:46:24.644Z"
+    },
+    {
+      "type": "completed",
+      "key": "effort_signal_count_hook_x_expectation_subversion_count",
+      "r": 0.0028,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T05:46:24.775Z"
+    },
+    {
+      "type": "completed",
+      "key": "expectation_subversion_count_x_curiosity_trigger_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:58.158Z"
+      "ts": "2026-04-24T05:46:24.966Z"
     },
     {
       "type": "completed",
-      "key": "vulnerability_count_hook_x_proof_signal_count",
+      "key": "curiosity_trigger_count_x_expectation_subversion_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:58.289Z"
+      "ts": "2026-04-24T05:46:25.096Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_stakes_high_count_hook",
+      "key": "expectation_subversion_count_x_curiosity_trigger_density",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:58.417Z"
+      "ts": "2026-04-24T05:46:25.228Z"
     },
     {
       "type": "completed",
-      "key": "stakes_high_count_hook_x_proof_signal_count",
+      "key": "curiosity_trigger_density_x_expectation_subversion_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:41:58.549Z"
+      "ts": "2026-04-24T05:46:25.355Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_discovery_reveal_count_hook",
+      "key": "expectation_subversion_count_x_curiosity_trigger_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:01.635Z"
+      "ts": "2026-04-24T05:46:25.482Z"
     },
     {
       "type": "completed",
-      "key": "discovery_reveal_count_hook_x_proof_signal_count",
+      "key": "curiosity_trigger_count_hook_x_expectation_subversion_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:01.780Z"
+      "ts": "2026-04-24T05:46:25.609Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_persistence_signal_count_hook",
-      "r": 0,
+      "key": "expectation_subversion_density_x_tension_builder_count",
+      "r": 0.0729,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:01.911Z"
+      "ts": "2026-04-24T05:46:25.744Z"
     },
     {
       "type": "completed",
-      "key": "persistence_signal_count_hook_x_proof_signal_count",
-      "r": 0,
+      "key": "tension_builder_count_x_expectation_subversion_density",
+      "r": 0.0729,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:02.040Z"
+      "ts": "2026-04-24T05:46:25.885Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_viewer_promise_count_hook",
-      "r": 0,
+      "key": "expectation_subversion_density_x_tension_builder_density",
+      "r": 0.0445,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:02.164Z"
+      "ts": "2026-04-24T05:46:26.025Z"
     },
     {
       "type": "completed",
-      "key": "viewer_promise_count_hook_x_proof_signal_count",
-      "r": 0,
+      "key": "tension_builder_density_x_expectation_subversion_density",
+      "r": 0.0445,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:02.289Z"
+      "ts": "2026-04-24T05:46:26.162Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_result_signal_count_hook",
-      "r": 0,
+      "key": "expectation_subversion_density_x_implicit_promise_count",
+      "r": -0.0274,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:02.415Z"
+      "ts": "2026-04-24T05:46:26.299Z"
     },
     {
       "type": "completed",
-      "key": "result_signal_count_hook_x_proof_signal_count",
-      "r": 0,
+      "key": "implicit_promise_count_x_expectation_subversion_density",
+      "r": -0.0274,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:02.543Z"
+      "ts": "2026-04-24T05:46:26.438Z"
     },
     {
       "type": "completed",
-      "key": "proof_signal_count_x_risk_signal_count_hook",
-      "r": 0,
+      "key": "expectation_subversion_density_x_implicit_promise_density",
+      "r": -0.0248,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:02.674Z"
+      "ts": "2026-04-24T05:46:26.577Z"
     },
     {
       "type": "completed",
-      "key": "risk_signal_count_hook_x_proof_signal_count",
-      "r": 0,
+      "key": "implicit_promise_density_x_expectation_subversion_density",
+      "r": -0.0248,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T05:42:02.803Z"
-    },
-    {
-      "type": "completed",
-      "key": "proof_signal_count_x_early_proof_signal_count_hook",
-      "r": -0.047,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T05:42:02.930Z"
-    },
-    {
-      "type": "completed",
-      "key": "early_proof_signal_count_hook_x_proof_signal_count",
-      "r": -0.047,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T05:42:03.062Z"
+      "ts": "2026-04-24T05:46:26.710Z"
     }
   ],
-  "pre_attempted": 142,
-  "pre_completed": 136,
+  "pre_attempted": 1105,
+  "pre_completed": 1099,
   "post_attempted": 0,
   "post_completed": 0
 }
