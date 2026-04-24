@@ -1,10 +1,10 @@
 {
   "active": false,
-  "run_id": "auto_20260424025547.",
+  "run_id": "auto_20260424030157.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-24T02:55:47.434Z",
-  "updated_at": "2026-04-24T02:55:56.466Z",
-  "finished_at": "2026-04-24T02:55:56.466Z",
+  "started_at": "2026-04-24T03:01:57.762Z",
+  "updated_at": "2026-04-24T03:02:05.816Z",
+  "finished_at": "2026-04-24T03:02:05.816Z",
   "requested_iterations": 3000,
   "attempted": 119,
   "completed": 0,
@@ -22,140 +22,140 @@
       "key": "effort_signal_position_pct_x_delayed_gratification_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.219Z"
+      "ts": "2026-04-24T03:02:02.662Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_story_stake_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.246Z"
+      "ts": "2026-04-24T03:02:02.688Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_credibility_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.272Z"
+      "ts": "2026-04-24T03:02:02.712Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_teaser_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.301Z"
+      "ts": "2026-04-24T03:02:02.740Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_anticipation_escalation_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.329Z"
+      "ts": "2026-04-24T03:02:02.769Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_proof_delay_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.361Z"
+      "ts": "2026-04-24T03:02:02.801Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_open_question_setup_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.393Z"
+      "ts": "2026-04-24T03:02:02.832Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_visual_anchor_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.421Z"
+      "ts": "2026-04-24T03:02:02.860Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_time_progress_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.447Z"
+      "ts": "2026-04-24T03:02:02.887Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_persistence_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.474Z"
+      "ts": "2026-04-24T03:02:02.913Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_payoff_anticipation_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.500Z"
+      "ts": "2026-04-24T03:02:02.940Z"
     },
     {
       "type": "failed",
       "key": "effort_signal_position_pct_x_visual_proof_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.527Z"
+      "ts": "2026-04-24T03:02:02.967Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_delayed_gratification_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.554Z"
+      "ts": "2026-04-24T03:02:02.996Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_story_stake_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.581Z"
+      "ts": "2026-04-24T03:02:03.024Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_credibility_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.607Z"
+      "ts": "2026-04-24T03:02:03.048Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_anticipation_escalation_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.636Z"
+      "ts": "2026-04-24T03:02:03.078Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_time_progress_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.662Z"
+      "ts": "2026-04-24T03:02:03.104Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_persistence_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.690Z"
+      "ts": "2026-04-24T03:02:03.130Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_payoff_anticipation_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.717Z"
+      "ts": "2026-04-24T03:02:03.157Z"
     },
     {
       "type": "failed",
       "key": "visual_proof_signal_position_pct_x_effort_signal_position_pct",
       "reason": "processIndicator returned null",
       "layer": "pre",
-      "ts": "2026-04-24T02:55:53.744Z"
+      "ts": "2026-04-24T03:02:03.185Z"
     }
   ],
   "pre_attempted": 119,
