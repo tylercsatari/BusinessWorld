@@ -2425,28 +2425,434 @@ function composeTitle(obj, endpoint, scale, bodyPart) {
     return core;
 }
 
+// Removes emojis, trailing decorative symbols, and collapses whitespace so a
+// raw video title like "Making a GRAPPLING GUN 😎" reads as "Making a GRAPPLING GUN"
+// before it gets parsed as a premise. No abstraction, just surface cleanup.
+function stripSourceTitleDecorations(s) {
+    return String(s || '')
+        .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F000}-\u{1F2FF}]/gu, '')
+        .replace(/\s+/g, ' ')
+        .replace(/\s+([?.!,:;])/g, '$1')
+        .trim();
+}
+
+// Picks a grounded body-part triple from the exact validated source title by
+// reading factual tokens (feet ↔ marathon/shoes/steps, shoulders ↔ pushup/plank,
+// hands ↔ grip/deadhang, lungs ↔ oxygen/breath, eyes ↔ dark/blind). No category
+// layer — each branch is one keyword check against the real title text.
+function inferSourceBodyAnchor(titleLower) {
+    if (/\b(feet|foot|toes?|shoes?|marathon|running|walking|walked|stairs?|steps?|hike|hiking|skydive|skydiving)\b/.test(titleLower)) {
+        return { body_part_phrase: 'feet', body_parts: ['feet', 'legs', 'skin'], sensation_words: ['feet', 'painful', 'numb', 'feeling'] };
+    }
+    if (/\b(push.?up|plank|pull.?up|dip|bench|chest|triceps)\b/.test(titleLower)) {
+        return { body_part_phrase: 'shoulders', body_parts: ['shoulders', 'chest', 'skin'], sensation_words: ['painful', 'shoulders', 'numb', 'feeling'] };
+    }
+    if (/\b(hand|hands|grip|hold|hang|deadhang|crane|fingers?|iron fist|punch)\b/.test(titleLower)) {
+        return { body_part_phrase: 'hands', body_parts: ['hands', 'shoulders', 'skin'], sensation_words: ['hands', 'painful', 'numb', 'feeling'] };
+    }
+    if (/\b(eye|eyes|sight|dark|darkness|blind|see)\b/.test(titleLower)) {
+        return { body_part_phrase: 'eyes', body_parts: ['eyes', 'face', 'skin'], sensation_words: ['curious', 'feeling', 'numb'] };
+    }
+    if (/\b(breath|breathe|oxygen|lungs?|smoke|gas|suffocat)\b/.test(titleLower)) {
+        return { body_part_phrase: 'lungs', body_parts: ['lungs', 'chest', 'skin'], sensation_words: ['painful', 'numb', 'feeling'] };
+    }
+    if (/\b(arm|arms|bicep|forearm)\b/.test(titleLower)) {
+        return { body_part_phrase: 'arm', body_parts: ['arm', 'shoulders', 'skin'], sensation_words: ['painful', 'numb', 'arm', 'feeling'] };
+    }
+    return { body_part_phrase: 'body', body_parts: ['body', 'shoulders', 'skin'], sensation_words: ['feeling', 'numb', 'painful'] };
+}
+
+// Scalable source-grounded fallback used when no handcrafted rule above matches.
+// Every validated source video gets a view whose fields are derived from the
+// exact validated title — not from a generic premise-atom template. Output
+// shape mirrors the handcrafted rules so composeSeed treats both paths the same.
+//
+// Rule order matters: each branch is a direct rewrite of one real title shape
+// ("Can X?", "Did I X?", "Making/Built X", "Testing X", "X vs Y", numeric-anchor,
+// first-person "I X", and a final verbatim fallback). title_has_builtin_reveal
+// is always set so composeTitle never tacks a generic endpoint suffix onto
+// a source-grounded title.
+function buildGenericSourceGroundedView(sourceVideo) {
+    const rawTitle = stripSourceTitleDecorations((sourceVideo && sourceVideo.name) || '');
+    if (!rawTitle) return null;
+    const t = rawTitle.toLowerCase();
+    const anchor = inferSourceBodyAnchor(t);
+
+    const base = {
+        title_has_builtin_reveal: true,
+        body_part_phrase: anchor.body_part_phrase,
+        body_parts: anchor.body_parts,
+        sensation_words: anchor.sensation_words,
+        source_grounded_form: 'generic_title_parsed',
+    };
+
+    // "Can X?" / "Can X ..." — test-whether frame
+    let m = /^can\s+(.+?)\??$/i.exec(rawTitle);
+    if (m) {
+        const subject = m[1].replace(/[?!]+$/, '').trim();
+        const subj = subject.toLowerCase();
+        return {
+            ...base,
+            title_premise_line: `I Ran The Exact Test To Answer: Can ${capitalize(subject)} — Here’s What Actually Happened`,
+            logline_action: `set up the exact test that asks "can ${subj}" and escalate the conditions until the camera holds a real answer`,
+            first_frame_action: `the full rig needed to test "can ${subj}" all framed together before the first attempt`,
+            visual_action_short: `the "can ${subj}" test running while the outcome becomes visible on camera`,
+            setting_hint: `inside the exact rig built to answer whether ${subj}`,
+            reveal_phrase: `the test lands a clear visible answer to "can ${subj}" and the camera freezes on the result`,
+            promise_tail: `the question "can ${subj}" gets a real on-camera answer`,
+        };
+    }
+
+    // "Did I X?" — retro-question frame
+    m = /^did i\s+(.+?)\??$/i.exec(rawTitle);
+    if (m) {
+        const phrase = m[1].replace(/[?!]+$/, '').trim().toLowerCase();
+        return {
+            ...base,
+            title_premise_line: `I Went All In Trying To ${capitalize(phrase)} — Here’s What Actually Happened`,
+            logline_action: `push to actually ${phrase} on camera and keep escalating the attempt until the result is undeniable`,
+            first_frame_action: `the setup for the "${phrase}" attempt framed with the target already visible`,
+            visual_action_short: `the "${phrase}" attempt escalating while the target stays visible on camera`,
+            setting_hint: `inside the exact setup needed to try to ${phrase}`,
+            reveal_phrase: `the camera shows whether I actually managed to ${phrase}`,
+            promise_tail: `the camera answers whether I actually pulled off "${phrase}"`,
+        };
+    }
+
+    // "Making X" / "Built X" / "I Made X" — build-and-test frame
+    m = /^(making|i made|i built|building)\s+(?:a |the |an )?(.+)$/i.exec(rawTitle);
+    if (m) {
+        const subject = m[2].replace(/[?!]+$/, '').trim();
+        const subj = subject.toLowerCase();
+        return {
+            ...base,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'shoulders', 'skin'],
+            sensation_words: ['hands', 'painful', 'numb', 'feeling'],
+            title_premise_line: `I Built ${capitalize(subject)} From Scratch And Ran It Until The Build Gave A Real Answer`,
+            logline_action: `build ${subj} from the ground up on camera and stress-test it until the build either holds or visibly gives`,
+            first_frame_action: `the raw materials for ${subj} and the final test target framed together before the first step`,
+            visual_action_short: `${subj} coming together while the test target stays in the same frame`,
+            setting_hint: `inside a workshop with every stage of ${subj} visible on camera`,
+            reveal_phrase: `${subj} either holds or visibly breaks when the final test lands`,
+            promise_tail: `${subj} either holds or visibly gives`,
+        };
+    }
+
+    // "Testing X"
+    m = /^testing\s+(.+)$/i.exec(rawTitle);
+    if (m) {
+        const subject = m[1].replace(/[?!]+$/, '').trim();
+        const subj = subject.toLowerCase();
+        return {
+            ...base,
+            title_premise_line: `I Tested ${capitalize(subject)} Until The Real Breaking Point Showed Up`,
+            logline_action: `test ${subj} by escalating the conditions on camera until the failure point is physically visible`,
+            first_frame_action: `${subj} and the full test rig framed together before the first push`,
+            visual_action_short: `${subj} being pushed while the failure point stays in the same frame`,
+            setting_hint: `inside the exact test rig built to push ${subj}`,
+            reveal_phrase: `${subj} reaches its real breaking point on camera`,
+            promise_tail: `${subj} reaches its real breaking point`,
+        };
+    }
+
+    // "X vs Y"
+    m = /^(.+?)\s+vs\.?\s+(.+)$/i.exec(rawTitle);
+    if (m) {
+        const a = m[1].trim();
+        const b = m[2].trim();
+        const aL = a.toLowerCase();
+        const bL = b.toLowerCase();
+        return {
+            ...base,
+            title_premise_line: `I Put ${capitalize(a)} Up Against ${capitalize(b)} Until One Of Them Actually Gave`,
+            logline_action: `stage the exact matchup of ${aL} against ${bL} and keep escalating until one of them visibly gives`,
+            first_frame_action: `${aL} and ${bL} framed side-by-side before the first contact`,
+            visual_action_short: `${aL} colliding with ${bL} while the result frame stays locked`,
+            setting_hint: `inside the exact rig built to run ${aL} against ${bL}`,
+            reveal_phrase: `one of ${aL} or ${bL} visibly gives on camera and the frame freezes on the loser`,
+            promise_tail: `one of ${aL} or ${bL} visibly gives`,
+        };
+    }
+
+    // Numeric quantity anchor — "N miles/steps/hours/days/..."
+    m = /(\d[\d,]*)\s*(hours?|minutes?|days?|steps?|miles?|km|kilometers?|reps?|push.?ups?|pull.?ups?|squats?|stairs?)\b/i.exec(rawTitle);
+    if (m) {
+        const qty = m[1];
+        const unit = m[2].toLowerCase();
+        const leadingRaw = rawTitle.slice(0, m.index).replace(/[\s,:\-—]+$/, '').trim();
+        const trailingRaw = rawTitle.slice(m.index + m[0].length).replace(/^[\s,:\-—]+/, '').trim();
+        const ctx = trailingRaw || leadingRaw || '';
+        const ctxClause = ctx ? ` ${ctx.toLowerCase()}` : '';
+        return {
+            ...base,
+            title_premise_line: `I Went ${qty} ${capitalize(unit)}${ctx ? ' ' + capitalize(ctx) : ''} Until My Body Forced A Real Decision`,
+            logline_action: `commit to ${qty} ${unit}${ctxClause} and keep filming every physical change until my body forces a visible decision`,
+            first_frame_action: `the counter set to 0 and the target of ${qty} ${unit} both visible before the first move`,
+            visual_action_short: `the counter climbing toward ${qty} ${unit} while my body stays in the same frame`,
+            setting_hint: `on the exact course needed to push ${qty} ${unit}${ctxClause} with the counter always visible`,
+            reveal_phrase: `the counter lands on the real final number at ${qty} ${unit} and the camera holds on the moment it settles`,
+            promise_tail: `the counter lands on the real final number at ${qty} ${unit}`,
+        };
+    }
+
+    // First-person "I X" — carry the original phrasing verbatim
+    m = /^i\s+(.+)$/i.exec(rawTitle);
+    if (m) {
+        const rest = m[1].replace(/[?!]+$/, '').trim();
+        const restL = rest.toLowerCase();
+        return {
+            ...base,
+            title_premise_line: `I ${capitalize(rest)} — Here’s What Actually Happened`,
+            logline_action: `actually do this on camera: ${restL}, and keep filming every real moment until the outcome is undeniable`,
+            first_frame_action: `the exact starting state for "${restL}" framed before the first move`,
+            visual_action_short: `"${restL}" unfolding while the camera holds on the consequence`,
+            setting_hint: `inside the exact environment where "${restL}" has to play out`,
+            reveal_phrase: `the real outcome of "${restL}" lands on camera and the frame freezes on it`,
+            promise_tail: `the real outcome of "${restL}" lands`,
+        };
+    }
+
+    // Final verbatim fallback — carry the exact validated title as the premise line.
+    const rawL = rawTitle.toLowerCase();
+    return {
+        ...base,
+        title_premise_line: `${capitalize(rawTitle)} — Here’s What Actually Happened`,
+        logline_action: `carry out the exact premise of "${rawL}" on camera and keep filming until the outcome is visible`,
+        first_frame_action: `the setup required for "${rawL}" framed before the first move`,
+        visual_action_short: `"${rawL}" unfolding while the camera holds on the consequence`,
+        setting_hint: `inside the exact environment where "${rawL}" plays out`,
+        reveal_phrase: `the real outcome of "${rawL}" lands on camera and the frame freezes on it`,
+        promise_tail: `the real outcome of "${rawL}" lands`,
+    };
+}
+
+function deriveSourceVideoPremiseView(sourceVideo) {
+    const rawTitle = String((sourceVideo && sourceVideo.name) || '').trim();
+    if (!rawTitle) return null;
+    const t = rawTitle.toLowerCase();
+
+    if (/laser/.test(t) && /(arm|skin)/.test(t)) {
+        const target = /skin/.test(t) ? 'skin' : 'arm';
+        return {
+            title_premise_line: `I Put My ${capitalize(target)} In Front Of A $20,000 Laser To See If It Would Actually Cut Through — Here’s What Actually Happened`,
+            title_has_builtin_reveal: true,
+            logline_action: `put my ${target} in front of a high-powered laser, increase the exposure in controlled steps, and keep filming until the test gives a real answer`,
+            first_frame_action: `the laser head powering on while my ${target} and the safety rig are both clearly in frame`,
+            visual_action_short: `my ${target} moving toward the laser path with the power setting visible on screen`,
+            setting_hint: 'inside a workshop test rig with visible safety barriers and a live power readout',
+            reveal_phrase: `the laser either cuts through my ${target} or it visibly doesn’t, and the camera freezes on the real result`,
+            promise_tail: `the laser gives a visible answer on my ${target}`,
+            body_part_phrase: target,
+            body_parts: [target, 'skin', 'hand'],
+            sensation_words: [target, 'skin', 'painful', 'numb', 'feeling'],
+        };
+    }
+
+    if (/(stop a bullet|bullet proof|bulletproof|oobleck)/.test(t)) {
+        const isShield = /shield/.test(t);
+        const material = /oobleck/.test(t) ? 'oobleck' : (isShield ? 'a homemade shield' : 'different homemade materials');
+        return {
+            title_premise_line: isShield
+                ? 'I Built A Shield To See If It Could Actually Stop A Bullet — Here’s What Happened'
+                : /oobleck/.test(t)
+                    ? 'I Tested Whether Oobleck Could Actually Stop A Bullet — Here’s What Happened'
+                    : 'I Tested Homemade Materials To See If Any Could Actually Stop A Bullet — Here’s What Happened',
+            title_has_builtin_reveal: true,
+            logline_action: `test whether ${material} can stop a bullet by escalating through real shots until the answer is visually undeniable`,
+            first_frame_action: 'the target rig, impact zone, and projectile test setup all framed together before the first shot',
+            visual_action_short: 'a projectile test hitting the target while the impact result is frozen on screen',
+            setting_hint: 'at an outdoor ballistic range with the target rig and impact camera both visible',
+            reveal_phrase: `the bullet either gets stopped by ${material} or it visibly punches through, and the impact frame freezes on the real result`,
+            promise_tail: `${material} either stops the bullet or visibly fails`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'shoulders', 'skin'],
+            sensation_words: ['painful', 'curious', 'skin', 'numb'],
+        };
+    }
+
+    if (/banned shoes/.test(t) && /marathon/.test(t)) {
+        return {
+            title_premise_line: 'I Ran A Marathon In Banned Shoes To See When My Feet Would Start Fighting Me',
+            title_has_builtin_reveal: true,
+            logline_action: 'run a full marathon in banned racing shoes and keep filming each physical change until my feet make the cost obvious',
+            first_frame_action: 'lacing up the banned shoes next to the start line with the race clock already visible',
+            visual_action_short: 'the shoes pounding pavement while the race clock and stride stay in frame',
+            setting_hint: 'on a live marathon course with the race clock and road markings visible',
+            reveal_phrase: 'my feet hit the exact moment they stop cooperating with the banned shoes on the marathon course',
+            promise_tail: 'my feet decide how far the banned shoes can carry me',
+            body_part_phrase: 'feet',
+            body_parts: ['feet', 'legs', 'skin'],
+            sensation_words: ['feet', 'painful', 'numb', 'feeling'],
+        };
+    }
+
+    if (/shock collar/.test(t) && /marathon/.test(t)) {
+        return {
+            title_premise_line: 'I Ran A Marathon With A Shock Collar To See When The Pain Would Change My Pace',
+            title_has_builtin_reveal: true,
+            logline_action: 'run a full marathon while a shock collar keeps threatening the next step, and keep filming until the pain visibly changes my stride',
+            first_frame_action: 'the shock collar clicking on beside the race bib before the first step',
+            visual_action_short: 'my stride changing on course while the collar and race clock both stay visible',
+            setting_hint: 'on a live road race course with the clock and collar both visible in frame',
+            reveal_phrase: 'the shock collar visibly changes my stride on the marathon course and the camera holds on the moment it lands',
+            promise_tail: 'the shock collar forces my stride to change on camera',
+            body_part_phrase: 'legs',
+            body_parts: ['legs', 'feet', 'skin'],
+            sensation_words: ['painful', 'numb', 'feet', 'feeling'],
+        };
+    }
+
+    if (/painful shoes|electrocute you/.test(t)) {
+        const adjective = /electrocute/.test(t) ? 'electric' : 'painful';
+        return {
+            title_premise_line: `I Tried The Most ${capitalize(adjective)} Shoes I Could Find To See How Long My Feet Would Last`,
+            title_has_builtin_reveal: true,
+            logline_action: `wear brutally ${adjective} shoes and keep escalating the test until my feet force a visible decision`,
+            first_frame_action: `slipping into the ${adjective} shoes while the camera holds on the sole and my reaction in the same frame`,
+            visual_action_short: `taking real steps in the shoes while the reaction and the shoe contact stay visible`,
+            setting_hint: 'on a simple test course where every step and reaction reads clearly on camera',
+            reveal_phrase: `my feet force the first visible moment the ${adjective} shoes become impossible to ignore`,
+            promise_tail: `my feet call it before the ${adjective} shoes do`,
+            body_part_phrase: 'feet',
+            body_parts: ['feet', 'legs', 'skin'],
+            sensation_words: ['feet', 'painful', 'numb', 'feeling'],
+        };
+    }
+
+    if (/impossible pushup/.test(t)) {
+        return {
+            title_premise_line: 'I Tried To Beat The Impossible Pushup Until My Body Finally Gave Me An Answer',
+            title_has_builtin_reveal: true,
+            logline_action: 'keep attempting the impossible pushup variation, adjusting form and effort on camera until my body gives a visible answer',
+            first_frame_action: 'my hands setting into the impossible pushup position before the first attempt',
+            visual_action_short: 'full-body pushup attempts with the form and failure point both visible',
+            setting_hint: 'on a simple gym floor with one angle that makes the leverage obvious',
+            reveal_phrase: 'my body lands a visible answer on the impossible pushup and the camera freezes on the single frame that settles it',
+            promise_tail: 'the impossible pushup gets a visible answer from my body',
+            body_part_phrase: 'shoulders',
+            body_parts: ['shoulders', 'chest', 'skin'],
+            sensation_words: ['painful', 'numb', 'shoulders', 'feeling'],
+        };
+    }
+
+    if (/world record/.test(t)) {
+        return {
+            title_premise_line: 'I Tried To Break A World Record Until The Attempt Turned Into Its Own Story',
+            title_has_builtin_reveal: true,
+            logline_action: 'chase a real world record attempt from setup to failure or success, keeping the counter and the emotional swing visible the whole time',
+            first_frame_action: 'the record setup and the number to beat both visible before the first attempt starts',
+            visual_action_short: 'each attempt tightening while the target number stays on screen',
+            setting_hint: 'inside the record attempt setup with the goal number and attempt both visible',
+            reveal_phrase: 'the record attempt lands on whatever the real final number turns out to be with the counter still in frame',
+            promise_tail: 'the world record attempt lands on its real final number',
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'shoulders', 'skin'],
+            sensation_words: ['painful', 'curious', 'numb', 'feeling'],
+        };
+    }
+
+    if (/became a bodybuilder|called fat/.test(t)) {
+        return {
+            title_premise_line: 'I Got Called Fat So I Trained Until My Body Actually Looked Different',
+            title_has_builtin_reveal: true,
+            logline_action: 'rebuild my body like a bodybuilder and keep comparing the same poses until the before and after become impossible to argue with',
+            first_frame_action: 'a side-by-side day-1 mirror frame locked to the exact pose I will repeat at the end',
+            visual_action_short: 'matching gym reps and identical pose checks cutting against each other',
+            setting_hint: 'in the same gym and mirror setup every time so the change is undeniable',
+            reveal_phrase: 'the matching before/after pose cut lands and the change becomes impossible to argue with',
+            promise_tail: 'the before/after pose makes the change undeniable',
+            body_part_phrase: 'body',
+            body_parts: ['body', 'shoulders', 'stomach'],
+            sensation_words: ['body', 'bigger', 'painful', 'feeling'],
+        };
+    }
+
+    if (/military training/.test(t)) {
+        return {
+            title_premise_line: 'I Tried To Survive Insane Military Training For A Full Day',
+            title_has_builtin_reveal: true,
+            logline_action: 'follow a brutal military training day from the first drill to the last and keep filming the moment my body starts negotiating with me',
+            first_frame_action: 'the first command getting yelled while I step into the training field already behind everyone else',
+            visual_action_short: 'matching the drill pace while the instructors and the field stay visible in frame',
+            setting_hint: 'inside a real military-style training course with the instructors in frame',
+            reveal_phrase: 'my body starts visibly negotiating with the drill and the instructor’s response lands in the same frame',
+            promise_tail: 'my body starts visibly negotiating with the drill',
+            body_part_phrase: 'shoulders',
+            body_parts: ['shoulders', 'legs', 'stomach'],
+            sensation_words: ['painful', 'numb', 'stomach', 'feeling'],
+        };
+    }
+
+    if (/solitary/.test(t)) {
+        return {
+            title_premise_line: 'I Locked My Little Sister In Solitary To See How Fast The Situation Got Weird',
+            title_has_builtin_reveal: true,
+            logline_action: 'run a controlled solitary-style isolation test and keep filming the moment the emotional effect becomes undeniable',
+            first_frame_action: 'the door closing while the timer starts and the isolation room is fully visible',
+            visual_action_short: 'the timer climbing while every new reaction is filmed through the same viewpoint',
+            setting_hint: 'inside a controlled room with a visible timer and one consistent camera angle',
+            reveal_phrase: 'the isolation visibly changes what she does with the room and the timer is still running in the same frame',
+            promise_tail: 'the isolation visibly shifts what she does with the room',
+            body_part_phrase: 'face',
+            body_parts: ['face', 'skin', 'feeling'],
+            sensation_words: ['curious', 'feeling', 'numb'],
+        };
+    }
+
+    if (/oxygen save my life/.test(t)) {
+        return {
+            title_premise_line: 'Can Pure Oxygen Actually Save Me In A Real Test',
+            title_has_builtin_reveal: true,
+            logline_action: 'test whether pure oxygen actually changes a dangerous physical situation and keep filming until the answer becomes obvious',
+            first_frame_action: 'the oxygen rig, my body, and the countdown to the test all visible in the same frame',
+            visual_action_short: 'the oxygen test running while the physical response stays in frame',
+            setting_hint: 'inside a controlled test setup with the oxygen rig and timer both visible',
+            reveal_phrase: 'the pure oxygen either visibly changes the physical outcome or it doesn’t, and the camera freezes on which',
+            promise_tail: 'the pure oxygen test forces a visible verdict on my body',
+            body_part_phrase: 'lungs',
+            body_parts: ['lungs', 'chest', 'skin'],
+            sensation_words: ['painful', 'numb', 'feeling'],
+        };
+    }
+
+    // Fallback: derive a grounded view directly from the exact validated video
+    // title. Every validated source video — not just the handcrafted ones —
+    // gets a source-grounded premise so no top seed falls through to a generic
+    // premise-atom template.
+    return buildGenericSourceGroundedView(sourceVideo);
+}
+
 function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, creatorFit, proofClarity, visualLegibility, sourceVideo = null) {
+    const sourcePremise = sourceVideo ? deriveSourceVideoPremiseView(sourceVideo) : null;
+    const premiseObj = sourcePremise ? { ...obj, ...sourcePremise } : obj;
     const scale = pickScale(obj);
-    const bodyPart = obj.body_part_phrase || (obj.body_parts && obj.body_parts[0]) || 'body';
-    const title = composeTitle(obj, endpoint, scale, bodyPart);
+    const bodyPart = premiseObj.body_part_phrase || (premiseObj.body_parts && premiseObj.body_parts[0]) || 'body';
+    const title = composeTitle(premiseObj, endpoint, scale, bodyPart);
     const revealVal = overDeliveryRevealValue(scale, endpoint);
 
-    const endpointPhrase = endpointPhraseFor(obj, endpoint, scale, revealVal, bodyPart);
+    const endpointPhrase = endpointPhraseFor(premiseObj, endpoint, scale, revealVal, bodyPart);
+    // When the premise is grounded in an exact validated source video, the
+    // source's own reveal language replaces the generic endpoint phrase across
+    // logline / payoff / climax / 90-100 beat. Seeds without a sourcePremise
+    // (raw OBJECT_MOTIFS \u00d7 ENDPOINT path) still use endpointPhrase unchanged.
+    const revealPhrase = premiseObj.reveal_phrase || endpointPhrase;
 
-    const action = obj.logline_action || `${obj.verb_present_phrase} ${obj.noun_subject_phrase}`;
+    const action = premiseObj.logline_action || `${premiseObj.verb_present_phrase} ${premiseObj.noun_subject_phrase}`;
     const isQualitativeReveal = ['transformation', 'experiment', 'identity'].includes(endpoint.kind);
-    const logline = `I ${action} ${obj.setting_hint}, narrating every sensation in my ${bodyPart} until ${endpointPhrase}.`;
-    const promiseTail = endpoint.kind === 'body' ? `my ${bodyPart} gives out`
+    const logline = `I ${action} ${premiseObj.setting_hint}, narrating every sensation in my ${bodyPart} until ${revealPhrase}.`;
+    const promiseTail = premiseObj.promise_tail
+        || (endpoint.kind === 'body' ? `my ${bodyPart} gives out`
         : endpoint.kind === 'transformation' ? 'the before/after lands in one shot'
         : endpoint.kind === 'experiment' ? 'one observation replaces every assumption'
         : endpoint.kind === 'identity' ? `the person I shadowed says we\u2019re done`
         : endpoint.kind === 'build_test' ? 'the build holds or visibly gives'
-        : 'the counter lands on a specific number';
+        : 'the counter lands on a specific number');
     const promise = `You\'re watching me ${action} \u2014 the question is where ${promiseTail}.`;
     const payoffTail = isQualitativeReveal
         ? 'a single word of reaction lands as overlay.'
         : 'a single sensation word appears as overlay.';
-    const payoff = `Final 5% of runtime: ${endpointPhrase}; ${payoffTail}`;
+    const payoff = `Final 5% of runtime: ${revealPhrase}; ${payoffTail}`;
     const overDelivery = isQualitativeReveal
         ? `Hook implies a legible answer to the premise (${scale.display}); payoff delivers the reveal as one frame/phrase \u2014 specificity of the single shot over-delivers vs the rounded premise.`
         : `Hook implies a round target (${scale.display}); payoff lands on a specific, non-round value (${revealVal}) \u2014 specificity over-delivers vs the rounded promise.`;
@@ -2460,8 +2866,8 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
 
     // Vocabulary — commit only to peak words that are in corpus positive list + body parts in positive list
     const useWords = Array.from(new Set([
-        ...(obj.sensation_words || []).filter(w => ctx.positiveWords.has(w)),
-        ...(obj.body_parts || []).filter(w => ctx.positiveWords.has(w)),
+        ...(premiseObj.sensation_words || []).filter(w => ctx.positiveWords.has(w)),
+        ...(premiseObj.body_parts || []).filter(w => ctx.positiveWords.has(w)),
         ...ctx.peakWordsRanked.slice(0, 5),
     ])).slice(0, 9);
     const avoidWords = ctx.negWordsRanked.slice(0, 6);
@@ -2481,20 +2887,20 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
     // First frame — derive from obj.first_frame_action + top frame mech at first_5s (if POSITIVE rho)
     const topFirst5 = (ctx.frameMechs.first_5s || []).filter(m => m.outcome === 'log_views' && m.rho > 0)[0];
     const firstFrameExtras = topFirst5 ? `; composition emphasizes ${topFirst5.id.replace('frame_','').replace('_at_first_5s','').replace(/_/g,' ')} (rho=${round(topFirst5.rho, 3)} vs log_views)` : '';
-    const firstFrame = `Close on ${obj.first_frame_action}. Counter visible. No explanatory overlay${firstFrameExtras}.`;
+    const firstFrame = `Close on ${premiseObj.first_frame_action}. Counter visible. No explanatory overlay${firstFrameExtras}.`;
     const firstLine = `${capitalize(firstWord)} — ${scale.display}, and my ${bodyPart} is going to tell you when it\'s over.`.replace('shoulders is', 'shoulders are').replace('foot is', 'foot is').replace('hand is', 'hand is');
-    const openingAction = `Camera locked on ${obj.visual_action_short} for the first 3 seconds; I enter motion inside the first second.`;
+    const openingAction = `Camera locked on ${premiseObj.visual_action_short} for the first 3 seconds; I enter motion inside the first second.`;
 
     // Build phases — retention-pattern driven by top_5_retention_predictors
     const buildPhases = [
-        { zone_pct: '0-10', beat: `enter ${obj.setting_hint.replace(/^at |^on |^in /, '')}; ${obj.visual_action_short}; premise named on screen`, visceral: true, note: 'Concept + body inside first 10%. Design rule v3 #6 (5.4x gap).' },
-        { zone_pct: '10-25', beat: `first ${bodyPart} sensation narration ("my ${bodyPart} is bigger"); counter begins to tick`, visceral: true, note: 'Divergence lock-in at ~22%. Sensory-word ramp begins.' },
-        { zone_pct: '25-60', beat: `escalating ${obj.visual_action_short} with sensory updates; utterances < 10 words; no pauses > 1s`, visceral: true, note: 'Monotonic rise in distress / counter. Peak-word density increases.' },
+        { zone_pct: '0-10', beat: `enter ${premiseObj.setting_hint.replace(/^at |^on |^in /, '')}; ${premiseObj.visual_action_short}; premise named on screen`, visceral: true, note: 'Concept + body inside first 10%. Design rule v3 #6 (5.4x gap).' },
+        { zone_pct: '10-25', beat: `first ${bodyPart} sensation narration; counter begins to tick; ${premiseObj.visual_action_short}`, visceral: true, note: 'Divergence lock-in at ~22%. Sensory-word ramp begins.' },
+        { zone_pct: '25-60', beat: `escalating ${premiseObj.visual_action_short} with sensory updates; utterances < 10 words; no pauses > 1s`, visceral: true, note: 'Monotonic rise in distress / counter. Peak-word density increases.' },
         { zone_pct: '60-90', beat: `peak zone — slow to 3.0 w/s; short sentence on a single sensation; reaction → wide on the count or distance milestone`, visceral: true, note: 'Peak 60-80%. Peak-speaking-rate 3.86 wps confirmed; utterance 7.9 words.' },
-        { zone_pct: '90-100', beat: `${endpointPhrase}; single-word overlay (sensation); wide shot of the final state`, visceral: true, note: 'Golden final 5% + END_RECOVERY. Emotion word in final 10% = +0.069.' },
+        { zone_pct: '90-100', beat: `${revealPhrase}; single-word overlay (sensation); wide shot of the final state`, visceral: true, note: 'Golden final 5% + END_RECOVERY. Emotion word in final 10% = +0.069.' },
     ];
 
-    const climaxHint = `At 95% of runtime, ${endpointPhrase}; camera holds on the final position; I say one word and the overlay freezes.`;
+    const climaxHint = `At 95% of runtime, ${revealPhrase}; camera holds on the final position; I say one word and the overlay freezes.`;
     const closingLineHint = `Close with ${bodyPart} + impact word: "${bodyPart}\'s numb — ${closingWords[0] || 'insane'}."`;
 
     // Visual prescription per zone — derived from top frame mechanisms at each bucket
@@ -2505,9 +2911,9 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
             : [];
     };
     const visualHints = {
-        first_5s: [`${obj.first_frame_action}`, 'no explanatory overlay', 'counter visible', ...zoneRec('first_5s')],
-        hook_quarter: [`${obj.visual_action_short}`, 'body in motion only', ...zoneRec('hook_quarter')],
-        mid: [`alternate ${bodyPart} close-ups with ${obj.visual_action_short}`, 'text overlay at beat moments only', ...zoneRec('mid')],
+        first_5s: [`${premiseObj.first_frame_action}`, 'no explanatory overlay', 'counter visible', ...zoneRec('first_5s')],
+        hook_quarter: [`${premiseObj.visual_action_short}`, 'body in motion only', ...zoneRec('hook_quarter')],
+        mid: [`alternate ${bodyPart} close-ups with ${premiseObj.visual_action_short}`, 'text overlay at beat moments only', ...zoneRec('mid')],
         late: [`slow push-in on ${bodyPart}`, 'wide reveal at the endpoint', ...zoneRec('late')],
         avoid: ['face + text with no action', 'naming materials by brand', 'pauses > 1s'],
     };
@@ -2592,13 +2998,20 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
                 object_atom_id: obj.id,
                 endpoint_atom_id: endpoint.id,
                 proof_surface: getProofSurfaceKey(obj),
-                title_premise_line: getTitlePremiseLine(obj, obj.concrete_kind),
-                action_line: obj.logline_action,
-                first_frame_action: obj.first_frame_action,
-                setting_hint: obj.setting_hint,
-                visible_body_anchor: obj.body_part_phrase,
+                title_premise_line: getTitlePremiseLine(premiseObj, premiseObj.concrete_kind),
+                action_line: premiseObj.logline_action,
+                first_frame_action: premiseObj.first_frame_action,
+                setting_hint: premiseObj.setting_hint,
+                visible_body_anchor: premiseObj.body_part_phrase,
                 scale_kind: scale.kind,
                 scale_value: scale.value,
+                source_video_override_applied: !!sourcePremise,
+                source_grounded_form: sourcePremise
+                    ? (sourcePremise.source_grounded_form || 'handcrafted_source_rule')
+                    : 'none',
+                reveal_phrase_source: sourcePremise && sourcePremise.reveal_phrase
+                    ? (sourcePremise.source_grounded_form || 'handcrafted_source_rule')
+                    : 'endpoint_kind_default',
             },
             derived_from_lattice: [
                 'opening.best_first_word_used ← opening_words.best_first_words',
