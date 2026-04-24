@@ -1,205 +1,205 @@
 {
   "active": false,
-  "run_id": "auto_20260424151335.",
+  "run_id": "auto_20260424152423.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-24T15:13:35.899Z",
-  "updated_at": "2026-04-24T15:21:39.630274Z",
-  "finished_at": "2026-04-24T15:21:39.630274Z",
+  "started_at": "2026-04-24T15:24:23.123Z",
+  "updated_at": "2026-04-24T15:37:19.141Z",
+  "finished_at": "2026-04-24T15:37:19.140Z",
   "requested_iterations": 3000,
-  "attempted": 1905,
-  "completed": 1899,
+  "attempted": 1826,
+  "completed": 1820,
   "failures": 5,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 20,
+  "no_signal_streak": 1,
   "stop_reason": "process_died_watchdog",
-  "current_candidate": null,
-  "last_completed_candidate": "outcome_tease_count_x_payoff_proximity_density_first20s",
+  "current_candidate": "callback_setup_count_x_deferred_reveal_count_first8s",
+  "last_completed_candidate": "deferred_reveal_count_first8s_x_callback_setup_count",
   "last_completed_r": 0,
   "recent_events": [
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first15s_x_effort_signal_count_hook",
-      "r": 0,
+      "key": "discovery_reveal_count_hook_x_deferred_reveal_count_first8s",
+      "r": 0.0015,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:32.095Z"
+      "ts": "2026-04-24T15:31:03.896Z"
     },
     {
       "type": "completed",
-      "key": "effort_signal_count_hook_x_payoff_proximity_density_first15s",
+      "key": "deferred_reveal_count_first8s_x_persistence_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:32.226Z"
+      "ts": "2026-04-24T15:31:04.034Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first15s_x_curiosity_trigger_count",
+      "key": "persistence_signal_count_hook_x_deferred_reveal_count_first8s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:32.361Z"
+      "ts": "2026-04-24T15:31:04.170Z"
     },
     {
       "type": "completed",
-      "key": "curiosity_trigger_count_x_payoff_proximity_density_first15s",
+      "key": "deferred_reveal_count_first8s_x_viewer_promise_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:32.494Z"
+      "ts": "2026-04-24T15:31:04.309Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first15s_x_curiosity_trigger_density",
+      "key": "viewer_promise_count_hook_x_deferred_reveal_count_first8s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:32.630Z"
+      "ts": "2026-04-24T15:31:04.444Z"
     },
     {
       "type": "completed",
-      "key": "curiosity_trigger_density_x_payoff_proximity_density_first15s",
+      "key": "deferred_reveal_count_first8s_x_result_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:32.763Z"
+      "ts": "2026-04-24T15:31:04.581Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first15s_x_curiosity_trigger_count_hook",
+      "key": "result_signal_count_hook_x_deferred_reveal_count_first8s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:32.896Z"
+      "ts": "2026-04-24T15:31:04.717Z"
     },
     {
       "type": "completed",
-      "key": "curiosity_trigger_count_hook_x_payoff_proximity_density_first15s",
+      "key": "deferred_reveal_count_first8s_x_risk_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:33.031Z"
+      "ts": "2026-04-24T15:31:04.854Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first20s_x_tension_builder_count",
+      "key": "risk_signal_count_hook_x_deferred_reveal_count_first8s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:33.174Z"
+      "ts": "2026-04-24T15:31:04.990Z"
     },
     {
       "type": "completed",
-      "key": "tension_builder_count_x_payoff_proximity_density_first20s",
+      "key": "deferred_reveal_count_first8s_x_early_proof_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:33.321Z"
+      "ts": "2026-04-24T15:31:05.127Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first20s_x_tension_builder_density",
+      "key": "early_proof_signal_count_hook_x_deferred_reveal_count_first8s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:33.463Z"
+      "ts": "2026-04-24T15:31:05.267Z"
     },
     {
       "type": "completed",
-      "key": "tension_builder_density_x_payoff_proximity_density_first20s",
-      "r": 0,
+      "key": "deferred_reveal_count_first8s_x_tension_hold_count",
+      "r": -0.0158,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:33.613Z"
+      "ts": "2026-04-24T15:31:05.406Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first20s_x_implicit_promise_count",
-      "r": 0,
+      "key": "tension_hold_count_x_deferred_reveal_count_first8s",
+      "r": -0.0158,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:33.756Z"
+      "ts": "2026-04-24T15:31:05.549Z"
     },
     {
       "type": "completed",
-      "key": "implicit_promise_count_x_payoff_proximity_density_first20s",
-      "r": 0,
+      "key": "deferred_reveal_count_first8s_x_tension_hold_density",
+      "r": -0.0158,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:33.903Z"
+      "ts": "2026-04-24T15:31:05.691Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first20s_x_implicit_promise_density",
-      "r": 0,
+      "key": "tension_hold_density_x_deferred_reveal_count_first8s",
+      "r": -0.0158,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:34.047Z"
+      "ts": "2026-04-24T15:31:05.835Z"
     },
     {
       "type": "completed",
-      "key": "implicit_promise_density_x_payoff_proximity_density_first20s",
+      "key": "deferred_reveal_count_first8s_x_tension_hold_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:34.192Z"
+      "ts": "2026-04-24T15:31:05.981Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first20s_x_loop_reinforcer_count",
+      "key": "tension_hold_count_hook_x_deferred_reveal_count_first8s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:34.342Z"
+      "ts": "2026-04-24T15:31:06.131Z"
     },
     {
       "type": "completed",
-      "key": "loop_reinforcer_count_x_payoff_proximity_density_first20s",
-      "r": 0,
+      "key": "deferred_reveal_count_first8s_x_payoff_anticipation_count_hook",
+      "r": 0.0856,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:34.495Z"
+      "ts": "2026-04-24T15:31:06.278Z"
     },
     {
       "type": "completed",
-      "key": "payoff_proximity_density_first20s_x_outcome_tease_count",
-      "r": 0,
+      "key": "payoff_anticipation_count_hook_x_deferred_reveal_count_first8s",
+      "r": 0.0856,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:34.640Z"
+      "ts": "2026-04-24T15:31:06.426Z"
     },
     {
       "type": "completed",
-      "key": "outcome_tease_count_x_payoff_proximity_density_first20s",
+      "key": "deferred_reveal_count_first8s_x_callback_setup_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T15:20:34.786Z"
+      "ts": "2026-04-24T15:31:07.179Z"
     }
   ],
-  "pre_attempted": 1905,
-  "pre_completed": 1899,
+  "pre_attempted": 1826,
+  "pre_completed": 1820,
   "post_attempted": 0,
   "post_completed": 0
 }
