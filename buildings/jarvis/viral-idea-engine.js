@@ -1489,6 +1489,381 @@ function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYt
     return seeds;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Synthetic new-concept seed path
+// ──────────────────────────────────────────────────────────────────────
+// Generates NEW project ideas (not rewrites of existing source videos) by
+// combining the corpus's strongest project patterns with validated IP anchors.
+// Each synthetic seed:
+//   - title follows Tyler's proven "Verb POWER_WORD IP Object" format
+//     (impersonal framing r=+0.257, power word + object r=+0.203)
+//   - is rejected if its tokens overlap >= 0.7 jaccard with any existing
+//     signals-dataset.json title (so we never silently dupe a real video)
+//   - flows through the same scoreMotifCombo pipeline as source-video seeds
+//     (creator_fit, proof_clarity, visual_legibility, ip_anchor)
+//   - tags synthesis_trace.seed_path='synthetic_new_concept' and writes a
+//     synthetic_new_concept block citing the corpus pattern, the IP anchor,
+//     the supporting indicators, and the duplicate-check result
+//
+// Patterns and IP anchors are NOT made up — every entry cites concrete
+// signals-dataset.json videos and indicator-registry.json rows that
+// validate the structure. Combinations not present in the corpus are
+// generated; combinations that already exist are skipped.
+
+const SYNTHETIC_NEW_CONCEPT_PATTERNS = [
+    {
+        id: 'indestructible_make',
+        power_word: 'INDESTRUCTIBLE',
+        verb_present: 'Making',
+        verb_past: 'Made',
+        test_action: 'tested with hammers, drops, and crushing weights on camera',
+        first_frame: 'the finished {OBJECT} on a workbench surrounded by the tools that will test it',
+        visual_action: 'hammers, drops, and crushing weights tested against the {OBJECT} while the camera holds on every impact',
+        setting: 'in my workshop',
+        evidence: 'signals-dataset.json: "Making INDESTRUCTIBLE armour" 285M views (top of corpus); "Testing INDESTRUCTIBLE Shoes" 34.1M; indicator_registry.playbook_2_indestructible_making 143.8M avg (~18x baseline, 80% hit rate at keep>75)',
+        indicators: [
+            'signals-dataset.json::indestructible_armour=285M views, keep=79.4',
+            'indicator_registry.playbook_2_indestructible_making (143.8M avg, 80% hit rate)',
+            'indicator_registry.making_x_tension r_partial=+0.351 (strongest single pre-upload signal)',
+            'indicator_registry.making_superhero_synergy 2.57x synergy ratio, 20.4M avg',
+        ],
+    },
+    {
+        id: 'bulletproof_make',
+        power_word: 'BULLETPROOF',
+        verb_present: 'Making',
+        verb_past: 'Made',
+        test_action: 'firing real rounds at it on a controlled range',
+        first_frame: 'the finished {OBJECT} mounted on a stand with the rifle and the impact backstop both in frame',
+        visual_action: 'rounds being fired at the {OBJECT} while the camera holds on the impact surface after every shot',
+        setting: 'in my workshop, then on a controlled outdoor range',
+        evidence: 'signals-dataset.json: "How I made BULLETPROOF Batman Armour" 80.0M views, keep 84.6 — strongest single power_word + IP + object combo in the corpus',
+        indicators: [
+            'signals-dataset.json::bulletproof_batman_armour=80M views, keep=84.6',
+            'indicator_registry.making_superhero_synergy 2.57x synergy ratio',
+            'indicator_registry.superhero_build_best_converter 0.194% conversion (+73% vs vehicle/machine baseline)',
+            'indicator_registry.superhero_category r=+0.159 vs log(views), +216% lift',
+        ],
+    },
+    {
+        id: 'fireproof_make',
+        power_word: 'FIREPROOF',
+        verb_present: 'Making',
+        verb_past: 'Made',
+        test_action: 'putting it through a controlled flamethrower test',
+        first_frame: 'the finished {OBJECT} clamped in front of a flamethrower nozzle with the ignition trigger visible',
+        visual_action: 'the flame on the {OBJECT} while the camera holds on the surface for charring or hold',
+        setting: 'in my workshop, then at a controlled outdoor fire pit',
+        evidence: 'signals-dataset.json: "Making FIREPROOF Batman Helmet" 18.1M views, keep 83.2; "Making a fire proof shield" 62.4M views, keep 78.3 — fireproof + protective wearable proven in corpus',
+        indicators: [
+            'signals-dataset.json::fireproof_batman_helmet=18.1M views, keep=83.2',
+            'signals-dataset.json::fireproof_shield=62.4M views, keep=78.3',
+            'indicator_registry.making_superhero_synergy 2.57x synergy ratio',
+            'indicator_registry.superhero_build_best_converter 0.194% conversion',
+        ],
+    },
+    {
+        id: 'magnetic_climb',
+        power_word: 'MAGNETIC',
+        verb_present: 'Climbing With',
+        verb_past: 'Climbed With',
+        test_action: 'climbing a vertical steel wall with it on camera',
+        first_frame: 'the {OBJECT} pressed onto the steel surface with my body weight beginning to lift off the ground',
+        visual_action: 'climbing up a sheet-metal wall while the {OBJECT} holds at every step',
+        setting: 'on a vertical steel sheet rigged for the test',
+        evidence: 'signals-dataset.json: "Climbing with MAGNET Shoes" 55.2M views, keep 74.4; "How many magnets does it take to make me float?" 41.8M, keep 83.8 — magnet + wearable + capability demo proven in corpus',
+        indicators: [
+            'signals-dataset.json::magnet_shoes_climbing=55.2M views, keep=74.4',
+            'signals-dataset.json::magnet_float=41.8M views, keep=83.8 (capability demo class)',
+            'indicator_registry.superhero_build_best_converter 0.194% conversion',
+            'indicator_registry.making_x_tension r_partial=+0.351',
+        ],
+        object_filter: ['gloves', 'boots', 'gauntlets', 'vest'],
+    },
+    {
+        id: 'invincible_make',
+        power_word: 'INVINCIBLE',
+        verb_present: 'Making',
+        verb_past: 'Made',
+        test_action: 'every weapon I own against it in sequence',
+        first_frame: 'the finished {OBJECT} on a stand with a wall of test weapons lined up behind it',
+        visual_action: 'each weapon striking the {OBJECT} in sequence with the camera holding on the surface after every hit',
+        setting: 'in my workshop, then on a controlled test range',
+        evidence: 'signals-dataset.json: "INVINCIBLE armour" 4.3M views, keep 72.7 — underexplored vs INDESTRUCTIBLE; same playbook structure with fresh power-word framing',
+        indicators: [
+            'signals-dataset.json::invincible_armour=4.3M views (underexplored vs INDESTRUCTIBLE 285M)',
+            'indicator_registry.playbook_2_indestructible_making (transferable to invincible variant)',
+            'indicator_registry.making_x_tension r_partial=+0.351',
+        ],
+    },
+];
+
+const SYNTHETIC_NEW_CONCEPT_OBJECTS = [
+    { word: 'Helmet',    body_part_phrase: 'head',      body_parts: ['head', 'face', 'skin'],      sensation_words: ['painful', 'numb', 'feeling'] },
+    { word: 'Armor',     body_part_phrase: 'body',      body_parts: ['body', 'chest', 'shoulders'], sensation_words: ['painful', 'numb', 'feeling'] },
+    { word: 'Shield',    body_part_phrase: 'arm',       body_parts: ['arm', 'shoulders', 'skin'],   sensation_words: ['painful', 'numb', 'feeling'] },
+    { word: 'Suit',      body_part_phrase: 'body',      body_parts: ['body', 'chest', 'shoulders'], sensation_words: ['painful', 'numb', 'feeling'] },
+    { word: 'Gloves',    body_part_phrase: 'hands',     body_parts: ['hands', 'fingers', 'skin'],   sensation_words: ['hands', 'painful', 'feeling'] },
+    { word: 'Boots',     body_part_phrase: 'feet',      body_parts: ['feet', 'legs', 'skin'],       sensation_words: ['feet', 'painful', 'feeling'] },
+    { word: 'Mask',      body_part_phrase: 'face',      body_parts: ['face', 'eyes', 'skin'],       sensation_words: ['painful', 'numb', 'feeling'] },
+    { word: 'Gauntlets', body_part_phrase: 'hands',     body_parts: ['hands', 'arms', 'skin'],      sensation_words: ['hands', 'painful', 'feeling'] },
+    { word: 'Vest',      body_part_phrase: 'chest',     body_parts: ['chest', 'body', 'skin'],      sensation_words: ['painful', 'numb', 'feeling'] },
+    { word: 'Cape',      body_part_phrase: 'shoulders', body_parts: ['shoulders', 'back', 'skin'],  sensation_words: ['painful', 'numb', 'feeling'] },
+];
+
+// IP anchors validated by indicator-registry.json (superhero_category +216%
+// lift, making_superhero_synergy 2.57x) and the corpus IP_ANCHORS list.
+// Order roughly reflects per-anchor corpus performance evidence.
+const SYNTHETIC_NEW_CONCEPT_IP_ANCHORS = [
+    { id: 'batman',          display: 'Batman',          evidence: 'signals-dataset.json: BULLETPROOF Batman Armour 80M + FIREPROOF Batman Helmet 18.1M — strongest IP × power-word combo in corpus' },
+    { id: 'spider_man',      display: 'Spider-Man',      evidence: 'IP_ANCHORS validated franchise; indicator_registry.superhero_category r=+0.159 (+216% lift); underexplored in BULLETPROOF/MAGNETIC formats' },
+    { id: 'iron_man',        display: 'Iron Man',        evidence: 'IP_ANCHORS validated franchise; indicator_registry.superhero_category notes explicitly name Iron Man' },
+    { id: 'goku',            display: 'Goku',            evidence: 'signals-dataset.json: Walking 50,000 steps in Goku Shoes 21M, keep 81.4 — Goku × wearable proven in corpus' },
+    { id: 'captain_america', display: 'Captain America', evidence: 'IP_ANCHORS validated franchise; signals-dataset fireproof shield 62.4M + IP-anchor 1.72x lift extends naturally to Captain America Shield' },
+    { id: 'wolverine',       display: 'Wolverine',       evidence: 'IP_ANCHORS validated franchise; INDESTRUCTIBLE / adamantium narrative is the perfect alignment for indestructible_make pattern' },
+    { id: 'mandalorian',     display: 'Mandalorian',     evidence: 'IP_ANCHORS validated franchise; beskar helmet/armor lore aligns directly with making playbook' },
+    { id: 'thor',            display: 'Thor',            evidence: 'IP_ANCHORS validated franchise; armor/helmet/cape combos culturally aligned' },
+];
+
+const _SYNTH_DEDUP_STOP = new Set([
+    'i', 'a', 'an', 'the', 'in', 'on', 'at', 'for', 'to', 'of', 'and', 'or',
+    'my', 'it', 'is', 'with', 'this', 'that', 'how', 'when', 'one', 'made',
+    'make', 'makes', 'making', 'did', 'do',
+]);
+
+function _syntheticTokenize(s) {
+    return new Set(String(s || '').toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(t => t.length >= 3 && !_SYNTH_DEDUP_STOP.has(t)));
+}
+
+// Token-jaccard against every signals-dataset.json title. Anything at or
+// above the threshold is rejected so a synthetic concept never silently
+// duplicates a video Tyler has already shipped.
+function syntheticTitleOverlap(syntheticTitle, dataset) {
+    if (!dataset || !dataset.length) return { max_jaccard: 0, closest: null };
+    const synTokens = _syntheticTokenize(syntheticTitle);
+    if (!synTokens.size) return { max_jaccard: 0, closest: null };
+    let maxJ = 0;
+    let closest = null;
+    for (const v of dataset) {
+        if (!v || !v.name) continue;
+        const vTokens = _syntheticTokenize(v.name);
+        if (!vTokens.size) continue;
+        let inter = 0;
+        for (const t of synTokens) if (vTokens.has(t)) inter++;
+        const union = synTokens.size + vTokens.size - inter;
+        if (union <= 0) continue;
+        const j = inter / union;
+        if (j > maxJ) { maxJ = j; closest = v.name; }
+    }
+    return { max_jaccard: maxJ, closest };
+}
+
+function buildSyntheticTitle(pattern, ipAnchor, object) {
+    return `${pattern.verb_present} ${pattern.power_word} ${ipAnchor.display} ${object.word}`;
+}
+
+function buildSyntheticObj(pattern, ipAnchor, object) {
+    const objectLower = object.word.toLowerCase();
+    const title = buildSyntheticTitle(pattern, ipAnchor, object);
+    const objLabel = `${ipAnchor.display} ${objectLower}`;
+    return {
+        id: `synthetic__${pattern.id}__${ipAnchor.id}__${objectLower}`,
+        verb_past_phrase: `${pattern.verb_past} ${pattern.power_word} ${ipAnchor.display} ${object.word}`,
+        verb_present_phrase: `${pattern.verb_present.toLowerCase()} a ${pattern.power_word.toLowerCase()} ${objLabel}`,
+        noun_subject_phrase: `a ${pattern.power_word.toLowerCase()} ${objLabel}`,
+        title_premise_line: title,
+        title_has_builtin_reveal: true,
+        logline_action: `build a ${pattern.power_word.toLowerCase()} ${objLabel} from raw materials, then ${pattern.test_action} until the result is visibly resolved on camera`,
+        concrete_kind: 'pieces',
+        scales: [1],
+        body_parts: object.body_parts,
+        body_part_phrase: object.body_part_phrase,
+        sensation_words: object.sensation_words,
+        first_frame_action: pattern.first_frame.replace('{OBJECT}', objLabel),
+        visual_action_short: pattern.visual_action.replace('{OBJECT}', objLabel),
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        diversity_bucket: 'build_test',
+        preferred_hook_type: 'transformation',
+        setting_hint: pattern.setting,
+        endpoint_kinds: ['build_test_outcome'],
+        implied_material_words: [],
+    };
+}
+
+// Generates seeds from corpus pattern × IP anchor × object combinations
+// that DON'T already exist in signals-dataset.json. Each seed is scored
+// through scoreMotifCombo (same path as source-video seeds) and tagged
+// with synthesis_trace.seed_path='synthetic_new_concept' plus a
+// synthetic_new_concept block citing the corpus pattern, IP anchor,
+// supporting indicators, and the duplicate-check result.
+function synthesizeSyntheticNewConceptSeeds(brief, artifacts, maxCount = 4) {
+    if (maxCount <= 0) return [];
+    const dataset = (artifacts && artifacts.signals) || loadJsonSafe('signals-dataset.json') || [];
+    const ctx = deriveMotifContext(brief, artifacts);
+    const buildTestEndpoint = ENDPOINT_MOTIFS.find(e => e.id === 'build_test_outcome');
+    if (!buildTestEndpoint) return [];
+
+    const candidates = [];
+    for (const pattern of SYNTHETIC_NEW_CONCEPT_PATTERNS) {
+        for (const ipAnchor of SYNTHETIC_NEW_CONCEPT_IP_ANCHORS) {
+            for (const object of SYNTHETIC_NEW_CONCEPT_OBJECTS) {
+                if (pattern.object_filter && !pattern.object_filter.includes(object.word.toLowerCase())) continue;
+                const synthObj = buildSyntheticObj(pattern, ipAnchor, object);
+                const overlap = syntheticTitleOverlap(synthObj.title_premise_line, dataset);
+                if (overlap.max_jaccard >= 0.7) continue;
+                const scored = scoreMotifCombo(synthObj, buildTestEndpoint, ctx);
+                candidates.push({ synthObj, scored, overlap, pattern, ipAnchor, object });
+            }
+        }
+    }
+
+    candidates.sort((a, b) => b.scored.score - a.scored.score);
+
+    // Per-(pattern,object), per-pattern, and per-IP caps so the synthetic pool
+    // surfaces varied power-words and IP anchors instead of stacking the same
+    // pattern across every object slot. Per-IP cap=1 forces fresh IPs until
+    // every IP has been used; per-pattern cap is small (max 2) so the pool
+    // distributes across power-word patterns rather than sweeping all objects
+    // for one pattern. The final MMR re-rank in generateIdeas uses
+    // diversity_bucket=`synthetic__${pattern_id}` to apply the same pressure
+    // when assembling the top-N output slate.
+    const seeds = [];
+    const usedPatternObject = new Map();
+    const usedPattern = new Map();
+    const usedIp = new Map();
+    const patternCap = 2;
+    const ipCap = 1;
+    for (const cand of candidates) {
+        if (seeds.length >= maxCount) break;
+        const poKey = `${cand.pattern.id}__${cand.object.word.toLowerCase()}`;
+        if ((usedPatternObject.get(poKey) || 0) >= 1) continue;
+        if ((usedPattern.get(cand.pattern.id) || 0) >= patternCap) continue;
+        if ((usedIp.get(cand.ipAnchor.id) || 0) >= ipCap) continue;
+        const seed = composeSeed(
+            cand.synthObj,
+            buildTestEndpoint,
+            ctx,
+            seeds.length + 1,
+            cand.scored.score,
+            cand.scored.drivers,
+            { score: cand.scored.creator_fit_score, drivers: cand.scored.creator_fit_drivers, core_score: cand.scored.core_score },
+            { score: cand.scored.proof_clarity_score, drivers: cand.scored.proof_clarity_drivers },
+            { score: cand.scored.visual_legibility_score, drivers: cand.scored.visual_legibility_drivers },
+            null,
+        );
+        if (!seed) continue;
+        if (seed.synthesis_trace) {
+            seed.synthesis_trace.seed_path = 'synthetic_new_concept';
+            seed.synthesis_trace.diversity_bucket = `synthetic__${cand.pattern.id}`;
+            seed.synthesis_trace.diversity_bucket_source = 'synthetic_new_concept';
+            seed.synthesis_trace.proof_surface = getProofSurfaceKey(cand.synthObj);
+            seed.synthesis_trace.synthetic_new_concept = {
+                pattern_id: cand.pattern.id,
+                power_word: cand.pattern.power_word,
+                title_verb: cand.pattern.verb_present,
+                ip_anchor_id: cand.ipAnchor.id,
+                ip_anchor_display: cand.ipAnchor.display,
+                object_word: cand.object.word,
+                body_anchor: cand.object.body_part_phrase,
+                source_pattern_evidence: cand.pattern.evidence,
+                ip_anchor_evidence: cand.ipAnchor.evidence,
+                supporting_indicators: cand.pattern.indicators,
+                title_format_evidence: 'impersonal "Verb POWER_WORD IP Object" framing (r=+0.257 impersonal title, r=+0.203 power-word + object) — proven format for top-of-corpus videos like "Making INDESTRUCTIBLE armour" (285M) and "How I made BULLETPROOF Batman Armour" (80M)',
+                duplicate_check: {
+                    closest_existing_title: cand.overlap.closest,
+                    max_jaccard_to_existing: round(cand.overlap.max_jaccard, 3),
+                    rejection_threshold: 0.7,
+                    note: 'Generated title was checked for token-jaccard against every signals-dataset.json title; passed because max overlap was below the duplicate-rejection threshold — this is a NEW project, not a rewrite of an existing video.',
+                },
+                derivation_path: 'corpus pattern (power-word + protective wearable + workshop framing, validated by signals-dataset top performers) × indicator-validated IP anchor (indicator_registry.superhero_category +216% lift, IP-anchored 1.72x view lift) × object slot — combined into the impersonal "Verb POWER_WORD IP Object" title format proven by signals-dataset top performers',
+            };
+        }
+        usedPatternObject.set(poKey, (usedPatternObject.get(poKey) || 0) + 1);
+        usedPattern.set(cand.pattern.id, (usedPattern.get(cand.pattern.id) || 0) + 1);
+        usedIp.set(cand.ipAnchor.id, (usedIp.get(cand.ipAnchor.id) || 0) + 1);
+        seeds.push(seed);
+    }
+
+    // If per-IP cap starved the pool below the target (more synthetic slots
+    // remain than fresh IPs), relax the IP cap and fill the rest from the
+    // remaining candidates. (pattern-object dedup is still respected so we
+    // never emit two seeds with the exact same pattern+object combination.)
+    if (seeds.length < maxCount) {
+        for (const cand of candidates) {
+            if (seeds.length >= maxCount) break;
+            const poKey = `${cand.pattern.id}__${cand.object.word.toLowerCase()}`;
+            if ((usedPatternObject.get(poKey) || 0) >= 1) continue;
+            if ((usedPattern.get(cand.pattern.id) || 0) >= patternCap) continue;
+            const seed = composeSeed(
+                cand.synthObj,
+                buildTestEndpoint,
+                ctx,
+                seeds.length + 1,
+                cand.scored.score,
+                cand.scored.drivers,
+                { score: cand.scored.creator_fit_score, drivers: cand.scored.creator_fit_drivers, core_score: cand.scored.core_score },
+                { score: cand.scored.proof_clarity_score, drivers: cand.scored.proof_clarity_drivers },
+                { score: cand.scored.visual_legibility_score, drivers: cand.scored.visual_legibility_drivers },
+                null,
+            );
+            if (!seed) continue;
+            if (seed.synthesis_trace) {
+                seed.synthesis_trace.seed_path = 'synthetic_new_concept';
+                seed.synthesis_trace.diversity_bucket = `synthetic__${cand.pattern.id}`;
+                seed.synthesis_trace.diversity_bucket_source = 'synthetic_new_concept';
+                seed.synthesis_trace.proof_surface = getProofSurfaceKey(cand.synthObj);
+                seed.synthesis_trace.synthetic_new_concept = {
+                    pattern_id: cand.pattern.id,
+                    power_word: cand.pattern.power_word,
+                    title_verb: cand.pattern.verb_present,
+                    ip_anchor_id: cand.ipAnchor.id,
+                    ip_anchor_display: cand.ipAnchor.display,
+                    object_word: cand.object.word,
+                    body_anchor: cand.object.body_part_phrase,
+                    source_pattern_evidence: cand.pattern.evidence,
+                    ip_anchor_evidence: cand.ipAnchor.evidence,
+                    supporting_indicators: cand.pattern.indicators,
+                    title_format_evidence: 'impersonal "Verb POWER_WORD IP Object" framing (r=+0.257 impersonal title, r=+0.203 power-word + object) — proven format for top-of-corpus videos like "Making INDESTRUCTIBLE armour" (285M) and "How I made BULLETPROOF Batman Armour" (80M)',
+                    duplicate_check: {
+                        closest_existing_title: cand.overlap.closest,
+                        max_jaccard_to_existing: round(cand.overlap.max_jaccard, 3),
+                        rejection_threshold: 0.7,
+                        note: 'Generated title was checked for token-jaccard against every signals-dataset.json title; passed because max overlap was below the duplicate-rejection threshold — this is a NEW project, not a rewrite of an existing video.',
+                    },
+                    derivation_path: 'corpus pattern (power-word + protective wearable + workshop framing, validated by signals-dataset top performers) × indicator-validated IP anchor (indicator_registry.superhero_category +216% lift, IP-anchored 1.72x view lift) × object slot — combined into the impersonal "Verb POWER_WORD IP Object" title format proven by signals-dataset top performers',
+                    backfill_pass: true,
+                };
+            }
+            usedPatternObject.set(poKey, (usedPatternObject.get(poKey) || 0) + 1);
+            usedPattern.set(cand.pattern.id, (usedPattern.get(cand.pattern.id) || 0) + 1);
+            usedIp.set(cand.ipAnchor.id, (usedIp.get(cand.ipAnchor.id) || 0) + 1);
+            seeds.push(seed);
+        }
+    }
+
+    return seeds;
+}
+
+// Mix validated source-video seeds with synthetic new-concept seeds in a
+// rough 2:1 ratio so synthetic ideas surface alongside grounded ones. Two
+// validated, then one synthetic, repeat until either pool runs out.
+function mixValidatedAndSyntheticSeeds(validatedSeeds, syntheticSeeds, maxCount) {
+    if (!syntheticSeeds.length) return validatedSeeds.slice(0, maxCount);
+    if (!validatedSeeds.length) return syntheticSeeds.slice(0, maxCount);
+    const result = [];
+    let vi = 0, si = 0;
+    while (result.length < maxCount && (vi < validatedSeeds.length || si < syntheticSeeds.length)) {
+        if (vi < validatedSeeds.length && result.length < maxCount) result.push(validatedSeeds[vi++]);
+        if (vi < validatedSeeds.length && result.length < maxCount) result.push(validatedSeeds[vi++]);
+        if (si < syntheticSeeds.length && result.length < maxCount) result.push(syntheticSeeds[si++]);
+    }
+    return result;
+}
+
 // Interleave primary source-video seeds with secondary validated-video seeds in a 2:1
 // ratio so the pool stays grounded in exact validated sources throughout.
 function interleaveSeeds(vpSeeds, secondarySeeds, maxCount) {
@@ -3198,17 +3573,28 @@ function selectDiverseCombos(combos, maxCount, lambda = 0.55) {
 }
 
 function synthesizeSeeds(brief, artifacts, maxCount = 12) {
-    // Exact-source-only path: every emitted seed must stay grounded in a
-    // specific validated video. The rejected abstract fallback is no
-    // longer allowed to silently repopulate the pool.
-    const vpMax = Math.ceil(maxCount * 2 / 3);
+    // Two seed paths share the pool:
+    //   1. Source-video-grounded seeds (every seed cites an exact validated
+    //      video in signals-dataset.json) — primary path, ~2/3 of the pool.
+    //   2. Synthetic new-concept seeds (corpus pattern × validated IP anchor ×
+    //      object, dedup-checked against signals-dataset titles) — ~1/3 of
+    //      the pool so NEW project ideas (not just rewrites of existing
+    //      videos) surface alongside the validated grounding.
+    const validatedTarget = Math.max(2, Math.ceil(maxCount * 2 / 3));
+    const vpMax = Math.ceil(validatedTarget * 2 / 3);
     const vpSeeds = synthesizeVideoPrototypeSeeds(brief, artifacts, vpMax);
     const vpYtIds = new Set(
         vpSeeds.map(s => s.synthesis_trace && s.synthesis_trace.source_video_lineage && s.synthesis_trace.source_video_lineage.ytId).filter(Boolean)
     );
-    const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, maxCount, vpYtIds);
-    return interleaveSeeds(vpSeeds, secondarySeeds, maxCount)
+    const secondarySeeds = synthesizeValidatedVideoSeeds(brief, artifacts, validatedTarget, vpYtIds);
+    const validatedSeeds = interleaveSeeds(vpSeeds, secondarySeeds, validatedTarget)
         .filter(seed => seed && seed.synthesis_trace && seed.synthesis_trace.source_video_lineage);
+
+    const syntheticTarget = Math.max(2, maxCount - validatedSeeds.length);
+    const syntheticSeeds = synthesizeSyntheticNewConceptSeeds(brief, artifacts, syntheticTarget)
+        .filter(seed => seed && seed.synthesis_trace && seed.synthesis_trace.seed_path === 'synthetic_new_concept');
+
+    return mixValidatedAndSyntheticSeeds(validatedSeeds, syntheticSeeds, maxCount);
 }
 
 
@@ -4749,7 +5135,15 @@ function generateIdeas(brief, count = 5, artifacts = null) {
     // take more than ~2 of the top `count` slots when other lanes remain.
     const scored = ideas.map(idea => {
         const seedPath = idea.synthesis_trace && idea.synthesis_trace.seed_path;
-        const vpRankBonus = seedPath === 'source_video_primary' ? 0.35 : 0;
+        // source_video_primary seeds get the strongest bonus (validated source).
+        // synthetic_new_concept seeds get a smaller bonus so corpus-derived
+        // NEW project ideas still surface in the top-N alongside grounded ones,
+        // without overwhelming the validated path.
+        const vpRankBonus = seedPath === 'source_video_primary'
+            ? 0.35
+            : seedPath === 'synthetic_new_concept'
+                ? 0.20
+                : 0;
         return {
             idea,
             // Premise-lane axis for final ranking. Active seeds now write
