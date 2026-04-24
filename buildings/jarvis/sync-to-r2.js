@@ -28,10 +28,26 @@ const FILES = [
 // Files that get compact mirrors (dataset arrays stripped)
 const COMPACT_SOURCES = ['indicators', 'derived_experiments', 'experiments_log'];
 
-function compactProject(item) {
+function compactProject(name, item) {
     if (!item) return item;
-    const { dataset, ...rest } = item;
-    return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+    if (name === 'indicators') {
+        const { dataset, ...rest } = item;
+        return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
+    }
+    if (name === 'experiments_log') {
+        return {
+            id: item.id,
+            indicator_key: item.indicator_key,
+            target: item.target,
+            n_videos: item.n_videos,
+            status: item.status,
+            ran_at: item.ran_at,
+            kind: item.kind,
+            source: item.source,
+            r: item.r != null ? item.r : (item.outputs && typeof item.outputs.r === 'number' ? item.outputs.r : null),
+        };
+    }
+    return item;
 }
 
 async function run() {
@@ -65,7 +81,7 @@ async function run() {
 
             // Build and upload compact mirror if applicable
             if (COMPACT_SOURCES.includes(name) && Array.isArray(parsed)) {
-                const compact = parsed.map(compactProject);
+                const compact = parsed.map(item => compactProject(name, item));
                 const compactStr = JSON.stringify(compact);
                 const compactBuf = Buffer.from(compactStr);
                 const compactName = `${name}_compact`;

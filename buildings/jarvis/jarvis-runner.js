@@ -260,13 +260,10 @@ function stepUpdateGraph(indicator, graph) {
             depth: 2,
             target,
             interaction_key: key,
-            experiment_key: key,
             interaction_r: indicator.result.primary_r,
             component_keys: [parsed.a, parsed.b],
-            experiment_id: indicator.experiment.id,
             strength_label: indicator.result.strength_label,
             direction: indicator.result.direction,
-            added_at: nowIso(),
         });
         graph.updated_at = nowIso();
         log(`  [GRAPH]     Derived edge added: ${parsed.a} × ${parsed.b} → '${target}', depth=2`);
@@ -440,19 +437,17 @@ async function runQueue(nToRun) {
             } else {
                 indicators.push(result);
             }
-            const expLog = await jarvisStore.loadJson('experiments_log', []);
+            const expLog = await jarvisStore.loadCompactJson('experiments_log', []);
             expLog.push({
                 id: result.experiment.id,
                 indicator_key: key,
-                tool_id: result.experiment.tool_id,
-                tool_name: result.experiment.tool_name,
                 target: result.target,
-                parameters: result.experiment.parameters,
-                outputs: result.experiment.outputs,
                 n_videos: result.experiment.n_videos,
                 status: result.result.status,
                 ran_at: result.experiment.ran_at,
                 kind: isComposite ? 'interaction' : 'atomic',
+                source: 'deterministic',
+                r: result.result.primary_r,
             });
             await jarvisStore.saveJson('experiments_log', expLog);
             await jarvisStore.saveJson('indicators', indicators);
@@ -490,7 +485,7 @@ async function autoRun(opts = {}) {
 
     const indicators = await jarvisStore.loadJson('indicators', []);
     const derivedExperiments = await jarvisStore.loadJson('derived_experiments', []);
-    const expLog = await jarvisStore.loadJson('experiments_log', []);
+    const expLog = await jarvisStore.loadCompactJson('experiments_log', []);
     const tools = await jarvisStore.loadJson('tools', []);
     const resolutions = await jarvisStore.loadJson('resolutions', []);
     const graph = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
@@ -618,16 +613,13 @@ async function autoRun(opts = {}) {
                 expLog.push({
                     id: result.experiment.id,
                     indicator_key: key,
-                    tool_id: result.experiment.tool_id,
-                    tool_name: result.experiment.tool_name,
                     target: result.target,
-                    parameters: result.experiment.parameters,
-                    outputs: result.experiment.outputs,
                     n_videos: result.experiment.n_videos,
                     status: result.result.status,
                     ran_at: result.experiment.ran_at,
                     source: 'deterministic',
                     kind: isComposite ? 'interaction' : 'atomic',
+                    r: result.result.primary_r,
                 });
                 existingKeys.add(key);
 

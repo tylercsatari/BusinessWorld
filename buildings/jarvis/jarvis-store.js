@@ -215,6 +215,20 @@ async function loadCompactJson(name, fallback) {
         return cache[cn];
     }
 
+    const lp = localPath(cn);
+    try {
+        if (fs.existsSync(lp)) {
+            const data = JSON.parse(fs.readFileSync(lp, 'utf8'));
+            if (shouldCache(cn)) {
+                cache[cn] = data;
+                cacheTime[cn] = now;
+            }
+            return data;
+        }
+    } catch (e) {
+        console.warn(`jarvis-store: local compact read failed for ${cn}:`, e.message);
+    }
+
     if (isR2Ready()) {
         try {
             const buf = await downloadFromR2(r2Key(cn));
@@ -229,20 +243,6 @@ async function loadCompactJson(name, fallback) {
         } catch (e) {
             console.warn(`jarvis-store: R2 compact read failed for ${cn}:`, e.message);
         }
-    }
-
-    const lp = localPath(cn);
-    try {
-        if (fs.existsSync(lp)) {
-            const data = JSON.parse(fs.readFileSync(lp, 'utf8'));
-            if (shouldCache(cn)) {
-                cache[cn] = data;
-                cacheTime[cn] = now;
-            }
-            return data;
-        }
-    } catch (e) {
-        console.warn(`jarvis-store: local compact read failed for ${cn}:`, e.message);
     }
 
     console.warn(`jarvis-store: compact mirror not found for ${name} — return empty`);
