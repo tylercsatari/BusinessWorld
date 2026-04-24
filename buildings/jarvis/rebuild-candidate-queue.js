@@ -388,6 +388,31 @@ const baseAtomics = [
     'visual_proof_signal_count', 'visual_proof_signal_density',
     'visual_proof_signal_count_first5s', 'visual_proof_signal_count_first10s', 'visual_proof_signal_count_first15s', 'visual_proof_signal_count_first20s',
     'visual_proof_signal_count_hook', 'visual_proof_signal_front_load_ratio', 'visual_proof_signal_count_first_half', 'visual_proof_signal_position_pct',
+    // Group AM: Tension-release / Early-commitment / Narrative-investment / Curiosity-resolution / Viewer-sunk-cost / Proof-withholding / Story-momentum / Payoff-framing
+    'tension_release_count', 'tension_release_density',
+    'tension_release_count_first5s', 'tension_release_count_first10s', 'tension_release_count_first15s', 'tension_release_count_first20s',
+    'tension_release_count_hook', 'tension_release_front_load_ratio', 'tension_release_count_first_half', 'tension_release_position_pct',
+    'early_commitment_count', 'early_commitment_density',
+    'early_commitment_count_first5s', 'early_commitment_count_first10s', 'early_commitment_count_first15s', 'early_commitment_count_first20s',
+    'early_commitment_count_hook', 'early_commitment_front_load_ratio', 'early_commitment_count_first_half', 'early_commitment_position_pct',
+    'narrative_investment_count', 'narrative_investment_density',
+    'narrative_investment_count_first5s', 'narrative_investment_count_first10s', 'narrative_investment_count_first15s', 'narrative_investment_count_first20s',
+    'narrative_investment_count_hook', 'narrative_investment_front_load_ratio', 'narrative_investment_count_first_half', 'narrative_investment_position_pct',
+    'curiosity_resolution_count', 'curiosity_resolution_density',
+    'curiosity_resolution_count_first5s', 'curiosity_resolution_count_first10s', 'curiosity_resolution_count_first15s', 'curiosity_resolution_count_first20s',
+    'curiosity_resolution_count_hook', 'curiosity_resolution_front_load_ratio', 'curiosity_resolution_count_first_half', 'curiosity_resolution_position_pct',
+    'viewer_sunk_cost_count', 'viewer_sunk_cost_density',
+    'viewer_sunk_cost_count_first5s', 'viewer_sunk_cost_count_first10s', 'viewer_sunk_cost_count_first15s', 'viewer_sunk_cost_count_first20s',
+    'viewer_sunk_cost_count_hook', 'viewer_sunk_cost_front_load_ratio', 'viewer_sunk_cost_count_first_half', 'viewer_sunk_cost_position_pct',
+    'proof_withholding_count', 'proof_withholding_density',
+    'proof_withholding_count_first5s', 'proof_withholding_count_first10s', 'proof_withholding_count_first15s', 'proof_withholding_count_first20s',
+    'proof_withholding_count_hook', 'proof_withholding_front_load_ratio', 'proof_withholding_count_first_half', 'proof_withholding_position_pct',
+    'story_momentum_count', 'story_momentum_density',
+    'story_momentum_count_first5s', 'story_momentum_count_first10s', 'story_momentum_count_first15s', 'story_momentum_count_first20s',
+    'story_momentum_count_hook', 'story_momentum_front_load_ratio', 'story_momentum_count_first_half', 'story_momentum_position_pct',
+    'payoff_framing_count', 'payoff_framing_density',
+    'payoff_framing_count_first5s', 'payoff_framing_count_first10s', 'payoff_framing_count_first15s', 'payoff_framing_count_first20s',
+    'payoff_framing_count_hook', 'payoff_framing_front_load_ratio', 'payoff_framing_count_first_half', 'payoff_framing_position_pct',
 ];
 
 // Windowed variants for count/density families
@@ -469,6 +494,15 @@ const windowedFamilies = [
     ['curiosity_trigger',         ['count', 'density']],
     ['narrative_clock',           ['count', 'density']],
     ['visual_proof_signal',       ['count', 'density']],
+    // Group AM windowed families
+    ['tension_release',        ['count', 'density']],
+    ['early_commitment',       ['count', 'density']],
+    ['narrative_investment',   ['count', 'density']],
+    ['curiosity_resolution',   ['count', 'density']],
+    ['viewer_sunk_cost',       ['count', 'density']],
+    ['proof_withholding',      ['count', 'density']],
+    ['story_momentum',         ['count', 'density']],
+    ['payoff_framing',         ['count', 'density']],
 ];
 const windowedAtomics = [];
 for (const [fam, measures] of windowedFamilies) {
@@ -555,6 +589,15 @@ const HIGH_SIGNAL_BASES = [
     'curiosity_trigger_count', 'curiosity_trigger_density', 'curiosity_trigger_count_hook', 'curiosity_trigger_front_load_ratio',
     'narrative_clock_count', 'narrative_clock_density', 'narrative_clock_count_hook', 'narrative_clock_front_load_ratio',
     'visual_proof_signal_count', 'visual_proof_signal_density', 'visual_proof_signal_count_hook', 'visual_proof_signal_front_load_ratio',
+    // Group AM high-signal bases
+    'tension_release_count', 'tension_release_count_hook', 'tension_release_front_load_ratio',
+    'early_commitment_count', 'early_commitment_count_hook', 'early_commitment_front_load_ratio',
+    'narrative_investment_count', 'narrative_investment_count_hook', 'narrative_investment_front_load_ratio',
+    'curiosity_resolution_count', 'curiosity_resolution_count_hook', 'curiosity_resolution_front_load_ratio',
+    'viewer_sunk_cost_count', 'viewer_sunk_cost_count_hook',
+    'proof_withholding_count', 'proof_withholding_count_hook', 'proof_withholding_front_load_ratio',
+    'story_momentum_count', 'story_momentum_count_hook', 'story_momentum_front_load_ratio',
+    'payoff_framing_count', 'payoff_framing_count_hook', 'payoff_framing_front_load_ratio',
 ];
 
 // Excluded keys — always return null

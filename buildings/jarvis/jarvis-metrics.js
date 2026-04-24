@@ -1307,6 +1307,73 @@ const ZYGARNIK_PHRASE_SETS = {
         'shown below', 'as i show you', 'showing you', 'i am showing',
         'here on screen', 'visible here', 'see how', 'notice how',
     ],
+
+    // Group AM phrase families
+    tension_release: [
+        'relief', 'finally', 'whew', 'exhale', 'breathe', 'relax', 'let go',
+        'the tension breaks', 'all good', 'safe now', 'crisis averted', 'problem solved',
+        'it is over', 'cleared', 'resolved', 'no longer', 'the pressure',
+        'tension lifted', 'stress gone', 'worked out', 'the worst is over',
+        'escaped', 'recovered', 'turned around', 'crisis passed',
+    ],
+    early_commitment: [
+        'i promise', 'i will show you', 'by the end of this', 'before this video ends',
+        'before we finish', 'i am going to prove', 'stick with me', 'follow along',
+        'trust the process', 'here is my commitment', 'i guarantee', 'i swear',
+        'by the end you will', 'i will walk you through', 'commit to',
+        'stay until the end', 'do not skip', 'watch until',
+        'the payoff is coming', 'worth watching', 'worth your time',
+    ],
+    narrative_investment: [
+        'my journey', 'how i', 'i started', 'i used to', 'i decided',
+        'the day i', 'i remember when', 'here is my story', 'let me take you back',
+        'it started when', 'looking back', 'from the beginning',
+        'my process', 'i went through', 'i spent', 'i dedicated', 'i sacrificed',
+        'it took me', 'after years', 'after months', 'everything changed when',
+        'my turning point', 'the moment that changed',
+    ],
+    curiosity_resolution: [
+        'and here is why', 'turns out', 'the reason is', 'because', 'that is why',
+        'the answer', 'now i know', 'now you know', 'i figured out', 'i discovered',
+        'the explanation', 'it makes sense now', 'that explains', 'the reason',
+        'solved it', 'cracked it', 'found the answer', 'revealed',
+        'the mystery', 'here is the truth', 'the real reason', 'the secret reason',
+        'finally understand', 'now it all makes sense',
+    ],
+    viewer_sunk_cost: [
+        'you have made it this far', 'since you are still here', 'you stayed',
+        'if you watched this far', 'you have been with me', 'you know by now',
+        'you have already seen', 'as you watched', 'you have invested',
+        'you started this', 'we have come this far', 'you came this far',
+        'halfway through', 'you are almost there', 'almost done',
+        'keep going', 'do not stop now', 'we are almost',
+    ],
+    proof_withholding: [
+        'not yet', 'not showing you', 'saving this for later', 'you will have to wait',
+        'i am not going to tell you yet', 'hold on', 'patience',
+        'first let me', 'before the reveal', 'before i show you the result',
+        'the answer is coming', 'you will see', 'soon enough',
+        'before i give you', 'but first', 'stay tuned', 'almost time',
+        'the reveal is coming', 'saving the best', 'not quite yet',
+    ],
+    story_momentum: [
+        'and then', 'next', 'so then', 'after that', 'that led to',
+        'which means', 'so now', 'and so', 'which caused', 'this triggered',
+        'that started', 'one thing led to', 'which led to', 'and from there',
+        'building on that', 'going further', 'accelerating', 'gaining momentum',
+        'things were moving', 'picking up speed', 'it escalated',
+        'the pace increased', 'things got faster', 'the stakes grew',
+        'building up to', 'heading toward',
+    ],
+    payoff_framing: [
+        'here it is', 'the moment you have been waiting for', 'here is the result',
+        'drum roll', 'without further ado', 'finally', 'at last',
+        'here is what happened', 'and the result', 'and it worked',
+        'the big reveal', 'the answer is', 'behold', 'check it out',
+        'here is the payoff', 'worth the wait', 'there it is',
+        'the transformation', 'the final result', 'and there you have it',
+        'here is the proof', 'and it is', 'turns out it',
+    ],
 };
 
 // ── New phrase sets for expanded indicator families (Group P) ─────────────
