@@ -1,205 +1,205 @@
 {
   "active": false,
-  "run_id": "auto_20260424144849.",
+  "run_id": "auto_20260424150035.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-24T14:48:49.422Z",
-  "updated_at": "2026-04-24T14:57:54.175044Z",
-  "finished_at": "2026-04-24T14:57:54.175044Z",
+  "started_at": "2026-04-24T15:00:35.071Z",
+  "updated_at": "2026-04-24T15:09:09.052369Z",
+  "finished_at": "2026-04-24T15:09:09.052369Z",
   "requested_iterations": 3000,
-  "attempted": 2005,
-  "completed": 1999,
+  "attempted": 1955,
+  "completed": 1949,
   "failures": 5,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 460,
+  "no_signal_streak": 382,
   "stop_reason": "process_died_watchdog",
   "current_candidate": null,
-  "last_completed_candidate": "callback_setup_count_hook_x_fomo_signal_density_first3s",
+  "last_completed_candidate": "callback_setup_count_hook_x_authority_stack_density_first10s",
   "last_completed_r": 0,
   "recent_events": [
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_result_signal_count_hook",
+      "key": "authority_stack_density_first10s_x_result_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:19.499Z"
+      "ts": "2026-04-24T15:08:13.684Z"
     },
     {
       "type": "completed",
-      "key": "result_signal_count_hook_x_fomo_signal_density_first3s",
+      "key": "result_signal_count_hook_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:19.632Z"
+      "ts": "2026-04-24T15:08:13.855Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_risk_signal_count_hook",
+      "key": "authority_stack_density_first10s_x_risk_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:19.765Z"
+      "ts": "2026-04-24T15:08:14.053Z"
     },
     {
       "type": "completed",
-      "key": "risk_signal_count_hook_x_fomo_signal_density_first3s",
+      "key": "risk_signal_count_hook_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:19.899Z"
+      "ts": "2026-04-24T15:08:14.263Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_early_proof_signal_count_hook",
+      "key": "authority_stack_density_first10s_x_early_proof_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.031Z"
+      "ts": "2026-04-24T15:08:14.431Z"
     },
     {
       "type": "completed",
-      "key": "early_proof_signal_count_hook_x_fomo_signal_density_first3s",
+      "key": "early_proof_signal_count_hook_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.163Z"
+      "ts": "2026-04-24T15:08:14.633Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_tension_hold_count",
+      "key": "authority_stack_density_first10s_x_tension_hold_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.299Z"
+      "ts": "2026-04-24T15:08:14.801Z"
     },
     {
       "type": "completed",
-      "key": "tension_hold_count_x_fomo_signal_density_first3s",
+      "key": "tension_hold_count_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.436Z"
+      "ts": "2026-04-24T15:08:15.016Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_tension_hold_density",
+      "key": "authority_stack_density_first10s_x_tension_hold_density",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.570Z"
+      "ts": "2026-04-24T15:08:15.182Z"
     },
     {
       "type": "completed",
-      "key": "tension_hold_density_x_fomo_signal_density_first3s",
+      "key": "tension_hold_density_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.708Z"
+      "ts": "2026-04-24T15:08:15.395Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_tension_hold_count_hook",
+      "key": "authority_stack_density_first10s_x_tension_hold_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.840Z"
+      "ts": "2026-04-24T15:08:15.568Z"
     },
     {
       "type": "completed",
-      "key": "tension_hold_count_hook_x_fomo_signal_density_first3s",
+      "key": "tension_hold_count_hook_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:20.972Z"
+      "ts": "2026-04-24T15:08:15.769Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_payoff_anticipation_count_hook",
+      "key": "authority_stack_density_first10s_x_payoff_anticipation_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:21.104Z"
+      "ts": "2026-04-24T15:08:15.940Z"
     },
     {
       "type": "completed",
-      "key": "payoff_anticipation_count_hook_x_fomo_signal_density_first3s",
+      "key": "payoff_anticipation_count_hook_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:21.238Z"
+      "ts": "2026-04-24T15:08:16.103Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_callback_setup_count",
+      "key": "authority_stack_density_first10s_x_callback_setup_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:21.373Z"
+      "ts": "2026-04-24T15:08:16.315Z"
     },
     {
       "type": "completed",
-      "key": "callback_setup_count_x_fomo_signal_density_first3s",
+      "key": "callback_setup_count_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:21.511Z"
+      "ts": "2026-04-24T15:08:16.483Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_callback_setup_density",
+      "key": "authority_stack_density_first10s_x_callback_setup_density",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:21.645Z"
+      "ts": "2026-04-24T15:08:16.690Z"
     },
     {
       "type": "completed",
-      "key": "callback_setup_density_x_fomo_signal_density_first3s",
+      "key": "callback_setup_density_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:21.780Z"
+      "ts": "2026-04-24T15:08:16.899Z"
     },
     {
       "type": "completed",
-      "key": "fomo_signal_density_first3s_x_callback_setup_count_hook",
+      "key": "authority_stack_density_first10s_x_callback_setup_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:21.913Z"
+      "ts": "2026-04-24T15:08:17.070Z"
     },
     {
       "type": "completed",
-      "key": "callback_setup_count_hook_x_fomo_signal_density_first3s",
+      "key": "callback_setup_count_hook_x_authority_stack_density_first10s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T14:56:22.045Z"
+      "ts": "2026-04-24T15:08:17.237Z"
     }
   ],
-  "pre_attempted": 2005,
-  "pre_completed": 1999,
+  "pre_attempted": 1955,
+  "pre_completed": 1949,
   "post_attempted": 0,
   "post_completed": 0
 }
