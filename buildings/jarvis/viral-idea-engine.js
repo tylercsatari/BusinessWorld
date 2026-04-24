@@ -2575,7 +2575,26 @@ function buildGenericSourceGroundedView(sourceVideo) {
         };
     }
 
-    // Numeric quantity anchor — "N miles/steps/hours/days/..."
+    // First-person "I X" — take precedence over numeric anchor so that titles
+    // like "I stood in a circle for 24 hours" keep the author's verbatim framing
+    // instead of getting collapsed into a generic counter story around "24 hours".
+    m = /^i\s+(.+)$/i.exec(rawTitle);
+    if (m) {
+        const rest = m[1].replace(/[?!]+$/, '').trim();
+        const restL = rest.toLowerCase();
+        return {
+            ...base,
+            title_premise_line: `I ${capitalize(rest)} — Here’s What Actually Happened`,
+            logline_action: `actually do this on camera: ${restL}, and keep filming every real moment until the outcome is undeniable`,
+            first_frame_action: `the exact starting state for "${restL}" framed before the first move`,
+            visual_action_short: `"${restL}" unfolding while the camera holds on the consequence`,
+            setting_hint: `inside the exact environment where "${restL}" has to play out`,
+            reveal_phrase: `the real outcome of "${restL}" lands on camera and the frame freezes on it`,
+            promise_tail: `the real outcome of "${restL}" lands`,
+        };
+    }
+
+    // Numeric quantity anchor — "N miles/steps/hours/days/..." in non-first-person titles
     m = /(\d[\d,]*)\s*(hours?|minutes?|days?|steps?|miles?|km|kilometers?|reps?|push.?ups?|pull.?ups?|squats?|stairs?)\b/i.exec(rawTitle);
     if (m) {
         const qty = m[1];
@@ -2593,23 +2612,6 @@ function buildGenericSourceGroundedView(sourceVideo) {
             setting_hint: `on the exact course needed to push ${qty} ${unit}${ctxClause} with the counter always visible`,
             reveal_phrase: `the counter lands on the real final number at ${qty} ${unit} and the camera holds on the moment it settles`,
             promise_tail: `the counter lands on the real final number at ${qty} ${unit}`,
-        };
-    }
-
-    // First-person "I X" — carry the original phrasing verbatim
-    m = /^i\s+(.+)$/i.exec(rawTitle);
-    if (m) {
-        const rest = m[1].replace(/[?!]+$/, '').trim();
-        const restL = rest.toLowerCase();
-        return {
-            ...base,
-            title_premise_line: `I ${capitalize(rest)} — Here’s What Actually Happened`,
-            logline_action: `actually do this on camera: ${restL}, and keep filming every real moment until the outcome is undeniable`,
-            first_frame_action: `the exact starting state for "${restL}" framed before the first move`,
-            visual_action_short: `"${restL}" unfolding while the camera holds on the consequence`,
-            setting_hint: `inside the exact environment where "${restL}" has to play out`,
-            reveal_phrase: `the real outcome of "${restL}" lands on camera and the frame freezes on it`,
-            promise_tail: `the real outcome of "${restL}" lands`,
         };
     }
 
