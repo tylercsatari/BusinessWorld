@@ -2916,6 +2916,18 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
             endpoint_atom_id: endpoint.id,
             scale_kind: scale.kind,
             scale_value: scale.value,
+            ip_anchor: (() => {
+                const detection = detectIpAnchor(title, sourceVideo && sourceVideo.name);
+                return {
+                    ...detection,
+                    scanned_inputs: {
+                        idea_title: title,
+                        source_video_title: (sourceVideo && sourceVideo.name) || null,
+                    },
+                    derived_from_indicators: IP_ANCHOR_CORPUS_EVIDENCE,
+                    note: 'Deterministic franchise-anchor scan over the emitted title and the source video title. Matched anchors add a boost in scoreIdea() (applied_weight_in_scoreIdea, score, boost_applied are written back at scoring time).',
+                };
+            })(),
             validated_premise_signature: {
                 object_atom_id: obj.id,
                 endpoint_atom_id: endpoint.id,
@@ -3220,11 +3232,122 @@ function pickHooksForIdea(brief, pref = {}) {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// IP-anchor signal (v3.6)
+//
+// Known high-performing franchise anchors measurably lift outcomes in the
+// validated corpus, independent of premise/endpoint/proof structure.
+// Evidence the boost is grounded in:
+//   - indicator-registry.superhero_category: r=0.159 vs log(views); SUPERHERO
+//     videos avg 25.0M views (+216% lift); notes explicitly cite "Batman/Iron
+//     Man concepts resonate"
+//   - indicator-registry.superhero_build_best_converter: SUPERHERO_BUILD
+//     converts at 0.194% — 73% better than VEHICLE_MACHINE (0.112%)
+//   - indicator-registry.making_superhero_synergy: MAKING+SUPERHERO combo,
+//     2.57x synergy ratio, avg 20.4M views
+//   - signals-dataset (observed in this corpus): IP-anchored titles avg
+//     13.2M views vs 7.7M for non-IP (1.72x lift); keep 78.8 vs 74.3
+//   - Concrete evidence: "How I made BULLETPROOF Batman Armour" 80.0M views,
+//     "Walking 50,000 steps in Goku Shoes" 20.9M, "Making FIREPROOF Batman
+//     Helmet" 18.1M — the franchise anchor is doing measurable work
+//
+// Detection is deterministic: both the generated idea title and the source
+// video title are scanned for franchise aliases using word-boundary matches.
+// The detection result is written to synthesis_trace.ip_anchor so the audit
+// trail records which anchor was found, where, and how much boost it added.
+// ──────────────────────────────────────────────────────────────────────
+
+const IP_ANCHORS = [
+    // Marvel
+    { id: 'iron_man', franchise: 'Marvel', aliases: ['iron man', 'iron-man', 'ironman'] },
+    { id: 'spider_man', franchise: 'Marvel', aliases: ['spider-man', 'spiderman', 'spider man'] },
+    { id: 'wolverine', franchise: 'Marvel', aliases: ['wolverine'] },
+    { id: 'thor', franchise: 'Marvel', aliases: ['thor'] },
+    { id: 'captain_america', franchise: 'Marvel', aliases: ['captain america'] },
+    { id: 'hulk', franchise: 'Marvel', aliases: ['hulk'] },
+    { id: 'black_panther', franchise: 'Marvel', aliases: ['black panther'] },
+    { id: 'doctor_octopus', franchise: 'Marvel', aliases: ['doctor octopus', 'doc ock'] },
+    { id: 'deadpool', franchise: 'Marvel', aliases: ['deadpool'] },
+    { id: 'venom', franchise: 'Marvel', aliases: ['venom'] },
+    { id: 'groot', franchise: 'Marvel', aliases: ['groot'] },
+    { id: 'avengers', franchise: 'Marvel', aliases: ['avenger', 'avengers'] },
+    // DC
+    { id: 'batman', franchise: 'DC', aliases: ['batman'] },
+    { id: 'superman', franchise: 'DC', aliases: ['superman'] },
+    { id: 'joker', franchise: 'DC', aliases: ['joker'] },
+    { id: 'flash', franchise: 'DC', aliases: ['the flash'] },
+    // Star Wars
+    { id: 'darth_vader', franchise: 'StarWars', aliases: ['darth vader'] },
+    { id: 'mandalorian', franchise: 'StarWars', aliases: ['mandalorian'] },
+    { id: 'yoda', franchise: 'StarWars', aliases: ['yoda'] },
+    { id: 'grogu', franchise: 'StarWars', aliases: ['grogu', 'baby yoda'] },
+    // Other franchise IPs validated in corpus or culturally adjacent
+    { id: 'predator', franchise: 'Predator', aliases: ['predator'] },
+    { id: 'xenomorph', franchise: 'Alien', aliases: ['xenomorph'] },
+    { id: 'goku', franchise: 'DragonBall', aliases: ['goku'] },
+    { id: 'saiyan', franchise: 'DragonBall', aliases: ['saiyan', 'super saiyan'] },
+    { id: 'minecraft', franchise: 'Minecraft', aliases: ['minecraft'] },
+    { id: 'mario', franchise: 'Mario', aliases: ['super mario', 'mario'] },
+    { id: 'sonic', franchise: 'Sonic', aliases: ['sonic the hedgehog'] },
+    { id: 'pokemon', franchise: 'Pokemon', aliases: ['pokemon', 'pokémon'] },
+    { id: 'pikachu', franchise: 'Pokemon', aliases: ['pikachu'] },
+    { id: 'zelda', franchise: 'Zelda', aliases: ['zelda'] },
+    { id: 'terminator', franchise: 'Terminator', aliases: ['terminator', 't-800', 't-1000'] },
+    { id: 'godzilla', franchise: 'Godzilla', aliases: ['godzilla'] },
+];
+
+const IP_ANCHOR_CORPUS_EVIDENCE = [
+    'indicator_registry.superhero_category: r=0.159 vs log(views); SUPERHERO videos avg 25.0M (+216% lift) — notes explicitly name Batman/Iron Man',
+    'indicator_registry.superhero_build_best_converter: SUPERHERO_BUILD converts at 0.194% (73% better than VEHICLE_MACHINE 0.112%)',
+    'indicator_registry.making_superhero_synergy: MAKING+SUPERHERO 2.57x synergy ratio, 20.4M avg (n=6)',
+    'signals-dataset observed: IP-anchored titles 13.2M avg vs 7.7M non-IP (1.72x lift), keep 78.8 vs 74.3',
+    'signals-dataset top anchors: "BULLETPROOF Batman Armour" 80.0M, "Walking 50,000 steps in Goku Shoes" 20.9M, "FIREPROOF Batman Helmet" 18.1M',
+];
+
+function _escapeRegex(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Word-boundary match so "thor" doesn't fire on "author" or "thorough".
+// Deterministic, no randomness, no LLM calls.
+function detectIpAnchor(...texts) {
+    const clean = texts.filter(t => t != null && String(t).trim()).map(String);
+    if (!clean.length) return { matched: false, anchors: [], franchises: [], source_text: null };
+    const joined = clean.join(' | ').toLowerCase();
+    const hits = [];
+    for (const anchor of IP_ANCHORS) {
+        for (const alias of anchor.aliases) {
+            const re = new RegExp(`(^|[^a-z0-9])${_escapeRegex(alias)}([^a-z0-9]|$)`, 'i');
+            if (re.test(joined)) {
+                hits.push({ id: anchor.id, franchise: anchor.franchise, matched_alias: alias });
+                break;
+            }
+        }
+    }
+    return {
+        matched: hits.length > 0,
+        anchors: hits,
+        franchises: [...new Set(hits.map(h => h.franchise))],
+        source_text: clean.join(' | '),
+    };
+}
+
+// Turns a detection result into a normalized [0,1] score. One franchise
+// anchor lands full weight (that's where the Batman-Armor / Goku-Shoes lift
+// comes from). Additional anchors give diminishing returns so stacking names
+// can't game the signal.
+function ipAnchorScore(detection) {
+    if (!detection || !detection.matched) return 0;
+    const n = detection.anchors.length;
+    if (n <= 0) return 0;
+    if (n === 1) return 1.0;
+    if (n === 2) return 1.0;
+    return 1.0; // flat — stacking more names doesn't keep adding lift in corpus
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Scoring (carried over from v1) — used for rank ordering
 // ──────────────────────────────────────────────────────────────────────
 
 function scoreIdea(idea, brief) {
-    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0, premise: 0, fit: 0, proof: 0, legibility: 0 };
+    const parts = { hook: 0, narrative: 0, duration: 0, bridge: 0, vocabulary: 0, interactions: 0, premise: 0, fit: 0, proof: 0, legibility: 0, ip: 0 };
 
     // Motif-synthesis score (lattice-driven object/endpoint alignment)
     if (idea.synthesis_trace && typeof idea.synthesis_trace.premise_score === 'number') {
@@ -3258,6 +3381,21 @@ function scoreIdea(idea, brief) {
         parts.legibility += idea.synthesis_trace.visual_legibility.score * 0.16;
     }
 
+    // IP-anchor signal (v3.6) — franchise anchors (Batman, Iron Man, Goku,
+    // Mandalorian, etc.) measurably lift views/keep in the validated corpus
+    // independent of premise/proof structure. See IP_ANCHOR_CORPUS_EVIDENCE.
+    // Weight 0.14 sits between fit (0.12) and legibility (0.16) — mirrors
+    // proof_clarity because the lift magnitude (+216% SUPERHERO, 1.72x IP/non-IP)
+    // is comparable to proof-visibility effects in this corpus.
+    const IP_ANCHOR_WEIGHT = 0.14;
+    if (idea.synthesis_trace && idea.synthesis_trace.ip_anchor && idea.synthesis_trace.ip_anchor.matched) {
+        const score = ipAnchorScore(idea.synthesis_trace.ip_anchor);
+        parts.ip += score * IP_ANCHOR_WEIGHT;
+        idea.synthesis_trace.ip_anchor.applied_weight_in_scoreIdea = IP_ANCHOR_WEIGHT;
+        idea.synthesis_trace.ip_anchor.score = score;
+        idea.synthesis_trace.ip_anchor.boost_applied = round(score * IP_ANCHOR_WEIGHT, 4);
+    }
+
     for (const hook of idea.hook_mechanisms) parts.hook += Math.abs(hook.csw || 0);
 
     for (const n of idea.narrative_structures) {
@@ -3287,7 +3425,7 @@ function scoreIdea(idea, brief) {
         if (rule && rule.r_partial) parts.interactions += Math.abs(rule.r_partial) * 0.1;
     }
 
-    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions + parts.premise + parts.fit + parts.proof + parts.legibility;
+    const total = parts.hook + parts.narrative + parts.duration + parts.bridge + parts.vocabulary + parts.interactions + parts.premise + parts.fit + parts.proof + parts.legibility + parts.ip;
     return { parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, round(v, 4)])), total: round(total, 4) };
 }
 
