@@ -1,205 +1,205 @@
 {
   "active": false,
-  "run_id": "auto_20260424091237.",
+  "run_id": "auto_20260424143722.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-24T09:12:37.859Z",
-  "updated_at": "2026-04-24T09:40:54.146941Z",
-  "finished_at": "2026-04-24T09:40:54.146941Z",
+  "started_at": "2026-04-24T14:37:22.700Z",
+  "updated_at": "2026-04-24T14:46:17.526533Z",
+  "finished_at": "2026-04-24T14:46:17.526533Z",
   "requested_iterations": 3000,
-  "attempted": 751,
-  "completed": 746,
+  "attempted": 2055,
+  "completed": 2049,
   "failures": 5,
   "llm_proposed": 0,
   "llm_completed": 0,
-  "no_signal_streak": 23,
+  "no_signal_streak": 2,
   "stop_reason": "process_died_watchdog",
   "current_candidate": null,
-  "last_completed_candidate": "expectation_subversion_density_first10s_x_vulnerability_count_hook",
+  "last_completed_candidate": "outcome_tease_count_x_suspense_bridge_density_first5s",
   "last_completed_r": 0,
   "recent_events": [
     {
       "type": "completed",
-      "key": "proof_signal_count_x_expectation_subversion_density_first10s",
-      "r": 0.0269,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:33:08.151Z"
-    },
-    {
-      "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_expectation_subversion_count",
-      "r": -0.0192,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:33:39.643Z"
-    },
-    {
-      "type": "completed",
-      "key": "expectation_subversion_count_x_expectation_subversion_density_first10s",
-      "r": -0.0192,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:33:54.442Z"
-    },
-    {
-      "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_knowledge_gap_count",
+      "key": "suspense_bridge_density_first3s_x_effort_signal_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:34:14.897Z"
+      "ts": "2026-04-24T14:45:12.372Z"
     },
     {
       "type": "completed",
-      "key": "knowledge_gap_count_x_expectation_subversion_density_first10s",
+      "key": "effort_signal_count_hook_x_suspense_bridge_density_first3s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:34:23.164Z"
+      "ts": "2026-04-24T14:45:12.516Z"
     },
     {
       "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_suspense_bridge_count",
-      "r": 0.0061,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:34:31.190Z"
-    },
-    {
-      "type": "completed",
-      "key": "suspense_bridge_count_x_expectation_subversion_density_first10s",
-      "r": 0.0061,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:34:40.951Z"
-    },
-    {
-      "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_identity_challenge_count",
+      "key": "suspense_bridge_density_first3s_x_curiosity_trigger_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:34:48.678Z"
+      "ts": "2026-04-24T14:45:12.695Z"
     },
     {
       "type": "completed",
-      "key": "identity_challenge_count_x_expectation_subversion_density_first10s",
+      "key": "curiosity_trigger_count_x_suspense_bridge_density_first3s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:34:57.615Z"
+      "ts": "2026-04-24T14:45:12.827Z"
     },
     {
       "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_mechanism_reveal_count",
+      "key": "suspense_bridge_density_first3s_x_curiosity_trigger_density",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:35:09.813Z"
+      "ts": "2026-04-24T14:45:12.960Z"
     },
     {
       "type": "completed",
-      "key": "mechanism_reveal_count_x_expectation_subversion_density_first10s",
+      "key": "curiosity_trigger_density_x_suspense_bridge_density_first3s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:35:17.571Z"
+      "ts": "2026-04-24T14:45:13.089Z"
     },
     {
       "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_story_stake_count_hook",
-      "r": 0.0191,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:35:26.829Z"
-    },
-    {
-      "type": "completed",
-      "key": "story_stake_count_hook_x_expectation_subversion_density_first10s",
-      "r": 0.0191,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:35:37.278Z"
-    },
-    {
-      "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_foreshadow_count_hook",
+      "key": "suspense_bridge_density_first3s_x_curiosity_trigger_count_hook",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:35:50.954Z"
+      "ts": "2026-04-24T14:45:13.218Z"
     },
     {
       "type": "completed",
-      "key": "foreshadow_count_hook_x_expectation_subversion_density_first10s",
+      "key": "curiosity_trigger_count_hook_x_suspense_bridge_density_first3s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:36:05.451Z"
+      "ts": "2026-04-24T14:45:13.346Z"
     },
     {
       "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_tension_ratchet_count_hook",
+      "key": "suspense_bridge_density_first5s_x_tension_builder_count",
+      "r": 0.0412,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:13.483Z"
+    },
+    {
+      "type": "completed",
+      "key": "tension_builder_count_x_suspense_bridge_density_first5s",
+      "r": 0.0412,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:13.639Z"
+    },
+    {
+      "type": "completed",
+      "key": "suspense_bridge_density_first5s_x_tension_builder_density",
+      "r": 0.0412,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:13.817Z"
+    },
+    {
+      "type": "completed",
+      "key": "tension_builder_density_x_suspense_bridge_density_first5s",
+      "r": 0.0412,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:13.956Z"
+    },
+    {
+      "type": "completed",
+      "key": "suspense_bridge_density_first5s_x_implicit_promise_count",
+      "r": 0.0749,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:14.096Z"
+    },
+    {
+      "type": "completed",
+      "key": "implicit_promise_count_x_suspense_bridge_density_first5s",
+      "r": 0.0749,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:14.237Z"
+    },
+    {
+      "type": "completed",
+      "key": "suspense_bridge_density_first5s_x_implicit_promise_density",
+      "r": 0.0775,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:14.377Z"
+    },
+    {
+      "type": "completed",
+      "key": "implicit_promise_density_x_suspense_bridge_density_first5s",
+      "r": 0.0775,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:14.518Z"
+    },
+    {
+      "type": "completed",
+      "key": "suspense_bridge_density_first5s_x_loop_reinforcer_count",
+      "r": 0.0769,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:14.664Z"
+    },
+    {
+      "type": "completed",
+      "key": "loop_reinforcer_count_x_suspense_bridge_density_first5s",
+      "r": 0.0769,
+      "resolution_id": "r0",
+      "target": "views",
+      "layer": "pre",
+      "ts": "2026-04-24T14:45:14.813Z"
+    },
+    {
+      "type": "completed",
+      "key": "suspense_bridge_density_first5s_x_outcome_tease_count",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:36:21.395Z"
+      "ts": "2026-04-24T14:45:14.949Z"
     },
     {
       "type": "completed",
-      "key": "tension_ratchet_count_hook_x_expectation_subversion_density_first10s",
+      "key": "outcome_tease_count_x_suspense_bridge_density_first5s",
       "r": 0,
       "resolution_id": "r0",
       "target": "views",
       "layer": "pre",
-      "ts": "2026-04-24T09:36:34.802Z"
-    },
-    {
-      "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_proof_build_count_hook",
-      "r": 0,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:37:09.403Z"
-    },
-    {
-      "type": "completed",
-      "key": "proof_build_count_hook_x_expectation_subversion_density_first10s",
-      "r": 0,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:37:24.841Z"
-    },
-    {
-      "type": "completed",
-      "key": "expectation_subversion_density_first10s_x_vulnerability_count_hook",
-      "r": 0,
-      "resolution_id": "r0",
-      "target": "views",
-      "layer": "pre",
-      "ts": "2026-04-24T09:37:42.866Z"
+      "ts": "2026-04-24T14:45:15.189Z"
     }
   ],
-  "pre_attempted": 751,
-  "pre_completed": 746,
+  "pre_attempted": 2055,
+  "pre_completed": 2049,
   "post_attempted": 0,
   "post_completed": 0
 }
