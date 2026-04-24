@@ -491,6 +491,10 @@ const ZYGARNIK_PHRASE_SETS = {
         "by step", "nothing was working", "i was starting to",
         "i was running out", "started falling apart", "it was getting worse",
         "the pressure was", "i hit a wall", "things were not going",
+        "this changes everything", "what happens next", "you wont believe",
+        "things get worse", "it gets better", "wait for it", "suddenly",
+        "but then", "at that point", "thats when", "the problem was",
+        "and then it", "everything changed", "that was when", "i couldnt believe",
     ],
     implicit_promise: [
         "what you are about to see", "this is where it gets good",
@@ -520,6 +524,10 @@ const ZYGARNIK_PHRASE_SETS = {
         "something really interesting", "i noticed something",
         "i noticed two", "i noticed something really",
         "i discovered something", "i found something",
+        "i will show you", "by the end of this", "youre going to learn",
+        "heres what i found", "this is how", "i figured out", "let me explain",
+        "heres why", "the real reason", "what actually works", "i want to show you",
+        "im going to show you", "you will see", "ill explain",
     ],
     progressive_reveal: [
         "first", "then", "after that", "and then", "next",
@@ -535,6 +543,10 @@ const ZYGARNIK_PHRASE_SETS = {
         "step by step", "one by one", "first up", "next up",
         "to start", "to begin", "now i", "now we",
         "what happened next", "what came next", "at that point",
+        "so far", "the next thing", "moving on", "and another thing",
+        "also important", "not only that", "on top of that", "in addition",
+        "and theres more", "keep watching", "theres more", "but wait",
+        "additionally", "furthermore", "and also",
     ],
     loop_reinforcer: [
         "remember when i said", "going back to", "as i mentioned",
@@ -570,6 +582,10 @@ const ZYGARNIK_PHRASE_SETS = {
         "now you", "now this", "and now", "so now",
         "as you can see", "as you saw", "as i said",
         "i mentioned", "i talked about", "i showed",
+        "remember when i said", "as i mentioned", "going back to",
+        "which brings me to", "this is why i told you", "earlier i showed",
+        "recall that", "as i showed you earlier", "connecting this back",
+        "and this is related to", "going back to what i said",
     ],
     consequence_language: [
         "because of this", "which means", "so this means",
@@ -587,6 +603,10 @@ const ZYGARNIK_PHRASE_SETS = {
         "and so", "and that is when", "which means that",
         "so if you", "that meant", "as a result",
         "and that is because", "so what happened was",
+        "if you do this", "this will cause", "the result is", "this leads to",
+        "which means", "so that means", "because of this", "therefore",
+        "as a result", "this is why", "thats why", "causing",
+        "leading to", "this will", "youll end up", "you could end up",
     ],
     setup_anchor: [
         "picture this", "imagine", "here is the scenario",
@@ -614,6 +634,10 @@ const ZYGARNIK_PHRASE_SETS = {
         "so when i", "so now that", "so at this point",
         "since i was", "since this was", "since it was",
         "since i had", "given that", "with that in mind",
+        "the context is", "first you need to know", "background is",
+        "to understand this", "the situation is", "let me set the scene",
+        "here is the setup", "before i get into", "some background",
+        "to give you some context", "a little background",
     ],
     outcome_tease: [
         "the number surprised me", "the result was unexpected",
@@ -631,6 +655,11 @@ const ZYGARNIK_PHRASE_SETS = {
         "to see if it would", "to see if i could", "to figure out",
         "what happens when", "i wanted to see what", "i had to know",
         "i set out to find", "the goal was to see",
+        "the result was", "what happened was", "it turns out",
+        "here is the outcome", "the final result", "what i found",
+        "it worked", "it didnt work", "we discovered", "the verdict",
+        "at the end of the day", "ultimately", "in the end",
+        "after all of this", "when all was said and done",
     ],
     proof_signal: [
         "i have the receipts", "here is the proof", "the evidence shows",
@@ -641,6 +670,11 @@ const ZYGARNIK_PHRASE_SETS = {
         "documented everything", "recorded it all", "the logs show",
         "actual results not estimates", "real numbers not guesses",
         "i can show you exactly", "hard evidence",
+        "here is the evidence", "the data shows", "you can see",
+        "as you can tell", "the proof is", "look at this", "see this number",
+        "check this out", "the results show", "this proves", "heres proof",
+        "as evidence", "you can see here that", "look at these numbers",
+        "the stats show",
     ],
 
     // ── Group AB: Expectation-subversion / Knowledge-gap / Momentum / Suspense-bridge ──
@@ -652,6 +686,11 @@ const ZYGARNIK_PHRASE_SETS = {
         "on the surface it looks", "most experts say", "the standard advice is",
         "what they teach you", "the traditional approach", "the old way of thinking",
         "that is actually backwards", "completely wrong about",
+        "but actually", "surprisingly", "the opposite is true", "turns out",
+        "not what you think", "you might think", "everyone assumes",
+        "contrary to", "unlike what most think", "i was wrong about",
+        "i thought", "i assumed", "to my surprise", "what surprised me",
+        "i didnt expect",
     ],
     knowledge_gap: [
         "most people do not know", "nobody tells you", "what they never teach you",
@@ -661,6 +700,11 @@ const ZYGARNIK_PHRASE_SETS = {
         "what i wish i had known", "if only i had known", "the gap nobody fills",
         "what gets left out", "the missing piece most overlook", "buried in",
         "not obvious at first", "you have to dig to find",
+        "most people dont know", "what nobody tells you", "the hidden truth",
+        "what they dont tell you", "the secret is", "few people realize",
+        "almost nobody knows", "little known fact", "the truth about",
+        "what really happens", "most dont realize", "the thing most people miss",
+        "what most people dont", "the real secret",
     ],
     momentum_language: [
         "and then", "suddenly", "at that point", "from there", "everything changed",
@@ -676,6 +720,11 @@ const ZYGARNIK_PHRASE_SETS = {
         "no going back now", "let us do it", "doing it now",
         "kicking things off", "getting started", "off we go",
         "time to", "let us see", "time to find out",
+        "lets keep going", "moving forward", "as we progress",
+        "building on this", "taking it further", "the next level",
+        "pushing further", "continuing on", "pressing ahead", "now lets",
+        "next we", "now we can", "from here", "building momentum",
+        "gaining momentum",
     ],
     suspense_bridge: [
         "but here is the thing", "here is where it gets interesting",
@@ -687,6 +736,11 @@ const ZYGARNIK_PHRASE_SETS = {
         "here is what blew my mind", "which leads to something even bigger",
         "and here is the kicker", "this is the part nobody expects",
         "hold on because this gets better", "and the answer will surprise you",
+        "but here is the thing", "there is a catch", "there is a problem",
+        "the issue is", "but then something happened", "until one day",
+        "and that is when", "and then everything", "something unexpected",
+        "out of nowhere", "what i didnt know was", "little did i know",
+        "what came next", "i had no idea",
     ],
 
     // ── Group AC: Identity-challenge / Before-after-frame / FOMO / Mechanism-reveal ──
@@ -742,6 +796,11 @@ const ZYGARNIK_PHRASE_SETS = {
         "you will wish you had done this sooner", "by the time most people realize",
         "they are not waiting for", "the gap is widening", "the opportunity will not",
         "act now before",
+        "before its too late", "dont miss", "you dont want to miss",
+        "limited time", "act now", "while you still can", "now or never",
+        "this wont last", "get this before", "once this is gone",
+        "last chance", "dont wait", "the window is closing",
+        "time is running out",
     ],
     mechanism_reveal: [
         "the reason this works", "the mechanism is", "what actually drives this",
@@ -751,6 +810,10 @@ const ZYGARNIK_PHRASE_SETS = {
         "at its heart", "stripped down this is", "the engine behind",
         "what makes this tick", "the why behind the what", "here is the mechanism",
         "the principle that makes this work", "the science behind",
+        "heres how it works", "what causes", "why this occurs",
+        "the process is", "this works because", "at its core",
+        "fundamentally", "the key is", "the way it works",
+        "what makes this work", "the reason why", "here is why",
     ],
 
     // ── Group AD: Authority-stack / Narrative-stakes-escalation / Payoff-proximity ──
@@ -1143,6 +1206,11 @@ const ZYGARNIK_PHRASE_SETS = {
         'see if it works', 'see if this works', 'does it work',
         'and now', 'the time has come', 'finally time', 'ready to see',
         'ready to find out', 'prepare yourself', 'get ready for',
+        'coming up', 'in just a moment', 'soon ill show', 'stay tuned',
+        'keep watching', 'the good part', 'wait until you see',
+        'youre going to love', 'almost there', 'nearly done',
+        'and later', 'coming soon', 'at the end', 'ill get to that',
+        'well get to', 'but first', 'ill show you later', 'patience',
     ],
 
     // callback_setup: sets up a reference that will be resolved later (Zygarnik anchor)
@@ -1181,6 +1249,11 @@ const ZYGARNIK_PHRASE_SETS = {
         'worked so hard', 'worked tirelessly', 'relentlessly',
         'did not stop', 'would not stop', 'refused to stop',
         'not giving up', 'keeping going', 'kept pushing',
+        'i spent', 'took me', 'after many', 'worked hard',
+        'put in the work', 'dedicated time', 'invested', 'committed to',
+        'gave up', 'worked for months', 'years of', 'hours of',
+        'days of', 'weeks of', 'a lot of work', 'so much time',
+        'countless hours', 'all the time i spent',
     ],
 
     // curiosity_trigger: questions that open explicit information gaps
@@ -1211,6 +1284,11 @@ const ZYGARNIK_PHRASE_SETS = {
         'phase one', 'phase two', 'phase three',
         'step one', 'step two', 'step three',
         'stage one', 'stage two', 'stage three',
+        'in the next few minutes', 'by the end of this video',
+        'over the course of', 'throughout this', 'from start to finish',
+        'during this time', 'as we go through', 'minute by minute',
+        'one by one', 'over time', 'as time goes on',
+        'in the following', 'in the next section',
     ],
 
     // visual_proof_signal: spoken phrases pointing to visual proof being shown
@@ -1224,6 +1302,10 @@ const ZYGARNIK_PHRASE_SETS = {
         'the video shows', 'the camera caught', 'caught on camera',
         'this image', 'this photo', 'this screenshot',
         'look at this screenshot', 'look at this photo',
+        'you can see', 'look at', 'check this out', 'as shown',
+        'see the screen', 'on the screen', 'right here', 'look here',
+        'shown below', 'as i show you', 'showing you', 'i am showing',
+        'here on screen', 'visible here', 'see how', 'notice how',
     ],
 };
 
@@ -1769,6 +1851,11 @@ const ZYGARNIK_SPECIAL_KEYS = [
     'zygarnik_completion_ratio',
     'stakes_in_hook_flag',
     'payoff_before_midpoint_flag',
+    // Group AB: New derived rate metrics
+    'open_loop_count_per_minute',
+    'closure_rate_pct',
+    'zygarnik_effect_index',
+    'open_loop_to_word_count_ratio',
 ];
 
 function windowedTranscript(transcript, duration, windowSec) {
@@ -7003,6 +7090,40 @@ function extractMetric(key, analysis) {
         return [(tease || 0) / delivery, null];
     }
 
+    // ── Group AB: New derived rate metrics ──
+    if (key === 'open_loop_count_per_minute') {
+        if (!transcript) return [null, 'no transcript'];
+        const dur = meta.duration || 0;
+        if (!dur) return [null, 'no duration'];
+        const tl = transcript.toLowerCase();
+        const count = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        return [count / (dur / 60 + 0.01), null];
+    }
+    if (key === 'closure_rate_pct') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const openCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closeCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        return [closeCount / (openCount + closeCount + 0.01), null];
+    }
+    if (key === 'zygarnik_effect_index') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const openCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closeCount = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
+        const [gdp] = extractMetric('gratification_delay_pct', analysis);
+        if (gdp == null) return [null, 'no gratification_delay_pct'];
+        return [(openCount * gdp) / (closeCount + 1), null];
+    }
+    if (key === 'open_loop_to_word_count_ratio') {
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const count = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
+        return [count / (words.length + 1) * 100, null];
+    }
+
     return [null, `unknown key: ${key}`];
 }
 
@@ -7189,6 +7310,17 @@ function generateAutonomousCandidates() {
         }
     }
 
+    // Group AB: New derived rate metric atomics + cross-products
+    for (const k of [
+        'open_loop_count_per_minute', 'closure_rate_pct',
+        'zygarnik_effect_index', 'open_loop_to_word_count_ratio',
+        'open_loop_count_per_minute_x_open_loop_to_closure_ratio',
+        'open_loop_count_per_minute_x_hook_drop_rate',
+        'closure_rate_pct_x_pre_gratification_open_loop_count',
+        'zygarnik_effect_index_x_visual_proof_phrase_count',
+        'open_loop_to_word_count_ratio_x_gratification_delay_pct',
+    ]) { candidates.push(k); }
+
     // Group H: New families — temporal tension, stakes, proof signals
     for (const k of [
         "stakes_density", "stakes_density_hook", "loss_aversion_density",
@@ -7275,8 +7407,8 @@ function biasPool(pool, preuploadRatio) {
         while (added < nPre && pi < pre.length) { result.push(pre[pi++]); added++; }
         added = 0;
         while (added < nPost && qi < post.length) { result.push(post[qi++]); added++; }
-        if (pi >= pre.length && qi < post.length) { result.push(...post.slice(qi)); break; }
-        if (qi >= post.length && pi < pre.length) { result.push(...pre.slice(pi)); break; }
+        if (pi >= pre.length && qi < post.length) { for (let ii = qi; ii < post.length; ii++) result.push(post[ii]); break; }
+        if (qi >= post.length && pi < pre.length) { for (let ii = pi; ii < pre.length; ii++) result.push(pre[ii]); break; }
     }
     return result;
 }

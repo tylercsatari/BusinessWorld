@@ -513,7 +513,9 @@ async function autoRun(opts = {}) {
     // Filter out candidates whose component indicators are zero-variance or sparse.
     // Zero-variance: all values identical. Sparse: fewer than MIN_NONZERO_COUNT nonzero values.
     // Both trivially produce r=0 and waste iterations.
-    const MIN_NONZERO_COUNT = 20;
+    // Exception: pre×pre pairs (both components pre-upload phrase metrics) are kept even if sparse,
+    // since phrase families by design have low-count distributions but real signal.
+    const MIN_NONZERO_COUNT = 8;  // was 20
     const zeroVarKeys = new Set();
     const sparseKeys = new Set();
     for (const ind of indicators) {
@@ -534,7 +536,18 @@ async function autoRun(opts = {}) {
         const before = pool.length;
         pool = pool.filter(k => {
             const parts = k.split('_x_');
-            return !parts.some(p => skipKeys.has(p));
+            if (parts.length !== 2) return true; // non-interaction keys always pass
+            const [a, b] = parts;
+            const aSkip = skipKeys.has(a);
+            const bSkip = skipKeys.has(b);
+            if (!aSkip && !bSkip) return true; // neither sparse, keep
+            // Both sparse: only keep if both are pre-upload (pre×pre pairs have real signal)
+            if (aSkip && bSkip) {
+                const layerA = metrics.getCandidateLayer(a);
+                const layerB = metrics.getCandidateLayer(b);
+                return layerA === 'pre' && layerB === 'pre';
+            }
+            return false; // one sparse, one not: skip (asymmetric noise)
         });
         log(`Zero-variance filter: skipped indicators — ${zeroVarKeys.size} constant-value, ${sparseKeys.size} sparse (<${MIN_NONZERO_COUNT} nonzero); removed ${before - pool.length} candidates`);
     }
