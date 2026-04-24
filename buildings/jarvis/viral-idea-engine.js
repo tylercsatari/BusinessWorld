@@ -2462,174 +2462,79 @@ function inferSourceBodyAnchor(titleLower) {
     return { body_part_phrase: 'body', body_parts: ['body', 'shoulders', 'skin'], sensation_words: ['feeling', 'numb', 'painful'] };
 }
 
-// Scalable source-grounded fallback used when no handcrafted rule above matches.
-// Every validated source video gets a view whose fields are derived from the
-// exact validated title — not from a generic premise-atom template. Output
-// shape mirrors the handcrafted rules so composeSeed treats both paths the same.
+// Source-grounded view used when no per-video handcrafted rule matches.
+// The premise line IS the exact validated title. No category rewrite,
+// no template rewrite, no "— Here's What Actually Happened" tail. Support
+// fields (logline, visual, reveal, setting) quote the cleaned title text
+// directly so they carry the source instead of an abstract template.
+// title_has_builtin_reveal is set so composeTitle never tacks a generic
+// endpoint suffix onto this source-grounded title.
 //
-// Rule order matters: each branch is a direct rewrite of one real title shape
-// ("Can X?", "Did I X?", "Making/Built X", "Testing X", "X vs Y", numeric-anchor,
-// first-person "I X", and a final verbatim fallback). title_has_builtin_reveal
-// is always set so composeTitle never tacks a generic endpoint suffix onto
-// a source-grounded title.
+// Trailing parenthetical decorators like "(Possible?)", "(HARD)",
+// "(this happens)" are stripped from the premise line because they read
+// as clickbait suffix rather than the core claim; the core statement is
+// preserved verbatim, keeping the creator's exact phrasing and casing.
 function buildGenericSourceGroundedView(sourceVideo) {
     const rawTitle = stripSourceTitleDecorations((sourceVideo && sourceVideo.name) || '');
     if (!rawTitle) return null;
-    const t = rawTitle.toLowerCase();
-    const anchor = inferSourceBodyAnchor(t);
-
-    const base = {
+    const core = rawTitle.replace(/\s*\([^)]*\)\s*$/, '').trim() || rawTitle;
+    const coreL = core.toLowerCase();
+    const anchor = inferSourceBodyAnchor(coreL);
+    return {
         title_has_builtin_reveal: true,
         body_part_phrase: anchor.body_part_phrase,
         body_parts: anchor.body_parts,
         sensation_words: anchor.sensation_words,
-        source_grounded_form: 'generic_title_parsed',
-    };
-
-    // "Can X?" / "Can X ..." — test-whether frame
-    let m = /^can\s+(.+?)\??$/i.exec(rawTitle);
-    if (m) {
-        const subject = m[1].replace(/[?!]+$/, '').trim();
-        const subj = subject.toLowerCase();
-        return {
-            ...base,
-            title_premise_line: `I Ran The Exact Test To Answer: Can ${capitalize(subject)} — Here’s What Actually Happened`,
-            logline_action: `set up the exact test that asks "can ${subj}" and escalate the conditions until the camera holds a real answer`,
-            first_frame_action: `the full rig needed to test "can ${subj}" all framed together before the first attempt`,
-            visual_action_short: `the "can ${subj}" test running while the outcome becomes visible on camera`,
-            setting_hint: `inside the exact rig built to answer whether ${subj}`,
-            reveal_phrase: `the test lands a clear visible answer to "can ${subj}" and the camera freezes on the result`,
-            promise_tail: `the question "can ${subj}" gets a real on-camera answer`,
-        };
-    }
-
-    // "Did I X?" — retro-question frame
-    m = /^did i\s+(.+?)\??$/i.exec(rawTitle);
-    if (m) {
-        const phrase = m[1].replace(/[?!]+$/, '').trim().toLowerCase();
-        return {
-            ...base,
-            title_premise_line: `I Went All In Trying To ${capitalize(phrase)} — Here’s What Actually Happened`,
-            logline_action: `push to actually ${phrase} on camera and keep escalating the attempt until the result is undeniable`,
-            first_frame_action: `the setup for the "${phrase}" attempt framed with the target already visible`,
-            visual_action_short: `the "${phrase}" attempt escalating while the target stays visible on camera`,
-            setting_hint: `inside the exact setup needed to try to ${phrase}`,
-            reveal_phrase: `the camera shows whether I actually managed to ${phrase}`,
-            promise_tail: `the camera answers whether I actually pulled off "${phrase}"`,
-        };
-    }
-
-    // "Making X" / "Built X" / "I Made X" — build-and-test frame
-    m = /^(making|i made|i built|building)\s+(?:a |the |an )?(.+)$/i.exec(rawTitle);
-    if (m) {
-        const subject = m[2].replace(/[?!]+$/, '').trim();
-        const subj = subject.toLowerCase();
-        return {
-            ...base,
-            body_part_phrase: 'hands',
-            body_parts: ['hands', 'shoulders', 'skin'],
-            sensation_words: ['hands', 'painful', 'numb', 'feeling'],
-            title_premise_line: `I Built ${capitalize(subject)} From Scratch And Ran It Until The Build Gave A Real Answer`,
-            logline_action: `build ${subj} from the ground up on camera and stress-test it until the build either holds or visibly gives`,
-            first_frame_action: `the raw materials for ${subj} and the final test target framed together before the first step`,
-            visual_action_short: `${subj} coming together while the test target stays in the same frame`,
-            setting_hint: `inside a workshop with every stage of ${subj} visible on camera`,
-            reveal_phrase: `${subj} either holds or visibly breaks when the final test lands`,
-            promise_tail: `${subj} either holds or visibly gives`,
-        };
-    }
-
-    // "Testing X"
-    m = /^testing\s+(.+)$/i.exec(rawTitle);
-    if (m) {
-        const subject = m[1].replace(/[?!]+$/, '').trim();
-        const subj = subject.toLowerCase();
-        return {
-            ...base,
-            title_premise_line: `I Tested ${capitalize(subject)} Until The Real Breaking Point Showed Up`,
-            logline_action: `test ${subj} by escalating the conditions on camera until the failure point is physically visible`,
-            first_frame_action: `${subj} and the full test rig framed together before the first push`,
-            visual_action_short: `${subj} being pushed while the failure point stays in the same frame`,
-            setting_hint: `inside the exact test rig built to push ${subj}`,
-            reveal_phrase: `${subj} reaches its real breaking point on camera`,
-            promise_tail: `${subj} reaches its real breaking point`,
-        };
-    }
-
-    // "X vs Y"
-    m = /^(.+?)\s+vs\.?\s+(.+)$/i.exec(rawTitle);
-    if (m) {
-        const a = m[1].trim();
-        const b = m[2].trim();
-        const aL = a.toLowerCase();
-        const bL = b.toLowerCase();
-        return {
-            ...base,
-            title_premise_line: `I Put ${capitalize(a)} Up Against ${capitalize(b)} Until One Of Them Actually Gave`,
-            logline_action: `stage the exact matchup of ${aL} against ${bL} and keep escalating until one of them visibly gives`,
-            first_frame_action: `${aL} and ${bL} framed side-by-side before the first contact`,
-            visual_action_short: `${aL} colliding with ${bL} while the result frame stays locked`,
-            setting_hint: `inside the exact rig built to run ${aL} against ${bL}`,
-            reveal_phrase: `one of ${aL} or ${bL} visibly gives on camera and the frame freezes on the loser`,
-            promise_tail: `one of ${aL} or ${bL} visibly gives`,
-        };
-    }
-
-    // First-person "I X" — take precedence over numeric anchor so that titles
-    // like "I stood in a circle for 24 hours" keep the author's verbatim framing
-    // instead of getting collapsed into a generic counter story around "24 hours".
-    m = /^i\s+(.+)$/i.exec(rawTitle);
-    if (m) {
-        const rest = m[1].replace(/[?!]+$/, '').trim();
-        const restL = rest.toLowerCase();
-        return {
-            ...base,
-            title_premise_line: `I ${capitalize(rest)} — Here’s What Actually Happened`,
-            logline_action: `actually do this on camera: ${restL}, and keep filming every real moment until the outcome is undeniable`,
-            first_frame_action: `the exact starting state for "${restL}" framed before the first move`,
-            visual_action_short: `"${restL}" unfolding while the camera holds on the consequence`,
-            setting_hint: `inside the exact environment where "${restL}" has to play out`,
-            reveal_phrase: `the real outcome of "${restL}" lands on camera and the frame freezes on it`,
-            promise_tail: `the real outcome of "${restL}" lands`,
-        };
-    }
-
-    // Numeric quantity anchor — "N miles/steps/hours/days/..." in non-first-person titles
-    m = /(\d[\d,]*)\s*(hours?|minutes?|days?|steps?|miles?|km|kilometers?|reps?|push.?ups?|pull.?ups?|squats?|stairs?)\b/i.exec(rawTitle);
-    if (m) {
-        const qty = m[1];
-        const unit = m[2].toLowerCase();
-        const leadingRaw = rawTitle.slice(0, m.index).replace(/[\s,:\-—]+$/, '').trim();
-        const trailingRaw = rawTitle.slice(m.index + m[0].length).replace(/^[\s,:\-—]+/, '').trim();
-        const ctx = trailingRaw || leadingRaw || '';
-        const ctxClause = ctx ? ` ${ctx.toLowerCase()}` : '';
-        return {
-            ...base,
-            title_premise_line: `I Went ${qty} ${capitalize(unit)}${ctx ? ' ' + capitalize(ctx) : ''} Until My Body Forced A Real Decision`,
-            logline_action: `commit to ${qty} ${unit}${ctxClause} and keep filming every physical change until my body forces a visible decision`,
-            first_frame_action: `the counter set to 0 and the target of ${qty} ${unit} both visible before the first move`,
-            visual_action_short: `the counter climbing toward ${qty} ${unit} while my body stays in the same frame`,
-            setting_hint: `on the exact course needed to push ${qty} ${unit}${ctxClause} with the counter always visible`,
-            reveal_phrase: `the counter lands on the real final number at ${qty} ${unit} and the camera holds on the moment it settles`,
-            promise_tail: `the counter lands on the real final number at ${qty} ${unit}`,
-        };
-    }
-
-    // Final verbatim fallback — carry the exact validated title as the premise line.
-    const rawL = rawTitle.toLowerCase();
-    return {
-        ...base,
-        title_premise_line: `${capitalize(rawTitle)} — Here’s What Actually Happened`,
-        logline_action: `carry out the exact premise of "${rawL}" on camera and keep filming until the outcome is visible`,
-        first_frame_action: `the setup required for "${rawL}" framed before the first move`,
-        visual_action_short: `"${rawL}" unfolding while the camera holds on the consequence`,
-        setting_hint: `inside the exact environment where "${rawL}" plays out`,
-        reveal_phrase: `the real outcome of "${rawL}" lands on camera and the frame freezes on it`,
-        promise_tail: `the real outcome of "${rawL}" lands`,
+        source_grounded_form: 'verbatim_validated_title',
+        title_premise_line: core,
+        logline_action: `carry out the exact premise of "${coreL}" on camera and keep filming until the outcome is visible`,
+        first_frame_action: `the setup required for "${coreL}" framed before the first move`,
+        visual_action_short: `"${coreL}" unfolding while the camera holds on the consequence`,
+        setting_hint: `inside the exact environment where "${coreL}" plays out`,
+        reveal_phrase: `the real outcome of "${coreL}" lands on camera and the frame freezes on it`,
+        promise_tail: `the real outcome of "${coreL}" lands`,
     };
 }
 
+// Returns the exact validated source title with decorative noise (emojis,
+// collapsed whitespace) stripped and trailing parenthetical clickbait tails
+// like "(Possible?)", "(this happens)", "(HARD)" removed. The creator's
+// original casing and phrasing of the core claim is preserved so the
+// premise reads exactly like the source that was actually validated.
+function cleanVerbatimSourceTitle(sourceVideo) {
+    const rawName = String((sourceVideo && sourceVideo.name) || '').trim();
+    if (!rawName) return '';
+    const cleaned = stripSourceTitleDecorations(rawName);
+    if (!cleaned) return '';
+    const core = cleaned.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return core || cleaned;
+}
+
+// Wraps the handcrafted / generic source-grounded view so the title_premise_line
+// is ALWAYS the exact validated source title. Per-video handcrafted rules still
+// contribute body anchor, reveal phrase, logline, and visual craft — but the
+// emitted title itself never drifts from the exact validated video framing.
+// The source_grounded_form trace is preserved (or upgraded to a *_verbatim
+// marker) so the audit trail records both the craft layer that matched and
+// the verbatim-title enforcement.
 function deriveSourceVideoPremiseView(sourceVideo) {
+    const inner = _deriveSourceVideoPremiseCraftedView(sourceVideo);
+    if (!inner) return null;
+    const verbatim = cleanVerbatimSourceTitle(sourceVideo);
+    if (!verbatim) return inner;
+    const priorForm = inner.source_grounded_form
+        || (inner.title_premise_line === verbatim ? 'verbatim_validated_title' : 'handcrafted_source_rule');
+    const nextForm = priorForm.endsWith('_verbatim') || priorForm === 'verbatim_validated_title'
+        ? priorForm
+        : `${priorForm}_verbatim`;
+    return {
+        ...inner,
+        title_premise_line: verbatim,
+        source_grounded_form: nextForm,
+    };
+}
+
+function _deriveSourceVideoPremiseCraftedView(sourceVideo) {
     const rawTitle = String((sourceVideo && sourceVideo.name) || '').trim();
     if (!rawTitle) return null;
     const t = rawTitle.toLowerCase();
@@ -2855,9 +2760,16 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
         ? 'a single word of reaction lands as overlay.'
         : 'a single sensation word appears as overlay.';
     const payoff = `Final 5% of runtime: ${revealPhrase}; ${payoffTail}`;
-    const overDelivery = isQualitativeReveal
-        ? `Hook implies a legible answer to the premise (${scale.display}); payoff delivers the reveal as one frame/phrase \u2014 specificity of the single shot over-delivers vs the rounded premise.`
-        : `Hook implies a round target (${scale.display}); payoff lands on a specific, non-round value (${revealVal}) \u2014 specificity over-delivers vs the rounded promise.`;
+    // Source-grounded over-delivery note when a validated source video is the
+    // seed: the hook is the exact validated title and the payoff is the source
+    // reveal, so the over-delivery claim reads against the actual title-tease
+    // rather than a template scale (e.g. "5 miles") inherited from the premise
+    // atom. Seeds without a sourcePremise still use the scale-based phrasing.
+    const overDelivery = sourcePremise
+        ? `Hook is the exact validated title tease; payoff delivers ${revealPhrase} as the single visible on-camera moment that resolves it \u2014 the resolved frame over-delivers vs the headline question.`
+        : isQualitativeReveal
+            ? `Hook implies a legible answer to the premise (${scale.display}); payoff delivers the reveal as one frame/phrase \u2014 specificity of the single shot over-delivers vs the rounded premise.`
+            : `Hook implies a round target (${scale.display}); payoff lands on a specific, non-round value (${revealVal}) \u2014 specificity over-delivers vs the rounded promise.`;
 
     // Narrative structures — pick top 4-5 from ranked lattice list + always include the key three
     const strBase = ['late_peak_arc', 'golden_final_5pct', 'visceral_body_language'];
@@ -2890,7 +2802,15 @@ function composeSeed(obj, endpoint, ctx, rank, premiseScore, premiseDrivers, cre
     const topFirst5 = (ctx.frameMechs.first_5s || []).filter(m => m.outcome === 'log_views' && m.rho > 0)[0];
     const firstFrameExtras = topFirst5 ? `; composition emphasizes ${topFirst5.id.replace('frame_','').replace('_at_first_5s','').replace(/_/g,' ')} (rho=${round(topFirst5.rho, 3)} vs log_views)` : '';
     const firstFrame = `Close on ${premiseObj.first_frame_action}. Counter visible. No explanatory overlay${firstFrameExtras}.`;
-    const firstLine = `${capitalize(firstWord)} — ${scale.display}, and my ${bodyPart} is going to tell you when it\'s over.`.replace('shoulders is', 'shoulders are').replace('foot is', 'foot is').replace('hand is', 'hand is');
+    // First line: for source-grounded seeds the opening narration drops the
+    // premise-atom scale (e.g. "5 miles") — which is a template relic, not
+    // anything the source video actually claims — and hangs on the body
+    // anchor that the source title already implies. Non-source seeds keep
+    // the scale-display anchor so the legacy path is unchanged.
+    const firstLine = (sourcePremise
+        ? `${capitalize(firstWord)} — my ${bodyPart} is going to tell you when it\'s over.`
+        : `${capitalize(firstWord)} — ${scale.display}, and my ${bodyPart} is going to tell you when it\'s over.`
+    ).replace('shoulders is', 'shoulders are').replace('feet is', 'feet are').replace('hands is', 'hands are').replace('legs is', 'legs are').replace('eyes is', 'eyes are').replace('lungs is', 'lungs are');
     const openingAction = `Camera locked on ${premiseObj.visual_action_short} for the first 3 seconds; I enter motion inside the first second.`;
 
     // Build phases — retention-pattern driven by top_5_retention_predictors
