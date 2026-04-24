@@ -74,9 +74,7 @@ function loadAllArtifacts() {
 
 function normalizeIndicatorMetadata(data) {
     if (!data || typeof data !== 'object') return data;
-    const out = Object.assign({}, data);
-    if (!out.diversity_bucket && typeof out.family === 'string') out.diversity_bucket = out.family;
-    return out;
+    return Object.assign({}, data);
 }
 
 const TARGET_PROXY = new Set(['views', 'views_log10', 'log_views', 'log10_views']);

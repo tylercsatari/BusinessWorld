@@ -6132,7 +6132,7 @@ const JarvisUI = (() => {
             </div>`;
         }).join('') : '';
         const finalAltRows = finalAlts && Array.isArray(finalAlts.nearby_displaced) ? finalAlts.nearby_displaced.map(a => {
-            const altLane = a.diversity_bucket || a.family;
+            const altLane = a.diversity_bucket;
             return `<div style="font-size:10px;color:#cbd5e1;line-height:1.5;padding:2px 0;border-top:1px dashed #1e293b">
                 <code style="color:#f59e0b">${escapeHtml(a.idea_id || '')}</code>
                 ${altLane ? `<span style="color:#64748b"> · </span><code style="color:#a78bfa;font-size:10px" title="source-video lane">${escapeHtml(altLane)}</code>` : ''}

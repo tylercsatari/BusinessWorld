@@ -17,6 +17,7 @@ trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] watch-and-sync started" >> "$LOG"
 
 STALE_MINUTES=3
+PID_MISSING_GRACE_SECONDS=45
 RUN_STALLED=false
 
 # Poll until run is no longer active or appears stalled
@@ -26,30 +27,39 @@ for i in $(seq 1 60); do
   UPDATED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('updated_at',''))" 2>/dev/null)
   COMPLETED=$(python3 -c "import json; d=json.load(open('$JARVIS_DIR/autonomous_progress.json')); print(d.get('completed',0))" 2>/dev/null)
   RUN_PID=$(pgrep -f "^${LAUNCH_CMD}$" | head -n 1)
-  STALE=$(python3 - <<PY 2>/dev/null
+  AGE_STATE=$(python3 - <<PY 2>/dev/null
 import json, datetime
 try:
     d=json.load(open('$JARVIS_DIR/autonomous_progress.json'))
     updated=d.get('updated_at')
     if not updated:
-        print('false')
+        print('false 0')
     else:
         dt=datetime.datetime.fromisoformat(updated.replace('Z','+00:00'))
-        age=(datetime.datetime.now(datetime.timezone.utc)-dt).total_seconds()/60
-        print('true' if age > $STALE_MINUTES else 'false')
+        age_seconds=max(0.0, (datetime.datetime.now(datetime.timezone.utc)-dt).total_seconds())
+        stale='true' if (age_seconds / 60.0) > $STALE_MINUTES else 'false'
+        print(f"{stale} {age_seconds:.1f}")
 except Exception:
-    print('false')
+    print('false 0')
 PY
 )
-  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] active=$ACTIVE completed=$COMPLETED updated=$UPDATED stale=$STALE pid=${RUN_PID:-none}" >> "$LOG"
+  STALE=$(printf '%s' "$AGE_STATE" | awk '{print $1}')
+  AGE_SECONDS=$(printf '%s' "$AGE_STATE" | awk '{print $2}')
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] active=$ACTIVE completed=$COMPLETED updated=$UPDATED age_seconds=$AGE_SECONDS stale=$STALE pid=${RUN_PID:-none}" >> "$LOG"
 
   if [ "$ACTIVE" = "False" ] || [ "$ACTIVE" = "false" ]; then
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Run complete. Syncing R2..." >> "$LOG"
     break
   fi
 
-  if [ "$STALE" = "true" ] && [ -z "$RUN_PID" ]; then
-    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Detected stalled autorun (active=true but stale heartbeat and no launch-autorun pid). Marking run stalled and recovering..." >> "$LOG"
+  PID_MISSING_STALE=$(python3 - <<PY 2>/dev/null
+age=float('${AGE_SECONDS:-0}' or 0)
+print('true' if age > $PID_MISSING_GRACE_SECONDS else 'false')
+PY
+)
+
+  if [ -z "$RUN_PID" ] && { [ "$STALE" = "true" ] || [ "$PID_MISSING_STALE" = "true" ]; }; then
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Detected stalled autorun (active=true, no launch-autorun pid, age_seconds=$AGE_SECONDS). Marking run stalled and recovering..." >> "$LOG"
     python3 - <<PY >> "$LOG" 2>&1
 import json, datetime
 path='$JARVIS_DIR/autonomous_progress.json'
