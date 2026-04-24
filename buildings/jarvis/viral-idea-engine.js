@@ -75,7 +75,7 @@ function loadAllArtifacts() {
 function normalizeIndicatorMetadata(data) {
     if (!data || typeof data !== 'object') return data;
     const out = Object.assign({}, data);
-    if (!out.diversity_bucket && typeof out.family === 'string') out.diversity_bucket = out.family; // legacy metadata alias
+    if (!out.diversity_bucket && typeof out.family === 'string') out.diversity_bucket = out.family;
     return out;
 }
 
