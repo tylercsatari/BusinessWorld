@@ -1040,6 +1040,97 @@ const OBJECT_MOTIFS = [
         endpoint_kinds: ['exact_distance', 'build_test_outcome'],
         implied_material_words: [],
     },
+    // ── build/test formats (Tyler's dominant corpus format) ──────────
+    // Each motif is anchored to a specific top-performing source video
+    // so diversity_bucket is source-video-specific, not generic.
+    {
+        id: 'indestructible_build',
+        verb_past_phrase: 'Made',
+        verb_present_phrase: 'make',
+        noun_subject_phrase: 'INDESTRUCTIBLE armour',
+        title_premise_line: 'I Made INDESTRUCTIBLE {OBJECT} And Tested It Until Something Gave',
+        logline_action: 'build a piece of armour or gear from scratch in my workshop, then test it against escalating forces until the build either holds or visibly fails on camera',
+        concrete_kind: 'object',
+        scales: ['armour', 'shield', 'suit', 'shoes', 'helmet'],
+        body_parts: ['hands', 'arms', 'body', 'skin'],
+        body_part_phrase: 'hands',
+        sensation_words: ['painful', 'numb', 'bigger', 'feeling', 'curious'],
+        first_frame_action: 'the finished build on a workshop table surrounded by the test tools that will break it',
+        visual_action_short: 'hammers, drops, and crushing weights testing the build while the camera holds on every impact',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        diversity_bucket: 'video:aE9jKLck_cI',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'in my workshop with the finished build and test rig both visible',
+        endpoint_kinds: ['build_test_outcome', 'experiment_observation'],
+        implied_material_words: [],
+    },
+    {
+        id: 'bulletproof_build',
+        verb_past_phrase: 'Made',
+        verb_present_phrase: 'make',
+        noun_subject_phrase: 'BULLETPROOF armour',
+        title_premise_line: 'I Made BULLETPROOF {OBJECT} And Shot It To See What Happened',
+        logline_action: 'build a bulletproof version of a real object in my workshop, then take it to a ballistic range and shoot it with escalating rounds until the result is visually undeniable',
+        concrete_kind: 'object',
+        scales: ['armour', 'Batman armour', 'shield', 'helmet', 'vest'],
+        body_parts: ['hands', 'chest', 'arms', 'body'],
+        body_part_phrase: 'hands',
+        sensation_words: ['curious', 'painful', 'numb', 'feeling'],
+        first_frame_action: 'the finished bulletproof build on a ballistic range target rig with the impact camera already running',
+        visual_action_short: 'a projectile test hitting the target while the impact result is frozen on screen',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        diversity_bucket: 'video:YFNOSHumPZc',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'at an outdoor ballistic range with the target rig and impact camera both visible',
+        endpoint_kinds: ['build_test_outcome', 'experiment_observation'],
+        implied_material_words: [],
+    },
+    {
+        id: 'fireproof_build',
+        verb_past_phrase: 'Made',
+        verb_present_phrase: 'make',
+        noun_subject_phrase: 'FIREPROOF shield',
+        title_premise_line: 'I Made A FIREPROOF {OBJECT} And Set It On Fire To See What Happened',
+        logline_action: 'build a fireproof version of a real object in my workshop using heat-resistant materials, then expose it to escalating fire until the build holds or visibly fails on camera',
+        concrete_kind: 'object',
+        scales: ['shield', 'helmet', 'suit', 'Batman helmet', 'armour'],
+        body_parts: ['hands', 'arms', 'body', 'skin'],
+        body_part_phrase: 'hands',
+        sensation_words: ['curious', 'painful', 'feeling', 'numb', 'bigger'],
+        first_frame_action: 'the finished fireproof build on a test stand with a flamethrower visible in the background',
+        visual_action_short: 'flames hitting the build while the camera holds close on the material surface',
+        action_intensity: 'high',
+        safety_tier: 'safe',
+        diversity_bucket: 'video:FogW1ZnoUIw',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'in an open outdoor test area with fire safety kit visible',
+        endpoint_kinds: ['build_test_outcome', 'experiment_observation'],
+        implied_material_words: [],
+    },
+    {
+        id: 'costume_build',
+        verb_past_phrase: 'Built',
+        verb_present_phrase: 'build',
+        noun_subject_phrase: 'a superhero costume',
+        title_premise_line: 'I Built The Most {POWER_WORD} {CHARACTER} Costume Ever Made',
+        logline_action: 'design and build an elaborate costume from scratch in my workshop, test each component on camera, then wear the finished costume in a real public setting to see how people react',
+        concrete_kind: 'object',
+        scales: ['Halloween costume', 'Batman suit', 'Spider-Man suit', 'Iron Man suit', 'superhero costume'],
+        body_parts: ['hands', 'arms', 'shoulders', 'body'],
+        body_part_phrase: 'hands',
+        sensation_words: ['curious', 'feeling', 'bigger', 'painful', 'numb'],
+        first_frame_action: 'the finished costume on a workshop mannequin surrounded by build tools; I step into frame and put it on',
+        visual_action_short: 'the costume being assembled piece by piece with each component test-fitted on camera',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        diversity_bucket: 'video:TtRS6sjkZ4A',
+        preferred_hook_type: 'transformation',
+        setting_hint: 'in my workshop then out in a real public setting wearing the finished costume',
+        endpoint_kinds: ['build_test_outcome', 'transformation_reveal'],
+        implied_material_words: [],
+    },
     // ── body_transformation bucket ───────────────────────────────────
     {
         id: 'one_food_thirty_days',
@@ -1349,10 +1440,15 @@ function inferPremiseSpecFromVideo(video) {
     else if (/\bcoin\b/.test(t))                                    { obj_id = 'coin_edge_tower'; obj_source = 'title_keyword'; }
     else if (/cardboard.{0,10}boat|boat.{0,10}cardboard/.test(t))  { obj_id = 'cardboard_boat_row'; obj_source = 'title_keyword'; }
     else if (/2x4|wooden.{0,5}bike|bike.{0,5}wood/.test(t))        { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
-    else if (/\bindestructible\b|\bfireproof\b/.test(t))            { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
-    else if (/laser|bullet.?proof|bulletproof|\bshield\b|\barmor\b|\barmour\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
-    else if (/\bmaking\b.{0,20}\b(armour|armor|costume|suit|helmet)\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
-    else if (/\bsuperhero\b|\bspider.?man\b|\bbatman\b|\biron.?man\b|\bgoku\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    // Dedicated build/test motifs — route to specific motif by concept type
+    else if (/\bindestructible\b/.test(t))                             { obj_id = 'indestructible_build'; obj_source = 'title_keyword'; }
+    else if (/\bfireproof\b|fire.?proof/.test(t))                      { obj_id = 'fireproof_build'; obj_source = 'title_keyword'; }
+    else if (/bullet.?proof|bulletproof|stop a bullet/.test(t))        { obj_id = 'bulletproof_build'; obj_source = 'title_keyword'; }
+    else if (/\bcostume\b|halloween|\bsuperhero\b.*\b(build|built|made)\b|wanted to be a superhero/.test(t)) { obj_id = 'costume_build'; obj_source = 'title_keyword'; }
+    else if (/laser|\bshield\b|\barmor\b|\barmour\b/.test(t))          { obj_id = 'bulletproof_build'; obj_source = 'title_keyword'; }
+    else if (/\bmaking\b.{0,20}\b(armour|armor|suit|helmet)\b/.test(t)) { obj_id = 'indestructible_build'; obj_source = 'title_keyword'; }
+    else if (/\bspider.?man\b|\bbatman\b|\biron.?man\b/.test(t))        { obj_id = 'costume_build'; obj_source = 'title_keyword'; }
+    else if (/\bgoku\b|\bsuperhero\b/.test(t))                          { obj_id = 'costume_build'; obj_source = 'title_keyword'; }
     else if (/\bclimbing\b|\bclimb\b/.test(t))                     { obj_id = 'stair_climb_repeats'; obj_source = 'title_keyword'; }
     else if (/bodybuilder|became a bodybuilder|got called fat/.test(t)) { obj_id = 'pro_boxer_day'; obj_source = 'title_keyword'; }
     else if (/routine|training like|lived like|living.*insane/.test(t)) { obj_id = 'pro_boxer_day'; obj_source = 'title_keyword'; }
@@ -1375,7 +1471,7 @@ function inferPremiseSpecFromVideo(video) {
             transformation_reveal:  'one_food_thirty_days',
             experiment_observation: 'phoneless_fortnight',
             identity_dayend:        'pro_boxer_day',
-            build_test_outcome:     'cardboard_boat_row',
+            build_test_outcome:     'indestructible_build',
         };
         obj_id = ENDPOINT_OBJ_DEFAULTS[endpoint_id] || 'pushups_one_day';
         if (endpoint_source === 'signal_fallback') obj_source = 'signal_fallback';
@@ -3158,6 +3254,74 @@ function _deriveSourceVideoPremiseCraftedView(sourceVideo) {
             body_part_phrase: 'lungs',
             body_parts: ['lungs', 'chest', 'skin'],
             sensation_words: ['painful', 'numb', 'feeling'],
+        };
+    }
+
+    // ── Build/Test format rules for Tyler's highest-view corpus videos ──
+    // These fill in BEFORE the generic fallback so the blueprint content
+    // reflects the actual video concept (workshop build → escalating test)
+    // instead of the generic "unfolding while the camera holds on the consequence" filler.
+
+    if (/\bindestructible\b/.test(t)) {
+        const object = /armou?r/.test(t) ? 'armour' : /shoes?/.test(t) ? 'shoes' : /egg/.test(t) ? 'egg' : 'object';
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `build a piece of INDESTRUCTIBLE ${object} from scratch, layer the reinforcement until the build feels wrong to destroy, then test it against escalating forces on camera until it either holds or visibly fails`,
+            first_frame_action: `the finished INDESTRUCTIBLE ${object} on the workshop table with the test tools — hammers, weights, fire — arranged around it before the first impact`,
+            visual_action_short: `hammers and weights hitting the ${object} while the camera holds tight on every impact point and dent`,
+            setting_hint: `in my workshop with the finished ${object} and all test tools visible before the first hit`,
+            reveal_phrase: `the INDESTRUCTIBLE ${object} either survives every test or one specific hit visibly ends it, and the camera freezes on the real result`,
+            promise_tail: `the INDESTRUCTIBLE ${object} gets a visible verdict from the escalating test`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'arms', 'body'],
+            sensation_words: ['painful', 'numb', 'curious', 'feeling'],
+        };
+    }
+
+    if (/\bfireproof\b|fire.?proof|fire proof/.test(t)) {
+        const object = /shield/.test(t) ? 'shield' : /helmet/.test(t) ? 'helmet' : /suit/.test(t) ? 'suit' : 'build';
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `build a FIREPROOF ${object} from heat-resistant materials in my workshop, then expose it to escalating fire until the real failure point (or total survival) becomes impossible to dispute`,
+            first_frame_action: `the finished FIREPROOF ${object} on a test stand with a flamethrower visible in the background, both in the same frame before the first flame`,
+            visual_action_short: `flames hitting the ${object} surface while the camera holds close on the material — every blister, char mark, and smoke curl visible`,
+            setting_hint: `in an open outdoor test area with full fire kit visible and the ${object} centred on the test stand`,
+            reveal_phrase: `the fire either overwhelms the FIREPROOF ${object} on camera or the build holds through every escalating test, and the camera freezes on the frame that settles it`,
+            promise_tail: `the fire forces a visible verdict on the FIREPROOF ${object}`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'arms', 'skin'],
+            sensation_words: ['curious', 'painful', 'numb', 'feeling'],
+        };
+    }
+
+    if (/\bcostume\b|halloween costume/.test(t)) {
+        const character = /batman/i.test(t) ? 'Batman' : /spider.?man/i.test(t) ? 'Spider-Man' : /iron.?man/i.test(t) ? 'Iron Man' : 'the character';
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `design and build the most elaborate ${character} costume possible in my workshop, testing each component piece on camera, then wear the complete costume in a real public setting to capture the live reaction`,
+            first_frame_action: `the full completed costume on a workshop mannequin surrounded by the build tools, every piece locked in, before I step into frame and put it on`,
+            visual_action_short: `the costume being assembled and test-fitted piece by piece with each component's reaction captured in the same frame as the build`,
+            setting_hint: `in my workshop for the build, then out in a real public location wearing the finished costume for the reveal`,
+            reveal_phrase: `the completed costume lands in a real public setting and the camera holds on the first genuine reaction from someone who didn't know it was coming`,
+            promise_tail: `the finished costume meets a real public setting and the reaction lands`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'shoulders', 'body'],
+            sensation_words: ['curious', 'feeling', 'bigger', 'numb'],
+        };
+    }
+
+    if (/superhero/.test(t) && /build|built|made/.test(t)) {
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `build a real functional superhero-grade piece of gear from scratch, test every part that matters on camera, then wear or deploy it in a setting where the real world tests it`,
+            first_frame_action: `the finished superhero build on a workshop stand with me stepping into frame and suiting up before the first real-world test`,
+            visual_action_short: `the superhero gear in use — every functional test, stress point, and reaction captured in the same frame as the build`,
+            setting_hint: `in my workshop for the build phase, then in a real-world setting for the test and reveal`,
+            reveal_phrase: `the superhero gear either performs exactly as promised or one specific real-world moment reveals the gap, and the camera holds on it`,
+            promise_tail: `the superhero gear meets a real-world test and the camera holds on what happens`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'arms', 'body'],
+            sensation_words: ['curious', 'feeling', 'bigger', 'numb'],
         };
     }
 
@@ -5207,8 +5371,16 @@ function generateIdeas(brief, count = 5, artifacts = null) {
             : seedPath === 'synthetic_new_concept'
                 ? 0.20
                 : 0;
+        // Guaranteed top-view anchors bypass endpoint/bucket caps so all
+        // GUARANTEED_SLOTS always appear in the final output regardless of
+        // how many share the same endpoint (build_test_outcome dominates
+        // Tyler's corpus, so all 4 guaranteed slots often share it).
+        const svl = idea.synthesis_trace && idea.synthesis_trace.source_video_lineage;
+        const isGuaranteed = !!(svl && svl.source_selection_reason &&
+            svl.source_selection_reason.includes('guaranteed_top_views'));
         return {
             idea,
+            isGuaranteed,
             // Premise-lane axis for final ranking. Active seeds now write
             // only the source-video-led `diversity_bucket` field here.
             bucket: (idea.synthesis_trace && idea.synthesis_trace.diversity_bucket) || 'unknown',
@@ -5223,8 +5395,7 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         };
     });
     // build_test_outcome is Tyler's dominant proven format (~40% of top corpus
-    // by raw views). Cap raised to 3 so the top 3 build/test validated videos
-    // can surface alongside other concept types without cap starvation.
+    // by raw views). Guaranteed anchor ideas bypass this cap entirely.
     const perBucketCap = 2;
     const perEndCap = 3;
     const lambda = 0.35;
@@ -5243,8 +5414,13 @@ function generateIdeas(brief, count = 5, artifacts = null) {
         for (let i = 0; i < remaining.length; i++) {
             const c = remaining[i];
             let blocked = null;
-            if ((perBucket.get(c.bucket) || 0) >= perBucketCap) blocked = `diversity-bucket cap hit (${c.bucket}=${perBucketCap})`;
-            else if (c.endpoint_kind && (perEnd.get(c.endpoint_kind) || 0) >= perEndCap) blocked = `endpoint-kind cap hit (${c.endpoint_kind}=${perEndCap})`;
+            if (c.isGuaranteed) {
+                // Guaranteed top-view anchors are never blocked by caps
+            } else if ((perBucket.get(c.bucket) || 0) >= perBucketCap) {
+                blocked = `diversity-bucket cap hit (${c.bucket}=${perBucketCap})`;
+            } else if (c.endpoint_kind && (perEnd.get(c.endpoint_kind) || 0) >= perEndCap) {
+                blocked = `endpoint-kind cap hit (${c.endpoint_kind}=${perEndCap})`;
+            }
             let sim = 0;
             for (const p of ranked) {
                 let s = 0;
