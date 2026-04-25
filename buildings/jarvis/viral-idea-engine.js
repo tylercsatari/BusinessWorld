@@ -1388,19 +1388,30 @@ function inferPremiseSpecFromVideo(video) {
 // Every source-video assignment is inferred directly from the source video title,
 // but selection is done on the exact source video rows themselves, not a
 // surrogate abstraction-layer grouping.
+// MAX_LOG_VIEWS: log10(285M) ≈ 8.455 — used to normalise the view component
+// of the blended selection score so the corpus's top raw-view videos always
+// surface as primary anchors alongside high-retention-quality videos.
+const _MAX_LOG_VIEWS = Math.log10(285e6);
+
 function selectPrimarySourceVideos(dataset) {
     const scored = (dataset || []).filter(v => v.ytId).map(v => {
         const quality_score = round(
             (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
         );
+        // Blended score = quality_score × (1 + 0.6 × log_views_norm)
+        // This ensures 285M / 80M corpus outliers surface in the primary pool
+        // without discarding the retention-quality signal.
+        const log_views_norm = Math.log10(Math.max(v.views || 1, 1)) / _MAX_LOG_VIEWS;
+        const blended_score = round(quality_score * (1 + 0.6 * log_views_norm), 4);
         const spec = inferPremiseSpecFromVideo(v);
         return {
             spec: { ytId: v.ytId, ...spec },
             video: v,
             quality_score,
+            blended_score,
             source_selection_reason: `${spec.endpoint_source}:${spec.endpoint_id};${spec.obj_source}:${spec.obj_id}`,
         };
-    }).sort((a, b) => b.quality_score - a.quality_score);
+    }).sort((a, b) => b.blended_score - a.blended_score);
 
     const seenYtIds = new Set();
     return scored.filter(row => {
@@ -1459,8 +1470,42 @@ function buildVideoDerivedSeed(spec, video, quality_score, source_reason, ctx, r
 function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     const dataset = loadJsonSafe('signals-dataset.json');
     if (!dataset || !dataset.length) return [];
-    const primarySourceVideos = selectPrimarySourceVideos(dataset).slice(0, maxCount);
     const ctx = deriveMotifContext(brief, artifacts);
+
+    // Guaranteed viral-anchor slots: always include up to 2 of the corpus's
+    // top performers by raw views (>= 20M) so the biggest validated hits
+    // (285M indestructible, 80M bulletproof Batman, etc.) always anchor ideas
+    // regardless of their quality_score rank.
+    const GUARANTEED_VIEW_THRESHOLD = 20e6;
+    const GUARANTEED_SLOTS = 2;
+    const byViews = (dataset || [])
+        .filter(v => v.ytId && (v.views || 0) >= GUARANTEED_VIEW_THRESHOLD)
+        .sort((a, b) => (b.views || 0) - (a.views || 0));
+    const guaranteedRows = [];
+    const guaranteedYtIds = new Set();
+    for (const v of byViews) {
+        if (guaranteedYtIds.size >= GUARANTEED_SLOTS) break;
+        const spec = inferPremiseSpecFromVideo(v);
+        const obj = OBJECT_MOTIFS.find(m => m.id === spec.obj_id);
+        const endpoint = ENDPOINT_MOTIFS.find(e => e.id === spec.endpoint_id);
+        if (!obj || !endpoint) continue; // skip unresolvable motifs
+        const quality_score = round((v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3);
+        guaranteedRows.push({
+            spec: { ytId: v.ytId, ...spec },
+            video: v,
+            quality_score,
+            source_selection_reason: `guaranteed_top_views:${spec.endpoint_id};${spec.obj_source}:${spec.obj_id}`,
+        });
+        guaranteedYtIds.add(v.ytId);
+    }
+
+    // Fill remaining slots from blended-score ranked pool
+    const remaining = maxCount - guaranteedRows.length;
+    const blendedRows = selectPrimarySourceVideos(dataset)
+        .filter(row => !guaranteedYtIds.has(row.video.ytId))
+        .slice(0, remaining);
+
+    const primarySourceVideos = [...guaranteedRows, ...blendedRows];
     const seeds = [];
     for (const { spec, video, quality_score, source_selection_reason } of primarySourceVideos) {
         const seed = buildVideoDerivedSeed(spec, video, quality_score, source_selection_reason, ctx, seeds.length + 1, 'source_video_primary', 'primary');
@@ -1481,15 +1526,18 @@ function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYt
             const quality_score = round(
                 (v.z_score || 0) * (v.retention || 0) / 100 * (v.keep || 0) / 100, 3
             );
+            const log_views_norm = Math.log10(Math.max(v.views || 1, 1)) / _MAX_LOG_VIEWS;
+            const blended_score = round(quality_score * (1 + 0.6 * log_views_norm), 4);
             const spec = inferPremiseSpecFromVideo(v);
             return {
                 spec: { ytId: v.ytId, ...spec },
                 video: v,
                 quality_score,
+                blended_score,
                 source_selection_reason: `${spec.endpoint_source}:${spec.endpoint_id};${spec.obj_source}:${spec.obj_id}`,
             };
         })
-        .sort((a, b) => b.quality_score - a.quality_score)
+        .sort((a, b) => b.blended_score - a.blended_score)
         .slice(0, maxCount * 3);
 
     const seeds = [];
