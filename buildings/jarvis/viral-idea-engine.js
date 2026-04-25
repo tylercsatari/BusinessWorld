@@ -607,8 +607,7 @@ function compress(artifacts) {
             videos_in_pool: mechanisms && mechanisms.n_videos_pool,
             indicators_total: indicatorRegistry && indicatorRegistry.total,
             candidate_proposal_diversity_buckets: getCandidateProposalDiversityBuckets(candidateProposals).length,
-            // Active synthesis traces now use only source-video-led diversity_bucket naming.
-            synthesis_trace_primary_diversity_axis: 'diversity_bucket',
+            synthesis_trace_primary_diversity_axis: 'source_video_ytid',
             keep_rate_top_indicators_primary_evidence_type: 'wave7.progression_patterns',
             mechanism_indicator_links: mechanismIndicatorLinks && mechanismIndicatorLinks.n_links,
             retention_pattern_waves: retentionPatterns && retentionPatterns.analysis_waves,
@@ -725,7 +724,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a push-up from the top of the motion',
         action_intensity: 'high',
         safety_tier: 'safe',
-        diversity_bucket: 'endurance',
+        diversity_bucket: 'video:A1hNcdAUfy8',
         preferred_hook_type: 'mystery',
         setting_hint: 'in my garage',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -747,7 +746,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a plank held flat with a running timer',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'endurance',
+        diversity_bucket: 'video:0B4RW7hTluE',
         preferred_hook_type: 'mystery',
         setting_hint: 'on gym flooring with a timer overlay',
         endpoint_kinds: ['time_to_target', 'body_quit'],
@@ -769,7 +768,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'boots in motion with a mile-counter overlay',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'endurance',
+        diversity_bucket: 'video:vvLnmLTEh64',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a marked road',
         endpoint_kinds: ['exact_distance', 'body_quit'],
@@ -791,7 +790,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'running up a flight with foot-on-stair visible',
         action_intensity: 'high',
         safety_tier: 'safe',
-        diversity_bucket: 'endurance',
+        diversity_bucket: 'video:vvLnmLTEh64',
         preferred_hook_type: 'mystery',
         setting_hint: 'in a stairwell',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -813,7 +812,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'rope spinning with feet leaving the ground',
         action_intensity: 'high',
         safety_tier: 'safe',
-        diversity_bucket: 'endurance',
+        diversity_bucket: 'video:vvLnmLTEh64',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a driveway',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -835,7 +834,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'the bag carried step by step with a distance overlay',
         action_intensity: 'high',
         safety_tier: 'safe',
-        diversity_bucket: 'endurance',
+        diversity_bucket: 'video:ge3qqbgVzAo',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a long stretch of road',
         endpoint_kinds: ['exact_distance', 'body_quit'],
@@ -858,7 +857,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a book flipping with page checkmarks filling in',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'cognitive_feat',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a page tally on the wall',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -880,7 +879,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand writing with a stack of addressed envelopes growing',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'repetition_outreach',
+        diversity_bucket: 'video:0B4RW7hTluE',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk beside a stack of stamped envelopes',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -902,7 +901,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand drawing with a growing stack of finished portraits',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'repetition_outreach',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a busy sidewalk',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -924,7 +923,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'hands wrapping rubber bands around a ball',
         action_intensity: 'low',
         safety_tier: 'safe',
-        diversity_bucket: 'craft_patience',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a desk with a band counter and a ruler against the ball',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -946,7 +945,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'fingers folding paper and adding to a crane pile',
         action_intensity: 'low',
         safety_tier: 'safe',
-        diversity_bucket: 'craft_patience',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a growing pile of cranes',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -968,7 +967,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'hands sliding puzzle pieces with a completion-% overlay climbing',
         action_intensity: 'low',
         safety_tier: 'safe',
-        diversity_bucket: 'cognitive_feat',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a long puzzle table',
         endpoint_kinds: ['exact_count', 'time_to_target'],
@@ -990,7 +989,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a hand placing coins on a growing, tilting stack',
         action_intensity: 'low',
         safety_tier: 'safe',
-        diversity_bucket: 'craft_patience',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a table with a height ruler taped behind the tower',
         endpoint_kinds: ['exact_count', 'body_quit'],
@@ -1013,7 +1012,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'oars pulling as the cardboard boat slides out from the dock',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'build_test',
+        diversity_bucket: 'video:URrMQS-pm4E',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a calm shallow lake wearing a life vest',
         endpoint_kinds: ['exact_distance', 'build_test_outcome'],
@@ -1035,7 +1034,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'pedals turning on the wooden bike with a mile-counter overlay',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'build_test',
+        diversity_bucket: 'video:aE9jKLck_cI',
         preferred_hook_type: 'mystery',
         setting_hint: 'on a closed empty parking lot wearing a helmet',
         endpoint_kinds: ['exact_distance', 'build_test_outcome'],
@@ -1059,7 +1058,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a cut between identical morning weigh-ins and identical potato plates',
         action_intensity: 'low',
         safety_tier: 'safe',
-        diversity_bucket: 'body_transformation',
+        diversity_bucket: 'video:UmCT36lJy0c',
         preferred_hook_type: 'transformation',
         setting_hint: 'at the same kitchen counter every morning',
         endpoint_kinds: ['transformation_reveal', 'time_to_target'],
@@ -1082,7 +1081,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a cut between two runs at the same starting line on day 1 and day N',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'body_transformation',
+        diversity_bucket: 'video:Kw2f_ozAkqk',
         preferred_hook_type: 'transformation',
         setting_hint: 'on the exact same one-mile neighborhood loop',
         endpoint_kinds: ['transformation_reveal', 'time_to_target'],
@@ -1106,7 +1105,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'short encounters where I gesture and people react on camera',
         action_intensity: 'low',
         safety_tier: 'safe',
-        diversity_bucket: 'mystery_experiment',
+        diversity_bucket: 'video:ZqqOca_H99w',
         preferred_hook_type: 'mystery',
         setting_hint: 'in everyday errands around my neighborhood',
         endpoint_kinds: ['experiment_observation', 'time_to_target'],
@@ -1129,7 +1128,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'time-lapse of a day that used to be scrolling and is now something else',
         action_intensity: 'low',
         safety_tier: 'safe',
-        diversity_bucket: 'mystery_experiment',
+        diversity_bucket: 'video:ZqqOca_H99w',
         preferred_hook_type: 'mystery',
         setting_hint: 'at home, at work, and on public transit where the phone used to live',
         endpoint_kinds: ['experiment_observation', 'time_to_target'],
@@ -1153,7 +1152,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'matching his bag work beat for beat with both fighters in the shot',
         action_intensity: 'high',
         safety_tier: 'safe',
-        diversity_bucket: 'identity',
+        diversity_bucket: 'video:GuxoGIpWe_Y',
         preferred_hook_type: 'transformation',
         setting_hint: 'inside a pro fighter\u2019s actual gym',
         endpoint_kinds: ['identity_dayend', 'body_quit'],
@@ -1175,7 +1174,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'me stepping into gear next to the crew as the truck rolls out',
         action_intensity: 'high',
         safety_tier: 'safe',
-        diversity_bucket: 'identity',
+        diversity_bucket: 'video:GuxoGIpWe_Y',
         preferred_hook_type: 'mystery',
         setting_hint: 'inside an active firehouse with full crew consent',
         endpoint_kinds: ['identity_dayend', 'body_quit'],
@@ -1199,7 +1198,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'flashcards moving from an unknown-pile to a known-pile with a running tally',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'skill_dare',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'transformation',
         setting_hint: 'at a kitchen table with a native speaker sitting opposite me at dusk',
         endpoint_kinds: ['exact_count', 'experiment_observation'],
@@ -1222,7 +1221,7 @@ const OBJECT_MOTIFS = [
         visual_action_short: 'a first awkward note progressing into a full clean phrase by the end',
         action_intensity: 'medium',
         safety_tier: 'safe',
-        diversity_bucket: 'skill_dare',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
         preferred_hook_type: 'transformation',
         setting_hint: 'in a practice room, ending on a small stage in front of a real crowd',
         endpoint_kinds: ['identity_dayend', 'time_to_target'],
@@ -1350,7 +1349,15 @@ function inferPremiseSpecFromVideo(video) {
     else if (/\bcoin\b/.test(t))                                    { obj_id = 'coin_edge_tower'; obj_source = 'title_keyword'; }
     else if (/cardboard.{0,10}boat|boat.{0,10}cardboard/.test(t))  { obj_id = 'cardboard_boat_row'; obj_source = 'title_keyword'; }
     else if (/2x4|wooden.{0,5}bike|bike.{0,5}wood/.test(t))        { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
-    else if (/laser|bullet.?proof|bulletproof|\bshield\b|\barmor\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    else if (/\bindestructible\b|\bfireproof\b/.test(t))            { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    else if (/laser|bullet.?proof|bulletproof|\bshield\b|\barmor\b|\barmour\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    else if (/\bmaking\b.{0,20}\b(armour|armor|costume|suit|helmet)\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    else if (/\bsuperhero\b|\bspider.?man\b|\bbatman\b|\biron.?man\b|\bgoku\b/.test(t)) { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    else if (/\bclimbing\b|\bclimb\b/.test(t))                     { obj_id = 'stair_climb_repeats'; obj_source = 'title_keyword'; }
+    else if (/bodybuilder|became a bodybuilder|got called fat/.test(t)) { obj_id = 'pro_boxer_day'; obj_source = 'title_keyword'; }
+    else if (/routine|training like|lived like|living.*insane/.test(t)) { obj_id = 'pro_boxer_day'; obj_source = 'title_keyword'; }
+    else if (/\bwalking\b|\bwalked\b/.test(t))                      { obj_id = 'weighted_backpack_march'; obj_source = 'title_keyword'; }
+    else if (/\bstep[s]?\b.*\d{3,}|\d{3,}.*\bstep[s]?\b/.test(t)) { obj_id = 'weighted_backpack_march'; obj_source = 'title_keyword'; }
     else if (/only \w+ for \d+\s*days?|ate only|eating only/.test(t)) { obj_id = 'one_food_thirty_days'; obj_source = 'title_keyword'; }
     else if (/mile every day|ran every day|daily.{0,5}mile/.test(t)) { obj_id = 'daily_mile_one_year'; obj_source = 'title_keyword'; }
     else if (/\bsilent\b|didn'?t speak/.test(t))                    { obj_id = 'silent_seven_days'; obj_source = 'title_keyword'; }
@@ -3610,7 +3617,7 @@ function synthesizeSeeds(brief, artifacts, maxCount = 12) {
 function pickHooksForIdea(brief, pref = {}) {
     const picks = [];
     const byBucket = {};
-    for (const h of brief.hook_mechanisms) {
+    for (const h of (brief.hook_mechanisms || [])) {
         (byBucket[h.bucket] ||= []).push(h);
     }
     for (const b of Object.keys(byBucket)) {
