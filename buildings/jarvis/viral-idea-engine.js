@@ -3310,6 +3310,23 @@ function _deriveSourceVideoPremiseCraftedView(sourceVideo) {
     }
 
     // ── Physics/control experiment rules ──
+    if (/climbing with|climb with/.test(t)) {
+        const shoe = /magnet/i.test(rawTitle) ? 'magnet' : /gecko/i.test(rawTitle) ? 'gecko' : /suction/i.test(rawTitle) ? 'suction' : 'special';
+        const surface = /magnet/i.test(rawTitle) ? 'metal surfaces' : /gecko/i.test(rawTitle) ? 'walls and glass' : 'surfaces';
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `put on ${shoe} shoes and try to climb ${surface}, escalating to steeper and harder surfaces until the shoes either grip or visibly fail at the hardest test`,
+            first_frame_action: `the ${shoe} shoe sole pressed against the first surface before the first step — grip test zero on screen`,
+            visual_action_short: `each step up ${surface} with the grip connection and my body weight visible, escalating to steeper angles`,
+            setting_hint: `on ${surface} starting gentle and escalating to the hardest test the shoes might survive`,
+            reveal_phrase: `the ${shoe} shoes hit the exact surface or angle they cannot handle and the failure (or total success) lands on camera`,
+            promise_tail: `the ${shoe} shoes meet the surface or angle that settles what they can actually do`,
+            body_part_phrase: 'feet',
+            body_parts: ['feet', 'hands', 'arms', 'legs'],
+            sensation_words: ['curious', 'painful', 'numb', 'feeling'],
+        };
+    }
+
     if (/\b(walked?|walking)\b.{0,30}\bsteps?\b|\b\d{2,}[,.]?\d*[kK]?\s*steps?\b/.test(t)) {
         const stepsMatch = rawTitle.match(/(\d[\d,]*(?:[kK])?\s*steps?)/i);
         const steps = stepsMatch ? stepsMatch[1] : '50,000 steps';

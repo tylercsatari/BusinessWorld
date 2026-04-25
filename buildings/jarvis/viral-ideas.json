@@ -1,6 +1,6 @@
 {
   "brief_summary": {
-    "generated_at": "2026-04-25T11:15:01.758Z",
+    "generated_at": "2026-04-25T12:21:47.022Z",
     "engine_version": "v2",
     "source_sizes": {
       "findings_model_history": 8,
@@ -30381,5 +30381,5 @@
       }
     }
   ],
-  "generated_at": "2026-04-25T11:15:01.880Z"
+  "generated_at": "2026-04-25T12:21:47.141Z"
 }
