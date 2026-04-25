@@ -1,10 +1,10 @@
 {
   "active": false,
-  "run_id": "auto_20260425033538.",
+  "run_id": "auto_20260425034257.",
   "mode": "hybrid_auto",
-  "started_at": "2026-04-25T03:35:38.479Z",
-  "updated_at": "2026-04-25T03:35:50.724Z",
-  "finished_at": "2026-04-25T03:35:50.723Z",
+  "started_at": "2026-04-25T03:42:57.457Z",
+  "updated_at": "2026-04-25T03:43:09.379Z",
+  "finished_at": "2026-04-25T03:43:09.379Z",
   "requested_iterations": 3000,
   "attempted": 500,
   "completed": 0,
@@ -22,140 +22,140 @@
       "key": "tension_release_count_first_half_x_payoff_framing_count_hook",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.346Z"
+      "ts": "2026-04-25T03:43:07.033Z"
     },
     {
       "type": "failed",
       "key": "payoff_framing_count_hook_x_tension_release_count_first_half",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.346Z"
+      "ts": "2026-04-25T03:43:07.034Z"
     },
     {
       "type": "failed",
       "key": "tension_release_count_first_half_x_payoff_framing_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.346Z"
+      "ts": "2026-04-25T03:43:07.034Z"
     },
     {
       "type": "failed",
       "key": "payoff_framing_front_load_ratio_x_tension_release_count_first_half",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.346Z"
+      "ts": "2026-04-25T03:43:07.034Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_open_loop_count",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.347Z"
+      "ts": "2026-04-25T03:43:07.034Z"
     },
     {
       "type": "failed",
       "key": "open_loop_count_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.347Z"
+      "ts": "2026-04-25T03:43:07.034Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_dangling_question_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.347Z"
+      "ts": "2026-04-25T03:43:07.035Z"
     },
     {
       "type": "failed",
       "key": "dangling_question_ratio_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.347Z"
+      "ts": "2026-04-25T03:43:07.036Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_hook_payoff_gap",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.347Z"
+      "ts": "2026-04-25T03:43:07.036Z"
     },
     {
       "type": "failed",
       "key": "hook_payoff_gap_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.348Z"
+      "ts": "2026-04-25T03:43:07.037Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_reference_callback_count",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.349Z"
+      "ts": "2026-04-25T03:43:07.037Z"
     },
     {
       "type": "failed",
       "key": "reference_callback_count_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.349Z"
+      "ts": "2026-04-25T03:43:07.037Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_reference_callback_density",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.350Z"
+      "ts": "2026-04-25T03:43:07.038Z"
     },
     {
       "type": "failed",
       "key": "reference_callback_density_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.350Z"
+      "ts": "2026-04-25T03:43:07.038Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_reference_callback_front_load_ratio",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.350Z"
+      "ts": "2026-04-25T03:43:07.038Z"
     },
     {
       "type": "failed",
       "key": "reference_callback_front_load_ratio_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.350Z"
+      "ts": "2026-04-25T03:43:07.038Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_visual_credibility_count",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.350Z"
+      "ts": "2026-04-25T03:43:07.038Z"
     },
     {
       "type": "failed",
       "key": "visual_credibility_count_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.351Z"
+      "ts": "2026-04-25T03:43:07.039Z"
     },
     {
       "type": "failed",
       "key": "tension_release_position_pct_x_visual_credibility_density",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.351Z"
+      "ts": "2026-04-25T03:43:07.039Z"
     },
     {
       "type": "failed",
       "key": "visual_credibility_density_x_tension_release_position_pct",
       "reason": "processIndicator returned null",
       "layer": "post",
-      "ts": "2026-04-25T03:35:48.351Z"
+      "ts": "2026-04-25T03:43:07.039Z"
     }
   ],
   "pre_attempted": 224,
