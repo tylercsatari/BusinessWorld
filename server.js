@@ -3787,6 +3787,84 @@ Respond ONLY as valid JSON (no markdown):
     }
 
     // =========================================
+    // API: Jarvis Project Ideas
+    //   GET    /api/jarvis/project-ideas       — load { ideas, methodology }
+    //   POST   /api/jarvis/project-ideas       — append a new idea
+    //   DELETE /api/jarvis/project-ideas/:id   — remove idea by id
+    // =========================================
+    if (pathname === '/api/jarvis/project-ideas' && req.method === 'GET') {
+        const filePath = path.join(__dirname, 'buildings', 'jarvis', 'project-ideas.json');
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(content);
+        } catch {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'project-ideas.json not found' }));
+        }
+        return;
+    }
+    if (pathname === '/api/jarvis/project-ideas' && req.method === 'POST') {
+        const filePath = path.join(__dirname, 'buildings', 'jarvis', 'project-ideas.json');
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', () => {
+            try {
+                const incoming = JSON.parse(body || '{}');
+                const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                if (!Array.isArray(data.ideas)) data.ideas = [];
+                let maxNum = 0;
+                for (const it of data.ideas) {
+                    const m = /^idea_(\d+)$/.exec(String(it.id || ''));
+                    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+                }
+                const nextId = `idea_${String(maxNum + 1).padStart(3, '0')}`;
+                const novelty = Math.max(1, Math.min(10, parseInt(incoming.novelty_score, 10) || 5));
+                const idea = {
+                    id: nextId,
+                    title: String(incoming.title || '').trim() || '(untitled)',
+                    novelty_score: novelty,
+                    done_before: !!incoming.done_before,
+                    done_before_note: incoming.done_before_note || null,
+                    verdict: novelty >= 7 ? 'KEEP' : 'NEEDS_TWIST',
+                    improved_title: String(incoming.improved_title || incoming.title || '').trim(),
+                    improved_why: String(incoming.improved_why || '').trim(),
+                    thumbnail_hook: incoming.thumbnail_hook ? String(incoming.thumbnail_hook).trim() : null,
+                    ip_anchor: incoming.ip_anchor ? String(incoming.ip_anchor).trim() : null,
+                    category: String(incoming.category || 'gadget').trim(),
+                    tags: Array.isArray(incoming.tags) ? incoming.tags.map(String) : [],
+                    status: 'idea',
+                };
+                data.ideas.push(idea);
+                fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ ok: true, idea }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+    if (pathname.startsWith('/api/jarvis/project-ideas/') && req.method === 'DELETE') {
+        const id = decodeURIComponent(pathname.slice('/api/jarvis/project-ideas/'.length));
+        const filePath = path.join(__dirname, 'buildings', 'jarvis', 'project-ideas.json');
+        try {
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const before = Array.isArray(data.ideas) ? data.ideas.length : 0;
+            data.ideas = (data.ideas || []).filter(it => it.id !== id);
+            const removed = before - data.ideas.length;
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, removed }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Jarvis Indicator Registry
     // =========================================
     if (pathname === '/api/jarvis/indicators' && req.method === 'GET') {

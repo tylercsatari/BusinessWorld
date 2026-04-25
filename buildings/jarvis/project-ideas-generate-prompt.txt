@@ -1,0 +1,90 @@
+PROJECT IDEAS GENERATION PROMPT — Tyler Csatari YouTube Channel
+=================================================================
+
+Run with:
+  env -u ANTHROPIC_API_KEY claude --permission-mode bypassPermissions --print < project-ideas-generate-prompt.txt
+
+GOAL
+----
+Produce N (default 50) IP-anchored, buildable, testable, single-proof-moment
+project ideas for Tyler's YouTube channel. Each idea must be a JSON object
+matching the schema described under SCHEMA, and the full payload must drop
+straight into buildings/jarvis/project-ideas.json's `ideas` array.
+
+CORPUS-DERIVED INDICATORS (use as ranking weights)
+--------------------------------------------------
+- INDESTRUCTIBLE concept: avg 60.9M views (+668% lift, r ≈ 0.244)
+- MAKING / BUILD framing: avg 18.3M views (+131% lift, r ≈ 0.272)
+- MAGNETS concept: avg 38.1M views (+380% lift, r ≈ 0.210)
+- SUPERHERO build category: avg 25M views (+216% lift, r ≈ 0.159)
+- IP anchor + power word: r ≈ 0.20  (e.g. BULLETPROOF X / INDESTRUCTIBLE X)
+- Impersonal framing ("Making X" > "I made X"): r ≈ 0.257
+- Top objects (descending): armour > helmet > shoes > suit
+- Duration sweet spot: 46-60s viral; 15-30s death zone
+
+IP FORMULA
+----------
+Known IP anchor (Batman / Iron Man / Spider-Man / Wolverine / Thor /
+Captain America / Venom / Darth Vader / Predator / Mandalorian / Doctor
+Doom / Ant-Man / Sonic / Minecraft / Thanos / Deadpool / Robocop / Master
+Chief / Juggernaut / Ghost Rider / etc) + buildable physical object +
+wearable / protective + extreme visible test + single proof moment.
+
+NOVELTY CHECK (apply to every idea)
+-----------------------------------
+1. Has this been done on YouTube before?  Rate novelty 1-10.
+2. If novelty < 7, twist it with a specific change that makes it genuinely
+   new.  The twist must be:
+     • buildable
+     • testable on camera
+     • single visible proof moment
+     • IP-anchored if possible
+3. If a twist already lives in the maker's prior work, push further until
+   the proof-moment is undeniably unique.
+
+PROJECT PATTERNS THAT WORK
+--------------------------
+- INDESTRUCTIBLE / BULLETPROOF / FIREPROOF + wearable object
+- MAGNET + climb / float / deflect
+- IP character + build + extreme test
+- Material science + single visible proof
+- Known prop + untested canonical function
+
+THUMBNAIL FORMULA
+-----------------
+Single undeniable visual proof moment: object mid-action, consequence
+visible, no explanation needed.  When you can name a clear thumbnail moment,
+write it into `thumbnail_hook`.  When the proof is mostly verbal/temporal
+and lacks a clean still frame, set `thumbnail_hook` to null.
+
+SCHEMA (one object per idea — append to `ideas` array)
+------------------------------------------------------
+{
+  "id": "idea_NNN",                        // 3-digit zero-padded, increment from last
+  "title": "original idea name",           // the unimproved seed
+  "novelty_score": 1-10,                   // honest YouTube saturation rating
+  "done_before": true | false,
+  "done_before_note": "channel(s) that did it" | null,
+  "verdict": "KEEP" | "NEEDS_TWIST",       // KEEP if novelty >= 7 OR if twist nullifies prior work
+  "improved_title": "twisted/improved name",
+  "improved_why": "why the improved version is novel",
+  "thumbnail_hook": "single visible proof moment" | null,
+  "ip_anchor": "Batman" | ... | null,
+  "category": "armor" | "shoes" | "weapon" | "gadget" | "vehicle",
+  "tags": ["indestructible", "wearable", ...],
+  "status": "idea"
+}
+
+OUTPUT INSTRUCTIONS
+-------------------
+- Output ONLY a JSON array of new idea objects (no prose, no code fences).
+- Do NOT repeat ids that already exist in project-ideas.json.
+- Spread categories: aim for ~40% armor, ~25% gadget, ~15% weapon, ~10% shoes,
+  ~10% vehicle.
+- Spread IP anchors: never more than 4 ideas per single IP in one batch.
+- Every idea must clear the novelty check.  If you can't twist it into
+  something new, drop it — quality over count.
+
+REMINDER: the file currently lives at
+  buildings/jarvis/project-ideas.json
+The methodology block is canonical; only append to `ideas`.

@@ -111,6 +111,7 @@ const JarvisUI = (() => {
         { id: 'variables', label: 'Variables' },
         { id: 'mechanisms', label: 'Mechanisms' },
         { id: 'ideaModel', label: 'Idea Model' },
+        { id: 'projectIdeas', label: 'Project Ideas' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'knowledge', label: 'Knowledge' },
         { id: 'resolution', label: 'Resolution' },
@@ -210,6 +211,7 @@ const JarvisUI = (() => {
                 knowledgeSubTab = 'mechanisms';
                 return renderKnowledge();
             case 'ideaModel': return renderIdeaModel();
+            case 'projectIdeas': return renderProjectIdeas();
             case 'autoResearch': return renderAutoResearch();
             case 'knowledge': return renderKnowledge();
             case 'resolution': return renderResolution();
@@ -6258,6 +6260,346 @@ const JarvisUI = (() => {
             </div>`;
     }
 
+    // ══════════════════════════════════════════════════
+    // TAB: PROJECT IDEAS — IP-anchored video premises
+    // ══════════════════════════════════════════════════
+    let projectIdeasData = null;
+    let projectIdeasLoading = false;
+    let projectIdeasError = null;
+    let projectIdeasShowAddForm = false;
+    let projectIdeasShowMethodology = false;
+    let projectIdeasShowGenerate = false;
+
+    async function loadProjectIdeas(force = false) {
+        if (projectIdeasLoading) return;
+        if (!force && projectIdeasData) return;
+        projectIdeasLoading = true;
+        projectIdeasError = null;
+        refreshProjectIdeasRoot();
+        try {
+            const res = await fetch('/api/jarvis/project-ideas');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            projectIdeasData = await res.json();
+        } catch (e) {
+            projectIdeasError = e.message || String(e);
+        }
+        projectIdeasLoading = false;
+        refreshProjectIdeasRoot();
+    }
+
+    function refreshProjectIdeasRoot() {
+        const root = container?.querySelector('.jarvis-project-ideas-root');
+        if (!root) return;
+        root.innerHTML = renderProjectIdeasBody();
+        bindProjectIdeasEvents();
+    }
+
+    function renderProjectIdeas() {
+        if (!projectIdeasData && !projectIdeasLoading && !projectIdeasError) {
+            loadProjectIdeas();
+        }
+        setTimeout(bindProjectIdeasEvents, 30);
+        return `<div class="jarvis-project-ideas-root">${renderProjectIdeasBody()}</div>`;
+    }
+
+    function renderProjectIdeasBody() {
+        if (projectIdeasError && !projectIdeasData) {
+            return loadingBox('Failed to load project ideas: ' + projectIdeasError, true);
+        }
+        if (!projectIdeasData) {
+            return loadingBox('Loading project ideas…');
+        }
+        const { ideas = [], methodology = {} } = projectIdeasData;
+        const totalCount = ideas.length;
+        const keepCount = ideas.filter(i => i.verdict === 'KEEP').length;
+        const twistCount = ideas.filter(i => i.verdict === 'NEEDS_TWIST').length;
+        const hookCount = ideas.filter(i => i.thumbnail_hook).length;
+
+        const header = `
+            <div style="margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                <div>
+                    <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:3px">Project Ideas — IP-Anchored Video Premises</div>
+                    <div style="font-size:12px;color:#64748b;line-height:1.5;max-width:720px">${totalCount} ideas. Each twisted past prior maker work into a single visible proof moment. Click "Generation Methodology" to see exactly how these were generated, or run "Generate More Ideas" to extend the list.</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <button id="jarvis-pi-add-toggle" style="background:#0d1424;color:#22d3ee;border:1px solid #22d3ee;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">＋ Add Idea</button>
+                    <button id="jarvis-pi-generate-toggle" style="background:#0d1424;color:#fbbf24;border:1px solid #fbbf24;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer">🔄 Generate More Ideas</button>
+                </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+                <div style="background:#1e293b;border-radius:6px;padding:6px 12px;font-size:11px"><span style="color:#64748b">Total:</span> <span style="color:#f1f5f9;font-weight:700">${totalCount}</span></div>
+                <div style="background:#10b98122;border-radius:6px;padding:6px 12px;font-size:11px"><span style="color:#64748b">Keep:</span> <span style="color:#10b981;font-weight:700">${keepCount}</span></div>
+                <div style="background:#fbbf2422;border-radius:6px;padding:6px 12px;font-size:11px"><span style="color:#64748b">Needs Twist:</span> <span style="color:#fbbf24;font-weight:700">${twistCount}</span></div>
+                <div style="background:#a78bfa22;border-radius:6px;padding:6px 12px;font-size:11px"><span style="color:#64748b">Thumbnail Hooks:</span> <span style="color:#a78bfa;font-weight:700">${hookCount}</span></div>
+            </div>
+        `;
+
+        return header
+            + renderProjectIdeasAddForm()
+            + renderProjectIdeasGenerateBox(methodology)
+            + renderProjectIdeasHooks(ideas)
+            + renderProjectIdeasAll(ideas)
+            + renderProjectIdeasMethodology(methodology);
+    }
+
+    function renderProjectIdeasAddForm() {
+        if (!projectIdeasShowAddForm) return '';
+        return `
+            <div style="background:#0a1628;border:1px solid #22d3ee;border-radius:8px;padding:14px;margin-bottom:14px">
+                <div style="font-size:13px;font-weight:700;color:#22d3ee;margin-bottom:10px">＋ Add New Idea</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <input id="jarvis-pi-f-title" placeholder="Original title" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:11px"/>
+                    <input id="jarvis-pi-f-improved" placeholder="Improved title (twisted version)" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:11px"/>
+                    <input id="jarvis-pi-f-ip" placeholder="IP anchor (e.g. Batman)" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:11px"/>
+                    <select id="jarvis-pi-f-cat" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:11px">
+                        <option value="armor">armor</option>
+                        <option value="shoes">shoes</option>
+                        <option value="weapon">weapon</option>
+                        <option value="gadget" selected>gadget</option>
+                        <option value="vehicle">vehicle</option>
+                    </select>
+                    <select id="jarvis-pi-f-novelty" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:11px">
+                        ${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}"${n===5?' selected':''}>Novelty ${n}/10</option>`).join('')}
+                    </select>
+                    <input id="jarvis-pi-f-hook" placeholder="Thumbnail hook (optional)" style="background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:11px"/>
+                </div>
+                <textarea id="jarvis-pi-f-why" placeholder="Why the improved version is novel" rows="2" style="width:100%;background:#060d1a;color:#cbd5e1;border:1px solid #1e293b;border-radius:4px;padding:6px 10px;font-size:11px;resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
+                <div style="display:flex;gap:8px">
+                    <button id="jarvis-pi-submit" style="background:#22d3ee;color:#060d1a;border:none;border-radius:4px;padding:6px 14px;font-size:11px;cursor:pointer;font-weight:700">Save Idea</button>
+                    <button id="jarvis-pi-add-cancel" style="background:transparent;color:#64748b;border:1px solid #1e293b;border-radius:4px;padding:6px 14px;font-size:11px;cursor:pointer">Cancel</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderProjectIdeasGenerateBox(methodology) {
+        if (!projectIdeasShowGenerate) return '';
+        const cmd = methodology.generation_claude_command || 'env -u ANTHROPIC_API_KEY claude --permission-mode bypassPermissions --print';
+        const fullCmd = `${cmd} < buildings/jarvis/project-ideas-generate-prompt.txt`;
+        return `
+            <div style="background:#0a1628;border:1px solid #fbbf24;border-radius:8px;padding:14px;margin-bottom:14px">
+                <div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:8px">🔄 Generate More Ideas</div>
+                <div style="font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:10px">Run this command in your terminal at the project root. It pipes the saved prompt template (which contains the full corpus indicators, IP formula, novelty check, and JSON schema) into Claude Code, then outputs new idea objects you can append to project-ideas.json.</div>
+                <pre style="background:#060d1a;color:#22d3ee;padding:10px 12px;border-radius:4px;font-size:11px;font-family:monospace;overflow-x:auto;margin:0 0 10px;border:1px solid #1e293b">${escapeHtml(fullCmd)}</pre>
+                <div style="font-size:10px;color:#64748b;line-height:1.6">
+                    <div><b style="color:#94a3b8">Prompt template:</b> <code style="color:#22d3ee">buildings/jarvis/project-ideas-generate-prompt.txt</code></div>
+                    <div><b style="color:#94a3b8">Append target:</b> <code style="color:#22d3ee">buildings/jarvis/project-ideas.json</code> &middot; <code>ideas[]</code></div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderProjectIdeasHooks(ideas) {
+        const hooked = ideas.filter(i => i.thumbnail_hook);
+        if (!hooked.length) return '';
+        const cards = hooked.map(idea => `
+            <div style="background:#0a1628;border:2px solid #fbbf24;border-radius:8px;padding:14px">
+                <div style="font-size:14px;font-weight:700;color:#f1f5f9;line-height:1.35;margin-bottom:8px">${escapeHtml(idea.improved_title)}</div>
+                <div style="background:#1a1408;border-left:3px solid #fbbf24;padding:8px 10px;border-radius:0 4px 4px 0;margin-bottom:8px">
+                    <div style="font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#fbbf24;margin-bottom:3px">Thumbnail Hook</div>
+                    <div style="font-size:12px;color:#fde68a;line-height:1.4">${escapeHtml(idea.thumbnail_hook)}</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    ${idea.ip_anchor ? `<span style="background:#06b6d422;color:#22d3ee;border-radius:10px;padding:2px 8px;font-size:10px">${escapeHtml(idea.ip_anchor)}</span>` : ''}
+                    <span style="background:#1e293b;color:#94a3b8;border-radius:10px;padding:2px 8px;font-size:10px">${escapeHtml(idea.category)}</span>
+                </div>
+            </div>
+        `).join('');
+        return `
+            <div style="margin-bottom:18px">
+                <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#fbbf24;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+                    <span>★ Top Thumbnail Hooks</span>
+                    <span style="color:#64748b">(${hooked.length})</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
+                    ${cards}
+                </div>
+            </div>
+        `;
+    }
+
+    function noveltyColor(score) {
+        if (score >= 7) return '#10b981';
+        if (score >= 4) return '#fbbf24';
+        return '#ef4444';
+    }
+
+    function renderProjectIdeasAll(ideas) {
+        const cards = ideas.map(idea => {
+            const nColor = noveltyColor(idea.novelty_score);
+            const doneDot = idea.done_before
+                ? '<span title="done before" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444"></span>'
+                : '<span title="not done before" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981"></span>';
+            const doneLabel = idea.done_before
+                ? `<span style="font-size:9px;color:#94a3b8">done${idea.done_before_note ? ' · ' + escapeHtml(idea.done_before_note) : ''}</span>`
+                : `<span style="font-size:9px;color:#94a3b8">not done before</span>`;
+            return `
+                <div style="background:#0a1628;border:1px solid #1e293b;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                        <div style="font-size:13px;font-weight:700;color:#f1f5f9;line-height:1.35;flex:1">${escapeHtml(idea.improved_title)}</div>
+                        <button data-pi-delete="${escapeHtml(idea.id)}" title="Delete idea" style="background:transparent;color:#64748b;border:none;cursor:pointer;font-size:14px;line-height:1;padding:0 4px">×</button>
+                    </div>
+                    <div style="font-size:10px;color:#64748b;font-style:italic">Original: <span style="color:#94a3b8">${escapeHtml(idea.title)}</span></div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <span style="background:${nColor}22;color:${nColor};border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">Novelty ${idea.novelty_score}/10</span>
+                        ${idea.ip_anchor ? `<span style="background:#06b6d422;color:#22d3ee;border-radius:10px;padding:2px 8px;font-size:10px">${escapeHtml(idea.ip_anchor)}</span>` : ''}
+                        <span style="background:#1e293b;color:#94a3b8;border-radius:10px;padding:2px 8px;font-size:10px">${escapeHtml(idea.category)}</span>
+                        <span style="background:${idea.verdict === 'KEEP' ? '#10b98122' : '#fbbf2422'};color:${idea.verdict === 'KEEP' ? '#10b981' : '#fbbf24'};border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">${escapeHtml(idea.verdict)}</span>
+                        <span style="display:flex;align-items:center;gap:4px;margin-left:auto">${doneDot}${doneLabel}</span>
+                    </div>
+                    ${idea.improved_why ? `<div style="font-size:11px;color:#cbd5e1;line-height:1.5">${escapeHtml(idea.improved_why)}</div>` : ''}
+                    ${idea.thumbnail_hook ? `<div style="font-size:10px;color:#fbbf24;background:#1a1408;border-left:2px solid #fbbf24;padding:4px 8px;border-radius:0 4px 4px 0">★ ${escapeHtml(idea.thumbnail_hook)}</div>` : ''}
+                    ${(idea.tags && idea.tags.length) ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${idea.tags.map(t => `<span style="font-size:9px;color:#64748b;background:#1e293b;padding:1px 6px;border-radius:8px">#${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+                    <div style="font-size:9px;color:#475569;font-family:monospace">${escapeHtml(idea.id)}</div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div style="margin-bottom:18px">
+                <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px">All ${ideas.length} Ideas</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">
+                    ${cards}
+                </div>
+            </div>
+        `;
+    }
+
+    function renderProjectIdeasMethodology(methodology) {
+        const open = projectIdeasShowMethodology;
+        const indicators = (methodology.corpus_indicators_used || []).map(ind => `
+            <li style="margin-bottom:4px">
+                <code style="color:#22d3ee">${escapeHtml(ind.key)}</code>
+                ${ind.r != null ? `<span style="color:#a78bfa">· r=${ind.r}</span>` : ''}
+                <span style="color:#94a3b8"> — ${escapeHtml(ind.meaning)}</span>
+            </li>
+        `).join('');
+        const anchors = (methodology.top_ip_anchors || []).map(a =>
+            `<span style="background:#06b6d422;color:#22d3ee;border-radius:10px;padding:2px 8px;font-size:10px;display:inline-block;margin:2px">${escapeHtml(a)}</span>`
+        ).join('');
+        const patterns = (methodology.project_patterns || []).map(p =>
+            `<li style="margin-bottom:3px;color:#cbd5e1">${escapeHtml(p)}</li>`
+        ).join('');
+        const body = open ? `
+            <div style="padding:14px;background:#0a1628;border:1px solid #1e293b;border-top:none;border-radius:0 0 8px 8px;font-size:11px;color:#94a3b8;line-height:1.6">
+                <div style="margin-bottom:12px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Description</div>
+                    <div style="color:#cbd5e1">${escapeHtml(methodology.description || '')}</div>
+                </div>
+                <div style="margin-bottom:12px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">IP Formula</div>
+                    <div style="color:#cbd5e1;font-style:italic">${escapeHtml(methodology.ip_formula || '')}</div>
+                </div>
+                <div style="margin-bottom:12px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Thumbnail Formula</div>
+                    <div style="color:#cbd5e1">${escapeHtml(methodology.thumbnail_formula || '')}</div>
+                </div>
+                <div style="margin-bottom:12px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Novelty Check Prompt</div>
+                    <div style="background:#060d1a;border-radius:4px;padding:8px 10px;color:#cbd5e1;border-left:2px solid #22d3ee;white-space:pre-wrap">${escapeHtml(methodology.novelty_check_prompt || '')}</div>
+                </div>
+                <div style="margin-bottom:12px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Corpus Indicators Used</div>
+                    <ul style="margin:0;padding-left:18px">${indicators}</ul>
+                </div>
+                <div style="margin-bottom:12px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Project Patterns</div>
+                    <ul style="margin:0;padding-left:18px">${patterns}</ul>
+                </div>
+                <div style="margin-bottom:12px">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Top IP Anchors</div>
+                    <div>${anchors}</div>
+                </div>
+                <div style="margin-bottom:0">
+                    <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:4px">Generation Command</div>
+                    <pre style="background:#060d1a;color:#22d3ee;padding:8px 10px;border-radius:4px;font-size:11px;font-family:monospace;overflow-x:auto;margin:0;border:1px solid #1e293b">${escapeHtml(methodology.generation_claude_command || '')}</pre>
+                </div>
+            </div>
+        ` : '';
+        return `
+            <div style="margin-bottom:14px">
+                <button id="jarvis-pi-methodology-toggle" style="width:100%;background:#0a1628;color:#cbd5e1;border:1px solid #1e293b;border-radius:${open ? '8px 8px 0 0' : '8px'};padding:10px 14px;font-size:11px;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">
+                    <span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8">Generation Methodology &middot; v${escapeHtml(methodology.version || '1.0')}</span>
+                    <span style="color:#64748b">${open ? '▾' : '▸'}</span>
+                </button>
+                ${body}
+            </div>
+        `;
+    }
+
+    function bindProjectIdeasEvents() {
+        if (!container) return;
+        const addToggle = container.querySelector('#jarvis-pi-add-toggle');
+        if (addToggle) addToggle.onclick = () => {
+            projectIdeasShowAddForm = !projectIdeasShowAddForm;
+            refreshProjectIdeasRoot();
+        };
+        const addCancel = container.querySelector('#jarvis-pi-add-cancel');
+        if (addCancel) addCancel.onclick = () => {
+            projectIdeasShowAddForm = false;
+            refreshProjectIdeasRoot();
+        };
+        const generateToggle = container.querySelector('#jarvis-pi-generate-toggle');
+        if (generateToggle) generateToggle.onclick = () => {
+            projectIdeasShowGenerate = !projectIdeasShowGenerate;
+            refreshProjectIdeasRoot();
+        };
+        const methToggle = container.querySelector('#jarvis-pi-methodology-toggle');
+        if (methToggle) methToggle.onclick = () => {
+            projectIdeasShowMethodology = !projectIdeasShowMethodology;
+            refreshProjectIdeasRoot();
+        };
+        const submit = container.querySelector('#jarvis-pi-submit');
+        if (submit) submit.onclick = submitNewProjectIdea;
+        container.querySelectorAll('[data-pi-delete]').forEach(btn => {
+            btn.onclick = () => deleteProjectIdea(btn.getAttribute('data-pi-delete'));
+        });
+    }
+
+    async function submitNewProjectIdea() {
+        if (!container) return;
+        const get = id => (container.querySelector(id) || {}).value || '';
+        const payload = {
+            title: get('#jarvis-pi-f-title').trim(),
+            improved_title: get('#jarvis-pi-f-improved').trim(),
+            ip_anchor: get('#jarvis-pi-f-ip').trim() || null,
+            category: get('#jarvis-pi-f-cat'),
+            novelty_score: parseInt(get('#jarvis-pi-f-novelty'), 10) || 5,
+            improved_why: get('#jarvis-pi-f-why').trim(),
+            thumbnail_hook: get('#jarvis-pi-f-hook').trim() || null,
+        };
+        if (!payload.title && !payload.improved_title) {
+            alert('Need at least a title or improved_title.');
+            return;
+        }
+        try {
+            const res = await fetch('/api/jarvis/project-ideas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            projectIdeasShowAddForm = false;
+            await loadProjectIdeas(true);
+        } catch (e) {
+            alert('Failed to save idea: ' + e.message);
+        }
+    }
+
+    async function deleteProjectIdea(id) {
+        if (!id) return;
+        if (!confirm('Delete idea ' + id + '?')) return;
+        try {
+            const res = await fetch('/api/jarvis/project-ideas/' + encodeURIComponent(id), {
+                method: 'DELETE',
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            await loadProjectIdeas(true);
+        } catch (e) {
+            alert('Failed to delete idea: ' + e.message);
+        }
+    }
+
     function bindIdeaModelEvents() {
         const refreshBtn = container?.querySelector('#jarvis-idea-refresh');
         if (refreshBtn) {
@@ -6337,6 +6679,12 @@ const JarvisUI = (() => {
         ideaModelLoading = false;
         ideaModelError = null;
         ideaIdeasCount = 5;
+        projectIdeasData = null;
+        projectIdeasLoading = false;
+        projectIdeasError = null;
+        projectIdeasShowAddForm = false;
+        projectIdeasShowMethodology = false;
+        projectIdeasShowGenerate = false;
 
         render();
     }
