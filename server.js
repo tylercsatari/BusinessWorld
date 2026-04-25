@@ -70,6 +70,16 @@ function compactDerived(d) {
     return { ...rest, _datasetSize: Array.isArray(dataset) ? dataset.length : 0 };
 }
 
+// ── Viral-Idea Ideas Cache (Render OOM guard) ──────────────────────────
+// buildIdeas() loads the full Jarvis artifact set (~5MB) and runs idea
+// synthesis. On the 2GB Render dyno that spike, hit by parallel UI requests,
+// has crashed the process with 502s. We cache the last result per `count`
+// for VIRAL_IDEAS_TTL_MS and serialize concurrent requests for the same key
+// so only one generation runs at a time.
+const VIRAL_IDEAS_TTL_MS = 5 * 60 * 1000;
+const _viralIdeasCache = new Map(); // count -> { payload, ts }
+const _viralIdeasInFlight = new Map(); // count -> Promise<payload>
+
 // ── Jarvis Runner State (in-memory, survives across requests) ──────────
 const LOG_TAIL_MAX = 32 * 1024; // keep last 32 KB of output
 const _runner = {
@@ -3733,14 +3743,30 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
     if (pathname === '/api/jarvis/viral-idea-ideas' && req.method === 'GET') {
-        try {
-            const count = Math.max(1, Math.min(20, parseInt(url.searchParams.get('count') || '5', 10)));
-            const payload = viralIdeaEngine.buildIdeas(count);
-            sendJsonGz(req, res, payload);
-        } catch (e) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message }));
+        const count = Math.max(1, Math.min(20, parseInt(url.searchParams.get('count') || '5', 10)));
+        const force = url.searchParams.get('force') === '1';
+        const now = Date.now();
+        const cached = _viralIdeasCache.get(count);
+        if (!force && cached && (now - cached.ts) < VIRAL_IDEAS_TTL_MS) {
+            sendJsonGz(req, res, cached.payload);
+            return;
         }
+        let pending = _viralIdeasInFlight.get(count);
+        if (!pending) {
+            pending = (async () => {
+                // skipMechanisms drops mechanisms.json (~2.8MB) — its body is
+                // unused downstream; only two scalar counts come from it.
+                const payload = viralIdeaEngine.buildIdeas(count, { skipMechanisms: true });
+                _viralIdeasCache.set(count, { payload, ts: Date.now() });
+                return payload;
+            })().finally(() => { _viralIdeasInFlight.delete(count); });
+            _viralIdeasInFlight.set(count, pending);
+        }
+        pending.then(payload => sendJsonGz(req, res, payload))
+               .catch(e => {
+                   res.writeHead(500, { 'Content-Type': 'application/json' });
+                   res.end(JSON.stringify({ error: e.message }));
+               });
         return;
     }
 

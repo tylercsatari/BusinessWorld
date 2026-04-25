@@ -47,14 +47,19 @@ function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 // Loaders
 // ──────────────────────────────────────────────────────────────────────
 
-function loadAllArtifacts() {
+function loadAllArtifacts(opts = {}) {
+    // skipMechanisms: skip mechanisms.json (~2.8MB). Only its top-level
+    // n_mechanisms / n_videos_pool scalars are read by compress(); nothing
+    // downstream references the body. The ideas endpoint passes this on
+    // Render to keep the dyno under the 2GB memory cap.
+    const skipMechanisms = !!opts.skipMechanisms;
     return {
         findings: loadJsonSafe('findings-summary.json'),
         answers: loadJsonSafe('research_answers.json'),
         principles: loadJsonSafe('principles.json'),
         bridgeTop: loadJsonSafe('bridge_top_principles.json'),
         components: loadJsonSafe('components.json'),
-        mechanisms: loadJsonSafe('mechanisms.json'),
+        mechanisms: skipMechanisms ? null : loadJsonSafe('mechanisms.json'),
         questions: loadJsonSafe('research_questions.json'),
         retentionPatterns: loadJsonSafe('retention-patterns.json'),
         wordImpact: loadJsonSafe('word-retention-impact.json'),
@@ -5328,13 +5333,13 @@ function computeEvidenceSummary(idea) {
     };
 }
 
-function buildModel() {
-    const artifacts = loadAllArtifacts();
+function buildModel(opts = {}) {
+    const artifacts = loadAllArtifacts(opts);
     return { brief: compress(artifacts), artifacts };
 }
 
-function buildIdeas(count = 5) {
-    const { brief, artifacts } = buildModel();
+function buildIdeas(count = 5, opts = {}) {
+    const { brief, artifacts } = buildModel(opts);
     const ideas = generateIdeas(brief, count, artifacts);
     return { brief_summary: summarizeBrief(brief), ideas };
 }
