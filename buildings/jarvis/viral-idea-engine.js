@@ -1040,6 +1040,53 @@ const OBJECT_MOTIFS = [
         endpoint_kinds: ['exact_distance', 'build_test_outcome'],
         implied_material_words: [],
     },
+    // ── physics/control experiment format (Tyler's second largest cluster) ──
+    // Magnets, force tests, control experiments, mystery reveals.
+    // Anchored to top validated source videos in this cluster.
+    {
+        id: 'physics_experiment',
+        verb_past_phrase: 'Tested',
+        verb_present_phrase: 'test',
+        noun_subject_phrase: 'magnets',
+        title_premise_line: 'How Many {OBJECT} Does It Take To {OUTCOME}',
+        logline_action: 'keep escalating the test — more magnets, more force, more of the variable — and film every new result until the answer becomes impossible to fake or deny',
+        concrete_kind: 'count',
+        scales: ['10', '50', '100', '1000'],
+        body_parts: ['hands', 'arms', 'body', 'skin'],
+        body_part_phrase: 'hands',
+        sensation_words: ['curious', 'feeling', 'bigger', 'numb', 'painful'],
+        first_frame_action: 'the test apparatus already running with the measurement visible and the result not yet reached',
+        visual_action_short: 'the variable being added one increment at a time while the measurement climbs toward the threshold',
+        action_intensity: 'medium',
+        safety_tier: 'safe',
+        diversity_bucket: 'video:vwli8lumtSs',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'in my workshop with the test apparatus and live measurement both visible before the first increment',
+        endpoint_kinds: ['experiment_observation', 'build_test_outcome'],
+        implied_material_words: [],
+    },
+    {
+        id: 'control_experiment',
+        verb_past_phrase: 'Let',
+        verb_present_phrase: 'let',
+        noun_subject_phrase: 'a chinchilla',
+        title_premise_line: 'I Let {CONTROLLER} Control My {DOMAIN} For {D} To See What Would Happen',
+        logline_action: 'hand over real control of something in my life to an unlikely controller and keep filming every decision until the outcome becomes undeniable',
+        concrete_kind: 'duration',
+        scales: ['1 day', '24 hours', '1 week'],
+        body_parts: ['hands', 'face', 'body'],
+        body_part_phrase: 'hands',
+        sensation_words: ['curious', 'feeling', 'numb', 'bigger'],
+        first_frame_action: 'the controller and the thing being controlled in the same frame before the first decision lands',
+        visual_action_short: 'the controller making an unexpected choice and my real-time reaction in the same frame',
+        action_intensity: 'low',
+        safety_tier: 'safe',
+        diversity_bucket: 'video:RLOFobyQ9Aw',
+        preferred_hook_type: 'mystery',
+        setting_hint: 'in a real environment where the controller\'s decisions have visible consequences',
+        endpoint_kinds: ['experiment_observation', 'transformation_reveal'],
+        implied_material_words: [],
+    },
     // ── build/test formats (Tyler's dominant corpus format) ──────────
     // Each motif is anchored to a specific top-performing source video
     // so diversity_bucket is source-video-specific, not generic.
@@ -1440,6 +1487,10 @@ function inferPremiseSpecFromVideo(video) {
     else if (/\bcoin\b/.test(t))                                    { obj_id = 'coin_edge_tower'; obj_source = 'title_keyword'; }
     else if (/cardboard.{0,10}boat|boat.{0,10}cardboard/.test(t))  { obj_id = 'cardboard_boat_row'; obj_source = 'title_keyword'; }
     else if (/2x4|wooden.{0,5}bike|bike.{0,5}wood/.test(t))        { obj_id = 'two_by_four_bike'; obj_source = 'title_keyword'; }
+    // Physics/control experiment motifs
+    else if (/\bmagnets?\b|make me float|make me lift|how many.*take to/.test(t)) { obj_id = 'physics_experiment'; obj_source = 'title_keyword'; }
+    else if (/controlled by|control my|let.*control/.test(t))          { obj_id = 'control_experiment'; obj_source = 'title_keyword'; }
+    else if (/how much can this make|this make me/.test(t))             { obj_id = 'physics_experiment'; obj_source = 'title_keyword'; }
     // Dedicated build/test motifs — route to specific motif by concept type
     else if (/\bindestructible\b/.test(t))                             { obj_id = 'indestructible_build'; obj_source = 'title_keyword'; }
     else if (/\bfireproof\b|fire.?proof/.test(t))                      { obj_id = 'fireproof_build'; obj_source = 'title_keyword'; }
@@ -1573,10 +1624,11 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     // (285M indestructible, 80M bulletproof Batman, etc.) always anchor ideas
     // regardless of their quality_score rank.
     const GUARANTEED_VIEW_THRESHOLD = 20e6;
-    // 4 guaranteed slots to cover the corpus's top 4 raw-view performers
+    // 6 guaranteed slots: top 4 build/test giants + 2 experiment-format anchors
     // (285M indestructible, 80M bulletproof Batman, 75M Halloween costume,
-    //  62M fire proof shield) so each always anchors at least one idea.
-    const GUARANTEED_SLOTS = 4;
+    //  62M fire proof shield, 55M magnet shoes, 48M walked 50k steps) so each
+    // major format cluster always contributes at least one guaranteed idea.
+    const GUARANTEED_SLOTS = 6;
     const byViews = (dataset || [])
         .filter(v => v.ytId && (v.views || 0) >= GUARANTEED_VIEW_THRESHOLD)
         .sort((a, b) => (b.views || 0) - (a.views || 0));
@@ -1637,7 +1689,7 @@ function synthesizeValidatedVideoSeeds(brief, artifacts, maxCount = 8, excludeYt
             };
         })
         .sort((a, b) => b.blended_score - a.blended_score)
-        .slice(0, maxCount * 3);
+        .slice(0, maxCount * 4); // wider candidate window so rank-50-60 videos (e.g. 42M magnets-float) enter the pool
 
     const seeds = [];
     for (const row of candidates) {
@@ -3254,6 +3306,74 @@ function _deriveSourceVideoPremiseCraftedView(sourceVideo) {
             body_part_phrase: 'lungs',
             body_parts: ['lungs', 'chest', 'skin'],
             sensation_words: ['painful', 'numb', 'feeling'],
+        };
+    }
+
+    // ── Physics/control experiment rules ──
+    if (/\b(walked?|walking)\b.{0,30}\bsteps?\b|\b\d{2,}[,.]?\d*[kK]?\s*steps?\b/.test(t)) {
+        const stepsMatch = rawTitle.match(/(\d[\d,]*(?:[kK])?\s*steps?)/i);
+        const steps = stepsMatch ? stepsMatch[1] : '50,000 steps';
+        const reveal = /this happens|what happened/.test(t)
+            ? 'my body does the one thing I was most worried about'
+            : 'my feet force the moment that settles what this many steps actually does to a body';
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `walk ${steps} in a single push, narrating every kilometre marker and every physical change on camera until the one thing I was most worried about either happens or doesn't`,
+            first_frame_action: `the step counter at zero and my feet in motion inside the first second, both in the same frame`,
+            visual_action_short: `my stride on pavement while the step counter climbs and my body narrates each new milestone`,
+            setting_hint: `on a route long enough to hit ${steps} with a visible step counter and kilometre markers`,
+            reveal_phrase: `${reveal} with the step counter still running in frame`,
+            promise_tail: `${steps} produces the one moment I was most worried about`,
+            body_part_phrase: 'feet',
+            body_parts: ['feet', 'legs', 'skin', 'stomach'],
+            sensation_words: ['feet', 'painful', 'numb', 'feeling', 'skin'],
+        };
+    }
+
+    if (/magnet/.test(t) && /(float|lift|make me|how many)/.test(t)) {
+        const outcome = /float/.test(t) ? 'float' : /lift/.test(t) ? 'lift more' : 'change something measurable';
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `keep adding magnets one by one, measuring the effect on camera at each increment, until the force crosses the threshold and the result becomes impossible to fake`,
+            first_frame_action: `the magnet stack and the measurement display in the same frame before the first increment lands`,
+            visual_action_short: `each new magnet snapping onto the stack while the measurement climbs toward the threshold on screen`,
+            setting_hint: `in my workshop with the magnet rig and live measurement both visible before the first increment`,
+            reveal_phrase: `the magnet count crosses the exact threshold that makes me ${outcome}, and the measurement display and my reaction land in the same frame`,
+            promise_tail: `the magnets cross the threshold that makes me ${outcome}`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'arms', 'body'],
+            sensation_words: ['curious', 'feeling', 'bigger', 'numb'],
+        };
+    }
+
+    if (/controlled by/.test(t)) {
+        const controller = /chinchilla/.test(t) ? 'chinchilla' : t.match(/controlled by (a |an )?([\w]+)/)?.[2] || 'the controller';
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `hand over real control of my day to my ${controller} and film every decision it makes until the outcome becomes something I couldn't have predicted`,
+            first_frame_action: `my ${controller} and the thing it's about to control in the same frame before the first decision lands`,
+            visual_action_short: `my ${controller} making an unexpected choice while my real-time reaction lands in the same frame`,
+            setting_hint: `in a real environment where my ${controller}'s decisions have visible and immediate consequences`,
+            reveal_phrase: `my ${controller} makes the one decision that settles how the day ends, and the camera holds on whatever that produces`,
+            promise_tail: `my ${controller}'s final decision lands and the result is impossible to ignore`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'face', 'body'],
+            sensation_words: ['curious', 'feeling', 'numb', 'bigger'],
+        };
+    }
+
+    if (/how much can this make me lift|make me lift/.test(t)) {
+        return {
+            title_has_builtin_reveal: true,
+            logline_action: `test a piece of equipment or technology to see exactly how much it changes my lift on camera, escalating the test until the measurement gap becomes undeniable`,
+            first_frame_action: `the equipment and the weight I'm lifting in the same frame before the first measurement baseline is set`,
+            visual_action_short: `each new lift attempt with the measurement visible on screen as the number climbs above my baseline`,
+            setting_hint: `in the gym with the equipment and the measurement both visible before the first rep`,
+            reveal_phrase: `the equipment pushes my lift to a number I couldn't hit without it, and the measurement display and my reaction are in the same frame`,
+            promise_tail: `the equipment forces my lift number to a visible new ceiling`,
+            body_part_phrase: 'hands',
+            body_parts: ['hands', 'arms', 'body'],
+            sensation_words: ['curious', 'bigger', 'painful', 'numb'],
         };
     }
 
