@@ -95,6 +95,14 @@ async function run() {
             console.error(`  ✗ ${name}: ${e.message}`);
         }
     }
+    // Also refresh the viral-ideas R2 cache so the Render endpoints stay
+    // current with the latest experiments.
+    try {
+        const ideasSync = require('./sync-ideas-to-r2');
+        await ideasSync.run();
+    } catch (e) {
+        console.error('  ✗ viral-ideas refresh:', e.message);
+    }
     console.log('Sync complete.');
 }
 

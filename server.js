@@ -71,14 +71,31 @@ function compactDerived(d) {
 }
 
 // ── Viral-Idea Ideas Cache (Render OOM guard) ──────────────────────────
-// buildIdeas() loads the full Jarvis artifact set (~5MB) and runs idea
-// synthesis. On the 2GB Render dyno that spike, hit by parallel UI requests,
-// has crashed the process with 502s. We cache the last result per `count`
-// for VIRAL_IDEAS_TTL_MS and serialize concurrent requests for the same key
-// so only one generation runs at a time.
+// Render's 2GB dyno can't run buildIdeas() — it OOMs and 502s. Ideas are
+// pre-generated locally by buildings/jarvis/sync-ideas-to-r2.js and uploaded
+// to R2; these endpoints just serve the cached JSON. In-memory cache layer
+// avoids re-fetching R2 on every request. Local generation is kept as a
+// last-resort fallback (with a hard timeout) for when R2 is unreachable.
 const VIRAL_IDEAS_TTL_MS = 5 * 60 * 1000;
 const _viralIdeasCache = new Map(); // count -> { payload, ts }
 const _viralIdeasInFlight = new Map(); // count -> Promise<payload>
+const VIRAL_IDEAS_R2_KEY = 'jarvis/viral-ideas-cache.json';
+const VIRAL_MODEL_R2_KEY = 'jarvis/viral-model-cache.json';
+const VIRAL_R2_MEM_KEY_IDEAS = '__r2_ideas__';
+const VIRAL_R2_MEM_KEY_MODEL = '__r2_model__';
+const VIRAL_LOCAL_FALLBACK_MS = 500;
+const VIRAL_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
+let _viralRefreshLastRun = 0;
+let _viralRefreshActive = false;
+
+// Trim a cached ideas payload to the requested count. The R2 cache is built
+// at count=10 (the upper bound the UI ever asks for); smaller requests just
+// take a prefix of the array so we don't re-generate per-count.
+function _shapeIdeasPayload(payload, count) {
+    if (!payload || !Array.isArray(payload.ideas)) return payload;
+    if (payload.ideas.length <= count) return payload;
+    return { ...payload, ideas: payload.ideas.slice(0, count) };
+}
 
 // ── Jarvis Runner State (in-memory, survives across requests) ──────────
 const LOG_TAIL_MAX = 32 * 1024; // keep last 32 KB of output
@@ -3731,42 +3748,113 @@ Respond ONLY as valid JSON (no markdown):
     //   GET /api/jarvis/viral-idea-ideas?count=N — N evidence-backed ideas
     // =========================================
     if (pathname === '/api/jarvis/viral-idea-model' && req.method === 'GET') {
-        try {
-            const { brief } = viralIdeaEngine.buildModel();
-            const summaryOnly = url.searchParams.get('summary') === '1';
-            const payload = summaryOnly ? viralIdeaEngine.summarizeBrief(brief) : brief;
-            sendJsonGz(req, res, payload);
-        } catch (e) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message }));
+        const summaryOnly = url.searchParams.get('summary') === '1';
+        const memCached = _viralIdeasCache.get(VIRAL_R2_MEM_KEY_MODEL);
+        if (memCached && (Date.now() - memCached.ts) < VIRAL_IDEAS_TTL_MS) {
+            const brief = memCached.payload.brief || memCached.payload;
+            sendJsonGz(req, res, summaryOnly ? viralIdeaEngine.summarizeBrief(brief) : brief);
+            return;
         }
+        (async () => {
+            try {
+                if (cloud.isR2Ready()) {
+                    const buf = await cloud.downloadFromR2(VIRAL_MODEL_R2_KEY);
+                    if (buf) {
+                        const parsed = JSON.parse(buf.toString());
+                        _viralIdeasCache.set(VIRAL_R2_MEM_KEY_MODEL, { payload: parsed, ts: Date.now() });
+                        const brief = parsed.brief || parsed;
+                        sendJsonGz(req, res, summaryOnly ? viralIdeaEngine.summarizeBrief(brief) : brief);
+                        return;
+                    }
+                }
+                // Fallback: local gen with timeout (Render will likely fail this,
+                // but we try so dev/local still works without R2 priming).
+                const payload = await Promise.race([
+                    Promise.resolve().then(() => viralIdeaEngine.buildModel({ skipMechanisms: true })),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('local-gen-timeout')), VIRAL_LOCAL_FALLBACK_MS)),
+                ]);
+                const brief = payload.brief;
+                sendJsonGz(req, res, summaryOnly ? viralIdeaEngine.summarizeBrief(brief) : brief);
+            } catch (e) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'viral-model unavailable', detail: e.message }));
+            }
+        })();
         return;
     }
     if (pathname === '/api/jarvis/viral-idea-ideas' && req.method === 'GET') {
         const count = Math.max(1, Math.min(20, parseInt(url.searchParams.get('count') || '5', 10)));
         const force = url.searchParams.get('force') === '1';
-        const now = Date.now();
-        const cached = _viralIdeasCache.get(count);
-        if (!force && cached && (now - cached.ts) < VIRAL_IDEAS_TTL_MS) {
-            sendJsonGz(req, res, cached.payload);
+        const memCached = _viralIdeasCache.get(VIRAL_R2_MEM_KEY_IDEAS);
+        if (!force && memCached && (Date.now() - memCached.ts) < VIRAL_IDEAS_TTL_MS) {
+            sendJsonGz(req, res, _shapeIdeasPayload(memCached.payload, count));
             return;
         }
-        let pending = _viralIdeasInFlight.get(count);
+        let pending = _viralIdeasInFlight.get(VIRAL_R2_MEM_KEY_IDEAS);
         if (!pending) {
             pending = (async () => {
-                // skipMechanisms drops mechanisms.json (~2.8MB) — its body is
-                // unused downstream; only two scalar counts come from it.
-                const payload = viralIdeaEngine.buildIdeas(count, { skipMechanisms: true });
-                _viralIdeasCache.set(count, { payload, ts: Date.now() });
-                return payload;
-            })().finally(() => { _viralIdeasInFlight.delete(count); });
-            _viralIdeasInFlight.set(count, pending);
+                if (cloud.isR2Ready()) {
+                    try {
+                        const buf = await cloud.downloadFromR2(VIRAL_IDEAS_R2_KEY);
+                        if (buf) {
+                            const parsed = JSON.parse(buf.toString());
+                            _viralIdeasCache.set(VIRAL_R2_MEM_KEY_IDEAS, { payload: parsed, ts: Date.now() });
+                            return parsed;
+                        }
+                    } catch (e) {
+                        console.warn('viral-idea-ideas: R2 download failed:', e.message);
+                    }
+                }
+                // Fallback: local gen with timeout. On Render this will time out
+                // (and OOM-protect itself); locally it works fine.
+                return Promise.race([
+                    Promise.resolve().then(() => viralIdeaEngine.buildIdeas(count, { skipMechanisms: true })),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('local-gen-timeout')), VIRAL_LOCAL_FALLBACK_MS)),
+                ]);
+            })().finally(() => { _viralIdeasInFlight.delete(VIRAL_R2_MEM_KEY_IDEAS); });
+            _viralIdeasInFlight.set(VIRAL_R2_MEM_KEY_IDEAS, pending);
         }
-        pending.then(payload => sendJsonGz(req, res, payload))
+        pending.then(payload => sendJsonGz(req, res, _shapeIdeasPayload(payload, count)))
                .catch(e => {
-                   res.writeHead(500, { 'Content-Type': 'application/json' });
-                   res.end(JSON.stringify({ error: e.message }));
+                   res.writeHead(503, { 'Content-Type': 'application/json' });
+                   res.end(JSON.stringify({ error: 'viral-ideas unavailable', detail: e.message }));
                });
+        return;
+    }
+    if (pathname === '/api/jarvis/viral-ideas-refresh' && req.method === 'GET') {
+        const now = Date.now();
+        if (_viralRefreshActive) {
+            sendJsonGz(req, res, { status: 'refreshing', started_at_ms_ago: now - _viralRefreshLastRun });
+            return;
+        }
+        const sinceLast = now - _viralRefreshLastRun;
+        if (sinceLast < VIRAL_REFRESH_COOLDOWN_MS) {
+            sendJsonGz(req, res, { status: 'cooldown', retry_in_ms: VIRAL_REFRESH_COOLDOWN_MS - sinceLast });
+            return;
+        }
+        _viralRefreshActive = true;
+        _viralRefreshLastRun = now;
+        // Respond immediately, do work in background
+        sendJsonGz(req, res, { status: 'refreshing' });
+        (async () => {
+            try {
+                if (!cloud.isR2Ready()) throw new Error('R2 not ready');
+                const ideasPayload = viralIdeaEngine.buildIdeas(10, { skipMechanisms: true });
+                ideasPayload.generated_at = new Date().toISOString();
+                ideasPayload.cached_count = 10;
+                await cloud.uploadToR2(VIRAL_IDEAS_R2_KEY, Buffer.from(JSON.stringify(ideasPayload)), 'application/json');
+                const { brief } = viralIdeaEngine.buildModel({ skipMechanisms: true });
+                const modelPayload = { generated_at: new Date().toISOString(), brief };
+                await cloud.uploadToR2(VIRAL_MODEL_R2_KEY, Buffer.from(JSON.stringify(modelPayload)), 'application/json');
+                _viralIdeasCache.set(VIRAL_R2_MEM_KEY_IDEAS, { payload: ideasPayload, ts: Date.now() });
+                _viralIdeasCache.set(VIRAL_R2_MEM_KEY_MODEL, { payload: modelPayload, ts: Date.now() });
+                console.log('viral-ideas-refresh: uploaded to R2');
+            } catch (e) {
+                console.error('viral-ideas-refresh failed:', e.message);
+            } finally {
+                _viralRefreshActive = false;
+            }
+        })();
         return;
     }
 
