@@ -2615,6 +2615,13 @@ for (const k of [
     'zygarnik_open_loop_count_first_half', 'zygarnik_open_loop_density_first_half', 'zygarnik_open_loop_position_pct',
     'gratification_delay_phrase_count_first_half', 'gratification_delay_phrase_density_first_half', 'gratification_delay_phrase_position_pct',
     'story_stake_signal_count_first_half', 'story_stake_signal_density_first_half', 'story_stake_signal_position_pct',
+    // Group AJ-ext: early_commitment / deferred_reveal / open_loop density_first_half — present in candidate queue
+    // but missing from STATIC_KEYS; extractMetric dispatch via ZYGARNIK_FAMILIES/_zyExtRe handles computation
+    'early_commitment_count_first_half', 'early_commitment_density_first_half', 'early_commitment_position_pct',
+    'deferred_reveal_count_first_half', 'deferred_reveal_density_first_half', 'deferred_reveal_position_pct',
+    'open_loop_density_first_half',
+    // zygarnik composite first_half proxies (no specific half-extraction yet; fallback generic def triggers)
+    'zygarnik_score_first_half', 'zygarnik_buildup_ratio_first_half', 'zygarnik_completion_ratio_first_half',
     // retention_pct_N pattern variants (pattern-matched in getMetricDefinition when in STATIC_KEYS)
     'retention_pct_10', 'retention_pct_25', 'retention_pct_50',
 ]) {
@@ -7116,6 +7123,46 @@ function extractMetric(key, analysis) {
         const loops_closed = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.closure);
         const loops_opened = countPhraseMatches(tl, ZYGARNIK_PHRASE_SETS.open_loop);
         return [loops_closed / Math.max(loops_opened, 1), null];
+    }
+
+    // ── Group AJ-ext: zygarnik composite first-half variants ──
+    if (key === 'zygarnik_buildup_ratio_first_half') {
+        // Open-loop density in first quarter vs second quarter (both within first half)
+        if (!transcript) return [null, 'no transcript'];
+        const tl = transcript.toLowerCase();
+        const words = tl.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const q1End = Math.floor(words.length / 4);
+        const halfEnd = Math.floor(words.length / 2);
+        const q1 = words.slice(0, q1End).join(' ');
+        const q2 = words.slice(q1End, halfEnd).join(' ');
+        const d1 = countPhraseMatches(q1, ZYGARNIK_PHRASE_SETS.open_loop) / Math.max(q1End, 1);
+        const d2 = countPhraseMatches(q2, ZYGARNIK_PHRASE_SETS.open_loop) / Math.max(halfEnd - q1End, 1);
+        return [d1 / (d2 + 0.0001), null];
+    }
+
+    if (key === 'zygarnik_score_first_half') {
+        // zygarnik_score computed over first-half transcript only
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ').toLowerCase();
+        const openCount = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closureCount = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.closure);
+        const unresolved = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.unresolved_ref);
+        const wc = Math.floor(words.length / 2) || 1;
+        return [Math.min(10, (openCount - closureCount + unresolved) / wc * 1000), null];
+    }
+
+    if (key === 'zygarnik_completion_ratio_first_half') {
+        // Closure-to-open-loop ratio in first half only
+        if (!transcript) return [null, 'no transcript'];
+        const words = transcript.toLowerCase().split(/\s+/).filter(Boolean);
+        if (!words.length) return [null, 'empty transcript'];
+        const firstHalf = words.slice(0, Math.floor(words.length / 2)).join(' ');
+        const opened = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.open_loop);
+        const closed = countPhraseMatches(firstHalf, ZYGARNIK_PHRASE_SETS.closure);
+        return [closed / Math.max(opened, 1), null];
     }
 
     if (key === 'stakes_in_hook_flag') {
