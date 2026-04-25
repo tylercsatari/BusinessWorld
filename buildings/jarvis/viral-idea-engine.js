@@ -1477,7 +1477,10 @@ function synthesizeVideoPrototypeSeeds(brief, artifacts, maxCount = 4) {
     // (285M indestructible, 80M bulletproof Batman, etc.) always anchor ideas
     // regardless of their quality_score rank.
     const GUARANTEED_VIEW_THRESHOLD = 20e6;
-    const GUARANTEED_SLOTS = 2;
+    // 4 guaranteed slots to cover the corpus's top 4 raw-view performers
+    // (285M indestructible, 80M bulletproof Batman, 75M Halloween costume,
+    //  62M fire proof shield) so each always anchors at least one idea.
+    const GUARANTEED_SLOTS = 4;
     const byViews = (dataset || [])
         .filter(v => v.ytId && (v.views || 0) >= GUARANTEED_VIEW_THRESHOLD)
         .sort((a, b) => (b.views || 0) - (a.views || 0));
@@ -5219,8 +5222,11 @@ function generateIdeas(brief, count = 5, artifacts = null) {
             vpRankBonus,
         };
     });
+    // build_test_outcome is Tyler's dominant proven format (~40% of top corpus
+    // by raw views). Cap raised to 3 so the top 3 build/test validated videos
+    // can surface alongside other concept types without cap starvation.
     const perBucketCap = 2;
-    const perEndCap = 2;
+    const perEndCap = 3;
     const lambda = 0.35;
     const ranked = [];
     const remaining = scored.slice();
