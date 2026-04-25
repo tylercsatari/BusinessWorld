@@ -92,7 +92,7 @@ const StorageEmbeddings = (() => {
             catch (e) { console.warn('Pinecone delete failed (non-fatal):', e.message); }
         },
 
-        async findBestMatch(queryText, topK = 4) {
+        async findBestMatch(queryText, topK = 11) {
             const canonical = StorageCanonicalize.normalizeToSingular(queryText);
             const vector = await embedText(canonical);
             const matches = await pineconeQuery(vector, topK);
