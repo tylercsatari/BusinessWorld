@@ -505,6 +505,22 @@ async function autoRun(opts = {}) {
 
     let pool = merged.filter(k => !existingKeys.has(k));
 
+    // Filter out composites where either component doesn't exist in indicators.
+    // These always fail (compute returns null) and burn through consecutiveFailures budget.
+    const indicatorKeySet = new Set(indicators.map(i => i.key));
+    {
+        const before = pool.length;
+        pool = pool.filter(k => {
+            const parts = k.split('_x_');
+            if (parts.length !== 2) {
+                return !indicatorKeySet.has(k); // atomic already in indicators is already done
+            }
+            // composite — only keep if BOTH components exist in indicators
+            return indicatorKeySet.has(parts[0]) && indicatorKeySet.has(parts[1]);
+        });
+        log(`Pool after component-existence filter: ${pool.length} (removed ${before - pool.length} with missing/unknown components)`);
+    }
+
     // Filter out candidates whose component indicators are zero-variance or sparse.
     // Zero-variance: all values identical. Sparse: fewer than MIN_NONZERO_COUNT nonzero values.
     // Both trivially produce r=0 and waste iterations.
