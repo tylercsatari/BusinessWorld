@@ -4176,10 +4176,62 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
     if (pathname === '/api/jarvis/v2/graph' && req.method === 'GET') {
+        // Memory-efficient path: prefer prebuilt graph_compact.json (~7MB) over graph.json (~237MB).
+        // The full file's per-node `connections` arrays are full duplicates of node keys (~100MB
+        // of pure redundancy), and derived_edges has 438K rows the UI cannot render anyway.
+        // Loading graph.json into Node heap on a 2GB Render dyno OOMs the process.
         try {
-            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('graph');
-            const data = await jarvisStore.loadJson('graph', { nodes: [], edges: [], derived_edges: [] });
-            sendJsonGz(req, res, data);
+            const dir = path.join(__dirname, 'buildings', 'jarvis');
+            const compactPath = path.join(dir, 'graph_compact.json');
+            const fullPath = path.join(dir, 'graph.json');
+
+            if (fs.existsSync(compactPath)) {
+                const buf = fs.readFileSync(compactPath);
+                const accepts = (req.headers['accept-encoding'] || '');
+                if (accepts.includes('gzip')) {
+                    zlib.gzip(buf, (err, compressed) => {
+                        if (err) {
+                            res.writeHead(200, { 'Content-Type': 'application/json' });
+                            res.end(buf);
+                        } else {
+                            res.writeHead(200, {
+                                'Content-Type': 'application/json',
+                                'Content-Encoding': 'gzip',
+                                'Vary': 'Accept-Encoding',
+                            });
+                            res.end(compressed);
+                        }
+                    });
+                } else {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(buf);
+                }
+                return;
+            }
+
+            // Fallback: read full graph.json directly and strip on the fly. Still expensive,
+            // but better than nothing if the prebuilt compact file is missing.
+            const data = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+            const nodes = (data.nodes || []).map(({ connections, ...rest }) => rest);
+            const deLimit = parseInt(url.searchParams.get('de_limit') || '10000', 10);
+            const allDe = data.derived_edges || [];
+            const derived_edges = deLimit > 0
+                ? allDe
+                    .filter(de => de.interaction_r != null)
+                    .sort((a, b) => Math.abs(b.interaction_r) - Math.abs(a.interaction_r))
+                    .slice(0, deLimit)
+                : allDe;
+            sendJsonGz(req, res, {
+                nodes,
+                edges: data.edges || [],
+                derived_edges,
+                _meta: {
+                    total_derived_edges: allDe.length,
+                    returned_derived_edges: derived_edges.length,
+                    connections_stripped: true,
+                    fallback: true,
+                },
+            });
         } catch { sendJsonGz(req, res, { nodes: [], edges: [], derived_edges: [] }); }
         return;
     }
@@ -4407,11 +4459,26 @@ Respond ONLY as valid JSON (no markdown):
                     jarvisStore.loadCompactJson('experiments_log', []),
                     jarvisStore.loadCompactJson('derived_experiments', []),
                 ]);
+                // derived_experiments_compact.json is still ~85MB (no field projection
+                // is applied for this source). Slice to top 5K by |r| so the response
+                // payload and Node heap stay under control on the 2GB Render dyno.
+                const derivedTopK = parseInt(url.searchParams.get('derived_top') || '5000', 10);
+                const derivedTop = Array.isArray(derived)
+                    ? derived
+                        .filter(e => e && e.r != null)
+                        .sort((a, b) => Math.abs(b.r || 0) - Math.abs(a.r || 0))
+                        .slice(0, derivedTopK)
+                    : [];
                 const taggedAtomic = atomic.map(e => e.kind ? e : { ...e, kind: 'atomic' });
                 sendJsonGz(req, res, {
                     atomic: enrichAtomic(taggedAtomic),
-                    derived: enrichDerived(derived),
-                    count: { atomic: taggedAtomic.length, derived: derived.length, total: taggedAtomic.length + derived.length },
+                    derived: enrichDerived(derivedTop),
+                    count: {
+                        atomic: taggedAtomic.length,
+                        derived: derivedTop.length,
+                        derived_total: Array.isArray(derived) ? derived.length : 0,
+                        total: taggedAtomic.length + derivedTop.length,
+                    },
                 });
             }
         } catch (e) {
