@@ -6297,30 +6297,24 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
-    // TAB: Hook Model — linear neural net (240+ input nodes → log10(views))
+    // TAB: Hook Model — 3-layer linear network
+    //   pre-upload (text features)  →  post-upload (YT metrics)  →  log10(views)
     // ══════════════════════════════════════════════════
     let hookModelText = 'I built a piano that fires a real flame on every key I press';
     let hookModelWps = 4.4;
     let hookModelWindow = 10;
     let hookModelScore = null;
-    let hookModelNodes = null;
-    let hookModelMeta = null;
+    let hookModelData = null;        // /nodes-v2 response: pre_nodes, post_nodes, weights
     let hookModelLoading = false;
     let hookModelError = null;
-    let hookModelSelectedNode = null;
-    let hookModelTopN = 50;
+    let hookModelSelectedNode = null; // { layer: 'pre'|'post', key, ...meta }
 
     async function loadHookModelNodes() {
-        if (hookModelNodes) return;
+        if (hookModelData) return;
         try {
-            const resp = await fetch('/api/jarvis/hook-model/nodes');
+            const resp = await fetch('/api/jarvis/hook-model/nodes-v2');
             const data = await resp.json();
-            hookModelNodes = data.nodes || [];
-            hookModelMeta = {
-                bias: data.bias, log10_views_std: data.log10_views_std,
-                wps_default: data.wps_default, mode: data.mode,
-                trained_at: data.trained_at, training_n: data.training_n, cv_r2: data.cv_r2,
-            };
+            hookModelData = data;
             if (data.wps_default) hookModelWps = parseFloat(data.wps_default.toFixed(2));
         } catch (e) {
             hookModelError = e.message;
@@ -6332,7 +6326,7 @@ const JarvisUI = (() => {
         hookModelLoading = true;
         refreshHookModelRoot();
         try {
-            const resp = await fetch('/api/jarvis/hook-model/score', {
+            const resp = await fetch('/api/jarvis/hook-model/score-v2', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ hook: hookModelText, wps: hookModelWps }),
@@ -6354,7 +6348,7 @@ const JarvisUI = (() => {
     }
 
     function renderHookModel() {
-        if (!hookModelNodes && !hookModelLoading) {
+        if (!hookModelData && !hookModelLoading) {
             loadHookModelNodes().then(() => {
                 refreshHookModelRoot();
                 if (!hookModelScore) scoreHookModel();
@@ -6391,26 +6385,40 @@ const JarvisUI = (() => {
         }
     }
 
+    // ─── Tier colors (which time-window does each word/node belong to) ───
+    const HM_TIER_COLOR = {
+        1:  '#60a5fa',  // blue
+        3:  '#fbbf24',  // yellow
+        5:  '#fb923c',  // orange
+        10: '#f87171',  // red
+    };
+    const HM_TIER_BG = {
+        1:  'rgba(96, 165, 250, 0.18)',
+        3:  'rgba(251, 191, 36, 0.18)',
+        5:  'rgba(251, 146, 60, 0.18)',
+        10: 'rgba(248, 113, 113, 0.18)',
+    };
+
     function renderHookModelBody() {
-        if (hookModelError && !hookModelNodes) {
+        if (hookModelError && !hookModelData) {
             return `<div style="color:#f87171;padding:14px">Failed to load hook model: ${escapeHtml(hookModelError)}</div>`;
         }
-        if (!hookModelNodes) {
+        if (!hookModelData) {
             return `<div style="color:#64748b;padding:14px">Loading hook model nodes…</div>`;
         }
 
         const score = hookModelScore;
-        const meta = hookModelMeta || {};
-        const modeBadge = meta.mode === 'trained'
-            ? `<span style="background:#22c55e22;color:#22c55e;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">TRAINED CV R²=${meta.cv_r2 != null ? meta.cv_r2.toFixed(3) : '—'}</span>`
-            : `<span style="background:#fbbf2422;color:#fbbf24;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">R-VALUE PRIOR (run train.py to refine)</span>`;
+        const meta = hookModelData;
+        const modeBadge = meta.mode === 'measured'
+            ? `<span style="background:#22c55e22;color:#22c55e;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">MEASURED · n=${meta.training_n || 372}</span>`
+            : `<span style="background:#fbbf2422;color:#fbbf24;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">${escapeHtml(meta.mode || 'r-prior')}</span>`;
 
         const headerHtml = `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:14px;flex-wrap:wrap">
                 <div>
-                    <div style="font-size:18px;font-weight:700;color:#f1f5f9">Hook Model</div>
+                    <div style="font-size:18px;font-weight:700;color:#f1f5f9">Hook Model v2 — 3-Layer Network</div>
                     <div style="font-size:11px;color:#94a3b8;margin-top:3px">
-                        Linear network · ${hookModelNodes.length} input nodes → log10(views) · ${meta.training_n || 372} training videos
+                        ${meta.pre_nodes.length} pre-upload features → ${meta.post_nodes.length} post-upload metrics → log10(views)
                     </div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -6434,19 +6442,78 @@ const JarvisUI = (() => {
         `;
     }
 
+    // Build a colored, word-level rendering of the hook with phrase
+    // matches highlighted via underline, and per-word colored backgrounds
+    // showing which time window each word falls in at the current WPS.
+    function renderHighlightedHook(text, wps, matched) {
+        if (!text) return '<span style="color:#64748b">—</span>';
+        const dt = 1 / Math.max(wps || 4.4, 0.1);
+        const words = text.split(/(\s+)/);
+        const tokens = [];
+        let wordIdx = 0;
+        for (const tok of words) {
+            if (/^\s+$/.test(tok)) { tokens.push({ type: 'space', text: tok }); continue; }
+            if (!tok) continue;
+            const t = wordIdx * dt;
+            let tier = null;
+            if (t < 1) tier = 1;
+            else if (t < 3) tier = 3;
+            else if (t < 5) tier = 5;
+            else if (t < 10) tier = 10;
+            tokens.push({ type: 'word', text: tok, t, tier, idx: wordIdx });
+            wordIdx++;
+        }
+
+        // Mark which words are in matched phrases (any window)
+        const allMatches = new Set();
+        if (matched) for (const arr of Object.values(matched)) for (const m of (arr || [])) allMatches.add(m.toLowerCase());
+
+        const lower = text.toLowerCase();
+        const hitMask = new Array(tokens.length).fill(false);
+        // Find phrases
+        for (const phrase of allMatches) {
+            if (!phrase) continue;
+            let from = 0;
+            while (true) {
+                const at = lower.indexOf(phrase, from);
+                if (at < 0) break;
+                // Mark every word whose source position overlaps the phrase
+                let pos = 0;
+                for (let i = 0; i < tokens.length; i++) {
+                    const t = tokens[i];
+                    const start = pos;
+                    pos += t.text.length;
+                    if (t.type !== 'word') continue;
+                    if (start < at + phrase.length && pos > at) hitMask[i] = true;
+                }
+                from = at + Math.max(1, phrase.length);
+            }
+        }
+
+        let html = '';
+        let pos = 0;
+        for (let i = 0; i < tokens.length; i++) {
+            const tok = tokens[i];
+            if (tok.type === 'space') { html += escapeHtml(tok.text); continue; }
+            const tier = tok.tier;
+            const bg = tier ? HM_TIER_BG[tier] : 'transparent';
+            const border = tier ? HM_TIER_COLOR[tier] : '#1e293b';
+            const underline = hitMask[i] ? `border-bottom:2px solid #fbbf24;` : '';
+            const fontWeight = hitMask[i] ? 600 : 400;
+            html += `<span title="t=${tok.t.toFixed(2)}s · @${tier || '>10'}s window" style="background:${bg};color:#f1f5f9;padding:1px 3px;border-radius:3px;border-left:2px solid ${border};${underline}font-weight:${fontWeight}">${escapeHtml(tok.text)}</span>`;
+        }
+        return html;
+    }
+
     function renderHookScorerPanel(score) {
         const text = hookModelText;
         const matched = score && score.matched ? score.matched : {};
-        const allMatches = new Set();
-        for (const arr of Object.values(matched)) for (const m of (arr || [])) allMatches.add(m);
-        // Highlight matched phrases in the original hook
-        let highlighted = escapeHtml(text);
-        const sorted = Array.from(allMatches).sort((a, b) => b.length - a.length);
-        for (const phrase of sorted) {
-            if (!phrase) continue;
-            const re = new RegExp('(\\b)' + phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\b|\\s|$|[.,!?])', 'gi');
-            highlighted = highlighted.replace(re, (m) => `<mark style="background:#fbbf2433;color:#fbbf24;padding:0 2px;border-radius:2px">${m}</mark>`);
-        }
+        const highlighted = renderHighlightedHook(text, hookModelWps, matched);
+
+        // Word counts per window at current WPS
+        const wpsVal = hookModelWps;
+        const totalWords = (text || '').split(/\s+/).filter(Boolean).length;
+        const wordsAt = (sec) => Math.min(totalWords, Math.max(0, Math.round(sec * wpsVal)));
 
         const predBlock = score ? `
             <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;background:#0a1628;border-radius:6px;padding:10px 12px">
@@ -6464,127 +6531,222 @@ const JarvisUI = (() => {
                 </div>
             </div>` : '<div style="color:#64748b;padding:10px">Type a hook above and click Score…</div>';
 
-        const contrib = score ? renderContributionBars(score.contributions) : '';
+        const contrib = score ? renderContributionBars(score.pre_contributions, score.post_contributions) : '';
+
+        const wpsLegend = `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px;color:#cbd5e1">
+                ${[1, 3, 5, 10].map(w => `
+                    <span style="display:inline-flex;align-items:center;gap:5px">
+                        <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${HM_TIER_BG[w]};border-left:3px solid ${HM_TIER_COLOR[w]}"></span>
+                        <span style="color:#94a3b8">@${w}s</span>
+                        <span style="font-family:monospace;color:#f1f5f9">${wordsAt(w)} ${wordsAt(w) === 1 ? 'word' : 'words'}</span>
+                    </span>
+                `).join('')}
+            </div>`;
 
         return `
             <div style="background:#0f172a;border-radius:8px;padding:14px;margin-bottom:14px;border:1px solid #1e293b">
                 <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Hook Script</div>
-                <textarea id="jarvis-hm-text" style="width:100%;min-height:90px;background:#0a1628;color:#f1f5f9;border:1px solid #1e293b;border-radius:6px;padding:10px;font-family:inherit;font-size:13px;line-height:1.5;resize:vertical">${escapeHtml(text)}</textarea>
+                <textarea id="jarvis-hm-text" style="width:100%;min-height:80px;background:#0a1628;color:#f1f5f9;border:1px solid #1e293b;border-radius:6px;padding:10px;font-family:inherit;font-size:13px;line-height:1.5;resize:vertical;box-sizing:border-box">${escapeHtml(text)}</textarea>
 
-                <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:10px;margin-bottom:10px">
-                    <div style="display:flex;align-items:center;gap:8px">
+                <div style="background:#0a1628;border-radius:6px;padding:10px 12px;margin-top:10px;border:1px solid #1e293b">
+                    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
                         <label style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Speaking rate</label>
-                        <input type="range" id="jarvis-hm-wps" min="1" max="8" step="0.1" value="${hookModelWps}" style="width:120px">
-                        <span id="jarvis-hm-wps-val" style="font-size:12px;color:#cbd5e1;font-family:monospace">${hookModelWps.toFixed(1)} wps</span>
+                        <input type="range" id="jarvis-hm-wps" min="1.5" max="6" step="0.1" value="${hookModelWps}" style="flex:1;min-width:160px;max-width:240px">
+                        <span id="jarvis-hm-wps-val" style="font-size:13px;color:#22d3ee;font-family:monospace;font-weight:700">${hookModelWps.toFixed(1)} wps</span>
+                        <button id="jarvis-hm-score-btn" style="padding:6px 14px;background:#22d3ee;color:#0f172a;border:none;border-radius:4px;font-weight:700;font-size:12px;cursor:pointer">${hookModelLoading ? 'Scoring…' : 'Score'}</button>
                     </div>
-                    <div style="display:flex;gap:4px">
-                        ${[1, 3, 5, 10].map(w => `<button data-window="${w}" class="jarvis-hm-window-btn" style="padding:4px 10px;border-radius:4px;background:${hookModelWindow === w ? '#22d3ee' : '#1e293b'};color:${hookModelWindow === w ? '#0f172a' : '#cbd5e1'};border:none;font-size:11px;font-weight:600;cursor:pointer">@${w}s</button>`).join('')}
-                    </div>
-                    <button id="jarvis-hm-score-btn" style="padding:6px 16px;background:#22d3ee;color:#0f172a;border:none;border-radius:4px;font-weight:700;font-size:12px;cursor:pointer">${hookModelLoading ? 'Scoring…' : 'Score'}</button>
+                    <div id="jarvis-hm-wps-legend">${wpsLegend}</div>
                 </div>
 
-                <div style="background:#0a1628;border-radius:6px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#cbd5e1;line-height:1.6">
-                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Hook @${hookModelWindow}s preview</div>
-                    ${score && score.windows ? escapeHtml(score.windows[hookModelWindow] || '') : '—'}
-                </div>
-
-                <div style="background:#0a1628;border-radius:6px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#cbd5e1;line-height:1.7">
-                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Matched phrases</div>
+                <div style="background:#0a1628;border-radius:6px;padding:10px 12px;margin-top:10px;font-size:14px;color:#cbd5e1;line-height:2">
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Hook (colored by time window · underline = phrase match)</div>
                     ${highlighted}
                 </div>
 
-                ${predBlock}
+                <div style="display:flex;gap:4px;margin-top:10px;flex-wrap:wrap">
+                    ${[1, 3, 5, 10].map(w => `<button data-window="${w}" class="jarvis-hm-window-btn" style="padding:4px 10px;border-radius:4px;background:${hookModelWindow === w ? HM_TIER_COLOR[w] : '#1e293b'};color:${hookModelWindow === w ? '#0f172a' : '#cbd5e1'};border:none;font-size:11px;font-weight:600;cursor:pointer">@${w}s</button>`).join('')}
+                    <span style="font-size:10px;color:#64748b;align-self:center;margin-left:4px">selects active window for the graph</span>
+                </div>
+
+                <div style="margin-top:10px">${predBlock}</div>
                 ${contrib}
             </div>`;
     }
 
-    function renderContributionBars(contributions) {
-        if (!contributions || !contributions.length) return '';
-        const top = contributions.slice(0, 12);
-        const maxAbs = Math.max(...top.map(c => Math.abs(c.contribution)), 0.001);
-        const rows = top.map(c => {
-            const pct = (Math.abs(c.contribution) / maxAbs) * 100;
+    function renderContributionBars(preContribs, postContribs) {
+        if (!preContribs || !preContribs.length) return '';
+        const topPre = preContribs.slice(0, 10);
+        const maxPre = Math.max(...topPre.map(c => Math.abs(c.contribution)), 0.001);
+        const preRows = topPre.map(c => {
+            const pct = (Math.abs(c.contribution) / maxPre) * 100;
             const color = c.contribution >= 0 ? '#22d3ee' : '#f87171';
-            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;cursor:pointer" data-node-key="${escapeHtml(c.key)}">
-                <div style="flex:0 0 220px;font-size:11px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(humanizeFeatureKey(c.key))}</div>
-                <div style="flex:1;background:#0a1628;border-radius:3px;height:12px;position:relative;overflow:hidden">
+            const tier = HM_TIER_COLOR[c.window] || '#94a3b8';
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;cursor:pointer" data-pre-key="${escapeHtml(c.key)}">
+                <div style="flex:0 0 220px;font-size:11px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${tier};margin-right:6px"></span>${escapeHtml(humanizeFeatureKey(c.key))}
+                </div>
+                <div style="flex:1;background:#0a1628;border-radius:3px;height:11px;position:relative;overflow:hidden">
                     <div style="background:${color};height:100%;width:${pct.toFixed(1)}%"></div>
                 </div>
                 <div style="flex:0 0 80px;font-size:10px;font-family:monospace;color:${color};text-align:right">${c.contribution >= 0 ? '+' : ''}${c.contribution.toFixed(3)}</div>
             </div>`;
         }).join('');
-        return `<div style="margin-top:10px">
-            <div style="font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Top contributions to log10(views)</div>
-            ${rows}
+
+        const maxPost = Math.max(...(postContribs || []).map(c => Math.abs(c.contribution)), 0.001);
+        const postRows = (postContribs || []).map(c => {
+            const pct = (Math.abs(c.contribution) / maxPost) * 100;
+            const color = c.contribution >= 0 ? '#22d3ee' : '#f87171';
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;cursor:pointer" data-post-key="${escapeHtml(c.key)}">
+                <div style="flex:0 0 220px;font-size:11px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.label || c.key)}</div>
+                <div style="flex:1;background:#0a1628;border-radius:3px;height:11px;position:relative;overflow:hidden">
+                    <div style="background:${color};height:100%;width:${pct.toFixed(1)}%"></div>
+                </div>
+                <div style="flex:0 0 80px;font-size:10px;font-family:monospace;color:${color};text-align:right">${c.contribution >= 0 ? '+' : ''}${c.contribution.toFixed(3)}</div>
+            </div>`;
+        }).join('');
+
+        return `<div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div>
+                <div style="font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Top pre-upload contributions</div>
+                ${preRows}
+            </div>
+            <div>
+                <div style="font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Post-upload → views</div>
+                ${postRows}
+            </div>
         </div>`;
     }
 
     function renderHookModelGraph(score) {
-        if (!hookModelNodes || !hookModelNodes.length) return '';
-        const contribByKey = {};
-        if (score && score.contributions) for (const c of score.contributions) contribByKey[c.key] = c;
+        if (!hookModelData) return '';
+        const data = hookModelData;
+        const preNodes = data.pre_nodes || [];
+        const postNodes = data.post_nodes || [];
 
-        // Sort nodes by |weight|, take top N
-        const sorted = [...hookModelNodes].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
-        const topN = Math.min(hookModelTopN, sorted.length);
-        const nodes = sorted.slice(0, topN);
-        const maxW = Math.max(...nodes.map(n => Math.abs(n.weight)), 0.01);
-        const maxAct = Math.max(...nodes.map(n => Math.abs((contribByKey[n.key] || { contribution: 0 }).contribution)), 0.01);
+        // Filter pre nodes to those in the active window (or sized by activation
+        // in current window). Show all 12 indicators × 1 row each, and use
+        // current window as the row source.
+        const activeWin = hookModelWindow;
+        const indicatorKeys = [];
+        const seen = new Set();
+        for (const n of preNodes) { if (!seen.has(n.indicator_key)) { seen.add(n.indicator_key); indicatorKeys.push(n.indicator_key); } }
 
-        const W = 720, H = Math.max(360, topN * 14 + 60);
-        const inputX = 200;
-        const outputX = W - 90;
-        const yStart = 30;
-        const yStep = (H - 60) / Math.max(topN - 1, 1);
+        // Pre nodes shown: one per indicator, at active window
+        const preRow = indicatorKeys.map(ik => {
+            const fk = `${ik}_w${activeWin}`;
+            const node = preNodes.find(n => n.key === fk) || preNodes.find(n => n.indicator_key === ik);
+            const contrib = score && score.pre_contributions ? score.pre_contributions.find(c => c.key === fk) : null;
+            return { key: fk, node, contrib };
+        });
 
-        const edges = nodes.map((n, i) => {
-            const ny = yStart + i * yStep;
-            const widthW = Math.max(0.3, Math.abs(n.weight) / maxW * 3);
-            const w = n.weight;
-            const stroke = w >= 0 ? 'rgba(34, 211, 153, 0.4)' : 'rgba(248, 113, 113, 0.4)';
-            return `<line x1="${inputX}" y1="${ny}" x2="${outputX}" y2="${H/2}" stroke="${stroke}" stroke-width="${widthW}"/>`;
+        const W = 880, H = Math.max(420, preRow.length * 28 + 60);
+        const xPre = 40, xPost = W * 0.55, xView = W - 90;
+        const yStartPre = 40, yStepPre = (H - 80) / Math.max(preRow.length - 1, 1);
+        const yStartPost = 40, yStepPost = (H - 80) / Math.max(postNodes.length - 1, 1);
+
+        // Compute max abs contribution for sizing
+        const maxPreAbs = Math.max(...preRow.map(r => Math.abs((r.contrib || {}).contribution || 0)), 0.01);
+        const maxPostAbs = Math.max(...postNodes.map(p => {
+            const c = score && score.post_contributions ? score.post_contributions.find(x => x.key === p.key) : null;
+            return Math.abs((c || {}).contribution || 0);
+        }), 0.01);
+
+        // Edges pre→post: weight = pre_to_post_weights[post][pre_key]
+        const preToPost = data.pre_to_post_weights || {};
+        const maxEdgeW = Math.max(...postNodes.flatMap(p => Object.values(preToPost[p.key] || {}).map(Math.abs)), 0.01);
+        const edgesPP = [];
+        preRow.forEach((p, i) => {
+            const py = yStartPre + i * yStepPre;
+            postNodes.forEach((post, j) => {
+                const w = (preToPost[post.key] || {})[p.key] || 0;
+                if (Math.abs(w) < 0.05) return;  // hide near-zero edges
+                const qy = yStartPost + j * yStepPost;
+                const stroke = w >= 0 ? 'rgba(34, 211, 153,' : 'rgba(248, 113, 113,';
+                const a = 0.15 + 0.55 * (Math.abs(w) / maxEdgeW);
+                const sw = Math.max(0.4, Math.abs(w) / maxEdgeW * 2.8);
+                edgesPP.push(`<path d="M ${xPre + 14} ${py} C ${(xPre + xPost) / 2} ${py}, ${(xPre + xPost) / 2} ${qy}, ${xPost - 22} ${qy}" stroke="${stroke}${a.toFixed(3)})" stroke-width="${sw.toFixed(2)}" fill="none"/>`);
+            });
+        });
+
+        // Edges post→views
+        const postToViews = data.post_to_views_weights || {};
+        const maxPVAbs = Math.max(...Object.values(postToViews).map(Math.abs), 0.01);
+        const edgesPV = postNodes.map((post, j) => {
+            const qy = yStartPost + j * yStepPost;
+            const w = postToViews[post.key] || 0;
+            const stroke = w >= 0 ? 'rgba(34, 211, 153,' : 'rgba(248, 113, 113,';
+            const a = 0.25 + 0.55 * (Math.abs(w) / maxPVAbs);
+            const sw = Math.max(0.6, Math.abs(w) / maxPVAbs * 4);
+            return `<path d="M ${xPost + 22} ${qy} C ${(xPost + xView) / 2} ${qy}, ${(xPost + xView) / 2} ${H/2}, ${xView - 22} ${H/2}" stroke="${stroke}${a.toFixed(3)})" stroke-width="${sw.toFixed(2)}" fill="none"/>`;
         }).join('');
 
-        const circles = nodes.map((n, i) => {
-            const ny = yStart + i * yStep;
-            const c = contribByKey[n.key] || { contribution: 0, value: 0, zscore: 0 };
-            const r = 5 + Math.min(10, Math.abs(c.contribution) / maxAct * 8);
-            const fill = colorForActivation(c.contribution, maxAct);
-            return `<g class="jarvis-hm-node" data-node-key="${escapeHtml(n.key)}" style="cursor:pointer">
-                <circle cx="${inputX}" cy="${ny}" r="${r}" fill="${fill}" stroke="#0f172a" stroke-width="1"/>
-                <text x="${inputX - 12}" y="${ny + 3}" text-anchor="end" fill="#cbd5e1" style="font-size:9px;font-family:monospace">${escapeHtml(humanizeFeatureKey(n.key)).slice(0, 32)}</text>
-                <text x="${inputX + 12}" y="${ny + 3}" fill="#64748b" style="font-size:9px;font-family:monospace">${(n.weight >= 0 ? '+' : '') + n.weight.toFixed(2)}</text>
+        // Pre nodes
+        const preCircles = preRow.map((p, i) => {
+            const py = yStartPre + i * yStepPre;
+            const c = p.contrib || { contribution: 0, value: 0, zscore: 0 };
+            const r = 6 + Math.min(10, Math.abs(c.contribution || 0) / maxPreAbs * 8);
+            const fill = colorForActivation(c.contribution || 0, maxPreAbs);
+            const tier = HM_TIER_COLOR[activeWin] || '#94a3b8';
+            const label = (p.node && p.node.indicator_key) ? p.node.indicator_key.replace(/_/g, ' ') : p.key;
+            return `<g class="jarvis-hm-pre" data-pre-key="${escapeHtml(p.key)}" style="cursor:pointer">
+                <circle cx="${xPre + 14}" cy="${py}" r="${r.toFixed(1)}" fill="${fill}" stroke="${tier}" stroke-width="2"/>
+                <text x="${xPre + 30}" y="${py + 3}" fill="#cbd5e1" style="font-size:10px;font-family:monospace">${escapeHtml(label)}</text>
+                <text x="${xPre + 14}" y="${py - r - 4}" text-anchor="middle" fill="#64748b" style="font-size:8px;font-family:monospace">z=${(c.zscore || 0).toFixed(1)}</text>
+            </g>`;
+        }).join('');
+
+        // Post nodes
+        const postCircles = postNodes.map((post, j) => {
+            const qy = yStartPost + j * yStepPost;
+            const c = score && score.post_contributions ? score.post_contributions.find(x => x.key === post.key) : null;
+            const z = c ? c.zscore : 0;
+            const contrib = c ? c.contribution : 0;
+            const r = 14 + Math.min(12, Math.abs(contrib) / maxPostAbs * 10);
+            const fill = colorForActivation(contrib, maxPostAbs);
+            const isHookDrop = post.key === 'hook_drop_rate';
+            return `<g class="jarvis-hm-post" data-post-key="${escapeHtml(post.key)}" style="cursor:pointer">
+                <circle cx="${xPost}" cy="${qy}" r="${r.toFixed(1)}" fill="${fill}" stroke="#22d3ee" stroke-width="${isHookDrop ? 2.5 : 1.5}"/>
+                <text x="${xPost}" y="${qy + 3}" text-anchor="middle" fill="#0a1628" style="font-size:9px;font-weight:700">${escapeHtml(post.label || post.key)}</text>
+                <text x="${xPost}" y="${qy + r + 12}" text-anchor="middle" fill="#94a3b8" style="font-size:9px;font-family:monospace">z=${z.toFixed(2)} · r→v=${(post.r_with_views ?? 0).toFixed(2)}</text>
             </g>`;
         }).join('');
 
         const outNode = `
-            <circle cx="${outputX}" cy="${H/2}" r="22" fill="#22d3ee" stroke="#0f172a" stroke-width="2"/>
-            <text x="${outputX}" y="${H/2 + 4}" text-anchor="middle" fill="#0f172a" style="font-size:11px;font-weight:700">log10(v)</text>
-            ${score ? `<text x="${outputX}" y="${H/2 + 38}" text-anchor="middle" fill="#22d3ee" style="font-size:11px;font-family:monospace">${score.log10_views.toFixed(2)}</text>` : ''}
-            ${score ? `<text x="${outputX}" y="${H/2 + 52}" text-anchor="middle" fill="#94a3b8" style="font-size:10px">${fmtViewCount(score.predicted_views)} views</text>` : ''}
+            <circle cx="${xView}" cy="${H/2}" r="28" fill="#22d3ee" stroke="#0f172a" stroke-width="2"/>
+            <text x="${xView}" y="${H/2 - 2}" text-anchor="middle" fill="#0f172a" style="font-size:11px;font-weight:700">log10(v)</text>
+            ${score ? `<text x="${xView}" y="${H/2 + 12}" text-anchor="middle" fill="#0f172a" style="font-size:10px;font-family:monospace;font-weight:700">${score.log10_views.toFixed(2)}</text>` : ''}
+            ${score ? `<text x="${xView}" y="${H/2 + 48}" text-anchor="middle" fill="#22d3ee" style="font-size:11px;font-family:monospace;font-weight:700">${fmtViewCount(score.predicted_views)}</text>` : ''}
+            ${score ? `<text x="${xView}" y="${H/2 + 62}" text-anchor="middle" fill="#94a3b8" style="font-size:9px">predicted views</text>` : ''}
+        `;
+
+        const colHeaders = `
+            <text x="${xPre + 14}" y="20" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">Pre-upload @${activeWin}s</text>
+            <text x="${xPost}" y="20" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">Post-upload metrics</text>
+            <text x="${xView}" y="20" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">log10(views)</text>
         `;
 
         return `
             <div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:12px;margin-bottom:14px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b">Network Graph (top ${topN} by |weight|)</div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        <label style="font-size:10px;color:#64748b">Show top</label>
-                        <input type="range" id="jarvis-hm-topn" min="10" max="${hookModelNodes.length}" step="1" value="${hookModelTopN}" style="width:100px">
-                        <span style="font-size:11px;color:#cbd5e1;font-family:monospace">${hookModelTopN}</span>
-                    </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap">
+                    <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b">3-Layer Network · pre @${activeWin}s window</div>
+                    <div style="font-size:10px;color:#64748b">click any node for details</div>
                 </div>
-                <div style="overflow:auto;max-height:520px;background:#0a1628;border-radius:6px;border:1px solid #1e293b">
+                <div style="overflow:auto;max-height:560px;background:#0a1628;border-radius:6px;border:1px solid #1e293b">
                     <svg id="jarvis-hm-graph" width="${W}" height="${H}" style="display:block">
-                        ${edges}
-                        ${circles}
+                        ${colHeaders}
+                        ${edgesPP.join('')}
+                        ${edgesPV}
+                        ${preCircles}
+                        ${postCircles}
                         ${outNode}
                     </svg>
                 </div>
                 <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10px;color:#64748b;margin-top:6px">
-                    <span><span style="display:inline-block;width:10px;height:3px;background:rgba(34,211,153,0.6);vertical-align:middle"></span> positive r (more = more views)</span>
-                    <span><span style="display:inline-block;width:10px;height:3px;background:rgba(248,113,113,0.6);vertical-align:middle"></span> negative r (more = fewer views)</span>
-                    <span>Node size = |contribution to this hook|</span>
+                    <span><span style="display:inline-block;width:10px;height:3px;background:rgba(34,211,153,0.6);vertical-align:middle"></span> positive correlation</span>
+                    <span><span style="display:inline-block;width:10px;height:3px;background:rgba(248,113,113,0.6);vertical-align:middle"></span> negative correlation</span>
+                    <span>Edge width = |r|</span>
+                    <span>Node size = |contribution to views|</span>
                 </div>
             </div>`;
     }
@@ -6593,90 +6755,96 @@ const JarvisUI = (() => {
         if (!hookModelSelectedNode) {
             return `<div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:12px;color:#64748b;font-size:12px">
                 <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Node Detail</div>
-                Click any node in the graph or contribution bar to see the indicator's full backstory: r-value vs Jarvis, current value for this hook, matched phrases, and which window it operates on.
+                Click any pre-upload (left) or post-upload (middle) node to see what it measures, the exact phrase list it matches, its r-value with views, and how it composes through the network for this hook.
             </div>`;
         }
-        const n = hookModelSelectedNode;
-        const score = hookModelScore;
-        const c = (score && score.contributions || []).find(x => x.key === n.key) || null;
-        const baseInd = (hookModelNodes || []).find(x => x.indicator_key === n.indicator_key) || {};
-        const r = n.r_value != null ? n.r_value : baseInd.r_value;
-        const w = n.weight != null ? n.weight : baseInd.weight;
-        const stat = (score && score.contributions || []).find(x => x.key === n.key);
+        if (hookModelSelectedNode.layer === 'post') return renderPostNodePanel(hookModelSelectedNode);
+        return renderPreNodePanel(hookModelSelectedNode);
+    }
 
-        const matchedList = (c && c.matched && c.matched.length)
-            ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:3px">
-                ${c.matched.slice(0, 30).map(m => `<code style="background:#1e293b;color:#fbbf24;padding:1px 5px;border-radius:3px;font-size:10px">${escapeHtml(m)}</code>`).join('')}
-              </div>`
-            : '<div style="color:#64748b;font-size:11px;margin-top:4px">No matches in this window</div>';
+    function renderPreNodePanel(n) {
+        const data = hookModelData;
+        const score = hookModelScore;
+        const preDetail = score && score.pre_detail ? score.pre_detail[n.key] : null;
+        const preContribObj = score && score.pre_contributions ? score.pre_contributions.find(c => c.key === n.key) : null;
+        const matched = preDetail ? preDetail.matched : (n.matched || []);
+        const value = preDetail ? preDetail.value : null;
+        const z = preDetail ? preDetail.zscore : null;
 
         const wordList = n.wordList && Array.isArray(n.wordList) && n.wordList.length
-            ? `<div style="margin-top:8px"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Watch list (full vocab)</div><div style="display:flex;flex-wrap:wrap;gap:3px">${n.wordList.map(p => `<code style="background:#0a1628;color:#94a3b8;padding:1px 4px;border-radius:3px;font-size:9px">${escapeHtml(p)}</code>`).join('')}</div></div>`
-            : '';
+            ? `<div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Watch list (full vocab — ${n.wordList.length} ${n.wordList.length === 1 ? 'phrase' : 'phrases'})</div><div style="display:flex;flex-wrap:wrap;gap:3px;max-height:180px;overflow:auto">${n.wordList.map(p => {
+                const isMatched = matched.some(m => m.toLowerCase() === p.toLowerCase());
+                return `<code style="background:${isMatched ? '#fbbf2433' : '#0a1628'};color:${isMatched ? '#fbbf24' : '#94a3b8'};padding:1px 5px;border-radius:3px;font-size:10px;border:1px solid ${isMatched ? '#fbbf24' : '#1e293b'}">${escapeHtml(p)}</code>`;
+            }).join('')}</div></div>`
+            : '<div style="color:#64748b;font-size:11px">No fixed phrase list (computed from text statistics).</div>';
 
-        // Window breakdown — same indicator across all 4 windows
+        const matchedBlock = matched.length
+            ? `<div style="margin-top:8px"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Matched in this hook @${n.window}s</div>
+                <div style="display:flex;flex-wrap:wrap;gap:3px">${matched.slice(0, 30).map(m => `<code style="background:#fbbf2422;color:#fbbf24;padding:1px 5px;border-radius:3px;font-size:10px">${escapeHtml(m)}</code>`).join('')}</div></div>`
+            : '<div style="margin-top:6px;color:#64748b;font-size:11px">No matches in this window.</div>';
+
+        // Window breakdown — value at each window
         const windowRows = [1, 3, 5, 10].map(win => {
             const fk = `${n.indicator_key}_w${win}`;
-            const sc = (score && score.contributions || []).find(x => x.key === fk);
-            const v = sc ? sc.value : null;
-            const z = sc ? sc.zscore : null;
-            const cb = sc ? sc.contribution : null;
+            const sd = score && score.pre_detail ? score.pre_detail[fk] : null;
+            const sc = score && score.pre_contributions ? score.pre_contributions.find(c => c.key === fk) : null;
             const isCurrent = win === n.window;
+            const v = sd ? sd.value : null;
+            const zz = sd ? sd.zscore : null;
+            const cb = sc ? sc.contribution : null;
+            const tier = HM_TIER_COLOR[win];
             return `<tr style="${isCurrent ? 'background:#0a1628' : ''}">
-                <td style="padding:3px 8px;font-size:11px;color:${isCurrent ? '#22d3ee' : '#cbd5e1'};font-weight:${isCurrent ? '700' : '400'}">@${win}s</td>
+                <td style="padding:3px 8px;font-size:11px;color:${isCurrent ? tier : '#cbd5e1'};font-weight:${isCurrent ? '700' : '400'}">@${win}s</td>
                 <td style="padding:3px 8px;font-size:11px;color:#cbd5e1;font-family:monospace;text-align:right">${v != null ? (Number.isInteger(v) ? v : v.toFixed(3)) : '—'}</td>
-                <td style="padding:3px 8px;font-size:11px;color:#94a3b8;font-family:monospace;text-align:right">${z != null ? z.toFixed(2) : '—'}</td>
+                <td style="padding:3px 8px;font-size:11px;color:#94a3b8;font-family:monospace;text-align:right">${zz != null ? zz.toFixed(2) : '—'}</td>
                 <td style="padding:3px 8px;font-size:11px;font-family:monospace;text-align:right;color:${cb != null && cb >= 0 ? '#22d3ee' : '#f87171'}">${cb != null ? (cb >= 0 ? '+' : '') + cb.toFixed(3) : '—'}</td>
             </tr>`;
         }).join('');
 
-        const desc = n.description || '';
-        const pVal = n.p_value;
-        const pStr = pVal != null ? (pVal < 0.001 ? pVal.toExponential(2) : pVal.toFixed(4)) : '—';
-        const ciStr = (n.ci_low != null && n.ci_high != null)
-            ? `[${n.ci_low.toFixed(3)}, ${n.ci_high.toFixed(3)}]` : '—';
+        // Pre→post weights for this node — which post metric does it most affect?
+        const ptp = data && data.pre_to_post_weights ? data.pre_to_post_weights : {};
+        const postRows = (data && data.post_nodes ? data.post_nodes : []).map(post => {
+            const w = (ptp[post.key] || {})[n.key] || 0;
+            const color = w >= 0 ? '#22d3ee' : '#f87171';
+            const pct = Math.min(100, (Math.abs(w) / 0.5) * 100);
+            return `<tr><td style="padding:3px 8px;font-size:11px;color:#cbd5e1">${escapeHtml(post.label || post.key)}</td>
+                <td style="padding:3px 8px;font-size:10px;font-family:monospace;text-align:right;color:${color}">${w >= 0 ? '+' : ''}${w.toFixed(3)}</td>
+                <td style="padding:3px 8px"><div style="background:#0a1628;height:6px;border-radius:2px;overflow:hidden"><div style="background:${color};height:100%;width:${pct.toFixed(1)}%"></div></div></td></tr>`;
+        }).join('');
+
+        const r = n.r_with_views;
+        const tier = HM_TIER_COLOR[n.window] || '#22d3ee';
 
         return `
-            <div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:14px;position:sticky;top:8px;max-height:calc(100vh - 100px);overflow-y:auto">
+            <div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:14px;position:sticky;top:8px;max-height:calc(100vh - 80px);overflow-y:auto">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
                     <div>
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                            <span style="background:${tier};color:#0f172a;font-weight:700;padding:1px 7px;border-radius:3px;font-size:10px">@${n.window}s</span>
+                            <span style="background:#06b6d422;color:#22d3ee;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600">PRE-UPLOAD</span>
+                        </div>
                         <div style="font-size:14px;font-weight:700;color:#f1f5f9">${escapeHtml(n.label || n.indicator_key)}</div>
                         <code style="font-size:10px;color:#64748b">${escapeHtml(n.key)}</code>
                     </div>
                     <button id="jarvis-hm-close-node" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer">×</button>
                 </div>
 
-                ${desc ? `<div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:10px">${escapeHtml(desc)}</div>` : ''}
+                ${n.description ? `<div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:10px">${escapeHtml(n.description)}</div>` : ''}
 
-                <div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
-                        <div><span style="color:#64748b">Pearson r:</span> <span style="color:${r >= 0 ? '#22d3ee' : '#f87171'};font-weight:700;font-family:monospace">${r != null ? (r >= 0 ? '+' : '') + r.toFixed(3) : '—'}</span></div>
-                        <div><span style="color:#64748b">Weight:</span> <span style="color:${w >= 0 ? '#22d3ee' : '#f87171'};font-weight:700;font-family:monospace">${w != null ? (w >= 0 ? '+' : '') + w.toFixed(3) : '—'}</span></div>
-                        <div><span style="color:#64748b">p-value:</span> <span style="color:#cbd5e1;font-family:monospace">${pStr}</span></div>
-                        <div><span style="color:#64748b">n videos:</span> <span style="color:#cbd5e1;font-family:monospace">${n.n_videos != null ? n.n_videos : '—'}</span></div>
-                        <div style="grid-column:1 / span 2"><span style="color:#64748b">95% CI:</span> <span style="color:#94a3b8;font-family:monospace">${ciStr}</span></div>
-                    </div>
+                <div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
+                    <div><span style="color:#64748b">r vs views:</span> <span style="color:${r >= 0 ? '#22d3ee' : '#f87171'};font-weight:700;font-family:monospace">${r != null ? (r >= 0 ? '+' : '') + r.toFixed(3) : '—'}</span></div>
+                    <div><span style="color:#64748b">n videos:</span> <span style="color:#cbd5e1;font-family:monospace">${n.n_videos != null ? n.n_videos : '—'}</span></div>
+                    <div><span style="color:#64748b">value @${n.window}s:</span> <span style="color:#f1f5f9;font-family:monospace">${value != null ? (Number.isInteger(value) ? value : value.toFixed(3)) : '—'}</span></div>
+                    <div><span style="color:#64748b">z-score:</span> <span style="color:${(z||0) >= 0 ? '#22d3ee' : '#f87171'};font-family:monospace">${z != null ? z.toFixed(2) + 'σ' : '—'}</span></div>
                 </div>
 
-                ${c ? `<div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px">
-                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">For this hook @${n.window}s</div>
-                    <div style="font-size:11px;color:#cbd5e1;line-height:1.7">
-                        Value: <span style="color:#f1f5f9;font-family:monospace">${Number.isInteger(c.value) ? c.value : c.value.toFixed(3)}</span><br>
-                        Z-score: <span style="color:${c.zscore >= 0 ? '#22d3ee' : '#f87171'};font-family:monospace">${c.zscore.toFixed(2)}σ ${c.zscore >= 0 ? 'above' : 'below'} training mean</span><br>
-                        Contribution: <span style="color:${c.contribution >= 0 ? '#22d3ee' : '#f87171'};font-weight:700;font-family:monospace">${c.contribution >= 0 ? '+' : ''}${c.contribution.toFixed(3)} log10(views)</span>
-                    </div>
-                    <div style="margin-top:6px;font-size:10px;color:#64748b">
-                        Sensitivity: each +1σ in this indicator multiplies views by ${Math.pow(10, w).toFixed(2)}×
-                    </div>
-                </div>` : ''}
-
                 <div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px">
-                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Matched in this window</div>
-                    ${matchedList}
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Phrase list (what triggers this node)</div>
                     ${wordList}
+                    ${matchedBlock}
                 </div>
 
-                <div style="background:#0a1628;border-radius:6px;padding:8px">
+                <div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px">
                     <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Window breakdown</div>
                     <table style="width:100%;border-collapse:collapse">
                         <thead><tr>
@@ -6689,20 +6857,85 @@ const JarvisUI = (() => {
                     </table>
                 </div>
 
-                <div style="margin-top:10px;font-size:10px;color:#64748b;line-height:1.6">
-                    <strong style="color:#94a3b8">Source:</strong> Jarvis indicator <code style="color:#22d3ee">${escapeHtml(n.indicator_key)}</code> measured on ${n.n_videos != null ? n.n_videos : '?'} Tyler videos. The weight is initialized to the measured Pearson r and refined by training; positive means more = more views.
+                <div style="background:#0a1628;border-radius:6px;padding:8px">
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Connects to post-upload metrics</div>
+                    <table style="width:100%;border-collapse:collapse">${postRows}</table>
                 </div>
-            </div>
-        `;
+            </div>`;
     }
 
-    async function selectHookNode(fkey) {
-        try {
-            const resp = await fetch('/api/jarvis/hook-model/node/' + encodeURIComponent(fkey));
-            hookModelSelectedNode = await resp.json();
-        } catch (e) {
-            hookModelSelectedNode = { key: fkey, error: e.message };
-        }
+    function renderPostNodePanel(post) {
+        const data = hookModelData;
+        const score = hookModelScore;
+        const detail = score && score.post_detail ? score.post_detail[post.key] : null;
+        const contribObj = score && score.post_contributions ? score.post_contributions.find(c => c.key === post.key) : null;
+
+        const drivers = (detail && detail.drivers) ? detail.drivers : [];
+        const driverRows = drivers.map(d => {
+            const color = d.contrib >= 0 ? '#22d3ee' : '#f87171';
+            const pct = Math.min(100, Math.abs(d.contrib) / Math.max(...drivers.map(x => Math.abs(x.contrib)), 0.01) * 100);
+            return `<tr style="cursor:pointer" data-pre-key="${escapeHtml(d.pre_key)}">
+                <td style="padding:3px 8px;font-size:11px;color:#cbd5e1">${escapeHtml(humanizeFeatureKey(d.pre_key))}</td>
+                <td style="padding:3px 8px;font-size:10px;font-family:monospace;text-align:right;color:${color}">${d.weight >= 0 ? '+' : ''}${d.weight.toFixed(3)}</td>
+                <td style="padding:3px 8px;font-size:10px;font-family:monospace;text-align:right;color:#94a3b8">z=${d.pre_z.toFixed(2)}</td>
+                <td style="padding:3px 8px"><div style="background:#0a1628;height:6px;border-radius:2px;overflow:hidden"><div style="background:${color};height:100%;width:${pct.toFixed(1)}%"></div></div></td>
+            </tr>`;
+        }).join('');
+
+        const r = post.r_with_views ?? (data.post_to_views_weights || {})[post.key];
+        const z = detail ? detail.zscore : (contribObj ? contribObj.zscore : null);
+        const contrib = contribObj ? contribObj.contribution : null;
+
+        return `
+            <div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:14px;position:sticky;top:8px;max-height:calc(100vh - 80px);overflow-y:auto">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                            <span style="background:#22d3ee22;color:#22d3ee;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600">POST-UPLOAD</span>
+                        </div>
+                        <div style="font-size:14px;font-weight:700;color:#f1f5f9">${escapeHtml(post.label || post.key)}</div>
+                        <code style="font-size:10px;color:#64748b">${escapeHtml(post.key)}</code>
+                    </div>
+                    <button id="jarvis-hm-close-node" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer">×</button>
+                </div>
+
+                ${post.description ? `<div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:10px">${escapeHtml(post.description)}</div>` : ''}
+
+                <div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
+                    <div><span style="color:#64748b">r vs views:</span> <span style="color:${(r||0) >= 0 ? '#22d3ee' : '#f87171'};font-weight:700;font-family:monospace">${r != null ? (r >= 0 ? '+' : '') + r.toFixed(3) : '—'}</span></div>
+                    <div><span style="color:#64748b">n videos:</span> <span style="color:#cbd5e1;font-family:monospace">${post.n_videos != null ? post.n_videos : '—'}</span></div>
+                    <div><span style="color:#64748b">predicted z:</span> <span style="color:${(z||0) >= 0 ? '#22d3ee' : '#f87171'};font-family:monospace">${z != null ? z.toFixed(2) + 'σ' : '—'}</span></div>
+                    <div><span style="color:#64748b">→ log10(v):</span> <span style="color:${(contrib||0) >= 0 ? '#22d3ee' : '#f87171'};font-weight:700;font-family:monospace">${contrib != null ? (contrib >= 0 ? '+' : '') + contrib.toFixed(3) : '—'}</span></div>
+                </div>
+
+                ${post.improve_hint ? `
+                <div style="background:#16243a;border-left:3px solid #22d3ee;padding:8px 10px;margin-bottom:10px;border-radius:0 4px 4px 0">
+                    <div style="font-size:9px;color:#22d3ee;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;font-weight:700">To improve this metric</div>
+                    <div style="font-size:11px;color:#cbd5e1;line-height:1.5">${escapeHtml(post.improve_hint)}</div>
+                </div>` : ''}
+
+                <div style="background:#0a1628;border-radius:6px;padding:8px">
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Top pre-upload drivers (this hook)</div>
+                    ${drivers.length ? `<table style="width:100%;border-collapse:collapse">${driverRows}</table>` : '<div style="color:#64748b;font-size:11px">Score the hook to populate.</div>'}
+                </div>
+            </div>`;
+    }
+
+    function selectHookPreNode(fkey) {
+        const data = hookModelData;
+        if (!data) return;
+        const node = (data.pre_nodes || []).find(n => n.key === fkey);
+        if (!node) return;
+        hookModelSelectedNode = { ...node, layer: 'pre' };
+        refreshHookModelRoot();
+    }
+
+    function selectHookPostNode(key) {
+        const data = hookModelData;
+        if (!data) return;
+        const node = (data.post_nodes || []).find(n => n.key === key);
+        if (!node) return;
+        hookModelSelectedNode = { ...node, layer: 'post' };
         refreshHookModelRoot();
     }
 
@@ -6721,6 +6954,22 @@ const JarvisUI = (() => {
                 hookModelWps = parseFloat(e.target.value);
                 const span = root.querySelector('#jarvis-hm-wps-val');
                 if (span) span.textContent = hookModelWps.toFixed(1) + ' wps';
+                // Live-update the legend + word coloring without full rerender
+                const legend = root.querySelector('#jarvis-hm-wps-legend');
+                if (legend) {
+                    const total = (hookModelText || '').split(/\s+/).filter(Boolean).length;
+                    const wordsAt = (sec) => Math.min(total, Math.max(0, Math.round(sec * hookModelWps)));
+                    legend.innerHTML = `
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px;color:#cbd5e1">
+                            ${[1, 3, 5, 10].map(w => `
+                                <span style="display:inline-flex;align-items:center;gap:5px">
+                                    <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${HM_TIER_BG[w]};border-left:3px solid ${HM_TIER_COLOR[w]}"></span>
+                                    <span style="color:#94a3b8">@${w}s</span>
+                                    <span style="font-family:monospace;color:#f1f5f9">${wordsAt(w)} ${wordsAt(w) === 1 ? 'word' : 'words'}</span>
+                                </span>
+                            `).join('')}
+                        </div>`;
+                }
             });
             wps.addEventListener('change', () => scoreHookModel());
         }
@@ -6733,17 +6982,11 @@ const JarvisUI = (() => {
         const scoreBtn = root.querySelector('#jarvis-hm-score-btn');
         if (scoreBtn) scoreBtn.addEventListener('click', () => scoreHookModel());
 
-        const topn = root.querySelector('#jarvis-hm-topn');
-        if (topn) {
-            topn.addEventListener('input', (e) => {
-                hookModelTopN = parseInt(e.target.value, 10);
-                refreshHookModelRoot();
-            });
-        }
-
-        // Click any node circle or contribution bar
-        root.querySelectorAll('[data-node-key]').forEach(el => {
-            el.addEventListener('click', () => selectHookNode(el.dataset.nodeKey));
+        root.querySelectorAll('[data-pre-key]').forEach(el => {
+            el.addEventListener('click', () => selectHookPreNode(el.dataset.preKey));
+        });
+        root.querySelectorAll('[data-post-key]').forEach(el => {
+            el.addEventListener('click', () => selectHookPostNode(el.dataset.postKey));
         });
         const closeBtn = root.querySelector('#jarvis-hm-close-node');
         if (closeBtn) closeBtn.addEventListener('click', () => {

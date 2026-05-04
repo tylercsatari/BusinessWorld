@@ -417,6 +417,30 @@ function featurize(hookText, wps = DEFAULT_WPS) {
 }
 
 /**
+ * Estimate per-word timestamps for a hook script at a given WPS.
+ * Returns one entry per word with t (start seconds) and a windows array
+ * describing which @1s/@3s/@5s/@10s windows the word falls into.
+ */
+function getWordTimings(text, wps = DEFAULT_WPS) {
+    const words = (text || '').split(/\s+/).filter(Boolean);
+    const dt = 1 / Math.max(wps, 0.1);
+    const out = [];
+    for (let i = 0; i < words.length; i++) {
+        const t = i * dt;
+        const inWindows = TIME_WINDOWS.filter(w => t < w);
+        out.push({
+            word: words[i],
+            index: i,
+            t: parseFloat(t.toFixed(3)),
+            windows: inWindows,
+            // smallest window that contains this word — used for color tier
+            tier: inWindows.length ? inWindows[0] : null,
+        });
+    }
+    return out;
+}
+
+/**
  * Returns the registry of indicators (key → metadata).
  */
 function getIndicators() {
@@ -437,6 +461,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         featurize,
         getIndicators,
+        getWordTimings,
         HOOK_INDICATORS,
         TIME_WINDOWS,
         DEFAULT_WPS,
@@ -455,5 +480,5 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 if (typeof window !== 'undefined') {
-    window.HookModelFeaturizer = { featurize, getIndicators, HOOK_INDICATORS, TIME_WINDOWS, DEFAULT_WPS };
+    window.HookModelFeaturizer = { featurize, getIndicators, getWordTimings, HOOK_INDICATORS, TIME_WINDOWS, DEFAULT_WPS };
 }

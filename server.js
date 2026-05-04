@@ -4037,6 +4037,65 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
 
+    // ───── Hook Model v2 (3-layer: pre → post → views) ─────
+    if (pathname === '/api/jarvis/hook-model/score-v2' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', () => {
+            try {
+                const { hook = '', wps } = JSON.parse(body || '{}');
+                const hookModelV2 = require('./buildings/jarvis/hook-model/model-v2');
+                const out = hookModelV2.predict(hook, wps);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(out));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message, stack: e.stack }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/jarvis/hook-model/nodes-v2' && req.method === 'GET') {
+        try {
+            const hookModelV2 = require('./buildings/jarvis/hook-model/model-v2');
+            const featurizer = require('./buildings/jarvis/hook-model/featurizer');
+            const model = hookModelV2.loadModel(true);
+            const indReg = featurizer.getIndicators();
+
+            // Enrich pre_nodes with phrase lists from the featurizer
+            const preNodes = (model.pre_nodes || []).map(n => {
+                const reg = indReg[n.indicator_key] || {};
+                return {
+                    ...n,
+                    wordList: n.wordList || reg.wordList || null,
+                    description: n.description || reg.description || '',
+                };
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                version: model.version,
+                mode: model.mode,
+                bias: model.bias,
+                log10_views_std: model.log10_views_std,
+                wps_default: model.wps_default,
+                training_n: model.training_n,
+                trained_at: model.trained_at,
+                pre_nodes: preNodes,
+                post_nodes: model.post_nodes,
+                pre_to_post_weights: model.pre_to_post_weights,
+                post_to_views_weights: model.post_to_views_weights,
+                feature_stats: model.feature_stats,
+                post_stats: model.post_stats,
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     if (pathname.startsWith('/api/jarvis/hook-model/node/') && req.method === 'GET') {
         try {
             const key = decodeURIComponent(pathname.slice('/api/jarvis/hook-model/node/'.length));

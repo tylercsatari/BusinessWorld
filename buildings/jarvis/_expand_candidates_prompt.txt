@@ -1,0 +1,161 @@
+## Jarvis AutoResearch: Candidate Pool Exhaustion Fix + Expansion
+
+### Diagnosis
+The autorun candidate pool is exhausted. The zero-variance/sparse filter in jarvis-runner.js::autoRun() (MIN_NONZERO_COUNT=20) is removing 99.95% of the 257,956 remaining candidates because 705 base indicator keys are flagged as sparse or zero-variance. Almost all remaining candidates are cross-products that involve at least one of these sparse keys, so the pool collapses to 119 items — all of which also fail due to dataset < 50 videos.
+
+### Root cause
+The new phrase-family metrics added recently (tension_builder, implicit_promise, progressive_reveal, loop_reinforcer, consequence_language, setup_anchor, outcome_tease, proof_signal, expectation_subversion, knowledge_gap, momentum_language, suspense_bridge, identity_challenge, before_after_frame, fomo_signal, mechanism_reveal, authority_stack, payoff_anticipation, effort_signal, narrative_clock, visual_proof_signal, etc.) have phrase lists that match very few videos (1-17 nonzero out of 370 videos). So every cross-product involving them gets filtered out.
+
+### File to fix: buildings/jarvis/jarvis-metrics.js
+
+### Fix 1: Expand phrase lists for sparse families
+In ZYGARNIK_PHRASE_SETS, expand the phrase arrays for these sparse families so they match more videos. Focus on adding common, everyday variants that would actually appear in YouTube transcripts. These phrases should be natural spoken language, not formal academic terms. Keep all phrases lowercase (transcripts are lowercased before matching).
+
+Families to expand (they currently match very few videos):
+- tension_builder: Add phrases like "this changes everything", "what happens next", "you wont believe", "things get worse", "it gets better", "wait for it", "suddenly", "but then", "at that point", "thats when", "the problem was", "and then it", "everything changed", "that was when", "i couldnt believe"
+- implicit_promise: Add "i will show you", "by the end of this", "youre going to learn", "heres what i found", "this is how", "i figured out", "let me explain", "heres why", "the real reason", "what actually works", "i want to show you", "im going to show you", "you will see", "ill explain"
+- progressive_reveal: Add "so far", "the next thing", "moving on", "and another thing", "also important", "not only that", "on top of that", "in addition", "and theres more", "keep watching", "theres more", "but wait", "additionally", "furthermore", "and also"
+- loop_reinforcer: Add "remember when i said", "as i mentioned", "going back to", "which brings me to", "this is why i told you", "earlier i showed", "recall that", "as i showed you earlier", "connecting this back", "and this is related to", "going back to what i said"
+- consequence_language: Add "if you do this", "this will cause", "the result is", "this leads to", "which means", "so that means", "because of this", "therefore", "as a result", "this is why", "thats why", "causing", "leading to", "this will", "youll end up", "you could end up"
+- setup_anchor: Add "the context is", "first you need to know", "background is", "to understand this", "the situation is", "let me set the scene", "here is the setup", "starting with", "beginning with", "before i get into", "some background", "to give you some context", "a little background"
+- outcome_tease: Add "the result was", "what happened was", "it turns out", "here is the outcome", "the final result", "what i found", "it worked", "it didnt work", "we discovered", "the verdict", "at the end of the day", "ultimately", "in the end", "after all of this", "when all was said and done"
+- proof_signal: Add "here is the evidence", "the data shows", "you can see", "as you can tell", "the proof is", "look at this", "see this number", "check this out", "the results show", "this proves", "heres proof", "as evidence", "you can see here that", "look at these numbers", "the stats show"
+- payoff_anticipation: Add "coming up", "in just a moment", "soon ill show", "stay tuned", "keep watching", "the good part", "wait until you see", "youre going to love", "almost there", "nearly done", "and later", "coming soon", "at the end", "ill get to that", "well get to", "but first", "ill show you later", "patience"
+- effort_signal: Add "i spent", "took me", "after many", "worked hard", "put in the work", "dedicated time", "invested", "committed to", "gave up", "worked for months", "years of", "hours of", "days of", "weeks of", "a lot of work", "so much time", "countless hours", "all the time i spent"
+- narrative_clock: Add "in the next few minutes", "by the end of this video", "over the course of", "throughout this", "from start to finish", "during this time", "as we go through", "minute by minute", "step by step", "one by one", "over time", "as time goes on", "in the following", "in the next section"
+- visual_proof_signal: Add "you can see", "look at", "check this out", "as shown", "see the screen", "on the screen", "right here", "look here", "shown below", "as i show you", "showing you", "i am showing", "here on screen", "visible here", "see how", "notice how"
+- knowledge_gap: Add "most people dont know", "what nobody tells you", "the hidden truth", "what they dont tell you", "the secret is", "few people realize", "almost nobody knows", "little known fact", "the truth about", "what really happens", "most dont realize", "the thing most people miss", "what most people dont", "the real secret"
+- expectation_subversion: Add "but actually", "surprisingly", "the opposite is true", "turns out", "not what you think", "you might think", "everyone assumes", "contrary to", "unlike what most think", "i was wrong about", "i thought", "i assumed", "to my surprise", "what surprised me", "i didnt expect"
+- momentum_language: Add "lets keep going", "moving forward", "as we progress", "building on this", "taking it further", "the next level", "pushing further", "continuing on", "pressing ahead", "now lets", "next we", "now we can", "from here", "building momentum", "gaining momentum"
+- mechanism_reveal: Add "heres how it works", "the mechanism is", "the reason this happens", "what causes", "why this occurs", "the process is", "this works because", "at its core", "fundamentally", "the key is", "the way it works", "what makes this work", "the reason why", "here is why"
+- fomo_signal: Add "before its too late", "dont miss", "you dont want to miss", "limited time", "act now", "while you still can", "now or never", "this wont last", "get this before", "once this is gone", "last chance", "dont wait", "the window is closing", "time is running out"
+- suspense_bridge: Add "but here is the thing", "there is a catch", "there is a problem", "the issue is", "but then something happened", "until one day", "and that is when", "and then everything", "something unexpected", "out of nowhere", "what i didnt know was", "little did i know", "what came next", "i had no idea"
+
+### Fix 2: Lower the sparse filter threshold in jarvis-runner.js
+In autoRun(), change MIN_NONZERO_COUNT from 20 to 8. This allows cross-products of moderately rare but real signals through. Also: do NOT filter out candidates where BOTH components are pre-upload phrase metrics from ZYGARNIK_FAMILIES — those should pass through even if each is individually sparse (threshold 3 for pre×pre pairs).
+
+Here is the specific change for the filter block in autoRun():
+```javascript
+// Keep the skipKeys filter but lower threshold
+const MIN_NONZERO_COUNT = 8;  // was 20
+const zeroVarKeys = new Set();
+const sparseKeys = new Set();
+for (const ind of indicators) {
+    const ds = ind.dataset || [];
+    if (!ds.length) continue;
+    const vals = ds.map(d => (d && typeof d === 'object') ? d.value : d).filter(v => v != null);
+    if (!vals.length) continue;
+    const firstVal = String(vals[0]);
+    if (vals.every(v => String(v) === firstVal)) {
+        zeroVarKeys.add(ind.key);
+    } else {
+        const nonzeroCount = vals.filter(v => v !== 0 && v !== 0.0).length;
+        if (nonzeroCount < MIN_NONZERO_COUNT) sparseKeys.add(ind.key);
+    }
+}
+const skipKeys = new Set([...zeroVarKeys, ...sparseKeys]);
+if (skipKeys.size > 0) {
+    const before = pool.length;
+    pool = pool.filter(k => {
+        const parts = k.split('_x_');
+        if (parts.length !== 2) return true; // non-interaction keys always pass
+        const [a, b] = parts;
+        const aSkip = skipKeys.has(a);
+        const bSkip = skipKeys.has(b);
+        if (!aSkip && !bSkip) return true; // neither sparse, keep
+        // Both sparse: only keep if both are pre-upload (pre x pre pairs have value)
+        if (aSkip && bSkip) {
+            const layerA = metrics.getCandidateLayer(a);
+            const layerB = metrics.getCandidateLayer(b);
+            return layerA === 'pre' && layerB === 'pre';
+        }
+        return false; // one sparse, one not: skip (asymmetric noise)
+    });
+    log('Zero-variance filter: skipped indicators — ' + zeroVarKeys.size + ' constant-value, ' + sparseKeys.size + ' sparse (<' + MIN_NONZERO_COUNT + ' nonzero); removed ' + (before - pool.length) + ' candidates');
+}
+```
+
+### Fix 3: Add new non-sparse atomic metrics
+Add these to STATIC_KEYS (pre-upload layer) and implement in extractMetric:
+
+a) open_loop_count_per_minute — open_loop_count / (duration_s / 60 + 0.01)
+   extractMetric: get open_loop_count value, get duration, divide
+   
+b) closure_rate_pct — closure_count / (open_loop_count + closure_count + 0.01)
+   extractMetric: count both, compute ratio
+
+c) zygarnik_effect_index — (open_loop_count * gratification_delay_pct) / (closure_count + 1)
+   extractMetric: compose from existing metrics
+
+d) open_loop_to_word_count_ratio — open_loop_count / (word_count + 1) * 100
+   extractMetric: use open_loop_count and word count
+
+e) For each of these, add corresponding _x_ cross-products with top known-good anchors in generateAutonomousCandidates:
+   - open_loop_count_per_minute × open_loop_to_closure_ratio
+   - open_loop_count_per_minute × hook_drop_rate
+   - closure_rate_pct × pre_gratification_open_loop_count
+   - zygarnik_effect_index × visual_proof_phrase_count
+   - open_loop_to_word_count_ratio × gratification_delay_pct
+
+### Fix 4: Fix biasPool spread overflow (defensive)
+In biasPool() in jarvis-metrics.js, replace:
+```javascript
+if (pi >= pre.length && qi < post.length) { result.push(...post.slice(qi)); break; }
+if (qi >= post.length && pi < pre.length) { result.push(...pre.slice(pi)); break; }
+```
+With safe loops:
+```javascript
+if (pi >= pre.length && qi < post.length) { for (let ii = qi; ii < post.length; ii++) result.push(post[ii]); break; }
+if (qi >= post.length && pi < pre.length) { for (let ii = pi; ii < pre.length; ii++) result.push(pre[ii]); break; }
+```
+
+### Fix 5: Rebuild candidate queue
+After updating jarvis-metrics.js, run:
+  node buildings/jarvis/rebuild-candidate-queue.js
+
+This regenerates candidate_queue.json.
+
+### Fix 6: Verify and launch
+1. Check pool size with the sparse filter (MIN_NONZERO_COUNT=8):
+   node -e "
+   const m=require('./buildings/jarvis/jarvis-metrics.js');
+   const fs=require('fs');
+   const indicators=JSON.parse(fs.readFileSync('buildings/jarvis/indicators.json','utf8'));
+   const derivedExps=JSON.parse(fs.readFileSync('buildings/jarvis/derived_experiments_compact.json','utf8'));
+   const queue=JSON.parse(fs.readFileSync('buildings/jarvis/candidate_queue.json','utf8'));
+   const existingKeys=new Set([...indicators.map(i=>i.key),...derivedExps.map(d=>d.key)]);
+   const MIN=8;
+   const zv=new Set(), sp=new Set();
+   for (const ind of indicators){const ds=ind.dataset||[];const vals=ds.map(d=>d&&typeof d==='object'?d.value:d).filter(v=>v!=null);if(!vals.length)continue;const fv=String(vals[0]);if(vals.every(v=>String(v)===fv)){zv.add(ind.key);}else{const nz=vals.filter(v=>v!==0).length;if(nz<MIN)sp.add(ind.key);}}
+   const skip=new Set([...zv,...sp]);
+   const auto=m.generateAutonomousCandidates();
+   const seen=new Set();let pool=[];
+   for(const k of auto){if(!seen.has(k)){seen.add(k);pool.push(k);}}
+   for(const k of queue){if(!seen.has(k)){seen.add(k);pool.push(k);}}
+   pool=pool.filter(k=>!existingKeys.has(k));
+   const before=pool.length;
+   pool=pool.filter(k=>{const parts=k.split('_x_');if(parts.length!==2)return true;const[a,b]=parts;const as=skip.has(a);const bs=skip.has(b);if(!as&&!bs)return true;if(as&&bs){const la=m.getCandidateLayer(a);const lb=m.getCandidateLayer(b);return la==='pre'&&lb==='pre';}return false;});
+   console.log('Before filter:',before,'After filter:',pool.length,'Pre:', pool.filter(k=>m.getCandidateLayer(k)==='pre').length);
+   "
+
+2. Stage and commit:
+   git add buildings/jarvis/jarvis-metrics.js buildings/jarvis/jarvis-runner.js buildings/jarvis/candidate_queue.json
+   git commit -m "Expand phrase families + fix sparse filter (MIN=8, pre×pre bypass) + biasPool overflow fix + new atomic metrics + rebuild candidate pool"
+   git push origin master
+
+3. Launch autorun in background:
+   nohup node buildings/jarvis/launch-autorun.js >> buildings/jarvis/watch-sync.log 2>&1 &
+
+4. Verify it started by checking watch-sync.log tail after a few seconds.
+
+### IMPORTANT CONSTRAINTS
+- Do NOT modify the video_data directory
+- Do NOT change JSON schemas of indicators.json, derived_experiments.json, or autonomous_progress.json
+- Do NOT add LLM-dependent metrics (no API calls in extractMetric)
+- All new phrase matches must work on transcript.fullText string (lowercase)
+- Handle null/missing gracefully: return [null, "no transcript"] if transcript absent
+- Stay within existing patterns — use countPhraseMatches() and windowedTranscript() helpers
+- Phrase lists: realistic YouTube spoken-word transcripts, no punctuation needed since transcripts are already lowercased
+
+When completely finished, run:
+openclaw system event --text "Jarvis pool fix complete: phrase families expanded, sparse filter fixed to MIN=8 with pre×pre bypass, biasPool overflow fixed, autorun relaunched" --mode now
