@@ -1,3 +1,18 @@
+Iteration re-ran on 2026-05-04 (stable — source data unchanged since 50c44f8).
+
+**Summary:**
+- **Step 1:** 15 atomic post-upload indicators per video (avg_percent_viewed, swiped_away_rate_pct, stayed_to_watch_pct, retention_variation, ret@10/25/50/75/85/90%, hook_drop, end_recovery, retention_quartile_spread) — `post_indicator_values.json`
+- **Step 2:** 1,134 pre × 15 post = 17,010 pairs computed → **2,478 edges** kept (|r| ≥ 0.07, n ≥ 40), 630 distinct pre indicators with at least one edge — `pre_post_correlations.json`
+- **Step 3:** 198K pre × pre pairs over 630 active indicators → **16,590 edges** kept (|r| ≥ 0.15, n ≥ 40) — `pre_pre_correlations.json`
+- **Step 4:** Rebuilt `model-v2.json` — 682 pre nodes (52 featurizer + 630 Tactical Brain), 15 post nodes; depth ordering uses pre×pre edges to nodes closer to post; view-score calibration uses measured Pearson r against log10(views), no arbitrary weights.
+- **Step 5:** Validated on 10 videos spanning 83K–22M views. **RMSE = 0.7308 log10**, training σ = 0.7812, skill ratio **0.936** (text-only signal r ≈ 0.18 with views, so predictions shrink toward the mean as expected).
+- **Step 6:** Committed, pushed, `openclaw system event` posted.
+
+**Top post→views correlations (anchor for the model's predictive ceiling):**
+- non_sub_fraction r=0.626, retention_quartile_spread r=0.549, end_recovery r=0.506, ret_at_85pct r=0.504, ret_at_90pct r=0.504, hook_drop r=-0.358, retention_variation r=-0.248, avg_percent_viewed r=0.211
+
+Note: the underlying datasets (videos_complete.json: Apr 29; indicators.json: Apr 25) haven't changed since the prior run, so this iteration reproduces the same model. Numbers are stable.
+
 Iteration re-ran on 2026-05-03 (stable — source data unchanged since 291c8cc).
 
 **Summary:**
@@ -12,3 +27,13 @@ Iteration re-ran on 2026-05-03 (stable — source data unchanged since 291c8cc).
 - non_sub_fraction r=0.626, retention_quartile_spread r=0.549, end_recovery r=0.506, ret_at_85pct r=0.504, ret_at_90pct r=0.504, hook_drop r=-0.358, retention_variation r=-0.248, avg_percent_viewed r=0.211
 
 Note: the underlying datasets (videos_complete.json, indicators.json) haven't changed since the prior run, so this iteration reproduces the same model. Numbers are stable.
+Hook Model iteration complete (stable — source data hasn't changed since the prior commit, so numbers reproduce):
+
+- **Step 1:** 15 atomic post-upload indicators per video → `post_indicator_values.json` (n=369–372 each)
+- **Step 2:** 1,134 pre × 15 post = 17,010 pairs → **2,478 edges** kept (|r|≥0.07, n≥40), 630 distinct active pre indicators → `pre_post_correlations.json`
+- **Step 3:** 198K pre×pre pairs over 630 active indicators → **16,590 edges** kept (|r|≥0.15, n≥40) → `pre_pre_correlations.json`
+- **Step 4:** Rebuilt `model-v2.json` — **682 pre nodes** (52 featurizer + 630 Tactical Brain) → **15 post nodes** → log10(views). Edge weights = measured Pearson r; depth = # of pre-pre peers closer to post.
+- **Step 5:** Validated on 10 videos spanning 83K–22M views. **RMSE = 0.7308 log10**, training σ = 0.7812 → **skill ratio 0.936** (text-only signal r ≈ 0.18 with views, so predictions correctly shrink toward the mean).
+- **Step 6:** Committed (`50c44f8`), pushed to master, openclaw event posted.
+
+Top post→views anchors: `non_sub_fraction` r=0.626, `retention_quartile_spread` r=0.549, `end_recovery` r=0.506, `ret@85/90%` r=0.504, `hook_drop` r=−0.358.
