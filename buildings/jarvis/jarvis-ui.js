@@ -6624,48 +6624,71 @@ const JarvisUI = (() => {
         const preNodes = data.pre_nodes || [];
         const postNodes = data.post_nodes || [];
 
-        // Filter pre nodes to those in the active window (or sized by activation
-        // in current window). Show all 12 indicators × 1 row each, and use
-        // current window as the row source.
         const activeWin = hookModelWindow;
+        const TIME_WINS = [1, 3, 5, 10];
+
+        // Group the 4 per-window pre nodes into a single indicator group so we
+        // can render each indicator as a vector bar [@1s|@3s|@5s|@10s].
         const indicatorKeys = [];
-        const seen = new Set();
-        for (const n of preNodes) { if (!seen.has(n.indicator_key)) { seen.add(n.indicator_key); indicatorKeys.push(n.indicator_key); } }
+        const indicatorMeta = {};
+        for (const n of preNodes) {
+            if (!indicatorMeta[n.indicator_key]) {
+                indicatorKeys.push(n.indicator_key);
+                indicatorMeta[n.indicator_key] = {
+                    label: n.label || n.indicator_key.replace(/_/g, ' '),
+                    byWin: {},
+                };
+            }
+            indicatorMeta[n.indicator_key].byWin[n.window] = n;
+        }
 
-        // Pre nodes shown: one per indicator, at active window
-        const preRow = indicatorKeys.map(ik => {
-            const fk = `${ik}_w${activeWin}`;
-            const node = preNodes.find(n => n.key === fk) || preNodes.find(n => n.indicator_key === ik);
-            const contrib = score && score.pre_contributions ? score.pre_contributions.find(c => c.key === fk) : null;
-            return { key: fk, node, contrib };
-        });
+        // Layout
+        const labelW = 150, cellW = 22, cellH = 16, cellGap = 1;
+        const vectorW = TIME_WINS.length * (cellW + cellGap) - cellGap;
+        const rowH = 24;
+        const W = 940;
+        const xPre = 14;
+        const vectorStartX = xPre + labelW;
+        const vectorEndX = vectorStartX + vectorW;
+        const xPost = 580, xView = W - 70;
+        const headerY = 30;
+        const yStartPre = 50;
+        const H = Math.max(440, indicatorKeys.length * rowH + yStartPre + 30);
+        const yStartPost = 60;
+        const yStepPost = (H - 100) / Math.max(postNodes.length - 1, 1);
+        const yForPre = (i) => yStartPre + i * rowH + cellH / 2;
 
-        const W = 880, H = Math.max(420, preRow.length * 28 + 60);
-        const xPre = 40, xPost = W * 0.55, xView = W - 90;
-        const yStartPre = 40, yStepPre = (H - 80) / Math.max(preRow.length - 1, 1);
-        const yStartPost = 40, yStepPost = (H - 80) / Math.max(postNodes.length - 1, 1);
+        // Color scaling for cells: largest absolute z across all (indicator × window) cells.
+        let maxPreZ = 0.5;
+        if (score && score.pre_detail) {
+            for (const fk in score.pre_detail) {
+                maxPreZ = Math.max(maxPreZ, Math.abs(score.pre_detail[fk].zscore || 0));
+            }
+        }
 
-        // Compute max abs contribution for sizing
-        const maxPreAbs = Math.max(...preRow.map(r => Math.abs((r.contrib || {}).contribution || 0)), 0.01);
         const maxPostAbs = Math.max(...postNodes.map(p => {
             const c = score && score.post_contributions ? score.post_contributions.find(x => x.key === p.key) : null;
             return Math.abs((c || {}).contribution || 0);
         }), 0.01);
 
-        // Edges pre→post: weight = pre_to_post_weights[post][pre_key]
+        // Edges pre→post: anchor on the active window's cell so the visible
+        // weight set matches the highlighted column.
         const preToPost = data.pre_to_post_weights || {};
         const maxEdgeW = Math.max(...postNodes.flatMap(p => Object.values(preToPost[p.key] || {}).map(Math.abs)), 0.01);
+        const activeCellIdx = TIME_WINS.indexOf(activeWin);
+        const activeCellRightX = vectorStartX + (activeCellIdx + 1) * (cellW + cellGap) - cellGap;
         const edgesPP = [];
-        preRow.forEach((p, i) => {
-            const py = yStartPre + i * yStepPre;
+        indicatorKeys.forEach((ik, i) => {
+            const fk = `${ik}_w${activeWin}`;
+            const py = yForPre(i);
             postNodes.forEach((post, j) => {
-                const w = (preToPost[post.key] || {})[p.key] || 0;
-                if (Math.abs(w) < 0.05) return;  // hide near-zero edges
+                const w = (preToPost[post.key] || {})[fk] || 0;
+                if (Math.abs(w) < 0.05) return;
                 const qy = yStartPost + j * yStepPost;
                 const stroke = w >= 0 ? 'rgba(34, 211, 153,' : 'rgba(248, 113, 113,';
                 const a = 0.15 + 0.55 * (Math.abs(w) / maxEdgeW);
                 const sw = Math.max(0.4, Math.abs(w) / maxEdgeW * 2.8);
-                edgesPP.push(`<path d="M ${xPre + 14} ${py} C ${(xPre + xPost) / 2} ${py}, ${(xPre + xPost) / 2} ${qy}, ${xPost - 22} ${qy}" stroke="${stroke}${a.toFixed(3)})" stroke-width="${sw.toFixed(2)}" fill="none"/>`);
+                edgesPP.push(`<path d="M ${activeCellRightX + 1} ${py} C ${(activeCellRightX + xPost) / 2} ${py}, ${(activeCellRightX + xPost) / 2} ${qy}, ${xPost - 22} ${qy}" stroke="${stroke}${a.toFixed(3)})" stroke-width="${sw.toFixed(2)}" fill="none"/>`);
             });
         });
 
@@ -6678,25 +6701,59 @@ const JarvisUI = (() => {
             const stroke = w >= 0 ? 'rgba(34, 211, 153,' : 'rgba(248, 113, 113,';
             const a = 0.25 + 0.55 * (Math.abs(w) / maxPVAbs);
             const sw = Math.max(0.6, Math.abs(w) / maxPVAbs * 4);
-            return `<path d="M ${xPost + 22} ${qy} C ${(xPost + xView) / 2} ${qy}, ${(xPost + xView) / 2} ${H/2}, ${xView - 22} ${H/2}" stroke="${stroke}${a.toFixed(3)})" stroke-width="${sw.toFixed(2)}" fill="none"/>`;
+            return `<path d="M ${xPost + 22} ${qy} C ${(xPost + xView) / 2} ${qy}, ${(xPost + xView) / 2} ${H/2}, ${xView - 28} ${H/2}" stroke="${stroke}${a.toFixed(3)})" stroke-width="${sw.toFixed(2)}" fill="none"/>`;
         }).join('');
 
-        // Pre nodes
-        const preCircles = preRow.map((p, i) => {
-            const py = yStartPre + i * yStepPre;
-            const c = p.contrib || { contribution: 0, value: 0, zscore: 0 };
-            const r = 6 + Math.min(10, Math.abs(c.contribution || 0) / maxPreAbs * 8);
-            const fill = colorForActivation(c.contribution || 0, maxPreAbs);
-            const tier = HM_TIER_COLOR[activeWin] || '#94a3b8';
-            const label = (p.node && p.node.indicator_key) ? p.node.indicator_key.replace(/_/g, ' ') : p.key;
-            return `<g class="jarvis-hm-pre" data-pre-key="${escapeHtml(p.key)}" style="cursor:pointer">
-                <circle cx="${xPre + 14}" cy="${py}" r="${r.toFixed(1)}" fill="${fill}" stroke="${tier}" stroke-width="2"/>
-                <text x="${xPre + 30}" y="${py + 3}" fill="#cbd5e1" style="font-size:10px;font-family:monospace">${escapeHtml(label)}</text>
-                <text x="${xPre + 14}" y="${py - r - 4}" text-anchor="middle" fill="#64748b" style="font-size:8px;font-family:monospace">z=${(c.zscore || 0).toFixed(1)}</text>
+        // Pre nodes — vector bars (label + 4 cells per indicator)
+        const preGroups = indicatorKeys.map((ik, i) => {
+            const py = yForPre(i);
+            const meta = indicatorMeta[ik];
+            const labelTxt = meta.label;
+
+            // Per-window cells
+            const cellsHtml = TIME_WINS.map((w, k) => {
+                const fk = `${ik}_w${w}`;
+                const detail = score && score.pre_detail ? score.pre_detail[fk] : null;
+                const z = detail ? (detail.zscore || 0) : 0;
+                const value = detail ? detail.value : null;
+                const cellX = vectorStartX + k * (cellW + cellGap);
+                const cellY = yStartPre + i * rowH;
+                const fill = detail ? colorForActivation(z, maxPreZ) : '#0a1628';
+                const border = HM_TIER_COLOR[w];
+                const isActive = w === activeWin;
+                const strokeW = isActive ? 2.2 : 0.7;
+                let valTxt = '';
+                if (value != null) {
+                    if (Number.isInteger(value)) valTxt = String(value);
+                    else if (Math.abs(value) < 1) valTxt = value.toFixed(2);
+                    else valTxt = value.toFixed(1);
+                }
+                const textColor = (Math.abs(z) > 0.4 || (value != null && value !== 0)) ? '#0a1628' : '#475569';
+                return `<g class="jarvis-hm-pre" data-pre-key="${escapeHtml(fk)}" style="cursor:pointer">
+                    <title>${escapeHtml(labelTxt)} @${w}s · value=${valTxt || '0'} · z=${z.toFixed(2)}</title>
+                    <rect x="${cellX}" y="${cellY}" width="${cellW}" height="${cellH}" fill="${fill}" stroke="${border}" stroke-width="${strokeW}" rx="2"/>
+                    <text x="${cellX + cellW / 2}" y="${cellY + cellH / 2 + 3.2}" text-anchor="middle" fill="${textColor}" style="font-size:9px;font-family:monospace;font-weight:700;pointer-events:none">${escapeHtml(valTxt)}</text>
+                </g>`;
+            }).join('');
+
+            // Label area is its own click target (selects active window node)
+            const labelGroup = `<g class="jarvis-hm-pre" data-pre-key="${escapeHtml(`${ik}_w${activeWin}`)}" style="cursor:pointer">
+                <rect x="${xPre}" y="${yStartPre + i * rowH}" width="${labelW - 4}" height="${cellH}" fill="transparent"/>
+                <text x="${vectorStartX - 6}" y="${py + 3}" text-anchor="end" fill="#cbd5e1" style="font-size:10px;font-family:monospace">${escapeHtml(labelTxt)}</text>
             </g>`;
+
+            return labelGroup + cellsHtml;
         }).join('');
 
-        // Post nodes
+        // Header row for the vector cells
+        const headerCells = TIME_WINS.map((w, k) => {
+            const cx = vectorStartX + k * (cellW + cellGap) + cellW / 2;
+            const fill = HM_TIER_COLOR[w];
+            const isActive = w === activeWin;
+            return `<text x="${cx}" y="${headerY + 14}" text-anchor="middle" fill="${fill}" style="font-size:9px;font-family:monospace;font-weight:${isActive ? '800' : '600'}">@${w}s</text>`;
+        }).join('');
+
+        // Post nodes (unchanged shape)
         const postCircles = postNodes.map((post, j) => {
             const qy = yStartPost + j * yStepPost;
             const c = score && score.post_contributions ? score.post_contributions.find(x => x.key === post.key) : null;
@@ -6707,8 +6764,8 @@ const JarvisUI = (() => {
             const isHookDrop = post.key === 'hook_drop_rate';
             return `<g class="jarvis-hm-post" data-post-key="${escapeHtml(post.key)}" style="cursor:pointer">
                 <circle cx="${xPost}" cy="${qy}" r="${r.toFixed(1)}" fill="${fill}" stroke="#22d3ee" stroke-width="${isHookDrop ? 2.5 : 1.5}"/>
-                <text x="${xPost}" y="${qy + 3}" text-anchor="middle" fill="#0a1628" style="font-size:9px;font-weight:700">${escapeHtml(post.label || post.key)}</text>
-                <text x="${xPost}" y="${qy + r + 12}" text-anchor="middle" fill="#94a3b8" style="font-size:9px;font-family:monospace">z=${z.toFixed(2)} · r→v=${(post.r_with_views ?? 0).toFixed(2)}</text>
+                <text x="${xPost}" y="${qy + 3}" text-anchor="middle" fill="#0a1628" style="font-size:9px;font-weight:700;pointer-events:none">${escapeHtml(post.label || post.key)}</text>
+                <text x="${xPost}" y="${qy + r + 12}" text-anchor="middle" fill="#94a3b8" style="font-size:9px;font-family:monospace;pointer-events:none">z=${z.toFixed(2)} · r→v=${(post.r_with_views ?? 0).toFixed(2)}</text>
             </g>`;
         }).join('');
 
@@ -6721,23 +6778,24 @@ const JarvisUI = (() => {
         `;
 
         const colHeaders = `
-            <text x="${xPre + 14}" y="20" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">Pre-upload @${activeWin}s</text>
-            <text x="${xPost}" y="20" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">Post-upload metrics</text>
-            <text x="${xView}" y="20" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">log10(views)</text>
+            <text x="${vectorStartX + vectorW / 2}" y="${headerY}" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">Pre-upload (vector)</text>
+            <text x="${xPost}" y="${headerY}" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">Post-upload metrics</text>
+            <text x="${xView}" y="${headerY}" text-anchor="middle" fill="#64748b" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em">log10(views)</text>
         `;
 
         return `
             <div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:12px;margin-bottom:14px">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap">
-                    <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b">3-Layer Network · pre @${activeWin}s window</div>
-                    <div style="font-size:10px;color:#64748b">click any node for details</div>
+                    <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b">3-Layer Network · pre nodes are vectors [@1s|@3s|@5s|@10s] · edges drawn from active window @${activeWin}s</div>
+                    <div style="font-size:10px;color:#64748b">click any cell or label for details</div>
                 </div>
-                <div style="overflow:auto;max-height:560px;background:#0a1628;border-radius:6px;border:1px solid #1e293b">
+                <div style="overflow:auto;max-height:600px;background:#0a1628;border-radius:6px;border:1px solid #1e293b">
                     <svg id="jarvis-hm-graph" width="${W}" height="${H}" style="display:block">
                         ${colHeaders}
+                        ${headerCells}
                         ${edgesPP.join('')}
                         ${edgesPV}
-                        ${preCircles}
+                        ${preGroups}
                         ${postCircles}
                         ${outNode}
                     </svg>
@@ -6746,7 +6804,8 @@ const JarvisUI = (() => {
                     <span><span style="display:inline-block;width:10px;height:3px;background:rgba(34,211,153,0.6);vertical-align:middle"></span> positive correlation</span>
                     <span><span style="display:inline-block;width:10px;height:3px;background:rgba(248,113,113,0.6);vertical-align:middle"></span> negative correlation</span>
                     <span>Edge width = |r|</span>
-                    <span>Node size = |contribution to views|</span>
+                    <span>Cell color = z-score for that window</span>
+                    <span>Cell number = raw value</span>
                 </div>
             </div>`;
     }
@@ -6762,46 +6821,118 @@ const JarvisUI = (() => {
         return renderPreNodePanel(hookModelSelectedNode);
     }
 
+    // Human-readable description of the exact algorithm a given indicator uses
+    // so the node-detail panel can show "what this node actually computes"
+    // alongside the phrase list.
+    function describeIndicatorAlgorithm(indicatorKey, wordList) {
+        const ALGO = {
+            pivot_word_count: 'Counts whole-word matches (case-insensitive, word-boundary regex).',
+            sensory_count: 'Splits into words, counts those in the sensory word-set (after stripping punctuation).',
+            open_loop_count: 'Counts substring occurrences of any open-loop phrase in the windowed text.',
+            open_loop_count_first_half: 'Same as open_loop_count but only over the first half of the windowed text (by word count).',
+            proof_of_work_count: 'Counts substring occurrences of any proof-of-work phrase.',
+            contrast_count: 'Counts substring occurrences of any contrast phrase.',
+            action_verb_count: 'Counts substring occurrences of any action verb / -ing form.',
+            repeated_phrase_count: 'Walks all bigrams (2-word phrases). Counts those that appear 2+ times with ≥10 words between occurrences.',
+            unique_word_ratio: 'unique_words ÷ total_words (Jaccard-style vocabulary diversity).',
+            hapax_legomena_ratio: 'words_appearing_exactly_once ÷ total_words.',
+            beat_count: 'Splits on .!? then counts sentences whose first word is one of: So, And then, Now, But then, Then, After, Before, When, Until, Because, Which means.',
+            transcript_word_count: 'Total word count after whitespace split.',
+            transcript_char_count: 'Total character count of the windowed text.',
+            hook_word_ratio: 'count(words in {what, how, why, will, can, could, would, watch, see, look, check, wait, but, if}) ÷ total_words.',
+            hook_phrase_diversity: 'Number of distinct families present (open_loop, contrast, action_verb, proof_of_work, sensory). 0–5.',
+            anticipation_escalation_position_pct: 'Position (0–1) of the FIRST escalation phrase scanned with a 6-word rolling window. 0 = none found.',
+        };
+        const algoLine = ALGO[indicatorKey] || 'Computed from text statistics on the windowed hook (no fixed phrase list).';
+        const wlLine = (wordList && wordList.length)
+            ? ` Phrase list contains ${wordList.length} ${wordList.length === 1 ? 'entry' : 'entries'}.`
+            : '';
+        return algoLine + wlLine;
+    }
+
     function renderPreNodePanel(n) {
         const data = hookModelData;
         const score = hookModelScore;
         const preDetail = score && score.pre_detail ? score.pre_detail[n.key] : null;
-        const preContribObj = score && score.pre_contributions ? score.pre_contributions.find(c => c.key === n.key) : null;
         const matched = preDetail ? preDetail.matched : (n.matched || []);
         const value = preDetail ? preDetail.value : null;
         const z = preDetail ? preDetail.zscore : null;
+        const TIME_WINS = [1, 3, 5, 10];
 
-        const wordList = n.wordList && Array.isArray(n.wordList) && n.wordList.length
-            ? `<div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Watch list (full vocab — ${n.wordList.length} ${n.wordList.length === 1 ? 'phrase' : 'phrases'})</div><div style="display:flex;flex-wrap:wrap;gap:3px;max-height:180px;overflow:auto">${n.wordList.map(p => {
-                const isMatched = matched.some(m => m.toLowerCase() === p.toLowerCase());
-                return `<code style="background:${isMatched ? '#fbbf2433' : '#0a1628'};color:${isMatched ? '#fbbf24' : '#94a3b8'};padding:1px 5px;border-radius:3px;font-size:10px;border:1px solid ${isMatched ? '#fbbf24' : '#1e293b'}">${escapeHtml(p)}</code>`;
-            }).join('')}</div></div>`
-            : '<div style="color:#64748b;font-size:11px">No fixed phrase list (computed from text statistics).</div>';
-
-        const matchedBlock = matched.length
-            ? `<div style="margin-top:8px"><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Matched in this hook @${n.window}s</div>
-                <div style="display:flex;flex-wrap:wrap;gap:3px">${matched.slice(0, 30).map(m => `<code style="background:#fbbf2422;color:#fbbf24;padding:1px 5px;border-radius:3px;font-size:10px">${escapeHtml(m)}</code>`).join('')}</div></div>`
-            : '<div style="margin-top:6px;color:#64748b;font-size:11px">No matches in this window.</div>';
-
-        // Window breakdown — value at each window
-        const windowRows = [1, 3, 5, 10].map(win => {
+        // Precompute per-window detail so multiple sections can share it
+        const perWindow = TIME_WINS.map(win => {
             const fk = `${n.indicator_key}_w${win}`;
             const sd = score && score.pre_detail ? score.pre_detail[fk] : null;
             const sc = score && score.pre_contributions ? score.pre_contributions.find(c => c.key === fk) : null;
-            const isCurrent = win === n.window;
-            const v = sd ? sd.value : null;
-            const zz = sd ? sd.zscore : null;
-            const cb = sc ? sc.contribution : null;
-            const tier = HM_TIER_COLOR[win];
-            return `<tr style="${isCurrent ? 'background:#0a1628' : ''}">
-                <td style="padding:3px 8px;font-size:11px;color:${isCurrent ? tier : '#cbd5e1'};font-weight:${isCurrent ? '700' : '400'}">@${win}s</td>
+            return {
+                win, fk,
+                value: sd ? sd.value : null,
+                zscore: sd ? sd.zscore : null,
+                contribution: sc ? sc.contribution : null,
+                matched: sd ? (sd.matched || []) : [],
+            };
+        });
+
+        const allMatched = new Set();
+        perWindow.forEach(pw => pw.matched.forEach(m => allMatched.add((m || '').toLowerCase())));
+
+        // ── Algorithm section ──
+        const algoText = describeIndicatorAlgorithm(n.indicator_key, n.wordList);
+        const wordListBlock = (n.wordList && n.wordList.length)
+            ? `<div style="display:flex;flex-wrap:wrap;gap:3px;max-height:180px;overflow:auto;margin-top:6px">${n.wordList.map(p => {
+                const isMatched = allMatched.has(p.toLowerCase());
+                return `<code style="background:${isMatched ? '#fbbf2444' : '#0a1628'};color:${isMatched ? '#fbbf24' : '#94a3b8'};padding:1px 5px;border-radius:3px;font-size:10px;border:1px solid ${isMatched ? '#fbbf24' : '#1e293b'};font-weight:${isMatched ? '700' : '400'}">${escapeHtml(p)}</code>`;
+            }).join('')}</div>`
+            : '';
+
+        // ── Computed values vector (4 cells) ──
+        let maxAbsZ = 0.5;
+        perWindow.forEach(pw => { if (pw.zscore != null) maxAbsZ = Math.max(maxAbsZ, Math.abs(pw.zscore)); });
+        const vectorCells = perWindow.map(pw => {
+            const fill = pw.zscore != null ? colorForActivation(pw.zscore, maxAbsZ) : '#0a1628';
+            const border = HM_TIER_COLOR[pw.win];
+            const valTxt = pw.value == null ? '—'
+                : (Number.isInteger(pw.value) ? String(pw.value)
+                : (Math.abs(pw.value) < 1 ? pw.value.toFixed(3) : pw.value.toFixed(2)));
+            const isActive = pw.win === n.window;
+            return `<div style="flex:1;background:${fill};border:${isActive ? '2.5px' : '1px'} solid ${border};border-radius:4px;padding:8px 4px;text-align:center;min-width:0;cursor:pointer" data-pre-key="${escapeHtml(pw.fk)}" title="@${pw.win}s · click to inspect">
+                <div style="font-size:9px;color:${border};text-transform:uppercase;letter-spacing:0.05em;font-weight:700">@${pw.win}s</div>
+                <div style="font-size:18px;font-weight:800;color:#0a1628;font-family:monospace;line-height:1.1;margin-top:2px">${escapeHtml(valTxt)}</div>
+                <div style="font-size:9px;color:#0f172a;font-family:monospace;margin-top:2px">z=${pw.zscore != null ? pw.zscore.toFixed(2) : '—'}</div>
+            </div>`;
+        }).join('');
+
+        // Computed values numerical table (raw / z / contrib per window)
+        const windowRows = perWindow.map(pw => {
+            const isCurrent = pw.win === n.window;
+            const tier = HM_TIER_COLOR[pw.win];
+            const v = pw.value;
+            const zz = pw.zscore;
+            const cb = pw.contribution;
+            return `<tr style="${isCurrent ? 'background:#0a1628' : ''};cursor:pointer" data-pre-key="${escapeHtml(pw.fk)}">
+                <td style="padding:3px 8px;font-size:11px;color:${isCurrent ? tier : '#cbd5e1'};font-weight:${isCurrent ? '700' : '400'}">@${pw.win}s</td>
                 <td style="padding:3px 8px;font-size:11px;color:#cbd5e1;font-family:monospace;text-align:right">${v != null ? (Number.isInteger(v) ? v : v.toFixed(3)) : '—'}</td>
                 <td style="padding:3px 8px;font-size:11px;color:#94a3b8;font-family:monospace;text-align:right">${zz != null ? zz.toFixed(2) : '—'}</td>
                 <td style="padding:3px 8px;font-size:11px;font-family:monospace;text-align:right;color:${cb != null && cb >= 0 ? '#22d3ee' : '#f87171'}">${cb != null ? (cb >= 0 ? '+' : '') + cb.toFixed(3) : '—'}</td>
             </tr>`;
         }).join('');
 
-        // Pre→post weights for this node — which post metric does it most affect?
+        // ── Matched phrases per window ──
+        const matchedRows = perWindow.map(pw => {
+            const tier = HM_TIER_COLOR[pw.win];
+            return `<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:5px">
+                <span style="display:inline-block;background:${tier};color:#0f172a;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;flex:0 0 38px;text-align:center">@${pw.win}s</span>
+                <div style="flex:1;display:flex;flex-wrap:wrap;gap:3px;min-width:0">
+                    ${pw.matched.length
+                        ? pw.matched.slice(0, 40).map(m => `<code style="background:#fbbf2433;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:600;border:1px solid #fbbf2466">${escapeHtml(m)}</code>`).join('')
+                        : '<span style="color:#475569;font-size:10px;font-style:italic">(no matches in this window)</span>'}
+                </div>
+            </div>`;
+        }).join('');
+
+        const totalMatched = perWindow.reduce((acc, pw) => acc + pw.matched.length, 0);
+
+        // ── Pre→post weights (which post metric does this node most affect?) ──
         const ptp = data && data.pre_to_post_weights ? data.pre_to_post_weights : {};
         const postRows = (data && data.post_nodes ? data.post_nodes : []).map(post => {
             const w = (ptp[post.key] || {})[n.key] || 0;
@@ -6820,11 +6951,11 @@ const JarvisUI = (() => {
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
                     <div>
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-                            <span style="background:${tier};color:#0f172a;font-weight:700;padding:1px 7px;border-radius:3px;font-size:10px">@${n.window}s</span>
+                            <span style="background:${tier};color:#0f172a;font-weight:700;padding:1px 7px;border-radius:3px;font-size:10px">@${n.window}s active</span>
                             <span style="background:#06b6d422;color:#22d3ee;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600">PRE-UPLOAD</span>
                         </div>
                         <div style="font-size:14px;font-weight:700;color:#f1f5f9">${escapeHtml(n.label || n.indicator_key)}</div>
-                        <code style="font-size:10px;color:#64748b">${escapeHtml(n.key)}</code>
+                        <code style="font-size:10px;color:#64748b">${escapeHtml(n.indicator_key)}</code>
                     </div>
                     <button id="jarvis-hm-close-node" style="background:none;border:none;color:#64748b;font-size:16px;cursor:pointer">×</button>
                 </div>
@@ -6838,27 +6969,33 @@ const JarvisUI = (() => {
                     <div><span style="color:#64748b">z-score:</span> <span style="color:${(z||0) >= 0 ? '#22d3ee' : '#f87171'};font-family:monospace">${z != null ? z.toFixed(2) + 'σ' : '—'}</span></div>
                 </div>
 
-                <div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px">
-                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Phrase list (what triggers this node)</div>
-                    ${wordList}
-                    ${matchedBlock}
+                <div style="background:#0a1628;border-radius:6px;padding:10px;margin-bottom:10px;border-left:3px solid #a78bfa">
+                    <div style="font-size:10px;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">1. Algorithm</div>
+                    <div style="font-size:12px;color:#cbd5e1;line-height:1.55">${escapeHtml(algoText)}</div>
+                    ${wordListBlock}
                 </div>
 
-                <div style="background:#0a1628;border-radius:6px;padding:8px;margin-bottom:10px">
-                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Window breakdown</div>
+                <div style="background:#0a1628;border-radius:6px;padding:10px;margin-bottom:10px;border-left:3px solid #22d3ee">
+                    <div style="font-size:10px;color:#22d3ee;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">2. Computed values · vector [@1s | @3s | @5s | @10s]</div>
+                    <div style="display:flex;gap:4px;margin-bottom:8px">${vectorCells}</div>
                     <table style="width:100%;border-collapse:collapse">
                         <thead><tr>
                             <th style="text-align:left;padding:3px 8px;font-size:9px;color:#64748b;font-weight:600">Window</th>
-                            <th style="text-align:right;padding:3px 8px;font-size:9px;color:#64748b;font-weight:600">Value</th>
-                            <th style="text-align:right;padding:3px 8px;font-size:9px;color:#64748b;font-weight:600">Z</th>
-                            <th style="text-align:right;padding:3px 8px;font-size:9px;color:#64748b;font-weight:600">Contrib</th>
+                            <th style="text-align:right;padding:3px 8px;font-size:9px;color:#64748b;font-weight:600">Raw value</th>
+                            <th style="text-align:right;padding:3px 8px;font-size:9px;color:#64748b;font-weight:600">Z-score</th>
+                            <th style="text-align:right;padding:3px 8px;font-size:9px;color:#64748b;font-weight:600">→ log10(v)</th>
                         </tr></thead>
                         <tbody>${windowRows}</tbody>
                     </table>
                 </div>
 
+                <div style="background:#0a1628;border-radius:6px;padding:10px;margin-bottom:10px;border-left:3px solid #fbbf24">
+                    <div style="font-size:10px;color:#fbbf24;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px">3. Matched phrases (this hook · ${totalMatched} total)</div>
+                    ${totalMatched ? matchedRows : '<div style="color:#64748b;font-size:11px;font-style:italic">No phrases from this indicator fired anywhere in the hook.</div>'}
+                </div>
+
                 <div style="background:#0a1628;border-radius:6px;padding:8px">
-                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Connects to post-upload metrics</div>
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Connects to post-upload metrics (weight = pearson r over 372 videos)</div>
                     <table style="width:100%;border-collapse:collapse">${postRows}</table>
                 </div>
             </div>`;
