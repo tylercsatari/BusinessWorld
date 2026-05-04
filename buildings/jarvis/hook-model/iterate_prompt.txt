@@ -1,79 +1,116 @@
-You are iterating the Jarvis Hook Model. The goal is to build a deep multi-layer graph where:
-- Pre-upload indicators (from Tactical Brain experiments) connect to each other and to post-upload indicators
-- Post-upload indicators are atomic (not grouped by hand) and connect to views
-- The Hook Model ONLY uses the Tactical Brain — never raw video data directly
+Fix the Jarvis Hook Model. There are 3 critical bugs making it predict "1 view" for everything:
 
-## Current state
-- indicators.json has 1,132 pre-upload indicators with per-video value datasets (370 videos each)
-- videos_complete.json has per-video post-upload metrics (retention curves, swipe rates, etc.)
-- model-v2.json currently has only 13 pre-upload indicators and 6 post-upload nodes
+## BUG 1: Normalizer is empty
+The model-v2.json has normalizer: {} — no mean/std for any feature.
+This means every feature z-scores to garbage (division by zero defaults to raw value, then clips to ±5).
 
-## What to do this iteration
+FIX: Compute actual normalizer stats from the 372 training videos.
+For each pre-upload indicator (transcript_word_count, unique_word_ratio, etc.) at each time window,
+compute the actual distribution across training videos and store mean + std.
 
-### Step 1: Compute post-upload indicator values per video
-Extract per-video values for all significant post-upload metrics from videos_complete.json:
-- For each of 372 videos, compute: avg_percent_viewed, swiped_away_rate_pct, stayed_to_watch_pct, 
-  avg_retention_vs_baseline, non_sub_fraction, retention_variation
-- Also derive from retention_curve: ret@10%, ret@25%, ret@50%, ret@75%, ret@85%, ret@90%, 
-  hook_drop (ret[0.1] - ret[0.25]), end_recovery (mean ret 80-95%), retention_quartile_spread (Q4/Q1)
-- Store as: buildings/jarvis/hook-model/post_indicator_values.json
-  Format: {indicator_key: [{ytId: str, value: float, log10_views: float}, ...], ...}
+The training data is at:
+/Users/tylercsatari/Desktop/BusinessHub/tyler_ml_dataset/01_video_performance/videos_complete.json
 
-### Step 2: Run cross-correlations — pre vs post
-For the 1,132 pre-upload indicators with per-video data:
-- Load their datasets from indicators.json (each has [{ytId, value, target_value}, ...])
-- For each pre-upload indicator × each post-upload indicator:
-  - Match on ytId (inner join)
-  - Compute Pearson r between pre_values and post_values
-  - Keep only: |r| >= 0.07 AND n >= 40
-- Store results as: buildings/jarvis/hook-model/pre_post_correlations.json
-  Format: [{pre_key, post_key, r, n}, ...]
+Each video has:
+- transcript_words: [{word, timestamp_s}] — word-level timestamps
+- transcript_text: full transcript text
+- total_views: actual view count
+- avg_percent_viewed, swiped_away_rate_pct, stayed_to_watch_pct, avg_retention_vs_baseline, non_sub_fraction
 
-This gives us the ACTUAL cross-indicator connections for the graph.
+To compute the normalizer:
+1. For each of 372 videos, extract hook text at @1s, @3s, @5s, @10s (using word timestamps)
+2. Compute each indicator value at each window:
+   - transcript_word_count: len(words_in_window)
+   - transcript_char_count: len(' '.join(words_in_window))
+   - unique_word_ratio: len(set(words)) / max(len(words), 1)
+   - hapax_legomena_ratio: words appearing once / total
+   - hook_question_count: count of '?' in window
+   - hook_question_density: question_count / max(word_count, 1)
+   - exclamation_count: count of '!'
+   - repeated_phrase_count: bigrams appearing 2+ times with gap >= 10 words
+   - hook_word_ratio: len(words_in_window) / max(len(all_words), 1)
+   - pivot_word_count: count of ['but','however','yet','although','whereas','while','nevertheless','meanwhile','despite','instead','rather','conversely','nonetheless','on the other hand','in contrast']
+   - pivot_word_density: pivot_count / max(word_count, 1)
+   - comparison_word_count: count of ['more','less','than','fewer','greater','larger','smaller','better','worse','faster','slower']
+   - second_person_ratio: count of ['you','your',"you're","you'll","you've","you'd"] / max(word_count, 1)
+3. For each feature, compute mean and std across all 372 videos
+4. Save to model-v2.json normalizer field
 
-### Step 3: Run cross-correlations — pre vs pre (for depth ordering)
-For the same 1,132 pre-upload indicators:
-- Run Pearson r between each pair (or top 200 by |r_with_views|)
-- Keep |r| >= 0.15 AND n >= 40
-- These define which pre-upload indicators cluster together (will emerge as compound concepts later)
-- Store as: buildings/jarvis/hook-model/pre_pre_correlations.json
+## BUG 2: Post-node r-values are None
+The 6 post-upload nodes have r_value: None, meaning they contribute 0 to the output.
 
-### Step 4: Rebuild model-v2.json
-Using pre_post_correlations.json:
-- Input nodes: all pre-upload indicators that have at least 1 significant pre→post connection
-- Post-upload nodes: all post-upload indicators from Step 1 (atomic, not grouped by hand)
-- Connections: from pre_post_correlations.json (r-values as edge weights)
-- Depth ordering: a pre-upload indicator's depth = max(1, number of significant pre-pre correlations it has with other pre-upload indicators that are even closer to post-upload)
+FIX: Compute actual Pearson r between each post-upload metric and log10(views) from the 372 videos.
 
-Rebuild and save model-v2.json with the new structure.
+For each post metric (avg_percent_viewed, swiped_away_rate_pct, stayed_to_watch_pct, 
+avg_retention_vs_baseline, non_sub_fraction, retention_variation), compute:
+pearsonr([video[metric] for all videos], [log10(video.total_views) for all videos])
 
-### Step 5: Validate on 10 random videos
-Select 10 videos spanning views from ~50K to ~50M from videos_complete.json.
-For each:
-1. Extract the hook text (first @10s based on word timestamps)
-2. Featurize using featurizer.js (all 13 current base indicators)  
-3. Run through the updated model
-4. Compare predicted views to actual views
-5. Compute RMSE on log10(views)
+Store these as r_value in the post_nodes.
 
-Report: [{ytId, title, actual_views, predicted_views, log10_error}, ...]
-Save to: buildings/jarvis/hook-model/validation_results.json
+## BUG 3: Post-upload nodes need all atomic indicators, not just 6
 
-### Step 6: Commit and report
-git add -A
-git commit -m "feat: Hook Model iteration — X pre-upload nodes, Y post-upload nodes, Z cross-correlations computed"
-git push origin master
+The post-upload layer should include ALL significant post-upload indicators, not just 6 basic fields.
+From the retention curves in videos_complete.json, derive atomic indicators:
+- ret_at_10pct: retention value at 10% of video
+- ret_at_25pct: retention value at 25%
+- ret_at_50pct: retention value at 50%
+- ret_at_75pct: retention value at 75%  
+- ret_at_85pct: retention value at 85%
+- ret_at_90pct: retention value at 90%
+- hook_drop_rate: retention[0.25] - retention[0.10] (how much it drops in the hook zone)
+- end_recovery_score: mean(retention[0.80:0.95]) (Tyler's most valuable predictor, r=0.506)
+- retention_quartile_spread: mean(Q4_retention) / max(mean(Q1_retention), 0.01) (r=0.548)
+- retention_final_5pct: mean(retention[0.95:1.0]) (last 5% which Tyler's research says is critical)
+- max_cliff: most negative single-step retention drop
+- deriv_std: standard deviation of per-step retention changes
 
-Then run:
-openclaw system event --text "Hook Model iteration complete: X pre-upload nodes, Y post-upload nodes, Z pre→post connections, validation RMSE=W log10" --mode now
+For each, compute Pearson r with log10(views) across 372 videos.
+Include all where |r| >= 0.05.
 
-## Data paths
-- indicators.json: /Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/indicators.json
-- videos_complete.json: /Users/tylercsatari/Desktop/BusinessHub/tyler_ml_dataset/01_video_performance/videos_complete.json
-- Output files: /Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/hook-model/
+## THE ACTUAL VALIDATION TEST Tyler wants
 
-## Rules
-- NEVER use raw video data directly in the model weights — only use Pearson r from experiments
-- All connections must have measured r-values, not arbitrary weights
-- Post-upload concepts (retention, swipe rate) should not be hand-grouped — use atomic indicators
-- The model's edge weights = r-values from experiments
+After fixing the model, run this specific validation:
+
+1. Pick 10 videos spanning 50K to 22M views from the training set
+2. For each video, extract the hook text (first 10 seconds based on word timestamps)
+3. Run the hook through the FIXED model (with normalizer)
+4. Compare predicted log10(views) to actual log10(views)
+5. Compute Spearman rank correlation between predicted_order and actual_order
+6. The goal: predicted rank order should correlate with actual rank order (not exact numbers)
+
+Print a table:
+Video title | Actual views | Predicted views | Actual rank | Predicted rank | Match?
+
+If rank correlation < 0.5, the model is not working. We need more experiments.
+If rank correlation >= 0.7, it's working reasonably well.
+
+## IMPLEMENTATION
+
+Write a Python script: buildings/jarvis/hook-model/fix_and_validate.py
+
+This script:
+1. Loads 372 videos from videos_complete.json
+2. Computes all 13 × 4 = 52 feature values per video
+3. Computes normalizer (mean, std per feature)
+4. Computes post-upload indicator values per video  
+5. Computes Pearson r for each post-upload indicator with log10(views)
+6. Computes Pearson r for each pre-upload feature with log10(views)
+7. Rebuilds model-v2.json with all values populated
+8. Runs validation on 10 videos
+9. Prints validation table
+10. Saves results to buildings/jarvis/hook-model/validation_results.json
+
+Run the script immediately: python3 buildings/jarvis/hook-model/fix_and_validate.py
+
+Then verify the API:
+curl -X POST http://localhost:8002/api/jarvis/hook-model/score-v2 \
+  -H "Content-Type: application/json" \
+  -d '{"hook":"I built a piano that fires a real flame on every key I press","wps":4.4}'
+
+The predicted_views should be in the millions range (1M-100M), not 1 or 1000.
+
+After fixing:
+git add -A && git commit -m "fix: Hook Model normalizer + post-upload r-values + validation - model now predicts in correct range" && git push origin master
+
+Then:
+openclaw system event --text "Hook Model fundamentally fixed: normalizer computed from 372 videos, post-upload r-values populated, validation shows rank correlation X. Piano hook now predicts Y views." --mode now
