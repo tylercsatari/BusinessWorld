@@ -1,0 +1,79 @@
+You are iterating the Jarvis Hook Model. The goal is to build a deep multi-layer graph where:
+- Pre-upload indicators (from Tactical Brain experiments) connect to each other and to post-upload indicators
+- Post-upload indicators are atomic (not grouped by hand) and connect to views
+- The Hook Model ONLY uses the Tactical Brain — never raw video data directly
+
+## Current state
+- indicators.json has 1,132 pre-upload indicators with per-video value datasets (370 videos each)
+- videos_complete.json has per-video post-upload metrics (retention curves, swipe rates, etc.)
+- model-v2.json currently has only 13 pre-upload indicators and 6 post-upload nodes
+
+## What to do this iteration
+
+### Step 1: Compute post-upload indicator values per video
+Extract per-video values for all significant post-upload metrics from videos_complete.json:
+- For each of 372 videos, compute: avg_percent_viewed, swiped_away_rate_pct, stayed_to_watch_pct, 
+  avg_retention_vs_baseline, non_sub_fraction, retention_variation
+- Also derive from retention_curve: ret@10%, ret@25%, ret@50%, ret@75%, ret@85%, ret@90%, 
+  hook_drop (ret[0.1] - ret[0.25]), end_recovery (mean ret 80-95%), retention_quartile_spread (Q4/Q1)
+- Store as: buildings/jarvis/hook-model/post_indicator_values.json
+  Format: {indicator_key: [{ytId: str, value: float, log10_views: float}, ...], ...}
+
+### Step 2: Run cross-correlations — pre vs post
+For the 1,132 pre-upload indicators with per-video data:
+- Load their datasets from indicators.json (each has [{ytId, value, target_value}, ...])
+- For each pre-upload indicator × each post-upload indicator:
+  - Match on ytId (inner join)
+  - Compute Pearson r between pre_values and post_values
+  - Keep only: |r| >= 0.07 AND n >= 40
+- Store results as: buildings/jarvis/hook-model/pre_post_correlations.json
+  Format: [{pre_key, post_key, r, n}, ...]
+
+This gives us the ACTUAL cross-indicator connections for the graph.
+
+### Step 3: Run cross-correlations — pre vs pre (for depth ordering)
+For the same 1,132 pre-upload indicators:
+- Run Pearson r between each pair (or top 200 by |r_with_views|)
+- Keep |r| >= 0.15 AND n >= 40
+- These define which pre-upload indicators cluster together (will emerge as compound concepts later)
+- Store as: buildings/jarvis/hook-model/pre_pre_correlations.json
+
+### Step 4: Rebuild model-v2.json
+Using pre_post_correlations.json:
+- Input nodes: all pre-upload indicators that have at least 1 significant pre→post connection
+- Post-upload nodes: all post-upload indicators from Step 1 (atomic, not grouped by hand)
+- Connections: from pre_post_correlations.json (r-values as edge weights)
+- Depth ordering: a pre-upload indicator's depth = max(1, number of significant pre-pre correlations it has with other pre-upload indicators that are even closer to post-upload)
+
+Rebuild and save model-v2.json with the new structure.
+
+### Step 5: Validate on 10 random videos
+Select 10 videos spanning views from ~50K to ~50M from videos_complete.json.
+For each:
+1. Extract the hook text (first @10s based on word timestamps)
+2. Featurize using featurizer.js (all 13 current base indicators)  
+3. Run through the updated model
+4. Compare predicted views to actual views
+5. Compute RMSE on log10(views)
+
+Report: [{ytId, title, actual_views, predicted_views, log10_error}, ...]
+Save to: buildings/jarvis/hook-model/validation_results.json
+
+### Step 6: Commit and report
+git add -A
+git commit -m "feat: Hook Model iteration — X pre-upload nodes, Y post-upload nodes, Z cross-correlations computed"
+git push origin master
+
+Then run:
+openclaw system event --text "Hook Model iteration complete: X pre-upload nodes, Y post-upload nodes, Z pre→post connections, validation RMSE=W log10" --mode now
+
+## Data paths
+- indicators.json: /Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/indicators.json
+- videos_complete.json: /Users/tylercsatari/Desktop/BusinessHub/tyler_ml_dataset/01_video_performance/videos_complete.json
+- Output files: /Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/hook-model/
+
+## Rules
+- NEVER use raw video data directly in the model weights — only use Pearson r from experiments
+- All connections must have measured r-values, not arbitrary weights
+- Post-upload concepts (retention, swipe rate) should not be hand-grouped — use atomic indicators
+- The model's edge weights = r-values from experiments

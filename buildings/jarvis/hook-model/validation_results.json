@@ -1,0 +1,117 @@
+{
+  "rmse_log10": 0.73082149805297,
+  "training_std_log10": 0.7811636921764326,
+  "n_validation": 10,
+  "results": [
+    {
+      "ytId": "y3J3B5TvV9Y",
+      "title": "Can I swim 1326 laps? (Took forever)",
+      "actual_views": 83498,
+      "predicted_views": 1503180,
+      "log10_actual": 4.9217,
+      "log10_predicted": 6.177,
+      "log10_error": 1.2553,
+      "wps": 4.25,
+      "hook_text": "this is the English Channel and less than 0.1% of people have ever been able to swim across so in order for me to try I would need to swim 1320 laps across this pool but I was not"
+    },
+    {
+      "ytId": "IDdmtvRHrhk",
+      "title": "I’ve been TERRIFIED for this (Day 5)",
+      "actual_views": 250276,
+      "predicted_views": 1707537,
+      "log10_actual": 5.3984,
+      "log10_predicted": 6.2324,
+      "log10_error": 0.834,
+      "wps": 4.86,
+      "hook_text": "this is day five of showing you my life until you believe it's real and today has terrified me for a long time i've been training boxing since a couple weeks ago all for this moment to box my friend paul who destroyed me in a fight a couple"
+    },
+    {
+      "ytId": "auQoo8y8tV4",
+      "title": "I made a POWERFUL hidden blade 💀",
+      "actual_views": 546435,
+      "predicted_views": 1368263,
+      "log10_actual": 5.7375,
+      "log10_predicted": 6.1362,
+      "log10_error": 0.3986,
+      "wps": 3.32,
+      "hook_text": "When I press this button, it launches a super powerful hidden blade. But how powerful actually is against an apple, you could see it slice through really easily, which was honestly super"
+    },
+    {
+      "ytId": "1fhRmnDwQaY",
+      "title": "ALL THIS in one day (Your ideas)",
+      "actual_views": 887012,
+      "predicted_views": 2254021,
+      "log10_actual": 5.9479,
+      "log10_predicted": 6.353,
+      "log10_error": 0.405,
+      "wps": 4.84,
+      "hook_text": "here are a bunch of your suggestions it started off with a thousand push-ups which took hours and was way harder than I thought then I had to learn to solve a Rubik's Cube in under a minute now some of these were really hard but I felt"
+    },
+    {
+      "ytId": "QR-xRVflnDY",
+      "title": "I can finally climb walls!",
+      "actual_views": 1412913,
+      "predicted_views": 1465709,
+      "log10_actual": 6.1501,
+      "log10_predicted": 6.166,
+      "log10_error": 0.0159,
+      "wps": 4.08,
+      "hook_text": "These shoes have extremely powerful magnets inside that let you stick to walls, but the problem is they stick a little bit too well. So, in order to fix that, I got these electromagnets rated up to 150 lbs."
+    },
+    {
+      "ytId": "Kzc04OPQek0",
+      "title": "I became an actual SUPERHUMAN",
+      "actual_views": 2394456,
+      "predicted_views": 1416616,
+      "log10_actual": 6.3792,
+      "log10_predicted": 6.1513,
+      "log10_error": -0.228,
+      "wps": 4.16,
+      "hook_text": "is me absolutely dying after 15 minutes on the stairmask so I decided to do the impossible and just become the fittest person on the planet so I started training and on day one I did two hours"
+    },
+    {
+      "ytId": "rGjlx47Bly4",
+      "title": "I did Rock Lee’s INSANE routine and THIS happened",
+      "actual_views": 3529389,
+      "predicted_views": 1621638,
+      "log10_actual": 6.5477,
+      "log10_predicted": 6.21,
+      "log10_error": -0.3377,
+      "wps": 4.53,
+      "hook_text": "Then try one of Rock Lee's workouts I fell asleep instantly after Rock Lee was never like the other kids He wasn't born with their powers or their strength But what separated him from everyone else is he never"
+    },
+    {
+      "ytId": "2Wl2rdYegus",
+      "title": "I fell asleep in a metronome factory",
+      "actual_views": 6678110,
+      "predicted_views": 1325021,
+      "log10_actual": 6.8247,
+      "log10_predicted": 6.1222,
+      "log10_error": -0.7024,
+      "wps": 3.8,
+      "hook_text": "I wanted to see if it was actually true that if you fell asleep in a metronome Factory you would lose your sense of Rhythm fell asleep in a metronome Factory when I woke I completely lost my sense of Rhythm so first"
+    },
+    {
+      "ytId": "E6jUDBSTXLs",
+      "title": "Making a PERFECT burger cube 😍",
+      "actual_views": 12917850,
+      "predicted_views": 2138530,
+      "log10_actual": 7.1112,
+      "log10_predicted": 6.3301,
+      "log10_error": -0.7811,
+      "wps": 4.2,
+      "hook_text": "when this person hydraulic pressed a burger I wondered what would happen if you pressed one into a 1in cube then ate it so I picked up a burger and quickly made a mold and this was way more satisfying"
+    },
+    {
+      "ytId": "MhBOL4WsLjc",
+      "title": "Can I run as fast as the fastest man alive? (Results)",
+      "actual_views": 21866148,
+      "predicted_views": 1331933,
+      "log10_actual": 7.3398,
+      "log10_predicted": 6.1245,
+      "log10_error": -1.2153,
+      "wps": 4.28,
+      "hook_text": "run as fast as usain bolt i can't believe how fast this is he holds the world record for the fastest sprint running at an insane speed of well we'll get there in a second but first this"
+    }
+  ]
+}
