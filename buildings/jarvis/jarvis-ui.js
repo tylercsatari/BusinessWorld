@@ -6430,16 +6430,72 @@ const JarvisUI = (() => {
 
         return `
             ${headerHtml}
+            ${renderQuantifiabilityNote(meta)}
             <div style="display:grid;grid-template-columns:1fr 360px;gap:14px;align-items:start">
                 <div>
                     ${renderHookScorerPanel(score)}
                     ${renderHookModelGraph(score)}
+                    ${renderRemovedIndicatorsBlock(meta)}
                 </div>
                 <div>
                     ${renderHookNodePanel()}
                 </div>
             </div>
         `;
+    }
+
+    // Banner explaining the quantifiability rule the model now enforces, plus
+    // a count of structural vs linguistic indicators.
+    function renderQuantifiabilityNote(meta) {
+        const pre = meta.pre_nodes || [];
+        const seen = new Set();
+        const cats = { structural: 0, linguistic: 0 };
+        for (const n of pre) {
+            if (seen.has(n.indicator_key)) continue;
+            seen.add(n.indicator_key);
+            const c = n.category || 'structural';
+            if (cats[c] != null) cats[c]++;
+        }
+        const removedN = (meta.removed_indicators || []).length;
+        return `
+            <div style="background:#0a1628;border:1px solid #1e293b;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+                <div style="font-size:11px;color:#10b981;text-transform:uppercase;letter-spacing:0.06em;font-weight:700">Quantifiability rule</div>
+                <div style="font-size:11px;color:#cbd5e1;flex:1;min-width:240px">
+                    Every indicator below is either pure text statistics or a closed grammatical category — no curated topic phrases.
+                    Compound indicators (proof_of_work, open_loop, sensory, …) were removed; they are expected to re-emerge from the model over time.
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                    ${categoryBadge('structural')}<span style="font-family:monospace;color:#cbd5e1;font-size:11px">${cats.structural}</span>
+                    ${categoryBadge('linguistic')}<span style="font-family:monospace;color:#cbd5e1;font-size:11px">${cats.linguistic}</span>
+                    ${categoryBadge('emerging')}<span style="font-family:monospace;color:#cbd5e1;font-size:11px">${removedN}</span>
+                </div>
+            </div>`;
+    }
+
+    // Greyed-out list of indicators that were removed because they relied on
+    // arbitrary phrase lists. Shown so Tyler can see where the model is going.
+    function renderRemovedIndicatorsBlock(meta) {
+        const removed = meta.removed_indicators || [];
+        if (!removed.length) return '';
+        const rows = removed.map(r => `
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:6px 8px;border-bottom:1px dashed #1e293b;opacity:0.65">
+                <span style="font-size:14px;flex:0 0 auto">${HM_CATEGORY.emerging.icon}</span>
+                <div style="flex:0 0 200px">
+                    <div style="font-family:monospace;font-size:11px;color:#94a3b8;text-decoration:line-through">${escapeHtml(r.key)}</div>
+                </div>
+                <div style="flex:1;font-size:11px;color:#64748b;line-height:1.5">${escapeHtml(r.reason || '')}</div>
+            </div>`).join('');
+        return `
+            <div style="background:#0f172a;border-radius:8px;border:1px dashed #fbbf2444;padding:12px;margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:14px;flex-wrap:wrap">
+                    <div style="display:flex;gap:8px;align-items:center">
+                        ${categoryBadge('emerging')}
+                        <span style="font-size:11px;color:#cbd5e1;font-weight:600">Removed indicators · will emerge as compounds (${removed.length})</span>
+                    </div>
+                    <div style="font-size:10px;color:#64748b">Greyed-out — not in the current model. Listed to show what the model will need to discover on its own.</div>
+                </div>
+                <div style="background:#0a1628;border-radius:6px;border:1px solid #1e293b;max-height:300px;overflow:auto">${rows}</div>
+            </div>`;
     }
 
     // Build a colored, word-level rendering of the hook with phrase
@@ -6736,10 +6792,17 @@ const JarvisUI = (() => {
                 </g>`;
             }).join('');
 
-            // Label area is its own click target (selects active window node)
+            // Label area is its own click target (selects active window node).
+            // Prefix label with the indicator's category icon (🔢 structural, 📐 linguistic).
+            const sampleNode = meta.byWin[activeWin] || Object.values(meta.byWin)[0];
+            const cat = (sampleNode && sampleNode.category) || 'structural';
+            const catIcon = (HM_CATEGORY[cat] || HM_CATEGORY.structural).icon;
+            const catColor = (HM_CATEGORY[cat] || HM_CATEGORY.structural).color;
+            const catTip = (HM_CATEGORY[cat] || HM_CATEGORY.structural).tip;
             const labelGroup = `<g class="jarvis-hm-pre" data-pre-key="${escapeHtml(`${ik}_w${activeWin}`)}" style="cursor:pointer">
+                <title>${escapeHtml(labelTxt)} — ${escapeHtml(catTip)}</title>
                 <rect x="${xPre}" y="${yStartPre + i * rowH}" width="${labelW - 4}" height="${cellH}" fill="transparent"/>
-                <text x="${vectorStartX - 6}" y="${py + 3}" text-anchor="end" fill="#cbd5e1" style="font-size:10px;font-family:monospace">${escapeHtml(labelTxt)}</text>
+                <text x="${vectorStartX - 6}" y="${py + 3}" text-anchor="end" fill="#cbd5e1" style="font-size:10px;font-family:monospace">${escapeHtml(labelTxt)} <tspan fill="${catColor}" style="font-size:9px">${catIcon}</tspan></text>
             </g>`;
 
             return labelGroup + cellsHtml;
@@ -6814,40 +6877,31 @@ const JarvisUI = (() => {
         if (!hookModelSelectedNode) {
             return `<div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:12px;color:#64748b;font-size:12px">
                 <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px">Node Detail</div>
-                Click any pre-upload (left) or post-upload (middle) node to see what it measures, the exact phrase list it matches, its r-value with views, and how it composes through the network for this hook.
+                Click any pre-upload cell or label to see the exact algorithm, why it counts as quantifiable (structural vs grammatical), the per-window computed values, and what fired in this hook.
             </div>`;
         }
         if (hookModelSelectedNode.layer === 'post') return renderPostNodePanel(hookModelSelectedNode);
         return renderPreNodePanel(hookModelSelectedNode);
     }
 
-    // Human-readable description of the exact algorithm a given indicator uses
-    // so the node-detail panel can show "what this node actually computes"
-    // alongside the phrase list.
-    function describeIndicatorAlgorithm(indicatorKey, wordList) {
-        const ALGO = {
-            pivot_word_count: 'Counts whole-word matches (case-insensitive, word-boundary regex).',
-            sensory_count: 'Splits into words, counts those in the sensory word-set (after stripping punctuation).',
-            open_loop_count: 'Counts substring occurrences of any open-loop phrase in the windowed text.',
-            open_loop_count_first_half: 'Same as open_loop_count but only over the first half of the windowed text (by word count).',
-            proof_of_work_count: 'Counts substring occurrences of any proof-of-work phrase.',
-            contrast_count: 'Counts substring occurrences of any contrast phrase.',
-            action_verb_count: 'Counts substring occurrences of any action verb / -ing form.',
-            repeated_phrase_count: 'Walks all bigrams (2-word phrases). Counts those that appear 2+ times with ≥10 words between occurrences.',
-            unique_word_ratio: 'unique_words ÷ total_words (Jaccard-style vocabulary diversity).',
-            hapax_legomena_ratio: 'words_appearing_exactly_once ÷ total_words.',
-            beat_count: 'Splits on .!? then counts sentences whose first word is one of: So, And then, Now, But then, Then, After, Before, When, Until, Because, Which means.',
-            transcript_word_count: 'Total word count after whitespace split.',
-            transcript_char_count: 'Total character count of the windowed text.',
-            hook_word_ratio: 'count(words in {what, how, why, will, can, could, would, watch, see, look, check, wait, but, if}) ÷ total_words.',
-            hook_phrase_diversity: 'Number of distinct families present (open_loop, contrast, action_verb, proof_of_work, sensory). 0–5.',
-            anticipation_escalation_position_pct: 'Position (0–1) of the FIRST escalation phrase scanned with a 6-word rolling window. 0 = none found.',
-        };
-        const algoLine = ALGO[indicatorKey] || 'Computed from text statistics on the windowed hook (no fixed phrase list).';
-        const wlLine = (wordList && wordList.length)
-            ? ` Phrase list contains ${wordList.length} ${wordList.length === 1 ? 'entry' : 'entries'}.`
-            : '';
-        return algoLine + wlLine;
+    // Category badge for a quantifiable indicator. Source of truth lives in
+    // featurizer.HOOK_INDICATORS — passed through to pre_nodes via the model
+    // so we just read node.category.
+    const HM_CATEGORY = {
+        structural: { icon: '🔢', label: 'Structural', color: '#22d3ee', bg: '#06b6d422',
+            tip: 'Computed purely from text statistics — no vocabulary or domain knowledge required.' },
+        linguistic: { icon: '📐', label: 'Linguistic', color: '#a78bfa', bg: '#a78bfa22',
+            tip: 'Uses a closed grammatical category defined by English grammar (interrogatives, contrastive conjunctions, etc.) — not a curated topic vocabulary.' },
+        emerging:   { icon: '🔮', label: 'Will emerge', color: '#fbbf24', bg: '#fbbf2422',
+            tip: 'Currently removed. Expected to re-emerge as a compound feature discovered by the model over time.' },
+    };
+
+    function categoryBadge(category, opts = {}) {
+        const c = HM_CATEGORY[category] || HM_CATEGORY.structural;
+        const sz = opts.size || 'md';
+        const padding = sz === 'sm' ? '1px 5px' : '2px 7px';
+        const fontSize = sz === 'sm' ? '9px' : '10px';
+        return `<span title="${escapeHtml(c.tip)}" style="background:${c.bg};color:${c.color};padding:${padding};border-radius:3px;font-size:${fontSize};font-weight:600;display:inline-flex;align-items:center;gap:3px"><span>${c.icon}</span><span>${c.label}</span></span>`;
     }
 
     function renderPreNodePanel(n) {
@@ -6876,8 +6930,9 @@ const JarvisUI = (() => {
         const allMatched = new Set();
         perWindow.forEach(pw => pw.matched.forEach(m => allMatched.add((m || '').toLowerCase())));
 
-        // ── Algorithm section ──
-        const algoText = describeIndicatorAlgorithm(n.indicator_key, n.wordList);
+        // ── Algorithm section ── (source of truth: featurizer → pre_nodes.algorithm)
+        const algoText = n.algorithm || 'Computed from text statistics on the windowed hook.';
+        const quantReason = n.quantifiable_reason || '';
         const wordListBlock = (n.wordList && n.wordList.length)
             ? `<div style="display:flex;flex-wrap:wrap;gap:3px;max-height:180px;overflow:auto;margin-top:6px">${n.wordList.map(p => {
                 const isMatched = allMatched.has(p.toLowerCase());
@@ -6950,9 +7005,9 @@ const JarvisUI = (() => {
             <div style="background:#0f172a;border-radius:8px;border:1px solid #1e293b;padding:14px;position:sticky;top:8px;max-height:calc(100vh - 80px);overflow-y:auto">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">
                     <div>
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap">
                             <span style="background:${tier};color:#0f172a;font-weight:700;padding:1px 7px;border-radius:3px;font-size:10px">@${n.window}s active</span>
-                            <span style="background:#06b6d422;color:#22d3ee;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600">PRE-UPLOAD</span>
+                            ${categoryBadge(n.category || 'structural')}
                         </div>
                         <div style="font-size:14px;font-weight:700;color:#f1f5f9">${escapeHtml(n.label || n.indicator_key)}</div>
                         <code style="font-size:10px;color:#64748b">${escapeHtml(n.indicator_key)}</code>
@@ -6974,6 +7029,12 @@ const JarvisUI = (() => {
                     <div style="font-size:12px;color:#cbd5e1;line-height:1.55">${escapeHtml(algoText)}</div>
                     ${wordListBlock}
                 </div>
+
+                ${quantReason ? `
+                <div style="background:#0a1628;border-radius:6px;padding:10px;margin-bottom:10px;border-left:3px solid #10b981">
+                    <div style="font-size:10px;color:#10b981;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">Why this is quantifiable</div>
+                    <div style="font-size:12px;color:#cbd5e1;line-height:1.55">${escapeHtml(quantReason)}</div>
+                </div>` : ''}
 
                 <div style="background:#0a1628;border-radius:6px;padding:10px;margin-bottom:10px;border-left:3px solid #22d3ee">
                     <div style="font-size:10px;color:#22d3ee;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:5px">2. Computed values · vector [@1s | @3s | @5s | @10s]</div>

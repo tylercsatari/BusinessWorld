@@ -31,22 +31,15 @@ const VIDEOS_PATH = path.join(DATASET, '01_video_performance/videos_complete.jso
 const INDICATORS_PATH = path.join(DATASET, '02_jarvis_brain/indicators.json');
 const OUT_PATH = path.join(__dirname, 'model-v2.json');
 
-// ─────────── 12 pre-upload indicator keys (text-derivable) ───────────
-// Visual indicators (frame_*/scene_*) are excluded from the hook scorer.
-const PRE_INDICATORS = [
-    'pivot_word_count',
-    'sensory_count',
-    'open_loop_count',
-    'proof_of_work_count',
-    'contrast_count',
-    'action_verb_count',
-    'beat_count',
-    'transcript_word_count',
-    'unique_word_ratio',
-    'hook_word_ratio',
-    'repeated_phrase_count',
-    'hapax_legomena_ratio',
-];
+// ─────────── Quantifiable pre-upload indicators only ───────────
+// Driven by featurizer.HOOK_INDICATORS — keep the model in lockstep with the
+// featurizer's indicator registry. All entries are either:
+//   structural (pure text statistics) or
+//   linguistic (a CLOSED grammatical category in English).
+// Arbitrary phrase-list indicators (proof_of_work, open_loop, sensory,
+// action_verb, beat_count, hook_phrase_diversity, anticipation_escalation, …)
+// have been removed and are expected to re-emerge as compound features.
+const PRE_INDICATORS = Object.keys(featurizer.HOOK_INDICATORS);
 
 const WINDOWS = [1, 3, 5, 10];
 
@@ -56,37 +49,37 @@ const POST_NODES = [
         key: 'swipe_away_rate',
         label: 'Swipe-Away Rate',
         description: 'Fraction of viewers who swipe away in the first second. Lower = better. Source: YouTube analytics swiped_away_rate_pct.',
-        improve_hint: 'To lower this: open with a bold visible promise (an action_verb @1s, a sensory hook, a clear stake) — make staying easier than leaving.',
+        improve_hint: 'Front-load contrastive conjunctions (pivot_word) and questions in the @1s window — give the viewer something to resolve.',
     },
     {
         key: 'end_recovery_score',
         label: 'End Recovery Score',
         description: 'Mean retention from 80–95% of the video. Captures whether viewers "stick the landing".',
-        improve_hint: 'To raise this: tease the payoff in the hook (open_loop @1s, contrast @3s) so viewers stay for the resolution.',
+        improve_hint: 'Set up bigram callbacks (repeated_phrase_count) early — they pay off in the back half.',
     },
     {
         key: 'retention_quartile_spread',
         label: 'Retention Q4/Q1 Ratio',
         description: 'Mean retention in last quarter divided by first quarter. >1 = curve rising, <1 = curve falling.',
-        improve_hint: 'To raise this: make the back half pay off — pivot_word @5s + repeated_phrase callbacks set up a satisfying return.',
+        improve_hint: 'Use repeated_phrase callbacks and pivot_word transitions to make the back half feel earned.',
     },
     {
         key: 'retention_mean_75_100',
         label: 'Final-Quarter Retention',
         description: 'Mean retention across the final quarter of the video (0.75–1.0).',
-        improve_hint: 'To raise this: promise the climax in the hook so viewers wait for it. Beat_count @5s helps signal narrative arc.',
+        improve_hint: 'Higher transcript_word_count and pivot_word density correlate with stronger final-quarter retention.',
     },
     {
         key: 'hook_drop_rate',
         label: 'Hook Drop Rate',
         description: 'Retention slope across the first 20% of the video (negative = dropping fast). Less negative = better hook.',
-        improve_hint: 'To make this less negative: front-load action_verb + sensory + proof_of_work in the @1s/@3s windows.',
+        improve_hint: 'Reduce hook_word_ratio (over-using question words hurts), favor contrastive conjunctions and concrete tokens.',
     },
     {
         key: 'avg_percent_viewed',
         label: 'Avg % Viewed',
         description: 'Average percentage of the video each viewer watched.',
-        improve_hint: 'To raise this: longer hook setup (transcript_word_count @5s, beat_count @3s) keeps viewers committed.',
+        improve_hint: 'Longer hook setup (transcript_word_count @5s) and structural pivots correlate with higher overall retention.',
     },
 ];
 
@@ -315,6 +308,9 @@ for (const ind of PRE_INDICATORS) {
             window: w,
             label: (meta.label || ind.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())),
             description: reg.description || meta.description || '',
+            algorithm: reg.algorithm || '',
+            category: reg.category || 'structural',
+            quantifiable_reason: reg.quantifiable_reason || '',
             r_with_views: meta.r_with_views ?? reg.r ?? null,
             p_value: meta.p_value ?? reg.p ?? null,
             n_videos: meta.n_videos ?? reg.n ?? null,
@@ -324,6 +320,8 @@ for (const ind of PRE_INDICATORS) {
         });
     }
 }
+
+const removed_indicators = featurizer.getRemovedIndicators ? featurizer.getRemovedIndicators() : [];
 
 const post_nodes = POST_NODES.map(n => ({
     key: n.key,
@@ -339,7 +337,7 @@ const post_nodes = POST_NODES.map(n => ({
 const model = {
     version: 'v2',
     mode: 'measured',
-    note: 'v2 3-layer model: pre-upload text features → post-upload YouTube metrics → log10(views). All weights are measured Pearson r values across the 372-video training corpus.',
+    note: 'v2 3-layer model: pre-upload text features → post-upload YouTube metrics → log10(views). All pre-upload features are quantifiable: pure text statistics or closed grammatical categories. Arbitrary phrase-list indicators were removed and are expected to re-emerge as compound features.',
     trained_at: new Date().toISOString(),
     training_n: nWithViews,
     bias,
@@ -353,6 +351,7 @@ const model = {
     feature_stats,
     post_stats,
     post_combo_stats,
+    removed_indicators,
 };
 
 fs.writeFileSync(OUT_PATH, JSON.stringify(model, null, 2));

@@ -4063,15 +4063,22 @@ Respond ONLY as valid JSON (no markdown):
             const model = hookModelV2.loadModel(true);
             const indReg = featurizer.getIndicators();
 
-            // Enrich pre_nodes with phrase lists from the featurizer
+            // Enrich pre_nodes with phrase lists + algorithm/category/quantifiable_reason
+            // from the featurizer (the featurizer is the source of truth for indicator metadata).
             const preNodes = (model.pre_nodes || []).map(n => {
                 const reg = indReg[n.indicator_key] || {};
                 return {
                     ...n,
                     wordList: n.wordList || reg.wordList || null,
                     description: n.description || reg.description || '',
+                    algorithm: n.algorithm || reg.algorithm || '',
+                    category: n.category || reg.category || 'structural',
+                    quantifiable_reason: n.quantifiable_reason || reg.quantifiable_reason || '',
                 };
             });
+
+            const removedIndicators = model.removed_indicators
+                || (featurizer.getRemovedIndicators ? featurizer.getRemovedIndicators() : []);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -4088,6 +4095,7 @@ Respond ONLY as valid JSON (no markdown):
                 post_to_views_weights: model.post_to_views_weights,
                 feature_stats: model.feature_stats,
                 post_stats: model.post_stats,
+                removed_indicators: removedIndicators,
             }));
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });

@@ -1,93 +1,64 @@
 /**
- * Hook Model Featurizer
- * --------------------
- * Pure-JS port of the indicator computation logic from jarvis-metrics.js.
- * Given a hook script + words-per-second, computes each indicator value at
- * @1s, @3s, @5s, @10s windows and returns the feature vector + matched
- * phrases for UI highlighting.
+ * Hook Model Featurizer — quantifiable indicators only.
+ * --------------------------------------------------------
+ * Every indicator in this file MUST be a pure function of (text, wps).
+ * No domain-specific phrase lists. No topic-specific vocabularies. Only:
  *
- * Word lists are verbatim from jarvis-metrics.js. R-values come from
- * indicators.json (measured Pearson r on 370 Tyler Csatari videos).
+ *   - structural   → pure math on the text (counts, ratios)
+ *   - linguistic   → uses a CLOSED grammatical category defined by English
+ *                    grammar (interrogatives, contrastive conjunctions,
+ *                    comparative markers, second-person pronouns)
+ *
+ * Arbitrary phrase-list indicators (proof_of_work, open_loop, sensory,
+ * action_verb, beat_count, anticipation/escalation, hook_phrase_diversity,
+ * narrative_tension, social_proof, …) have been removed. They will be
+ * re-discovered by the model itself over time as compound features that
+ * emerge from interactions of the quantifiable primitives below.
  */
 
 const TIME_WINDOWS = [1, 3, 5, 10];
 const DEFAULT_WPS = 4.402;
 
-// ─────────── Word / phrase lists (verbatim from jarvis-metrics.js) ───────────
+// ─────────── Closed grammatical categories ───────────
+// All members of these lists are defined by their syntactic function in
+// English, not by topic or domain. They are NOT arbitrary curated vocabularies.
 
-const PIVOT_WORDS = [
+// Contrastive conjunctions (Quirk et al., A Comprehensive Grammar of the
+// English Language, 1985, §13.30+). Closed class.
+const CONTRASTIVE_CONJUNCTIONS = [
     'but', 'however', 'yet', 'although', 'whereas', 'while', 'nevertheless',
     'meanwhile', 'despite', 'instead', 'rather', 'conversely', 'nonetheless',
     'on the other hand', 'in contrast'
 ];
 
-const SENSORY_WORDS = [
-    'feel', 'touch', 'cold', 'warm', 'hot', 'sharp', 'rough', 'smooth',
-    'loud', 'quiet', 'bright', 'dark', 'smell', 'taste', 'bitter', 'sweet',
-    'soft', 'hard', 'heavy', 'light', 'thick', 'thin', 'pain', 'ache',
-    'burn', 'tingle'
+// Comparative markers — comparison constructions in English.
+// 'than', 'vs', 'versus' = closed class. The comparative adjectives are
+// the most frequent forms; speakers identify them by morphology (-er) or by
+// 'more X' / 'less X' syntactic comparison constructions.
+const COMPARISON_MARKERS = [
+    'than', 'vs', 'versus', 'more', 'less', 'better', 'worse',
+    'greater', 'smaller', 'higher', 'lower', 'faster', 'slower'
 ];
 
-const OPEN_LOOP_PHRASES = [
-    'what if', 'i wonder', "let's see", 'will it', 'can i', 'can we',
-    'how many', 'is it possible', 'to find out', 'to see if', 'to see how',
-    'to test', 'but first', 'wait until', 'watch what', "you won't believe",
-    "let's find out", 'the question is', 'i wanted to see', 'i wanted to find out',
-    'i wanted to test', 'i wanted to know', 'could i', 'could we', 'would it',
-    'i need to know', 'i have to try', 'we need to find', "let's test",
-    'to figure out', 'if it works', 'if this works', 'whether it'
-];
-
-const PROOF_OF_WORK_PHRASES = [
-    'i tested', 'i tried', 'i built', 'i made', 'i created', 'i spent',
-    'i walked', 'i ran', 'i ate', 'i wore', 'i did', 'i used',
-    'after testing', 'after trying', 'after building', 'after making',
-    'i found out', 'i discovered', 'i learned', 'i measured',
-    'this took', 'this cost', 'it took me', 'it cost me',
-    'i calculated', 'i counted', 'i tracked', 'i recorded',
-    'according to my', 'based on my', 'from my testing'
-];
-
-const CONTRAST_PHRASES = [
-    'but', 'however', 'instead', 'versus', 'surprisingly', 'actually',
-    'except', 'though', 'although', 'yet', 'on the other hand',
-    'plot twist', 'the catch'
-];
-
-const ACTION_VERB_PHRASES = [
-    'make', 'making', 'build', 'building', 'create', 'creating',
-    'try', 'trying', 'test', 'testing', 'break', 'breaking',
-    'destroy', 'destroying', 'cut', 'cutting', 'open', 'opening',
-    'eat', 'eating', 'cook', 'cooking', 'turn', 'turning',
-    'use', 'using', 'smash', 'smashing', 'drop', 'dropping',
-    'launch', 'launching', 'pour', 'pouring', 'mix', 'mixing'
-];
-
-const ESCALATION_PHRASES = [
-    "and it gets worse", "but wait", "and then", "and here's the thing",
-    "but here's where it gets", "and that's when", "and just when",
-    "but the worst part", "and it only gets", "and then something happened",
-    "and i realized", "and at that moment", "right at that point"
-];
-
-const HOOK_TYPE_WORDS = new Set([
-    'what', 'how', 'why', 'will', 'can', 'could', 'would',
-    'watch', 'see', 'look', 'check', 'wait', 'but', 'if'
+// Interrogative wh-words and inversion auxiliaries used to form questions
+// in English. Closed grammatical class.
+const INTERROGATIVE_WORDS = new Set([
+    'what', 'how', 'why', 'who', 'when', 'where', 'which', 'whose',
+    'will', 'can', 'could', 'would', 'should',
+    'do', 'does', 'did', 'is', 'are', 'was', 'were',
+    'if', 'whether'
 ]);
 
-const BEAT_STARTERS_RE = /^(So|And\s+then|Now|But\s+then|Then|After|Before|When|Until|Because|Which\s+means)\b/i;
-
-const TITLE_ACTION_RE = /^(Making|Building|Testing|Breaking|Trying|Running|Walking|Eating|Creating|Destroying|Climbing|Lifting|Cutting|Firing|Launching|Smashing|Dropping|Pouring|Growing|Wearing)/i;
+// Second-person pronouns — closed grammatical class.
+const SECOND_PERSON_PRONOUNS = new Set([
+    'you', 'your', 'yours', 'yourself', 'yourselves'
+]);
 
 // ─────────── Helpers ───────────
 
-function escapeRe(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-function tokens(text) {
-    return text.toLowerCase().split(/\s+/).filter(Boolean);
-}
+function tokens(text) { return text.toLowerCase().split(/\s+/).filter(Boolean); }
 
 function countWordBoundary(textLower, words) {
     let total = 0;
@@ -103,68 +74,96 @@ function countWordBoundary(textLower, words) {
     return { count: total, matches };
 }
 
-function countPhrases(textLower, phrases) {
-    let total = 0;
-    const matches = [];
-    for (const p of phrases) {
-        const re = new RegExp(escapeRe(p), 'g');
-        const found = textLower.match(re);
-        if (found) {
-            total += found.length;
-            for (let i = 0; i < found.length; i++) matches.push(p);
-        }
-    }
-    return { count: total, matches };
-}
-
 function countWordSet(textLower, wordSet) {
     const wlist = textLower.split(/\s+/).filter(Boolean);
     let total = 0;
     const matches = [];
     for (const w of wlist) {
         const stripped = w.replace(/[^a-z']/g, '');
-        if (wordSet.has(stripped)) {
-            total++;
-            matches.push(stripped);
-        }
+        if (wordSet.has(stripped)) { total++; matches.push(stripped); }
     }
     return { count: total, matches };
 }
 
 // ─────────── Indicator computations ───────────
-// Each returns { value: number, matches: string[] }
+// Each returns { count: number, matches: string[] }
 
-function computePivotWordCount(textLower) {
-    return countWordBoundary(textLower, PIVOT_WORDS);
+function computeTranscriptWordCount(textLower) {
+    const trimmed = textLower.trim();
+    return { count: trimmed ? trimmed.split(/\s+/).length : 0, matches: [] };
 }
 
-function computeSensoryCount(textLower) {
-    const set = new Set(SENSORY_WORDS);
-    return countWordSet(textLower, set);
+function computeTranscriptCharCount(_textLower, originalText) {
+    return { count: (originalText || '').length, matches: [] };
 }
 
-function computeOpenLoopCount(textLower) {
-    return countPhrases(textLower, OPEN_LOOP_PHRASES);
-}
-
-function computeOpenLoopFirstHalf(textLower) {
+function computeUniqueWordRatio(textLower) {
     const words = textLower.split(/\s+/).filter(Boolean);
     if (!words.length) return { count: 0, matches: [] };
-    const mid = Math.floor(words.length / 2);
-    const firstHalf = words.slice(0, mid).join(' ');
-    return countPhrases(firstHalf, OPEN_LOOP_PHRASES);
+    return { count: new Set(words).size / words.length, matches: [] };
 }
 
-function computeProofOfWorkCount(textLower) {
-    return countPhrases(textLower, PROOF_OF_WORK_PHRASES);
+function computeHapaxRatio(textLower) {
+    const words = textLower.split(/\s+/).filter(Boolean);
+    if (!words.length) return { count: 0, matches: [] };
+    const counts = {};
+    for (const w of words) counts[w] = (counts[w] || 0) + 1;
+    const hapax = Object.entries(counts).filter(([_, c]) => c === 1);
+    return { count: hapax.length / words.length, matches: hapax.map(([w]) => w) };
 }
 
-function computeContrastCount(textLower) {
-    return countPhrases(textLower, CONTRAST_PHRASES);
+function computePivotWordCount(textLower) {
+    return countWordBoundary(textLower, CONTRASTIVE_CONJUNCTIONS);
 }
 
-function computeActionVerbCount(textLower) {
-    return countPhrases(textLower, ACTION_VERB_PHRASES);
+function computePivotWordDensity(textLower) {
+    const wc = textLower.split(/\s+/).filter(Boolean).length;
+    const { count, matches } = computePivotWordCount(textLower);
+    return { count: wc ? (count / wc) * 100 : 0, matches };
+}
+
+function computeComparisonWordCount(textLower) {
+    return countWordBoundary(textLower, COMPARISON_MARKERS);
+}
+
+function computeHookWordRatio(textLower) {
+    const words = textLower.split(/\s+/).filter(Boolean);
+    if (!words.length) return { count: 0, matches: [] };
+    const matches = [];
+    let n = 0;
+    for (const w of words) {
+        const stripped = w.replace(/[^a-z']/g, '');
+        if (INTERROGATIVE_WORDS.has(stripped)) { n++; matches.push(stripped); }
+    }
+    return { count: n / words.length, matches };
+}
+
+function computeSecondPersonRatio(textLower) {
+    const words = textLower.split(/\s+/).filter(Boolean);
+    if (!words.length) return { count: 0, matches: [] };
+    const matches = [];
+    let n = 0;
+    for (const w of words) {
+        const stripped = w.replace(/[^a-z']/g, '');
+        if (SECOND_PERSON_PRONOUNS.has(stripped)) { n++; matches.push(stripped); }
+    }
+    return { count: n / words.length, matches };
+}
+
+function computeHookQuestionCount(_textLower, originalText) {
+    const matches = (originalText || '').match(/\?/g) || [];
+    return { count: matches.length, matches: matches.length ? ['?'] : [] };
+}
+
+function computeHookQuestionDensity(textLower, originalText) {
+    const wc = textLower.split(/\s+/).filter(Boolean).length;
+    const { count } = computeHookQuestionCount(textLower, originalText);
+    return { count: wc ? count / wc : 0, matches: [] };
+}
+
+function computeExclamationCount(_textLower, originalText) {
+    const matches = (originalText || '').match(/!/g) || [];
+    return { count: matches.length, matches: matches.length ? ['!'] : [] };
 }
 
 function computeRepeatedPhraseCount(textLower) {
@@ -180,196 +179,160 @@ function computeRepeatedPhraseCount(textLower) {
     for (const [bg, pos] of Object.entries(positions)) {
         if (pos.length < 2) continue;
         for (let i = 1; i < pos.length; i++) {
-            if (pos[i] - pos[i - 1] >= 10) {
-                count++;
-                matches.push(bg);
-                break;
-            }
+            if (pos[i] - pos[i - 1] >= 10) { count++; matches.push(bg); break; }
         }
     }
     return { count, matches };
 }
 
-function computeUniqueWordRatio(textLower) {
-    const words = textLower.split(/\s+/).filter(Boolean);
-    if (!words.length) return { count: 0, matches: [] };
-    return { count: new Set(words).size / words.length, matches: [] };
-}
-
-function computeHapaxRatio(textLower) {
-    const words = textLower.split(/\s+/).filter(Boolean);
-    if (!words.length) return { count: 0, matches: [] };
-    const counts = {};
-    for (const w of words) counts[w] = (counts[w] || 0) + 1;
-    const hapax = Object.entries(counts).filter(([_, c]) => c === 1);
-    return {
-        count: hapax.length / words.length,
-        matches: hapax.map(([w]) => w),
-    };
-}
-
-function computeBeatCount(text) {
-    const sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
-    const matches = sentences.filter(s => BEAT_STARTERS_RE.test(s));
-    return { count: matches.length, matches };
-}
-
-function computeTranscriptWordCount(textLower) {
-    const trimmed = textLower.trim();
-    return { count: trimmed ? trimmed.split(/\s+/).length : 0, matches: [] };
-}
-
-function computeTranscriptCharCount(text) {
-    return { count: text.length, matches: [] };
-}
-
-function computeHookWordRatio(textLower) {
-    const words = textLower.split(/\s+/).filter(Boolean);
-    if (!words.length) return { count: 0, matches: [] };
-    const matches = [];
-    let hookN = 0;
-    for (const w of words) {
-        const stripped = w.replace(/[^a-z']/g, '');
-        if (HOOK_TYPE_WORDS.has(stripped)) {
-            hookN++;
-            matches.push(stripped);
-        }
-    }
-    return { count: hookN / words.length, matches };
-}
-
-function computeHookPhraseDiversity(textLower) {
-    const families = [
-        ['open_loop', OPEN_LOOP_PHRASES],
-        ['contrast', CONTRAST_PHRASES],
-        ['action_verb', ACTION_VERB_PHRASES],
-        ['proof_of_work', PROOF_OF_WORK_PHRASES],
-    ];
-    let n = 0;
-    const matches = [];
-    for (const [name, phrases] of families) {
-        if (phrases.some(p => textLower.includes(p))) {
-            n++;
-            matches.push(name);
-        }
-    }
-    // Sensory uses word-set semantics
-    const set = new Set(SENSORY_WORDS);
-    if (textLower.split(/\s+/).some(w => set.has(w.replace(/[^a-z']/g, '')))) {
-        n++;
-        matches.push('sensory');
-    }
-    return { count: n, matches };
-}
-
-function computeAnticipationEscalationPositionPct(textLower) {
-    const words = textLower.split(/\s+/).filter(Boolean);
-    if (!words.length) return { count: 0, matches: [], missing: true };
-    for (let i = 0; i < words.length; i++) {
-        const window = words.slice(i, i + 6).join(' ');
-        for (const p of ESCALATION_PHRASES) {
-            if (window.includes(p)) {
-                return { count: i / words.length, matches: [p], missing: false };
-            }
-        }
-    }
-    return { count: 0, matches: [], missing: true };
-}
-
 // ─────────── Indicator registry ───────────
-// Each entry exposes its r-value, description, and a compute() that returns
-// { count, matches }. The featurizer iterates this registry per time window.
+// `category` is one of:
+//   'structural'   → computed from text statistics, no vocabulary at all
+//   'linguistic'   → uses a CLOSED grammatical category (interrogatives,
+//                    contrastive conjunctions, comparative markers, pronouns)
+// `algorithm` is the precise rule shown to the user in the node panel.
+// `quantifiable_reason` justifies why it does not depend on domain knowledge.
 
 const HOOK_INDICATORS = {
-    pivot_word_count: {
-        r: 0.241, p: 2.7e-6, n: 370,
-        description: 'Count of pivot/contrast words (but, however, yet, although…).',
-        wordList: PIVOT_WORDS,
-        compute: (textLower) => computePivotWordCount(textLower),
-    },
-    sensory_count: {
-        r: 0.197, p: 1.4e-4, n: 370,
-        description: 'Count of sensory/physical words (cold, sharp, loud, taste…).',
-        wordList: SENSORY_WORDS,
-        compute: (textLower) => computeSensoryCount(textLower),
-    },
-    open_loop_count: {
-        r: 0.206, p: 6.6e-5, n: 370,
-        description: 'Count of open-loop / Zeigarnik phrases (what if, will it, can I…).',
-        wordList: OPEN_LOOP_PHRASES,
-        compute: (textLower) => computeOpenLoopCount(textLower),
-    },
-    open_loop_count_first_half: {
-        r: 0.206, p: 6.6e-5, n: 370,
-        description: 'Open-loop matches in first half of hook only.',
-        wordList: OPEN_LOOP_PHRASES,
-        compute: (textLower) => computeOpenLoopFirstHalf(textLower),
-    },
-    proof_of_work_count: {
-        r: 0.211, p: 4.4e-5, n: 370,
-        description: 'Count of proof-of-work phrases (i tested, i built, i spent…).',
-        wordList: PROOF_OF_WORK_PHRASES,
-        compute: (textLower) => computeProofOfWorkCount(textLower),
-    },
-    contrast_count: {
-        r: 0.205, p: 7.4e-5, n: 370,
-        description: 'Count of contrast phrases (but, however, instead, plot twist…).',
-        wordList: CONTRAST_PHRASES,
-        compute: (textLower) => computeContrastCount(textLower),
-    },
-    action_verb_count: {
-        r: 0.183, p: 3.7e-4, n: 370,
-        description: 'Count of action verbs (make, build, test, smash, drop…).',
-        wordList: ACTION_VERB_PHRASES,
-        compute: (textLower) => computeActionVerbCount(textLower),
-    },
-    repeated_phrase_count: {
-        r: 0.217, p: 2.8e-5, n: 367,
-        description: 'Bigrams repeated 2+ times with gap >= 10 words (verbal callbacks).',
-        compute: (textLower) => computeRepeatedPhraseCount(textLower),
-    },
-    unique_word_ratio: {
-        r: -0.203, p: 8.3e-5, n: 370,
-        description: 'Unique words / total words. Higher = more vocab variety = fewer views.',
-        compute: (textLower) => computeUniqueWordRatio(textLower),
-    },
-    hapax_legomena_ratio: {
-        r: -0.185, p: 3.6e-4, n: 370,
-        description: 'Fraction of words appearing exactly once. Lower = more repetition = more views.',
-        compute: (textLower) => computeHapaxRatio(textLower),
-    },
-    beat_count: {
-        r: 0.226, p: 1.1e-5, n: 370,
-        description: 'Narrative beats — sentences starting with So/And then/Now/But then/etc.',
-        compute: (_, originalText) => computeBeatCount(originalText),
-    },
     transcript_word_count: {
         r: 0.264, p: 4.1e-7, n: 370,
-        description: 'Total word count (longer hooks correlate with more views).',
+        category: 'structural',
+        description: 'Total word count of the windowed text.',
+        algorithm: 'len(text.split()) — counts whitespace-separated tokens.',
+        quantifiable_reason: 'Pure tokenization. No vocabulary, no domain knowledge.',
         compute: (textLower) => computeTranscriptWordCount(textLower),
     },
     transcript_char_count: {
         r: 0.256, p: 8.2e-7, n: 370,
-        description: 'Total character count of the hook.',
-        compute: (_, originalText) => computeTranscriptCharCount(originalText),
+        category: 'structural',
+        description: 'Total character count of the windowed text.',
+        algorithm: 'len(text) — counts characters including spaces and punctuation.',
+        quantifiable_reason: 'Pure character count. No vocabulary involved.',
+        compute: (_, originalText) => computeTranscriptCharCount(_, originalText),
+    },
+    unique_word_ratio: {
+        r: -0.203, p: 8.3e-5, n: 370,
+        category: 'structural',
+        description: 'Type–token ratio: unique words divided by total words.',
+        algorithm: 'len(set(words)) / len(words). Standard type–token ratio.',
+        quantifiable_reason: 'Pure math on word identities. No domain knowledge.',
+        compute: (textLower) => computeUniqueWordRatio(textLower),
+    },
+    hapax_legomena_ratio: {
+        r: -0.185, p: 3.6e-4, n: 370,
+        category: 'structural',
+        description: 'Fraction of words that appear exactly once (hapax legomena).',
+        algorithm: 'count(w for w in words if words.count(w) == 1) / len(words). A standard corpus-linguistics metric.',
+        quantifiable_reason: 'Counts singletons — a closed mathematical operation. No vocabulary required.',
+        compute: (textLower) => computeHapaxRatio(textLower),
+    },
+    pivot_word_count: {
+        r: 0.241, p: 2.7e-6, n: 370,
+        category: 'linguistic',
+        description: 'Count of contrastive conjunctions (a closed grammatical category in English).',
+        algorithm: "Counts whole-word, case-insensitive matches of the closed grammatical category of contrastive conjunctions: ['but', 'however', 'yet', 'although', 'whereas', 'while', 'nevertheless', 'meanwhile', 'despite', 'instead', 'rather', 'conversely', 'nonetheless', 'on the other hand', 'in contrast']. These are defined by English grammar (Quirk et al., 1985, §13.30+), not by arbitrary topic selection.",
+        quantifiable_reason: 'Contrastive conjunctions are a CLOSED grammatical class in English — defined by syntactic function, not by topic. Membership is fixed by the language, not curated.',
+        wordList: CONTRASTIVE_CONJUNCTIONS,
+        compute: (textLower) => computePivotWordCount(textLower),
+    },
+    pivot_word_density: {
+        r: 0.154, p: 0.003, n: 370,
+        category: 'linguistic',
+        description: 'Contrastive conjunctions per 100 words — length-normalized.',
+        algorithm: '(pivot_word_count / max(word_count, 1)) × 100. Density per 100 words.',
+        quantifiable_reason: 'Same closed grammatical class as pivot_word_count, normalized for text length.',
+        wordList: CONTRASTIVE_CONJUNCTIONS,
+        compute: (textLower) => computePivotWordDensity(textLower),
+    },
+    comparison_word_count: {
+        r: 0.153, p: 0.003, n: 370,
+        category: 'linguistic',
+        description: 'Count of comparative markers (a closed grammatical class).',
+        algorithm: "Counts whole-word matches of comparative markers: ['than', 'vs', 'versus', 'more', 'less', 'better', 'worse', 'greater', 'smaller', 'higher', 'lower', 'faster', 'slower']. These signal grammatical comparison constructions.",
+        quantifiable_reason: "'than', 'vs', 'versus' are closed-class function words. The comparative adjectives ('more', 'less', '-er' forms) are part of the comparison construction grammar, not topic vocabulary.",
+        wordList: COMPARISON_MARKERS,
+        compute: (textLower) => computeComparisonWordCount(textLower),
     },
     hook_word_ratio: {
         r: -0.269, p: 1.4e-7, n: 370,
-        description: 'Fraction of hook-type words (what/how/why/will/can…). Negative: overusing hurts.',
+        category: 'linguistic',
+        description: 'Fraction of interrogative wh-words and inversion auxiliaries.',
+        algorithm: "count(w in {'what','how','why','who','when','where','which','whose','will','can','could','would','should','do','does','did','is','are','was','were','if','whether'}) / len(words). Closed grammatical class of interrogatives + auxiliaries used in question formation.",
+        quantifiable_reason: 'WH-words and inversion auxiliaries form a closed grammatical class for question formation in English. Membership is fixed by the language.',
+        wordList: Array.from(INTERROGATIVE_WORDS),
         compute: (textLower) => computeHookWordRatio(textLower),
     },
-    hook_phrase_diversity: {
-        r: 0.186, p: 2.8e-4, n: 370,
-        description: 'Number of distinct phrase families present in the hook.',
-        compute: (textLower) => computeHookPhraseDiversity(textLower),
+    second_person_ratio: {
+        r: -0.138, p: 0.008, n: 370,
+        category: 'linguistic',
+        description: "Fraction of second-person pronouns ('you', 'your', 'yours', 'yourself', 'yourselves').",
+        algorithm: "count(w in {'you','your','yours','yourself','yourselves'}) / len(words). Closed grammatical class of second-person pronouns.",
+        quantifiable_reason: 'Second-person pronouns are a closed grammatical class in English. Five entries, fixed by the language.',
+        wordList: Array.from(SECOND_PERSON_PRONOUNS),
+        compute: (textLower) => computeSecondPersonRatio(textLower),
     },
-    anticipation_escalation_position_pct: {
-        r: -0.227, p: 0.033, n: 88,
-        description: 'Position (0–1) of first escalation phrase. Earlier = fewer views.',
-        wordList: ESCALATION_PHRASES,
-        compute: (textLower) => computeAnticipationEscalationPositionPct(textLower),
+    hook_question_count: {
+        r: 0.126, p: 0.015, n: 370,
+        category: 'structural',
+        description: "Number of '?' punctuation marks in the windowed text.",
+        algorithm: "Counts occurrences of '?' in the original (case-preserving) text.",
+        quantifiable_reason: 'Counts a single punctuation glyph. No vocabulary, no domain knowledge.',
+        compute: (textLower, originalText) => computeHookQuestionCount(textLower, originalText),
+    },
+    hook_question_density: {
+        r: 0.156, p: 0.003, n: 370,
+        category: 'structural',
+        description: "'?' per word in the windowed text.",
+        algorithm: "count('?') / max(word_count, 1).",
+        quantifiable_reason: 'Pure ratio of a punctuation glyph to token count.',
+        compute: (textLower, originalText) => computeHookQuestionDensity(textLower, originalText),
+    },
+    exclamation_count: {
+        r: -0.142, p: 0.006, n: 370,
+        category: 'structural',
+        description: "Number of '!' punctuation marks in the windowed text.",
+        algorithm: "Counts occurrences of '!' in the original text.",
+        quantifiable_reason: 'Counts a single punctuation glyph. No vocabulary required.',
+        compute: (textLower, originalText) => computeExclamationCount(textLower, originalText),
+    },
+    repeated_phrase_count: {
+        r: 0.217, p: 2.8e-5, n: 367,
+        category: 'structural',
+        description: 'Number of bigrams that repeat 2+ times with at least 10 words between occurrences.',
+        algorithm: 'Build all bigrams. For each bigram with 2+ occurrences, check if any consecutive pair of occurrences is separated by ≥10 word positions. Count bigrams that satisfy this. No phrase list — the bigrams come from the text itself.',
+        quantifiable_reason: 'Pure structural detection of self-repetition with positional gap. No vocabulary or topic knowledge.',
+        compute: (textLower) => computeRepeatedPhraseCount(textLower),
     },
 };
+
+// ─────────── Indicators removed (will emerge later) ───────────
+// These are exposed so the UI can show greyed-out placeholders and explain
+// why they are not in the model right now. The list is *informational only*
+// — featurize() does not compute them.
+const REMOVED_INDICATORS = [
+    { key: 'proof_of_work_count',         reason: '31 hand-curated phrases. Should emerge as a compound of action verbs + first-person + past tense.' },
+    { key: 'open_loop_count',             reason: '30+ hand-curated phrases. Should emerge from interrogatives + future modals + uncertainty markers.' },
+    { key: 'sensory_count',               reason: '26 hand-curated words. Should emerge from concrete-noun classifiers, not a fixed list.' },
+    { key: 'action_verb_count',           reason: '40 hand-curated verbs. Should emerge from POS tagging + verb-class clusters.' },
+    { key: 'beat_count',                  reason: '10 hand-curated sentence starters. Should emerge from discourse-marker analysis.' },
+    { key: 'contrast_count',              reason: 'Overlaps pivot_word but uses different curated phrases. Not independently grammatical.' },
+    { key: 'hook_phrase_diversity',       reason: 'Counts presence across multiple curated families. Compound of arbitrary lists.' },
+    { key: 'anticipation_escalation_position_pct', reason: 'Position of first match against curated escalation phrases. Arbitrary.' },
+    { key: 'urgency_count',               reason: 'Hand-curated urgency phrases.' },
+    { key: 'stakes_count',                reason: 'Hand-curated stakes phrases.' },
+    { key: 'callback_count',              reason: 'Hand-curated callback phrases.' },
+    { key: 'credibility_signal',          reason: 'Hand-curated credibility phrases.' },
+    { key: 'gap_tease_count',             reason: 'Hand-curated phrase family.' },
+    { key: 'narrative_clock_count',       reason: 'Hand-curated phrase family.' },
+    { key: 'progressive_reveal_count',    reason: 'Hand-curated phrase family.' },
+    { key: 'authority_stack_count',       reason: 'Hand-curated phrase family.' },
+    { key: 'specificity_anchor',          reason: 'Hand-curated specificity phrases.' },
+    { key: 'pre_gratification',           reason: 'Hand-curated phrases.' },
+    { key: 'narrative_tension',           reason: 'Hand-curated phrases.' },
+    { key: 'social_proof',                reason: 'Hand-curated phrases.' },
+    { key: 'loop_stacking',               reason: "Definition of 'loop' itself depends on curated phrase lists." },
+    { key: 'persistence_signal',          reason: 'Hand-curated phrases.' },
+];
 
 // ─────────── Window extraction ───────────
 
@@ -380,18 +343,10 @@ function extractWindow(words, windowSec, wps) {
 
 // ─────────── Public API ───────────
 
-/**
- * Compute features for a hook script across all time windows.
- * @param {string} hookText
- * @param {number} wps - words per second (default 4.402)
- * @returns {{ features: Object, windows: Object, matched: Object, indicators: string[] }}
- */
 function featurize(hookText, wps = DEFAULT_WPS) {
     const allWords = (hookText || '').split(/\s+/).filter(Boolean);
     const windows = {};
-    for (const w of TIME_WINDOWS) {
-        windows[w] = extractWindow(allWords, w, wps);
-    }
+    for (const w of TIME_WINDOWS) windows[w] = extractWindow(allWords, w, wps);
 
     const features = {};
     const matched = {};
@@ -416,11 +371,6 @@ function featurize(hookText, wps = DEFAULT_WPS) {
     };
 }
 
-/**
- * Estimate per-word timestamps for a hook script at a given WPS.
- * Returns one entry per word with t (start seconds) and a windows array
- * describing which @1s/@3s/@5s/@10s windows the word falls into.
- */
 function getWordTimings(text, wps = DEFAULT_WPS) {
     const words = (text || '').split(/\s+/).filter(Boolean);
     const dt = 1 / Math.max(wps, 0.1);
@@ -433,16 +383,12 @@ function getWordTimings(text, wps = DEFAULT_WPS) {
             index: i,
             t: parseFloat(t.toFixed(3)),
             windows: inWindows,
-            // smallest window that contains this word — used for color tier
             tier: inWindows.length ? inWindows[0] : null,
         });
     }
     return out;
 }
 
-/**
- * Returns the registry of indicators (key → metadata).
- */
 function getIndicators() {
     const out = {};
     for (const [key, ind] of Object.entries(HOOK_INDICATORS)) {
@@ -450,35 +396,34 @@ function getIndicators() {
             r: ind.r,
             p: ind.p,
             n: ind.n,
+            category: ind.category,
             description: ind.description,
+            algorithm: ind.algorithm,
+            quantifiable_reason: ind.quantifiable_reason,
             wordList: ind.wordList || null,
         };
     }
     return out;
 }
 
+function getRemovedIndicators() { return REMOVED_INDICATORS.slice(); }
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         featurize,
         getIndicators,
+        getRemovedIndicators,
         getWordTimings,
         HOOK_INDICATORS,
+        REMOVED_INDICATORS,
         TIME_WINDOWS,
         DEFAULT_WPS,
-        // Also expose word lists for highlighting in the UI
-        WORD_LISTS: {
-            pivot_word_count: PIVOT_WORDS,
-            sensory_count: SENSORY_WORDS,
-            open_loop_count: OPEN_LOOP_PHRASES,
-            open_loop_count_first_half: OPEN_LOOP_PHRASES,
-            proof_of_work_count: PROOF_OF_WORK_PHRASES,
-            contrast_count: CONTRAST_PHRASES,
-            action_verb_count: ACTION_VERB_PHRASES,
-            anticipation_escalation_position_pct: ESCALATION_PHRASES,
-        },
     };
 }
 
 if (typeof window !== 'undefined') {
-    window.HookModelFeaturizer = { featurize, getIndicators, getWordTimings, HOOK_INDICATORS, TIME_WINDOWS, DEFAULT_WPS };
+    window.HookModelFeaturizer = {
+        featurize, getIndicators, getRemovedIndicators, getWordTimings,
+        HOOK_INDICATORS, REMOVED_INDICATORS, TIME_WINDOWS, DEFAULT_WPS,
+    };
 }
