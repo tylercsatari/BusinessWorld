@@ -85,3 +85,26 @@ Iteration re-ran on 2026-05-04 (stable — source data unchanged since 361249b; 
 - **Step 6:** Committed, pushed, openclaw event posted.
 
 Top post→views anchors: `non_sub_fraction` r=0.626, `retention_quartile_spread` r=0.549, `end_recovery` r=0.506, `ret_at_85pct/ret_at_90pct` r=0.504, `hook_drop` r=−0.358, `retention_variation` r=−0.248.
+Iteration complete (stable reproduction — source data unchanged since `361249b`):
+
+- **Step 1:** 15 atomic post-upload indicators per 372 videos (n=369–372 each)
+- **Step 2:** 17,010 pre×post pairs → **2,478 edges** kept (|r|≥0.07, n≥40), 630 distinct active pre indicators
+- **Step 3:** 198,135 pre×pre pairs → **16,590 edges** kept (|r|≥0.15, n≥40)
+- **Step 4:** `model-v2.json` rebuilt — **682 pre nodes** (52 featurizer + 630 Tactical Brain) → **15 post nodes** → log10(views)
+- **Step 5:** Validation on 10 videos (83K–22M views) — **RMSE = 0.7308 log10**, training σ = 0.7812, **skill ratio 0.936**
+- **Step 6:** Committed `fe6c1f2`, pushed to master, openclaw event posted
+
+Top post→views anchors: `non_sub_fraction` r=0.626, `retention_quartile_spread` r=0.549, `end_recovery` r=0.506, `ret@85/90%` r=0.504, `hook_drop` r=−0.358.
+
+---
+
+Iteration re-ran on 2026-05-04 (stable — source data unchanged since `fe6c1f2`; indicators.json Apr 25, videos_complete.json Apr 29).
+
+- **Step 1:** 15 atomic post-upload indicators per 372 videos (n=369–372 each) → `post_indicator_values.json`
+- **Step 2:** 17,010 pre×post pairs → **2,478 edges** kept (|r|≥0.07, n≥40), 630 distinct active pre indicators → `pre_post_correlations.json`
+- **Step 3:** 198,135 pre×pre pairs → **16,590 edges** kept (|r|≥0.15, n≥40) → `pre_pre_correlations.json`
+- **Step 4:** `model-v2.json` rebuilt — **682 pre nodes** (52 featurizer + 630 Tactical Brain) → **15 post nodes** → log10(views), bias=6.2297
+- **Step 5:** Validation on 10 videos (83K–22M views) — **RMSE = 0.7308 log10**, training σ = 0.7812, **skill ratio 0.936**
+- **Step 6:** Committed, pushed to master, openclaw event posted
+
+Top post→views anchors: `non_sub_fraction` r=0.626, `retention_quartile_spread` r=0.549, `end_recovery` r=0.506, `ret@85/90%` r=0.504, `hook_drop` r=−0.358.
