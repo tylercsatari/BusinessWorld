@@ -2,7 +2,7 @@
   "version": "v2",
   "mode": "measured",
   "note": "v2 3-layer Hook Model. Pre-upload nodes come from (a) Tactical Brain experiments with measured per-video values and (b) the featurizer.js text-only indicators. Post-upload nodes are atomic metrics from videos_complete.json. Edge weights are Pearson r values measured across 372 videos. Pre→post edges below |r| >= 0.07 are dropped from the dataset-based path; featurizer→post edges are kept dense so inference can run on any new hook text.",
-  "trained_at": "2026-05-04T03:10:02.920Z",
+  "trained_at": "2026-05-04T04:03:21.437Z",
   "training_n": 372,
   "bias": 6.229740679374493,
   "log10_views_std": 0.7811636921764326,
