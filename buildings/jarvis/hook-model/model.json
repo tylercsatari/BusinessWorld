@@ -1,0 +1,547 @@
+{
+  "mode": "r_value_prior",
+  "note": "Weights = Pearson r-values from indicators.json (mode=r_value_prior). Feature stats computed by running JS featurizer over the 372 training transcripts. Replaced after train.py with LOO-trained weights.",
+  "trained_at": null,
+  "training_n": 371,
+  "cv_r2": null,
+  "bias": 6.233693004673176,
+  "log10_views_std": 0.7784924773958746,
+  "wps_default": 4.332424389575781,
+  "time_windows": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "weights": {
+    "hook_word_ratio_w1": -0.26930848822621745,
+    "hook_word_ratio_w3": -0.26930848822621745,
+    "hook_word_ratio_w5": -0.26930848822621745,
+    "hook_word_ratio_w10": -0.26930848822621745,
+    "transcript_word_count_w1": 0.2639487232819939,
+    "transcript_word_count_w3": 0.2639487232819939,
+    "transcript_word_count_w5": 0.2639487232819939,
+    "transcript_word_count_w10": 0.2639487232819939,
+    "transcript_char_count_w1": 0.255725779362024,
+    "transcript_char_count_w3": 0.255725779362024,
+    "transcript_char_count_w5": 0.255725779362024,
+    "transcript_char_count_w10": 0.255725779362024,
+    "pivot_word_count_w1": 0.24124891275806962,
+    "pivot_word_count_w3": 0.24124891275806962,
+    "pivot_word_count_w5": 0.24124891275806962,
+    "pivot_word_count_w10": 0.24124891275806962,
+    "anticipation_escalation_position_pct_w1": -0.2273688307248439,
+    "anticipation_escalation_position_pct_w3": -0.2273688307248439,
+    "anticipation_escalation_position_pct_w5": -0.2273688307248439,
+    "anticipation_escalation_position_pct_w10": -0.2273688307248439,
+    "beat_count_w1": 0.2258855983587482,
+    "beat_count_w3": 0.2258855983587482,
+    "beat_count_w5": 0.2258855983587482,
+    "beat_count_w10": 0.2258855983587482,
+    "repeated_phrase_count_w1": 0.216869804298255,
+    "repeated_phrase_count_w3": 0.216869804298255,
+    "repeated_phrase_count_w5": 0.216869804298255,
+    "repeated_phrase_count_w10": 0.216869804298255,
+    "proof_of_work_count_w1": 0.21065744238972664,
+    "proof_of_work_count_w3": 0.21065744238972664,
+    "proof_of_work_count_w5": 0.21065744238972664,
+    "proof_of_work_count_w10": 0.21065744238972664,
+    "open_loop_count_first_half_w1": 0.20590547417157698,
+    "open_loop_count_first_half_w3": 0.20590547417157698,
+    "open_loop_count_first_half_w5": 0.20590547417157698,
+    "open_loop_count_first_half_w10": 0.20590547417157698,
+    "contrast_count_w1": 0.20458937713859152,
+    "contrast_count_w3": 0.20458937713859152,
+    "contrast_count_w5": 0.20458937713859152,
+    "contrast_count_w10": 0.20458937713859152,
+    "unique_word_ratio_w1": -0.20320144654621736,
+    "unique_word_ratio_w3": -0.20320144654621736,
+    "unique_word_ratio_w5": -0.20320144654621736,
+    "unique_word_ratio_w10": -0.20320144654621736,
+    "sensory_count_w1": 0.19672161803605298,
+    "sensory_count_w3": 0.19672161803605298,
+    "sensory_count_w5": 0.19672161803605298,
+    "sensory_count_w10": 0.19672161803605298,
+    "hook_phrase_diversity_w1": 0.18560624929722322,
+    "hook_phrase_diversity_w3": 0.18560624929722322,
+    "hook_phrase_diversity_w5": 0.18560624929722322,
+    "hook_phrase_diversity_w10": 0.18560624929722322,
+    "hapax_legomena_ratio_w1": -0.18453520835473142,
+    "hapax_legomena_ratio_w3": -0.18453520835473142,
+    "hapax_legomena_ratio_w5": -0.18453520835473142,
+    "hapax_legomena_ratio_w10": -0.18453520835473142,
+    "action_verb_count_w1": 0.1826490265760959,
+    "action_verb_count_w3": 0.1826490265760959,
+    "action_verb_count_w5": 0.1826490265760959,
+    "action_verb_count_w10": 0.1826490265760959
+  },
+  "feature_stats": {
+    "hook_word_ratio_w1": {
+      "mean": 0.02996406109613657,
+      "std": 0.09102287553175592,
+      "n": 371
+    },
+    "hook_word_ratio_w3": {
+      "mean": 0.05333655738761175,
+      "std": 0.07261602922909392,
+      "n": 371
+    },
+    "hook_word_ratio_w5": {
+      "mean": 0.059390725380075324,
+      "std": 0.05939937420192369,
+      "n": 371
+    },
+    "hook_word_ratio_w10": {
+      "mean": 0.056404538366632104,
+      "std": 0.04254474487482802,
+      "n": 371
+    },
+    "transcript_word_count_w1": {
+      "mean": 4.4366576819407015,
+      "std": 0.8305996783919932,
+      "n": 371
+    },
+    "transcript_word_count_w3": {
+      "mean": 13.293800539083554,
+      "std": 2.4511308704130013,
+      "n": 371
+    },
+    "transcript_word_count_w5": {
+      "mean": 22.14016172506736,
+      "std": 4.091095006493088,
+      "n": 371
+    },
+    "transcript_word_count_w10": {
+      "mean": 41.706199460916416,
+      "std": 8.080503018400409,
+      "n": 371
+    },
+    "transcript_char_count_w1": {
+      "mean": 21.590296495956874,
+      "std": 5.865087973669241,
+      "n": 371
+    },
+    "transcript_char_count_w3": {
+      "mean": 66.98921832884102,
+      "std": 13.237126012205767,
+      "n": 371
+    },
+    "transcript_char_count_w5": {
+      "mean": 110.38814016172502,
+      "std": 20.93245945807815,
+      "n": 371
+    },
+    "transcript_char_count_w10": {
+      "mean": 206.98921832884093,
+      "std": 37.924033486350375,
+      "n": 371
+    },
+    "pivot_word_count_w1": {
+      "mean": 0.005390835579514822,
+      "std": 0.07332302335299767,
+      "n": 371
+    },
+    "pivot_word_count_w3": {
+      "mean": 0.09703504043126686,
+      "std": 0.30538738599622345,
+      "n": 371
+    },
+    "pivot_word_count_w5": {
+      "mean": 0.2452830188679247,
+      "std": 0.48401263464360667,
+      "n": 371
+    },
+    "pivot_word_count_w10": {
+      "mean": 0.5849056603773585,
+      "std": 0.6859112536128404,
+      "n": 371
+    },
+    "anticipation_escalation_position_pct_w1": {
+      "mean": 0,
+      "std": 0,
+      "n": 371
+    },
+    "anticipation_escalation_position_pct_w3": {
+      "mean": 0,
+      "std": 0,
+      "n": 371
+    },
+    "anticipation_escalation_position_pct_w5": {
+      "mean": 0.0017152658662092618,
+      "std": 0.033038353832346865,
+      "n": 371
+    },
+    "anticipation_escalation_position_pct_w10": {
+      "mean": 0.002235224508579317,
+      "std": 0.030874517690501525,
+      "n": 371
+    },
+    "beat_count_w1": {
+      "mean": 0.04582210242587601,
+      "std": 0.20938148462735914,
+      "n": 371
+    },
+    "beat_count_w3": {
+      "mean": 0.04582210242587601,
+      "std": 0.20938148462735914,
+      "n": 371
+    },
+    "beat_count_w5": {
+      "mean": 0.05390835579514823,
+      "std": 0.2261417450979318,
+      "n": 371
+    },
+    "beat_count_w10": {
+      "mean": 0.07547169811320746,
+      "std": 0.2645076632662427,
+      "n": 371
+    },
+    "repeated_phrase_count_w1": {
+      "mean": 0,
+      "std": 0,
+      "n": 371
+    },
+    "repeated_phrase_count_w3": {
+      "mean": 0.002695417789757411,
+      "std": 0.05191741316511651,
+      "n": 371
+    },
+    "repeated_phrase_count_w5": {
+      "mean": 0.08355795148247974,
+      "std": 0.41070046790240183,
+      "n": 371
+    },
+    "repeated_phrase_count_w10": {
+      "mean": 0.657681940700809,
+      "std": 1.0973255035435177,
+      "n": 371
+    },
+    "proof_of_work_count_w1": {
+      "mean": 0.03504043126684632,
+      "std": 0.18413034743730067,
+      "n": 371
+    },
+    "proof_of_work_count_w3": {
+      "mean": 0.0970350404312669,
+      "std": 0.3141128156109073,
+      "n": 371
+    },
+    "proof_of_work_count_w5": {
+      "mean": 0.15094339622641506,
+      "std": 0.3804235541749975,
+      "n": 371
+    },
+    "proof_of_work_count_w10": {
+      "mean": 0.26145552560646923,
+      "std": 0.49220632351542815,
+      "n": 371
+    },
+    "open_loop_count_first_half_w1": {
+      "mean": 0.010781671159029642,
+      "std": 0.10341301757364094,
+      "n": 371
+    },
+    "open_loop_count_first_half_w3": {
+      "mean": 0.09433962264150947,
+      "std": 0.3879889703348262,
+      "n": 371
+    },
+    "open_loop_count_first_half_w5": {
+      "mean": 0.1536388140161725,
+      "std": 0.4479460259507569,
+      "n": 371
+    },
+    "open_loop_count_first_half_w10": {
+      "mean": 0.32884097035040416,
+      "std": 0.6235933394605787,
+      "n": 371
+    },
+    "contrast_count_w1": {
+      "mean": 0,
+      "std": 0,
+      "n": 371
+    },
+    "contrast_count_w3": {
+      "mean": 0.17520215633423197,
+      "std": 0.4211049167538378,
+      "n": 371
+    },
+    "contrast_count_w5": {
+      "mean": 0.39622641509433953,
+      "std": 0.6508927693916277,
+      "n": 371
+    },
+    "contrast_count_w10": {
+      "mean": 0.822102425876011,
+      "std": 0.8483031713731044,
+      "n": 371
+    },
+    "unique_word_ratio_w1": {
+      "mean": 0.9930817610062889,
+      "std": 0.04741101568392905,
+      "n": 371
+    },
+    "unique_word_ratio_w3": {
+      "mean": 0.955320719246557,
+      "std": 0.0671499997549576,
+      "n": 371
+    },
+    "unique_word_ratio_w5": {
+      "mean": 0.9099091377892524,
+      "std": 0.07009144355692118,
+      "n": 371
+    },
+    "unique_word_ratio_w10": {
+      "mean": 0.8314758641586085,
+      "std": 0.07225128511708911,
+      "n": 371
+    },
+    "sensory_count_w1": {
+      "mean": 0.008086253369272238,
+      "std": 0.08968023133110493,
+      "n": 371
+    },
+    "sensory_count_w3": {
+      "mean": 0.029649595687331567,
+      "std": 0.18507744505680584,
+      "n": 371
+    },
+    "sensory_count_w5": {
+      "mean": 0.061994609164420525,
+      "std": 0.25241602290565673,
+      "n": 371
+    },
+    "sensory_count_w10": {
+      "mean": 0.1293800539083558,
+      "std": 0.3668336297634155,
+      "n": 371
+    },
+    "hook_phrase_diversity_w1": {
+      "mean": 0.2587601078167116,
+      "std": 0.44466516297217334,
+      "n": 371
+    },
+    "hook_phrase_diversity_w3": {
+      "mean": 0.7789757412398919,
+      "std": 0.7708822793391424,
+      "n": 371
+    },
+    "hook_phrase_diversity_w5": {
+      "mean": 1.2776280323450135,
+      "std": 0.9506815658486791,
+      "n": 371
+    },
+    "hook_phrase_diversity_w10": {
+      "mean": 2.0026954177897567,
+      "std": 1.1064886078995024,
+      "n": 371
+    },
+    "hapax_legomena_ratio_w1": {
+      "mean": 0.9870619946091643,
+      "std": 0.08314587594596379,
+      "n": 371
+    },
+    "hapax_legomena_ratio_w3": {
+      "mean": 0.9137667722788263,
+      "std": 0.11430461884865452,
+      "n": 371
+    },
+    "hapax_legomena_ratio_w5": {
+      "mean": 0.8306870777055667,
+      "std": 0.11725182269321523,
+      "n": 371
+    },
+    "hapax_legomena_ratio_w10": {
+      "mean": 0.7057757865918124,
+      "std": 0.11231823172143962,
+      "n": 371
+    },
+    "action_verb_count_w1": {
+      "mean": 0.1913746630727763,
+      "std": 0.4690772970412749,
+      "n": 371
+    },
+    "action_verb_count_w3": {
+      "mean": 0.47439353099730436,
+      "std": 0.7542792130247804,
+      "n": 371
+    },
+    "action_verb_count_w5": {
+      "mean": 0.8059299191374667,
+      "std": 1.055266015108497,
+      "n": 371
+    },
+    "action_verb_count_w10": {
+      "mean": 1.4150943396226425,
+      "std": 1.5369990695262734,
+      "n": 371
+    }
+  },
+  "node_meta": {
+    "hook_word_ratio": {
+      "label": "Hook Word Ratio",
+      "description": "hook word ratio",
+      "r_with_views": -0.26930848822621745,
+      "p_value": 1.438806807537361e-7,
+      "n_videos": 370,
+      "ci_low": -0.3613425863409009,
+      "ci_high": -0.17207764256950947,
+      "experiment_id": "exp_hook_word_ratio_20260410034427.",
+      "resolution_id": "r_hook"
+    },
+    "transcript_word_count": {
+      "label": "Transcript Word Count",
+      "description": "transcript word count",
+      "r_with_views": 0.2639487232819939,
+      "p_value": 2.582486408114479e-7,
+      "n_videos": 370,
+      "ci_low": 0.16647301790184538,
+      "ci_high": 0.3563155626857721,
+      "experiment_id": "exp_transcript_word_count_20260410034427.",
+      "resolution_id": "r0"
+    },
+    "transcript_char_count": {
+      "label": "Transcript Char Count",
+      "description": "transcript char count",
+      "r_with_views": 0.255725779362024,
+      "p_value": 6.180912868413263e-7,
+      "n_videos": 370,
+      "ci_low": 0.15788663695628088,
+      "ci_high": 0.34859270091283745,
+      "experiment_id": "exp_transcript_char_count_20260410034427.",
+      "resolution_id": "r0"
+    },
+    "pivot_word_count": {
+      "label": "Pivot Word Count",
+      "description": "Count of pivot/transition words (but, however, wait, instead, etc). r=+0.26 vs keep.",
+      "r_with_views": 0.24124891275806962,
+      "p_value": 0.0000026748174092794994,
+      "n_videos": 370,
+      "ci_low": 0.1428057909162261,
+      "ci_high": 0.33496553979925847,
+      "experiment_id": "exp_pivot_word_count_20260410_065010",
+      "resolution_id": "r0"
+    },
+    "anticipation_escalation_position_pct": {
+      "label": "Anticipation Escalation Position Pct",
+      "description": "Position (as fraction of total words) where the first \"ANTICIPATION ESCALATION\" phrase match occurs in the transcript.",
+      "r_with_views": -0.2273688307248439,
+      "p_value": 0.03313866833600845,
+      "n_videos": 88,
+      "ci_low": -0.4169586300760109,
+      "ci_high": -0.018819030371304328,
+      "experiment_id": "exp_anticipation_escalation_position_pct_20260423074147.",
+      "resolution_id": "r0"
+    },
+    "beat_count": {
+      "label": "Beat Count",
+      "description": "Total narrative beats: segment transitions + tension words + questions. Proxy for story rhythm complexity.",
+      "r_with_views": 0.2258855983587482,
+      "p_value": 0.000011485821324477462,
+      "n_videos": 370,
+      "ci_low": 0.12685135302634554,
+      "ci_high": 0.3204609529825147,
+      "experiment_id": "exp_beat_count_20260412_184106",
+      "resolution_id": "r0"
+    },
+    "repeated_phrase_count": {
+      "label": "Repeated Phrase Count",
+      "description": "Number of bigrams repeated 3+ times — verbal callbacks and catchphrases.",
+      "r_with_views": 0.216869804298255,
+      "p_value": 0.00002784245853509801,
+      "n_videos": 367,
+      "ci_low": 0.11709750542783312,
+      "ci_high": 0.3123081531413213,
+      "experiment_id": "exp_repeated_phrase_count_20260410_065025",
+      "resolution_id": "r0"
+    },
+    "proof_of_work_count": {
+      "label": "Proof Of Work Count",
+      "description": "proof of work count",
+      "r_with_views": 0.21065744238972664,
+      "p_value": 0.00004421199261736758,
+      "n_videos": 370,
+      "ci_low": 0.1110876802760807,
+      "ci_high": 0.30604007136503586,
+      "experiment_id": "exp_proof_of_work_count_20260415171044.",
+      "resolution_id": "r0"
+    },
+    "open_loop_count_first_half": {
+      "label": "Open Loop Count First Half",
+      "description": "Count of \"OPEN LOOP\" phrase matches in the first half of the transcript (by word index).",
+      "r_with_views": 0.20590547417157698,
+      "p_value": 0.00006604364246343146,
+      "n_videos": 370,
+      "ci_low": 0.10617883873072448,
+      "ci_high": 0.30153103576277546,
+      "experiment_id": "exp_open_loop_count_first_half_20260423024507.",
+      "resolution_id": "r0"
+    },
+    "contrast_count": {
+      "label": "Contrast Count",
+      "description": "contrast count",
+      "r_with_views": 0.20458937713859152,
+      "p_value": 0.00007368955089267694,
+      "n_videos": 370,
+      "ci_low": 0.10482015336086785,
+      "ci_high": 0.300281464111511,
+      "experiment_id": "exp_contrast_count_20260415020148.",
+      "resolution_id": "r0"
+    },
+    "unique_word_ratio": {
+      "label": "Unique Word Ratio",
+      "description": "unique word ratio",
+      "r_with_views": -0.20320144654621736,
+      "p_value": 0.00008265164908404867,
+      "n_videos": 370,
+      "ci_low": -0.29896333398134944,
+      "ci_high": -0.10338771330736996,
+      "experiment_id": "exp_unique_word_ratio_20260410034427.",
+      "resolution_id": "r0"
+    },
+    "sensory_count": {
+      "label": "Sensory Count",
+      "description": "sensory count",
+      "r_with_views": 0.19672161803605298,
+      "p_value": 0.00013981693473276096,
+      "n_videos": 370,
+      "ci_low": 0.09670555793939029,
+      "ci_high": 0.29280454332937284,
+      "experiment_id": "exp_sensory_count_20260415020159.",
+      "resolution_id": "r0"
+    },
+    "hook_phrase_diversity": {
+      "label": "Hook Phrase Diversity",
+      "description": "hook phrase diversity",
+      "r_with_views": 0.18560624929722322,
+      "p_value": 0.0003314859219954265,
+      "n_videos": 370,
+      "ci_low": 0.08526408117760303,
+      "ci_high": 0.28222127624713095,
+      "experiment_id": "exp_hook_phrase_diversity_20260415171053.",
+      "resolution_id": "r_hook"
+    },
+    "hapax_legomena_ratio": {
+      "label": "Hapax Legomena Ratio",
+      "description": "Fraction of words appearing exactly once — vocabulary uniqueness.",
+      "r_with_views": -0.18453520835473142,
+      "p_value": 0.00035932245866306415,
+      "n_videos": 370,
+      "ci_low": -0.28120026325926967,
+      "ci_high": -0.08416301356968259,
+      "experiment_id": "exp_hapax_legomena_ratio_20260410_065011",
+      "resolution_id": "r0"
+    },
+    "action_verb_count": {
+      "label": "Action Verb Count",
+      "description": "action verb count",
+      "r_with_views": 0.1826490265760959,
+      "p_value": 0.0004137014336930283,
+      "n_videos": 370,
+      "ci_low": 0.0822245483590295,
+      "ci_high": 0.2794016521639517,
+      "experiment_id": "exp_action_verb_count_20260415020156.",
+      "resolution_id": "r0"
+    }
+  }
+}

@@ -3969,6 +3969,124 @@ Respond ONLY as valid JSON (no markdown):
     }
 
     // =========================================
+    // API: Jarvis Hook Model (linear-network scorer)
+    // =========================================
+    //   POST /api/jarvis/hook-model/score       → predict(hook, wps)
+    //   GET  /api/jarvis/hook-model/nodes       → registry of nodes & weights
+    //   GET  /api/jarvis/hook-model/node/:key   → indicator detail
+    if (pathname === '/api/jarvis/hook-model/score' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => body += d);
+        req.on('end', () => {
+            try {
+                const { hook = '', wps } = JSON.parse(body || '{}');
+                const hookModel = require('./buildings/jarvis/hook-model/model');
+                const out = hookModel.predict(hook, wps);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(out));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    if (pathname === '/api/jarvis/hook-model/nodes' && req.method === 'GET') {
+        try {
+            const hookModel = require('./buildings/jarvis/hook-model/model');
+            const featurizer = require('./buildings/jarvis/hook-model/featurizer');
+            const model = hookModel.loadModel(true);
+            const indicators = featurizer.getIndicators();
+            const nodes = Object.entries(model.weights).map(([fkey, w]) => {
+                const m = fkey.match(/^(.+)_w(\d+)$/);
+                const ikey = m ? m[1] : fkey;
+                const win = m ? parseInt(m[2], 10) : null;
+                const meta = (model.node_meta && model.node_meta[ikey]) || {};
+                const ind = indicators[ikey] || {};
+                const stat = (model.feature_stats && model.feature_stats[fkey]) || {};
+                return {
+                    key: fkey,
+                    indicator_key: ikey,
+                    window: win,
+                    weight: w,
+                    r_value: meta.r_with_views ?? ind.r ?? null,
+                    p_value: meta.p_value ?? ind.p ?? null,
+                    n_videos: meta.n_videos ?? ind.n ?? null,
+                    description: meta.description || ind.description || '',
+                    label: meta.label || ikey,
+                    mean: stat.mean,
+                    std: stat.std,
+                };
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                nodes,
+                bias: model.bias,
+                log10_views_std: model.log10_views_std,
+                wps_default: model.wps_default,
+                mode: model.mode,
+                trained_at: model.trained_at,
+                training_n: model.training_n,
+                cv_r2: model.cv_r2,
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname.startsWith('/api/jarvis/hook-model/node/') && req.method === 'GET') {
+        try {
+            const key = decodeURIComponent(pathname.slice('/api/jarvis/hook-model/node/'.length));
+            const hookModel = require('./buildings/jarvis/hook-model/model');
+            const featurizer = require('./buildings/jarvis/hook-model/featurizer');
+            const model = hookModel.loadModel();
+            const m = key.match(/^(.+)_w(\d+)$/);
+            const ikey = m ? m[1] : key;
+            const win = m ? parseInt(m[2], 10) : null;
+            const meta = (model.node_meta && model.node_meta[ikey]) || {};
+            const ind = (featurizer.getIndicators())[ikey] || {};
+            const stat = (model.feature_stats && model.feature_stats[key]) || {};
+
+            // Try to enrich with full record from canonical indicators.json
+            let canonical = null;
+            try {
+                const canonicalPath = path.join(__dirname, 'buildings', 'jarvis', 'indicators_compact.json');
+                if (fs.existsSync(canonicalPath)) {
+                    const all = JSON.parse(fs.readFileSync(canonicalPath, 'utf8'));
+                    const list = Array.isArray(all) ? all : (all.indicators || []);
+                    canonical = list.find(i => i.key === ikey) || null;
+                }
+            } catch { /* non-fatal */ }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                key,
+                indicator_key: ikey,
+                window: win,
+                weight: model.weights[key],
+                r_value: meta.r_with_views ?? ind.r ?? null,
+                p_value: meta.p_value ?? ind.p ?? null,
+                n_videos: meta.n_videos ?? ind.n ?? null,
+                ci_low: meta.ci_low,
+                ci_high: meta.ci_high,
+                description: meta.description || ind.description || '',
+                label: meta.label || ikey,
+                mean: stat.mean,
+                std: stat.std,
+                wordList: ind.wordList || null,
+                canonical,
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Jarvis v2 (new unified architecture)
     // =========================================
 
