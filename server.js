@@ -30,6 +30,59 @@ const { spawn } = require('child_process');
 const PORT = process.env.PORT || 8002;
 const IS_RENDER = !!process.env.RENDER;  // Render sets this env var automatically
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function generateBatchInvoiceHTML({ invoiceNumber, invoiceDate, dueDate, primaryCompanyName, companyAddr, lineItems, subtotal, currency }) {
+    const numStr = String(invoiceNumber).padStart(4, '0');
+    // Group line items by company so multi-company invoices read clearly
+    const byCompany = {};
+    lineItems.forEach(li => { (byCompany[li.companyName || 'Other'] = byCompany[li.companyName || 'Other'] || []).push(li); });
+    const companyNames = Object.keys(byCompany);
+    const showGrouping = companyNames.length > 1;
+    const rows = showGrouping
+        ? companyNames.map(cn => {
+            const groupHeader = `<tr><td colspan="2" style="padding-top:14px;font-weight:700;color:#2d3436;background:#f8f9fa;">${esc(cn)}</td></tr>`;
+            const groupRows = byCompany[cn].map(li => `<tr><td style="padding-left:24px">${esc(li.description)}</td><td class="td-amount">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
+            return groupHeader + groupRows;
+        }).join('')
+        : lineItems.map(li => `<tr><td>${esc(li.description)}</td><td class="td-amount">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
+
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>INV-${numStr} ${esc(primaryCompanyName)} ${invoiceDate}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#333;padding:40px;max-width:800px;margin:0 auto}
+.inv-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #2d3436}
+.inv-title{font-size:32px;font-weight:800;color:#2d3436;letter-spacing:-0.5px}.inv-number{font-size:14px;color:#888;margin-top:4px}
+.inv-parties{display:flex;justify-content:space-between;gap:40px;margin-bottom:32px}.inv-party{flex:1}
+.inv-party-label{font-size:11px;font-weight:700;color:#636e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.inv-party-name{font-size:16px;font-weight:700;margin-bottom:4px}.inv-party-detail{font-size:13px;color:#666;line-height:1.6}
+.inv-dates{display:flex;gap:32px;margin-bottom:28px}.inv-date-box{background:#f8f9fa;padding:10px 16px;border-radius:8px}
+.inv-date-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase}.inv-date-value{font-size:15px;font-weight:600;margin-top:2px}
+table{width:100%;border-collapse:collapse;margin-bottom:24px}th{text-align:left;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;padding:10px 12px;border-bottom:2px solid #e0e0e0}
+td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-align:right;font-weight:600}
+.inv-totals{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-bottom:32px}
+.inv-total-row{display:flex;gap:40px;font-size:14px}.inv-total-label{color:#888;min-width:100px;text-align:right}
+.inv-total-value{font-weight:600;min-width:100px;text-align:right}
+.inv-grand-total{font-size:20px;font-weight:800;color:#2d3436;border-top:2px solid #2d3436;padding-top:8px;margin-top:4px}
+.inv-bank{margin-top:32px;padding:16px;background:#f8f9fa;border-radius:8px;font-size:13px;line-height:1.6}
+.inv-bank-title{font-size:12px;font-weight:700;color:#636e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.inv-bank-row{display:flex;gap:8px}.inv-bank-label{color:#888;min-width:130px}.inv-bank-value{font-weight:600}
+@media print{body{padding:15mm;margin:0}@page{margin:0;size:auto}html{-webkit-print-color-adjust:exact}}
+</style></head><body>
+<div class="inv-header"><div><div class="inv-title">INVOICE</div><div class="inv-number">INV-${numStr}</div></div></div>
+<div class="inv-parties">
+<div class="inv-party"><div class="inv-party-label">From</div><div class="inv-party-name">Centrality LTD</div><div class="inv-party-detail">14 Discovery Ridge Road SW<br>Calgary AB Canada, T3H 4P8</div></div>
+<div class="inv-party"><div class="inv-party-label">Bill To</div><div class="inv-party-name">${esc(primaryCompanyName)}</div><div class="inv-party-detail">${companyAddr || ''}</div></div>
+</div>
+<div class="inv-dates"><div class="inv-date-box"><div class="inv-date-label">Invoice Date</div><div class="inv-date-value">${invoiceDate}</div></div><div class="inv-date-box"><div class="inv-date-label">Due Date</div><div class="inv-date-value">${dueDate}</div></div></div>
+<table><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="inv-totals">
+<div class="inv-total-row"><span class="inv-total-label">Subtotal</span><span class="inv-total-value">${currency} $${subtotal.toFixed(2)}</span></div>
+<div class="inv-total-row inv-grand-total"><span class="inv-total-label">Total</span><span class="inv-total-value">${currency} $${subtotal.toFixed(2)}</span></div>
+</div>
+<div class="inv-bank"><div class="inv-bank-title">Payment Details</div><div class="inv-bank-row"><span class="inv-bank-label">Institution Number:</span><span class="inv-bank-value">001</span></div><div class="inv-bank-row"><span class="inv-bank-label">Transit Number:</span><span class="inv-bank-value">30489</span></div><div class="inv-bank-row"><span class="inv-bank-label">Account Number:</span><span class="inv-bank-value">1987-607</span></div></div>
+</body></html>`;
+}
+
 const DIR = __dirname;
 const LAYOUT_FILE = path.join(DIR, 'layout.json');
 const BUILD_TS = Date.now();
@@ -1122,6 +1175,104 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 companyName: company?.name || '',
                 lineItems, subtotal, total, currency, r2Key
             });
+
+            // If video already had an invoice, delete the old one (its R2 file + record) so we don't orphan it
+            if (video.invoiceId && video.invoiceId !== record.id) {
+                try {
+                    const old = await dataStore.getById('invoices', video.invoiceId);
+                    if (old?.r2Key && cloud.isR2Ready()) await cloud.deleteFromR2(old.r2Key).catch(() => {});
+                    await dataStore.remove('invoices', video.invoiceId);
+                } catch (e) { /* ok */ }
+            }
+
+            // Update video: link invoice and bump status to invoiced if still in progress
+            const newStatus = (video.status === 'pending' || video.status === 'active' || video.status === 'delivered') ? 'invoiced' : video.status;
+            await dataStore.update('sponsorvideos', video.id, { invoiceId: record.id, status: newStatus });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ invoice: record, html }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Batch invoice — one invoice covering multiple sponsor videos (possibly across companies)
+    // =========================================
+    if (pathname === '/api/invoices/generate-batch' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { sponsorVideoIds } = body;
+            if (!Array.isArray(sponsorVideoIds) || !sponsorVideoIds.length) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'sponsorVideoIds required' }));
+                return;
+            }
+
+            const videos = await Promise.all(sponsorVideoIds.map(id => dataStore.getById('sponsorvideos', id)));
+            const validVideos = videos.filter(Boolean);
+            if (!validVideos.length) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No valid videos found' }));
+                return;
+            }
+
+            const companyIds = [...new Set(validVideos.map(v => v.companyId).filter(Boolean))];
+            const companiesArr = await Promise.all(companyIds.map(id => dataStore.getById('sponsors', id)));
+            const companyMap = Object.fromEntries(companiesArr.filter(Boolean).map(c => [c.id, c]));
+
+            const allInvoices = await dataStore.getAll('invoices');
+            const maxNum = allInvoices.reduce((m, i) => Math.max(m, i.invoiceNumber || 0), 4);
+            const invoiceNumber = maxNum + 1;
+            const invoiceDate = new Date().toISOString().split('T')[0];
+            const due = new Date(); due.setDate(due.getDate() + 30);
+            const dueDate = due.toISOString().split('T')[0];
+
+            const lineItems = validVideos.map(v => ({
+                description: v.title || 'Sponsored Video',
+                companyName: companyMap[v.companyId]?.name || 'Unknown',
+                amount: v.amount || 0,
+                currency: v.currency || 'CAD',
+                videoId: v.id
+            }));
+
+            // Primary company = the one with the most line items (tie → first one)
+            const counts = {};
+            lineItems.forEach(li => { counts[li.companyName] = (counts[li.companyName] || 0) + 1; });
+            const primaryCompanyName = Object.entries(counts).sort((a,b) => b[1]-a[1])[0]?.[0] || lineItems[0]?.companyName || 'Client';
+            const primaryCompany = companiesArr.find(c => c?.name === primaryCompanyName);
+            const companyAddr = (primaryCompany?.address || '').replace(/\n/g, '<br>');
+
+            const subtotal = lineItems.reduce((s, li) => s + (li.amount || 0), 0);
+            const currency = validVideos[0]?.currency || 'CAD';
+
+            const html = generateBatchInvoiceHTML({
+                invoiceNumber, invoiceDate, dueDate,
+                primaryCompanyName, companyAddr,
+                lineItems, subtotal, currency
+            });
+
+            const r2Key = `invoices/INV-${String(invoiceNumber).padStart(4, '0')}.html`;
+            if (cloud.isR2Ready()) {
+                await cloud.uploadToR2(r2Key, Buffer.from(html), 'text/html');
+            }
+
+            const record = await dataStore.create('invoices', {
+                invoiceNumber, invoiceDate, dueDate,
+                sponsorVideoIds,
+                sponsorVideoId: sponsorVideoIds[0], // backward compat with single-invoice download/pdf paths
+                companyId: primaryCompany?.id || null,
+                companyName: primaryCompanyName,
+                lineItems, subtotal, total: subtotal, currency, r2Key, isBatch: true
+            });
+
+            // Link each video to this invoice and mark as invoiced (if still in progress)
+            await Promise.all(validVideos.map(v => {
+                const newStatus = (v.status === 'pending' || v.status === 'active' || v.status === 'delivered') ? 'invoiced' : v.status;
+                return dataStore.update('sponsorvideos', v.id, { invoiceId: record.id, status: newStatus }).catch(() => {});
+            }));
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ invoice: record, html }));

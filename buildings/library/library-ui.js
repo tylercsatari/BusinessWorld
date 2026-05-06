@@ -3056,6 +3056,10 @@ const LibraryUI = (() => {
         if (sponsorsSubTab === 'companies') {
             html += renderCompaniesListHtml();
         } else {
+            const batchEligibleCount = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced' && !v.invoiceId).length;
+            html += `<div style="display:flex;justify-content:flex-end;padding:8px 14px;border-bottom:1px solid #f0f0f0;">
+                <button id="sponsor-batch-invoice-btn" style="border:1px solid #0984e3;background:#fff;color:#0984e3;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;${batchEligibleCount === 0 ? 'opacity:0.5;cursor:not-allowed;' : ''}" ${batchEligibleCount === 0 ? 'disabled' : ''} title="Create one invoice covering multiple deals">📋 Batch Invoice</button>
+            </div>`;
             html += renderVideoDealsListHtml();
         }
 
@@ -3068,6 +3072,9 @@ const LibraryUI = (() => {
                 renderSponsorsContent(el);
             });
         });
+
+        const batchBtn = el.querySelector('#sponsor-batch-invoice-btn');
+        if (batchBtn) batchBtn.addEventListener('click', () => openBatchInvoiceModal());
 
         // Company card clicks
         el.querySelectorAll('.sponsor-company-card').forEach(card => {
@@ -3465,7 +3472,11 @@ const LibraryUI = (() => {
     async function generateInvoice(videoId) {
         const v = sponsorVideos.find(x => x.id === videoId);
         if (!v) return;
-        if (!confirm(`Generate invoice for "${v.title || 'this deal'}"?`)) return;
+        const replacing = !!v.invoiceId;
+        const promptMsg = replacing
+            ? `This deal already has an invoice. Replace it with a new one?`
+            : `Generate invoice for "${v.title || 'this deal'}"?`;
+        if (!confirm(promptMsg)) return;
         sponsorsBusy = true;
         try {
             const res = await fetch('/api/invoices/generate', {
@@ -3475,18 +3486,150 @@ const LibraryUI = (() => {
             });
             if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed'); }
             const data = await res.json();
-            // Update local video with invoiceId and persist status change
+            // Server already persisted invoiceId + status — mirror it locally
             v.invoiceId = data.invoice.id;
             if (v.status === 'pending' || v.status === 'active' || v.status === 'delivered') v.status = 'invoiced';
-            await fetch(`/api/data/sponsorvideos/${videoId}`, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ invoiceId: v.invoiceId, status: v.status })
-            });
             renderSponsorsTab();
             updateSponsorsBadge();
+            previewInvoice(v.invoiceId);
         } catch (e) {
             console.warn('Sponsors: generate invoice failed', e);
             alert('Failed to generate invoice: ' + e.message);
+        } finally {
+            sponsorsBusy = false;
+        }
+    }
+
+    // --- Batch invoice ---
+    function openBatchInvoiceModal() {
+        const eligible = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced' && !v.invoiceId);
+        if (!eligible.length) {
+            alert('No eligible video deals to invoice.\n\nDeals must not be paid, cancelled, or already invoiced.');
+            return;
+        }
+        const overlay = document.createElement('div');
+        overlay.className = 'sponsor-invoice-overlay';
+        const rows = eligible.map(v => {
+            const company = sponsorCompanies.find(c => c.id === v.companyId);
+            const companyName = company?.nickname || company?.name || 'Unknown';
+            const cur = v.currency || 'CAD';
+            const amt = (v.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return `<label class="batch-inv-row" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:14px;">
+                <input type="checkbox" class="batch-inv-cb" data-id="${escAttr(v.id)}" data-amount="${v.amount || 0}" data-currency="${escAttr(cur)}" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;" />
+                <span style="flex:0 0 130px;font-weight:600;color:#2d3436;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(companyName)}</span>
+                <span style="flex:1;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(v.title || 'Untitled')}</span>
+                <span style="flex:0 0 110px;text-align:right;font-weight:600;color:#0984e3;">${cur} $${amt}</span>
+            </label>`;
+        }).join('');
+
+        overlay.innerHTML = `
+            <div class="sponsor-invoice-popup" style="max-width:720px;width:95%;height:auto;max-height:85%;">
+                <div class="sponsor-invoice-popup-header">
+                    <span>Create Batch Invoice</span>
+                    <button class="sponsor-invoice-popup-close" title="Close">&times;</button>
+                </div>
+                <div style="padding:12px 14px;border-bottom:1px solid #f0f0f0;background:#f8f9fa;">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600;color:#2d3436;">
+                        <input type="checkbox" id="batch-inv-all" style="width:18px;height:18px;cursor:pointer;" />
+                        Select All (${eligible.length})
+                    </label>
+                </div>
+                <div id="batch-inv-list" style="flex:1;overflow-y:auto;min-height:120px;">${rows}</div>
+                <div style="padding:14px 16px;border-top:1px solid #e0e0e0;background:#fafafa;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                    <div id="batch-inv-total" style="font-size:15px;color:#2d3436;font-weight:600;">Total: <span style="color:#0984e3;">CAD $0.00</span> <span style="color:#888;font-weight:400;font-size:13px;">(0 selected)</span></div>
+                    <div style="display:flex;gap:8px;">
+                        <button id="batch-inv-cancel" style="border:1px solid #ddd;background:#fff;color:#666;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Cancel</button>
+                        <button id="batch-inv-go" style="border:1px solid #0984e3;background:#0984e3;color:#fff;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;" disabled>Generate Invoice</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        (container || document.body).appendChild(overlay);
+
+        const close = () => overlay.remove();
+        overlay.querySelector('.sponsor-invoice-popup-close').addEventListener('click', close);
+        overlay.querySelector('#batch-inv-cancel').addEventListener('click', close);
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+        const checkboxes = overlay.querySelectorAll('.batch-inv-cb');
+        const selectAll = overlay.querySelector('#batch-inv-all');
+        const totalEl = overlay.querySelector('#batch-inv-total');
+        const goBtn = overlay.querySelector('#batch-inv-go');
+
+        const updateTotals = () => {
+            let count = 0;
+            const totalsByCur = {};
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    count++;
+                    const cur = cb.dataset.currency || 'CAD';
+                    totalsByCur[cur] = (totalsByCur[cur] || 0) + parseFloat(cb.dataset.amount || 0);
+                }
+            });
+            const parts = Object.entries(totalsByCur).map(([cur, amt]) =>
+                `${cur} $${amt.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+            );
+            const totalStr = parts.length ? parts.join(' + ') : 'CAD $0.00';
+            totalEl.innerHTML = `Total: <span style="color:#0984e3;">${totalStr}</span> <span style="color:#888;font-weight:400;font-size:13px;">(${count} selected)</span>`;
+            goBtn.disabled = count === 0;
+            goBtn.style.opacity = count === 0 ? '0.5' : '1';
+            goBtn.style.cursor = count === 0 ? 'not-allowed' : 'pointer';
+            // Sync select-all state
+            selectAll.checked = count === checkboxes.length && count > 0;
+            selectAll.indeterminate = count > 0 && count < checkboxes.length;
+        };
+
+        checkboxes.forEach(cb => cb.addEventListener('change', updateTotals));
+        selectAll.addEventListener('change', () => {
+            checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
+            updateTotals();
+        });
+
+        goBtn.addEventListener('click', async () => {
+            const selectedIds = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.dataset.id);
+            if (!selectedIds.length) return;
+            // Warn on mixed currencies (server uses currency of first video)
+            const cursSelected = new Set(Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.dataset.currency));
+            if (cursSelected.size > 1) {
+                if (!confirm(`Selected videos use multiple currencies (${[...cursSelected].join(', ')}). The invoice will use ${[...cursSelected][0]}. Continue?`)) return;
+            }
+            goBtn.disabled = true;
+            goBtn.textContent = 'Generating…';
+            try {
+                await generateBatchInvoice(selectedIds);
+                close();
+            } catch (e) {
+                goBtn.disabled = false;
+                goBtn.textContent = 'Generate Invoice';
+            }
+        });
+    }
+
+    async function generateBatchInvoice(sponsorVideoIds) {
+        sponsorsBusy = true;
+        try {
+            const res = await fetch('/api/invoices/generate-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sponsorVideoIds })
+            });
+            if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed'); }
+            const data = await res.json();
+            // Mirror server-side updates locally so UI stays in sync without a refetch
+            sponsorVideoIds.forEach(id => {
+                const v = sponsorVideos.find(x => x.id === id);
+                if (!v) return;
+                v.invoiceId = data.invoice.id;
+                if (v.status === 'pending' || v.status === 'active' || v.status === 'delivered') v.status = 'invoiced';
+            });
+            renderSponsorsTab();
+            updateSponsorsBadge();
+            if (typeof updateFinanceDisplay === 'function') updateFinanceDisplay();
+            previewInvoice(data.invoice.id);
+        } catch (e) {
+            console.warn('Sponsors: batch invoice failed', e);
+            alert('Failed to generate batch invoice: ' + e.message);
+            throw e;
         } finally {
             sponsorsBusy = false;
         }
