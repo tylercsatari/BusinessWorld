@@ -70,7 +70,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 </style></head><body>
 <div class="inv-header"><div><div class="inv-title">INVOICE</div><div class="inv-number">INV-${numStr}</div></div></div>
 <div class="inv-parties">
-<div class="inv-party"><div class="inv-party-label">From</div><div class="inv-party-name">Centrality LTD</div><div class="inv-party-detail">14 Discovery Ridge Road SW<br>Calgary AB Canada, T3H 4P8</div></div>
+<div class="inv-party"><div class="inv-party-label">From</div><div class="inv-party-name">Centrality LTD</div><div class="inv-party-detail">14 Discovery Ridge Road SW<br>Calgary AB Canada, T3H 4P8<br>@TylerCsatari<br>+1 (403) 519-6945<br>tylerdaviscsatari@gmail.com</div></div>
 <div class="inv-party"><div class="inv-party-label">Bill To</div><div class="inv-party-name">${esc(primaryCompanyName)}</div><div class="inv-party-detail">${companyAddr || ''}</div></div>
 </div>
 <div class="inv-dates"><div class="inv-date-box"><div class="inv-date-label">Invoice Date</div><div class="inv-date-value">${invoiceDate}</div></div><div class="inv-date-box"><div class="inv-date-label">Due Date</div><div class="inv-date-value">${dueDate}</div></div></div>
@@ -1152,7 +1152,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 </style></head><body>
 <div class="inv-header"><div><div class="inv-title">INVOICE</div><div class="inv-number">INV-${String(invoiceNumber).padStart(4,'0')}</div></div></div>
 <div class="inv-parties">
-<div class="inv-party"><div class="inv-party-label">From</div><div class="inv-party-name">Centrality LTD</div><div class="inv-party-detail">14 Discovery Ridge Road SW<br>Calgary AB Canada, T3H 4P8</div></div>
+<div class="inv-party"><div class="inv-party-label">From</div><div class="inv-party-name">Centrality LTD</div><div class="inv-party-detail">14 Discovery Ridge Road SW<br>Calgary AB Canada, T3H 4P8<br>@TylerCsatari<br>+1 (403) 519-6945<br>tylerdaviscsatari@gmail.com</div></div>
 <div class="inv-party"><div class="inv-party-label">Bill To</div><div class="inv-party-name">${esc(company?.name || 'Company')}</div><div class="inv-party-detail">${companyAddr || ''}</div></div>
 </div>
 <div class="inv-dates"><div class="inv-date-box"><div class="inv-date-label">Invoice Date</div><div class="inv-date-value">${invoiceDate}</div></div><div class="inv-date-box"><div class="inv-date-label">Due Date</div><div class="inv-date-value">${dueDate}</div></div></div>
@@ -1341,6 +1341,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             doc.fontSize(10).font('Helvetica').fillColor('#666');
             doc.text('14 Discovery Ridge Road SW', col1, topY + 34, { width: colW });
             doc.text('Calgary AB Canada, T3H 4P8', col1, topY + 48, { width: colW });
+            doc.text('@TylerCsatari', col1, topY + 62, { width: colW });
+            doc.text('+1 (403) 519-6945', col1, topY + 76, { width: colW });
+            doc.text('tylerdaviscsatari@gmail.com', col1, topY + 90, { width: colW });
 
             doc.fontSize(9).font('Helvetica-Bold').fillColor(grey).text('BILL TO', col2, topY, { width: colW });
             doc.fontSize(14).font('Helvetica-Bold').fillColor(dark).text(invoice.companyName || 'Company', col2, topY + 16, { width: colW });
