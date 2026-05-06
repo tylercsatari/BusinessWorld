@@ -41,10 +41,10 @@ function generateBatchInvoiceHTML({ invoiceNumber, invoiceDate, dueDate, primary
     const rows = showGrouping
         ? companyNames.map(cn => {
             const groupHeader = `<tr><td colspan="2" style="padding-top:14px;font-weight:700;color:#2d3436;background:#f8f9fa;">${esc(cn)}</td></tr>`;
-            const groupRows = byCompany[cn].map(li => `<tr><td style="padding-left:24px">${esc(li.description)}</td><td class="td-amount">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
+            const groupRows = byCompany[cn].map(li => `<tr><td style="padding-left:24px">${esc(li.description)}${li.deliverables ? `<div style="font-size:12px;color:#666;margin-top:4px"><b>Deliverables:</b> ${esc(li.deliverables)}</div>` : ''}${li.notes ? `<div style="font-size:12px;color:#666;margin-top:2px"><b>Notes:</b> ${esc(li.notes)}</div>` : ''}</td><td class="td-amount" style="vertical-align:top">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
             return groupHeader + groupRows;
         }).join('')
-        : lineItems.map(li => `<tr><td>${esc(li.description)}</td><td class="td-amount">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
+        : lineItems.map(li => `<tr><td>${esc(li.description)}${li.deliverables ? `<div style="font-size:12px;color:#666;margin-top:4px"><b>Deliverables:</b> ${esc(li.deliverables)}</div>` : ''}${li.notes ? `<div style="font-size:12px;color:#666;margin-top:2px"><b>Notes:</b> ${esc(li.notes)}</div>` : ''}</td><td class="td-amount" style="vertical-align:top">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>INV-${numStr} ${esc(primaryCompanyName)} ${invoiceDate}</title>
@@ -1123,7 +1123,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const due = new Date(); due.setDate(due.getDate() + 30);
             const dueDate = due.toISOString().split('T')[0];
             const companyAddr = (company?.address || '').replace(/\n/g, '<br>');
-            const lineItems = [{ description: video.title || 'Sponsored Video', amount: video.amount || 0 }];
+            const lineItems = [{ description: video.title || 'Sponsored Video', amount: video.amount || 0, deliverables: video.deliverables || '', notes: video.notes || '' }];
             const subtotal = lineItems.reduce((s, li) => s + (li.amount || 0), 0);
             const total = subtotal;
             const currency = video.currency || 'CAD';
@@ -1156,7 +1156,7 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
 <div class="inv-party"><div class="inv-party-label">Bill To</div><div class="inv-party-name">${esc(company?.name || 'Company')}</div><div class="inv-party-detail">${companyAddr || ''}</div></div>
 </div>
 <div class="inv-dates"><div class="inv-date-box"><div class="inv-date-label">Invoice Date</div><div class="inv-date-value">${invoiceDate}</div></div><div class="inv-date-box"><div class="inv-date-label">Due Date</div><div class="inv-date-value">${dueDate}</div></div></div>
-<table><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>${lineItems.map(li => `<tr><td>${esc(li.description)}</td><td class="td-amount">${currency} $${li.amount.toFixed(2)}</td></tr>`).join('')}</tbody></table>
+<table><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>${lineItems.map(li => `<tr><td>${esc(li.description)}${li.deliverables ? `<div style="font-size:12px;color:#666;margin-top:4px"><b>Deliverables:</b> ${esc(li.deliverables)}</div>` : ''}${li.notes ? `<div style="font-size:12px;color:#666;margin-top:2px"><b>Notes:</b> ${esc(li.notes)}</div>` : ''}</td><td class="td-amount" style="vertical-align:top">${currency} $${li.amount.toFixed(2)}</td></tr>`).join('')}</tbody></table>
 <div class="inv-totals">
 <div class="inv-total-row"><span class="inv-total-label">Subtotal</span><span class="inv-total-value">${currency} $${subtotal.toFixed(2)}</span></div>
 <div class="inv-total-row inv-grand-total"><span class="inv-total-label">Total</span><span class="inv-total-value">${currency} $${total.toFixed(2)}</span></div>
@@ -1235,7 +1235,9 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
                 companyName: companyMap[v.companyId]?.name || 'Unknown',
                 amount: v.amount || 0,
                 currency: v.currency || 'CAD',
-                videoId: v.id
+                videoId: v.id,
+                deliverables: v.deliverables || '',
+                notes: v.notes || ''
             }));
 
             // Primary company = the one with the most line items (tie → first one)
@@ -1377,10 +1379,24 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-a
             const currency = invoice.currency || 'CAD';
             doc.font('Helvetica').fontSize(11).fillColor(dark);
             items.forEach(li => {
+                doc.font('Helvetica-Bold').fontSize(11).fillColor(dark);
                 doc.text(li.description || '', col1, rowY, { width: 340 });
                 doc.text(`${currency} $${(li.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 400, rowY, { width: pageRight - 400, align: 'right' });
-                doc.moveTo(col1, rowY + 18).lineTo(pageRight, rowY + 18).lineWidth(0.5).strokeColor('#f0f0f0').stroke();
-                rowY += 25;
+                let subY = rowY + 16;
+                if (li.deliverables) {
+                    doc.font('Helvetica').fontSize(9).fillColor('#555');
+                    doc.text(`Deliverables: ${li.deliverables}`, col1, subY, { width: 340 });
+                    subY += 13;
+                }
+                if (li.notes) {
+                    doc.font('Helvetica').fontSize(9).fillColor('#555');
+                    doc.text(`Notes: ${li.notes}`, col1, subY, { width: 340 });
+                    subY += 13;
+                }
+                const rowH = subY - rowY + 8;
+                doc.moveTo(col1, rowY + rowH).lineTo(pageRight, rowY + rowH).lineWidth(0.5).strokeColor('#f0f0f0').stroke();
+                rowY += rowH + 4;
+                doc.font('Helvetica').fontSize(11).fillColor(dark);
             });
 
             // Totals
