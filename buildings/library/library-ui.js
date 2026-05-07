@@ -3056,7 +3056,7 @@ const LibraryUI = (() => {
         if (sponsorsSubTab === 'companies') {
             html += renderCompaniesListHtml();
         } else {
-            const batchEligibleCount = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced' && !v.invoiceId).length;
+            const batchEligibleCount = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced').length;
             html += `<div style="display:flex;justify-content:flex-end;padding:8px 14px;border-bottom:1px solid #f0f0f0;">
                 <button id="sponsor-batch-invoice-btn" style="border:1px solid #0984e3;background:#fff;color:#0984e3;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;${batchEligibleCount === 0 ? 'opacity:0.5;cursor:not-allowed;' : ''}" ${batchEligibleCount === 0 ? 'disabled' : ''} title="Create one invoice covering multiple deals">📋 Batch Invoice</button>
             </div>`;
@@ -3502,7 +3502,7 @@ const LibraryUI = (() => {
 
     // --- Batch invoice ---
     function openBatchInvoiceModal() {
-        const eligible = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced' && !v.invoiceId);
+        const eligible = sponsorVideos.filter(v => v.status !== 'paid' && v.status !== 'cancelled' && v.status !== 'invoiced');
         if (!eligible.length) {
             alert('No eligible video deals to invoice.\n\nDeals must not be paid, cancelled, or already invoiced.');
             return;
