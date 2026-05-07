@@ -58,7 +58,7 @@ function generateBatchInvoiceHTML({ invoiceNumber, invoiceDate, dueDate, primary
 .inv-dates{display:flex;gap:32px;margin-bottom:28px}.inv-date-box{background:#f8f9fa;padding:10px 16px;border-radius:8px}
 .inv-date-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase}.inv-date-value{font-size:15px;font-weight:600;margin-top:2px}
 table{width:100%;border-collapse:collapse;margin-bottom:24px}th{text-align:left;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;padding:10px 12px;border-bottom:2px solid #e0e0e0}
-td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-align:right;font-weight:600}
+td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px;vertical-align:top;word-break:break-word}.td-amount{text-align:right;font-weight:600;white-space:nowrap;min-width:120px}
 .inv-totals{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-bottom:32px}
 .inv-total-row{display:flex;gap:40px;font-size:14px}.inv-total-label{color:#888;min-width:100px;text-align:right}
 .inv-total-value{font-weight:600;min-width:100px;text-align:right}
@@ -1140,7 +1140,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
 .inv-dates{display:flex;gap:32px;margin-bottom:28px}.inv-date-box{background:#f8f9fa;padding:10px 16px;border-radius:8px}
 .inv-date-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase}.inv-date-value{font-size:15px;font-weight:600;margin-top:2px}
 table{width:100%;border-collapse:collapse;margin-bottom:24px}th{text-align:left;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;padding:10px 12px;border-bottom:2px solid #e0e0e0}
-td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px}.td-amount{text-align:right;font-weight:600}
+td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px;vertical-align:top;word-break:break-word}.td-amount{text-align:right;font-weight:600;white-space:nowrap;min-width:120px}
 .inv-totals{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-bottom:32px}
 .inv-total-row{display:flex;gap:40px;font-size:14px}.inv-total-label{color:#888;min-width:100px;text-align:right}
 .inv-total-value{font-weight:600;min-width:100px;text-align:right}
