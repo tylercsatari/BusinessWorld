@@ -31,6 +31,27 @@ const PORT = process.env.PORT || 8002;
 const IS_RENDER = !!process.env.RENDER;  // Render sets this env var automatically
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+function makeLineItemRows(lineItems, currency, indent) {
+    return lineItems.map(li => {
+        const desc = li.description || "";
+        const amt = (li.amount || 0).toFixed(2);
+        const delivHtml = li.deliverables
+            ? `<div style="font-size:12px;color:#555;margin-top:6px;line-height:1.6;word-break:break-word;white-space:pre-wrap"><strong>Deliverables:</strong> ${esc(li.deliverables)}</div>`
+            : "";
+        const notesHtml = li.notes
+            ? `<div style="font-size:12px;color:#555;margin-top:4px;line-height:1.6;word-break:break-word;white-space:pre-wrap"><strong>Notes:</strong> ${esc(li.notes)}</div>`
+            : "";
+        const pl = indent ? "padding-left:20px;" : "";
+        return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding:14px 0;border-bottom:1px solid #f0f0f0;">
+            <div style="flex:1;min-width:0;${pl}">
+                <div style="font-size:14px;font-weight:700;color:#2d3436;word-break:break-word">${esc(desc)}</div>
+                ${delivHtml}${notesHtml}
+            </div>
+            <div style="font-size:14px;font-weight:700;color:#2d3436;white-space:nowrap;text-align:right;flex-shrink:0;padding-top:1px">${currency} $${amt}</div>
+        </div>`;
+    }).join("");
+}
+
 function generateBatchInvoiceHTML({ invoiceNumber, invoiceDate, dueDate, primaryCompanyName, companyAddr, lineItems, subtotal, currency }) {
     const numStr = String(invoiceNumber).padStart(4, '0');
     // Group line items by company so multi-company invoices read clearly
@@ -40,11 +61,10 @@ function generateBatchInvoiceHTML({ invoiceNumber, invoiceDate, dueDate, primary
     const showGrouping = companyNames.length > 1;
     const rows = showGrouping
         ? companyNames.map(cn => {
-            const groupHeader = `<tr><td colspan="2" style="padding-top:14px;font-weight:700;color:#2d3436;background:#f8f9fa;">${esc(cn)}</td></tr>`;
-            const groupRows = byCompany[cn].map(li => `<tr><td style="padding-left:24px;vertical-align:top;word-break:break-word;padding-bottom:10px">${esc(li.description)}${li.deliverables ? `<div style="font-size:12px;color:#666;margin-top:4px"><b>Deliverables:</b> ${esc(li.deliverables)}</div>` : ''}${li.notes ? `<div style="font-size:12px;color:#666;margin-top:2px"><b>Notes:</b> ${esc(li.notes)}</div>` : ''}</td><td class="td-amount" style="vertical-align:top">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
-            return groupHeader + groupRows;
-        }).join('')
-        : lineItems.map(li => `<tr><td style="vertical-align:top;word-break:break-word;padding-bottom:10px">${esc(li.description)}${li.deliverables ? `<div style="font-size:12px;color:#666;margin-top:4px"><b>Deliverables:</b> ${esc(li.deliverables)}</div>` : ''}${li.notes ? `<div style="font-size:12px;color:#666;margin-top:2px"><b>Notes:</b> ${esc(li.notes)}</div>` : ''}</td><td class="td-amount" style="vertical-align:top">${currency} $${(li.amount || 0).toFixed(2)}</td></tr>`).join('');
+            const header = `<div style="font-weight:700;color:#2d3436;background:#f8f9fa;padding:10px 12px;margin-top:8px;border-radius:4px;">${esc(cn)}</div>`;
+            return header + makeLineItemRows(byCompany[cn], currency, true);
+        }).join("")
+        : makeLineItemRows(lineItems, currency, false);
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>INV-${numStr} ${esc(primaryCompanyName)} ${invoiceDate}</title>
@@ -57,8 +77,6 @@ function generateBatchInvoiceHTML({ invoiceNumber, invoiceDate, dueDate, primary
 .inv-party-name{font-size:16px;font-weight:700;margin-bottom:4px}.inv-party-detail{font-size:13px;color:#666;line-height:1.6}
 .inv-dates{display:flex;gap:32px;margin-bottom:28px}.inv-date-box{background:#f8f9fa;padding:10px 16px;border-radius:8px}
 .inv-date-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase}.inv-date-value{font-size:15px;font-weight:600;margin-top:2px}
-table{width:100%;border-collapse:collapse;margin-bottom:24px}th{text-align:left;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;padding:10px 12px;border-bottom:2px solid #e0e0e0}
-td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px;vertical-align:top;word-break:break-word}.td-amount{text-align:right;font-weight:600;white-space:nowrap;min-width:120px}
 .inv-totals{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-bottom:32px}
 .inv-total-row{display:flex;gap:40px;font-size:14px}.inv-total-label{color:#888;min-width:100px;text-align:right}
 .inv-total-value{font-weight:600;min-width:100px;text-align:right}
@@ -74,7 +92,13 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px;vertical-align:to
 <div class="inv-party"><div class="inv-party-label">Bill To</div><div class="inv-party-name">${esc(primaryCompanyName)}</div><div class="inv-party-detail">${companyAddr || ''}</div></div>
 </div>
 <div class="inv-dates"><div class="inv-date-box"><div class="inv-date-label">Invoice Date</div><div class="inv-date-value">${invoiceDate}</div></div><div class="inv-date-box"><div class="inv-date-label">Due Date</div><div class="inv-date-value">${dueDate}</div></div></div>
-<table><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+<div style="margin-bottom:8px;">
+  <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:2px solid #e0e0e0;">
+    <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px">Description</span>
+    <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;text-align:right">Amount</span>
+  </div>
+  ${rows}
+</div>
 <div class="inv-totals">
 <div class="inv-total-row"><span class="inv-total-label">Subtotal</span><span class="inv-total-value">${currency} $${subtotal.toFixed(2)}</span></div>
 <div class="inv-total-row inv-grand-total"><span class="inv-total-label">Total</span><span class="inv-total-value">${currency} $${subtotal.toFixed(2)}</span></div>
@@ -1127,6 +1151,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const subtotal = lineItems.reduce((s, li) => s + (li.amount || 0), 0);
             const total = subtotal;
             const currency = video.currency || 'CAD';
+            const itemRows = makeLineItemRows(lineItems, currency, false);
 
             const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>INV-${String(invoiceNumber).padStart(4,'0')} ${esc(company?.name || 'Invoice')} ${invoiceDate}</title>
@@ -1139,8 +1164,6 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
 .inv-party-name{font-size:16px;font-weight:700;margin-bottom:4px}.inv-party-detail{font-size:13px;color:#666;line-height:1.6}
 .inv-dates{display:flex;gap:32px;margin-bottom:28px}.inv-date-box{background:#f8f9fa;padding:10px 16px;border-radius:8px}
 .inv-date-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase}.inv-date-value{font-size:15px;font-weight:600;margin-top:2px}
-table{width:100%;border-collapse:collapse;margin-bottom:24px}th{text-align:left;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;padding:10px 12px;border-bottom:2px solid #e0e0e0}
-td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px;vertical-align:top;word-break:break-word}.td-amount{text-align:right;font-weight:600;white-space:nowrap;min-width:120px}
 .inv-totals{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-bottom:32px}
 .inv-total-row{display:flex;gap:40px;font-size:14px}.inv-total-label{color:#888;min-width:100px;text-align:right}
 .inv-total-value{font-weight:600;min-width:100px;text-align:right}
@@ -1156,7 +1179,13 @@ td{padding:12px;border-bottom:1px solid #f0f0f0;font-size:14px;vertical-align:to
 <div class="inv-party"><div class="inv-party-label">Bill To</div><div class="inv-party-name">${esc(company?.name || 'Company')}</div><div class="inv-party-detail">${companyAddr || ''}</div></div>
 </div>
 <div class="inv-dates"><div class="inv-date-box"><div class="inv-date-label">Invoice Date</div><div class="inv-date-value">${invoiceDate}</div></div><div class="inv-date-box"><div class="inv-date-label">Due Date</div><div class="inv-date-value">${dueDate}</div></div></div>
-<table><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>${lineItems.map(li => `<tr><td style="vertical-align:top;word-break:break-word;padding-bottom:10px">${esc(li.description)}${li.deliverables ? `<div style="font-size:12px;color:#666;margin-top:4px"><b>Deliverables:</b> ${esc(li.deliverables)}</div>` : ''}${li.notes ? `<div style="font-size:12px;color:#666;margin-top:2px"><b>Notes:</b> ${esc(li.notes)}</div>` : ''}</td><td class="td-amount" style="vertical-align:top">${currency} $${li.amount.toFixed(2)}</td></tr>`).join('')}</tbody></table>
+<div style="margin-bottom:8px;">
+  <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:2px solid #e0e0e0;">
+    <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px">Description</span>
+    <span style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.5px;text-align:right">Amount</span>
+  </div>
+  ${itemRows}
+</div>
 <div class="inv-totals">
 <div class="inv-total-row"><span class="inv-total-label">Subtotal</span><span class="inv-total-value">${currency} $${subtotal.toFixed(2)}</span></div>
 <div class="inv-total-row inv-grand-total"><span class="inv-total-label">Total</span><span class="inv-total-value">${currency} $${total.toFixed(2)}</span></div>
