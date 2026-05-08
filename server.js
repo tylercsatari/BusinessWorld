@@ -363,10 +363,18 @@ function _tribeStartJob(videoId, videoPath) {
     _tribeJobs[videoId] = job;
 
     try {
+        const r2Key = `tribe-analysis/${videoId}.json`;
+        const spawnEnv = {
+            ...process.env,
+            HF_TOKEN: process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || '',
+            HUGGINGFACE_TOKEN: process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || '',
+        };
         const proc = require('child_process').spawn(
             TRIBE_PYTHON,
-            [scriptPath, videoPath, '--output', outPath, '--cache-folder', TRIBE_CACHE],
-            { cwd: path.dirname(scriptPath), env: { ...process.env } }
+            [scriptPath, videoPath, '--output', outPath,
+             '--cache-folder', TRIBE_CACHE,
+             '--r2-key', r2Key],
+            { cwd: path.dirname(scriptPath), env: spawnEnv }
         );
         job.status = 'running';
         job.pid = proc.pid;
@@ -5281,6 +5289,21 @@ Respond ONLY as valid JSON (no markdown):
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(txt);
                     return;
+                }
+                // Try R2 (results uploaded there after analysis)
+                if (cloud.isR2Ready()) {
+                    try {
+                        const r2Key = `tribe-analysis/${videoId}.json`;
+                        const buf = await cloud.downloadFromR2(r2Key);
+                        if (buf) {
+                            // Cache locally
+                            fs.mkdirSync(path.dirname(resultPath), { recursive: true });
+                            fs.writeFileSync(resultPath, buf);
+                            res.writeHead(200, { 'Content-Type': 'application/json' });
+                            res.end(buf);
+                            return;
+                        }
+                    } catch {}
                 }
                 const job = _tribeJobs[videoId];
                 if (job) {
