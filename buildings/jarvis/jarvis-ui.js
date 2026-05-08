@@ -113,7 +113,6 @@ const JarvisUI = (() => {
         { id: 'ideaModel', label: 'Idea Model' },
         { id: 'hookModel', label: 'Hook Model' },
         { id: 'brainAnalysis', label: '🧠 Brain' },
-        { id: 'videoGen', label: '🎬 Video' },
         { id: 'projectIdeas', label: 'Project Ideas' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'knowledge', label: 'Knowledge' },
@@ -216,7 +215,6 @@ const JarvisUI = (() => {
             case 'ideaModel': return renderIdeaModel();
             case 'hookModel': return renderHookModel();
             case 'brainAnalysis': return renderBrainAnalysis();
-            case 'videoGen': return renderVideoGen();
             case 'projectIdeas': return renderProjectIdeas();
             case 'autoResearch': return renderAutoResearch();
             case 'knowledge': return renderKnowledge();
@@ -7523,17 +7521,6 @@ const JarvisUI = (() => {
                 }
             };
         }
-    }
-
-    // ══════════════════════════════════════════════════
-    // TAB: VIDEO GENERATION — fal.ai studio
-    // ══════════════════════════════════════════════════
-    function renderVideoGen() {
-        if (typeof VideoUI === 'undefined') {
-            return `<div style="color:#f87171;padding:14px">VideoUI module not loaded — check that buildings/video/video-ui.js is included in index.html.</div>`;
-        }
-        VideoUI.attach(container);
-        return VideoUI.render();
     }
 
     // ══════════════════════════════════════════════════

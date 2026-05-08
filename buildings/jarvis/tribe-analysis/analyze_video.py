@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--r2-key", default=None, help="R2 object key to upload result")
     parser.add_argument("--cache-folder", default=str(Path.home() / ".cache" / "huggingface"))
     parser.add_argument("--no-images", action="store_true", help="Skip brain surface image generation")
+    parser.add_argument("--skip-text", action="store_true", help="Skip Llama text features (use when Llama access not yet approved)")
     args = parser.parse_args()
 
     video_path = Path(args.video_path).resolve()
@@ -58,9 +59,39 @@ def main():
     log(f"Model ready in {time.time()-t0:.1f}s")
 
     # ── Build events dataframe (audio + video + text) ──────────────
-    log("Building events dataframe (full multimodal)…")
+    log("Building events dataframe (full multimodal: video + text)…")
+    
+    # Build events from video (audio + frames)
     df = model.get_events_dataframe(video_path=str(video_path))
-    log(f"Events: {len(df)} rows, types: {df['type'].unique().tolist() if 'type' in df.columns else '?'}")
+    log(f"Video events: {len(df)} rows, types: {df['type'].unique().tolist() if 'type' in df.columns else '?'}")
+    
+    if not args.skip_text:
+        # Inject transcript from analysis.json as text events
+        # Uses gTTS to TTS the transcript, then TRIBE's text extractor (Llama-3.2-3B)
+        analysis_path = video_path.parent / 'analysis.json'
+        if analysis_path.exists():
+            try:
+                import tempfile
+                import pandas as pd
+                analysis = json.loads(analysis_path.read_text())
+                tr = analysis.get('transcript', {})
+                full_text = tr.get('fullText', '') if isinstance(tr, dict) else str(tr)
+                if full_text:
+                    tmp_txt = Path(tempfile.mktemp(suffix='.txt'))
+                    tmp_txt.write_text(full_text)
+                    log("Adding text events from existing transcript (requires Llama-3.2-3B access)...")
+                    try:
+                        text_df = model.get_events_dataframe(text_path=str(tmp_txt))
+                        text_types = text_df['type'].unique().tolist() if 'type' in text_df.columns else []
+                        log(f"Text events: {len(text_df)} rows, types: {text_types}")
+                        df = pd.concat([df, text_df], ignore_index=True)
+                        log(f"Combined: {len(df)} total events")
+                    except Exception as te:
+                        log(f"Text events failed (non-fatal, continuing with video only): {te}")
+                    finally:
+                        tmp_txt.unlink(missing_ok=True)
+            except Exception as e:
+                log(f"Transcript injection failed (non-fatal): {e}")
 
     # ── Run inference ───────────────────────────────────────────────
     log("Running inference (full multimodal: audio + video + text)…")
