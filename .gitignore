@@ -30,3 +30,5 @@ buildings/jarvis/experiments_log_compact.json
 buildings/jarvis/graph.json
 buildings/jarvis/watch-sync.log
 buildings/jarvis/autorun_overnight.log
+# TRIBE v2 brain analysis: model weights cache (~1 GB) — do not commit
+buildings/jarvis/tribe-analysis/cache/

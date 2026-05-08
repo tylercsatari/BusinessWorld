@@ -337,6 +337,67 @@ const MIME_TYPES = {
     '.md': 'text/markdown; charset=utf-8',
 };
 
+// =========================================
+// TRIBE v2 brain analysis: in-process job tracker
+// =========================================
+// Keyed by videoId — one job per video at a time. Persisted JSON in
+// buildings/jarvis/tribe-analysis/{videoId}.json IS the source of truth for
+// completed runs; this map only tracks queued/running/failed jobs in memory.
+const _tribeJobs = {};
+const TRIBE_PYTHON = process.env.TRIBE_PYTHON
+    || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/.venv/bin/python3.11';
+
+function _tribeStartJob(videoId, videoPath) {
+    if (_tribeJobs[videoId] && (_tribeJobs[videoId].status === 'running' || _tribeJobs[videoId].status === 'queued')) {
+        return _tribeJobs[videoId];
+    }
+    const scriptPath = path.join(__dirname, 'buildings', 'jarvis', 'tribe-analysis', 'analyze_video.py');
+    const outPath = path.join(__dirname, 'buildings', 'jarvis', 'tribe-analysis', `${videoId}.json`);
+    const id = `tribe_${videoId}_${Date.now()}`;
+    const job = {
+        id, videoId, status: 'queued', startedAt: new Date().toISOString(),
+        log: [], stdout: '', error: null,
+    };
+    _tribeJobs[videoId] = job;
+
+    try {
+        const proc = require('child_process').spawn(
+            TRIBE_PYTHON,
+            [scriptPath, videoPath, '--output', outPath],
+            { cwd: path.dirname(scriptPath), env: { ...process.env } }
+        );
+        job.status = 'running';
+        job.pid = proc.pid;
+        proc.stdout.on('data', d => { job.stdout += d.toString(); });
+        proc.stderr.on('data', d => {
+            const lines = d.toString().split(/\r?\n/).filter(Boolean);
+            for (const ln of lines) {
+                job.log.push(ln);
+                if (job.log.length > 200) job.log.shift();
+            }
+        });
+        proc.on('error', err => {
+            job.status = 'failed';
+            job.error = err.message;
+            console.error(`[tribe] spawn error for ${videoId}: ${err.message}`);
+        });
+        proc.on('close', code => {
+            if (code === 0 && fs.existsSync(outPath)) {
+                job.status = 'complete';
+                console.log(`[tribe] ${videoId} done → ${outPath}`);
+            } else {
+                job.status = 'failed';
+                job.error = job.error || `exit ${code}`;
+                console.error(`[tribe] ${videoId} failed (exit ${code})`);
+            }
+        });
+    } catch (e) {
+        job.status = 'failed';
+        job.error = e.message;
+    }
+    return job;
+}
+
 // Helper: read request body as JSON
 function readBody(req) {
     return new Promise((resolve, reject) => {
@@ -5137,6 +5198,104 @@ Respond ONLY as valid JSON (no markdown):
             const text = fs.existsSync(resultsPath) ? fs.readFileSync(resultsPath, 'utf8') : '';
             res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end(text);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // API: TRIBE v2 brain analysis
+    // =========================================
+    //   POST /api/tribe/analyze       { videoId } → { jobId, status }
+    //   GET  /api/tribe/results/:id   → analysis JSON or { status: 'pending'|'running'|'failed' }
+    //   GET  /api/tribe/available     → [{ videoId, analyzed_at, engagement_score, duration_s }]
+    if (pathname === '/api/tribe/analyze' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const videoId = String(body.videoId || '').trim();
+            if (!videoId || !/^[A-Za-z0-9_-]+$/.test(videoId)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid videoId' }));
+                return;
+            }
+            const videoPath = path.join(DIR, 'video_data', videoId, 'video.mp4');
+            if (!fs.existsSync(videoPath)) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `No video.mp4 at video_data/${videoId}/` }));
+                return;
+            }
+            const job = _tribeStartJob(videoId, videoPath);
+            res.writeHead(202, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jobId: job.id, status: job.status, videoId }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    {
+        const m = pathname.match(/^\/api\/tribe\/results\/([A-Za-z0-9_-]+)$/);
+        if (m && req.method === 'GET') {
+            try {
+                const videoId = m[1];
+                const resultPath = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis', `${videoId}.json`);
+                if (fs.existsSync(resultPath)) {
+                    const txt = fs.readFileSync(resultPath, 'utf8');
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(txt);
+                    return;
+                }
+                const job = _tribeJobs[videoId];
+                if (job) {
+                    res.writeHead(202, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        status: job.status,
+                        startedAt: job.startedAt,
+                        logTail: (job.log || []).slice(-12).join('\n'),
+                        error: job.error || null,
+                    }));
+                    return;
+                }
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ status: 'not_found' }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+            return;
+        }
+    }
+
+    if (pathname === '/api/tribe/available' && req.method === 'GET') {
+        try {
+            const dir = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis');
+            const out = [];
+            if (fs.existsSync(dir)) {
+                for (const f of fs.readdirSync(dir)) {
+                    if (!f.endsWith('.json')) continue;
+                    const videoId = f.slice(0, -5);
+                    try {
+                        const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+                        out.push({
+                            videoId,
+                            analyzed_at: data.analyzed_at || null,
+                            duration_s: data.duration_s || 0,
+                            engagement_score: data.engagement_score || 0,
+                            max_activation_second: data.max_activation_second || 0,
+                            n_timesteps: data.n_timesteps || 0,
+                        });
+                    } catch {}
+                }
+            }
+            // Also surface in-flight jobs so the UI can show progress.
+            const inflight = Object.values(_tribeJobs)
+                .filter(j => j.status === 'running' || j.status === 'queued')
+                .map(j => ({ videoId: j.videoId, status: j.status, startedAt: j.startedAt }));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ completed: out, inflight }));
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));

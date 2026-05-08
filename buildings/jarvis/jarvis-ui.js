@@ -112,6 +112,7 @@ const JarvisUI = (() => {
         { id: 'mechanisms', label: 'Mechanisms' },
         { id: 'ideaModel', label: 'Idea Model' },
         { id: 'hookModel', label: 'Hook Model' },
+        { id: 'brainAnalysis', label: '🧠 Brain' },
         { id: 'projectIdeas', label: 'Project Ideas' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'knowledge', label: 'Knowledge' },
@@ -213,6 +214,7 @@ const JarvisUI = (() => {
                 return renderKnowledge();
             case 'ideaModel': return renderIdeaModel();
             case 'hookModel': return renderHookModel();
+            case 'brainAnalysis': return renderBrainAnalysis();
             case 'projectIdeas': return renderProjectIdeas();
             case 'autoResearch': return renderAutoResearch();
             case 'knowledge': return renderKnowledge();
@@ -7524,6 +7526,362 @@ const JarvisUI = (() => {
     // ══════════════════════════════════════════════════
     // EVENTS
     // ══════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════
+    // TAB: BRAIN ANALYSIS — TRIBE v2 fMRI prediction
+    // ══════════════════════════════════════════════════
+    let brainVideos = null;            // [{ ytId, name, viewCount, hasRetention }]
+    let brainAvailable = null;         // { completed: [...], inflight: [...] }
+    let brainSelectedVideoId = null;   // currently inspected analyzed video
+    let brainSelectedAnalysis = null;  // its full JSON
+    let brainAnalysisError = null;
+    let brainPickedToRun = '';         // dropdown value
+    let brainRunStatus = null;         // { videoId, status, log }
+    let brainLoading = false;
+    let brainPollTimer = null;
+
+    function renderBrainAnalysis() {
+        if (!brainVideos && !brainLoading) {
+            brainLoading = true;
+            loadBrainData().then(() => { brainLoading = false; refreshBrainTab(); });
+        }
+        setTimeout(bindBrainEvents, 30);
+        return `<div class="jarvis-brain-root">${renderBrainBody()}</div>`;
+    }
+
+    function refreshBrainTab() {
+        const root = container?.querySelector('.jarvis-brain-root');
+        if (!root) return;
+        root.innerHTML = renderBrainBody();
+        bindBrainEvents();
+    }
+
+    async function loadBrainData() {
+        try {
+            const [vidsRes, availRes] = await Promise.all([
+                fetch('/api/v1/videos/all/analyses').catch(() => null),
+                fetch('/api/tribe/available').catch(() => null),
+            ]);
+            const analyses = vidsRes && vidsRes.ok ? await vidsRes.json() : [];
+            brainVideos = (Array.isArray(analyses) ? analyses : [])
+                .filter(x => x && x.record && x.record.youtubeVideoId)
+                .map(x => ({
+                    ytId: x.record.youtubeVideoId,
+                    name: x.record.name || x.analysis?.metadata?.title || x.record.youtubeVideoId,
+                    viewCount: x.analysis?.analytics?.totalViews ?? x.analysis?.metadata?.viewCount ?? 0,
+                    hasRetention: Array.isArray(x.analysis?.analytics?.retentionCurve) && x.analysis.analytics.retentionCurve.length > 0,
+                }))
+                .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
+            brainAvailable = availRes && availRes.ok ? await availRes.json() : { completed: [], inflight: [] };
+        } catch (e) {
+            brainAnalysisError = e.message;
+        }
+    }
+
+    async function loadBrainAnalysisFor(videoId) {
+        try {
+            const r = await fetch(`/api/tribe/results/${encodeURIComponent(videoId)}`);
+            const j = await r.json();
+            if (r.status === 200) {
+                brainSelectedAnalysis = j;
+                // Try to merge in retention curve if we have it
+                try {
+                    const ar = await fetch(`/api/video/analysis/${encodeURIComponent(videoId)}`);
+                    if (ar.ok) {
+                        const a = await ar.json();
+                        const rc = a?.analytics?.retentionCurve;
+                        if (Array.isArray(rc)) brainSelectedAnalysis._retentionCurve = rc;
+                        if (a?.metadata?.title) brainSelectedAnalysis._title = a.metadata.title;
+                    }
+                } catch {}
+            } else {
+                brainSelectedAnalysis = { _pending: true, ...j };
+            }
+        } catch (e) {
+            brainSelectedAnalysis = { _error: e.message };
+        }
+    }
+
+    function startBrainPolling() {
+        if (brainPollTimer) clearInterval(brainPollTimer);
+        brainPollTimer = setInterval(async () => {
+            if (activeTab !== 'brainAnalysis') { clearInterval(brainPollTimer); brainPollTimer = null; return; }
+            const stillRunning = brainRunStatus && (brainRunStatus.status === 'queued' || brainRunStatus.status === 'running');
+            if (!stillRunning) { clearInterval(brainPollTimer); brainPollTimer = null; return; }
+            try {
+                const r = await fetch(`/api/tribe/results/${encodeURIComponent(brainRunStatus.videoId)}`);
+                const j = await r.json();
+                if (r.status === 200) {
+                    brainRunStatus = { videoId: brainRunStatus.videoId, status: 'complete' };
+                    await loadBrainData();
+                    refreshBrainTab();
+                    clearInterval(brainPollTimer); brainPollTimer = null;
+                } else {
+                    brainRunStatus = { videoId: brainRunStatus.videoId, status: j.status || 'running', log: j.logTail || '', error: j.error };
+                    refreshBrainTab();
+                }
+            } catch {}
+        }, 4000);
+    }
+
+    function renderBrainBody() {
+        if (brainAnalysisError && !brainVideos) {
+            return `<div style="color:#f87171;padding:14px">Failed to load: ${escapeHtml(brainAnalysisError)}</div>`;
+        }
+        if (!brainVideos) {
+            return `<div style="color:#64748b;padding:14px">Loading videos…</div>`;
+        }
+
+        const completed = (brainAvailable && brainAvailable.completed) || [];
+        const inflight = (brainAvailable && brainAvailable.inflight) || [];
+        const completedById = {};
+        for (const c of completed) completedById[c.videoId] = c;
+
+        const headerHtml = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:14px;flex-wrap:wrap">
+                <div>
+                    <div style="font-size:18px;font-weight:700;color:#f1f5f9">🧠 Brain Analysis — TRIBE v2</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:3px;max-width:680px;line-height:1.5">
+                        Brain activation predicts where viewers <em>want</em> to watch.
+                        Retention shows where they <em>actually</em> watched.
+                        The gap between them reveals where your edit is losing attention that the brain says should be there.
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px">
+                    <span style="background:#1e293b;color:#cbd5e1;padding:2px 8px;border-radius:4px;font-size:10px">${completed.length} analyzed</span>
+                    ${inflight.length ? `<span style="background:#fbbf2422;color:#fbbf24;padding:2px 8px;border-radius:4px;font-size:10px">${inflight.length} running</span>` : ''}
+                </div>
+            </div>`;
+
+        const options = brainVideos.map(v => {
+            const done = completedById[v.ytId] ? ' ✓' : '';
+            const views = v.viewCount ? ` — ${fmtViewCount(v.viewCount)} views` : '';
+            const sel = brainPickedToRun === v.ytId ? ' selected' : '';
+            return `<option value="${escapeHtml(v.ytId)}"${sel}>${escapeHtml(v.name)}${views}${done}</option>`;
+        }).join('');
+
+        const runStatusHtml = brainRunStatus ? `
+            <div style="margin-top:10px;padding:10px;border-radius:6px;background:#0a1628;border:1px solid #1e293b">
+                <div style="font-size:11px;color:#cbd5e1">
+                    <strong style="color:#fbbf24">${escapeHtml(brainRunStatus.videoId)}</strong>
+                    — status: <span style="color:${brainRunStatus.status === 'complete' ? '#22c55e' : brainRunStatus.status === 'failed' ? '#f87171' : '#fbbf24'}">${escapeHtml(brainRunStatus.status)}</span>
+                </div>
+                ${brainRunStatus.error ? `<div style="font-size:11px;color:#f87171;margin-top:4px">${escapeHtml(brainRunStatus.error)}</div>` : ''}
+                ${brainRunStatus.log ? `<pre style="margin:6px 0 0;font-size:10px;color:#94a3b8;max-height:120px;overflow:auto;background:#020617;padding:6px;border-radius:4px;white-space:pre-wrap">${escapeHtml(brainRunStatus.log)}</pre>` : ''}
+            </div>
+        ` : '';
+
+        const runnerHtml = `
+            <div style="background:#0d1525;border:1px solid #1e293b;border-radius:8px;padding:14px;margin-bottom:14px">
+                <div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Analyze a video</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <select id="jarvis-brain-pick" style="flex:1;min-width:240px;background:#020617;color:#e2e8f0;border:1px solid #1e293b;border-radius:4px;padding:6px 8px;font-size:12px">
+                        <option value="">— choose a video —</option>
+                        ${options}
+                    </select>
+                    <button id="jarvis-brain-run" class="jarvis-btn" style="background:#7c3aed;color:#fff;border:0;border-radius:4px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Run TRIBE v2 Analysis</button>
+                </div>
+                <div style="font-size:10px;color:#475569;margin-top:6px">First run downloads ~1 GB of model weights. Inference: ~30–120 s on M-series CPU.</div>
+                ${runStatusHtml}
+            </div>`;
+
+        const completedHtml = completed.length ? `
+            <div style="background:#0d1525;border:1px solid #1e293b;border-radius:8px;padding:14px">
+                <div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Analysis Results</div>
+                <div style="display:flex;gap:14px;flex-wrap:wrap">
+                    <div style="flex:0 0 240px;max-height:480px;overflow:auto;border-right:1px solid #1e293b;padding-right:8px">
+                        ${completed.sort((a,b)=> (b.engagement_score||0)-(a.engagement_score||0)).map(c => {
+                            const v = brainVideos.find(x => x.ytId === c.videoId);
+                            const isSel = brainSelectedVideoId === c.videoId;
+                            const score = (c.engagement_score || 0).toFixed(3);
+                            const dur = c.duration_s ? `${Math.round(c.duration_s)}s` : '';
+                            return `<div class="jarvis-brain-row" data-vid="${escapeHtml(c.videoId)}" style="padding:8px;margin-bottom:4px;border-radius:4px;cursor:pointer;background:${isSel ? '#1e293b' : 'transparent'};border:1px solid ${isSel ? '#7c3aed' : 'transparent'}">
+                                <div style="font-size:12px;color:#e2e8f0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(v ? v.name : c.videoId)}</div>
+                                <div style="font-size:10px;color:#94a3b8;margin-top:2px">engagement ${score} · ${dur}</div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    <div style="flex:1;min-width:300px">
+                        ${renderBrainDetailPane()}
+                    </div>
+                </div>
+            </div>
+        ` : `<div style="background:#0d1525;border:1px solid #1e293b;border-radius:8px;padding:14px;color:#64748b;font-size:12px">
+                No analyses yet. Pick a video above and click <strong>Run TRIBE v2 Analysis</strong>.
+             </div>`;
+
+        return headerHtml + runnerHtml + completedHtml;
+    }
+
+    function renderBrainDetailPane() {
+        if (!brainSelectedVideoId) {
+            return `<div style="color:#64748b;font-size:12px;padding:24px;text-align:center">← Select an analyzed video to see its brain engagement curve.</div>`;
+        }
+        const a = brainSelectedAnalysis;
+        if (!a) return `<div style="color:#64748b;font-size:12px;padding:24px;text-align:center">Loading…</div>`;
+        if (a._error) return `<div style="color:#f87171;font-size:12px;padding:14px">Error: ${escapeHtml(a._error)}</div>`;
+        if (a._pending) return `<div style="color:#fbbf24;font-size:12px;padding:14px">Analysis pending — status: ${escapeHtml(a.status || '?')}</div>`;
+
+        const curve = a.brain_engagement_curve || [];
+        const peaks = a.peak_moments || [];
+        const retention = a._retentionCurve || null;
+
+        // Pick the actual retention peak (highest retention point) for the comparison line.
+        let retentionPeakSec = null;
+        if (retention && retention.length) {
+            // BusinessWorld retention curves can be either an array of {second,retention}
+            // or {time,value}. Handle both shapes.
+            const pts = retention.map(p => ({
+                t: p.second ?? p.time ?? p.t ?? 0,
+                v: p.retention ?? p.value ?? 0,
+            }));
+            // The biggest *drop* is more interesting than the absolute max (which is
+            // always at t=0). Use largest negative slope as "where they bailed".
+            let worstDrop = -Infinity, worstAt = pts[0]?.t || 0;
+            for (let i = 1; i < pts.length; i++) {
+                const d = pts[i - 1].v - pts[i].v;
+                if (d > worstDrop) { worstDrop = d; worstAt = pts[i].t; }
+            }
+            retentionPeakSec = worstAt;
+        }
+
+        const chartHtml = renderBrainCurveSvg(curve, retention, peaks);
+
+        const peaksHtml = peaks.length ? `
+            <div style="margin-top:12px">
+                <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Peak Brain Moments (top 10%)</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    ${peaks.map(p => `<span style="background:#7c3aed22;color:#a78bfa;padding:3px 8px;border-radius:4px;font-size:11px;font-family:monospace">${p.second.toFixed(1)}s · p${p.percentile}</span>`).join('')}
+                </div>
+            </div>` : '';
+
+        const compareHtml = `
+            <div style="margin-top:14px;padding:10px;background:#0a1628;border-radius:6px;border-left:3px solid #7c3aed">
+                <div style="font-size:11px;color:#cbd5e1;line-height:1.6">
+                    🧠 <strong style="color:#a78bfa">Brain says:</strong> peak at <strong>${(a.max_activation_second ?? 0).toFixed(1)}s</strong>
+                    ${retentionPeakSec != null ? `<br>📉 <strong style="color:#fbbf24">Retention shows:</strong> biggest drop at <strong>${Number(retentionPeakSec).toFixed(1)}s</strong>` : ''}
+                </div>
+            </div>`;
+
+        return `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:8px">
+                <div>
+                    <div style="font-size:14px;color:#e2e8f0;font-weight:700">${escapeHtml(a._title || brainSelectedVideoId)}</div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">${escapeHtml(brainSelectedVideoId)} · ${a.n_timesteps || 0} timesteps · ${(a.duration_s || 0).toFixed(1)}s</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Engagement</div>
+                    <div style="font-size:24px;color:#a78bfa;font-weight:700;line-height:1">${(a.engagement_score || 0).toFixed(3)}</div>
+                </div>
+            </div>
+            ${chartHtml}
+            ${compareHtml}
+            ${peaksHtml}
+        `;
+    }
+
+    function renderBrainCurveSvg(brainCurve, retentionCurve, peaks) {
+        const W = 560, H = 180, padL = 32, padR = 8, padT = 10, padB = 22;
+        const innerW = W - padL - padR;
+        const innerH = H - padT - padB;
+        if (!brainCurve.length) return `<div style="color:#64748b;font-size:11px;padding:14px">No curve data.</div>`;
+
+        const maxT = Math.max(...brainCurve.map(p => p.second), ...(retentionCurve ? retentionCurve.map(p => p.second ?? p.time ?? 0) : [0]));
+        const xOf = (t) => padL + (maxT > 0 ? (t / maxT) * innerW : 0);
+        const yOf = (v) => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
+
+        const brainPath = brainCurve.map((p, i) =>
+            `${i === 0 ? 'M' : 'L'}${xOf(p.second).toFixed(1)},${yOf(p.activation).toFixed(1)}`
+        ).join(' ');
+
+        let retentionPath = '';
+        if (retentionCurve && retentionCurve.length) {
+            // Normalize retention to 0–1 using max so the two curves share a y-axis.
+            const rPts = retentionCurve.map(p => ({
+                t: p.second ?? p.time ?? p.t ?? 0,
+                v: p.retention ?? p.value ?? 0,
+            }));
+            const rMax = Math.max(...rPts.map(p => p.v)) || 1;
+            retentionPath = rPts.map((p, i) =>
+                `${i === 0 ? 'M' : 'L'}${xOf(p.t).toFixed(1)},${yOf(p.v / rMax).toFixed(1)}`
+            ).join(' ');
+        }
+
+        const peakDots = peaks.map(p =>
+            `<circle cx="${xOf(p.second).toFixed(1)}" cy="${yOf(p.activation).toFixed(1)}" r="3" fill="#fbbf24" stroke="#0a1628" stroke-width="1"><title>${p.second.toFixed(1)}s · activation ${p.activation.toFixed(3)} · p${p.percentile}</title></circle>`
+        ).join('');
+
+        // x-axis ticks (seconds)
+        const tickStep = maxT <= 30 ? 5 : (maxT <= 120 ? 10 : 30);
+        const ticks = [];
+        for (let t = 0; t <= maxT; t += tickStep) {
+            const x = xOf(t).toFixed(1);
+            ticks.push(`<text x="${x}" y="${H - 6}" fill="#475569" font-size="9" text-anchor="middle">${t}s</text>`);
+            ticks.push(`<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#1e293b" stroke-width="0.5"/>`);
+        }
+
+        return `
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:#020617;border-radius:6px;border:1px solid #1e293b" preserveAspectRatio="none">
+                <text x="${padL - 4}" y="${padT + 4}" fill="#475569" font-size="9" text-anchor="end">1.0</text>
+                <text x="${padL - 4}" y="${padT + innerH}" fill="#475569" font-size="9" text-anchor="end">0</text>
+                ${ticks.join('')}
+                ${retentionPath ? `<path d="${retentionPath}" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.85"/>` : ''}
+                <path d="${brainPath}" fill="none" stroke="#a78bfa" stroke-width="2"/>
+                ${peakDots}
+                <g transform="translate(${padL + 6}, ${padT + 6})">
+                    <rect x="0" y="0" width="150" height="${retentionPath ? 30 : 16}" fill="#020617" stroke="#1e293b" rx="3"/>
+                    <line x1="6" y1="8" x2="20" y2="8" stroke="#a78bfa" stroke-width="2"/>
+                    <text x="24" y="11" fill="#cbd5e1" font-size="9">Brain engagement</text>
+                    ${retentionPath ? `<line x1="6" y1="22" x2="20" y2="22" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3"/><text x="24" y="25" fill="#cbd5e1" font-size="9">Retention (normalized)</text>` : ''}
+                </g>
+            </svg>
+        `;
+    }
+
+    function bindBrainEvents() {
+        const root = container?.querySelector('.jarvis-brain-root');
+        if (!root) return;
+
+        const pick = root.querySelector('#jarvis-brain-pick');
+        if (pick) {
+            pick.addEventListener('change', e => { brainPickedToRun = e.target.value; });
+        }
+        const runBtn = root.querySelector('#jarvis-brain-run');
+        if (runBtn) {
+            runBtn.addEventListener('click', async () => {
+                if (!brainPickedToRun) { alert('Pick a video first.'); return; }
+                runBtn.disabled = true;
+                runBtn.textContent = 'Submitting…';
+                try {
+                    const r = await fetch('/api/tribe/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ videoId: brainPickedToRun }),
+                    });
+                    const j = await r.json();
+                    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+                    brainRunStatus = { videoId: brainPickedToRun, status: j.status || 'queued' };
+                    refreshBrainTab();
+                    startBrainPolling();
+                } catch (e) {
+                    brainRunStatus = { videoId: brainPickedToRun, status: 'failed', error: e.message };
+                    refreshBrainTab();
+                } finally {
+                    runBtn.disabled = false;
+                    runBtn.textContent = 'Run TRIBE v2 Analysis';
+                }
+            });
+        }
+        root.querySelectorAll('.jarvis-brain-row').forEach(row => {
+            row.addEventListener('click', async () => {
+                brainSelectedVideoId = row.dataset.vid;
+                brainSelectedAnalysis = null;
+                refreshBrainTab();
+                await loadBrainAnalysisFor(brainSelectedVideoId);
+                refreshBrainTab();
+            });
+        });
+    }
+
     function bindEvents() {
         if (!container) return;
 
