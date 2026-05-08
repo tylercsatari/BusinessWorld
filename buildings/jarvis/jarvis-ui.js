@@ -113,6 +113,7 @@ const JarvisUI = (() => {
         { id: 'ideaModel', label: 'Idea Model' },
         { id: 'hookModel', label: 'Hook Model' },
         { id: 'brainAnalysis', label: '🧠 Brain' },
+        { id: 'videoGen', label: '🎬 Video' },
         { id: 'projectIdeas', label: 'Project Ideas' },
         { id: 'autoResearch', label: 'AutoResearch' },
         { id: 'knowledge', label: 'Knowledge' },
@@ -215,6 +216,7 @@ const JarvisUI = (() => {
             case 'ideaModel': return renderIdeaModel();
             case 'hookModel': return renderHookModel();
             case 'brainAnalysis': return renderBrainAnalysis();
+            case 'videoGen': return renderVideoGen();
             case 'projectIdeas': return renderProjectIdeas();
             case 'autoResearch': return renderAutoResearch();
             case 'knowledge': return renderKnowledge();
@@ -7524,6 +7526,17 @@ const JarvisUI = (() => {
     }
 
     // ══════════════════════════════════════════════════
+    // TAB: VIDEO GENERATION — fal.ai studio
+    // ══════════════════════════════════════════════════
+    function renderVideoGen() {
+        if (typeof VideoUI === 'undefined') {
+            return `<div style="color:#f87171;padding:14px">VideoUI module not loaded — check that buildings/video/video-ui.js is included in index.html.</div>`;
+        }
+        VideoUI.attach(container);
+        return VideoUI.render();
+    }
+
+    // ══════════════════════════════════════════════════
     // EVENTS
     // ══════════════════════════════════════════════════
     // ══════════════════════════════════════════════════
@@ -7571,6 +7584,15 @@ const JarvisUI = (() => {
                     hasRetention: v.hasRetention,
                 }));
             brainAvailable = availRes && availRes.ok ? await availRes.json() : { completed: [], inflight: [] };
+            // Auto-resume: if a job is already running server-side, pick it up
+            const inflight = brainAvailable.inflight || [];
+            if (inflight.length > 0 && !brainRunStatus) {
+                const job = inflight[0];
+                const vid = typeof job === 'string' ? job : job.videoId;
+                brainRunStatus = { videoId: vid, status: 'running', log: '' };
+                brainPickedToRun = vid;
+                startBrainPolling();
+            }
         } catch (e) {
             brainAnalysisError = e.message;
         }
@@ -7667,7 +7689,7 @@ const JarvisUI = (() => {
                     — status: <span style="color:${brainRunStatus.status === 'complete' ? '#22c55e' : brainRunStatus.status === 'failed' ? '#f87171' : '#fbbf24'}">${escapeHtml(brainRunStatus.status)}</span>
                 </div>
                 ${brainRunStatus.error ? `<div style="font-size:11px;color:#f87171;margin-top:4px">${escapeHtml(brainRunStatus.error)}</div>` : ''}
-                ${brainRunStatus.log ? `<pre style="margin:6px 0 0;font-size:10px;color:#94a3b8;max-height:120px;overflow:auto;background:#020617;padding:6px;border-radius:4px;white-space:pre-wrap">${escapeHtml(brainRunStatus.log)}</pre>` : ''}
+                ${brainRunStatus.log ? `<pre id="brain-run-log" style="margin:6px 0 0;font-size:10px;color:#94a3b8;max-height:280px;overflow:auto;background:#020617;padding:8px;border-radius:4px;white-space:pre-wrap;font-family:monospace">${escapeHtml(brainRunStatus.log)}</pre><script>setTimeout(()=>{const el=document.getElementById('brain-run-log');if(el)el.scrollTop=el.scrollHeight;},50)<\/script>` : ''}
             </div>
         ` : '';
 

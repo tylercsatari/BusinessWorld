@@ -373,7 +373,9 @@ function _tribeStartJob(videoId, videoPath) {
             TRIBE_PYTHON,
             [scriptPath, videoPath, '--output', outPath,
              '--cache-folder', TRIBE_CACHE,
-             '--r2-key', r2Key],
+             '--r2-key', r2Key,
+             '--skip-text',  // remove once Llama-3.2-3B access approved at hf.co
+            ],
             { cwd: path.dirname(scriptPath), env: spawnEnv }
         );
         job.status = 'running';
@@ -5392,6 +5394,307 @@ Respond ONLY as valid JSON (no markdown):
         } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // API: Video Generation (fal.ai proxy)
+    //   GET  /api/video/models                    → list of supported models + pricing
+    //   POST /api/video/storyboard                → GPT-4o storyboard for a concept
+    //   POST /api/video/generate                  → submit a single shot to fal.ai
+    //   GET  /api/video/status/:jobId?model=…     → poll a fal.ai queue job
+    //   POST /api/video/assemble                  → ffmpeg concat of finished shots
+    // =========================================
+    const VIDEO_MODELS = {
+        veo3: {
+            id: 'veo3',
+            label: 'Veo 3',
+            endpoint: 'fal-ai/veo3',
+            pricePerSecondAudio: 0.40,
+            pricePerSecondNoAudio: 0.20,
+            audioCapable: true,
+            badge: '🥇',
+            notes: 'Highest quality. Audio-on or audio-off. Ingredients-to-video for character consistency.',
+            maxDurationSec: 8,
+            featureFlags: ['audioPrompt', 'safetyFilter', 'ingredients'],
+        },
+        'kling-2.6-pro': {
+            id: 'kling-2.6-pro',
+            label: 'Kling 2.6 Pro',
+            endpoint: 'fal-ai/kling-video/v2.6/pro/text-to-video',
+            pricePerSecondAudio: 0.14,
+            pricePerSecondNoAudio: 0.07,
+            audioCapable: true,
+            badge: '🎬',
+            notes: 'Cinematic motion, strong camera control.',
+            maxDurationSec: 10,
+            featureFlags: ['cameraMovement'],
+        },
+        'kling-3.0': {
+            id: 'kling-3.0',
+            label: 'Kling 3.0',
+            endpoint: 'fal-ai/kling-video/v3/text-to-video',
+            pricePerSecondAudio: 0.029,
+            pricePerSecondNoAudio: 0.029,
+            audioCapable: false,
+            badge: '⚡',
+            notes: 'Cheap, fast, recent.',
+            maxDurationSec: 10,
+            featureFlags: [],
+        },
+        'wan-2.6': {
+            id: 'wan-2.6',
+            label: 'Wan 2.6',
+            endpoint: 'fal-ai/wan-2.6/text-to-video',
+            pricePerSecondAudio: 0.05,
+            pricePerSecondNoAudio: 0.05,
+            audioCapable: false,
+            badge: '🪞',
+            notes: 'Reference-video conditioning for character consistency.',
+            maxDurationSec: 10,
+            featureFlags: ['referenceVideo'],
+        },
+        'ltx-video': {
+            id: 'ltx-video',
+            label: 'LTX-Video',
+            endpoint: 'fal-ai/ltx-video',
+            pricePerSecondAudio: 0,
+            pricePerSecondNoAudio: 0,
+            audioCapable: false,
+            badge: '🆓',
+            notes: 'Free / local-style. Faster, lower fidelity.',
+            maxDurationSec: 5,
+            featureFlags: [],
+        },
+    };
+
+    if (pathname === '/api/video/models' && req.method === 'GET') {
+        const hasKey = !!(process.env.FAL_KEY || process.env.FAL_API_KEY);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            keyConfigured: hasKey,
+            billingUrl: 'https://fal.ai/dashboard/billing',
+            models: Object.values(VIDEO_MODELS),
+        }));
+        return;
+    }
+
+    if (pathname === '/api/video/storyboard' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const concept = String(body.concept || '').trim();
+            const duration = Math.max(5, Math.min(180, Number(body.duration) || 30));
+            const style = String(body.style || 'Cinematic');
+            const characters = String(body.characters || '').trim();
+            if (!concept) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Missing concept' }));
+                return;
+            }
+            const openaiKey = process.env.OPENAI_API_KEY;
+            if (!openaiKey) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'OPENAI_API_KEY not configured' }));
+                return;
+            }
+            const prompt = `You are a director storyboarding a ${duration}s video for a YouTube Short / Reel.
+
+Concept: ${concept}
+Style: ${style}
+Characters: ${characters || '(none specified)'}
+
+Break the video into 3–8 shots. Each shot must be 3–8 seconds. Total duration ≈ ${duration}s.
+For each shot recommend a model from this list: veo3 (best quality), kling-2.6-pro (cinematic), wan-2.6 (cheap reference-video), ltx-video (free, fast).
+Use veo3 sparingly for the most important shots (hook, payoff). Use kling-2.6-pro for cinematic action. Use wan-2.6 for B-roll. Use ltx-video for filler / transitions.
+
+Respond ONLY as valid JSON:
+{"shots":[{"shotNumber":1,"prompt":"…rich visual prompt…","durationSeconds":4,"recommendedModel":"veo3","cameraAngle":"Wide","audioMode":"on","notes":"why this shot"}]}`;
+            const aiResp = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o',
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.7,
+                    response_format: { type: 'json_object' },
+                }),
+            });
+            const aiData = await aiResp.json();
+            const content = aiData.choices?.[0]?.message?.content || '{"shots":[]}';
+            let parsed;
+            try { parsed = JSON.parse(content); }
+            catch { parsed = { shots: [] }; }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(parsed));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Storyboard failed: ' + e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/video/generate' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const modelId = String(body.model || 'veo3');
+            const model = VIDEO_MODELS[modelId];
+            if (!model) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `Unknown model: ${modelId}` }));
+                return;
+            }
+            const falKey = process.env.FAL_KEY || process.env.FAL_API_KEY;
+            if (!falKey) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'FAL_KEY not configured', billingUrl: 'https://fal.ai/dashboard/billing' }));
+                return;
+            }
+            const params = body.parameters || {};
+            const payload = {
+                prompt: String(body.prompt || ''),
+                duration: Math.max(1, Math.min(model.maxDurationSec, Number(body.durationSeconds) || 5)),
+                aspect_ratio: String(body.aspectRatio || '9:16'),
+                ...params,
+            };
+            if (body.imageUrl) payload.image_url = body.imageUrl;
+            if (Array.isArray(body.ingredients) && body.ingredients.length) payload.ingredients = body.ingredients;
+            const falResp = await fetch(`https://queue.fal.run/${model.endpoint}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Key ${falKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const falText = await falResp.text();
+            let falJson; try { falJson = JSON.parse(falText); } catch { falJson = { raw: falText }; }
+            if (!falResp.ok) {
+                const lower = falText.toLowerCase();
+                const isBalance = falResp.status === 403 || lower.includes('balance') || lower.includes('insufficient') || lower.includes('exhausted');
+                res.writeHead(falResp.status, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    error: falJson.detail || falJson.error || `fal.ai HTTP ${falResp.status}`,
+                    needsTopUp: isBalance,
+                    billingUrl: 'https://fal.ai/dashboard/billing',
+                    raw: falJson,
+                }));
+                return;
+            }
+            res.writeHead(202, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                jobId: falJson.request_id,
+                status: falJson.status || 'IN_QUEUE',
+                model: modelId,
+                endpoint: model.endpoint,
+                statusUrl: falJson.status_url,
+                responseUrl: falJson.response_url,
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Generate failed: ' + e.message }));
+        }
+        return;
+    }
+
+    {
+        const m = pathname.match(/^\/api\/video\/status\/([A-Za-z0-9_-]+)$/);
+        if (m && req.method === 'GET') {
+            try {
+                const jobId = m[1];
+                const modelId = url.searchParams.get('model') || 'veo3';
+                const model = VIDEO_MODELS[modelId];
+                if (!model) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: `Unknown model: ${modelId}` }));
+                    return;
+                }
+                const falKey = process.env.FAL_KEY || process.env.FAL_API_KEY;
+                if (!falKey) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'FAL_KEY not configured' }));
+                    return;
+                }
+                // Try the result endpoint first; if not ready, fall back to status.
+                const resultResp = await fetch(`https://queue.fal.run/${model.endpoint}/requests/${jobId}`, {
+                    headers: { 'Authorization': `Key ${falKey}` },
+                });
+                const resultText = await resultResp.text();
+                let resultJson; try { resultJson = JSON.parse(resultText); } catch { resultJson = { raw: resultText }; }
+                if (resultResp.ok && resultJson && (resultJson.video || resultJson.video_url || resultJson.url)) {
+                    const videoUrl = resultJson.video?.url || resultJson.video_url || resultJson.url;
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        status: 'COMPLETED',
+                        progress: 100,
+                        videoUrl,
+                        previewUrl: videoUrl,
+                        raw: resultJson,
+                    }));
+                    return;
+                }
+                const statusResp = await fetch(`https://queue.fal.run/${model.endpoint}/requests/${jobId}/status`, {
+                    headers: { 'Authorization': `Key ${falKey}` },
+                });
+                const statusText = await statusResp.text();
+                let statusJson; try { statusJson = JSON.parse(statusText); } catch { statusJson = { raw: statusText }; }
+                res.writeHead(statusResp.status, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    status: statusJson.status || 'IN_PROGRESS',
+                    progress: statusJson.progress || null,
+                    queuePosition: statusJson.queue_position,
+                    logs: statusJson.logs || [],
+                    raw: statusJson,
+                }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+            return;
+        }
+    }
+
+    if (pathname === '/api/video/assemble' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const shots = Array.isArray(body.shots) ? body.shots : [];
+            if (!shots.length) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No shots provided' }));
+                return;
+            }
+            const tmpDir = path.join(DIR, 'tmp', 'video-assemble-' + Date.now());
+            fs.mkdirSync(tmpDir, { recursive: true });
+            const localFiles = [];
+            for (let i = 0; i < shots.length; i++) {
+                const url = shots[i] && shots[i].videoUrl;
+                if (!url) continue;
+                const r = await fetch(url);
+                if (!r.ok) throw new Error(`Failed to fetch shot ${i}: HTTP ${r.status}`);
+                const buf = Buffer.from(await r.arrayBuffer());
+                const fp = path.join(tmpDir, `shot_${String(i).padStart(3, '0')}.mp4`);
+                fs.writeFileSync(fp, buf);
+                localFiles.push(fp);
+            }
+            if (!localFiles.length) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'No downloadable shots' }));
+                return;
+            }
+            const listFile = path.join(tmpDir, 'list.txt');
+            fs.writeFileSync(listFile, localFiles.map(f => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'));
+            const outFmt = body.outputFormat === 'webm' ? 'webm' : 'mp4';
+            const outFile = path.join(tmpDir, 'final.' + outFmt);
+            await new Promise((resolve, reject) => {
+                const ff = spawn('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', outFile]);
+                let stderr = '';
+                ff.stderr.on('data', d => { stderr += d.toString(); });
+                ff.on('error', reject);
+                ff.on('close', code => code === 0 ? resolve() : reject(new Error('ffmpeg exit ' + code + ': ' + stderr.slice(-400))));
+            });
+            const outUrl = '/' + path.relative(DIR, outFile).split(path.sep).join('/');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ videoUrl: outUrl, localPath: outFile, shots: localFiles.length }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Assemble failed: ' + e.message }));
         }
         return;
     }
