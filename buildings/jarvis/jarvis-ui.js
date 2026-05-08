@@ -7583,14 +7583,16 @@ const JarvisUI = (() => {
             const j = await r.json();
             if (r.status === 200) {
                 brainSelectedAnalysis = j;
-                // Try to merge in retention curve if we have it
+                // Merge in YouTube retention curve + duration so we can convert the
+                // normalized retention `second` (0–1 fraction) to real seconds.
                 try {
-                    const ar = await fetch(`/api/video/analysis/${encodeURIComponent(videoId)}`);
-                    if (ar.ok) {
-                        const a = await ar.json();
-                        const rc = a?.analytics?.retentionCurve;
-                        if (Array.isArray(rc)) brainSelectedAnalysis._retentionCurve = rc;
-                        if (a?.metadata?.title) brainSelectedAnalysis._title = a.metadata.title;
+                    const vr = await fetch(`/api/tribe/video-data/${encodeURIComponent(videoId)}`);
+                    if (vr.ok) {
+                        const vd = await vr.json();
+                        if (Array.isArray(vd.retentionCurve)) brainSelectedAnalysis._retentionCurve = vd.retentionCurve;
+                        if (vd.durationSec) brainSelectedAnalysis._durationSec = vd.durationSec;
+                        if (vd.title) brainSelectedAnalysis._title = vd.title;
+                        brainSelectedAnalysis._avgPercentViewed = vd.avgPercentViewed;
                     }
                 } catch {}
             } else {
@@ -7723,28 +7725,24 @@ const JarvisUI = (() => {
 
         const curve = a.brain_engagement_curve || [];
         const peaks = a.peak_moments || [];
-        const retention = a._retentionCurve || null;
+        const rawRetention = a._retentionCurve || null;
+        const durationSec = Number(a._durationSec || a.duration_s || 0) || 0;
 
-        // Pick the actual retention peak (highest retention point) for the comparison line.
-        let retentionPeakSec = null;
-        if (retention && retention.length) {
-            // BusinessWorld retention curves can be either an array of {second,retention}
-            // or {time,value}. Handle both shapes.
-            const pts = retention.map(p => ({
-                t: p.second ?? p.time ?? p.t ?? 0,
-                v: p.retention ?? p.value ?? 0,
-            }));
-            // The biggest *drop* is more interesting than the absolute max (which is
-            // always at t=0). Use largest negative slope as "where they bailed".
-            let worstDrop = -Infinity, worstAt = pts[0]?.t || 0;
-            for (let i = 1; i < pts.length; i++) {
-                const d = pts[i - 1].v - pts[i].v;
-                if (d > worstDrop) { worstDrop = d; worstAt = pts[i].t; }
-            }
-            retentionPeakSec = worstAt;
+        // YouTube retention curves use `second` as a 0–1 fraction of total length.
+        // Convert to real seconds so it shares an x-axis with the brain curve.
+        let retentionPts = null;
+        if (rawRetention && rawRetention.length && durationSec > 0) {
+            retentionPts = rawRetention.map(p => {
+                const frac = p.second ?? p.time ?? p.t ?? 0;
+                return {
+                    second: frac * durationSec,
+                    retention: Number(p.retention ?? p.value ?? 0),
+                };
+            }).filter(p => Number.isFinite(p.second) && Number.isFinite(p.retention));
         }
 
-        const chartHtml = renderBrainCurveSvg(curve, retention, peaks);
+        const metrics = computeBrainRetentionMetrics(curve, retentionPts);
+        const chartHtml = renderBrainCurveSvg(curve, retentionPts, peaks, durationSec);
 
         const peaksHtml = peaks.length ? `
             <div style="margin-top:12px">
@@ -7754,12 +7752,52 @@ const JarvisUI = (() => {
                 </div>
             </div>` : '';
 
-        const compareHtml = `
-            <div style="margin-top:14px;padding:10px;background:#0a1628;border-radius:6px;border-left:3px solid #7c3aed">
-                <div style="font-size:11px;color:#cbd5e1;line-height:1.6">
-                    🧠 <strong style="color:#a78bfa">Brain says:</strong> peak at <strong>${(a.max_activation_second ?? 0).toFixed(1)}s</strong>
-                    ${retentionPeakSec != null ? `<br>📉 <strong style="color:#fbbf24">Retention shows:</strong> biggest drop at <strong>${Number(retentionPeakSec).toFixed(1)}s</strong>` : ''}
-                </div>
+        const fmtSec = s => (s == null ? '—' : `${Number(s).toFixed(1)}s`);
+        const fmtR = r => (r == null ? '—' : (r >= 0 ? `+${r.toFixed(3)}` : r.toFixed(3)));
+        const rColor = r => r == null ? '#94a3b8'
+            : r >= 0.5 ? '#22c55e' : r >= 0.2 ? '#86efac'
+            : r >= -0.2 ? '#fbbf24' : r >= -0.5 ? '#fb923c' : '#f87171';
+
+        const metricCard = (label, value, sub, color) => `
+            <div style="flex:1;min-width:140px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px">
+                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">${label}</div>
+                <div style="font-size:18px;color:${color};font-weight:700;line-height:1.2;margin-top:4px;font-family:monospace">${value}</div>
+                ${sub ? `<div style="font-size:10px;color:#94a3b8;margin-top:3px">${sub}</div>` : ''}
+            </div>`;
+
+        const metricsHtml = `
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+                ${metricCard(
+                    '🧠 Brain peak',
+                    fmtSec(metrics.brainPeakSec),
+                    `activation ${metrics.brainPeakVal != null ? metrics.brainPeakVal.toFixed(3) : '—'}`,
+                    '#a78bfa'
+                )}
+                ${metricCard(
+                    '📈 Retention peak',
+                    fmtSec(metrics.retentionPeakSec),
+                    metrics.retentionPeakVal != null ? `${metrics.retentionPeakVal.toFixed(2)} (relative)` : '(no retention)',
+                    '#fbbf24'
+                )}
+                ${metricCard(
+                    '⚖️ Brain↔Retention r',
+                    fmtR(metrics.pearsonR),
+                    metrics.pearsonR == null ? '(no overlap)'
+                        : metrics.pearsonR > 0.3 ? 'aligned — edit follows brain'
+                        : metrics.pearsonR < -0.3 ? 'inverted — edit fights brain'
+                        : 'weak link',
+                    rColor(metrics.pearsonR)
+                )}
+                ${metricCard(
+                    '🚨 Biggest gap',
+                    fmtSec(metrics.biggestGapSec),
+                    metrics.biggestGapKind
+                        ? (metrics.biggestGapKind === 'brain_high_retention_low'
+                            ? 'brain wants more, retention dropped'
+                            : 'retention high, brain low')
+                        : '—',
+                    '#f87171'
+                )}
             </div>`;
 
         return `
@@ -7774,18 +7812,120 @@ const JarvisUI = (() => {
                 </div>
             </div>
             ${chartHtml}
-            ${compareHtml}
+            ${metricsHtml}
             ${peaksHtml}
         `;
     }
 
-    function renderBrainCurveSvg(brainCurve, retentionCurve, peaks) {
+    // Returns brain peak / retention peak / pearson r (interpolated to common time
+    // grid) / biggest brain-vs-retention gap. Both signals are min-max scaled to
+    // 0–1 before correlating so they're directly comparable.
+    function computeBrainRetentionMetrics(brainCurve, retentionPts) {
+        const out = {
+            brainPeakSec: null, brainPeakVal: null,
+            retentionPeakSec: null, retentionPeakVal: null,
+            pearsonR: null,
+            biggestGapSec: null, biggestGapKind: null,
+        };
+
+        if (brainCurve && brainCurve.length) {
+            let bi = 0;
+            for (let i = 1; i < brainCurve.length; i++) {
+                if ((brainCurve[i].activation || 0) > (brainCurve[bi].activation || 0)) bi = i;
+            }
+            out.brainPeakSec = brainCurve[bi].second;
+            out.brainPeakVal = brainCurve[bi].activation;
+        }
+        if (retentionPts && retentionPts.length) {
+            let ri = 0;
+            for (let i = 1; i < retentionPts.length; i++) {
+                if (retentionPts[i].retention > retentionPts[ri].retention) ri = i;
+            }
+            out.retentionPeakSec = retentionPts[ri].second;
+            out.retentionPeakVal = retentionPts[ri].retention;
+        }
+
+        if (!brainCurve?.length || !retentionPts?.length) return out;
+
+        // Common time grid: every 0.5s across the overlap.
+        const tStart = Math.max(brainCurve[0].second, retentionPts[0].second);
+        const tEnd = Math.min(
+            brainCurve[brainCurve.length - 1].second,
+            retentionPts[retentionPts.length - 1].second
+        );
+        if (!(tEnd > tStart)) return out;
+
+        const interp = (pts, getT, getV, t) => {
+            if (t <= getT(pts[0])) return getV(pts[0]);
+            if (t >= getT(pts[pts.length - 1])) return getV(pts[pts.length - 1]);
+            // Binary search.
+            let lo = 0, hi = pts.length - 1;
+            while (lo + 1 < hi) {
+                const mid = (lo + hi) >> 1;
+                if (getT(pts[mid]) <= t) lo = mid; else hi = mid;
+            }
+            const a = pts[lo], b = pts[hi];
+            const dt = getT(b) - getT(a);
+            if (dt <= 0) return getV(a);
+            return getV(a) + (getV(b) - getV(a)) * ((t - getT(a)) / dt);
+        };
+
+        const step = Math.max(0.5, (tEnd - tStart) / 200);
+        const brainSeries = [], retSeries = [], times = [];
+        for (let t = tStart; t <= tEnd + 1e-9; t += step) {
+            times.push(t);
+            brainSeries.push(interp(brainCurve, p => p.second, p => p.activation, t));
+            retSeries.push(interp(retentionPts, p => p.second, p => p.retention, t));
+        }
+
+        // Min-max scale both to [0, 1] for comparability.
+        const scale = arr => {
+            const lo = Math.min(...arr), hi = Math.max(...arr);
+            const span = hi - lo;
+            return span > 1e-9 ? arr.map(v => (v - lo) / span) : arr.map(() => 0);
+        };
+        const bs = scale(brainSeries);
+        const rs = scale(retSeries);
+
+        const n = bs.length;
+        if (n < 2) return out;
+        const mean = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+        const mb = mean(bs), mr = mean(rs);
+        let num = 0, db2 = 0, dr2 = 0;
+        for (let i = 0; i < n; i++) {
+            const dB = bs[i] - mb, dR = rs[i] - mr;
+            num += dB * dR;
+            db2 += dB * dB;
+            dr2 += dR * dR;
+        }
+        const denom = Math.sqrt(db2 * dr2);
+        out.pearsonR = denom > 1e-9 ? num / denom : null;
+
+        // Biggest gap: largest |brain_scaled − retention_scaled|.
+        let gapIdx = 0, gapAbs = -Infinity;
+        for (let i = 0; i < n; i++) {
+            const d = bs[i] - rs[i];
+            if (Math.abs(d) > gapAbs) { gapAbs = Math.abs(d); gapIdx = i; }
+        }
+        out.biggestGapSec = times[gapIdx];
+        out.biggestGapKind = (bs[gapIdx] - rs[gapIdx]) >= 0
+            ? 'brain_high_retention_low'
+            : 'retention_high_brain_low';
+
+        return out;
+    }
+
+    function renderBrainCurveSvg(brainCurve, retentionPts, peaks, durationSec) {
         const W = 560, H = 180, padL = 32, padR = 8, padT = 10, padB = 22;
         const innerW = W - padL - padR;
         const innerH = H - padT - padB;
         if (!brainCurve.length) return `<div style="color:#64748b;font-size:11px;padding:14px">No curve data.</div>`;
 
-        const maxT = Math.max(...brainCurve.map(p => p.second), ...(retentionCurve ? retentionCurve.map(p => p.second ?? p.time ?? 0) : [0]));
+        const maxT = Math.max(
+            ...brainCurve.map(p => p.second),
+            ...(retentionPts ? retentionPts.map(p => p.second) : [0]),
+            durationSec || 0,
+        );
         const xOf = (t) => padL + (maxT > 0 ? (t / maxT) * innerW : 0);
         const yOf = (v) => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
 
@@ -7794,15 +7934,11 @@ const JarvisUI = (() => {
         ).join(' ');
 
         let retentionPath = '';
-        if (retentionCurve && retentionCurve.length) {
+        if (retentionPts && retentionPts.length) {
             // Normalize retention to 0–1 using max so the two curves share a y-axis.
-            const rPts = retentionCurve.map(p => ({
-                t: p.second ?? p.time ?? p.t ?? 0,
-                v: p.retention ?? p.value ?? 0,
-            }));
-            const rMax = Math.max(...rPts.map(p => p.v)) || 1;
-            retentionPath = rPts.map((p, i) =>
-                `${i === 0 ? 'M' : 'L'}${xOf(p.t).toFixed(1)},${yOf(p.v / rMax).toFixed(1)}`
+            const rMax = Math.max(...retentionPts.map(p => p.retention)) || 1;
+            retentionPath = retentionPts.map((p, i) =>
+                `${i === 0 ? 'M' : 'L'}${xOf(p.second).toFixed(1)},${yOf(p.retention / rMax).toFixed(1)}`
             ).join(' ');
         }
 
@@ -7828,10 +7964,10 @@ const JarvisUI = (() => {
                 <path d="${brainPath}" fill="none" stroke="#a78bfa" stroke-width="2"/>
                 ${peakDots}
                 <g transform="translate(${padL + 6}, ${padT + 6})">
-                    <rect x="0" y="0" width="150" height="${retentionPath ? 30 : 16}" fill="#020617" stroke="#1e293b" rx="3"/>
+                    <rect x="0" y="0" width="170" height="${retentionPath ? 30 : 16}" fill="#020617" stroke="#1e293b" rx="3"/>
                     <line x1="6" y1="8" x2="20" y2="8" stroke="#a78bfa" stroke-width="2"/>
-                    <text x="24" y="11" fill="#cbd5e1" font-size="9">Brain engagement</text>
-                    ${retentionPath ? `<line x1="6" y1="22" x2="20" y2="22" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3"/><text x="24" y="25" fill="#cbd5e1" font-size="9">Retention (normalized)</text>` : ''}
+                    <text x="24" y="11" fill="#cbd5e1" font-size="9">Brain engagement (TRIBE v2)</text>
+                    ${retentionPath ? `<line x1="6" y1="22" x2="20" y2="22" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3"/><text x="24" y="25" fill="#cbd5e1" font-size="9">YouTube retention (norm.)</text>` : ''}
                 </g>
             </svg>
         `;

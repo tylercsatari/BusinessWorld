@@ -21,6 +21,78 @@ def log(msg: str) -> None:
     print(f"[tribe] {msg}", file=sys.stderr, flush=True)
 
 
+def _maybe_patch_whisperx(video_path: Path) -> Path | None:
+    """Bypass TRIBE's `uvx whisperx` step by reusing our pre-built transcript.
+
+    Looks for `video_data/<ytId>/analysis.json` in the parent BusinessWorld tree
+    and, if found, monkey-patches ExtractWordsFromAudio._get_transcript_from_audio
+    to return a DataFrame built from the existing word-level timestamps.
+
+    Why: TRIBE's uvx-spawned whisperx env hits a torchaudio/pyannote.audio
+    incompatibility on Python 3.14. The transcript is already on disk for every
+    video we care about, so this is both faster and more reliable.
+
+    Returns the analysis.json path if patching happened, else None.
+    """
+    # Walk up to find a sibling video_data directory containing this video's id.
+    yt_id = video_path.parent.name  # video_data/<ytId>/video.mp4
+    analysis_path = video_path.parent / "analysis.json"
+    if not analysis_path.exists():
+        return None
+    try:
+        data = json.loads(analysis_path.read_text())
+    except Exception as e:
+        log(f"Could not load {analysis_path}: {e}; falling back to whisperx")
+        return None
+    transcript = data.get("transcript") or {}
+    words = transcript.get("words") or []
+    full_text = transcript.get("fullText") or ""
+    if not words:
+        log("analysis.json has no transcript.words; falling back to whisperx")
+        return None
+
+    import re
+    import pandas as pd  # noqa: E402
+
+    # Split fullText into sentences (rough). AddSentenceToWords only needs words
+    # plus a Text event; sentences are recomputed downstream.
+    sent_strs = [s.strip() for s in re.split(r"[.!?]+", full_text) if s.strip()]
+    if not sent_strs:
+        sent_strs = [full_text or "transcript"]
+    chunk = max(1, len(words) // max(1, len(sent_strs)))
+
+    rows = []
+    for i, w in enumerate(words):
+        text = str(w.get("word", "")).strip().replace('"', "")
+        if not text:
+            continue
+        ts = float(w.get("timestamp", w.get("start", 0)) or 0)
+        nxt_ts = float(words[i + 1].get("timestamp", ts + 0.3)) if i + 1 < len(words) else ts + 0.3
+        duration = max(0.05, min(2.0, nxt_ts - ts))
+        sent_idx = min(i // chunk, len(sent_strs) - 1)
+        rows.append({
+            "text": text,
+            "start": ts,
+            "duration": duration,
+            "sequence_id": int(sent_idx),
+            "sentence": sent_strs[sent_idx],
+        })
+    if not rows:
+        log("Pre-built transcript yielded no usable words; falling back to whisperx")
+        return None
+
+    fixed_df = pd.DataFrame(rows)
+    log(f"[transcript] reusing {len(rows)} words from {analysis_path.name} (yt={yt_id})")
+
+    from tribev2 import eventstransforms  # noqa: E402
+
+    def _patched(wav_filename, language):  # signature must match original
+        return fixed_df.copy()
+
+    eventstransforms.ExtractWordsFromAudio._get_transcript_from_audio = staticmethod(_patched)
+    return analysis_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("video_path", type=str)
@@ -28,6 +100,8 @@ def main() -> int:
                         help="Optional path to also write the JSON result to disk")
     parser.add_argument("--cache-folder", type=str,
                         default=str(Path(__file__).resolve().parent / "cache"))
+    parser.add_argument("--no-prebuilt-transcript", action="store_true",
+                        help="Disable the analysis.json transcript bypass and force whisperx.")
     args = parser.parse_args()
 
     video_path = Path(args.video_path).resolve()
@@ -49,6 +123,9 @@ def main() -> int:
         cache_folder=cache_folder,
     )
     log(f"Model ready in {time.time() - t0:.1f}s")
+
+    if not args.no_prebuilt_transcript:
+        _maybe_patch_whisperx(video_path)
 
     log(f"Building events dataframe for {video_path.name}…")
     df = model.get_events_dataframe(video_path=str(video_path))

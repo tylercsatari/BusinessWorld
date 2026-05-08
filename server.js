@@ -346,6 +346,8 @@ const MIME_TYPES = {
 const _tribeJobs = {};
 const TRIBE_PYTHON = process.env.TRIBE_PYTHON
     || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/.venv/bin/python3.11';
+const TRIBE_CACHE = process.env.TRIBE_CACHE
+    || '/Users/tylercsatari/Desktop/BusinessHub/tribev2/cache';
 
 function _tribeStartJob(videoId, videoPath) {
     if (_tribeJobs[videoId] && (_tribeJobs[videoId].status === 'running' || _tribeJobs[videoId].status === 'queued')) {
@@ -363,7 +365,7 @@ function _tribeStartJob(videoId, videoPath) {
     try {
         const proc = require('child_process').spawn(
             TRIBE_PYTHON,
-            [scriptPath, videoPath, '--output', outPath],
+            [scriptPath, videoPath, '--output', outPath, '--cache-folder', TRIBE_CACHE],
             { cwd: path.dirname(scriptPath), env: { ...process.env } }
         );
         job.status = 'running';
@@ -5261,6 +5263,42 @@ Respond ONLY as valid JSON (no markdown):
                 }
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'not_found' }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+            return;
+        }
+    }
+
+    {
+        // GET /api/tribe/video-data/:videoId — companion data for the brain chart:
+        // YouTube retention curve (seconds + retention) and the video duration so the
+        // UI can convert the normalized retention `second` (0–1 fraction) back into
+        // real seconds and overlay it on the brain engagement chart.
+        const m = pathname.match(/^\/api\/tribe\/video-data\/([A-Za-z0-9_-]+)$/);
+        if (m && req.method === 'GET') {
+            try {
+                const videoId = m[1];
+                const analysisPath = path.join(DIR, 'video_data', videoId, 'analysis.json');
+                if (!fs.existsSync(analysisPath)) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'analysis.json not found' }));
+                    return;
+                }
+                const a = JSON.parse(fs.readFileSync(analysisPath, 'utf8'));
+                const rc = (a && a.analytics && Array.isArray(a.analytics.retentionCurve))
+                    ? a.analytics.retentionCurve : [];
+                const durationSec = Number(a?.metadata?.duration || a?.metadata?.durationSec || a?.analytics?.avgViewDuration || 0) || 0;
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    videoId,
+                    title: a?.metadata?.title || null,
+                    durationSec,
+                    avgViewDuration: a?.analytics?.avgViewDuration || null,
+                    avgPercentViewed: a?.analytics?.avgPercentViewed || null,
+                    retentionCurve: rc,
+                }));
             } catch (e) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: e.message }));
