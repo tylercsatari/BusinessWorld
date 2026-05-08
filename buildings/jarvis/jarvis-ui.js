@@ -7558,19 +7558,18 @@ const JarvisUI = (() => {
     async function loadBrainData() {
         try {
             const [vidsRes, availRes] = await Promise.all([
-                fetch('/api/v1/videos/all/analyses').catch(() => null),
+                fetch('/api/tribe/pen-videos').catch(() => null),
                 fetch('/api/tribe/available').catch(() => null),
             ]);
-            const analyses = vidsRes && vidsRes.ok ? await vidsRes.json() : [];
-            brainVideos = (Array.isArray(analyses) ? analyses : [])
-                .filter(x => x && x.record && x.record.youtubeVideoId)
-                .map(x => ({
-                    ytId: x.record.youtubeVideoId,
-                    name: x.record.name || x.analysis?.metadata?.title || x.record.youtubeVideoId,
-                    viewCount: x.analysis?.analytics?.totalViews ?? x.analysis?.metadata?.viewCount ?? 0,
-                    hasRetention: Array.isArray(x.analysis?.analytics?.retentionCurve) && x.analysis.analytics.retentionCurve.length > 0,
-                }))
-                .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
+            const penData = vidsRes && vidsRes.ok ? await vidsRes.json() : { videos: [] };
+            brainVideos = (penData.videos || [])
+                .filter(v => v.hasVideo)
+                .map(v => ({
+                    ytId: v.ytId,
+                    name: v.name,
+                    viewCount: v.viewCount,
+                    hasRetention: v.hasRetention,
+                }));
             brainAvailable = availRes && availRes.ok ? await availRes.json() : { completed: [], inflight: [] };
         } catch (e) {
             brainAnalysisError = e.message;
@@ -7677,7 +7676,7 @@ const JarvisUI = (() => {
                 <div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;margin-bottom:8px">Analyze a video</div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                     <select id="jarvis-brain-pick" style="flex:1;min-width:240px;background:#020617;color:#e2e8f0;border:1px solid #1e293b;border-radius:4px;padding:6px 8px;font-size:12px">
-                        <option value="">— choose a video —</option>
+                        <option value="">— choose a video (${brainVideos.length} available) —</option>
                         ${options}
                     </select>
                     <button id="jarvis-brain-run" class="jarvis-btn" style="background:#7c3aed;color:#fff;border:0;border-radius:4px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Run TRIBE v2 Analysis</button>

@@ -5213,6 +5213,38 @@ Respond ONLY as valid JSON (no markdown):
     //   POST /api/tribe/analyze       { videoId } → { jobId, status }
     //   GET  /api/tribe/results/:id   → analysis JSON or { status: 'pending'|'running'|'failed' }
     //   GET  /api/tribe/available     → [{ videoId, analyzed_at, engagement_score, duration_s }]
+    //   GET  /api/tribe/pen-videos    → list videos in video_data/ with analytics
+    if (pathname === '/api/tribe/pen-videos' && req.method === 'GET') {
+        try {
+            const videoDataDir = path.join(DIR, 'video_data');
+            const entries = fs.readdirSync(videoDataDir);
+            const videos = [];
+            for (const ytId of entries) {
+                const analysisPath = path.join(videoDataDir, ytId, 'analysis.json');
+                if (!fs.existsSync(analysisPath)) continue;
+                try {
+                    const analysis = JSON.parse(fs.readFileSync(analysisPath, 'utf8'));
+                    const meta = analysis.metadata || {};
+                    const analytics = analysis.analytics || {};
+                    videos.push({
+                        ytId,
+                        name: meta.title || ytId,
+                        viewCount: analytics.totalViews || 0,
+                        duration: meta.duration || 0,
+                        hasRetention: Array.isArray(analytics.retentionCurve) && analytics.retentionCurve.length > 0,
+                        hasVideo: fs.existsSync(path.join(videoDataDir, ytId, 'video.mp4')),
+                    });
+                } catch { continue; }
+            }
+            videos.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
+            sendJsonGz(req, res, { videos, count: videos.length });
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     if (pathname === '/api/tribe/analyze' && req.method === 'POST') {
         try {
             const body = await readBody(req);
