@@ -943,9 +943,119 @@ const LibraryUI = (() => {
         renderFreeNoteEditor(selectedFreeNote);
     }
 
+    // Minimal markdown → HTML renderer (covers headings, bold, italic, code, lists, tables, links, blockquotes, hr, paragraphs).
+    function renderMarkdown(md) {
+        if (!md) return '';
+        let s = String(md);
+
+        // Strip carriage returns
+        s = s.replace(/\r\n/g, '\n');
+
+        // Extract code blocks first (so we don't mess with their contents)
+        const codeBlocks = [];
+        s = s.replace(/```([\s\S]*?)```/g, (m, code) => {
+            codeBlocks.push(code);
+            return ` CODE${codeBlocks.length - 1} `;
+        });
+
+        // Tables (must run before inline transforms touch | chars)
+        s = s.replace(/((?:^\|[^\n]*\|\n)+)/gm, (block) => {
+            const lines = block.trim().split('\n').filter(l => l.startsWith('|'));
+            if (lines.length < 2) return block;
+            const cells = (line) => line.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+            const header = cells(lines[0]);
+            const sepRow = lines[1];
+            if (!/^\|[-:\s|]+\|$/.test(sepRow)) return block;
+            const rows = lines.slice(2).map(cells);
+            const renderCell = (c) => c.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            let out = '<table class="md-table"><thead><tr>';
+            for (const h of header) out += `<th>${renderCell(escHtml(h))}</th>`;
+            out += '</tr></thead><tbody>';
+            for (const row of rows) {
+                out += '<tr>';
+                for (const c of row) out += `<td>${renderCell(escHtml(c))}</td>`;
+                out += '</tr>';
+            }
+            out += '</tbody></table>\n';
+            return out;
+        });
+
+        // Headings
+        s = s.replace(/^###### (.*)$/gm, '<h6>$1</h6>');
+        s = s.replace(/^##### (.*)$/gm, '<h5>$1</h5>');
+        s = s.replace(/^#### (.*)$/gm, '<h4>$1</h4>');
+        s = s.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+        s = s.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+        s = s.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+
+        // Horizontal rule
+        s = s.replace(/^[\-_*]{3,}\s*$/gm, '<hr/>');
+
+        // Blockquotes
+        s = s.replace(/^> ?(.*)$/gm, '<blockquote>$1</blockquote>');
+        s = s.replace(/(<\/blockquote>)\n(<blockquote>)/g, '\n');
+
+        // Lists — gather consecutive bullet / numbered lines
+        s = s.replace(/(?:^[\t ]*[-*] .*(?:\n|$))+/gm, (block) => {
+            const items = block.trim().split('\n').map(l => l.replace(/^[\t ]*[-*] /, ''));
+            return '<ul>' + items.map(i => `<li>${i}</li>`).join('') + '</ul>\n';
+        });
+        s = s.replace(/(?:^[\t ]*\d+\. .*(?:\n|$))+/gm, (block) => {
+            const items = block.trim().split('\n').map(l => l.replace(/^[\t ]*\d+\. /, ''));
+            return '<ol>' + items.map(i => `<li>${i}</li>`).join('') + '</ol>\n';
+        });
+
+        // Inline: bold, italic, code, links — but NOT inside tables (already handled) or html
+        // Bold **x**
+        s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+        // Italic *x*
+        s = s.replace(/(?<![*\w])\*([^*\n]+)\*(?!\w)/g, '<em>$1</em>');
+        // Inline code `x`
+        s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+        // Links [text](url)
+        s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+        // Paragraphs — wrap stray text blocks
+        const lines = s.split('\n');
+        const out = [];
+        let para = [];
+        const flush = () => {
+            if (para.length) {
+                const text = para.join(' ').trim();
+                if (text) out.push(`<p>${text}</p>`);
+                para = [];
+            }
+        };
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) { flush(); continue; }
+            // Already-block elements
+            if (/^<(h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|blockquote|hr|p|pre|div|details|summary)/i.test(trimmed) ||
+                /^(<\/(h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|blockquote|p|pre|div|details|summary)>)$/i.test(trimmed) ||
+                trimmed.startsWith(' CODE')) {
+                flush();
+                out.push(line);
+            } else {
+                para.push(line);
+            }
+        }
+        flush();
+        s = out.join('\n');
+
+        // Restore code blocks
+        s = s.replace(/ CODE(\d+) /g, (m, i) => `<pre><code>${escHtml(codeBlocks[+i])}</code></pre>`);
+
+        return s;
+    }
+
     async function renderFreeNoteEditor(note) {
         const editorEl = document.getElementById('library-editor');
         if (!editorEl) return;
+
+        // Tabbed notes (framework-style): if note has a non-empty `tabs` array, render the tabbed view.
+        if (Array.isArray(note.tabs) && note.tabs.length > 0) {
+            return renderTabbedNoteEditor(note);
+        }
 
         // Project dropdown
         let projectOptions = '';
@@ -997,6 +1107,147 @@ const LibraryUI = (() => {
         document.getElementById('library-freenote-project').addEventListener('change', scheduleFreeNoteSave);
         document.getElementById('library-freenote-idea').addEventListener('change', scheduleFreeNoteSave);
         document.getElementById('library-freenote-pin').addEventListener('click', toggleFreeNotePin);
+    }
+
+    // Tabbed-note editor — for framework-style notes (e.g. the Da Vinci Stack)
+    let _tabbedNoteActiveIdx = 0;
+    let _tabbedNoteEditMode = false;
+
+    async function renderTabbedNoteEditor(note) {
+        const editorEl = document.getElementById('library-editor');
+        if (!editorEl) return;
+
+        const activeIdx = Math.max(0, Math.min(_tabbedNoteActiveIdx, note.tabs.length - 1));
+        const activeTab = note.tabs[activeIdx];
+
+        const tabBarHtml = note.tabs.map((t, i) => `
+            <button class="lib-tnote-tab${i === activeIdx ? ' active' : ''}" data-tab-idx="${i}">
+                ${escHtml(t.title || `Tab ${i+1}`)}
+            </button>
+        `).join('');
+
+        const bodyHtml = _tabbedNoteEditMode
+            ? `<textarea class="lib-tnote-textarea" id="lib-tnote-body">${escHtml(activeTab.body || '')}</textarea>`
+            : `<div class="lib-tnote-rendered">${renderMarkdown(activeTab.body || '')}</div>`;
+
+        editorEl.innerHTML = `
+            <div class="library-editor-toolbar">
+                <button class="library-back-btn" id="library-back-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    Notes
+                </button>
+                <div class="library-freenote-toolbar-right">
+                    <button class="lib-tnote-mode-btn" id="lib-tnote-mode" title="${_tabbedNoteEditMode ? 'Switch to read view' : 'Edit this tab'}">${_tabbedNoteEditMode ? '👁️ Read' : '✎ Edit'}</button>
+                    <button class="library-freenote-pin-btn ${note.pinned ? 'pinned' : ''}" id="library-freenote-pin" title="${note.pinned ? 'Unpin' : 'Pin to top'}">&#128204;</button>
+                    <span class="library-save-status saved" id="library-save-status">Saved</span>
+                </div>
+            </div>
+            <div class="library-editor-body lib-tnote-body-wrap">
+                <div class="library-editor-title-row">
+                    <input type="text" class="library-editor-title" id="library-freenote-title" value="${escAttr(note.title || '')}" placeholder="Note title..." />
+                </div>
+                <div class="lib-tnote-tabs">${tabBarHtml}</div>
+                <div class="lib-tnote-content">${bodyHtml}</div>
+            </div>
+        `;
+
+        // Tab click switching
+        editorEl.querySelectorAll('.lib-tnote-tab').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                // Save current tab body if in edit mode
+                if (_tabbedNoteEditMode) {
+                    const ta = document.getElementById('lib-tnote-body');
+                    if (ta && selectedFreeNote && selectedFreeNote.tabs[_tabbedNoteActiveIdx]) {
+                        selectedFreeNote.tabs[_tabbedNoteActiveIdx].body = ta.value;
+                        await saveTabbedNote();
+                    }
+                }
+                _tabbedNoteActiveIdx = parseInt(btn.dataset.tabIdx, 10);
+                renderTabbedNoteEditor(selectedFreeNote);
+            });
+        });
+
+        // Title editing
+        document.getElementById('library-freenote-title').addEventListener('input', () => {
+            freeNoteDirty = true;
+            setSaveStatus('Editing...');
+            if (freeNoteSaveTimer) clearTimeout(freeNoteSaveTimer);
+            freeNoteSaveTimer = setTimeout(() => saveTabbedNote(), 800);
+        });
+
+        // Body editing (only in edit mode)
+        const ta = document.getElementById('lib-tnote-body');
+        if (ta) {
+            ta.addEventListener('input', () => {
+                freeNoteDirty = true;
+                setSaveStatus('Editing...');
+                if (selectedFreeNote && selectedFreeNote.tabs[_tabbedNoteActiveIdx]) {
+                    selectedFreeNote.tabs[_tabbedNoteActiveIdx].body = ta.value;
+                }
+                if (freeNoteSaveTimer) clearTimeout(freeNoteSaveTimer);
+                freeNoteSaveTimer = setTimeout(() => saveTabbedNote(), 800);
+            });
+        }
+
+        // Mode toggle
+        document.getElementById('lib-tnote-mode').addEventListener('click', async () => {
+            if (_tabbedNoteEditMode) {
+                const taEl = document.getElementById('lib-tnote-body');
+                if (taEl && selectedFreeNote && selectedFreeNote.tabs[_tabbedNoteActiveIdx]) {
+                    selectedFreeNote.tabs[_tabbedNoteActiveIdx].body = taEl.value;
+                    await saveTabbedNote();
+                }
+            }
+            _tabbedNoteEditMode = !_tabbedNoteEditMode;
+            renderTabbedNoteEditor(selectedFreeNote);
+        });
+
+        // Back button
+        document.getElementById('library-back-btn').addEventListener('click', async () => {
+            if (_tabbedNoteEditMode) {
+                const taEl = document.getElementById('lib-tnote-body');
+                if (taEl && selectedFreeNote && selectedFreeNote.tabs[_tabbedNoteActiveIdx]) {
+                    selectedFreeNote.tabs[_tabbedNoteActiveIdx].body = taEl.value;
+                    await saveTabbedNote();
+                }
+            }
+            selectedFreeNote = null;
+            _tabbedNoteActiveIdx = 0;
+            _tabbedNoteEditMode = false;
+            showListPage();
+            renderFreeNotesList();
+        });
+
+        // Pin button
+        document.getElementById('library-freenote-pin').addEventListener('click', toggleFreeNotePin);
+    }
+
+    async function saveTabbedNote() {
+        if (!selectedFreeNote) return;
+        const titleEl = document.getElementById('library-freenote-title');
+        const fields = {
+            title: (titleEl?.value || '').trim() || 'Untitled',
+            tabs: selectedFreeNote.tabs,
+            lastEdited: new Date().toISOString()
+        };
+        setSaveStatus('Saving...');
+        try {
+            const res = await fetch(`/api/data/notes/${selectedFreeNote.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(fields)
+            });
+            if (!res.ok) throw new Error(res.status);
+            const updated = await res.json();
+            const idx = freeNotes.findIndex(n => n.id === selectedFreeNote.id);
+            if (idx >= 0) freeNotes[idx] = updated;
+            selectedFreeNote = updated;
+            freeNoteDirty = false;
+            setSaveStatus('Saved');
+        } catch (e) {
+            setSaveStatus('Save failed');
+            console.warn('Library: tabbed-note save failed', e);
+        }
     }
 
     async function toggleFreeNotePin() {

@@ -1,0 +1,17 @@
+[2026-05-27T18:30:00.557Z] extraction starting (last 3 years only)
+[2026-05-27T18:30:00.833Z] found 139 videos with uploadDate >= 20230527 (of 372 total)
+[2026-05-27T18:30:00.833Z] queue size: 139, concurrency: 8
+[2026-05-27T18:30:04.963Z] progress: 10/139 ok=10 fail=0
+[2026-05-27T18:30:08.178Z] progress: 20/139 ok=20 fail=0
+[2026-05-27T18:30:13.036Z] progress: 30/139 ok=30 fail=0
+[2026-05-27T18:30:16.983Z] progress: 40/139 ok=40 fail=0
+[2026-05-27T18:30:20.764Z] progress: 50/139 ok=50 fail=0
+[2026-05-27T18:30:24.732Z] progress: 60/139 ok=60 fail=0
+[2026-05-27T18:30:28.967Z] progress: 70/139 ok=70 fail=0
+[2026-05-27T18:30:33.412Z] progress: 80/139 ok=80 fail=0
+[2026-05-27T18:30:37.608Z] progress: 90/139 ok=90 fail=0
+[2026-05-27T18:30:40.236Z] progress: 100/139 ok=100 fail=0
+[2026-05-27T18:30:44.496Z] progress: 110/139 ok=110 fail=0
+[2026-05-27T18:30:50.090Z] progress: 120/139 ok=120 fail=0
+[2026-05-27T18:30:55.284Z] progress: 130/139 ok=130 fail=0
+[2026-05-27T18:31:03.122Z] done: ok=139 fail=0 total=139
