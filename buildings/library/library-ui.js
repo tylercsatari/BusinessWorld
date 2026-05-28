@@ -1113,22 +1113,70 @@ const LibraryUI = (() => {
     let _tabbedNoteActiveIdx = 0;
     let _tabbedNoteEditMode = false;
 
+    let _tabbedNoteActiveSubIdx = 0;
+    let _tabbedNoteFilter = '';
+    let _tabbedNoteSidebarCollapsed = false;
+
     async function renderTabbedNoteEditor(note) {
         const editorEl = document.getElementById('library-editor');
         if (!editorEl) return;
 
-        const activeIdx = Math.max(0, Math.min(_tabbedNoteActiveIdx, note.tabs.length - 1));
-        const activeTab = note.tabs[activeIdx];
+        // Filter tabs by name match
+        const filter = (_tabbedNoteFilter || '').toLowerCase().trim();
+        const tabsRaw = note.tabs || [];
+        // Build filtered index list (we keep original index so editing stays in sync)
+        const visibleTabs = tabsRaw.map((t, i) => ({ t, i })).filter(({ t }) => {
+            if (!filter) return true;
+            const titleMatch = (t.title || '').toLowerCase().includes(filter);
+            const subMatch = Array.isArray(t.subtabs) && t.subtabs.some(s => (s.title || '').toLowerCase().includes(filter));
+            return titleMatch || subMatch;
+        });
 
-        const tabBarHtml = note.tabs.map((t, i) => `
-            <button class="lib-tnote-tab${i === activeIdx ? ' active' : ''}" data-tab-idx="${i}">
+        // Clamp active indices to the visible set
+        let activeIdx = _tabbedNoteActiveIdx;
+        if (!visibleTabs.find(v => v.i === activeIdx)) {
+            activeIdx = visibleTabs[0]?.i ?? 0;
+            _tabbedNoteActiveIdx = activeIdx;
+        }
+        const activeTab = tabsRaw[activeIdx] || {};
+        const hasSubtabs = Array.isArray(activeTab.subtabs) && activeTab.subtabs.length > 0;
+        const activeSubIdx = hasSubtabs ? Math.max(0, Math.min(_tabbedNoteActiveSubIdx, activeTab.subtabs.length - 1)) : 0;
+        const renderedActiveContent = hasSubtabs ? activeTab.subtabs[activeSubIdx] : activeTab;
+
+        // Vertical tab list for the sidebar. The active tab's sub-tabs are nested
+        // directly beneath it (indented) so the whole picker is one scrollable column.
+        const tabBarHtml = visibleTabs.map(({ t, i }) => {
+            const isActive = i === activeIdx;
+            let html = `
+            <button class="lib-tnote-tab${isActive ? ' active' : ''}" data-tab-idx="${i}">
                 ${escHtml(t.title || `Tab ${i+1}`)}
-            </button>
-        `).join('');
+            </button>`;
+            if (isActive && Array.isArray(t.subtabs) && t.subtabs.length > 0) {
+                const visibleSubs = t.subtabs
+                    .map((s, si) => ({ s, si }))
+                    .filter(({ s }) => !filter || (s.title || '').toLowerCase().includes(filter));
+                html += `<div class="lib-tnote-subtabs">${
+                    visibleSubs.map(({ s, si }) => `
+                        <button class="lib-tnote-subtab${si === activeSubIdx ? ' active' : ''}" data-subtab-idx="${si}">
+                            ${escHtml(s.title || `${si+1}`)}
+                        </button>
+                    `).join('')
+                }</div>`;
+            }
+            return html;
+        }).join('');
 
+        const body = renderedActiveContent.body || '';
         const bodyHtml = _tabbedNoteEditMode
-            ? `<textarea class="lib-tnote-textarea" id="lib-tnote-body">${escHtml(activeTab.body || '')}</textarea>`
-            : `<div class="lib-tnote-rendered">${renderMarkdown(activeTab.body || '')}</div>`;
+            ? `<textarea class="lib-tnote-textarea" id="lib-tnote-body">${escHtml(body)}</textarea>`
+            : `<div class="lib-tnote-rendered">${renderMarkdown(body)}</div>`;
+
+        const filterBarHtml = (tabsRaw.length > 6 || hasSubtabs)
+            ? `<div class="lib-tnote-filter-row">
+                 <input type="text" class="lib-tnote-filter" id="lib-tnote-filter" placeholder="Filter tabs (${tabsRaw.length} total${hasSubtabs ? ', sub-tabs included' : ''})…" value="${escAttr(_tabbedNoteFilter)}" />
+                 ${_tabbedNoteFilter ? `<button class="lib-tnote-filter-clear" id="lib-tnote-filter-clear" title="Clear">×</button>` : ''}
+               </div>`
+            : '';
 
         editorEl.innerHTML = `
             <div class="library-editor-toolbar">
@@ -1146,23 +1194,94 @@ const LibraryUI = (() => {
                 <div class="library-editor-title-row">
                     <input type="text" class="library-editor-title" id="library-freenote-title" value="${escAttr(note.title || '')}" placeholder="Note title..." />
                 </div>
-                <div class="lib-tnote-tabs">${tabBarHtml}</div>
-                <div class="lib-tnote-content">${bodyHtml}</div>
+                <div class="lib-tnote-split${_tabbedNoteSidebarCollapsed ? ' collapsed' : ''}">
+                    <aside class="lib-tnote-sidebar">
+                        <div class="lib-tnote-sidebar-head">
+                            <span class="lib-tnote-sidebar-label">${tabsRaw.length} ${tabsRaw.length === 1 ? 'tab' : 'tabs'}</span>
+                            <button class="lib-tnote-sidebar-collapse" id="lib-tnote-collapse" title="Collapse list">⟨ Hide</button>
+                        </div>
+                        ${filterBarHtml}
+                        <div class="lib-tnote-tablist">${tabBarHtml}</div>
+                    </aside>
+                    <button class="lib-tnote-sidebar-reopen" id="lib-tnote-reopen" title="Show list">☰&nbsp; ${escHtml(activeTab.title || 'Tabs')}</button>
+                    <div class="lib-tnote-main">
+                        <div class="lib-tnote-content">${bodyHtml}</div>
+                    </div>
+                </div>
             </div>
         `;
+
+        // Filter input handlers
+        const filterInput = document.getElementById('lib-tnote-filter');
+        if (filterInput) {
+            filterInput.addEventListener('input', () => {
+                _tabbedNoteFilter = filterInput.value;
+                _tabbedNoteActiveSubIdx = 0;
+                renderTabbedNoteEditor(selectedFreeNote);
+                setTimeout(() => {
+                    const f = document.getElementById('lib-tnote-filter');
+                    if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+                }, 0);
+            });
+        }
+        const filterClear = document.getElementById('lib-tnote-filter-clear');
+        if (filterClear) {
+            filterClear.addEventListener('click', () => {
+                _tabbedNoteFilter = '';
+                renderTabbedNoteEditor(selectedFreeNote);
+            });
+        }
+
+        // Collapse / reopen the tab sidebar so the content gets the full width.
+        const collapseBtn = document.getElementById('lib-tnote-collapse');
+        if (collapseBtn) {
+            collapseBtn.addEventListener('click', () => {
+                _tabbedNoteSidebarCollapsed = true;
+                renderTabbedNoteEditor(selectedFreeNote);
+            });
+        }
+        const reopenBtn = document.getElementById('lib-tnote-reopen');
+        if (reopenBtn) {
+            reopenBtn.addEventListener('click', () => {
+                _tabbedNoteSidebarCollapsed = false;
+                renderTabbedNoteEditor(selectedFreeNote);
+            });
+        }
+
+        // Keep the active tab visible in the (potentially long) sidebar list.
+        const activeTabBtn = editorEl.querySelector('.lib-tnote-tab.active');
+        if (activeTabBtn) activeTabBtn.scrollIntoView({ block: 'nearest' });
+
+        // Sub-tab click switching
+        editorEl.querySelectorAll('.lib-tnote-subtab').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (_tabbedNoteEditMode) {
+                    const ta = document.getElementById('lib-tnote-body');
+                    if (ta && selectedFreeNote && selectedFreeNote.tabs[_tabbedNoteActiveIdx]?.subtabs?.[_tabbedNoteActiveSubIdx]) {
+                        selectedFreeNote.tabs[_tabbedNoteActiveIdx].subtabs[_tabbedNoteActiveSubIdx].body = ta.value;
+                        await saveTabbedNote();
+                    }
+                }
+                _tabbedNoteActiveSubIdx = parseInt(btn.dataset.subtabIdx, 10);
+                renderTabbedNoteEditor(selectedFreeNote);
+            });
+        });
 
         // Tab click switching
         editorEl.querySelectorAll('.lib-tnote-tab').forEach(btn => {
             btn.addEventListener('click', async () => {
-                // Save current tab body if in edit mode
+                // Save current tab/subtab body if in edit mode
                 if (_tabbedNoteEditMode) {
                     const ta = document.getElementById('lib-tnote-body');
-                    if (ta && selectedFreeNote && selectedFreeNote.tabs[_tabbedNoteActiveIdx]) {
-                        selectedFreeNote.tabs[_tabbedNoteActiveIdx].body = ta.value;
+                    if (ta && selectedFreeNote) {
+                        const cur = selectedFreeNote.tabs[_tabbedNoteActiveIdx];
+                        if (cur?.subtabs?.[_tabbedNoteActiveSubIdx]) cur.subtabs[_tabbedNoteActiveSubIdx].body = ta.value;
+                        else if (cur) cur.body = ta.value;
                         await saveTabbedNote();
                     }
                 }
                 _tabbedNoteActiveIdx = parseInt(btn.dataset.tabIdx, 10);
+                _tabbedNoteActiveSubIdx = 0;
                 renderTabbedNoteEditor(selectedFreeNote);
             });
         });
@@ -1175,14 +1294,16 @@ const LibraryUI = (() => {
             freeNoteSaveTimer = setTimeout(() => saveTabbedNote(), 800);
         });
 
-        // Body editing (only in edit mode)
+        // Body editing (only in edit mode) — routes to subtab body if subtabs present
         const ta = document.getElementById('lib-tnote-body');
         if (ta) {
             ta.addEventListener('input', () => {
                 freeNoteDirty = true;
                 setSaveStatus('Editing...');
-                if (selectedFreeNote && selectedFreeNote.tabs[_tabbedNoteActiveIdx]) {
-                    selectedFreeNote.tabs[_tabbedNoteActiveIdx].body = ta.value;
+                if (selectedFreeNote) {
+                    const cur = selectedFreeNote.tabs[_tabbedNoteActiveIdx];
+                    if (cur?.subtabs?.[_tabbedNoteActiveSubIdx]) cur.subtabs[_tabbedNoteActiveSubIdx].body = ta.value;
+                    else if (cur) cur.body = ta.value;
                 }
                 if (freeNoteSaveTimer) clearTimeout(freeNoteSaveTimer);
                 freeNoteSaveTimer = setTimeout(() => saveTabbedNote(), 800);

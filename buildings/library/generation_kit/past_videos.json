@@ -1,0 +1,154 @@
+{
+  "_schema": "principle_family → past Tyler video that demonstrates it + which natural materials can invoke it",
+  "_note": "Only principles that pass the Material Constructibility test from Doc 5 v2 are included. The 'rejected' section lists principles from Tyler's catalog that CAN'T be invoked from natural materials (magnet boots, Vantablack, D3O, Doc Oc) — usable for tutorial-style videos, not riddle-hook videos.",
+  "constructible": [
+    {
+      "principle_family": "non_newtonian_shear_thickening",
+      "principles": ["non-Newtonian shear-thickening dilatancy", "shear-thickening behavior of non-Newtonian fluids", "rheological dilatancy"],
+      "past_videos": [
+        { "title": "Testing INDESTRUCTIBLE Shoes 😳", "ytId": "gW7LHN9nTrY", "views": 34087238 },
+        { "title": "Making an indestructible egg", "ytId": "bTV4k95Sk5Y", "views": 549984341 }
+      ],
+      "natural_materials": ["cornstarch", "water", "cloth", "kitchen flour"],
+      "construction_method": "Mix cornstarch + water at ~2:1 by volume to make oobleck. Soak fabric in it. Apply to body. Soft when stretched slowly, locks rigid on impact."
+    },
+    {
+      "principle_family": "mechanical_advantage",
+      "principles": ["mechanical advantage via compound pulley", "second-class lever load-arm ratio", "block-and-tackle pulley velocity ratio", "first-class lever fulcrum positioning", "wheel-and-axle force multiplication", "inclined plane mechanical advantage", "screw thread force multiplication"],
+      "past_videos": [
+        { "title": "How much can this make me lift?", "ytId": "ge3qqbgVzAo", "views": 30278519 },
+        { "title": "Making a real life STRENGTH suit", "ytId": "BlYsm0nShHA", "views": 2244125 }
+      ],
+      "natural_materials": ["rope", "sticks", "branches", "wooden poles", "rocks (fulcrum)", "logs", "tree as anchor", "metal pipe"],
+      "construction_method": "Rope routed over sticks acting as fixed/movable pulleys. Each loop halves the pull force needed. Long pole + rock pivot = lever with mechanical advantage = load arm / effort arm ratio."
+    },
+    {
+      "principle_family": "composite_layering",
+      "principles": ["composite material layering for impact resistance", "cross-grain laminated composite", "multi-layered armor effectiveness", "interlaminar shear failure in cross-grain laminates", "layered composite armor design"],
+      "past_videos": [
+        { "title": "How I made BULLETPROOF Batman Armour", "ytId": "YFNOSHumPZc", "views": 80045214 },
+        { "title": "Making INDESTRUCTIBLE armour 💪", "ytId": "aE9jKLck_cI", "views": 285026839 }
+      ],
+      "natural_materials": ["newspaper", "duct tape", "cardboard", "fabric scraps", "leaves", "cotton t-shirts", "yard waste", "phone books"],
+      "construction_method": "Stack flexible material at alternating fiber orientations (0°/45°/90°/-45°), bond every other layer with tape or wet starch. Cross-grain distributes impact across multiple directions."
+    },
+    {
+      "principle_family": "thermal_insulation_organic",
+      "principles": ["thermal insulation via cellulose + water + pyrolysis char composite", "heat transfer through organic composites", "natural fiber thermal insulation properties", "high-temperature silicone thermal stability", "pyrolysis of organic materials"],
+      "past_videos": [
+        { "title": "Making a fire proof shield", "ytId": "FogW1ZnoUIw", "views": 62458886 },
+        { "title": "Making the coolest Halloween costume ever 😳", "ytId": "kE3Cm0q2wdY", "views": 74700000 }
+      ],
+      "natural_materials": ["green leaves", "ferns", "mud", "wet bark", "moss", "wool", "cotton", "hair", "wet newspaper", "creek water", "snow"],
+      "construction_method": "Layer: outer mud (char layer + thermal mass) → middle wet organic (water absorbs heat via vaporization latent heat 2260 J/g) → inner substrate (low thermal conductivity). Multi-layer shield exploits radiation reflection + specific heat + phase change + char insulation."
+    },
+    {
+      "principle_family": "spring_elastic_return",
+      "principles": ["spring-loaded energy return mechanism", "elastic potential energy storage in compressible media", "pneumatic spring compression", "Hooke's law for series springs", "viscoelastic behavior of 3D-printed materials"],
+      "past_videos": [
+        { "title": "3D printed basketball shoes 🔥", "ytId": "0e-Qt1CCD6c", "views": 1955037 }
+      ],
+      "natural_materials": ["bouncy balls", "yoga balls", "inner tubes", "tires", "tree branches (sapling)", "rubber bands", "trampoline", "springs", "plywood", "saplings"],
+      "construction_method": "Compressible medium + rigid platform on top + falling weight. Stored elastic PE = compression energy released as kinetic energy on rebound. ~90-95% energy return for good elastomers."
+    },
+    {
+      "principle_family": "buoyancy_displacement",
+      "principles": ["Archimedes buoyancy principle", "displacement volume = weight of fluid displaced", "metacentric stability in floating bodies", "specific gravity comparison"],
+      "past_videos": [
+        { "title": "How much can this make me lift?", "ytId": "ge3qqbgVzAo", "views": 30278519, "_note": "tangential — but the strength-lifting tribe of videos covers force-multiplication generally" }
+      ],
+      "natural_materials": ["empty bottles", "logs", "plastic bags (air-filled)", "barrels", "inflatable rafts", "water container", "sealed containers"],
+      "construction_method": "Lash empty sealed containers together. Total buoyancy = volume × water density. Distribute load above. Self-rights if metacenter is above center of mass."
+    },
+    {
+      "principle_family": "catenary_tensile_geometry",
+      "principles": ["catenary curve under self-weight", "tensile-only suspension structure", "parabolic load distribution under uniform weight", "minimum-surface tension geometry"],
+      "past_videos": [
+        { "title": "Da Vinci Bridge (Reciprocal)", "ytId": "DVY2Zxw-ZQc", "views": 3500000, "_note": "Reciprocal is adjacent to catenary — both are no-fastener structural mechanisms." }
+      ],
+      "natural_materials": ["rope", "chain", "vines", "cable", "fabric", "wire"],
+      "construction_method": "Suspend flexible tension member between two anchors. Under self-weight it forms a catenary (no point load) or parabola (uniform load). Strongest possible shape for those loads. Walk-the-rope or load-bearing suspension bridge."
+    },
+    {
+      "principle_family": "capillary_action",
+      "principles": ["capillary action via surface tension", "Jurin's law height of capillary rise", "wicking through porous media"],
+      "past_videos": [],
+      "natural_materials": ["cloth", "rope", "paper towels", "wood fiber", "sponge", "cotton", "tissue"],
+      "construction_method": "Porous fibrous material wicks water against gravity via meniscus formation in narrow channels. Useful for moving water without pumps, filtering, or condensation collection.",
+      "_note": "Tyler may have no direct video — use only when paired with strong adjacent past principle"
+    },
+    {
+      "principle_family": "friction_heat_ignition",
+      "principles": ["friction-induced ignition", "friction welding via rotational heat", "drill-friction fire start"],
+      "past_videos": [
+        { "title": "Making a fire proof shield", "ytId": "FogW1ZnoUIw", "views": 62458886, "_note": "Adjacent — pyrolysis context" }
+      ],
+      "natural_materials": ["dry wood", "dry tinder", "spinning shaft", "rope", "bow-drill setup"],
+      "construction_method": "Spin a wood spindle rapidly against a wood baseboard. Friction heats the contact point > ignition temp of dust. Tinder catches."
+    },
+    {
+      "principle_family": "triboelectric_static",
+      "principles": ["triboelectric series surface charge separation", "static electricity from material rubbing"],
+      "past_videos": [],
+      "natural_materials": ["wool", "fur", "balloon", "plastic comb", "amber", "silk", "dry hair"],
+      "construction_method": "Rub two materials from opposite ends of the triboelectric series. Electrons transfer; one becomes negative, the other positive. Generates 10s of kV in dry conditions. Can spark to tinder or shock."
+    },
+    {
+      "principle_family": "resonance_acoustic",
+      "principles": ["acoustic resonance frequency", "natural-frequency excitation", "destructive interference"],
+      "past_videos": [],
+      "natural_materials": ["voice", "tuning fork", "glass", "rod", "string", "wire"],
+      "construction_method": "Match driving frequency to object's natural frequency. Amplitude builds with each cycle. Reaches destructive amplitude (glass shattering, bridge collapse — Tacoma Narrows)."
+    },
+    {
+      "principle_family": "centripetal_centrifugal",
+      "principles": ["centripetal force = mv²/r", "centrifugal separation by density", "tangential velocity at release"],
+      "past_videos": [],
+      "natural_materials": ["rope + weight", "spinning object", "string"],
+      "construction_method": "Spin a weight on a rope. At release, the weight flies off tangentially at v = ωr. Higher angular velocity = more force. Sling weapon (David and Goliath)."
+    },
+    {
+      "principle_family": "siphon_fluid_dynamics",
+      "principles": ["siphon principle (atmospheric pressure)", "Bernoulli's equation along streamline", "Coanda effect (fluid following curved surface)", "Venturi vacuum effect"],
+      "past_videos": [],
+      "natural_materials": ["flexible tube", "hose", "tubing"],
+      "construction_method": "Tube with one end submerged at higher elevation, the other lower. Once primed, atmospheric pressure pushes fluid up the short leg; gravity pulls it down the long leg. No pump needed."
+    },
+    {
+      "principle_family": "balance_center_of_mass",
+      "principles": ["center of mass positioning", "stable vs unstable equilibrium", "moment arm about pivot", "tipping moment"],
+      "past_videos": [
+        { "title": "Climbing with MAGNET Shoes", "ytId": "QL1h_e09IUU", "views": 55212882, "_note": "Adjacent — kick-out mechanism uses CoM positioning" }
+      ],
+      "natural_materials": ["weighted objects", "balance beam", "lever"],
+      "construction_method": "Position mass so the center of gravity falls inside the base of support. For an overhung beam, counterweight on the opposite side moves CoM back over support."
+    }
+  ],
+  "rejected_for_riddle_use": [
+    {
+      "principle": "magnetic adhesion / magnetostatic force",
+      "videos": ["Magnet Shoes", "Magnets to Float"],
+      "why_rejected": "Requires neodymium magnets / electromagnets that aren't lying around. Material Plausibility = 0."
+    },
+    {
+      "principle": "Vantablack ultra-light absorption",
+      "videos": ["Painting a car VANTA BLACK 😳"],
+      "why_rejected": "Carbon nanotube coating isn't constructible from natural materials. Material Sufficiency = 0."
+    },
+    {
+      "principle": "D3O shear-thickening foam (engineered polymer)",
+      "videos": ["Bulletproof Batman Armor"],
+      "why_rejected": "Specialty polymer. Can use the general shear-thickening principle via cornstarch (oobleck) instead — see non_newtonian_shear_thickening family above."
+    },
+    {
+      "principle": "Continuum robotics (Doc Oc)",
+      "videos": ["Doc Oc Costume"],
+      "why_rejected": "Tendon-driven robot can't be hand-built in the moment from natural materials."
+    },
+    {
+      "principle": "Carbon nanotube thermal conductivity",
+      "videos": ["Vantablack car"],
+      "why_rejected": "Specialty material."
+    }
+  ]
+}
