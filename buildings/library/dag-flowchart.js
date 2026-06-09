@@ -569,18 +569,26 @@ const DagFlowchart = (() => {
         // --- Zoom / Pan ---
         let zoom = 1;
         const canvasWrap = document.getElementById(`dagflow-canvas-wrap-${containerId}`);
+        const _wrapEl = document.getElementById(`dagflow-wrapper-${containerId}`);
+        // FIT TO VIEW on first render — the pipeline is very wide, so default to showing the WHOLE
+        // thing (start → finish) instead of just the right-hand tail. Reset returns to this fit.
+        function fitToView() {
+            const wrapW = (_wrapEl ? _wrapEl.clientWidth : 0) || 1000;
+            const fit = Math.min(1, (wrapW - 24) / width);
+            zoom = Math.max(0.12, fit);
+            canvasWrap.style.transform = `scale(${zoom})`;
+            if (_wrapEl) _wrapEl.scrollLeft = 0;
+        }
+        setTimeout(fitToView, 0);
         document.getElementById(`dagflow-zoom-in-${containerId}`).addEventListener('click', () => {
             zoom = Math.min(zoom * 1.2, 3);
             canvasWrap.style.transform = `scale(${zoom})`;
         });
         document.getElementById(`dagflow-zoom-out-${containerId}`).addEventListener('click', () => {
-            zoom = Math.max(zoom / 1.2, 0.3);
+            zoom = Math.max(zoom / 1.2, 0.1);
             canvasWrap.style.transform = `scale(${zoom})`;
         });
-        document.getElementById(`dagflow-reset-${containerId}`).addEventListener('click', () => {
-            zoom = 1;
-            canvasWrap.style.transform = `scale(1)`;
-        });
+        document.getElementById(`dagflow-reset-${containerId}`).addEventListener('click', fitToView);
         document.getElementById(`dagflow-relayout-${containerId}`).addEventListener('click', () => {
             computeLayout(graph);
             renderSvg(graph, containerId, opts);
