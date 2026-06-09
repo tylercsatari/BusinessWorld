@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
+<title>Pipeline Visualizer</title>
+<style>
+  :root { --bg:#f5f3ee; --ink:#3d2b1f; --line:#5a3e1b; --accent:#d4a060; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow:hidden; }
+  #bar { position:fixed; top:0; left:0; right:0; height:52px; display:flex; align-items:center; gap:8px;
+    padding:0 12px; background:#fffdf8; border-bottom:1px solid #e0d8cc; z-index:20; }
+  #bar h1 { font-size:15px; margin:0; flex:0 0 auto; font-weight:800; color:var(--line); }
+  #bar .spacer { flex:1; }
+  .btn { padding:8px 12px; border:1px solid var(--accent); border-radius:8px; background:#fff;
+    color:var(--line); font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .btn.primary { background:var(--line); color:#fff; border-color:var(--line); }
+  .btn:active { transform:translateY(1px); }
+  #status { font-size:12px; color:#888; flex:0 0 auto; }
+  #stage { position:fixed; top:52px; left:0; right:0; bottom:0; overflow:auto; background:
+    repeating-linear-gradient(0deg,#f5f3ee,#f5f3ee 39px,#ece6da 40px),
+    repeating-linear-gradient(90deg,#f5f3ee,#f5f3ee 39px,#ece6da 40px); -webkit-overflow-scrolling:touch; }
+  #canvas { transform-origin:0 0; }
+  svg { display:block; }
+  .node { cursor:pointer; }
+  .node rect { transition:filter .1s; }
+  .node:active rect { filter:brightness(0.95); }
+  /* edit sheet */
+  #sheet { position:fixed; left:0; right:0; bottom:-100%; background:#fff; border-top:2px solid var(--accent);
+    border-radius:16px 16px 0 0; padding:16px; z-index:40; transition:bottom .22s ease; box-shadow:0 -4px 20px rgba(0,0,0,.15);
+    max-width:520px; margin:0 auto; }
+  #sheet.open { bottom:0; }
+  #sheet label { display:block; font-size:12px; color:#888; margin:10px 0 4px; }
+  #sheet input, #sheet select { width:100%; padding:11px; border:1px solid var(--accent); border-radius:9px; font-size:16px; }
+  #sheet .row { display:flex; gap:8px; margin-top:14px; }
+  #sheet .row .btn { flex:1; text-align:center; }
+  .btn.danger { color:#c0392b; border-color:#c0392b; }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--line); color:#fff;
+    padding:9px 16px; border-radius:20px; font-size:13px; opacity:0; transition:opacity .2s; z-index:50; pointer-events:none; }
+  #toast.show { opacity:1; }
+  #hint { position:fixed; bottom:10px; left:12px; font-size:11px; color:#aa9; z-index:10; }
+  @media (max-width:600px){ #bar h1{font-size:13px;} .btn{padding:8px 9px;font-size:12px;} }
+</style>
+</head>
+<body>
+<div id="bar">
+  <h1>Pipeline</h1>
+  <span id="status">loading…</span>
+  <span class="spacer"></span>
+  <button class="btn" id="fit">Fit</button>
+  <button class="btn" id="addNode">+ Stage</button>
+  <button class="btn" id="addEdge">+ Link</button>
+  <button class="btn primary" id="save">Save</button>
+</div>
+<div id="stage"><div id="canvas"></div></div>
+
+<div id="sheet">
+  <div id="sheetBody"></div>
+</div>
+<div id="toast"></div>
+<div id="hint">Tap a stage to edit • drag the canvas to pan • pinch / Fit to zoom</div>
+
+<script>
+const NOTE_ID = "2dd70089-4d1d-441b-b98e-5fadec3d0e01";
+const API = "/api/data/notes/" + NOTE_ID;
+const TYPES = {
+  video:    {bg:"#e3f2fd", stroke:"#2980b9", label:"Human / creative"},
+  stage:    {bg:"#e8f5e9", stroke:"#27ae60", label:"Build / manufacture"},
+  custom:   {bg:"#f3f0ff", stroke:"#6c5ce7", label:"Automated"},
+  parallel: {bg:"#fce4ec", stroke:"#e84393", label:"Gate / fork"},
+  project:  {bg:"#fff3e0", stroke:"#8d6e63", label:"Pivot"},
+};
+const EDGE = { pipeline:{c:"#5a3e1b",d:""}, causality:{c:"#c0392b",d:"6,4"}, decompose:{c:"#8d6e63",d:""} };
+let G = {nodes:[], edges:[]}, dirty=false, zoom=1, selId=null;
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
+function setStatus(m){ document.getElementById('status').textContent=m; }
+
+// ---- load from cloud (R2-backed note), always fresh ----
+async function load(){
+  setStatus("loading…");
+  try{
+    const r = await fetch(API + "?_=" + Date.now(), {cache:"no-store"});
+    const note = await r.json();
+    const m = (note.body||"").match(/<!--\s*dag-data:\s*([\s\S]*?)\s*-->/);
+    G = m ? JSON.parse(m[1]) : {nodes:[],edges:[]};
+    G.nodes.forEach(n=>{ n.type = n.type||"stage"; });
+    render(); fit();
+    setStatus(G.nodes.length + " stages");
+  }catch(e){ setStatus("load error"); console.error(e); }
+}
+
+// ---- layered left-to-right layout ----
+function layout(){
+  const id2n = Object.fromEntries(G.nodes.map(n=>[n.id,n]));
+  const radj={}, adj={}, indeg={};
+  G.nodes.forEach(n=>{radj[n.id]=[];adj[n.id]=[];indeg[n.id]=0;});
+  G.edges.forEach(e=>{ if(adj[e.from]&&adj[e.to]){adj[e.from].push(e.to);radj[e.to].push(e.from);indeg[e.to]++;} });
+  // topo (Kahn) + longest-path layer
+  const q=G.nodes.filter(n=>indeg[n.id]===0).map(n=>n.id).sort(); const topo=[]; const ind={...indeg};
+  while(q.length){ q.sort(); const id=q.shift(); topo.push(id); adj[id].forEach(v=>{ if(--ind[v]===0)q.push(v); }); }
+  G.nodes.forEach(n=>{ if(!topo.includes(n.id)) topo.push(n.id); });
+  const layer={}; topo.forEach(id=>{ let l=0; radj[id].forEach(p=>l=Math.max(l,(layer[p]||0)+1)); layer[id]=l; });
+  const maxL=Math.max(0,...Object.values(layer)); const cols=Array.from({length:maxL+1},()=>[]);
+  topo.forEach(id=>cols[layer[id]].push(id));
+  // barycenter ordering (reduce crossings)
+  for(let s=0;s<4;s++){ const pos={}; cols.forEach(c=>c.forEach((id,i)=>pos[id]=i));
+    const order = s%2? [...cols.keys()].reverse():[...cols.keys()];
+    order.forEach(l=>{ const side=s%2?adj:radj; cols[l]=cols[l].map(id=>{const nb=(side[id]||[]).filter(x=>x in pos);
+      return {id,b:nb.length?nb.reduce((a,x)=>a+pos[x],0)/nb.length:pos[id]};}).sort((a,b)=>a.b-b.b).map(o=>o.id); });
+  }
+  const W=170,H=64,GX=210,GY=92,BX=40,BY=40;
+  const rows=Math.max(1,...cols.map(c=>c.length)); const midY=BY+(rows-1)*GY/2;
+  cols.forEach((c,l)=>{ const top=midY-(c.length-1)*GY/2; c.forEach((id,i)=>{ const n=id2n[id]; n.x=BX+l*GX; n.y=top+i*GY; n.w=W; n.h=H; }); });
+  let mx=0,my=0; G.nodes.forEach(n=>{mx=Math.max(mx,n.x+n.w);my=Math.max(my,n.y+n.h);});
+  return {w:mx+BX, h:my+BY, id2n};
+}
+
+function edgePath(a,b){
+  const fcx=a.x+a.w/2,fcy=a.y+a.h/2,tcx=b.x+b.w/2,tcy=b.y+b.h/2;
+  if(Math.abs(tcx-fcx)>=Math.abs(tcy-fcy)){ const fx=tcx>=fcx?a.x+a.w:a.x, tx=tcx>=fcx?b.x:b.x+b.w, mx=(fx+tx)/2;
+    return `M ${fx} ${fcy} L ${mx} ${fcy} L ${mx} ${tcy} L ${tx} ${tcy}`; }
+  const fy=tcy>=fcy?a.y+a.h:a.y, ty=tcy>=fcy?b.y:b.y+b.h, my=(fy+ty)/2;
+  return `M ${fcx} ${fy} L ${fcx} ${my} L ${tcx} ${my} L ${tcx} ${ty}`;
+}
+function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+let LAY=null;
+function render(){
+  LAY = layout(); const {w,h,id2n}=LAY;
+  const colors=[...new Set(G.edges.map(e=>(EDGE[e.type]||EDGE.pipeline).c))];
+  const markers=colors.map(c=>`<marker id="a${c.slice(1)}" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="${c}"/></marker>`).join("");
+  const edges=G.edges.map(e=>{const a=id2n[e.from],b=id2n[e.to];if(!a||!b)return"";const s=EDGE[e.type]||EDGE.pipeline;
+    return `<path d="${edgePath(a,b)}" fill="none" stroke="${s.c}" stroke-width="2.2" ${s.d?`stroke-dasharray="${s.d}"`:""} marker-end="url(#a${s.c.slice(1)})"/>`;}).join("");
+  const nodes=G.nodes.map(n=>{const t=TYPES[n.type]||TYPES.stage;
+    return `<g class="node" data-id="${esc(n.id)}" transform="translate(${n.x},${n.y})">
+      <rect width="${n.w}" height="${n.h}" rx="10" fill="${t.bg}" stroke="${t.stroke}" stroke-width="2"/>
+      <text x="${n.w/2}" y="${n.h/2-2}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2b2018">${esc((n.label||"").slice(0,30))}</text>
+      ${n.sublabel?`<text x="${n.w/2}" y="${n.h/2+14}" text-anchor="middle" font-size="8.5" fill="${t.stroke}">${esc(n.sublabel.slice(0,34))}</text>`:""}
+    </g>`;}).join("");
+  document.getElementById('canvas').innerHTML =
+    `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><defs>${markers}</defs>${edges}${nodes}</svg>`;
+  document.querySelectorAll('.node').forEach(g=>g.addEventListener('click',ev=>{ev.stopPropagation();openEdit(g.dataset.id);}));
+}
+
+function fit(){
+  if(!LAY) return; const st=document.getElementById('stage');
+  zoom = Math.max(0.18, Math.min(1.4, (st.clientWidth-20)/LAY.w));
+  document.getElementById('canvas').style.transform = `scale(${zoom})`;
+  st.scrollLeft=0; st.scrollTop=0;
+}
+
+// ---- editing ----
+function openSheet(html){ document.getElementById('sheetBody').innerHTML=html; document.getElementById('sheet').classList.add('open'); }
+function closeSheet(){ document.getElementById('sheet').classList.remove('open'); selId=null; }
+function typeOpts(sel){ return Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${k===sel?'selected':''}>${v.label}</option>`).join(''); }
+
+function openEdit(id){
+  const n=G.nodes.find(x=>x.id===id); if(!n)return; selId=id;
+  openSheet(`
+    <label>Stage name</label><input id="f_label" value="${esc(n.label||'')}">
+    <label>Subtitle</label><input id="f_sub" value="${esc(n.sublabel||'')}">
+    <label>Type</label><select id="f_type">${typeOpts(n.type)}</select>
+    <div class="row"><button class="btn danger" id="f_del">Delete stage</button>
+    <button class="btn" id="f_cancel">Cancel</button>
+    <button class="btn primary" id="f_ok">Apply</button></div>`);
+  document.getElementById('f_ok').onclick=()=>{ n.label=document.getElementById('f_label').value; n.sublabel=document.getElementById('f_sub').value; n.type=document.getElementById('f_type').value; dirty=true; closeSheet(); render(); fit(); };
+  document.getElementById('f_cancel').onclick=closeSheet;
+  document.getElementById('f_del').onclick=()=>{ G.nodes=G.nodes.filter(x=>x.id!==id); G.edges=G.edges.filter(e=>e.from!==id&&e.to!==id); dirty=true; closeSheet(); render(); fit(); setStatus(G.nodes.length+" stages"); };
+}
+
+function addNode(){
+  const id="n"+Math.random().toString(36).slice(2,8);
+  openSheet(`<label>New stage name</label><input id="f_label" placeholder="e.g. Color Grade" autofocus>
+    <label>Subtitle</label><input id="f_sub" placeholder="optional">
+    <label>Type</label><select id="f_type">${typeOpts('stage')}</select>
+    <div class="row"><button class="btn" id="f_cancel">Cancel</button><button class="btn primary" id="f_ok">Add</button></div>`);
+  document.getElementById('f_ok').onclick=()=>{ const l=document.getElementById('f_label').value.trim(); if(!l)return closeSheet();
+    G.nodes.push({id,label:l,sublabel:document.getElementById('f_sub').value,type:document.getElementById('f_type').value}); dirty=true; closeSheet(); render(); fit(); setStatus(G.nodes.length+" stages"); };
+  document.getElementById('f_cancel').onclick=closeSheet;
+}
+
+function addEdge(){
+  const opt=G.nodes.map(n=>`<option value="${esc(n.id)}">${esc(n.label)}</option>`).join('');
+  openSheet(`<label>From stage</label><select id="e_from">${opt}</select>
+    <label>To stage</label><select id="e_to">${opt}</select>
+    <label>Link type</label><select id="e_type"><option value="pipeline">flow</option><option value="causality">causal (red)</option><option value="decompose">feeds</option></select>
+    <div class="row"><button class="btn" id="f_cancel">Cancel</button><button class="btn primary" id="f_ok">Add link</button></div>`);
+  document.getElementById('f_ok').onclick=()=>{ const f=document.getElementById('e_from').value,t=document.getElementById('e_to').value; if(f&&t&&f!==t){G.edges.push({from:f,to:t,type:document.getElementById('e_type').value});dirty=true;} closeSheet(); render(); fit(); };
+  document.getElementById('f_cancel').onclick=closeSheet;
+}
+
+// ---- save to cloud (same R2 note) ----
+async function save(){
+  setStatus("saving…");
+  try{
+    const note = await (await fetch(API+"?_="+Date.now(),{cache:"no-store"})).json();
+    let body = (note.body||"").replace(/\n*<!--\s*dag-data:[\s\S]*?-->\s*$/,"").trimEnd();
+    const clean = {nodes:G.nodes.map(n=>({id:n.id,type:n.type,label:n.label,sublabel:n.sublabel||"",info:n.info||""})), edges:G.edges.map(e=>({from:e.from,to:e.to,type:e.type}))};
+    body += "\n\n<!-- dag-data: " + JSON.stringify(clean) + " -->";
+    const r = await fetch(API,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({body})});
+    if(!r.ok) throw new Error(r.status);
+    dirty=false; setStatus(G.nodes.length+" stages • saved"); toast("Saved to cloud ✓");
+  }catch(e){ setStatus("save failed"); toast("Save failed"); console.error(e); }
+}
+
+// pan (drag) on the stage
+(function(){ const st=document.getElementById('stage'); let down=false,sx,sy,sl,stp;
+  st.addEventListener('pointerdown',e=>{ if(e.target.closest('.node'))return; down=true; sx=e.clientX; sy=e.clientY; sl=st.scrollLeft; stp=st.scrollTop; });
+  window.addEventListener('pointermove',e=>{ if(!down)return; st.scrollLeft=sl-(e.clientX-sx); st.scrollTop=stp-(e.clientY-sy); });
+  window.addEventListener('pointerup',()=>down=false);
+})();
+
+document.getElementById('fit').onclick=fit;
+document.getElementById('addNode').onclick=addNode;
+document.getElementById('addEdge').onclick=addEdge;
+document.getElementById('save').onclick=save;
+document.getElementById('stage').addEventListener('click',e=>{ if(!e.target.closest('.node')) closeSheet(); });
+window.addEventListener('resize',fit);
+load();
+</script>
+</body>
+</html>
