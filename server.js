@@ -15,6 +15,8 @@ if (fs.existsSync(envPath)) {
 }
 
 const videoAnalyzer = require('./video-analyzer');
+const geminiWatch = require('./gemini-watch');
+const videolabCoordinator = require('./videolab-coordinator');
 const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
@@ -368,6 +370,10 @@ function _tribeStartJob(videoId, videoPath) {
             ...process.env,
             HF_TOKEN: process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || '',
             HUGGINGFACE_TOKEN: process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN || '',
+            // Fix: python3.11 pyexpat links against system libexpat which is missing a symbol.
+            // Homebrew's libexpat has the symbol. Setting DYLD_LIBRARY_PATH makes the venv
+            // python3.11 pick up the correct library at runtime.
+            DYLD_LIBRARY_PATH: '/opt/homebrew/Cellar/expat/2.8.0/lib:' + (process.env.DYLD_LIBRARY_PATH || ''),
         };
         const proc = require('child_process').spawn(
             TRIBE_PYTHON,
@@ -448,12 +454,57 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const pathname = url.pathname;
 
+    // Never cache app code, the index page, or API data — stale cached assets/data were showing old
+    // content after edits. Media routes set their own long Cache-Control below, which overrides this.
+    if (!/\.(png|jpe?g|gif|webp|mp4|webm|mov|woff2?|ttf|ico)$/i.test(pathname)) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
+
     // --- CORS headers for all API routes ---
     if (pathname.startsWith('/api/')) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, X-QRD-Type, X-QRD-Ext');
         if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    }
+
+    // =========================================
+    // API: QRD predictive playground — upload a reel, get swipe-away/dud risk
+    // (reliable, AUC 0.84) + a weak retention ranking estimate. Runs the
+    // reproducible extracted-only model (librosa/opencv/whisper, no LLM).
+    // Raw binary body; metadata in X-QRD-Type (video|audio) / X-QRD-Ext headers.
+    // =========================================
+    if (pathname === '/api/qrd/predict' && req.method === 'POST') {
+        const type = (req.headers['x-qrd-type'] === 'audio') ? 'audio' : 'video';
+        const ext = (req.headers['x-qrd-ext'] || (type === 'audio' ? 'wav' : 'mp4')).replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'mp4';
+        const chunks = [];
+        let size = 0;
+        const MAX = 200 * 1024 * 1024; // 200 MB cap
+        req.on('data', c => { size += c.length; if (size > MAX) { req.destroy(); } chunks.push(c); });
+        req.on('end', () => {
+            if (size === 0 || size > MAX) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'empty or too-large upload (max 200MB)' })); return; }
+            const os = require('os');
+            const tmp = path.join(os.tmpdir(), `qrd_upload_${Date.now()}_${Math.round(Math.random() * 1e6)}.${ext}`);
+            try { fs.writeFileSync(tmp, Buffer.concat(chunks)); }
+            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
+            const script = path.join(__dirname, 'buildings', 'jarvis', 'qrd', 'extract_one.py');
+            const py = spawn('python3', [script, '--file', tmp, '--type', type], { env: { ...process.env } });
+            let out = '', err = '';
+            py.stdout.on('data', d => out += d);
+            py.stderr.on('data', d => err += d);
+            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 240000);
+            py.on('close', () => {
+                clearTimeout(timer);
+                try { fs.unlinkSync(tmp); } catch (e) {}
+                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'extraction produced no result', stderr: err.slice(-600) })); return; }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(line);
+            });
+            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+        });
+        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
+        return;
     }
 
     // =========================================
@@ -523,6 +574,11 @@ const server = http.createServer(async (req, res) => {
             temperature: body.temperature ?? 0
         };
         if (body.max_tokens) payload.max_tokens = body.max_tokens;
+        // Function-calling pass-through (used by the Storage agent)
+        if (body.tools) payload.tools = body.tools;
+        if (body.tool_choice) payload.tool_choice = body.tool_choice;
+        if (body.parallel_tool_calls !== undefined) payload.parallel_tool_calls = body.parallel_tool_calls;
+        if (body.response_format) payload.response_format = body.response_format;
 
         await proxyFetch(res, 'https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -1194,6 +1250,202 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.end(JSON.stringify({ ok: true }));
         } catch (e) {
             console.error('AI reply error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
+    // VIDEO LAB — Gemini watches a video; Optimusk Prime coordinates data-backed advice
+    // =========================================
+    const VIDEOLAB_SECRET = 'bw-videolab-secret-2026';
+
+    // POST /api/gemini/watch — Gemini "watches" a video and returns structured observations.
+    // The video is cached locally (.videolab-cache/) so it can be played back with a
+    // timeline and re-analyzed without re-downloading.
+    //   JSON  { url }           → download a YouTube/URL video with yt-dlp, then watch
+    //   raw   ?name=&type=mp4   → request body is the raw uploaded video bytes
+    if (pathname === '/api/gemini/watch' && req.method === 'POST') {
+        const crypto = require('crypto');
+        const ctype = (req.headers['content-type'] || '');
+        const CACHE = path.join(__dirname, '.videolab-cache');
+        fs.mkdirSync(CACHE, { recursive: true });
+        let videoPath = null, mimeType = 'video/mp4', ytId = null, id = null;
+        try {
+            if (!process.env.GEMINI_API_KEY) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'GEMINI_API_KEY is not set in .env. Add a Gemini API key to enable Video Lab.' }));
+                return;
+            }
+            if (ctype.includes('application/json')) {
+                const body = await readBody(req);
+                if (!body.url) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Provide { url } or upload raw bytes.' })); return; }
+                ytId = videoAnalyzer.parseVideoId ? videoAnalyzer.parseVideoId(body.url) : null;
+                id = ytId || crypto.randomUUID();
+                videoPath = path.join(CACHE, `${id}.mp4`);
+                const ytdlp = (function () { try { require('child_process').execSync('which yt-dlp', { stdio: 'ignore' }); return 'yt-dlp'; } catch (e) {} const hb = (process.env.HOME || '') + '/.local/bin/yt-dlp'; if (fs.existsSync(hb)) return hb; if (fs.existsSync('/opt/homebrew/bin/yt-dlp')) return '/opt/homebrew/bin/yt-dlp'; return 'yt-dlp'; })();
+                const cached = ytId && fs.existsSync(videoPath) && fs.statSync(videoPath).size > 10000;
+                if (!cached) {
+                    const dl = (extra) => new Promise((resolve, reject) => {
+                        const args = ['--js-runtimes', 'node', '--remote-components', 'ejs:github', ...extra, '-f', 'mp4[height<=480]/best[height<=480]/best', '--no-playlist', '--force-overwrites', '-o', videoPath, body.url];
+                        const proc = spawn(ytdlp, args);
+                        let err = '';
+                        proc.stderr.on('data', d => { err += d; });
+                        proc.on('close', code => code === 0 && fs.existsSync(videoPath) ? resolve() : reject(new Error('yt-dlp failed: ' + err.slice(-300))));
+                        proc.on('error', reject);
+                    });
+                    // Try plain; on YouTube bot-check, fall back to browser cookies.
+                    try { await dl([]); }
+                    catch (e1) {
+                        try { await dl(['--cookies-from-browser', 'chrome']); }
+                        catch (e2) { try { await dl(['--cookies-from-browser', 'safari']); } catch (e3) { throw e1; } }
+                    }
+                }
+            } else {
+                const name = (url.searchParams.get('name') || 'upload.mp4');
+                let ext = 'mp4';
+                if (/\.mov$/i.test(name)) { mimeType = 'video/quicktime'; ext = 'mov'; }
+                else if (/\.webm$/i.test(name)) { mimeType = 'video/webm'; ext = 'webm'; }
+                id = crypto.randomUUID();
+                videoPath = path.join(CACHE, `${id}.${ext}`);
+                await new Promise((resolve, reject) => {
+                    const ws = fs.createWriteStream(videoPath);
+                    req.pipe(ws);
+                    ws.on('finish', resolve);
+                    ws.on('error', reject);
+                    req.on('error', reject);
+                });
+            }
+
+            const { model, observations } = await geminiWatch.watchVideo(videoPath, mimeType, { displayName: ytId || 'videolab' });
+            const videoUrl = `/api/videolab/video/${id}`;
+            try { await cloud.uploadToR2(`data/videolab/obs-${id}.json`, Buffer.from(JSON.stringify({ ytId, id, model, videoUrl, observations })), 'application/json'); } catch (e) {}
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, ytId, videoId: id, videoUrl, model, observations }));
+        } catch (e) {
+            console.error('gemini/watch error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/videolab/video/:id — stream a cached video (HTTP Range support for seeking).
+    const vlVideoMatch = pathname.match(/^\/api\/videolab\/video\/([a-zA-Z0-9_-]+)$/);
+    if (vlVideoMatch && req.method === 'GET') {
+        try {
+            const CACHE = path.join(__dirname, '.videolab-cache');
+            const id = vlVideoMatch[1];
+            const file = fs.existsSync(CACHE) ? fs.readdirSync(CACHE).find(f => f.startsWith(id + '.')) : null;
+            if (!file) { res.writeHead(404); res.end('not found'); return; }
+            const full = path.join(CACHE, file);
+            const stat = fs.statSync(full);
+            const ext = file.split('.').pop().toLowerCase();
+            const ctypeMap = { mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
+            const contentType = ctypeMap[ext] || 'video/mp4';
+            const range = req.headers.range;
+            if (range) {
+                const m = range.match(/bytes=(\d+)-(\d*)/);
+                const start = parseInt(m[1], 10);
+                const end = m[2] ? parseInt(m[2], 10) : stat.size - 1;
+                res.writeHead(206, {
+                    'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': end - start + 1,
+                    'Content-Type': contentType,
+                });
+                fs.createReadStream(full, { start, end }).pipe(res);
+            } else {
+                res.writeHead(200, { 'Content-Length': stat.size, 'Content-Type': contentType, 'Accept-Ranges': 'bytes' });
+                fs.createReadStream(full).pipe(res);
+            }
+        } catch (e) { res.writeHead(500); res.end(e.message); }
+        return;
+    }
+
+    // POST /api/videolab/analyze — run the Optimusk Prime coordinator (server-side, fully logged).
+    if (pathname === '/api/videolab/analyze' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { observations, ytId, videoTitle, videoUrl } = body;
+            if (!observations) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'observations required' })); return; }
+            const crypto = require('crypto');
+            const jobId = crypto.randomUUID();
+
+            // Seed the job so the UI can poll immediately, then run the coordinator in the
+            // background (Gemini observations → data → Optimusk Prime 2-pass → saved transcript).
+            await cloud.uploadToR2(`data/videolab/${jobId}.json`, Buffer.from(JSON.stringify({ jobId, ytId: ytId || null, videoTitle: videoTitle || null, videoUrl: videoUrl || null, status: 'running', startedAt: new Date().toISOString(), steps: [] })), 'application/json');
+            videolabCoordinator.runCoordinator(jobId, { observations, ytId, videoTitle, videoUrl })
+                .then(r => console.log(`VideoLab coordinator ${jobId} → ${r.status}`))
+                .catch(e => console.error('VideoLab coordinator error:', e.message));
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, jobId }));
+        } catch (e) {
+            console.error('videolab/analyze error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // DELETE /api/videolab/advice/:jobId — remove a saved analysis + its history entry.
+    const vlDelMatch = pathname.match(/^\/api\/videolab\/advice\/([a-zA-Z0-9_-]+)$/);
+    if (vlDelMatch && req.method === 'DELETE') {
+        try {
+            const jobId = vlDelMatch[1];
+            await cloud.deleteFromR2(`data/videolab/${jobId}.json`);
+            try {
+                const buf = await cloud.downloadFromR2('data/videolab/index.json');
+                if (buf) {
+                    const idx = JSON.parse(buf.toString('utf8')).filter(x => x.jobId !== jobId);
+                    await cloud.uploadToR2('data/videolab/index.json', Buffer.from(JSON.stringify(idx)), 'application/json');
+                }
+            } catch (e) {}
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+
+    // GET /api/videolab/history — list past analyses.
+    if (pathname === '/api/videolab/history' && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2('data/videolab/index.json');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(buf ? buf.toString('utf8') : '[]');
+        } catch (e) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); }
+        return;
+    }
+
+    // POST /api/videolab/advice — coordinator callback with the finished advice JSON.
+    if (pathname === '/api/videolab/advice' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            if (body.secret !== VIDEOLAB_SECRET) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'invalid secret' })); return; }
+            if (!body.jobId) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'jobId required' })); return; }
+            const record = { jobId: body.jobId, status: 'done', advice: body.advice || null, finishedAt: new Date().toISOString() };
+            await cloud.uploadToR2(`data/videolab/${body.jobId}.json`, Buffer.from(JSON.stringify(record)), 'application/json');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/videolab/advice/:jobId — poll for the coordinator's result.
+    const vlMatch = pathname.match(/^\/api\/videolab\/advice\/([a-zA-Z0-9_-]+)$/);
+    if (vlMatch && req.method === 'GET') {
+        try {
+            const buf = await cloud.downloadFromR2(`data/videolab/${vlMatch[1]}.json`);
+            if (!buf) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'unknown' })); return; }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(buf.toString('utf8'));
+        } catch (e) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
         }
@@ -3365,6 +3617,64 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             const v1path = pathname.slice('/api/v1'.length); // e.g. "/videos" or "/videos/abc123"
 
+            // --- Video Lab coordinator data: indicators, relevance, patterns, research, brain ---
+            const jarvisJson = (f) => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'buildings', 'jarvis', f), 'utf8')); } catch (e) { return null; } };
+
+            if (v1path === '/indicators/relevance') {
+                const model = jarvisJson('prediction-model.json');
+                let topExperiments = [];
+                const derived = jarvisJson('derived_experiments_compact.json');
+                if (Array.isArray(derived)) {
+                    topExperiments = derived
+                        .filter(d => typeof d.r === 'number')
+                        .sort((a, b) => Math.abs(b.r) - Math.abs(a.r))
+                        .slice(0, 120)
+                        .map(d => ({ key: d.key, r: +d.r.toFixed(3), target: d.target, kind: d.kind, status: d.status }));
+                }
+                const findings = jarvisJson('findings-summary.json');
+                json({
+                    prediction_model: model || null,
+                    top_experiments_by_correlation: topExperiments,
+                    top_discoveries: findings ? findings.top_discoveries : null,
+                    note: 'r = Pearson correlation to log views; prediction_model feature lists are the honest weighted relevance (pre-upload CV≈0.35, full CV≈0.66).'
+                });
+                return;
+            }
+
+            if (v1path === '/indicators') {
+                const all = jarvisJson('indicators.json') || [];
+                const q = (url.searchParams.get('q') || '').toLowerCase();
+                const status = url.searchParams.get('status');
+                const layer = url.searchParams.get('layer');
+                const target = url.searchParams.get('target');
+                let out = all.filter(i =>
+                    (!status || i.status === status) &&
+                    (!layer || i.layer === layer) &&
+                    (!target || i.target === target) &&
+                    (!q || JSON.stringify(i).toLowerCase().includes(q))
+                );
+                json({ total: all.length, matched: out.length, indicators: out.slice(0, 200) });
+                return;
+            }
+
+            if (v1path === '/retention-patterns') { json(jarvisJson('retention-patterns.json') || { error: 'not found' }); return; }
+
+            if (v1path === '/research') {
+                const corpus = jarvisJson('signals-dataset-expanded.json') || [];
+                const q = (url.searchParams.get('q') || '').toLowerCase();
+                const rows = q ? corpus.filter(r => JSON.stringify(r).toLowerCase().includes(q)) : corpus;
+                json({ total: corpus.length, matched: rows.length, sample_fields: corpus[0] ? Object.keys(corpus[0]) : [], rows: rows.slice(0, 60) });
+                return;
+            }
+
+            const brainMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/brain$/);
+            if (brainMatch) {
+                const bp = path.join(__dirname, 'buildings', 'jarvis', 'tribe-analysis', `${brainMatch[1]}.json`);
+                if (fs.existsSync(bp)) { json(JSON.parse(fs.readFileSync(bp, 'utf8'))); }
+                else { json({ status: 'no_brain_analysis', videoId: brainMatch[1] }, 404); }
+                return;
+            }
+
             // --- Overview: summary stats across everything ---
             if (v1path === '/overview') {
                 const [videos, ideas, todos, calendar, invoices, notes, sponsors, sponsorvideos] = await Promise.all(
@@ -5280,6 +5590,59 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
 
+    if (pathname.match(/^\/api\/tribe\/results\/[^/]+$/) && req.method === 'DELETE') {
+        try {
+            const videoId = decodeURIComponent(pathname.split('/').pop());
+            if (!/^[A-Za-z0-9_-]+$/.test(videoId)) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Invalid videoId' }));
+                return;
+            }
+            const dir = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis');
+            const files = [`${videoId}.json`, `${videoId}.images.json`, `${videoId}.preds.npy.gz`];
+            const PROTECTED_FILES = ['fsaverage5_mesh.json', 'fsaverage5_regions.json', 'analyze_video.py', 'requirements.txt'];
+            for (const f of files) {
+                if (PROTECTED_FILES.some(p => f === p || f.endsWith('/' + p))) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Cannot delete protected file' }));
+                    return;
+                }
+            }
+            let deleted = 0;
+            for (const f of files) {
+                const fp = path.join(dir, f);
+                if (fs.existsSync(fp)) { fs.unlinkSync(fp); deleted++; }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ deleted, videoId }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/tribe/mesh' && req.method === 'GET') {
+        try {
+            const meshPath = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis', 'fsaverage5_mesh.json');
+            if (!fs.existsSync(meshPath)) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'fsaverage5_mesh.json not found' }));
+                return;
+            }
+            const buf = fs.readFileSync(meshPath);
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'public, max-age=86400',
+            });
+            res.end(buf);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     {
         const m = pathname.match(/^\/api\/tribe\/results\/([A-Za-z0-9_-]+)$/);
         if (m && req.method === 'GET') {
@@ -5364,16 +5727,86 @@ Respond ONLY as valid JSON (no markdown):
         }
     }
 
+    // GET /api/tribe/batch-status — full batch progress including queue
+    if (pathname === '/api/tribe/batch-status' && req.method === 'GET') {
+        try {
+            const videoDataDir = path.join(DIR, 'video_data');
+            const tribeDir = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis');
+
+            // Collect all analyzed videos
+            const analyzed = {};
+            if (fs.existsSync(tribeDir)) {
+                for (const f of fs.readdirSync(tribeDir)) {
+                    if (!f.endsWith('.json') || f.includes('.') && !f.endsWith('.json')) continue;
+                    const videoId = f.slice(0, -5);
+                    if (videoId.includes('.')) continue;
+                    try {
+                        const d = JSON.parse(fs.readFileSync(path.join(tribeDir, f)));
+                        if (d.n_timesteps > 0) {
+                            analyzed[videoId] = {
+                                n_timesteps: d.n_timesteps,
+                                engagement_score: d.engagement_score,
+                                analyzed_at: d.analyzed_at
+                            };
+                        }
+                    } catch {}
+                }
+            }
+
+            // Collect queue (videos with video.mp4, sorted by views desc)
+            const allVideos = [];
+            if (fs.existsSync(videoDataDir)) {
+                for (const vid of fs.readdirSync(videoDataDir)) {
+                    const mp4 = path.join(videoDataDir, vid, 'video.mp4');
+                    const ana = path.join(videoDataDir, vid, 'analysis.json');
+                    if (!fs.existsSync(mp4) || !fs.existsSync(ana)) continue;
+                    try {
+                        const meta = JSON.parse(fs.readFileSync(ana));
+                        const views = parseInt(meta.metadata?.viewCount || 0);
+                        const title = meta.metadata?.title || vid;
+                        const status = analyzed[vid] ? 'done'
+                            : _tribeJobs[vid]?.status === 'running' ? 'running'
+                            : _tribeJobs[vid]?.status === 'queued' ? 'queued'
+                            : _tribeJobs[vid]?.status === 'failed' ? 'failed'
+                            : 'pending';
+                        allVideos.push({ videoId: vid, title, views, status,
+                            engagement_score: analyzed[vid]?.engagement_score || null,
+                            analyzed_at: analyzed[vid]?.analyzed_at || null });
+                    } catch {}
+                }
+            }
+            allVideos.sort((a, b) => b.views - a.views);
+
+            const done = allVideos.filter(v => v.status === 'done').length;
+            const running = allVideos.filter(v => v.status === 'running').length;
+            const total = allVideos.length;
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ total, done, running, videos: allVideos }));
+        } catch (e) {
+            res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     if (pathname === '/api/tribe/available' && req.method === 'GET') {
         try {
             const dir = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis');
             const out = [];
             if (fs.existsSync(dir)) {
+                // Skip .images.json, fsaverage5_mesh.json, and non-analysis files
+                const SKIP_PATTERNS = ['images', 'fsaverage5_mesh', 'fsaverage5_regions'];
                 for (const f of fs.readdirSync(dir)) {
                     if (!f.endsWith('.json')) continue;
                     const videoId = f.slice(0, -5);
+                    // Skip protected/non-analysis files
+                    if (SKIP_PATTERNS.some(p => videoId === p || videoId.endsWith('.' + p) || videoId.endsWith('_' + p))) continue;
+                    // Also skip if videoId contains a dot (e.g. IvVJ9RUPcaw.images)
+                    if (videoId.includes('.')) continue;
                     try {
                         const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+                        // Must be a real analysis: needs n_timesteps and engagement_score
+                        if (!data.n_timesteps || !data.engagement_score) continue;
                         out.push({
                             videoId,
                             analyzed_at: data.analyzed_at || null,
@@ -5395,6 +5828,107 @@ Respond ONLY as valid JSON (no markdown):
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
         }
+        return;
+    }
+
+    // GET /api/tribe/transcript/:videoId — return { words: [{word, timestamp}], fullText }
+    // Sourced from video_data/{videoId}/analysis.json under transcript.{words,fullText}.
+    const tribeTranscriptMatch = pathname.match(/^\/api\/tribe\/transcript\/([A-Za-z0-9_-]+)$/);
+    if (tribeTranscriptMatch && req.method === 'GET') {
+        try {
+            const videoId = tribeTranscriptMatch[1];
+            const analysisPath = path.join(DIR, 'video_data', videoId, 'analysis.json');
+            if (!fs.existsSync(analysisPath)) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'analysis.json not found', words: [], fullText: '' }));
+                return;
+            }
+            const a = JSON.parse(fs.readFileSync(analysisPath, 'utf8'));
+            const tr = (a && a.transcript) || {};
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                videoId,
+                words: Array.isArray(tr.words) ? tr.words : [],
+                fullText: tr.fullText || '',
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // GET /api/tribe/video/:videoId — stream the actual video file for the browser player
+    const tribeVideoMatch = pathname.match(/^\/api\/tribe\/video\/([a-zA-Z0-9_-]+)$/);
+    if (tribeVideoMatch && req.method === 'GET') {
+        const videoId = tribeVideoMatch[1];
+        const videoPath = path.join(DIR, 'video_data', videoId, 'video.mp4');
+        if (!fs.existsSync(videoPath)) {
+            res.writeHead(404); res.end('Not found'); return;
+        }
+        const stat = fs.statSync(videoPath);
+        const fileSize = stat.size;
+        const range = req.headers.range;
+        if (range) {
+            const parts = range.replace(/bytes=/, '').split('-');
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunkSize = (end - start) + 1;
+            const fileStream = fs.createReadStream(videoPath, { start, end });
+            res.writeHead(206, {
+                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunkSize,
+                'Content-Type': 'video/mp4',
+            });
+            fileStream.pipe(res);
+        } else {
+            res.writeHead(200, {
+                'Content-Length': fileSize,
+                'Content-Type': 'video/mp4',
+                'Accept-Ranges': 'bytes',
+            });
+            fs.createReadStream(videoPath).pipe(res);
+        }
+        return;
+    }
+
+    // GET /api/tribe/frame/:videoId/:second — extract a JPEG frame at a given second
+    const tribeFrameMatch = pathname.match(/^\/api\/tribe\/frame\/([a-zA-Z0-9_-]+)\/(\d+(?:\.\d+)?)$/);
+    if (tribeFrameMatch && req.method === 'GET') {
+        const videoId = tribeFrameMatch[1];
+        const second = parseFloat(tribeFrameMatch[2]);
+        const videoPath = path.join(DIR, 'video_data', videoId, 'video.mp4');
+        if (!fs.existsSync(videoPath)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Video file not found' }));
+            return;
+        }
+        // Use ffmpeg to extract a single frame
+        const { execFile } = require('child_process');
+        const tmpFile = path.join(require('os').tmpdir(), `tribe_frame_${videoId}_${second}.jpg`);
+        execFile('ffmpeg', [
+            '-ss', String(second),
+            '-i', videoPath,
+            '-vframes', '1',
+            '-q:v', '3',
+            '-y', tmpFile
+        ], { timeout: 15000 }, (err) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'ffmpeg failed: ' + err.message }));
+                return;
+            }
+            try {
+                const data = fs.readFileSync(tmpFile);
+                fs.unlinkSync(tmpFile);
+                res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600' });
+                res.end(data);
+            } catch (e2) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e2.message }));
+            }
+        });
         return;
     }
 

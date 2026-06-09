@@ -1151,6 +1151,40 @@ const LibraryUI = (() => {
                 console.error('Failed to render embedded DAG flowchart:', e);
                 embeddedCanvas.innerHTML = `<div style="padding:20px;color:#c0392b;font-size:13px;">Flowchart render failed: ${e.message}</div>`;
             }
+
+            // LIVE FROM CLOUD: poll this note every few seconds (cache-busted, no-store) and re-render
+            // the flowchart whenever the graph changed on the server. So updates appear WITHOUT a reload
+            // and NEVER from a stale browser cache — this also self-corrects a stale initial load.
+            if (window._dagflowPoll) clearInterval(window._dagflowPoll);
+            const _dagOf = (b) => { const m = (b || '').match(/<!--\s*dag-data:[\s\S]*?-->/); return m ? m[0] : ''; };
+            let _lastDag = _dagOf(note.body);
+            const _mountGraph = (body) => {
+                const g = DagFlowchart.parseGraphFromBody(body || '');
+                DagFlowchart.computeLayout(g);
+                DagFlowchart.renderSvg(g, 'library-dagflow-embedded-canvas', {
+                    onChange: (ug) => {
+                        const be = document.getElementById('library-freenote-body');
+                        if (be) { be.value = DagFlowchart.serializeGraphToBody(be.value, ug); scheduleFreeNoteSave(); }
+                    }
+                });
+            };
+            window._dagflowPoll = setInterval(async () => {
+                const canvas = document.getElementById('library-dagflow-embedded-canvas');
+                if (!canvas) { clearInterval(window._dagflowPoll); window._dagflowPoll = null; return; }
+                const be = document.getElementById('library-freenote-body');
+                if (be && document.activeElement === be) return; // don't clobber active typing
+                try {
+                    const r = await fetch(`/api/data/notes/${note.id}?_=${Date.now()}`, { cache: 'no-store' });
+                    if (!r.ok) return;
+                    const fresh = await r.json();
+                    const dag = _dagOf(fresh.body);
+                    if (dag && dag !== _lastDag) {
+                        _lastDag = dag;
+                        if (be) be.value = fresh.body;
+                        _mountGraph(fresh.body);
+                    }
+                } catch (e) {}
+            }, 4000);
         }
     }
 
