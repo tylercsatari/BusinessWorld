@@ -130,6 +130,7 @@ const LibraryUI = (() => {
                         <button class="library-tab" data-tab="projects">Projects</button>
                         <button class="library-tab" data-tab="sponsors">Sponsors</button>
                         <button class="library-tab" data-tab="ideamap">Idea Map</button>
+                        <button class="library-tab" data-tab="dagflow">DAG Flow</button>
                     </div>
                     <div class="library-list-header" id="library-list-header">
                         <h2 class="library-list-heading" id="library-list-heading">Ideas</h2>
@@ -144,6 +145,7 @@ const LibraryUI = (() => {
                     <div class="library-projects-container" id="library-projects-container" style="display:none;"></div>
                     <div class="library-sponsors-container" id="library-sponsors-container" style="display:none;"></div>
                     <div class="library-ideamap-container" id="library-ideamap-container" style="display:none;"></div>
+                    <div class="library-dagflow-container" id="library-dagflow-container" style="display:none;"></div>
                 </div>
                 <div class="library-page library-editor-page" id="library-editor-page">
                     <div class="library-editor" id="library-editor">
@@ -217,6 +219,7 @@ const LibraryUI = (() => {
         const projectsContainer = document.getElementById('library-projects-container');
         const sponsorsContainer = document.getElementById('library-sponsors-container');
         const ideamapContainer = document.getElementById('library-ideamap-container');
+        const dagflowContainer = document.getElementById('library-dagflow-container');
 
         const notesFilterBar = document.getElementById('library-notes-filter-bar');
 
@@ -228,6 +231,7 @@ const LibraryUI = (() => {
         if (projectsContainer) projectsContainer.style.display = 'none';
         if (sponsorsContainer) sponsorsContainer.style.display = 'none';
         if (ideamapContainer) ideamapContainer.style.display = 'none';
+        if (dagflowContainer) dagflowContainer.style.display = 'none';
 
         const newBtn = document.getElementById('library-new-btn');
         const fillLogisticsBtn = document.getElementById('library-fill-logistics-btn');
@@ -278,9 +282,18 @@ const LibraryUI = (() => {
             // Scroll list page to top so ideamap is visible
             const listPage = document.getElementById('library-list-page');
             if (listPage) listPage.scrollTop = 0;
+        } else if (tab === 'dagflow') {
+            if (heading) heading.textContent = 'DAG Flow';
+            if (dagflowContainer) dagflowContainer.style.display = '';
+            if (newBtn) newBtn.style.display = 'none';
+            const header = document.getElementById('library-list-header');
+            if (header) header.style.display = 'none';
+            renderDagFlow();
+            const listPage = document.getElementById('library-list-page');
+            if (listPage) listPage.scrollTop = 0;
         }
         // Re-show header for non-ideamap tabs
-        if (tab !== 'ideamap') {
+        if (tab !== 'ideamap' && tab !== 'dagflow') {
             const header = document.getElementById('library-list-header');
             if (header) header.style.display = '';
         }
@@ -870,7 +883,7 @@ const LibraryUI = (() => {
     // =====================
 
     async function fetchFreeNotes() {
-        const res = await fetch('/api/data/notes');
+        const res = await fetch('/api/data/notes?_=' + Date.now(), { cache: 'no-store' });
         if (!res.ok) return [];
         return await res.json();
     }
@@ -1082,6 +1095,7 @@ const LibraryUI = (() => {
             <div class="library-editor-body">
                 <div class="library-editor-title-row">
                     <input type="text" class="library-editor-title" id="library-freenote-title" value="${escAttr(note.title || '')}" placeholder="Note title..." />
+                    ${((note.title && note.title.includes('DAG Architecture')) || (note.body && note.body.includes('<!-- dag-data:'))) ? `<button class="library-dagflow-btn" id="library-dagflow-btn" style="margin-left:10px;padding:6px 14px;border:1px solid #d4a060;border-radius:6px;background:#fff8ee;color:#5a3e1b;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">View DAG Flowchart</button>` : ''}
                 </div>
                 <div class="library-meta-row">
                     <label class="library-meta-label">Project</label>
@@ -1098,6 +1112,10 @@ const LibraryUI = (() => {
                     </select>
                 </div>
                 <textarea class="library-editor-textarea" id="library-freenote-body" placeholder="Write anything here...">${escHtml(note.body || '')}</textarea>
+                ${((note.title && note.title.includes('DAG Architecture')) || (note.body && note.body.includes('<!-- dag-data:'))) ? `
+                <div class="library-dagflow-embedded" style="margin-top:16px;border:1px solid #e0d8cc;border-radius:8px;overflow:hidden;height:520px;position:relative;">
+                    <div id="library-dagflow-embedded-canvas" style="width:100%;height:100%;"></div>
+                </div>` : ''}
             </div>
         `;
 
@@ -1107,6 +1125,33 @@ const LibraryUI = (() => {
         document.getElementById('library-freenote-project').addEventListener('change', scheduleFreeNoteSave);
         document.getElementById('library-freenote-idea').addEventListener('change', scheduleFreeNoteSave);
         document.getElementById('library-freenote-pin').addEventListener('click', toggleFreeNotePin);
+        const dagflowBtn = document.getElementById('library-dagflow-btn');
+        if (dagflowBtn) {
+            dagflowBtn.addEventListener('click', () => {
+                switchTab('dagflow');
+            });
+        }
+
+        // --- Embedded DAG Flowchart for DAG Architecture notes ---
+        const embeddedCanvas = document.getElementById('library-dagflow-embedded-canvas');
+        if (embeddedCanvas && typeof DagFlowchart !== 'undefined') {
+            try {
+                const graph = DagFlowchart.parseGraphFromBody(note.body || '');
+                DagFlowchart.computeLayout(graph);
+                DagFlowchart.renderSvg(graph, 'library-dagflow-embedded-canvas', {
+                    onChange: (updatedGraph) => {
+                        const bodyEl = document.getElementById('library-freenote-body');
+                        if (bodyEl) {
+                            bodyEl.value = DagFlowchart.serializeGraphToBody(bodyEl.value, updatedGraph);
+                            scheduleFreeNoteSave();
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to render embedded DAG flowchart:', e);
+                embeddedCanvas.innerHTML = `<div style="padding:20px;color:#c0392b;font-size:13px;">Flowchart render failed: ${e.message}</div>`;
+            }
+        }
     }
 
     // Tabbed-note editor — for framework-style notes (e.g. the Da Vinci Stack)
@@ -5171,6 +5216,393 @@ const LibraryUI = (() => {
 
             popover.style.display = 'none';
             ideaMapRenderKanban(el);
+        });
+    }
+
+    function renderDagFlow() {
+        const el = document.getElementById('library-dagflow-container');
+        if (!el) return;
+
+        el.innerHTML = `
+            <div class="dagflow-wrapper" style="width:100%;height:100%;overflow:auto;background:#f8f6f2;position:relative;" id="dagflow-wrapper">
+                <div class="dagflow-toolbar" style="position:sticky;top:0;z-index:10;background:#f8f6f2;padding:8px 12px;border-bottom:1px solid #e0d8cc;display:flex;gap:8px;align-items:center;">
+                    <span style="font-weight:700;color:#5a3e1b;font-size:13px;">DAG Pipeline Visualizer</span>
+                    <span style="flex:1"></span>
+                    <button class="dagflow-zoom-btn" id="dagflow-zoom-in" style="padding:4px 10px;border:1px solid #d4a060;border-radius:6px;background:#fff;color:#5a3e1b;font-size:12px;cursor:pointer;">Zoom In</button>
+                    <button class="dagflow-zoom-btn" id="dagflow-zoom-out" style="padding:4px 10px;border:1px solid #d4a060;border-radius:6px;background:#fff;color:#5a3e1b;font-size:12px;cursor:pointer;">Zoom Out</button>
+                    <button class="dagflow-zoom-btn" id="dagflow-reset" style="padding:4px 10px;border:1px solid #d4a060;border-radius:6px;background:#fff;color:#5a3e1b;font-size:12px;cursor:pointer;">Reset</button>
+                </div>
+                <div class="dagflow-canvas-wrap" id="dagflow-canvas-wrap" style="transform-origin:0 0;transition:transform 0.2s ease;">
+                    <svg id="dagflow-svg" viewBox="0 0 1400 1100" style="width:1400px;height:1100px;display:block;">
+                        <defs>
+                            <marker id="arrow-black" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+                                <path d="M0,0 L10,5 L0,10 L2,5 z" fill="#5a3e1b" />
+                            </marker>
+                            <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+                                <path d="M0,0 L10,5 L0,10 L2,5 z" fill="#c0392b" />
+                            </marker>
+                            <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+                                <path d="M0,0 L10,5 L0,10 L2,5 z" fill="#27ae60" />
+                            </marker>
+                            <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+                                <path d="M0,0 L10,5 L0,10 L2,5 z" fill="#2980b9" />
+                            </marker>
+                            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feDropShadow dx="1" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.12"/>
+                            </filter>
+                            <linearGradient id="grad-project" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#e8c39e"/>
+                                <stop offset="100%" stop-color="#d4a060"/>
+                            </linearGradient>
+                            <linearGradient id="grad-video" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#a8d8ea"/>
+                                <stop offset="100%" stop-color="#6bb3d6"/>
+                            </linearGradient>
+                            <linearGradient id="grad-stage" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#b8e994"/>
+                                <stop offset="100%" stop-color="#7bed9f"/>
+                            </linearGradient>
+                            <linearGradient id="grad-parallel" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#ff9ff3"/>
+                                <stop offset="100%" stop-color="#f368e0"/>
+                            </linearGradient>
+                        </defs>
+
+                        <!-- Background grid -->
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e8e0d4" stroke-width="0.5"/>
+                        </pattern>
+                        <rect width="1400" height="1100" fill="url(#grid)" />
+
+                        <!-- LAYER 1: PROJECTS -->
+                        <text x="700" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#5a3e1b">LAYER 1: PROJECTS (Causality & Scope)</text>
+
+                        <!-- Project A -->
+                        <g class="dagflow-node" data-info="Project A: Full Studio Suite — Declarative specification of desired end state. Spawns multiple videos." style="cursor:pointer;">
+                            <rect x="200" y="50" width="200" height="60" rx="10" fill="url(#grad-project)" filter="url(#shadow)" stroke="#5a3e1b" stroke-width="2"/>
+                            <text x="300" y="85" text-anchor="middle" font-size="14" font-weight="700" fill="#3d2b1f">Project A</text>
+                            <text x="300" y="100" text-anchor="middle" font-size="10" fill="#5a3e1b">Full Studio Suite</text>
+                        </g>
+
+                        <!-- Project B -->
+                        <g class="dagflow-node" data-info="Project B: Paint Wall Art — Depends on Project A (Build Studio Wall) completing. Causality edge shown in red." style="cursor:pointer;">
+                            <rect x="800" y="50" width="200" height="60" rx="10" fill="url(#grad-project)" filter="url(#shadow)" stroke="#5a3e1b" stroke-width="2"/>
+                            <text x="900" y="85" text-anchor="middle" font-size="14" font-weight="700" fill="#3d2b1f">Project B</text>
+                            <text x="900" y="100" text-anchor="middle" font-size="10" fill="#5a3e1b">Paint Wall Art</text>
+                        </g>
+
+                        <!-- Causality edge (red) from Project A to Project B -->
+                        <path d="M 400 80 L 800 80" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-red)" />
+                        <text x="600" y="70" text-anchor="middle" font-size="10" fill="#c0392b" font-weight="600">Causality Edge</text>
+
+                        <!-- Decomposition arrows (Project → Videos) -->
+                        <path d="M 300 110 L 300 180" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 300 110 L 150 180" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 300 110 L 450 180" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+
+                        <path d="M 900 110 L 900 180" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 900 110 L 750 180" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 900 110 L 1050 180" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+
+                        <text x="300" y="130" text-anchor="middle" font-size="10" fill="#5a3e1b" font-weight="600">Decomposes</text>
+                        <text x="900" y="130" text-anchor="middle" font-size="10" fill="#5a3e1b" font-weight="600">Decomposes</text>
+
+                        <!-- LAYER 2: VIDEOS -->
+                        <text x="700" y="210" text-anchor="middle" font-size="16" font-weight="700" fill="#5a3e1b">LAYER 2: VIDEOS (Parallel Instances)</text>
+
+                        <!-- Video nodes from Project A -->
+                        <g class="dagflow-node" data-info="Video 1A: Part 1 — Immutable artifact tracked by content hash. Independent pipeline instance." style="cursor:pointer;">
+                            <rect x="80" y="230" width="140" height="50" rx="8" fill="url(#grad-video)" filter="url(#shadow)" stroke="#2980b9" stroke-width="2"/>
+                            <text x="150" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5276">Video 1A</text>
+                        </g>
+                        <g class="dagflow-node" data-info="Video 2A: Part 2 — Reuses intro from Video 1A. Cross-video dependency." style="cursor:pointer;">
+                            <rect x="250" y="230" width="140" height="50" rx="8" fill="url(#grad-video)" filter="url(#shadow)" stroke="#2980b9" stroke-width="2"/>
+                            <text x="320" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5276">Video 2A</text>
+                        </g>
+                        <g class="dagflow-node" data-info="Video 3A: B-Roll — Short form content from Project A." style="cursor:pointer;">
+                            <rect x="420" y="230" width="140" height="50" rx="8" fill="url(#grad-video)" filter="url(#shadow)" stroke="#2980b9" stroke-width="2"/>
+                            <text x="490" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5276">Video 3A</text>
+                        </g>
+
+                        <!-- Video nodes from Project B -->
+                        <g class="dagflow-node" data-info="Video 1B: Part 1 — Cannot start until Project B is unblocked (Project A completes)." style="cursor:pointer;">
+                            <rect x="680" y="230" width="140" height="50" rx="8" fill="url(#grad-video)" filter="url(#shadow)" stroke="#2980b9" stroke-width="2"/>
+                            <text x="750" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5276">Video 1B</text>
+                        </g>
+                        <g class="dagflow-node" data-info="Video 2B: Shorts — Vertical short-form from Project B." style="cursor:pointer;">
+                            <rect x="850" y="230" width="140" height="50" rx="8" fill="url(#grad-video)" filter="url(#shadow)" stroke="#2980b9" stroke-width="2"/>
+                            <text x="920" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5276">Video 2B</text>
+                        </g>
+                        <g class="dagflow-node" data-info="Video 3B: Behind the Scenes — Bonus content from Project B." style="cursor:pointer;">
+                            <rect x="1020" y="230" width="140" height="50" rx="8" fill="url(#grad-video)" filter="url(#shadow)" stroke="#2980b9" stroke-width="2"/>
+                            <text x="1090" y="260" text-anchor="middle" font-size="12" font-weight="700" fill="#1a5276">Video 3B</text>
+                        </g>
+
+                        <!-- Cross-video dependency (1A → 2A) -->
+                        <path d="M 220 255 L 250 255" fill="none" stroke="#e67e22" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrow-black)" />
+                        <text x="235" y="250" text-anchor="middle" font-size="9" fill="#e67e22">uses intro</text>
+
+                        <!-- LAYER 3: STAGES -->
+                        <text x="700" y="320" text-anchor="middle" font-size="16" font-weight="700" fill="#5a3e1b">LAYER 3: STAGES (Deterministic Pipeline)</text>
+
+                        <!-- Stage 1: Incubator -->
+                        <g class="dagflow-node" data-info="Stage 1: Incubator — Idea + Context. Immutable, content-addressed." style="cursor:pointer;">
+                            <rect x="50" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="110" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">1. Incubator</text>
+                            <text x="110" y="390" text-anchor="middle" font-size="9" fill="#27ae60">Idea + Context</text>
+                        </g>
+
+                        <!-- Stage 2: Research -->
+                        <g class="dagflow-node" data-info="Stage 2: Research — Viral analysis + data. Can be shared across videos, cached." style="cursor:pointer;">
+                            <rect x="190" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="250" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">2. Research</text>
+                            <text x="250" y="390" text-anchor="middle" font-size="9" fill="#27ae60">Viral Analysis</text>
+                        </g>
+
+                        <!-- Stage 3: Script -->
+                        <g class="dagflow-node" data-info="Stage 3: Script — Pure function of context + research + template." style="cursor:pointer;">
+                            <rect x="330" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="390" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">3. Script</text>
+                            <text x="390" y="390" text-anchor="middle" font-size="9" fill="#27ae60">Library Writer</text>
+                        </g>
+
+                        <!-- Stage 4a: Asset Collection (parallel) -->
+                        <g class="dagflow-node" data-info="Stage 4a: Asset Collection — Storage + canonical brand library. Runs in parallel with Voiceover." style="cursor:pointer;">
+                            <rect x="470" y="340" width="120" height="55" rx="8" fill="url(#grad-parallel)" filter="url(#shadow)" stroke="#e84393" stroke-width="2"/>
+                            <text x="530" y="365" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">4a. Assets</text>
+                            <text x="530" y="380" text-anchor="middle" font-size="9" fill="#e84393">Brand Library</text>
+                        </g>
+
+                        <!-- Stage 4b: Voiceover (parallel) -->
+                        <g class="dagflow-node" data-info="Stage 4b: Voiceover — Recording booth. Isolated container, runs in parallel with Asset Collection." style="cursor:pointer;">
+                            <rect x="470" y="410" width="120" height="55" rx="8" fill="url(#grad-parallel)" filter="url(#shadow)" stroke="#e84393" stroke-width="2"/>
+                            <text x="530" y="435" text-anchor="middle" font-size="11" font-weight="700" fill="#c0392b">4b. Voiceover</text>
+                            <text x="530" y="450" text-anchor="middle" font-size="9" fill="#e84393">Recording Booth</text>
+                        </g>
+
+                        <!-- Stage 5: Edit -->
+                        <g class="dagflow-node" data-info="Stage 5: Edit — Workshop timeline. Deterministic function of all prior stages, build-cached." style="cursor:pointer;">
+                            <rect x="610" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="670" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">5. Edit</text>
+                            <text x="670" y="390" text-anchor="middle" font-size="9" fill="#27ae60">Timeline Build</text>
+                        </g>
+
+                        <!-- Stage 6: Review Gate -->
+                        <g class="dagflow-node" data-info="Stage 6: Review Gate — Auto QA + human sign-off. Idempotent, cost-tracked." style="cursor:pointer;">
+                            <rect x="750" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="810" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">6. Review Gate</text>
+                            <text x="810" y="390" text-anchor="middle" font-size="9" fill="#27ae60">QA + Sign-off</text>
+                        </g>
+
+                        <!-- Stage 7: Render -->
+                        <g class="dagflow-node" data-info="Stage 7: Render — Distributed farm. Priority-aware, preemptible, cache-aware." style="cursor:pointer;">
+                            <rect x="890" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="950" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">7. Render</text>
+                            <text x="950" y="390" text-anchor="middle" font-size="9" fill="#27ae60">Distributed Farm</text>
+                        </g>
+
+                        <!-- Stage 8: Publish -->
+                        <g class="dagflow-node" data-info="Stage 8: Publish — YouTube + The Pen. Idempotent upload." style="cursor:pointer;">
+                            <rect x="1030" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="1090" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">8. Publish</text>
+                            <text x="1090" y="390" text-anchor="middle" font-size="9" fill="#27ae60">YouTube + Pen</text>
+                        </g>
+
+                        <!-- Stage 9: Analytics -->
+                        <g class="dagflow-node" data-info="Stage 9: Analytics — Metrics + swipe ratio. Immutable daily versions." style="cursor:pointer;">
+                            <rect x="1170" y="350" width="120" height="55" rx="8" fill="url(#grad-stage)" filter="url(#shadow)" stroke="#27ae60" stroke-width="2"/>
+                            <text x="1230" y="375" text-anchor="middle" font-size="11" font-weight="700" fill="#1e8449">9. Analytics</text>
+                            <text x="1230" y="390" text-anchor="middle" font-size="9" fill="#27ae60">Metrics + Swipe</text>
+                        </g>
+
+                        <!-- Stage pipeline arrows -->
+                        <path d="M 170 377 L 190 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 310 377 L 330 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 450 377 L 470 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 590 377 L 610 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 730 377 L 750 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 870 377 L 890 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 1010 377 L 1030 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+                        <path d="M 1150 377 L 1170 377" fill="none" stroke="#5a3e1b" stroke-width="2" marker-end="url(#arrow-black)" />
+
+                        <!-- Parallel merge arrows (4a and 4b → 5) -->
+                        <path d="M 530 395 L 530 410 L 610 377" fill="none" stroke="#e84393" stroke-width="2" marker-end="url(#arrow-black)" stroke-dasharray="4,3" />
+                        <path d="M 530 410 L 530 440 L 610 377" fill="none" stroke="#e84393" stroke-width="2" marker-end="url(#arrow-black)" stroke-dasharray="4,3" />
+
+                        <!-- Video-to-stage funnel arrows (all videos feed into stage 1) -->
+                        <path d="M 150 280 L 150 320 L 110 350" fill="none" stroke="#5a3e1b" stroke-width="1.5" stroke-opacity="0.4" marker-end="url(#arrow-black)" />
+                        <path d="M 320 280 L 320 320 L 110 350" fill="none" stroke="#5a3e1b" stroke-width="1.5" stroke-opacity="0.4" marker-end="url(#arrow-black)" />
+                        <path d="M 490 280 L 490 320 L 110 350" fill="none" stroke="#5a3e1b" stroke-width="1.5" stroke-opacity="0.4" marker-end="url(#arrow-black)" />
+                        <path d="M 750 280 L 750 320 L 110 350" fill="none" stroke="#5a3e1b" stroke-width="1.5" stroke-opacity="0.4" marker-end="url(#arrow-black)" />
+                        <path d="M 920 280 L 920 320 L 110 350" fill="none" stroke="#5a3e1b" stroke-width="1.5" stroke-opacity="0.4" marker-end="url(#arrow-black)" />
+                        <path d="M 1090 280 L 1090 320 L 110 350" fill="none" stroke="#5a3e1b" stroke-width="1.5" stroke-opacity="0.4" marker-end="url(#arrow-black)" />
+
+                        <text x="700" y="310" text-anchor="middle" font-size="10" fill="#5a3e1b" font-weight="600" opacity="0.6">Every video enters the same canonical pipeline</text>
+
+                        <!-- PRINCIPLES SECTION -->
+                        <text x="700" y="520" text-anchor="middle" font-size="16" font-weight="700" fill="#5a3e1b">PRINCIPLES SATISFIED</text>
+
+                        <g transform="translate(60, 540)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Deterministic Output</text>
+                        </g>
+                        <g transform="translate(300, 540)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Parallel Execution</text>
+                        </g>
+                        <g transform="translate(540, 540)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Stage Decomposition</text>
+                        </g>
+                        <g transform="translate(780, 540)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Resource Isolation</text>
+                        </g>
+                        <g transform="translate(1020, 540)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Deadline QoS</text>
+                        </g>
+
+                        <g transform="translate(60, 600)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Version Control (Git+LFS)</text>
+                        </g>
+                        <g transform="translate(300, 600)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Idempotency</text>
+                        </g>
+                        <g transform="translate(540, 600)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Declarative Spec</text>
+                        </g>
+                        <g transform="translate(780, 600)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Functional Purity</text>
+                        </g>
+                        <g transform="translate(1020, 600)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Immutable Data</text>
+                        </g>
+
+                        <g transform="translate(300, 660)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">DAG Workflow</text>
+                        </g>
+                        <g transform="translate(540, 660)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Content-Addressed Storage</text>
+                        </g>
+                        <g transform="translate(780, 660)">
+                            <rect x="0" y="0" width="220" height="40" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="110" y="25" text-anchor="middle" font-size="11" font-weight="600" fill="#5a3e1b">Per-Job Cost Accounting</text>
+                        </g>
+
+                        <!-- MECHANISMS SECTION -->
+                        <text x="700" y="740" text-anchor="middle" font-size="16" font-weight="700" fill="#5a3e1b">MECHANISMS USED</text>
+
+                        <g transform="translate(60, 760)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Content-Addressed Storage</text>
+                        </g>
+                        <g transform="translate(260, 760)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">DAG Scheduler</text>
+                        </g>
+                        <g transform="translate(460, 760)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Containerized Execution</text>
+                        </g>
+                        <g transform="translate(660, 760)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Git + LFS</text>
+                        </g>
+                        <g transform="translate(860, 760)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Template Spec</text>
+                        </g>
+                        <g transform="translate(1060, 760)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Render Farm</text>
+                        </g>
+
+                        <g transform="translate(160, 810)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Build Cache</text>
+                        </g>
+                        <g transform="translate(360, 810)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Review Gate</text>
+                        </g>
+                        <g transform="translate(560, 810)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Asset Library</text>
+                        </g>
+                        <g transform="translate(760, 810)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Orchestrator</text>
+                        </g>
+                        <g transform="translate(960, 810)">
+                            <rect x="0" y="0" width="180" height="36" rx="6" fill="#fff8ee" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text x="90" y="23" text-anchor="middle" font-size="10" font-weight="600" fill="#5a3e1b">Priority Scheduler</text>
+                        </g>
+
+                        <!-- Tooltip (hidden by default) -->
+                        <g id="dagflow-tooltip" style="display:none;pointer-events:none;">
+                            <rect x="0" y="0" width="280" height="60" rx="6" fill="#fff" stroke="#d4a060" stroke-width="1.5" filter="url(#shadow)"/>
+                            <text id="dagflow-tooltip-text" x="10" y="20" font-size="11" fill="#5a3e1b" style="pointer-events:none;"/>
+                        </g>
+                    </svg>
+                </div>
+
+                <div class="dagflow-info-panel" id="dagflow-info-panel" style="position:fixed;bottom:20px;right:20px;width:280px;background:#fff;border:1px solid #d4a060;border-radius:8px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);z-index:20;display:none;max-height:200px;overflow-y:auto;">
+                    <div style="font-weight:700;color:#5a3e1b;font-size:13px;margin-bottom:6px;">Node Details</div>
+                    <div id="dagflow-info-text" style="font-size:12px;color:#5a3e1b;line-height:1.4;"></div>
+                    <button id="dagflow-info-close" style="margin-top:8px;padding:4px 10px;border:1px solid #d4a060;border-radius:6px;background:#f8f6f2;color:#5a3e1b;font-size:11px;cursor:pointer;">Close</button>
+                </div>
+            </div>
+        `;
+
+        // Zoom/pan logic
+        let zoom = 1;
+        const canvasWrap = document.getElementById('dagflow-canvas-wrap');
+        document.getElementById('dagflow-zoom-in').addEventListener('click', () => {
+            zoom = Math.min(zoom * 1.2, 3);
+            canvasWrap.style.transform = `scale(${zoom})`;
+        });
+        document.getElementById('dagflow-zoom-out').addEventListener('click', () => {
+            zoom = Math.max(zoom / 1.2, 0.3);
+            canvasWrap.style.transform = `scale(${zoom})`;
+        });
+        document.getElementById('dagflow-reset').addEventListener('click', () => {
+            zoom = 1;
+            canvasWrap.style.transform = `scale(1)`;
+        });
+
+        // Node interactions
+        const infoPanel = document.getElementById('dagflow-info-panel');
+        const infoText = document.getElementById('dagflow-info-text');
+        el.querySelectorAll('.dagflow-node').forEach(node => {
+            node.addEventListener('mouseenter', () => {
+                node.querySelector('rect')?.setAttribute('stroke-width', '3');
+                const info = node.dataset.info;
+                if (info) {
+                    infoText.textContent = info;
+                    infoPanel.style.display = 'block';
+                }
+            });
+            node.addEventListener('mouseleave', () => {
+                node.querySelector('rect')?.setAttribute('stroke-width', '2');
+            });
+            node.addEventListener('click', () => {
+                const info = node.dataset.info;
+                if (info) {
+                    infoText.textContent = info;
+                    infoPanel.style.display = 'block';
+                }
+            });
+        });
+        document.getElementById('dagflow-info-close').addEventListener('click', () => {
+            infoPanel.style.display = 'none';
         });
     }
 
