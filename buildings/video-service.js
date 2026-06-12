@@ -123,6 +123,9 @@ const VideoService = (() => {
                         deps: Array.isArray(videoData.deps) ? videoData.deps : [],   // typed: [{kind:'video'|'component'|'order', id}]
                         voPath: videoData.voPath || '',                  // Dropbox path of the linked voiceover
                         voName: videoData.voName || '',
+                        hookType: videoData.hookType || '',              // 'animation' | 'practical' — flips those branches
+                        hookVideoPath: videoData.hookVideoPath || '',    // Dropbox path of the hook footage (<project>/hook/)
+                        hookVideoName: videoData.hookVideoName || '',
                         requiredInventoryIds: Array.isArray(videoData.requiredInventoryIds) ? videoData.requiredInventoryIds : [],
                         producesInventoryIds: Array.isArray(videoData.producesInventoryIds) ? videoData.producesInventoryIds : []
                     })

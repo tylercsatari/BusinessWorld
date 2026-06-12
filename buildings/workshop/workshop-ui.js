@@ -1352,10 +1352,29 @@ const WorkshopUI = (() => {
                         <div class="wsp-subsection-title">🎙️ Voiceover <span class="wsp-hint">— one per video, stored in the project's vo/ folder in Dropbox. The Voiceover stage completes itself the moment one is linked.</span></div>
                         <div id="wsp-vo-section">
                             ${v.voPath
-                                ? '' /* filled by initVoSection */
+                                ? '' /* filled by initMediaSection */
                                 : v.project
                                     ? '<div class="wsp-hint">Checking the vo/ folder…</div>'
                                     : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the voiceover lives in that project\'s Dropbox folder, so no project means nowhere to put it.</div></div>'}
+                        </div>
+                    </div>
+
+                    <div class="wsp-subsection">
+                        <div class="wsp-subsection-title">🪝 Hook Video <span class="wsp-hint">— the hook footage, separate from the body so editors get it clean. Stored in the project's hook/ folder; ${v.hookType === 'animation' ? 'the Animation stage' : v.hookType === 'practical' ? 'Practical Hook Filming' : 'pick a Hook Type and that stage'} completes itself once one is linked, unlocking Editing.</span></div>
+                        <div class="wsp-add-row">
+                            <label class="wsp-hint" style="font-style:normal;font-weight:700;">Hook Type:</label>
+                            <select id="wsp-hook-type" class="wsp-inline-select" title="Sets the branch automatically: animation → Animation stage; practical → Practical Hook Filming">
+                                <option value="">— not decided —</option>
+                                <option value="animation" ${v.hookType === 'animation' ? 'selected' : ''}>🎞️ Animation</option>
+                                <option value="practical" ${v.hookType === 'practical' ? 'selected' : ''}>🎯 Practical</option>
+                            </select>
+                        </div>
+                        <div id="wsp-hookvid-section">
+                            ${v.hookVideoPath
+                                ? '' /* filled by initMediaSection */
+                                : v.project
+                                    ? '<div class="wsp-hint">Checking the hook/ folder…</div>'
+                                    : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the hook video lives in that project\'s Dropbox folder.</div></div>'}
                         </div>
                     </div>
 
@@ -1440,6 +1459,16 @@ const WorkshopUI = (() => {
 
         // Branch decisions (the decomposition validation gate)
         document.getElementById('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
+
+        // Hook type → deterministically flips the animation/hookfilm branches
+        document.getElementById('wsp-hook-type').addEventListener('change', async (e) => {
+            const hookType = e.target.value;
+            const branches = { ...(VideoService.getById(v.id)?.branches || v.branches || {}) };
+            if (hookType === 'animation') { branches.animation = true; branches.hookfilm = false; }
+            else if (hookType === 'practical') { branches.hookfilm = true; branches.animation = false; }
+            await VideoService.update(v.id, { hookType, branches, status: normalizedStatus(v) });
+            renderDetail();
+        });
 
         // Veto: jump straight to any stage
         document.getElementById('wsp-move-stage').addEventListener('change', async (e) => {
@@ -1557,8 +1586,9 @@ const WorkshopUI = (() => {
             });
         }
 
-        // Voiceover section (async — talks to Dropbox)
-        initVoSection(v);
+        // Voiceover + hook video sections (async — talk to Dropbox)
+        initMediaSection(v, 'vo');
+        initMediaSection(v, 'hook');
 
         // 3D egg preview
         if (v.project && window.EggRenderer) {
@@ -1566,7 +1596,7 @@ const WorkshopUI = (() => {
         }
     }
 
-    // ============ VOICEOVER (Dropbox <project>/vo/) ============
+    // ============ DROPBOX MEDIA SECTIONS (voiceover <project>/vo/, hook video <project>/hook/) ============
 
     async function dropboxRootPath() {
         try {
@@ -1575,46 +1605,56 @@ const WorkshopUI = (() => {
         } catch (e) { return ''; }
     }
 
-    async function initVoSection(v) {
-        const el = document.getElementById('wsp-vo-section');
-        if (!el) return;
+    const MEDIA_SECTIONS = {
+        vo:   { elId: 'wsp-vo-section',      folder: 'vo',   pathField: 'voPath',        nameField: 'voName',        accept: 'audio/*', icon: '🎙️', noun: 'voiceover',  color: '#8e44ad' },
+        hook: { elId: 'wsp-hookvid-section', folder: 'hook', pathField: 'hookVideoPath', nameField: 'hookVideoName', accept: 'video/*', icon: '🪝', noun: 'hook video', color: '#e8a020' }
+    };
 
-        // --- A voiceover is linked: play it or unlink it ---
-        if (v.voPath) {
-            const name = v.voName || v.voPath.split('/').pop();
+    async function initMediaSection(v, key) {
+        const cfg = MEDIA_SECTIONS[key];
+        const el = document.getElementById(cfg.elId);
+        if (!el) return;
+        const linkedPath = v[cfg.pathField];
+
+        // --- A file is linked: play/open it or unlink it ---
+        if (linkedPath) {
+            const name = v[cfg.nameField] || linkedPath.split('/').pop();
+            const isAudio = cfg.accept.startsWith('audio');
             el.innerHTML = `
-                <div class="wsp-row" style="border-left: 3px solid #8e44ad">
-                    <span class="wsp-row-name">🎙️ ${escHtml(name)} <span class="wsp-hint">linked ✅</span></span>
-                    <button class="wsp-mini-btn" id="wsp-vo-play">▶ Play</button>
-                    <button class="wsp-mini-btn danger" id="wsp-vo-unlink">✕ Unlink</button>
-                    <audio id="wsp-vo-audio" style="display:none"></audio>
+                <div class="wsp-row" style="border-left: 3px solid ${cfg.color}">
+                    <span class="wsp-row-name">${cfg.icon} ${escHtml(name)} <span class="wsp-hint">linked ✅</span></span>
+                    <button class="wsp-mini-btn" id="${cfg.elId}-play">${isAudio ? '▶ Play' : '▶ Open'}</button>
+                    <button class="wsp-mini-btn danger" id="${cfg.elId}-unlink">✕ Unlink</button>
+                    ${isAudio ? `<audio id="${cfg.elId}-audio" style="display:none"></audio>` : ''}
                 </div>`;
-            const playBtn = document.getElementById('wsp-vo-play');
-            const audio = document.getElementById('wsp-vo-audio');
+            const playBtn = document.getElementById(`${cfg.elId}-play`);
             playBtn.addEventListener('click', async () => {
-                if (!audio.src) {
-                    playBtn.textContent = '…';
-                    try {
-                        const r = await fetch('/api/dropbox/get_temporary_link', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ path: v.voPath })
-                        });
-                        const data = await r.json();
-                        if (!data.link) throw new Error(data.error_summary || 'no link');
-                        audio.src = data.link;
-                    } catch (e) {
-                        playBtn.textContent = '▶ Play';
-                        alert('Could not load the voiceover from Dropbox: ' + e.message);
-                        return;
+                playBtn.disabled = true;
+                try {
+                    const r = await fetch('/api/dropbox/get_temporary_link', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: linkedPath })
+                    });
+                    const data = await r.json();
+                    if (!data.link) throw new Error(data.error_summary || 'no link');
+                    if (isAudio) {
+                        const audio = document.getElementById(`${cfg.elId}-audio`);
+                        if (!audio.src) audio.src = data.link;
+                        if (audio.paused) { audio.play(); playBtn.textContent = '⏸ Pause'; }
+                        else { audio.pause(); playBtn.textContent = '▶ Play'; }
+                        audio.onended = () => { playBtn.textContent = '▶ Play'; };
+                    } else {
+                        window.open(data.link, '_blank');
                     }
+                } catch (e) {
+                    alert(`Could not load the ${cfg.noun} from Dropbox: ` + e.message);
+                } finally {
+                    playBtn.disabled = false;
                 }
-                if (audio.paused) { audio.play(); playBtn.textContent = '⏸ Pause'; }
-                else { audio.pause(); playBtn.textContent = '▶ Play'; }
-                audio.onended = () => { playBtn.textContent = '▶ Play'; };
             });
-            document.getElementById('wsp-vo-unlink').addEventListener('click', async () => {
-                if (!confirm('Unlink this voiceover? (The file stays in Dropbox.)')) return;
-                await VideoService.update(v.id, { voPath: '', voName: '', status: normalizedStatus(v) });
+            document.getElementById(`${cfg.elId}-unlink`).addEventListener('click', async () => {
+                if (!confirm(`Unlink this ${cfg.noun}? (The file stays in Dropbox.)`)) return;
+                await VideoService.update(v.id, { [cfg.pathField]: '', [cfg.nameField]: '', status: normalizedStatus(v) });
                 renderDetail();
             });
             return;
@@ -1623,14 +1663,14 @@ const WorkshopUI = (() => {
         // --- No project selected: deterministic bottleneck, nothing to do ---
         if (!v.project) return;
 
-        // --- No VO yet: offer existing files from <project>/vo/ + upload ---
+        // --- No file yet: offer existing files from <project>/<folder>/ + upload ---
         const root = await dropboxRootPath();
-        const voFolder = `${root}/${v.project}/vo`;
+        const folder = `${root}/${v.project}/${cfg.folder}`;
         let files = [];
         try {
             const r = await fetch('/api/dropbox/list_folder', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: voFolder })
+                body: JSON.stringify({ path: folder })
             });
             const data = await r.json();
             if (Array.isArray(data.entries)) {
@@ -1638,50 +1678,50 @@ const WorkshopUI = (() => {
             }
         } catch (e) { /* folder doesn't exist yet — created on first upload */ }
 
-        const stillThere = document.getElementById('wsp-vo-section');
+        const stillThere = document.getElementById(cfg.elId);
         if (!stillThere || !selectedVideo || selectedVideo.id !== v.id) return; // user navigated away
 
         stillThere.innerHTML = `
             ${files.length ? `<div class="wsp-add-row">
-                <select id="wsp-vo-pick">
-                    <option value="">Link an existing VO from ${escHtml(v.project)}/vo…</option>
+                <select id="${cfg.elId}-pick">
+                    <option value="">Link an existing file from ${escHtml(v.project)}/${cfg.folder}…</option>
                     ${files.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}
                 </select>
             </div>` : ''}
             <div class="wsp-add-row">
-                <input type="file" id="wsp-vo-file" accept="audio/*" style="font-size:11.5px;flex:1 1 180px;">
-                <button class="wsp-mini-btn done" id="wsp-vo-upload">⬆ Upload & link</button>
+                <input type="file" id="${cfg.elId}-file" accept="${cfg.accept}" style="font-size:11.5px;flex:1 1 180px;">
+                <button class="wsp-mini-btn done" id="${cfg.elId}-upload">⬆ Upload & link</button>
             </div>
-            <div class="wsp-hint">Uploads go straight to Dropbox: ${escHtml(voFolder)}/ (folder is created automatically).</div>`;
+            <div class="wsp-hint">Uploads go straight to Dropbox: ${escHtml(folder)}/ (folder is created automatically).</div>`;
 
-        const pick = document.getElementById('wsp-vo-pick');
+        const pick = document.getElementById(`${cfg.elId}-pick`);
         if (pick) pick.addEventListener('change', async () => {
             if (!pick.value) return;
             const name = pick.options[pick.selectedIndex].textContent;
-            await VideoService.update(v.id, { voPath: pick.value, voName: name, status: normalizedStatus(v) });
+            await VideoService.update(v.id, { [cfg.pathField]: pick.value, [cfg.nameField]: name, status: normalizedStatus(v) });
             renderDetail();
         });
-        document.getElementById('wsp-vo-upload').addEventListener('click', async () => {
-            const input = document.getElementById('wsp-vo-file');
+        document.getElementById(`${cfg.elId}-upload`).addEventListener('click', async () => {
+            const input = document.getElementById(`${cfg.elId}-file`);
             const file = input.files && input.files[0];
-            if (!file) { alert('Choose an audio file first.'); return; }
-            const btn = document.getElementById('wsp-vo-upload');
+            if (!file) { alert(`Choose a file first.`); return; }
+            const btn = document.getElementById(`${cfg.elId}-upload`);
             btn.textContent = 'Uploading…'; btn.disabled = true;
             try {
-                const dest = `${voFolder}/${file.name}`;
+                const dest = `${folder}/${file.name}`;
                 const r = await fetch(`/api/dropbox/upload?path=${encodeURIComponent(dest)}`, { method: 'POST', body: file });
                 const meta = await r.json();
                 if (!r.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `upload failed (${r.status})`);
                 await VideoService.update(v.id, {
-                    voPath: meta.path_display || meta.path_lower,
-                    voName: meta.name || file.name,
+                    [cfg.pathField]: meta.path_display || meta.path_lower,
+                    [cfg.nameField]: meta.name || file.name,
                     status: normalizedStatus(v)
                 });
-                toast(`Voiceover uploaded to ${v.project}/vo 🎙️`);
+                toast(`${cfg.icon} ${cfg.noun} uploaded to ${v.project}/${cfg.folder}`);
                 renderDetail();
             } catch (e) {
-                console.warn('VO upload failed', e);
-                alert('Voiceover upload failed: ' + e.message);
+                console.warn(`${cfg.noun} upload failed`, e);
+                alert(`${cfg.noun} upload failed: ` + e.message);
                 btn.textContent = '⬆ Upload & link'; btn.disabled = false;
             }
         });
@@ -1702,6 +1742,10 @@ const WorkshopUI = (() => {
         if (anc.has('hook') && (v.hook || '').trim().length < 10) missing.push('• Hook — write at least a line in the Hook field');
         if (anc.has('script') && (v.script || '').trim().length < 100) missing.push('• Script — the Script field needs real content');
         if (anc.has('voiceover') && !v.voPath) missing.push('• Voiceover — link or upload one first');
+        const hookStageActive = (v.branches && (v.branches.animation === true || v.branches.hookfilm === true));
+        if ((anc.has('animation') || anc.has('hookfilm')) && hookStageActive && !v.hookVideoPath) {
+            missing.push('• Hook video — link or upload the hook footage first');
+        }
         if (missing.length) {
             alert(`Can't move to ${target.label} yet — the move would skip past mandatory fields that are still empty:\n\n${missing.join('\n')}`);
             return false;

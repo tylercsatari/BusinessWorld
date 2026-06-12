@@ -29,7 +29,7 @@ const PipelineStages = (() => {
         { id: 'ideate',     label: 'Video Ideation',          icon: '💡', group: 'Concept',     desc: 'Queued from the Library — ideation is done by definition, so it immediately fans out into Hook and Script.' },
         { id: 'hook',       label: 'Hook Development',        icon: '🪝', group: 'Concept',     desc: 'Nail the hook. Fill the Hook field whenever — the stage completes itself.' },
         { id: 'script',     label: 'Script Writing',          icon: '📝', group: 'Concept',     desc: 'Write the full script. Fill the Script field whenever — the stage completes itself.' },
-        { id: 'animation',  label: 'Animation',               icon: '🎞️', group: 'Concept',     desc: 'Endpoint off the hook: do we have the animation or not? Feeds nothing downstream — it can never bypass Decomposition.' },
+        { id: 'animation',  label: 'Animation',               icon: '🎞️', group: 'Concept',     desc: 'The animated hook. When Hook Type = animation, the video waits here until the hook video is uploaded to the project\'s hook/ folder — then Editing can unlock. Feeds nothing on the build side, so it can never bypass Decomposition.' },
         { id: 'decomp',     label: 'Decomposition',           icon: '🧩', group: 'Planning',    bottleneck: true, desc: 'BOTTLENECK + validation gate — break the video down and decide exactly which branches it needs (design? props? CAD? build? …). Branches you say no to are skipped automatically.' },
         { id: 'design',     label: 'Design Research',         icon: '🔬', group: 'Planning',    desc: 'Research & engineering design. Only videos flagged as needing design land here.' },
         { id: 'propdesign', label: 'Props / Set Design',      icon: '🎨', group: 'Planning',    desc: 'Plan props and set design. Only flagged videos land here.' },
@@ -39,7 +39,7 @@ const PipelineStages = (() => {
         { id: 'software',   label: 'Software Development',    icon: '💻', group: 'Build',       desc: 'Code / firmware for the build. Runs parallel to Precision Manufacturing and feeds into Assembly — the build comes together with both its parts and its software. Only flagged videos land here.' },
         { id: 'assembly',   label: 'Manufacturing Assembly',  icon: '🔧', group: 'Build',       desc: 'General manufacturing & assembly of the build.' },
         { id: 'artistic',   label: 'Artistic Design',         icon: '🖌️', group: 'Build',       desc: 'Paint, finish, look — make it pretty.' },
-        { id: 'hookfilm',   label: 'Practical Hook Filming',  icon: '🎯', group: 'Production',  desc: 'Film the practical hook as soon as its parts arrive.' },
+        { id: 'hookfilm',   label: 'Practical Hook Filming',  icon: '🎯', group: 'Production',  desc: 'Film the practical hook as soon as its parts arrive — a side task before the main shoot. When Hook Type = practical, the video waits here until the hook video is uploaded to the project\'s hook/ folder.' },
         { id: 'film',       label: 'Filming / Production',    icon: '🎥', group: 'Production',  desc: 'Main shoot.' },
         { id: 'voiceover',  label: 'Voiceover',               icon: '🎙️', group: 'Post',        desc: 'Deterministic gate: a voiceover file must be linked (it lives in the project\'s vo/ folder in Dropbox). No VO → the video waits here; VO linked → straight to Editing.' },
         { id: 'edit',       label: 'Editing',                 icon: '✂️', group: 'Post',        desc: 'Edit the video.' },
@@ -72,6 +72,8 @@ const PipelineStages = (() => {
         ['hookfilm', 'film'],
         ['film', 'voiceover'],        // VO gate sits between the shoot and the edit
         ['voiceover', 'edit'],
+        ['animation', 'edit'],        // animated-hook gate: editors get the hook video before the edit
+                                      // (cannot bypass anything — edit still needs the whole film chain via voiceover)
         ['edit', 'splittest'],
         ['splittest', 'post']
     ];
@@ -125,6 +127,14 @@ const PipelineStages = (() => {
         voiceover: {
             desc: 'auto: done the moment a voiceover file is linked to this video',
             test: (v) => !!(v.voPath)
+        },
+        animation: {
+            desc: 'auto: done once the hook video is linked (Hook Type = animation)',
+            test: (v) => v.hookType === 'animation' && !!(v.hookVideoPath)
+        },
+        hookfilm: {
+            desc: 'auto: done once the hook video is linked (Hook Type = practical)',
+            test: (v) => v.hookType === 'practical' && !!(v.hookVideoPath)
         }
     };
 
