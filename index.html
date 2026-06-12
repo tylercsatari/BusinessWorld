@@ -2287,7 +2287,7 @@ function getBuildingByName(n) {
     return { 'Workshop': workshop, 'Storage': storage, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar, 'Video Lab': videoLab }[n];
 }
 let _layoutReady = false;
-function saveLayout() {
+function saveLayout(useBeacon) {
     if (!_layoutReady) return;
     const data = {
         buildings: {},
@@ -2303,8 +2303,14 @@ function saveLayout() {
         const b = getBuildingByName(n);
         if (b) data.buildings[n] = { x: b.position.x, z: b.position.z };
     });
-    // Save to server for session persistence
-    fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+    const json = JSON.stringify(data);
+    // On page unload a normal fetch gets cancelled mid-flight — sendBeacon survives
+    if (useBeacon && navigator.sendBeacon) {
+        navigator.sendBeacon('/save-layout', new Blob([json], { type: 'application/json' }));
+        return;
+    }
+    // keepalive lets an in-flight save finish even if the page navigates away
+    fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json, keepalive: true })
         .catch(err => console.warn('Server save failed:', err));
 }
 async function loadLayout() {
@@ -2319,7 +2325,8 @@ async function loadLayout() {
     }
     return null;
 }
-window.addEventListener('beforeunload', () => { saveLayout(); });
+window.addEventListener('beforeunload', () => { saveLayout(true); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveLayout(true); });
 setInterval(saveLayout, 30000);
 window.saveLayout = saveLayout;
 

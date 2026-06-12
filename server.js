@@ -3542,7 +3542,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     if (r2Data) existing = JSON.parse(r2Data.toString());
                 } catch (_) { /* no existing layout, start fresh */ }
 
-                const BUILDING_NAMES = ['Workshop','Storage','Incubator','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar'];
+                const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Video Lab'];
                 const MISSING_DEFAULTS = {
                     'Chocolate Bar': { x: 42, z: 12 },
                     'Gym': { x: 15, z: 30 },
