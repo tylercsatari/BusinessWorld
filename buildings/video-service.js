@@ -120,6 +120,7 @@ const VideoService = (() => {
                         sponsorId: videoData.sponsorId || '',
                         projectIds: Array.isArray(videoData.projectIds) ? videoData.projectIds : [],
                         dependsOn: Array.isArray(videoData.dependsOn) ? videoData.dependsOn : [],
+                        deps: Array.isArray(videoData.deps) ? videoData.deps : [],   // typed: [{kind:'video'|'component'|'order', id}]
                         requiredInventoryIds: Array.isArray(videoData.requiredInventoryIds) ? videoData.requiredInventoryIds : [],
                         producesInventoryIds: Array.isArray(videoData.producesInventoryIds) ? videoData.producesInventoryIds : []
                     })

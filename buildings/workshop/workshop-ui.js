@@ -34,7 +34,6 @@ const WorkshopUI = (() => {
     const PS = () => PipelineStages;
     const SVC = () => PipelineService;
 
-    const VIDEO_TYPES = ['Short', 'Long-form', 'Series', 'Collab', 'Sponsored', 'Vlog'];
     const COMPONENT_STATUSES = ['design', 'cad', 'manufacturing', 'assembly', 'done'];
     const ORDER_STATUSES = ['needed', 'ordered', 'received'];
     const INVENTORY_STATUSES = ['planned', 'building', 'ready'];
@@ -97,7 +96,17 @@ const WorkshopUI = (() => {
     }
 
     function videoBlockers(video) {
-        return PS().blockers(video, VideoService.getAll(), SVC().inventory.getAll());
+        return PS().blockers(video, {
+            videos: VideoService.getAll(),
+            components: SVC().components.getAll(),
+            orders: SVC().orders.getAll()
+        });
+    }
+
+    // Components broken out of this video at Decomposition — they flow
+    // through the pipeline on their own (blue dots on the board)
+    function componentsForVideo(videoId) {
+        return SVC().components.getAll().filter(c => c.videoId === videoId);
     }
 
     // Context for deterministic auto-checks (e.g. Ordering completes when all
@@ -361,7 +370,6 @@ const WorkshopUI = (() => {
 
     function pipelineFilterBarHtml() {
         const all = pipelineVideos();
-        const types = [...new Set(all.map(v => v.videoType).filter(Boolean))];
         const projects = SVC().projects.getAll().filter(p => p.status !== 'archived');
         const sponsors = [...new Set(all.map(v => v.sponsorId).filter(Boolean))].map(id => SVC().sponsors.getById(id)).filter(Boolean);
         const legend = [
@@ -376,7 +384,6 @@ const WorkshopUI = (() => {
             </div>
             <input type="text" class="wsp-search" id="wsp-f-search" placeholder="Search everything…" value="${escAttr(fSearch)}">
             ${projects.length ? `<select id="wsp-f-project"><option value="">All projects</option>${projects.map(p => `<option value="${p.id}" ${fProject === p.id ? 'selected' : ''}>🛠️ ${escHtml(p.name)}</option>`).join('')}</select>` : ''}
-            ${types.length ? `<select id="wsp-f-type"><option value="">All types</option>${types.map(t => `<option ${fType === t ? 'selected' : ''}>${escHtml(t)}</option>`).join('')}</select>` : ''}
             ${sponsors.length ? `<select id="wsp-f-sponsor"><option value="">All sponsors</option>${sponsors.map(s => `<option value="${s.id}" ${fSponsor === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}</select>` : ''}
             <div class="wsp-flag-btns">
                 <button class="workshop-filter-btn ${fFlag === 'blocked' ? 'active' : ''}" data-flag="blocked">🔒 Blocked</button>
@@ -405,7 +412,6 @@ const WorkshopUI = (() => {
         }
         const bind = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { fn(e.value); renderTab(); }); };
         bind('wsp-f-project', v => fProject = v);
-        bind('wsp-f-type', v => fType = v);
         bind('wsp-f-sponsor', v => fSponsor = v);
         el.querySelectorAll('[data-flag]').forEach(b => b.addEventListener('click', () => {
             fFlag = fFlag === b.dataset.flag ? '' : b.dataset.flag;
@@ -506,7 +512,6 @@ const WorkshopUI = (() => {
                     <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}</div>
                     <div class="wsp-stage-video-meta">
                         ${!stage ? frontierChips(v, 3) : ''}
-                        ${v.videoType ? `<span class="wsp-type-chip">${escHtml(v.videoType)}</span>` : ''}
                         ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
                         ${stage && stage.id === 'order' && openOrders ? `<span class="wsp-deadline soon">📦 ${openOrders} order${openOrders === 1 ? '' : 's'} open</span>` : ''}
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
@@ -535,7 +540,7 @@ const WorkshopUI = (() => {
             <div class="wsp-stage-video-meta">
                 ${frontierChips(v, 5)}
                 ${projChips}
-                ${getAssignedPeople(v).map(workerPill).join('')}
+                ${componentsForVideo(v.id).map(c => `<span class="wsp-proj-chip" style="background:#e3f2fd;">🧩 ${escHtml(c.name)} (${c.status})</span>`).join('')}
             </div>
             ${progressBar(v)}
             <div class="wsp-svb-actions"><button class="wsp-mini-btn" data-open="${v.id}">Open full editor →</button></div>
@@ -686,9 +691,14 @@ const WorkshopUI = (() => {
         const overlay = document.createElement('div');
         overlay.className = 'wsp-picker-overlay';
         overlay.style.display = 'flex';
+        const compListHtml = () => componentsForVideo(videoId).map(c =>
+            `<div class="wsp-row" style="border-left: 3px solid ${DOT_COLORS.component}">
+                <span class="wsp-row-name">🧩 ${escHtml(c.name)}</span>
+                <span class="wsp-pill active">${c.status}</span>
+            </div>`).join('');
         overlay.innerHTML = `
             <div class="wsp-picker wsp-branch-modal">
-                <div class="wsp-picker-header"><span>🧩 Decomposition — what does "${escHtml(v.name)}" need?</span><button class="wsp-picker-close" data-close>✕</button></div>
+                <div class="wsp-picker-header"><span>🧩 Decomposition — break "${escHtml(v.name)}" down</span><button class="wsp-picker-close" data-close>✕</button></div>
                 <div class="wsp-branch-list">
                     <div class="wsp-hint">Only branches switched ON will ever see this video — everything else is skipped automatically. That's the validation: nobody gets handed work that doesn't apply.</div>
                     ${PS().BRANCH_QUESTIONS.map(q => `
@@ -697,6 +707,12 @@ const WorkshopUI = (() => {
                             <span class="wsp-branch-label">${q.label}</span>
                             <span class="wsp-hint">${escHtml(q.hint)}</span>
                         </label>`).join('')}
+                    <div class="wsp-subsection-title" style="margin-top:6px;">🧩 Components <span class="wsp-hint">— things to build/make for this video; each flows through the pipeline on its own and the video waits for it</span></div>
+                    <div id="wsp-bd-comps">${compListHtml()}</div>
+                    <div class="wsp-add-row">
+                        <input type="text" id="wsp-bd-comp-name" placeholder="e.g. 'Doc Ock arm'">
+                        <button class="wsp-mini-btn done" id="wsp-bd-comp-add">Add</button>
+                    </div>
                 </div>
                 <div class="wsp-branch-actions">
                     <button class="wsp-mini-btn" id="wsp-branch-save">Save decisions</button>
@@ -708,6 +724,24 @@ const WorkshopUI = (() => {
         const close = () => overlay.remove();
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
         overlay.querySelector('[data-close]').addEventListener('click', close);
+
+        // Quick component breakdown right inside the gate
+        const addDialogComp = async () => {
+            const input = overlay.querySelector('#wsp-bd-comp-name');
+            const name = input.value.trim();
+            if (!name) return;
+            const fresh = VideoService.getById(videoId) || v;
+            const comp = await SVC().components.create({
+                videoId, projectId: (fresh.projectIds || [])[0] || '',
+                parentComponentId: '', name, status: 'design', notes: ''
+            });
+            await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
+            input.value = '';
+            overlay.querySelector('#wsp-bd-comps').innerHTML = compListHtml();
+            input.focus();
+        };
+        overlay.querySelector('#wsp-bd-comp-add').addEventListener('click', addDialogComp);
+        overlay.querySelector('#wsp-bd-comp-name').addEventListener('keydown', e => { if (e.key === 'Enter') addDialogComp(); });
         const save = async (alsoDone) => {
             const branches = {};
             overlay.querySelectorAll('input[data-flag]').forEach(i => { branches[i.dataset.flag] = i.checked; });
@@ -1241,17 +1275,29 @@ const WorkshopUI = (() => {
             sourceIdeaHtml = `<div class="workshop-source-idea">Source Idea: ${escHtml(idea ? idea.name : v.sourceIdeaId)}</div>`;
         }
 
-        const assignedPeople = getAssignedPeople(v);
         const blockers = videoBlockers(v);
         const sponsors = SVC().sponsors.getAll();
         const allProjects = SVC().projects.getAll().filter(p => p.status !== 'archived');
         const linkedProjects = (v.projectIds || []).map(id => SVC().projects.getById(id)).filter(Boolean);
-        const deps = (v.dependsOn || []).map(id => VideoService.getById(id)).filter(Boolean);
-        const reqInv = (v.requiredInventoryIds || []).map(id => SVC().inventory.getById(id)).filter(Boolean);
-        const prodInv = (v.producesInventoryIds || []).map(id => SVC().inventory.getById(id)).filter(Boolean);
         const myOrders = SVC().ordersForVideo(v.id);
-        const otherVideos = VideoService.getAll().filter(o => o.id !== v.id && !(v.dependsOn || []).includes(o.id));
-        const inventoryAll = SVC().inventory.getAll();
+        const myComps = componentsForVideo(v.id);
+
+        // Typed dependencies (video / component / order) — only unfinished
+        // things are offerable; finished things are never blockers.
+        const deps = videoDeps(v);
+        const depKey = d => d.kind + ':' + d.id;
+        const depSet = new Set(deps.map(depKey));
+        const DEP_ICONS = { video: '🎬', component: '🧩', order: '📦' };
+        const depChips = deps.map(d => {
+            let label = '(missing)', done = false;
+            if (d.kind === 'video') { const o = VideoService.getById(d.id); if (o) { label = o.name; done = o.status === 'posted'; } }
+            else if (d.kind === 'component') { const c = SVC().components.getById(d.id); if (c) { label = c.name; done = c.status === 'done'; } }
+            else if (d.kind === 'order') { const o = SVC().orders.getById(d.id); if (o) { label = o.name; done = o.status === 'received'; } }
+            return { id: depKey(d), label: `${DEP_ICONS[d.kind]} ${label}${done ? ' ✅' : ' ⏳'}` };
+        });
+        const depVideoOpts = VideoService.getPipeline().filter(o => o.id !== v.id && !depSet.has('video:' + o.id));
+        const depCompOpts = SVC().components.getAll().filter(c => c.status !== 'done' && !depSet.has('component:' + c.id));
+        const depOrderOpts = SVC().orders.getAll().filter(o => o.status !== 'received' && !depSet.has('order:' + o.id));
 
         el.innerHTML = `
             <div class="workshop-detail-toolbar">
@@ -1268,15 +1314,14 @@ const WorkshopUI = (() => {
             <div class="workshop-detail-body">
                 <div class="workshop-detail-egg">
                     ${v.project ? `<canvas id="workshop-detail-egg-canvas" class="workshop-egg-preview-canvas" width="160" height="200"></canvas>` : window.EggRenderer ? window.EggRenderer.renderSilhouetteEgg() : ''}
-                    ${assignedPeople.length ? `<div class="workshop-detail-avatars">${assignedPeople.map((name, idx) => `<canvas class="workshop-detail-avatar" id="workshop-detail-avatar-${idx}" data-worker="${escAttr(name)}" width="64" height="64"></canvas>`).join('')}</div>` : ''}
                     ${progressBar(v)}
                 </div>
                 <div class="workshop-detail-fields">
                     <div class="workshop-detail-summary">${sourceIdeaHtml}</div>
 
                     ${blockers.length ? `<div class="wsp-blockers-box">
-                        <div class="wsp-blockers-title">🔒 Blocked — bottlenecked by:</div>
-                        ${blockers.map(b => `<div class="wsp-blocker-line">${b.kind === 'video' ? '🎬' : '🗃️'} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
+                        <div class="wsp-blockers-title">🔒 Waiting on:</div>
+                        ${blockers.map(b => `<div class="wsp-blocker-line">${DEP_ICONS[b.kind] || '🗃️'} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
                     </div>` : ''}
 
                     <label>Video Name</label>
@@ -1284,12 +1329,7 @@ const WorkshopUI = (() => {
 
                     <div class="wsp-field-grid">
                         <div>
-                            <label>Type</label>
-                            <input type="text" id="workshop-type" list="wsp-type-list" value="${escAttr(v.videoType || '')}" placeholder="e.g. Short">
-                            <datalist id="wsp-type-list">${VIDEO_TYPES.map(t => `<option>${t}</option>`).join('')}</datalist>
-                        </div>
-                        <div>
-                            <label>Deadline</label>
+                            <label>Deadline <span class="wsp-hint">(optional)</span></label>
                             <input type="date" id="workshop-deadline" value="${escAttr(v.deadline || '')}">
                         </div>
                         <div>
@@ -1308,14 +1348,6 @@ const WorkshopUI = (() => {
                         </div>
                     </div>
 
-                    <label>Assigned To</label>
-                    <details class="workshop-assignee-picker" id="workshop-assignee-picker">
-                        <summary>${escHtml(assignedPeople.length ? assignedPeople.join(', ') : 'Unassigned')}</summary>
-                        <div class="workshop-assignee-menu">
-                            ${rosterNames(assignedPeople).map(w => `<label class="workshop-assignee-option"><input type="checkbox" value="${escAttr(w)}" ${assignedPeople.includes(w) ? 'checked' : ''}> <span>${escHtml(w)}</span></label>`).join('')}
-                        </div>
-                    </details>
-
                     <div class="wsp-progress-head">
                         <label>Pipeline Progress</label>
                         <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
@@ -1323,7 +1355,42 @@ const WorkshopUI = (() => {
                     ${stageChecklistHtml(v)}
 
                     <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">🛠️ Build projects <span class="wsp-hint">— builds this video needs (shared across videos)</span></div>
+                        <div class="wsp-subsection-title">🧩 Components <span class="wsp-hint">— broken out at Decomposition; each flows through the pipeline on its own and the video waits for it</span></div>
+                        ${myComps.map(c => `
+                            <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
+                                <span class="wsp-row-name">🧩 ${escHtml(c.name)}</span>
+                                <div class="wsp-status-cycle">
+                                    ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
+                                </div>
+                                <button class="wsp-mini-btn danger" data-comp-del="${c.id}">✕</button>
+                            </div>`).join('')}
+                        <div class="wsp-add-row">
+                            <input type="text" id="wsp-new-vcomp" placeholder="Add component (e.g. 'Doc Ock arm')">
+                            <button class="wsp-mini-btn done" id="wsp-add-vcomp">Add</button>
+                        </div>
+                    </div>
+
+                    <div class="wsp-subsection">
+                        <div class="wsp-subsection-title">⛓️ Waiting on <span class="wsp-hint">— a video, component or order that must finish first. Finished things never block.</span></div>
+                        <div class="wsp-chips">${chipListHtml(depChips, 'data-undep')}</div>
+                        <div class="wsp-add-row">
+                            <select id="wsp-add-dep">
+                                <option value="">Add something to wait on…</option>
+                                ${depVideoOpts.length ? `<optgroup label="🎬 Videos in the pipeline">${depVideoOpts.map(o => `<option value="video:${o.id}">${escHtml(o.name)}</option>`).join('')}</optgroup>` : ''}
+                                ${depCompOpts.length ? `<optgroup label="🧩 Components not done">${depCompOpts.map(c => `<option value="component:${c.id}">${escHtml(c.name)} (${c.status})</option>`).join('')}</optgroup>` : ''}
+                                ${depOrderOpts.length ? `<optgroup label="📦 Orders not received">${depOrderOpts.map(o => `<option value="order:${o.id}">${escHtml(o.name)} (${o.status})</option>`).join('')}</optgroup>` : ''}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="wsp-subsection">
+                        <div class="wsp-subsection-title">📦 Orders for this video</div>
+                        ${myOrders.map(orderRowHtml).join('')}
+                        ${addOrderRowHtml({ videoId: v.id })}
+                    </div>
+
+                    <div class="wsp-subsection">
+                        <div class="wsp-subsection-title">🛠️ Build projects <span class="wsp-hint">— shared builds this video uses (project components live in the Projects tab)</span></div>
                         <div class="wsp-chips">${chipListHtml(linkedProjects.map(p => ({ id: p.id, label: p.name })), 'data-unlink-project')}</div>
                         <div class="wsp-add-row">
                             <select id="wsp-link-project">
@@ -1334,49 +1401,11 @@ const WorkshopUI = (() => {
                         </div>
                     </div>
 
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">⛓️ Depends on <span class="wsp-hint">— videos that must be finished before this one (e.g. part 1 makes the prop)</span></div>
-                        <div class="wsp-chips">${chipListHtml(deps.map(d => ({ id: d.id, label: d.name + (d.status === 'posted' ? ' ✅' : ' ⏳') })), 'data-undep')}</div>
-                        <div class="wsp-add-row">
-                            <select id="wsp-add-dep">
-                                <option value="">Add dependency…</option>
-                                ${otherVideos.map(o => `<option value="${o.id}">${escHtml(o.name)}${o.status === 'posted' ? ' (posted)' : ''}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">🗃️ Needs from inventory <span class="wsp-hint">— props/footage this video uses; blocks until ready</span></div>
-                        <div class="wsp-chips">${chipListHtml(reqInv.map(i => ({ id: i.id, label: `${i.name}${i.status === 'ready' ? ' ✅' : ` (${i.status})`}` })), 'data-unreq')}</div>
-                        <div class="wsp-add-row">
-                            <select id="wsp-add-req">
-                                <option value="">Add required item…</option>
-                                ${inventoryAll.filter(i => !(v.requiredInventoryIds || []).includes(i.id)).map(i => `<option value="${i.id}">${escHtml(i.name)} (${i.status})</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">🎁 Produces <span class="wsp-hint">— props/footage this video creates; become reusable inventory once posted</span></div>
-                        <div class="wsp-chips">${chipListHtml(prodInv.map(i => ({ id: i.id, label: `${i.name} (${i.status})` })), 'data-unprod')}</div>
-                        <div class="wsp-add-row">
-                            <input type="text" id="wsp-new-produce" placeholder="e.g. 'Doc Ock claw prop'">
-                            <select id="wsp-new-produce-type">${INVENTORY_TYPES.map(t => `<option>${t}</option>`).join('')}</select>
-                            <button class="wsp-mini-btn done" id="wsp-add-produce">Add</button>
-                        </div>
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">📦 Orders for this video</div>
-                        ${myOrders.map(orderRowHtml).join('')}
-                        ${addOrderRowHtml({ videoId: v.id })}
-                    </div>
-
-                    <label>Hook</label>
+                    <label>Hook <span class="wsp-hint">— fill it in and Hook Development completes itself</span></label>
                     <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
                     <label>Context</label>
                     <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
-                    <label>Script</label>
+                    <label>Script <span class="wsp-hint">— fill it in and Script Writing completes itself</span></label>
                     ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
                 </div>
             </div>
@@ -1391,17 +1420,6 @@ const WorkshopUI = (() => {
             await VideoService.remove(v.id);
             showList();
         });
-
-        const assigneePicker = document.getElementById('workshop-assignee-picker');
-        if (assigneePicker) {
-            const summaryEl = assigneePicker.querySelector('summary');
-            assigneePicker.querySelectorAll('input[type="checkbox"]').forEach(input => {
-                input.addEventListener('change', () => {
-                    const selected = readAssignedPeopleFromPicker();
-                    summaryEl.textContent = selected.length ? selected.join(', ') : 'Unassigned';
-                });
-            });
-        }
 
         // Branch decisions (the decomposition validation gate)
         document.getElementById('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
@@ -1451,53 +1469,50 @@ const WorkshopUI = (() => {
             renderDetail();
         }));
 
-        // Dependencies
+        // Components broken out of this video (the video waits for them)
+        const addVComp = async () => {
+            const input = document.getElementById('wsp-new-vcomp');
+            const name = input.value.trim();
+            if (!name) return;
+            const comp = await SVC().components.create({
+                videoId: v.id,
+                projectId: (v.projectIds || [])[0] || '',
+                parentComponentId: '',
+                name, status: 'design', notes: ''
+            });
+            // deterministic: a component of this video automatically blocks it
+            const deps = [...videoDeps(v), { kind: 'component', id: comp.id }];
+            await saveDeps(v, deps);
+            renderDetail();
+        };
+        document.getElementById('wsp-add-vcomp').addEventListener('click', addVComp);
+        document.getElementById('wsp-new-vcomp').addEventListener('keydown', (e) => { if (e.key === 'Enter') addVComp(); });
+        el.querySelectorAll('[data-comp]').forEach(row => {
+            const compId = row.dataset.comp;
+            row.querySelectorAll('[data-comp-status]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    await SVC().components.update(compId, { status: btn.dataset.compStatus });
+                    renderDetail();
+                });
+            });
+        });
+        el.querySelectorAll('[data-comp-del]').forEach(b => b.addEventListener('click', async () => {
+            if (!confirm('Remove this component?')) return;
+            await SVC().components.remove(b.dataset.compDel);
+            await saveDeps(v, videoDeps(v).filter(d => !(d.kind === 'component' && d.id === b.dataset.compDel)));
+            renderDetail();
+        }));
+
+        // Typed dependencies
         document.getElementById('wsp-add-dep').addEventListener('change', async (e) => {
             if (!e.target.value) return;
-            const dependsOn = [...new Set([...(v.dependsOn || []), e.target.value])];
-            await VideoService.update(v.id, { dependsOn, status: normalizedStatus(v) });
+            const [kind, id] = e.target.value.split(':');
+            await saveDeps(v, [...videoDeps(v), { kind, id }]);
             renderDetail();
         });
         el.querySelectorAll('[data-undep]').forEach(b => b.addEventListener('click', async () => {
-            const dependsOn = (v.dependsOn || []).filter(id => id !== b.dataset.undep);
-            await VideoService.update(v.id, { dependsOn, status: normalizedStatus(v) });
-            renderDetail();
-        }));
-
-        // Required inventory
-        document.getElementById('wsp-add-req').addEventListener('change', async (e) => {
-            if (!e.target.value) return;
-            const requiredInventoryIds = [...new Set([...(v.requiredInventoryIds || []), e.target.value])];
-            await VideoService.update(v.id, { requiredInventoryIds, status: normalizedStatus(v) });
-            renderDetail();
-        });
-        el.querySelectorAll('[data-unreq]').forEach(b => b.addEventListener('click', async () => {
-            const requiredInventoryIds = (v.requiredInventoryIds || []).filter(id => id !== b.dataset.unreq);
-            await VideoService.update(v.id, { requiredInventoryIds, status: normalizedStatus(v) });
-            renderDetail();
-        }));
-
-        // Produces inventory
-        document.getElementById('wsp-add-produce').addEventListener('click', async () => {
-            const nameEl = document.getElementById('wsp-new-produce');
-            const name = nameEl.value.trim();
-            if (!name) return;
-            const item = await SVC().inventory.create({
-                name,
-                type: document.getElementById('wsp-new-produce-type').value,
-                status: 'building',
-                source: 'built',
-                projectId: (v.projectIds || [])[0] || '',
-                producedByVideoId: v.id,
-                location: '', notes: ''
-            });
-            const producesInventoryIds = [...new Set([...(v.producesInventoryIds || []), item.id])];
-            await VideoService.update(v.id, { producesInventoryIds, status: normalizedStatus(v) });
-            renderDetail();
-        });
-        el.querySelectorAll('[data-unprod]').forEach(b => b.addEventListener('click', async () => {
-            const producesInventoryIds = (v.producesInventoryIds || []).filter(id => id !== b.dataset.unprod);
-            await VideoService.update(v.id, { producesInventoryIds, status: normalizedStatus(v) });
+            const [kind, id] = b.dataset.undep.split(':');
+            await saveDeps(v, videoDeps(v).filter(d => !(d.kind === kind && d.id === id)));
             renderDetail();
         }));
 
@@ -1515,41 +1530,44 @@ const WorkshopUI = (() => {
             });
         }
 
-        // 3D egg preview + avatars
+        // 3D egg preview
         if (v.project && window.EggRenderer) {
             requestAnimationFrame(() => window.EggRenderer.initEggPreview('workshop-detail-egg-canvas', v.project));
         }
-        if (assignedPeople.length && window.EggRenderer) {
-            requestAnimationFrame(() => {
-                assignedPeople.forEach((name, idx) => {
-                    const avatarCanvas = document.getElementById(`workshop-detail-avatar-${idx}`);
-                    if (avatarCanvas) window.EggRenderer.renderCharacterAvatar(name, avatarCanvas, 32);
-                });
-            });
-        }
     }
 
-    function readAssignedPeopleFromPicker() {
-        return [...(container ? container.querySelectorAll('#workshop-assignee-picker input[type="checkbox"]:checked') : [])]
-            .map(input => String(input.value || '').trim())
-            .filter(Boolean);
+    // Merge legacy dependsOn (plain video ids) into the typed deps list
+    function videoDeps(v) {
+        const typed = Array.isArray(v.deps) ? v.deps.filter(d => d && d.id && d.kind) : [];
+        const seen = new Set(typed.map(d => d.kind + ':' + d.id));
+        (v.dependsOn || []).forEach(id => {
+            if (!seen.has('video:' + id)) typed.push({ kind: 'video', id });
+        });
+        return typed;
+    }
+    async function saveDeps(v, deps) {
+        // dedupe, write typed deps, retire the legacy field
+        const seen = new Set();
+        const clean = deps.filter(d => {
+            const k = d.kind + ':' + d.id;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+        await VideoService.update(v.id, { deps: clean, dependsOn: [], status: normalizedStatus(v) });
     }
 
     async function saveFields(silent) {
         if (!selectedVideo) return;
         const name = document.getElementById('workshop-name')?.value.trim() || selectedVideo.name;
         const project = document.getElementById('workshop-project')?.value || '';
-        const assignedToList = readAssignedPeopleFromPicker();
-        const assignedTo = assignedToList[0] || '';
         const hook = document.getElementById('workshop-hook')?.value || '';
         const context = document.getElementById('workshop-context')?.value || '';
-        const videoType = document.getElementById('workshop-type')?.value.trim() || '';
         const deadline = document.getElementById('workshop-deadline')?.value || '';
         const sponsorId = document.getElementById('workshop-sponsor')?.value || '';
         try {
             await VideoService.saveWithIdeaSync(selectedVideo.id, {
-                name, project, assignedTo, assignedToList, hook, context,
-                videoType, deadline, sponsorId,
+                name, project, hook, context, deadline, sponsorId,
                 status: normalizedStatus(selectedVideo)
             });
         } catch (e) {

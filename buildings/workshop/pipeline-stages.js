@@ -210,19 +210,32 @@ const PipelineStages = (() => {
         return BRANCH_QUESTIONS.every(q => b[q.flag] === true || b[q.flag] === false);
     }
 
-    // --- Causality / blocking across videos & inventory ---
-    function blockers(video, allVideos, inventoryItems) {
+    // --- Causality / blocking ---
+    // A video can wait on: another video (not yet posted), a component (not
+    // yet done) or an order (not yet received). Anything already finished is
+    // never a blocker — done means done, so blockers clear themselves.
+    // deps: [{ kind: 'video'|'component'|'order', id }]
+    // (legacy video.dependsOn = [videoId] is still honored as video deps)
+    function blockers(video, refs) {
+        const { videos = [], components = [], orders = [] } = refs || {};
         const out = [];
-        (video.dependsOn || []).forEach(depId => {
-            const dep = (allVideos || []).find(v => v.id === depId);
+        const videoDep = (depId) => {
+            const dep = videos.find(v => v.id === depId);
             if (!dep) return;
             const depPosted = dep.status === 'posted' || dep.status === 'pen' || stateOf(dep, 'post') === 'done';
-            if (!depPosted) out.push({ kind: 'video', id: dep.id, label: dep.name, detail: 'must be finished first' });
-        });
-        (video.requiredInventoryIds || []).forEach(invId => {
-            const item = (inventoryItems || []).find(i => i.id === invId);
-            if (!item) return;
-            if (item.status !== 'ready') out.push({ kind: 'inventory', id: item.id, label: item.name, detail: `not ready (${item.status || 'planned'})` });
+            if (!depPosted) out.push({ kind: 'video', id: dep.id, label: dep.name, detail: 'video not finished yet' });
+        };
+        (video.dependsOn || []).forEach(videoDep);
+        (video.deps || []).forEach(d => {
+            if (!d || !d.id) return;
+            if (d.kind === 'video') videoDep(d.id);
+            else if (d.kind === 'component') {
+                const c = components.find(x => x.id === d.id);
+                if (c && c.status !== 'done') out.push({ kind: 'component', id: c.id, label: c.name, detail: `component still in ${c.status || 'design'}` });
+            } else if (d.kind === 'order') {
+                const o = orders.find(x => x.id === d.id);
+                if (o && o.status !== 'received') out.push({ kind: 'order', id: o.id, label: o.name, detail: `order ${o.status || 'needed'}` });
+            }
         });
         return out;
     }
