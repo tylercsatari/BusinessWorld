@@ -730,3 +730,64 @@
 /* Nested component tree */
 .wsp-comp-row.nested { border-left: 2.5px solid #e8dcc8; }
 .wsp-comp-branch { color: #c9a86a; font-weight: 800; }
+
+/* ===================================================================
+   UNIFIED BOARD: dots, legend, group colors
+   =================================================================== */
+
+/* Entity dots on stage nodes — one dot per item, colored by type */
+.wsp-node-dots {
+    display: flex; flex-wrap: wrap; gap: 3px; align-items: center;
+    margin-top: 3px; min-height: 8px;
+}
+.wsp-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.8);
+}
+.wsp-dot-more {
+    font-size: 8.5px; font-weight: 800; color: #888;
+    background: #f0ece4; border-radius: 6px; padding: 0 4px;
+}
+
+/* Group color accent on nodes */
+.wsp-node { border-left: 3.5px solid var(--groupcolor, #e0dcd6); }
+.wsp-node.bottleneck { border-left-color: #e8a020; }
+.wsp-node.inv-node { border-left: 1.5px dashed #7eb78a; }
+
+/* Legend: clickable type toggles */
+.wsp-legend { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.wsp-legend-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid #e0dcd6; background: #fff; border-radius: 14px;
+    padding: 3px 10px; font-size: 11px; font-weight: 700; color: #999;
+    cursor: pointer; font-family: inherit; white-space: nowrap;
+    transition: all 0.12s;
+}
+.wsp-legend-chip .wsp-dot { opacity: 0.35; }
+.wsp-legend-chip.on { color: #444; border-color: var(--dotcolor); background: #fff; }
+.wsp-legend-chip.on .wsp-dot { opacity: 1; }
+.wsp-legend-chip:not(.on) { text-decoration: line-through; }
+
+.wsp-pipeline-filters {
+    border-bottom: 1px solid #ece8e0;
+    padding: 8px 14px;
+    row-gap: 6px;
+}
+
+/* Stage panel breakdown chips & section titles */
+.wsp-count-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 800; color: #555;
+    background: #faf7f1; border: 1px solid #ece8e0; border-left: 3px solid var(--dotcolor, #ccc);
+    border-radius: 7px; padding: 1px 8px; vertical-align: middle;
+}
+.wsp-panel-section-title {
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+    margin-top: 8px; padding: 0 2px;
+}
+
+@media (max-width: 600px) {
+    .wsp-legend { width: 100%; }
+    .wsp-legend-chip { padding: 3px 7px; font-size: 10px; }
+}

@@ -22,8 +22,10 @@ const WorkshopUI = (() => {
     let selectedProjectId = null;
     let currentPage = 'list';
 
-    // Videos tab filters
-    let fSearch = '', fStage = '', fType = '', fProject = '', fSponsor = '', fAssignee = '', fFlag = '';
+    // Pipeline board filters (apply to everything: dots, counts, stage panel)
+    let fSearch = '', fType = '', fProject = '', fSponsor = '', fAssignee = '', fFlag = '';
+    // Which entity types are visible on the board (legend toggles)
+    let showTypes = { video: true, component: true, order: true, inventory: true };
     // Inventory tab filters
     let invType = '', invStatus = '';
 
@@ -160,7 +162,6 @@ const WorkshopUI = (() => {
                     </div>
                     <div class="wsp-tabs">
                         <button class="wsp-tab active" data-tab="pipeline">Pipeline</button>
-                        <button class="wsp-tab" data-tab="videos">Videos</button>
                         <button class="wsp-tab" data-tab="projects">Projects</button>
                         <button class="wsp-tab" data-tab="orders">Orders</button>
                         <button class="wsp-tab" data-tab="inventory">Inventory</button>
@@ -206,7 +207,6 @@ const WorkshopUI = (() => {
         if (!el) return;
         updateCount();
         if (activeTab === 'pipeline') renderPipelineTab(el);
-        else if (activeTab === 'videos') renderVideosTab(el);
         else if (activeTab === 'projects') renderProjectsTab(el);
         else if (activeTab === 'orders') renderOrdersTab(el);
         else if (activeTab === 'inventory') renderInventoryTab(el);
@@ -217,20 +217,26 @@ const WorkshopUI = (() => {
         if (el) el.textContent = `${pipelineVideos().length} in pipeline`;
     }
 
-    // ============ TAB 1: PIPELINE BOARD ============
+    // ============ TAB 1: PIPELINE BOARD — the single view of everything ============
 
-    const NODE_W = 150, NODE_H = 60, GAP_X = 60, GAP_Y = 26, PAD = 24;
+    const NODE_W = 152, NODE_H = 72, GAP_X = 60, GAP_Y = 26, PAD = 24;
+
+    // One color per entity type — same colors everywhere (dots, legend, panel)
+    const DOT_COLORS = { video: '#00b894', component: '#1565c0', order: '#e8a020', inventory: '#8e44ad' };
+    const GROUP_COLORS = { Concept: '#4a9eff', Planning: '#e8a020', Procurement: '#e67e22', Build: '#7f8c9b', Production: '#e74c3c', Post: '#27ae60' };
+    // Where a component's build status lives on the video pipeline
+    const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', manufacturing: 'precision', assembly: 'assembly' };
 
     function boardPositions() {
         // Column = topological layer, row = index within layer (centered vertically)
         const layers = PS().LAYERS;
         const maxRows = Math.max(...layers.map(l => l.length), 2);
-        const boardH = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y + 90; // +90 for the inventory node row
+        const boardH = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y + 96; // +96 for the inventory node row
         const pos = {};
         layers.forEach((ids, li) => {
             const x = PAD + li * (NODE_W + GAP_X);
             const totalH = ids.length * NODE_H + (ids.length - 1) * GAP_Y;
-            const y0 = (boardH - 90 - totalH) / 2 + PAD / 2;
+            const y0 = (boardH - 96 - totalH) / 2 + PAD / 2;
             ids.forEach((id, ri) => {
                 pos[id] = { x, y: y0 + ri * (NODE_H + GAP_Y) };
             });
@@ -238,18 +244,75 @@ const WorkshopUI = (() => {
         const boardW = PAD * 2 + layers.length * NODE_W + (layers.length - 1) * GAP_X;
         // Component Library (Inventory) reference node sits under Ordering
         const orderPos = pos['order'];
-        pos['_inventory'] = { x: orderPos.x, y: boardH - 78 };
+        pos['_inventory'] = { x: orderPos.x, y: boardH - 80 };
         return { pos, boardW, boardH };
     }
 
-    function stageCounts() {
-        const counts = {};
-        const ctx = ctxNow();
-        PS().STAGES.forEach(s => { counts[s.id] = []; });
-        pipelineVideos().forEach(v => {
-            PS().frontier(v, ctx).forEach(id => counts[id].push(v));
+    // --- Filters (apply to the whole board: dots, counts, stage panel) ---
+
+    function filteredVideos() {
+        let list = pipelineVideos();
+        if (fSearch) {
+            const q = fSearch.toLowerCase();
+            list = list.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hook || '').toLowerCase().includes(q));
+        }
+        if (fType) list = list.filter(v => v.videoType === fType);
+        if (fProject) list = list.filter(v => (v.projectIds || []).includes(fProject));
+        if (fSponsor) list = list.filter(v => v.sponsorId === fSponsor);
+        if (fAssignee === 'none') list = list.filter(v => getAssignedPeople(v).length === 0);
+        else if (fAssignee) list = list.filter(v => getAssignedPeople(v).includes(fAssignee));
+        if (fFlag === 'blocked') list = list.filter(v => videoBlockers(v).length > 0);
+        if (fFlag === 'deadline') list = list.filter(v => { const d = deadlineInfo(v); return d && d.days <= 7; });
+        // Soonest deadline first
+        return [...list].sort((a, b) => {
+            const da = a.deadline || '9999', db = b.deadline || '9999';
+            if (da !== db) return da < db ? -1 : 1;
+            return (a.name || '').localeCompare(b.name || '');
         });
-        return counts;
+    }
+
+    function filteredComponents() {
+        let list = SVC().components.getAll().filter(c => c.status !== 'done');
+        if (fProject) list = list.filter(c => c.projectId === fProject);
+        if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(c => (c.name || '').toLowerCase().includes(q)); }
+        return list;
+    }
+
+    function filteredOrders() {
+        let list = SVC().orders.getAll().filter(o => o.status !== 'received');
+        if (fProject) {
+            const projVideoIds = new Set(pipelineVideos().filter(v => (v.projectIds || []).includes(fProject)).map(v => v.id));
+            list = list.filter(o => o.projectId === fProject || (o.videoId && projVideoIds.has(o.videoId)));
+        }
+        if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(o => (o.name || '').toLowerCase().includes(q)); }
+        return list;
+    }
+
+    function filteredInventory() {
+        let list = SVC().inventory.getAll();
+        if (fProject) list = list.filter(i => i.projectId === fProject);
+        if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(i => (i.name || '').toLowerCase().includes(q)); }
+        return list;
+    }
+
+    // Everything on the board, per stage, post-filter
+    function boardEntities() {
+        const ctx = ctxNow();
+        const byStage = {};
+        PS().STAGES.forEach(s => { byStage[s.id] = { videos: [], components: [], orders: [] }; });
+        if (showTypes.video) {
+            filteredVideos().forEach(v => PS().frontier(v, ctx).forEach(id => byStage[id].videos.push(v)));
+        }
+        if (showTypes.component) {
+            filteredComponents().forEach(c => {
+                const sid = COMPONENT_STAGE_MAP[c.status];
+                if (sid) byStage[sid].components.push(c);
+            });
+        }
+        if (showTypes.order) {
+            filteredOrders().forEach(o => byStage['order'].orders.push(o));
+        }
+        return byStage;
     }
 
     function edgePath(a, b) {
@@ -259,9 +322,72 @@ const WorkshopUI = (() => {
         return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
     }
 
+    // Dot strip: one dot per item, colored by type — the at-a-glance view
+    function dotsRow(dots) {
+        if (!dots.length) return '';
+        const MAX = 16;
+        const shown = dots.slice(0, MAX);
+        return `<div class="wsp-node-dots">${shown.map(d =>
+            `<span class="wsp-dot" style="background:${d.color}" title="${escAttr(d.title)}"></span>`).join('')}${dots.length > MAX ? `<span class="wsp-dot-more">+${dots.length - MAX}</span>` : ''}</div>`;
+    }
+
+    function pipelineFilterBarHtml() {
+        const all = pipelineVideos();
+        const types = [...new Set(all.map(v => v.videoType).filter(Boolean))];
+        const projects = SVC().projects.getAll().filter(p => p.status !== 'archived');
+        const sponsors = [...new Set(all.map(v => v.sponsorId).filter(Boolean))].map(id => SVC().sponsors.getById(id)).filter(Boolean);
+        const legend = [
+            ['video', '🎬 Videos'], ['component', '🧩 Components'], ['order', '📦 Orders'], ['inventory', '🗃️ Inventory']
+        ];
+        return `<div class="wsp-filterbar wsp-pipeline-filters">
+            <div class="wsp-legend">
+                ${legend.map(([key, label]) => `
+                    <button class="wsp-legend-chip${showTypes[key] ? ' on' : ''}" data-toggle-type="${key}" style="--dotcolor:${DOT_COLORS[key]}">
+                        <span class="wsp-dot" style="background:${DOT_COLORS[key]}"></span>${label}
+                    </button>`).join('')}
+            </div>
+            <input type="text" class="wsp-search" id="wsp-f-search" placeholder="Search everything…" value="${escAttr(fSearch)}">
+            ${projects.length ? `<select id="wsp-f-project"><option value="">All projects</option>${projects.map(p => `<option value="${p.id}" ${fProject === p.id ? 'selected' : ''}>🛠️ ${escHtml(p.name)}</option>`).join('')}</select>` : ''}
+            ${types.length ? `<select id="wsp-f-type"><option value="">All types</option>${types.map(t => `<option ${fType === t ? 'selected' : ''}>${escHtml(t)}</option>`).join('')}</select>` : ''}
+            ${sponsors.length ? `<select id="wsp-f-sponsor"><option value="">All sponsors</option>${sponsors.map(s => `<option value="${s.id}" ${fSponsor === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}</select>` : ''}
+            <div class="wsp-flag-btns">
+                <button class="workshop-filter-btn ${fFlag === 'blocked' ? 'active' : ''}" data-flag="blocked">🔒 Blocked</button>
+                <button class="workshop-filter-btn ${fFlag === 'deadline' ? 'active' : ''}" data-flag="deadline">⏰ Due soon</button>
+            </div>
+        </div>`;
+    }
+
+    function bindPipelineFilters(el) {
+        el.querySelectorAll('[data-toggle-type]').forEach(b => b.addEventListener('click', () => {
+            showTypes[b.dataset.toggleType] = !showTypes[b.dataset.toggleType];
+            renderTab();
+        }));
+        const search = document.getElementById('wsp-f-search');
+        if (search) {
+            let timer = null;
+            search.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    fSearch = search.value;
+                    renderTab();
+                    const s2 = document.getElementById('wsp-f-search');
+                    if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); }
+                }, 250);
+            });
+        }
+        const bind = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { fn(e.value); renderTab(); }); };
+        bind('wsp-f-project', v => fProject = v);
+        bind('wsp-f-type', v => fType = v);
+        bind('wsp-f-sponsor', v => fSponsor = v);
+        el.querySelectorAll('[data-flag]').forEach(b => b.addEventListener('click', () => {
+            fFlag = fFlag === b.dataset.flag ? '' : b.dataset.flag;
+            renderTab();
+        }));
+    }
+
     function renderPipelineTab(el) {
         const { pos, boardW, boardH } = boardPositions();
-        const counts = stageCounts();
+        const entities = boardEntities();
 
         const edgesSvg =
         `<defs>
@@ -277,24 +403,36 @@ const WorkshopUI = (() => {
 
         const nodesHtml = PS().STAGES.map(s => {
             const p = pos[s.id];
-            const vids = counts[s.id];
-            const blockedHere = vids.filter(v => videoBlockers(v).length > 0).length;
-            return `<div class="wsp-node${s.bottleneck ? ' bottleneck' : ''}${selectedStageId === s.id ? ' selected' : ''}${vids.length ? ' has-videos' : ''}"
-                        data-stage="${s.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px;height:${NODE_H}px;">
+            const e = entities[s.id];
+            const total = e.videos.length + e.components.length + e.orders.length;
+            const blockedHere = e.videos.filter(v => videoBlockers(v).length > 0).length;
+            const dots = [
+                ...e.videos.map(v => ({ color: DOT_COLORS.video, title: `🎬 ${v.name}` })),
+                ...e.components.map(c => ({ color: DOT_COLORS.component, title: `🧩 ${c.name}${projectName(c.projectId) ? ' · ' + projectName(c.projectId) : ''}` })),
+                ...e.orders.map(o => ({ color: DOT_COLORS.order, title: `📦 ${o.name} (${o.status})` }))
+            ];
+            return `<div class="wsp-node${s.bottleneck ? ' bottleneck' : ''}${selectedStageId === s.id ? ' selected' : ''}${total ? ' has-videos' : ''}"
+                        data-stage="${s.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px;height:${NODE_H}px;--groupcolor:${GROUP_COLORS[s.group] || '#ccc'};">
                 <div class="wsp-node-label">${s.icon} ${escHtml(s.label)}</div>
-                <div class="wsp-node-sub">${s.bottleneck ? '<span class="wsp-bottleneck-tag">bottleneck</span>' : `<span class="wsp-node-group">${escHtml(s.group)}</span>`}</div>
-                ${vids.length ? `<span class="wsp-node-count">${vids.length}</span>` : ''}
+                <div class="wsp-node-sub">${s.bottleneck ? '<span class="wsp-bottleneck-tag">bottleneck</span>' : `<span class="wsp-node-group" style="color:${GROUP_COLORS[s.group]}">${escHtml(s.group)}</span>`}</div>
+                ${dotsRow(dots)}
                 ${blockedHere ? `<span class="wsp-node-blocked" title="${blockedHere} blocked here">🔒</span>` : ''}
             </div>`;
         }).join('');
 
-        const readyInv = SVC().inventory.getAll().filter(i => i.status === 'ready').length;
-        const invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:54px;">
+        // Component Library node: inventory dots colored by readiness
+        const invItems = showTypes.inventory ? filteredInventory() : [];
+        const INV_STATUS_COLORS = { ready: '#27ae60', building: '#e8a020', planned: '#b0a8a0' };
+        const invDots = invItems.map(i => ({ color: INV_STATUS_COLORS[i.status] || '#b0a8a0', title: `🗃️ ${i.name} (${i.status})` }));
+        const readyInv = invItems.filter(i => i.status === 'ready').length;
+        const invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:64px;">
             <div class="wsp-node-label">🗃️ Component Library</div>
-            <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv} ready in inventory</span></div>
+            <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready</span></div>
+            ${dotsRow(invDots)}
         </div>`;
 
         el.innerHTML = `
+            ${pipelineFilterBarHtml()}
             <div class="wsp-board-wrap">
                 <div class="wsp-board" style="width:${boardW}px;height:${boardH}px;">
                     <svg class="wsp-edges" width="${boardW}" height="${boardH}">${edgesSvg}</svg>
@@ -305,6 +443,7 @@ const WorkshopUI = (() => {
             <div class="wsp-stage-panel" id="wsp-stage-panel"></div>
         `;
 
+        bindPipelineFilters(el);
         el.querySelectorAll('.wsp-node[data-stage]').forEach(node => {
             node.addEventListener('click', () => {
                 selectedStageId = selectedStageId === node.dataset.stage ? null : node.dataset.stage;
@@ -376,24 +515,38 @@ const WorkshopUI = (() => {
         if (!panel) return;
         if (!selectedStageId) {
             const total = pipelineVideos().length;
-            panel.innerHTML = `<div class="wsp-stage-panel-hint">Click a stage to see the videos sitting there. ${total ? '' : 'Queue an idea from the Library to start the pipeline.'}</div>`;
+            panel.innerHTML = `<div class="wsp-stage-panel-hint">Click a stage to see everything sitting there — videos, components and orders. ${total ? '' : 'Queue an idea from the Library to start the pipeline.'}</div>`;
             return;
         }
         const stage = PS().get(selectedStageId);
-        const vids = stageCounts()[selectedStageId] || [];
+        const e = boardEntities()[selectedStageId] || { videos: [], components: [], orders: [] };
         const autoDesc = PS().autoDesc(selectedStageId);
         const owner = SVC().stageOwners()[selectedStageId] || '';
         const names = rosterNames(owner ? [owner] : []);
 
+        const breakdown = [
+            e.videos.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">🎬 ${e.videos.length}</span>` : '',
+            e.components.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">🧩 ${e.components.length}</span>` : '',
+            e.orders.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">📦 ${e.orders.length}</span>` : ''
+        ].join('');
+
+        const compRows = e.components.map(c => `
+            <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
+                <span class="wsp-row-name">🧩 ${escHtml(c.name)} ${projectName(c.projectId) ? `<span class="wsp-hint">🛠️ ${escHtml(projectName(c.projectId))}</span>` : ''}</span>
+                <div class="wsp-status-cycle">
+                    ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
+                </div>
+            </div>`).join('');
+
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
                 <div class="wsp-stage-panel-headmain">
-                    <div class="wsp-stage-panel-title">${stage.icon} ${escHtml(stage.label)} <span class="wsp-stage-panel-count">${vids.length}</span></div>
+                    <div class="wsp-stage-panel-title">${stage.icon} ${escHtml(stage.label)} ${breakdown}</div>
                     <div class="wsp-stage-panel-desc">${escHtml(stage.desc || '')}</div>
                     ${autoDesc ? `<div class="wsp-auto-desc">⚡ ${escHtml(autoDesc)}</div>` : ''}
                 </div>
                 <div class="wsp-stage-panel-side">
-                    <label class="wsp-owner-label" title="Who owns this stage — videos here are automatically their queue">Owner
+                    <label class="wsp-owner-label" title="Who owns this stage — everything here is automatically their queue">Owner
                         <select id="wsp-stage-owner">
                             <option value="">— nobody —</option>
                             ${names.map(n => `<option value="${escAttr(n)}" ${owner === n ? 'selected' : ''}>${escHtml(n)}</option>`).join('')}
@@ -403,7 +556,10 @@ const WorkshopUI = (() => {
                 </div>
             </div>
             <div class="wsp-stage-panel-list">
-                ${vids.length === 0 ? '<div class="workshop-empty">No videos at this stage.</div>' : vids.map(v => stageVideoRowHtml(v, stage)).join('')}
+                ${e.videos.length === 0 && !compRows && e.orders.length === 0 ? '<div class="workshop-empty">Nothing at this stage (with current filters).</div>' : ''}
+                ${e.videos.map(v => stageVideoRowHtml(v, stage)).join('')}
+                ${compRows ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">🧩 Components being worked here</div>${compRows}` : ''}
+                ${e.orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">📦 Open orders</div>${e.orders.map(orderRowHtml).join('')}` : ''}
             </div>
         `;
 
@@ -412,11 +568,11 @@ const WorkshopUI = (() => {
             expandedStageVideoId = null;
             renderTab();
         });
-        document.getElementById('wsp-stage-owner').addEventListener('change', (e) => {
-            SVC().setStageOwner(selectedStageId, e.target.value).catch(err => console.warn('stage owner save failed', err));
+        document.getElementById('wsp-stage-owner').addEventListener('change', (ev) => {
+            SVC().setStageOwner(selectedStageId, ev.target.value).catch(err => console.warn('stage owner save failed', err));
         });
-        panel.querySelectorAll('[data-expand]').forEach(head => head.addEventListener('click', (e) => {
-            if (e.target.closest('button')) return; // buttons act, don't toggle
+        panel.querySelectorAll('[data-expand]').forEach(head => head.addEventListener('click', (ev) => {
+            if (ev.target.closest('button')) return; // buttons act, don't toggle
             const id = head.dataset.expand;
             expandedStageVideoId = expandedStageVideoId === id ? null : id;
             renderStagePanel();
@@ -428,6 +584,16 @@ const WorkshopUI = (() => {
             await setStageState(b.dataset.done, selectedStageId, 'done');
             renderTab();
         }));
+        panel.querySelectorAll('[data-comp]').forEach(row => {
+            const compId = row.dataset.comp;
+            row.querySelectorAll('[data-comp-status]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    await SVC().components.update(compId, { status: btn.dataset.compStatus });
+                    renderTab();
+                });
+            });
+        });
+        bindOrderRows(panel);
     }
 
     // The Decomposition validation gate: explicit yes/no per branch.
@@ -521,122 +687,7 @@ const WorkshopUI = (() => {
         }
     }
 
-    // ============ TAB 2: VIDEOS ============
-
-    function renderVideosTab(el) {
-        const all = pipelineVideos();
-        const types = [...new Set(all.map(v => v.videoType).filter(Boolean))];
-        const usedProjects = [...new Set(all.flatMap(v => (v.projectIds || [])))].map(id => SVC().projects.getById(id)).filter(Boolean);
-        const usedSponsors = [...new Set(all.map(v => v.sponsorId).filter(Boolean))].map(id => SVC().sponsors.getById(id)).filter(Boolean);
-        const assignees = [...new Set(all.flatMap(getAssignedPeople))];
-
-        let list = all;
-        if (fSearch) {
-            const q = fSearch.toLowerCase();
-            list = list.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hook || '').toLowerCase().includes(q));
-        }
-        if (fStage) { const c = ctxNow(); list = list.filter(v => PS().frontier(v, c).includes(fStage)); }
-        if (fType) list = list.filter(v => v.videoType === fType);
-        if (fProject) list = list.filter(v => (v.projectIds || []).includes(fProject));
-        if (fSponsor) list = list.filter(v => v.sponsorId === fSponsor);
-        if (fAssignee === 'none') list = list.filter(v => getAssignedPeople(v).length === 0);
-        else if (fAssignee) list = list.filter(v => getAssignedPeople(v).includes(fAssignee));
-        if (fFlag === 'blocked') list = list.filter(v => videoBlockers(v).length > 0);
-        if (fFlag === 'deadline') list = list.filter(v => { const d = deadlineInfo(v); return d && d.days <= 7; });
-
-        // Soonest deadline first, then most recently updated
-        list = [...list].sort((a, b) => {
-            const da = a.deadline || '9999', db = b.deadline || '9999';
-            if (da !== db) return da < db ? -1 : 1;
-            return (b.updatedAt || '') < (a.updatedAt || '') ? -1 : 1;
-        });
-
-        el.innerHTML = `
-            <div class="wsp-filterbar">
-                <input type="text" class="wsp-search" id="wsp-f-search" placeholder="Search videos…" value="${escAttr(fSearch)}">
-                <select id="wsp-f-stage">
-                    <option value="">All stages</option>
-                    ${PS().STAGES.map(s => `<option value="${s.id}" ${fStage === s.id ? 'selected' : ''}>${s.icon} ${escHtml(s.label)}</option>`).join('')}
-                </select>
-                ${types.length ? `<select id="wsp-f-type"><option value="">All types</option>${types.map(t => `<option ${fType === t ? 'selected' : ''}>${escHtml(t)}</option>`).join('')}</select>` : ''}
-                ${usedProjects.length ? `<select id="wsp-f-project"><option value="">All projects</option>${usedProjects.map(p => `<option value="${p.id}" ${fProject === p.id ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}</select>` : ''}
-                ${usedSponsors.length ? `<select id="wsp-f-sponsor"><option value="">All sponsors</option>${usedSponsors.map(s => `<option value="${s.id}" ${fSponsor === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}</select>` : ''}
-                ${assignees.length ? `<select id="wsp-f-assignee"><option value="">Anyone</option>${assignees.map(a => `<option ${fAssignee === a ? 'selected' : ''}>${escHtml(a)}</option>`).join('')}<option value="none" ${fAssignee === 'none' ? 'selected' : ''}>Unassigned</option></select>` : ''}
-                <div class="wsp-flag-btns">
-                    <button class="workshop-filter-btn ${fFlag === 'blocked' ? 'active' : ''}" data-flag="blocked">🔒 Blocked</button>
-                    <button class="workshop-filter-btn ${fFlag === 'deadline' ? 'active' : ''}" data-flag="deadline">⏰ Due soon</button>
-                </div>
-            </div>
-            <div class="workshop-items" id="wsp-video-list">
-                ${list.length === 0 ? '<div class="workshop-empty">No videos match. Queue an idea from the Library to feed the pipeline!</div>' : list.map(videoCardHtml).join('')}
-            </div>
-        `;
-
-        const bind = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { fn(e.value); renderTab(); }); };
-        const search = document.getElementById('wsp-f-search');
-        if (search) {
-            let timer = null;
-            search.addEventListener('input', () => {
-                clearTimeout(timer);
-                timer = setTimeout(() => { fSearch = search.value; renderTab(); const s2 = document.getElementById('wsp-f-search'); if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } }, 250);
-            });
-        }
-        bind('wsp-f-stage', v => fStage = v);
-        bind('wsp-f-type', v => fType = v);
-        bind('wsp-f-project', v => fProject = v);
-        bind('wsp-f-sponsor', v => fSponsor = v);
-        bind('wsp-f-assignee', v => fAssignee = v);
-        el.querySelectorAll('[data-flag]').forEach(b => b.addEventListener('click', () => {
-            fFlag = fFlag === b.dataset.flag ? '' : b.dataset.flag;
-            renderTab();
-        }));
-        el.querySelectorAll('.workshop-card').forEach(card => {
-            card.addEventListener('click', () => openDetail(card.dataset.id));
-        });
-        requestAnimationFrame(() => renderCardAssets());
-    }
-
-    function videoCardHtml(v) {
-        const dl = deadlineInfo(v);
-        const projChips = (v.projectIds || []).map(id => {
-            const p = SVC().projects.getById(id);
-            return p ? `<span class="wsp-proj-chip">🛠️ ${escHtml(p.name)}</span>` : '';
-        }).join('');
-        const sp = sponsorName(v.sponsorId);
-        return `
-        <div class="workshop-card" data-id="${v.id}">
-            <div class="workshop-card-egg">
-                <canvas class="workshop-egg-canvas" data-project="${escAttr(v.project)}" width="80" height="100" style="width:52px;height:64px"></canvas>
-            </div>
-            <div class="workshop-card-info">
-                <div class="workshop-card-name"><span class="workshop-card-name-text">${escHtml(v.name)}</span> ${blockedBadge(v)}</div>
-                <div class="wsp-card-stages">${frontierChips(v, 3)}</div>
-                <div class="workshop-card-meta">
-                    ${v.videoType ? `<span class="wsp-type-chip">${escHtml(v.videoType)}</span>` : ''}
-                    ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
-                    ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
-                    ${projChips}
-                    ${v.project ? `<span class="workshop-card-project">${escHtml(v.project)}</span>` : ''}
-                    ${getAssignedPeople(v).map(workerPill).join('')}
-                </div>
-                ${progressBar(v)}
-            </div>
-        </div>`;
-    }
-
-    async function renderCardAssets() {
-        if (!window.EggRenderer || !container) return;
-        const eggPromises = [];
-        container.querySelectorAll('.workshop-egg-canvas').forEach(canvas => {
-            eggPromises.push(window.EggRenderer.renderEggSnapshot(canvas.dataset.project, canvas, 40));
-        });
-        container.querySelectorAll('.workshop-avatar-canvas').forEach(canvas => {
-            window.EggRenderer.renderCharacterAvatar(canvas.dataset.worker, canvas, 32);
-        });
-        await Promise.all(eggPromises);
-    }
-
-    // ============ TAB 3: PROJECTS ============
+    // ============ TAB 2: PROJECTS ============
 
     function renderProjectsTab(el) {
         const projects = SVC().projects.getAll().filter(p => p.status !== 'archived');
@@ -1515,7 +1566,8 @@ const WorkshopUI = (() => {
             selectedProjectId = null;
             currentPage = 'list';
             activeTab = 'pipeline';
-            fSearch = fStage = fType = fProject = fSponsor = fAssignee = fFlag = '';
+            fSearch = fType = fProject = fSponsor = fAssignee = fFlag = '';
+            showTypes = { video: true, component: true, order: true, inventory: true };
         }
     };
 })();
