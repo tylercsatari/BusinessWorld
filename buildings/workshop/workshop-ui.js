@@ -34,7 +34,7 @@ const WorkshopUI = (() => {
     const PS = () => PipelineStages;
     const SVC = () => PipelineService;
 
-    const COMPONENT_STATUSES = ['design', 'cad', 'manufacturing', 'assembly', 'done'];
+    const COMPONENT_STATUSES = ['design', 'cad', 'software', 'manufacturing', 'assembly', 'done'];
     const ORDER_STATUSES = ['needed', 'ordered', 'received'];
     const INVENTORY_STATUSES = ['planned', 'building', 'ready'];
     const INVENTORY_TYPES = ['prop', 'footage', 'set', 'material', 'other'];
@@ -234,7 +234,7 @@ const WorkshopUI = (() => {
     const DOT_COLORS = { video: '#00b894', component: '#1565c0', order: '#e8a020', inventory: '#8e44ad' };
     const GROUP_COLORS = { Concept: '#4a9eff', Planning: '#e8a020', Procurement: '#e67e22', Build: '#7f8c9b', Production: '#e74c3c', Post: '#27ae60' };
     // Where a component's build status lives on the video pipeline
-    const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', manufacturing: 'precision', assembly: 'assembly' };
+    const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', software: 'software', manufacturing: 'precision', assembly: 'assembly' };
 
     function boardPositions() {
         // Column = topological layer, row = index within layer (centered vertically)
