@@ -40,6 +40,7 @@ const PipelineStages = (() => {
         { id: 'artistic',   label: 'Artistic Design',         icon: '🖌️', group: 'Build',       desc: 'Paint, finish, look — make it pretty.' },
         { id: 'hookfilm',   label: 'Practical Hook Filming',  icon: '🎯', group: 'Production',  desc: 'Film the practical hook as soon as its parts arrive.' },
         { id: 'film',       label: 'Filming / Production',    icon: '🎥', group: 'Production',  desc: 'Main shoot.' },
+        { id: 'voiceover',  label: 'Voiceover',               icon: '🎙️', group: 'Post',        desc: 'Deterministic gate: a voiceover file must be linked (it lives in the project\'s vo/ folder in Dropbox). No VO → the video waits here; VO linked → straight to Editing.' },
         { id: 'edit',       label: 'Editing',                 icon: '✂️', group: 'Post',        desc: 'Edit the video.' },
         { id: 'splittest',  label: 'Split Test Trials',       icon: '🧪', group: 'Post',        desc: 'Thumbnail/title split tests before posting.' },
         { id: 'post',       label: 'Posting',                 icon: '🚀', group: 'Post',        desc: 'Publish. The video hatches into the Pen and any props it produced become reusable Inventory.' }
@@ -66,7 +67,8 @@ const PipelineStages = (() => {
         ['assembly', 'artistic'],
         ['artistic', 'film'],
         ['hookfilm', 'film'],
-        ['film', 'edit'],
+        ['film', 'voiceover'],        // VO gate sits between the shoot and the edit
+        ['voiceover', 'edit'],
         ['edit', 'splittest'],
         ['splittest', 'post']
     ];
@@ -114,6 +116,10 @@ const PipelineStages = (() => {
                 const orders = ((ctx && ctx.orders) || []).filter(o => o.videoId === v.id);
                 return orders.length > 0 && orders.every(o => o.status === 'received');
             }
+        },
+        voiceover: {
+            desc: 'auto: done the moment a voiceover file is linked to this video',
+            test: (v) => !!(v.voPath)
         }
     };
 

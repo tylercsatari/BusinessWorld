@@ -121,6 +121,8 @@ const VideoService = (() => {
                         projectIds: Array.isArray(videoData.projectIds) ? videoData.projectIds : [],
                         dependsOn: Array.isArray(videoData.dependsOn) ? videoData.dependsOn : [],
                         deps: Array.isArray(videoData.deps) ? videoData.deps : [],   // typed: [{kind:'video'|'component'|'order', id}]
+                        voPath: videoData.voPath || '',                  // Dropbox path of the linked voiceover
+                        voName: videoData.voName || '',
                         requiredInventoryIds: Array.isArray(videoData.requiredInventoryIds) ? videoData.requiredInventoryIds : [],
                         producesInventoryIds: Array.isArray(videoData.producesInventoryIds) ? videoData.producesInventoryIds : []
                     })

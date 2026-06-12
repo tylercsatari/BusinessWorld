@@ -1348,6 +1348,17 @@ const WorkshopUI = (() => {
                         </div>
                     </div>
 
+                    <div class="wsp-subsection">
+                        <div class="wsp-subsection-title">🎙️ Voiceover <span class="wsp-hint">— one per video, stored in the project's vo/ folder in Dropbox. The Voiceover stage completes itself the moment one is linked.</span></div>
+                        <div id="wsp-vo-section">
+                            ${v.voPath
+                                ? '' /* filled by initVoSection */
+                                : v.project
+                                    ? '<div class="wsp-hint">Checking the vo/ folder…</div>'
+                                    : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the voiceover lives in that project\'s Dropbox folder, so no project means nowhere to put it.</div></div>'}
+                        </div>
+                    </div>
+
                     <div class="wsp-progress-head">
                         <label>Pipeline Progress</label>
                         <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
@@ -1530,10 +1541,134 @@ const WorkshopUI = (() => {
             });
         }
 
+        // Voiceover section (async — talks to Dropbox)
+        initVoSection(v);
+
         // 3D egg preview
         if (v.project && window.EggRenderer) {
             requestAnimationFrame(() => window.EggRenderer.initEggPreview('workshop-detail-egg-canvas', v.project));
         }
+    }
+
+    // ============ VOICEOVER (Dropbox <project>/vo/) ============
+
+    async function dropboxRootPath() {
+        try {
+            const cfg = await HtmlUtils.getConfig();
+            return (cfg.dropbox && cfg.dropbox.rootPath) || '';
+        } catch (e) { return ''; }
+    }
+
+    async function initVoSection(v) {
+        const el = document.getElementById('wsp-vo-section');
+        if (!el) return;
+
+        // --- A voiceover is linked: play it or unlink it ---
+        if (v.voPath) {
+            const name = v.voName || v.voPath.split('/').pop();
+            el.innerHTML = `
+                <div class="wsp-row" style="border-left: 3px solid #8e44ad">
+                    <span class="wsp-row-name">🎙️ ${escHtml(name)} <span class="wsp-hint">linked ✅</span></span>
+                    <button class="wsp-mini-btn" id="wsp-vo-play">▶ Play</button>
+                    <button class="wsp-mini-btn danger" id="wsp-vo-unlink">✕ Unlink</button>
+                    <audio id="wsp-vo-audio" style="display:none"></audio>
+                </div>`;
+            const playBtn = document.getElementById('wsp-vo-play');
+            const audio = document.getElementById('wsp-vo-audio');
+            playBtn.addEventListener('click', async () => {
+                if (!audio.src) {
+                    playBtn.textContent = '…';
+                    try {
+                        const r = await fetch('/api/dropbox/get_temporary_link', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ path: v.voPath })
+                        });
+                        const data = await r.json();
+                        if (!data.link) throw new Error(data.error_summary || 'no link');
+                        audio.src = data.link;
+                    } catch (e) {
+                        playBtn.textContent = '▶ Play';
+                        alert('Could not load the voiceover from Dropbox: ' + e.message);
+                        return;
+                    }
+                }
+                if (audio.paused) { audio.play(); playBtn.textContent = '⏸ Pause'; }
+                else { audio.pause(); playBtn.textContent = '▶ Play'; }
+                audio.onended = () => { playBtn.textContent = '▶ Play'; };
+            });
+            document.getElementById('wsp-vo-unlink').addEventListener('click', async () => {
+                if (!confirm('Unlink this voiceover? (The file stays in Dropbox.)')) return;
+                await VideoService.update(v.id, { voPath: '', voName: '', status: normalizedStatus(v) });
+                renderDetail();
+            });
+            return;
+        }
+
+        // --- No project selected: deterministic bottleneck, nothing to do ---
+        if (!v.project) return;
+
+        // --- No VO yet: offer existing files from <project>/vo/ + upload ---
+        const root = await dropboxRootPath();
+        const voFolder = `${root}/${v.project}/vo`;
+        let files = [];
+        try {
+            const r = await fetch('/api/dropbox/list_folder', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: voFolder })
+            });
+            const data = await r.json();
+            if (Array.isArray(data.entries)) {
+                files = data.entries.filter(e => e['.tag'] === 'file');
+            }
+        } catch (e) { /* folder doesn't exist yet — created on first upload */ }
+
+        const stillThere = document.getElementById('wsp-vo-section');
+        if (!stillThere || !selectedVideo || selectedVideo.id !== v.id) return; // user navigated away
+
+        stillThere.innerHTML = `
+            ${files.length ? `<div class="wsp-add-row">
+                <select id="wsp-vo-pick">
+                    <option value="">Link an existing VO from ${escHtml(v.project)}/vo…</option>
+                    ${files.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}
+                </select>
+            </div>` : ''}
+            <div class="wsp-add-row">
+                <input type="file" id="wsp-vo-file" accept="audio/*" style="font-size:11.5px;flex:1 1 180px;">
+                <button class="wsp-mini-btn done" id="wsp-vo-upload">⬆ Upload & link</button>
+            </div>
+            <div class="wsp-hint">Uploads go straight to Dropbox: ${escHtml(voFolder)}/ (folder is created automatically).</div>`;
+
+        const pick = document.getElementById('wsp-vo-pick');
+        if (pick) pick.addEventListener('change', async () => {
+            if (!pick.value) return;
+            const name = pick.options[pick.selectedIndex].textContent;
+            await VideoService.update(v.id, { voPath: pick.value, voName: name, status: normalizedStatus(v) });
+            renderDetail();
+        });
+        document.getElementById('wsp-vo-upload').addEventListener('click', async () => {
+            const input = document.getElementById('wsp-vo-file');
+            const file = input.files && input.files[0];
+            if (!file) { alert('Choose an audio file first.'); return; }
+            const btn = document.getElementById('wsp-vo-upload');
+            btn.textContent = 'Uploading…'; btn.disabled = true;
+            try {
+                const dest = `${voFolder}/${file.name}`;
+                const r = await fetch(`/api/dropbox/upload?path=${encodeURIComponent(dest)}`, { method: 'POST', body: file });
+                const meta = await r.json();
+                if (!r.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `upload failed (${r.status})`);
+                await VideoService.update(v.id, {
+                    voPath: meta.path_display || meta.path_lower,
+                    voName: meta.name || file.name,
+                    status: normalizedStatus(v)
+                });
+                toast(`Voiceover uploaded to ${v.project}/vo 🎙️`);
+                renderDetail();
+            } catch (e) {
+                console.warn('VO upload failed', e);
+                alert('Voiceover upload failed: ' + e.message);
+                btn.textContent = '⬆ Upload & link'; btn.disabled = false;
+            }
+        });
     }
 
     // Merge legacy dependsOn (plain video ids) into the typed deps list

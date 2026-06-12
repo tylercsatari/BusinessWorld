@@ -1854,6 +1854,39 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
 
+    // Upload a file (raw body) to Dropbox at ?path=... — parent folders are
+    // created automatically. Used by the Workshop's voiceover uploads
+    // (<project>/vo/<file>). autorename avoids clobbering existing takes.
+    if (pathname === '/api/dropbox/upload' && req.method === 'POST') {
+        const filePath = url.searchParams.get('path');
+        if (!filePath) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing path' })); return; }
+        const chunks = [];
+        req.on('data', c => chunks.push(c));
+        req.on('end', async () => {
+            try {
+                const buf = Buffer.concat(chunks);
+                if (!buf.length) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Empty body' })); return; }
+                const token = await cloud.getDropboxToken();
+                const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Dropbox-API-Arg': JSON.stringify({ path: filePath, mode: 'add', autorename: true, mute: true }),
+                        'Content-Type': 'application/octet-stream'
+                    },
+                    body: buf
+                });
+                const text = await response.text();
+                res.writeHead(response.status, { 'Content-Type': response.headers.get('content-type') || 'application/json' });
+                res.end(text);
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
     if (pathname === '/api/dropbox/get_thumbnail' && req.method === 'GET') {
         const filePath = url.searchParams.get('path');
         if (!filePath) { res.writeHead(400); res.end('Missing path'); return; }
