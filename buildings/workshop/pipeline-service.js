@@ -75,9 +75,14 @@ const PipelineService = (() => {
     const orders = makeStore('orders');
     const inventory = makeStore('inventory');
     const sponsors = makeStore('sponsors');
+    const settings = makeStore('settings');
+
+    function stageOwnersRecord() {
+        return settings.getAll().find(r => r.key === 'stageOwners') || null;
+    }
 
     return {
-        projects, components, orders, inventory, sponsors,
+        projects, components, orders, inventory, sponsors, settings,
 
         // Sync everything the pipeline UI needs (individual failures tolerated)
         async syncAll(force) {
@@ -86,8 +91,25 @@ const PipelineService = (() => {
                 components.sync(force).catch(e => console.warn('PipelineService: components sync failed', e)),
                 orders.sync(force).catch(e => console.warn('PipelineService: orders sync failed', e)),
                 inventory.sync(force).catch(e => console.warn('PipelineService: inventory sync failed', e)),
-                sponsors.sync(force).catch(e => console.warn('PipelineService: sponsors sync failed', e))
+                sponsors.sync(force).catch(e => console.warn('PipelineService: sponsors sync failed', e)),
+                settings.sync(force).catch(e => console.warn('PipelineService: settings sync failed', e))
             ]);
+        },
+
+        // --- Stage owners: each pipeline stage has a default person in
+        // charge. Videos at a stage are implicitly that person's queue —
+        // no per-video assigning needed. ---
+        stageOwners() {
+            const rec = stageOwnersRecord();
+            return (rec && rec.owners) || {};
+        },
+        async setStageOwner(stageId, name) {
+            let rec = stageOwnersRecord();
+            if (!rec) rec = await settings.create({ key: 'stageOwners', owners: {} });
+            const owners = { ...(rec.owners || {}) };
+            if (name) owners[stageId] = name;
+            else delete owners[stageId];
+            return settings.update(rec.id, { owners });
         },
 
         componentsForProject(projectId) {

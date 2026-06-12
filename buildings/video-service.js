@@ -114,6 +114,7 @@ const VideoService = (() => {
                         analysisStatus: videoData.analysisStatus || '',
                         // --- Pipeline fields ---
                         stageState: videoData.stageState || {},          // { [stageId]: 'done' | 'na' }
+                        branches: videoData.branches || {},              // decomp decisions { [flag]: true|false }
                         videoType: videoData.videoType || '',            // e.g. short / longform / series
                         deadline: videoData.deadline || '',
                         sponsorId: videoData.sponsorId || '',

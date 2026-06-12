@@ -18,6 +18,7 @@ const WorkshopUI = (() => {
     let activeTab = 'pipeline';
     let selectedVideo = null;
     let selectedStageId = null;
+    let expandedStageVideoId = null;
     let selectedProjectId = null;
     let currentPage = 'list';
 
@@ -97,6 +98,12 @@ const WorkshopUI = (() => {
         return PS().blockers(video, VideoService.getAll(), SVC().inventory.getAll());
     }
 
+    // Context for deterministic auto-checks (e.g. Ordering completes when all
+    // of a video's orders are received)
+    function ctxNow() {
+        return { orders: SVC().orders.getAll() };
+    }
+
     function blockedBadge(video) {
         const b = videoBlockers(video);
         if (!b.length) return '';
@@ -105,7 +112,7 @@ const WorkshopUI = (() => {
     }
 
     function frontierChips(video, max) {
-        const f = PS().frontier(video);
+        const f = PS().frontier(video, ctxNow());
         const shown = max ? f.slice(0, max) : f;
         let html = shown.map(id => {
             const st = PS().get(id);
@@ -117,7 +124,7 @@ const WorkshopUI = (() => {
     }
 
     function progressBar(video) {
-        const p = PS().progress(video);
+        const p = PS().progress(video, ctxNow());
         return `<div class="wsp-progress" title="${p.done}/${p.total} stages done">
             <div class="wsp-progress-fill" style="width:${p.pct}%"></div>
         </div>`;
@@ -237,16 +244,17 @@ const WorkshopUI = (() => {
 
     function stageCounts() {
         const counts = {};
+        const ctx = ctxNow();
         PS().STAGES.forEach(s => { counts[s.id] = []; });
         pipelineVideos().forEach(v => {
-            PS().frontier(v).forEach(id => counts[id].push(v));
+            PS().frontier(v, ctx).forEach(id => counts[id].push(v));
         });
         return counts;
     }
 
     function edgePath(a, b) {
         const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2;
-        const x2 = b.x, y2 = b.y + NODE_H / 2;
+        const x2 = b.x - 5, y2 = b.y + NODE_H / 2; // stop short so the arrowhead lands on the node edge
         const mx = (x1 + x2) / 2;
         return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
     }
@@ -255,10 +263,16 @@ const WorkshopUI = (() => {
         const { pos, boardW, boardH } = boardPositions();
         const counts = stageCounts();
 
-        const edgesSvg = PS().EDGES.map(([f, t]) => {
-            return `<path d="${edgePath(pos[f], pos[t])}" class="wsp-edge" />`;
+        const edgesSvg =
+        `<defs>
+            <marker id="wspArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#b3a98f"/>
+            </marker>
+        </defs>` +
+        PS().EDGES.map(([f, t]) => {
+            return `<path d="${edgePath(pos[f], pos[t])}" class="wsp-edge" marker-end="url(#wspArrow)" />`;
         }).join('') +
-        // dashed reference edges: Ordering ↔ Component Library
+        // dashed reference edge: Ordering ↔ Component Library (check inventory before buying)
         `<path d="M ${pos['order'].x + NODE_W / 2} ${pos['order'].y + NODE_H} L ${pos['_inventory'].x + NODE_W / 2} ${pos['_inventory'].y}" class="wsp-edge ref" />`;
 
         const nodesHtml = PS().STAGES.map(s => {
@@ -303,6 +317,60 @@ const WorkshopUI = (() => {
         renderStagePanel();
     }
 
+    function stageVideoRowHtml(v, stage) {
+        const dl = deadlineInfo(v);
+        const expanded = expandedStageVideoId === v.id;
+        const openOrders = SVC().ordersForVideo(v.id).filter(o => o.status !== 'received').length;
+        const sp = sponsorName(v.sponsorId);
+        // Decomposition can't be completed without the branch decisions —
+        // that's the validation gate that keeps irrelevant videos away from
+        // CAD/design/build people.
+        const needsDecisions = stage.id === 'decomp' && !PS().branchesDecided(v);
+        return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}" data-id="${v.id}">
+            <div class="wsp-stage-video-head" data-expand="${v.id}">
+                <span class="wsp-caret">${expanded ? '▾' : '▸'}</span>
+                <div class="wsp-stage-video-main">
+                    <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}</div>
+                    <div class="wsp-stage-video-meta">
+                        ${v.videoType ? `<span class="wsp-type-chip">${escHtml(v.videoType)}</span>` : ''}
+                        ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
+                        ${stage.id === 'order' && openOrders ? `<span class="wsp-deadline soon">📦 ${openOrders} order${openOrders === 1 ? '' : 's'} open</span>` : ''}
+                        ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
+                    </div>
+                </div>
+                <div class="wsp-stage-video-actions">
+                    ${needsDecisions
+                        ? `<button class="wsp-mini-btn done" data-decide="${v.id}" title="Decide which branches this video needs before completing Decomposition">🧩 Decide</button>`
+                        : `<button class="wsp-mini-btn done" data-done="${v.id}" title="Mark ${escAttr(stage.label)} done for this video">✓ Done</button>`}
+                </div>
+            </div>
+            ${expanded ? stageVideoBodyHtml(v) : ''}
+        </div>`;
+    }
+
+    function stageVideoBodyHtml(v) {
+        const script = (v.script || '').trim();
+        const projChips = (v.projectIds || []).map(id => {
+            const p = SVC().projects.getById(id);
+            return p ? `<span class="wsp-proj-chip">🛠️ ${escHtml(p.name)}</span>` : '';
+        }).join('');
+        const field = (label, text, limit) => text
+            ? `<div class="wsp-svb-field"><span class="wsp-svb-label">${label}</span>${escHtml(limit ? text.slice(0, limit) + (text.length > limit ? '…' : '') : text)}</div>`
+            : '';
+        return `<div class="wsp-stage-video-body">
+            ${field('Hook', (v.hook || '').trim())}
+            ${field('Context', (v.context || '').trim(), 300)}
+            ${script ? field('Script', script, 400) : '<div class="wsp-svb-field"><span class="wsp-svb-label">Script</span><span class="wsp-hint">none yet</span></div>'}
+            <div class="wsp-stage-video-meta">
+                ${frontierChips(v, 5)}
+                ${projChips}
+                ${getAssignedPeople(v).map(workerPill).join('')}
+            </div>
+            ${progressBar(v)}
+            <div class="wsp-svb-actions"><button class="wsp-mini-btn" data-open="${v.id}">Open full editor →</button></div>
+        </div>`;
+    }
+
     function renderStagePanel() {
         const panel = document.getElementById('wsp-stage-panel');
         if (!panel) return;
@@ -313,60 +381,100 @@ const WorkshopUI = (() => {
         }
         const stage = PS().get(selectedStageId);
         const vids = stageCounts()[selectedStageId] || [];
+        const autoDesc = PS().autoDesc(selectedStageId);
+        const owner = SVC().stageOwners()[selectedStageId] || '';
+        const names = rosterNames(owner ? [owner] : []);
 
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
-                <div>
+                <div class="wsp-stage-panel-headmain">
                     <div class="wsp-stage-panel-title">${stage.icon} ${escHtml(stage.label)} <span class="wsp-stage-panel-count">${vids.length}</span></div>
                     <div class="wsp-stage-panel-desc">${escHtml(stage.desc || '')}</div>
+                    ${autoDesc ? `<div class="wsp-auto-desc">⚡ ${escHtml(autoDesc)}</div>` : ''}
                 </div>
-                <button class="wsp-picker-close" id="wsp-stage-panel-close">✕</button>
+                <div class="wsp-stage-panel-side">
+                    <label class="wsp-owner-label" title="Who owns this stage — videos here are automatically their queue">Owner
+                        <select id="wsp-stage-owner">
+                            <option value="">— nobody —</option>
+                            ${names.map(n => `<option value="${escAttr(n)}" ${owner === n ? 'selected' : ''}>${escHtml(n)}</option>`).join('')}
+                        </select>
+                    </label>
+                    <button class="wsp-picker-close" id="wsp-stage-panel-close">✕</button>
+                </div>
             </div>
             <div class="wsp-stage-panel-list">
-                ${vids.length === 0 ? '<div class="workshop-empty">No videos at this stage.</div>' : vids.map(v => {
-                    const dl = deadlineInfo(v);
-                    return `<div class="wsp-stage-video" data-id="${v.id}">
-                        <div class="wsp-stage-video-main">
-                            <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}</div>
-                            <div class="wsp-stage-video-meta">
-                                ${v.videoType ? `<span class="wsp-type-chip">${escHtml(v.videoType)}</span>` : ''}
-                                ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
-                                ${getAssignedPeople(v).map(workerPill).join('')}
-                            </div>
-                        </div>
-                        <div class="wsp-stage-video-actions">
-                            <select class="wsp-claim-select" data-id="${v.id}" title="Assign / claim">
-                                <option value="">＋ assign</option>
-                                ${rosterNames(getAssignedPeople(v)).map(n => `<option value="${escAttr(n)}">${escHtml(n)}</option>`).join('')}
-                            </select>
-                            <button class="wsp-mini-btn done" data-done="${v.id}" title="Mark ${escAttr(stage.label)} done for this video">✓ Done</button>
-                            <button class="wsp-mini-btn" data-open="${v.id}">Open</button>
-                        </div>
-                    </div>`;
-                }).join('')}
+                ${vids.length === 0 ? '<div class="workshop-empty">No videos at this stage.</div>' : vids.map(v => stageVideoRowHtml(v, stage)).join('')}
             </div>
         `;
 
         document.getElementById('wsp-stage-panel-close').addEventListener('click', () => {
             selectedStageId = null;
+            expandedStageVideoId = null;
             renderTab();
         });
+        document.getElementById('wsp-stage-owner').addEventListener('change', (e) => {
+            SVC().setStageOwner(selectedStageId, e.target.value).catch(err => console.warn('stage owner save failed', err));
+        });
+        panel.querySelectorAll('[data-expand]').forEach(head => head.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return; // buttons act, don't toggle
+            const id = head.dataset.expand;
+            expandedStageVideoId = expandedStageVideoId === id ? null : id;
+            renderStagePanel();
+        }));
         panel.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.open)));
+        panel.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => openBranchDialog(b.dataset.decide, true)));
         panel.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', async () => {
             b.disabled = true;
             await setStageState(b.dataset.done, selectedStageId, 'done');
             renderTab();
         }));
-        panel.querySelectorAll('.wsp-claim-select').forEach(sel => {
-            sel.addEventListener('change', async () => {
-                const name = sel.value;
-                if (!name) return;
-                const v = VideoService.getById(sel.dataset.id);
-                const people = [...new Set([...getAssignedPeople(v), name])];
-                await VideoService.update(v.id, { assignedTo: people[0] || '', assignedToList: people, status: normalizedStatus(v) });
-                renderStagePanel();
-            });
-        });
+    }
+
+    // The Decomposition validation gate: explicit yes/no per branch.
+    // Branches switched OFF are auto-skipped ('na') everywhere downstream.
+    function openBranchDialog(videoId, markDecompDone) {
+        const v = VideoService.getById(videoId);
+        if (!v) return;
+        const b = v.branches || {};
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `
+            <div class="wsp-picker wsp-branch-modal">
+                <div class="wsp-picker-header"><span>🧩 Decomposition — what does "${escHtml(v.name)}" need?</span><button class="wsp-picker-close" data-close>✕</button></div>
+                <div class="wsp-branch-list">
+                    <div class="wsp-hint">Only branches switched ON will ever see this video — everything else is skipped automatically. That's the validation: nobody gets handed work that doesn't apply.</div>
+                    ${PS().BRANCH_QUESTIONS.map(q => `
+                        <label class="wsp-branch-row">
+                            <input type="checkbox" data-flag="${q.flag}" ${b[q.flag] === true ? 'checked' : ''}>
+                            <span class="wsp-branch-label">${q.label}</span>
+                            <span class="wsp-hint">${escHtml(q.hint)}</span>
+                        </label>`).join('')}
+                </div>
+                <div class="wsp-branch-actions">
+                    <button class="wsp-mini-btn" id="wsp-branch-save">Save decisions</button>
+                    ${markDecompDone ? `<button class="wsp-mini-btn done" id="wsp-branch-save-done">Save & complete Decomposition ✓</button>` : ''}
+                </div>
+            </div>`;
+        const panel = container.querySelector('.workshop-panel');
+        panel.appendChild(overlay);
+        const close = () => overlay.remove();
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+        overlay.querySelector('[data-close]').addEventListener('click', close);
+        const save = async (alsoDone) => {
+            const branches = {};
+            overlay.querySelectorAll('input[data-flag]').forEach(i => { branches[i.dataset.flag] = i.checked; });
+            const fresh = VideoService.getById(videoId) || v;
+            const changes = { branches, status: normalizedStatus(fresh) };
+            if (alsoDone) changes.stageState = { ...(fresh.stageState || {}), decomp: 'done' };
+            await VideoService.update(videoId, changes);
+            close();
+            if (currentPage === 'detail' && selectedVideo && selectedVideo.id === videoId) renderDetail();
+            else renderTab();
+        };
+        overlay.querySelector('#wsp-branch-save').addEventListener('click', () => save(false));
+        const sd = overlay.querySelector('#wsp-branch-save-done');
+        if (sd) sd.addEventListener('click', () => save(true));
     }
 
     function normalizedStatus(video) {
@@ -427,7 +535,7 @@ const WorkshopUI = (() => {
             const q = fSearch.toLowerCase();
             list = list.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hook || '').toLowerCase().includes(q));
         }
-        if (fStage) list = list.filter(v => PS().frontier(v).includes(fStage));
+        if (fStage) { const c = ctxNow(); list = list.filter(v => PS().frontier(v, c).includes(fStage)); }
         if (fType) list = list.filter(v => v.videoType === fType);
         if (fProject) list = list.filter(v => (v.projectIds || []).includes(fProject));
         if (fSponsor) list = list.filter(v => v.sponsorId === fSponsor);
@@ -962,16 +1070,19 @@ const WorkshopUI = (() => {
 
     function stageChecklistHtml(v) {
         // Stages grouped by topo layer, left → right like the board
+        const ctx = ctxNow();
         return `<div class="wsp-checklist">
             ${PS().LAYERS.map(ids => `<div class="wsp-checklist-col">
                 ${ids.map(id => {
                     const st = PS().get(id);
-                    const state = PS().stateOf(v, id);
-                    const ready = PS().isReady(v, id);
-                    const cls = state === 'done' ? 'done' : state === 'na' ? 'na' : ready ? 'ready' : 'locked';
-                    return `<div class="wsp-check ${cls}" data-stage="${id}" title="${escAttr(st.desc || '')}">
-                        <span class="wsp-check-mark">${state === 'done' ? '✓' : state === 'na' ? '–' : ready ? '●' : '○'}</span>
-                        <span class="wsp-check-label">${st.icon} ${escHtml(st.label)}</span>
+                    const state = PS().effectiveState(v, id, ctx);
+                    const ready = PS().isReady(v, id, ctx);
+                    const cls = (state === 'done' || state === 'auto') ? 'done' : state === 'na' ? 'na' : ready ? 'ready' : 'locked';
+                    const mark = state === 'done' ? '✓' : state === 'auto' ? '⚡' : state === 'na' ? '–' : ready ? '●' : '○';
+                    const autoTag = state === 'auto' ? '<span class="wsp-auto-tag">auto</span>' : '';
+                    return `<div class="wsp-check ${cls}" data-stage="${id}" title="${escAttr((st.desc || '') + (PS().autoDesc(id) ? '\n⚡ ' + PS().autoDesc(id) : ''))}">
+                        <span class="wsp-check-mark">${mark}</span>
+                        <span class="wsp-check-label">${st.icon} ${escHtml(st.label)}${autoTag}</span>
                         <span class="wsp-check-actions">
                             <button class="wsp-check-btn" data-act="done" title="Mark done">✓</button>
                             <button class="wsp-check-btn" data-act="na" title="Not applicable for this video">N/A</button>
@@ -1073,7 +1184,10 @@ const WorkshopUI = (() => {
                         </div>
                     </details>
 
-                    <label>Pipeline Progress</label>
+                    <div class="wsp-progress-head">
+                        <label>Pipeline Progress</label>
+                        <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
+                    </div>
                     ${stageChecklistHtml(v)}
 
                     <div class="wsp-subsection">
@@ -1157,6 +1271,9 @@ const WorkshopUI = (() => {
             });
         }
 
+        // Branch decisions (the decomposition validation gate)
+        document.getElementById('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
+
         // Stage checklist
         el.querySelectorAll('.wsp-check').forEach(row => {
             const stageId = row.dataset.stage;
@@ -1169,6 +1286,11 @@ const WorkshopUI = (() => {
                     if (stageId === 'post' && next === 'done') {
                         await saveFields(false);
                         await postFromDetail();
+                        return;
+                    }
+                    // Completing Decomposition requires the branch decisions
+                    if (stageId === 'decomp' && next === 'done' && !PS().branchesDecided(v)) {
+                        openBranchDialog(v.id, true);
                         return;
                     }
                     await setStageState(v.id, stageId, next);
@@ -1389,6 +1511,7 @@ const WorkshopUI = (() => {
             container = null;
             selectedVideo = null;
             selectedStageId = null;
+            expandedStageVideoId = null;
             selectedProjectId = null;
             currentPage = 'list';
             activeTab = 'pipeline';

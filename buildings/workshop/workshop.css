@@ -395,17 +395,62 @@
 .wsp-stage-panel-desc { font-size: 12px; color: #999; margin-top: 2px; max-width: 560px; }
 .wsp-stage-panel-list { flex: 1; overflow-y: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
 .wsp-stage-video {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    background: #fff; border: 1px solid #ece8e0; border-radius: 10px; padding: 8px 12px;
+    background: #fff; border: 1px solid #ece8e0; border-radius: 10px;
+    overflow: hidden;
 }
+.wsp-stage-video.expanded { border-color: #c9c2b4; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.wsp-stage-video-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 12px; cursor: pointer;
+}
+.wsp-stage-video-head:hover { background: #faf8f4; }
+.wsp-caret { color: #b09a78; font-size: 12px; flex-shrink: 0; width: 12px; }
 .wsp-stage-video-main { min-width: 0; flex: 1; }
 .wsp-stage-video-name { font-size: 13.5px; font-weight: 700; color: #333; display: flex; align-items: center; gap: 6px; }
 .wsp-stage-video-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 3px; }
 .wsp-stage-video-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
-.wsp-claim-select {
-    border: 1px solid #e0dcd6; border-radius: 7px; background: #faf8f5;
-    font-size: 11px; padding: 4px 6px; max-width: 92px; color: #555;
+.wsp-stage-video-body {
+    border-top: 1px dashed #ece8e0; padding: 10px 12px 12px 30px;
+    display: flex; flex-direction: column; gap: 8px; background: #fdfcfa;
 }
+.wsp-svb-field { font-size: 12.5px; color: #555; line-height: 1.45; white-space: pre-wrap; }
+.wsp-svb-label {
+    display: block; font-size: 10px; font-weight: 800; color: #b09a78;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1px;
+}
+.wsp-svb-actions { display: flex; justify-content: flex-end; }
+
+/* Stage panel header extras */
+.wsp-stage-panel-headmain { min-width: 0; flex: 1; }
+.wsp-stage-panel-side { display: flex; align-items: flex-start; gap: 10px; flex-shrink: 0; }
+.wsp-auto-desc { font-size: 11.5px; color: #0a7a63; font-weight: 600; margin-top: 3px; }
+.wsp-auto-tag {
+    background: #e6f7f1; color: #0a7a63; border-radius: 5px;
+    font-size: 8.5px; font-weight: 800; padding: 1px 4px; margin-left: 4px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+}
+.wsp-owner-label {
+    display: flex; flex-direction: column; gap: 3px;
+    font-size: 10px; font-weight: 800; color: #b09a78; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.wsp-owner-label select {
+    border: 1px solid #e0dcd6; border-radius: 7px; background: #fff;
+    font-size: 12px; padding: 4px 6px; color: #444; font-family: inherit;
+}
+
+/* Branch decision modal */
+.wsp-branch-modal { max-width: 520px; }
+.wsp-branch-list { padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.wsp-branch-row {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 7px 10px; border: 1px solid #f0ece4; border-radius: 9px; cursor: pointer;
+}
+.wsp-branch-row:hover { background: #faf8f4; }
+.wsp-branch-row input { flex-shrink: 0; transform: translateY(1px); }
+.wsp-branch-label { font-size: 13px; font-weight: 700; color: #333; white-space: nowrap; }
+.wsp-branch-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid #f0ece4; }
+.wsp-progress-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wsp-progress-head label { margin-bottom: 0; }
 
 /* Generic small bits */
 .wsp-mini-btn {
@@ -677,8 +722,9 @@
     .wsp-order-cols { grid-template-columns: 1fr; }
     .wsp-grid { grid-template-columns: 1fr 1fr; }
     .workshop-header { flex-wrap: wrap; gap: 6px; }
-    .wsp-stage-video { flex-direction: column; align-items: stretch; }
-    .wsp-stage-video-actions { justify-content: flex-end; }
+    .wsp-stage-video-head { flex-wrap: wrap; }
+    .wsp-stage-video-actions { margin-left: auto; }
+    .wsp-stage-video-body { padding-left: 14px; }
 }
 
 /* Nested component tree */
