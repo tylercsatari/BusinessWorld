@@ -106,10 +106,10 @@
         #loading-overlay .status { font-family: 'Nunito', sans-serif; font-size: 16px; color: rgba(255,255,255,0.8); margin-top: 14px; font-weight: 700; }
     </style>
     <link rel="stylesheet" href="buildings/storage/storage.css">
+    <link rel="stylesheet" href="buildings/videolab/videolab.css">
     <link rel="stylesheet" href="buildings/library/library.css">
     <link rel="stylesheet" href="buildings/movietheatre/movietheatre.css">
-    <link rel="stylesheet" href="buildings/incubator/incubator.css">
-    <link rel="stylesheet" href="buildings/workshop/workshop.css">
+    <link rel="stylesheet" href="buildings/workshop/workshop.css?v=2">
     <link rel="stylesheet" href="buildings/pen/pen.css">
     <link rel="stylesheet" href="buildings/pen/pen-analysis.css">
     <link rel="stylesheet" href="buildings/research/research.css?v=2">
@@ -172,7 +172,6 @@
 <div id="edit-indicator">EDIT MODE - Drag to rearrange</div>
 <div id="tooltip"></div>
 <div id="bw-badge-library" class="building-count-badge"></div>
-<div id="bw-badge-incubator" class="building-count-badge"></div>
 <div id="bw-badge-workshop" class="building-count-badge"></div>
 <div id="joystick-zone"><div id="joystick-base"><div id="joystick-stick"></div></div></div>
 <div id="modal-overlay" onclick="closeModal()">
@@ -201,8 +200,7 @@
     <div class="divider"></div>
     <h3>Buildings</h3>
     <div class="control-row"><span class="control-desc">The Pen - Animal socializing area</span></div>
-    <div class="control-row"><span class="control-desc">Incubator - Hatch eggs here</span></div>
-    <div class="control-row"><span class="control-desc">Workshop - Build & craft items</span></div>
+    <div class="control-row"><span class="control-desc">Workshop - The video pipeline</span></div>
     <div class="control-row"><span class="control-desc">Storage - Store your materials</span></div>
     <div class="control-row"><span class="control-desc">Money Pit - Your business bank</span></div>
     <div class="control-row"><span class="control-desc">Employee Island - Manage workers</span></div>
@@ -225,8 +223,9 @@
 <script src="buildings/storage/storage-airtable.js"></script>
 <script src="buildings/storage/storage-embeddings.js"></script>
 <script src="buildings/storage/storage-service.js"></script>
-<script src="buildings/storage/storage-intent.js"></script>
+<script src="buildings/storage/storage-agent.js"></script>
 <script src="buildings/storage/storage-ui.js"></script>
+<script src="buildings/videolab/videolab-ui.js"></script>
 <script>
 // Global utility functions used by video pipeline buildings + index.html module
 function seededRng(seed) {
@@ -254,17 +253,21 @@ function hashString(str) {
 <script src="buildings/library/script-service.js"></script>
 <script src="buildings/library/link-service.js"></script>
 <script src="buildings/library/script-linker.js"></script>
-<script src="buildings/library/library-ui.js"></script>
+<script src="buildings/library/dag-flowchart.js?v=1780965999"></script>
+<script src="buildings/library/library-ui.js?v=1780965999"></script>
 <script src="buildings/movietheatre/movietheatre-ui.js"></script>
-<script src="buildings/incubator/incubator-ui.js"></script>
-<script src="buildings/workshop/workshop-ui.js"></script>
+<script src="buildings/egg-renderer.js"></script>
+<script src="buildings/workshop/pipeline-stages.js"></script>
+<script src="buildings/workshop/pipeline-service.js"></script>
+<script src="buildings/workshop/workshop-ui.js?v=2"></script>
 <script src="buildings/pen/pen-ui.js"></script>
 <script src="buildings/research/research-ui.js?v=2"></script>
 <script src="buildings/gym/gym-service.js"></script>
 <script src="buildings/gym/gym-ui.js"></script>
 <script src="buildings/chocolatebar/chocolatebar-ui.js"></script>
 <script src="buildings/jarvis/jarvis-variable-catalog.js?v=1"></script>
-<script src="buildings/jarvis/jarvis-ui.js?v=12"></script>
+<script src="buildings/jarvis/jarvis-qrd.js?v=8"></script>
+<script src="buildings/jarvis/jarvis-ui.js?v=13"></script>
 <script src="buildings/finance/finance-ui.js"></script>
 <script src="buildings/employee/employee-service.js"></script>
 <script src="buildings/employee/employee-ui.js"></script>
@@ -373,7 +376,6 @@ async function loadAllModels() {
     const models = {
         workshop: 'assets/models/buildings/workshop.glb',
         storage: 'assets/models/buildings/storage.glb',
-        incubator: 'assets/models/buildings/incubator.glb',
         moneypit: 'assets/models/buildings/moneypit.glb',
         pen: 'assets/models/buildings/pen.glb',
         island: 'assets/models/buildings/island.glb',
@@ -613,7 +615,7 @@ function makeClickable(group, name, type = 'building') {
     return group;
 }
 
-let workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, movieTheatre, gym, chocolateBar;
+let workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, movieTheatre, gym, chocolateBar, videoLab;
 let jarvisNetwork; // separate group for network graph (replaceable with real data)
 let zeusMesh; // Zeus the cat
 
@@ -669,26 +671,6 @@ function createWorkshop() {
 function createStorage() {
     const g = prepareModel('storage', 7);
     return makeClickable(g, 'Storage');
-}
-
-// --- INCUBATOR: Tower House model + eggs + glow ---
-function createIncubator() {
-    const g = prepareModel('incubator', 5);
-    // Eggs around base
-    const eggColors = [0xfff5ee, 0xffe4c4, 0xffdab9, 0xffe0b2, 0xfff8e1];
-    for (let i = 0; i < 5; i++) {
-        const eg = new THREE.SphereGeometry(0.35, 12, 12); eg.scale(1, 1.4, 1);
-        const egg = new THREE.Mesh(eg, new THREE.MeshStandardMaterial({ color: eggColors[i], roughness: 0.4, emissive: 0xffcc66, emissiveIntensity: 0.1 }));
-        const a = i / 5 * Math.PI * 2;
-        egg.position.set(Math.cos(a) * 1.5, 0.5, Math.sin(a) * 1.5);
-        egg.userData = { isEgg: true, eggOffset: Math.random() * Math.PI * 2 };
-        addOutline(egg, 0.02, 0x8b6914); g.add(egg);
-    }
-    // Warm glow
-    const warmLight = new THREE.PointLight(0xff9933, 0.8, 12, 2);
-    warmLight.position.y = 2; g.add(warmLight);
-
-    return makeClickable(g, 'Incubator');
 }
 
 // --- MONEY PIT: Giant geodesic dome filled with gold coins proportional to level progress ---
@@ -1992,6 +1974,36 @@ function createGym() {
     return makeClickable(g, 'Gym');
 }
 
+// --- VIDEO LAB: dark studio with a glowing screen + clapperboard ---
+function createVideoLab() {
+    const g = new THREE.Group();
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x16121f, roughness: 0.7, metalness: 0.25 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(8, 5.5, 7), wallMat);
+    body.position.y = 2.75; body.castShadow = true; body.receiveShadow = true; g.add(body);
+    // Roof
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.4, 7.6), new THREE.MeshStandardMaterial({ color: 0x0e0a16, roughness: 0.6, metalness: 0.4 }));
+    roof.position.y = 5.7; roof.castShadow = true; g.add(roof);
+    // Big glowing "screen" on the front face — purple
+    const screenMat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, emissive: 0x7c3aed, emissiveIntensity: 0.9, roughness: 0.3 });
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(5.4, 3, 0.08), screenMat);
+    screen.position.set(0, 3, 3.55); g.add(screen);
+    // Play triangle on the screen
+    const playMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.7 });
+    const play = new THREE.Mesh(new THREE.CircleGeometry(0.75, 3), playMat);
+    play.rotation.y = 0; play.position.set(0, 3, 3.62); play.rotation.z = -Math.PI / 2; g.add(play);
+    // Clapperboard sign on top
+    const clapBase = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.7, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 }));
+    clapBase.position.set(0, 4.9, 3.6); g.add(clapBase);
+    for (let i = 0; i < 6; i++) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.14), new THREE.MeshStandardMaterial({ color: i % 2 ? 0xffffff : 0x111111 }));
+        stripe.position.set(-1.35 + i * 0.54, 5.3, 3.6); stripe.rotation.z = 0.25; g.add(stripe);
+    }
+    // Purple light glow
+    const lab = new THREE.PointLight(0x7c3aed, 0.9, 14); lab.position.set(0, 4, 5); g.add(lab);
+    g.position.set(22, 0, 6); // default spot (draggable)
+    return makeClickable(g, 'Video Lab');
+}
+
 // --- CHOCOLATE BAR ---
 function createChocolateBar() {
     const g = new THREE.Group();
@@ -2270,9 +2282,9 @@ async function initProjectFlags(savedFlags) {
 }
 
 // --- Save / Load Layout ---
-const BUILDING_NAMES = ['Workshop', 'Storage', 'Incubator', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar'];
+const BUILDING_NAMES = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Video Lab'];
 function getBuildingByName(n) {
-    return { 'Workshop': workshop, 'Storage': storage, 'Incubator': incubator, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar }[n];
+    return { 'Workshop': workshop, 'Storage': storage, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar, 'Video Lab': videoLab }[n];
 }
 let _layoutReady = false;
 function saveLayout() {
@@ -2322,7 +2334,6 @@ async function init() {
     // Create buildings from loaded models
     workshop = createWorkshop();
     storage = createStorage();
-    incubator = createIncubator();
     moneyPit = createMoneyPit();
     pen = createPen();
     employeeIsland = createEmployeeIsland();
@@ -2334,6 +2345,7 @@ async function init() {
     movieTheatre = createMovieTheatre();
     gym = createGym();
     chocolateBar = createChocolateBar();
+    videoLab = createVideoLab();
 
     // Load saved layout or use defaults
     const saved = await loadLayout();
@@ -2378,7 +2390,7 @@ async function init() {
 
     // Snap buildings to grid (for initial default positions)
     if (!saved) {
-        [workshop, storage, incubator, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house].forEach(b => {
+        [workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab].forEach(b => {
             b.position.x = snapToGrid(b.position.x);
             b.position.z = snapToGrid(b.position.z);
         });
@@ -2418,7 +2430,7 @@ async function init() {
     // Pen scale slider
     document.getElementById('pen-scale-slider').addEventListener('input', () => _applyPenCreatureScales());
     // Expose for testing
-    window._bw = { playerMesh, camera, cameraTarget, scene, workshop, storage, incubator, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house };
+    window._bw = { playerMesh, camera, cameraTarget, scene, workshop, storage, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab };
     console.log('Business World loaded!');
     fetchPlaidBalance();
 }
@@ -3394,7 +3406,7 @@ if (isTouchDevice && joystickZone) {
 }
 
 // --- Building Count Badges ---
-const bwBadgeCounts = { library: null, incubator: null, workshop: null };
+const bwBadgeCounts = { library: null, workshop: null };
 let bwBadgeLastFetch = 0;
 function fetchBuildingCounts() {
     const now = Date.now();
@@ -3406,14 +3418,12 @@ function fetchBuildingCounts() {
     }).catch(() => {});
     fetch('/api/v1/videos?key=' + readKey).then(r => r.json()).then(videos => {
         if (!Array.isArray(videos)) return;
-        bwBadgeCounts.incubator = videos.filter(v => v.status === 'incubator').length;
-        bwBadgeCounts.workshop = videos.filter(v => v.status === 'workshop' || v.status === 'edit').length;
+        bwBadgeCounts.workshop = videos.filter(v => v.status === 'pipeline' || v.status === 'incubator' || v.status === 'workshop' || v.status === 'edit').length;
     }).catch(() => {});
 }
 function updateBuildingBadges() {
     const badges = [
         { id: 'bw-badge-library', building: library, count: bwBadgeCounts.library, heightOffset: 15 },
-        { id: 'bw-badge-incubator', building: incubator, count: bwBadgeCounts.incubator, heightOffset: 10 },
         { id: 'bw-badge-workshop', building: workshop, count: bwBadgeCounts.workshop, heightOffset: 9 }
     ];
     for (const b of badges) {
@@ -3450,8 +3460,6 @@ function animate() {
     // Employees
     employees.forEach((e, i) => { e.position.y = Math.sin(time * 2 + i * 1.5) * 0.06; e.rotation.y = Math.sin(time * 0.5 + i * 2) * 0.4; });
     // (Money Pit: no animations — static gold pile)
-    // Egg wobble
-    incubator.children.forEach(ch => { if (ch.userData.isEgg) ch.rotation.z = Math.sin(time * 3 + ch.userData.eggOffset) * 0.08; });
     // Tree wind
     allTrees.forEach(t => t.children.forEach(ch => { if (ch.userData.isTreeFoliage) { ch.rotation.x = Math.sin(time * 0.8 + ch.userData.windOffset) * 0.03; ch.rotation.z = Math.cos(time * 0.6 + ch.userData.windOffset) * 0.02; } }));
     // Clouds

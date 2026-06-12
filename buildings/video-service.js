@@ -1,6 +1,7 @@
 /**
  * Video Pipeline Service — shared CRUD for the video lifecycle.
- * Videos flow: Incubator (queued) -> Workshop (active) -> Pen (posted)
+ * Videos flow: Library (idea) -> Workshop pipeline (status 'pipeline') -> Pen (posted)
+ * Legacy statuses 'incubator' and 'workshop' are treated as in-pipeline.
  * Backed by R2 via /api/data/videos.
  */
 const VideoService = (() => {
@@ -56,6 +57,11 @@ const VideoService = (() => {
             return videos.filter(v => v.status === status);
         },
 
+        // All videos in the deterministic pipeline (incl. legacy statuses)
+        getPipeline() {
+            return videos.filter(v => v.status === 'pipeline' || v.status === 'incubator' || v.status === 'workshop');
+        },
+
         getByProject(project) {
             return videos.filter(v => v.project === project);
         },
@@ -95,7 +101,7 @@ const VideoService = (() => {
                     body: JSON.stringify({
                         name: videoData.name || 'Untitled Video',
                         project: videoData.project || '',
-                        status: videoData.status || 'incubator',
+                        status: videoData.status || 'pipeline',
                         hook: videoData.hook || '',
                         context: videoData.context || '',
                         script: videoData.script || '',
@@ -105,7 +111,16 @@ const VideoService = (() => {
                         links: videoData.links || '',
                         sourceIdeaId: ideaId,
                         youtubeVideoId: videoData.youtubeVideoId || '',
-                        analysisStatus: videoData.analysisStatus || ''
+                        analysisStatus: videoData.analysisStatus || '',
+                        // --- Pipeline fields ---
+                        stageState: videoData.stageState || {},          // { [stageId]: 'done' | 'na' }
+                        videoType: videoData.videoType || '',            // e.g. short / longform / series
+                        deadline: videoData.deadline || '',
+                        sponsorId: videoData.sponsorId || '',
+                        projectIds: Array.isArray(videoData.projectIds) ? videoData.projectIds : [],
+                        dependsOn: Array.isArray(videoData.dependsOn) ? videoData.dependsOn : [],
+                        requiredInventoryIds: Array.isArray(videoData.requiredInventoryIds) ? videoData.requiredInventoryIds : [],
+                        producesInventoryIds: Array.isArray(videoData.producesInventoryIds) ? videoData.producesInventoryIds : []
                     })
                 });
                 if (!res.ok) throw new Error(`Create video failed: ${res.status}`);
@@ -148,8 +163,9 @@ const VideoService = (() => {
         },
 
         // --- Status transitions ---
-        async moveToIncubator(id) {
-            return this.update(id, { status: 'incubator', assignedTo: '', assignedToList: [] });
+        // Pull a posted video back into the pipeline
+        async requeue(id) {
+            return this.update(id, { status: 'pipeline' });
         },
 
         // --- Video Analysis ---

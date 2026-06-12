@@ -4015,7 +4015,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             };
             let videos = await dataStore.getAll('videos');
             const ideas = await dataStore.getAll('ideas');
-            videos = videos.filter(v => v.status === 'workshop');
+            videos = videos.filter(v => v.status === 'pipeline' || v.status === 'workshop' || v.status === 'incubator');
             if (projectParam) videos = videos.filter(v => v.project === projectParam);
             if (assigneeParam === 'none') videos = videos.filter(v => getAssignedPeople(v).length === 0);
             else if (assigneeParam) videos = videos.filter(v => getAssignedPeople(v).includes(assigneeParam));
@@ -4041,8 +4041,8 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             // Resolve pipeline status per idea (same logic as app)
             const getIdeaStatus = (idea) => {
                 const video = videos.find(v => v.sourceIdeaId === idea.id);
-                if (video) return video.status || 'incubator';
-                if (idea.type === 'converted') return 'incubator';
+                if (video) return video.status || 'pipeline';
+                if (idea.type === 'converted') return 'pipeline';
                 return idea.type || 'idea';
             };
 
@@ -4051,6 +4051,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 ideas = ideas.filter(i => {
                     const s = getIdeaStatus(i);
                     if (statusParam === 'posted') return s === 'posted' || s === 'converted';
+                    if (statusParam === 'pipeline' || statusParam === 'incubator' || statusParam === 'workshop') {
+                        return s === 'pipeline' || s === 'incubator' || s === 'workshop' || s === 'edit';
+                    }
                     return s === statusParam;
                 });
             }
@@ -6258,7 +6261,7 @@ function renderShareIdeaPage(idea) {
 }
 
 function renderShareIdeasPage(ideas, statusFilter, catFilter, getStatus) {
-    const statusLabels = { all: 'All', idea: 'Ideas', incubator: 'Incubator', workshop: 'Workshop', posted: 'Posted' };
+    const statusLabels = { all: 'All', idea: 'Ideas', pipeline: 'In Pipeline', incubator: 'In Pipeline', workshop: 'In Pipeline', posted: 'Posted' };
 
     let bodyHtml = '<div class="share-container">';
     bodyHtml += '<div class="share-header"><h1>Ideas</h1></div>';

@@ -1564,7 +1564,7 @@ const LibraryUI = (() => {
     function getNotesFilterSummary() {
         const parts = [];
         if (notesFilterStatus !== 'all') {
-            const labels = { idea: 'Ideas', incubator: 'Incubator', workshop: 'Workshop', posted: 'Posted' };
+            const labels = { idea: 'Ideas', pipeline: 'In Pipeline', incubator: 'In Pipeline', workshop: 'In Pipeline', posted: 'Posted' };
             parts.push(labels[notesFilterStatus] || notesFilterStatus);
         }
         if (notesFilterCategory !== 'all') {
@@ -1597,7 +1597,7 @@ const LibraryUI = (() => {
         const statusCounts = { all: allIdeas.length };
         for (const idea of allIdeas) {
             const s = ideaMapGetStatus(idea);
-            const key = (s === 'edit') ? 'workshop' : (s === 'posted') ? 'posted' : s;
+            const key = (s === 'edit' || s === 'workshop' || s === 'incubator') ? 'pipeline' : (s === 'posted') ? 'posted' : s;
             statusCounts[key] = (statusCounts[key] || 0) + 1;
         }
 
@@ -1605,8 +1605,7 @@ const LibraryUI = (() => {
         const statusFilters = [
             { key: 'all', label: 'All' },
             { key: 'idea', label: 'Ideas' },
-            { key: 'incubator', label: 'Incubator' },
-            { key: 'workshop', label: 'Workshop' },
+            { key: 'pipeline', label: 'In Pipeline' },
             { key: 'posted', label: 'Posted' }
         ];
 
@@ -1836,8 +1835,10 @@ const LibraryUI = (() => {
                 ideas = ideas.filter(i => {
                     const s = ideaMapGetStatus(i);
                     if (notesFilterStatus === 'idea') return s === 'idea';
-                    if (notesFilterStatus === 'incubator') return s === 'incubator';
-                    if (notesFilterStatus === 'workshop') return s === 'workshop' || s === 'edit';
+                    // 'pipeline' covers legacy incubator/workshop statuses too
+                    if (notesFilterStatus === 'pipeline' || notesFilterStatus === 'incubator' || notesFilterStatus === 'workshop') {
+                        return s === 'pipeline' || s === 'incubator' || s === 'workshop' || s === 'edit';
+                    }
                     if (notesFilterStatus === 'posted') return s === 'posted';
                     return s === notesFilterStatus;
                 });
@@ -2423,9 +2424,9 @@ const LibraryUI = (() => {
                 NotesService.update(note.id, { type: 'converted' }).catch(() => {});
             }
         } else if (isConverted) {
-            incubatorSection = `<div class="library-converted-badge">Sent to Incubator</div>`;
+            incubatorSection = `<div class="library-converted-badge">In Pipeline</div>`;
         } else {
-            incubatorSection = `<button class="library-send-btn" id="library-send-incubator">Send to Incubator</button>`;
+            incubatorSection = `<button class="library-send-btn" id="library-send-incubator">Queue in Pipeline ▶</button>`;
         }
 
         // Script field — inline textarea
@@ -2565,7 +2566,7 @@ const LibraryUI = (() => {
     async function sendToIncubator() {
         if (!selectedNote) return;
         const existing = VideoService.getByIdeaId(selectedNote.id);
-        if (existing) { alert('This idea has already been sent to the Incubator.'); return; }
+        if (existing) { alert('This idea is already in the pipeline.'); return; }
 
         const name = document.getElementById('library-editor-title')?.value.trim() || selectedNote.name || 'Untitled';
         const hookEl = document.getElementById('library-idea-hook');
@@ -2580,7 +2581,7 @@ const LibraryUI = (() => {
         if (sendBtn) { sendBtn.textContent = 'Sending...'; sendBtn.disabled = true; }
         const overlay = document.createElement('div');
         overlay.className = 'library-sending-overlay';
-        overlay.innerHTML = `<div class="library-sending-content"><div class="library-sending-egg">&#129370;</div><div class="library-sending-text">Sending to Incubator...</div></div>`;
+        overlay.innerHTML = `<div class="library-sending-content"><div class="library-sending-egg">&#129370;</div><div class="library-sending-text">Queueing into pipeline...</div></div>`;
         const editorBody = document.querySelector('.library-editor-body');
         if (editorBody) editorBody.style.position = 'relative';
         if (editorBody) editorBody.appendChild(overlay);
@@ -2591,9 +2592,9 @@ const LibraryUI = (() => {
         try {
             const scriptEl = document.getElementById('library-idea-script');
             const script = scriptEl?.value || selectedNote.script || '';
-            const video = await VideoService.create({ name, hook, context, script, project, sourceIdeaId: selectedNote.id, status: 'incubator' });
+            const video = await VideoService.create({ name, hook, context, script, project, sourceIdeaId: selectedNote.id, status: 'pipeline', stageState: {} });
             console.log("sendToIncubator: video created:", JSON.stringify(video));
-            await VideoService.sync(true); // force refresh so Incubator building sees the new video
+            await VideoService.sync(true); // force refresh so the Workshop pipeline sees the new video
             await NotesService.update(selectedNote.id, { type: 'converted' });
             console.log("sendToIncubator: note type updated to converted");
 
@@ -2609,10 +2610,10 @@ const LibraryUI = (() => {
             renderNoteEditor(selectedNote);
             renderNotesList().catch(() => {}); // update status badge in the list immediately
         } catch (e) {
-            console.error('Library: send to incubator failed', e);
+            console.error('Library: queue in pipeline failed', e);
             overlay.remove();
-            if (sendBtn) { sendBtn.textContent = 'Send to Incubator'; sendBtn.disabled = false; }
-            alert('Failed to send to Incubator:\n' + (e && e.message ? e.message : String(e)));
+            if (sendBtn) { sendBtn.textContent = 'Queue in Pipeline ▶'; sendBtn.disabled = false; }
+            alert('Failed to queue in pipeline:\n' + (e && e.message ? e.message : String(e)));
         }
     }
 
@@ -3312,7 +3313,7 @@ const LibraryUI = (() => {
         const projectVideos = VideoService.getByProject(p);
         const projectIdeas = NotesService.getByProject(p);
 
-        const statusLabel = (s) => s === 'incubator' ? 'Incubator' : s === 'workshop' ? 'Workshop' : s === 'posted' ? 'Posted' : s;
+        const statusLabel = (s) => (s === 'incubator' || s === 'workshop' || s === 'pipeline') ? 'In Pipeline' : s === 'posted' ? 'Posted' : s;
 
         let html = `
             <div class="library-project-detail-header">
@@ -4178,6 +4179,7 @@ const LibraryUI = (() => {
     // =====================
     const IDEAMAP_STATUS_COLORS = {
         idea: '#4a9eff',
+        pipeline: '#e8a020',
         incubator: '#e8a020',
         workshop: '#e67e22',
         edit: '#9b59b6',
@@ -4359,9 +4361,9 @@ const LibraryUI = (() => {
     function ideaMapGetStatus(idea) {
         // Always check linked video first — it has the true pipeline status
         const video = VideoService.getByIdeaId(idea.id);
-        if (video) return video.status || 'incubator';
+        if (video) return video.status || 'pipeline';
         // No linked video — use type/status fields
-        if (idea.type === 'converted') return 'incubator';
+        if (idea.type === 'converted') return 'pipeline';
         return idea.type || 'idea';
     }
 
@@ -4370,7 +4372,7 @@ const LibraryUI = (() => {
     }
 
     function ideaMapStatusLabel(status) {
-        const labels = { idea: 'Idea', incubator: 'Incubator', workshop: 'Workshop', edit: 'Edit', posted: 'Posted', 'in-progress': 'In Progress', converted: 'Converted' };
+        const labels = { idea: 'Idea', pipeline: 'In Pipeline', incubator: 'In Pipeline', workshop: 'In Pipeline', edit: 'Edit', posted: 'Posted', 'in-progress': 'In Progress', converted: 'Converted' };
         return labels[status] || status;
     }
 
@@ -4465,6 +4467,9 @@ const LibraryUI = (() => {
         if (sf !== 'all') {
             filtered = filtered.filter(i => {
                 const s = ideaMapGetStatus(i);
+                if (sf === 'pipeline' || sf === 'incubator' || sf === 'workshop') {
+                    return s === 'pipeline' || s === 'incubator' || s === 'workshop' || s === 'edit';
+                }
                 return s === sf;
             });
         }
@@ -4501,8 +4506,7 @@ const LibraryUI = (() => {
         const statusFilters = [
             { key: 'all', label: 'All' },
             { key: 'idea', label: 'Ideas' },
-            { key: 'incubator', label: 'Incubator' },
-            { key: 'workshop', label: 'Workshop' },
+            { key: 'pipeline', label: 'In Pipeline' },
             { key: 'posted', label: 'Posted' }
         ];
         // Pre-count per status across ALL ideas (unfiltered)
@@ -4510,7 +4514,8 @@ const LibraryUI = (() => {
         const statusCounts = {};
         for (const idea of allIdeas) {
             const s = ideaMapGetStatus(idea);
-            const key = (s === 'converted' || s === 'posted') ? 'posted' : s;
+            const key = (s === 'converted' || s === 'posted') ? 'posted'
+                : (s === 'incubator' || s === 'workshop' || s === 'edit') ? 'pipeline' : s;
             statusCounts[key] = (statusCounts[key] || 0) + 1;
         }
         statusCounts.all = allIdeas.length;
