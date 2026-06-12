@@ -792,3 +792,6 @@
     .wsp-legend { width: 100%; }
     .wsp-legend-chip { padding: 3px 7px; font-size: 10px; }
 }
+
+/* Move-to-stage veto control */
+.wsp-progress-head-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

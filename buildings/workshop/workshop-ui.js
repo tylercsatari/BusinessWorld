@@ -1361,7 +1361,13 @@ const WorkshopUI = (() => {
 
                     <div class="wsp-progress-head">
                         <label>Pipeline Progress</label>
-                        <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
+                        <div class="wsp-progress-head-actions">
+                            <select id="wsp-move-stage" class="wsp-inline-select" title="Veto: jump this video to any stage — everything before it gets marked done (hook/script/voiceover must exist if the move passes them)">
+                                <option value="">⏩ Move to stage…</option>
+                                ${PS().STAGES.map(s => `<option value="${s.id}">${s.icon} ${escHtml(s.label)}</option>`).join('')}
+                            </select>
+                            <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
+                        </div>
                     </div>
                     ${stageChecklistHtml(v)}
 
@@ -1434,6 +1440,16 @@ const WorkshopUI = (() => {
 
         // Branch decisions (the decomposition validation gate)
         document.getElementById('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
+
+        // Veto: jump straight to any stage
+        document.getElementById('wsp-move-stage').addEventListener('change', async (e) => {
+            const target = e.target.value;
+            e.target.value = '';
+            if (!target) return;
+            await saveFields(true); // capture any hook/script edits before validating
+            const moved = await moveVideoToStage(VideoService.getById(v.id) || v, target);
+            if (moved) renderDetail();
+        });
 
         // Stage checklist
         el.querySelectorAll('.wsp-check').forEach(row => {
@@ -1669,6 +1685,45 @@ const WorkshopUI = (() => {
                 btn.textContent = '⬆ Upload & link'; btn.disabled = false;
             }
         });
+    }
+
+    // Veto move: jump a video to any stage. Everything upstream of the
+    // target gets marked done so the target becomes the frontier; the target
+    // and everything after it are reset to pending. Hard requirements are
+    // only the FIELD gates the move would skip over (hook text, script text,
+    // linked voiceover) — components/branches are NOT mandatory here, this
+    // is the escape hatch for pre-pipeline videos.
+    async function moveVideoToStage(v, targetId) {
+        const target = PS().get(targetId);
+        if (!v || !target) return false;
+
+        const anc = new Set(PS().ancestorsOf(targetId));
+        const missing = [];
+        if (anc.has('hook') && (v.hook || '').trim().length < 10) missing.push('• Hook — write at least a line in the Hook field');
+        if (anc.has('script') && (v.script || '').trim().length < 100) missing.push('• Script — the Script field needs real content');
+        if (anc.has('voiceover') && !v.voPath) missing.push('• Voiceover — link or upload one first');
+        if (missing.length) {
+            alert(`Can't move to ${target.label} yet — the move would skip past mandatory fields that are still empty:\n\n${missing.join('\n')}`);
+            return false;
+        }
+
+        if (!confirm(`Move "${v.name}" to ${target.icon} ${target.label}?\nEverything before it will be marked done; ${target.label} and everything after reset to pending.`)) return false;
+
+        const cur = { ...(v.stageState || {}) };
+        const resetSet = new Set([targetId, ...PS().descendantsOf(targetId)]);
+        const stageState = {};
+        PS().STAGES.forEach(s => {
+            if (anc.has(s.id)) {
+                stageState[s.id] = cur[s.id] === 'na' ? 'na' : 'done';   // everything before: done (keep explicit N/As)
+            } else if (resetSet.has(s.id)) {
+                if (cur[s.id] === 'na') stageState[s.id] = 'na';          // target & after: pending (keep explicit N/As)
+            } else if (cur[s.id]) {
+                stageState[s.id] = cur[s.id];                             // unrelated parallel branches: untouched
+            }
+        });
+        await VideoService.update(v.id, { stageState, status: normalizedStatus(v) });
+        toast(`Moved to ${target.icon} ${target.label}`);
+        return true;
     }
 
     // Merge legacy dependsOn (plain video ids) into the typed deps list

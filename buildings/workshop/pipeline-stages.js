@@ -252,11 +252,26 @@ const PipelineStages = (() => {
         return video && (video.status === 'pipeline' || video.status === 'incubator' || video.status === 'workshop');
     }
 
+    // Transitive closures — used by the manual "move to stage" veto
+    function ancestorsOf(stageId) {
+        const out = new Set();
+        const walk = (id) => upstream[id].forEach(u => { if (!out.has(u)) { out.add(u); walk(u); } });
+        walk(stageId);
+        return [...out];
+    }
+    function descendantsOf(stageId) {
+        const out = new Set();
+        const walk = (id) => downstream[id].forEach(d => { if (!out.has(d)) { out.add(d); walk(d); } });
+        walk(stageId);
+        return [...out];
+    }
+
     return {
         STAGES, EDGES, LAYERS, BRANCH_QUESTIONS, BRANCH_FLAG_FOR_STAGE,
         get: id => stageById[id] || null,
         upstreamOf: id => upstream[id] || [],
         downstreamOf: id => downstream[id] || [],
+        ancestorsOf, descendantsOf,
         layerOf: id => layerOf[id] ?? 0,
         autoDesc: id => (AUTO_CHECKS[id] ? AUTO_CHECKS[id].desc : ''),
         stateOf, effectiveState, isDone, isReady, frontier, isComplete, progress,
