@@ -2286,9 +2286,23 @@ const BUILDING_NAMES = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee
 function getBuildingByName(n) {
     return { 'Workshop': workshop, 'Storage': storage, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar, 'Video Lab': videoLab }[n];
 }
-let _layoutReady = false;
+let _layoutReady = false;   // true only after the saved layout is APPLIED — saving before that would overwrite R2 with default positions
+let _layoutStale = false;   // another tab/device saved after we loaded — pause saves here so we don't put the buildings back
+let _layoutBasedOn = '';    // _savedAt stamp of the layout this tab is based on
+const _layoutWriter = 'w' + Math.random().toString(36).slice(2, 10);
+function layoutBanner(msg) {
+    let el = document.getElementById('layout-banner');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'layout-banner';
+        el.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:8px 16px;border-radius:8px;font:13px sans-serif;z-index:9999;box-shadow:0 2px 10px rgba(0,0,0,.4);';
+        document.body.appendChild(el);
+    }
+    el.textContent = msg;
+}
+function hideLayoutBanner() { document.getElementById('layout-banner')?.remove(); }
 function saveLayout(useBeacon) {
-    if (!_layoutReady) return;
+    if (!_layoutReady || _layoutStale) return;
     const data = {
         buildings: {},
         paths: Array.from(pathTiles),
@@ -2298,6 +2312,8 @@ function saveLayout(useBeacon) {
         penSize: { w: penSize.w, d: penSize.d },
         flags: projectFlags.map(f => ({ name: f.userData.projectName, x: f.position.x, z: f.position.z })),
         finances: finances,
+        _basedOn: _layoutBasedOn,
+        _writer: _layoutWriter,
     };
     BUILDING_NAMES.forEach(n => {
         const b = getBuildingByName(n);
@@ -2311,6 +2327,17 @@ function saveLayout(useBeacon) {
     }
     // keepalive lets an in-flight save finish even if the page navigates away
     fetch('/save-layout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json, keepalive: true })
+        .then(async res => {
+            if (res.status === 409) {
+                _layoutStale = true;
+                layoutBanner('⚠️ Layout was changed in another tab or device — saving is paused here. Reload to pick up the latest.');
+                return;
+            }
+            if (res.ok) {
+                const r = await res.json().catch(() => null);
+                if (r && r.savedAt) _layoutBasedOn = r.savedAt;
+            }
+        })
         .catch(err => console.warn('Server save failed:', err));
 }
 async function loadLayout() {
@@ -2318,12 +2345,38 @@ async function loadLayout() {
         const res = await fetch('/load-layout');
         if (res.ok) {
             const data = await res.json();
-            if (data && data.buildings) return data;
+            if (data && typeof data === 'object') return data;   // {} = nothing saved yet (fresh start)
         }
     } catch (e) {
         console.warn('Server load failed:', e);
     }
-    return null;
+    return null;   // ERROR — layout server unreachable; saves stay disabled until a retry succeeds
+}
+function applySavedBuildings(saved) {
+    if (!saved.buildings) return;
+    BUILDING_NAMES.forEach(n => {
+        const b = getBuildingByName(n);
+        if (b && saved.buildings[n]) {
+            b.position.x = saved.buildings[n].x;
+            b.position.z = saved.buildings[n].z;
+        }
+    });
+}
+// Load failed at startup: the session is read-only for layout (saving now
+// would clobber R2 with defaults). Keep retrying; apply + unlock on success.
+function retryLayoutLoad() {
+    layoutBanner('⚠️ Layout could not load — changes are NOT being saved. Retrying…');
+    const t = setInterval(async () => {
+        const saved = await loadLayout();
+        if (!saved) return;
+        clearInterval(t);
+        applySavedBuildings(saved);
+        if (saved.paths) saved.paths.forEach(k => { const [gx, gz] = k.split(',').map(Number); addPathTile(gx, gz); });
+        _layoutBasedOn = saved._savedAt || '';
+        _layoutReady = true;
+        hideLayoutBanner();
+        console.log('Layout loaded after retry — saving enabled');
+    }, 15000);
 }
 window.addEventListener('beforeunload', () => { saveLayout(true); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveLayout(true); });
@@ -2361,15 +2414,7 @@ async function init() {
     }
     if (saved) {
         // Restore building positions
-        if (saved.buildings) {
-            BUILDING_NAMES.forEach(n => {
-                const b = getBuildingByName(n);
-                if (b && saved.buildings[n]) {
-                    b.position.x = saved.buildings[n].x;
-                    b.position.z = saved.buildings[n].z;
-                }
-            });
-        }
+        applySavedBuildings(saved);
         // Restore path tiles
         if (saved.paths && saved.paths.length > 0) {
             saved.paths.forEach(key => {
@@ -2379,10 +2424,12 @@ async function init() {
         } else {
             initDefaultPaths();
         }
+        _layoutBasedOn = saved._savedAt || '';
+        _layoutReady = true;   // only now is it safe to save — we're based on the real layout
     } else {
         initDefaultPaths();
+        retryLayoutLoad();     // load FAILED: keep this session read-only for layout until it loads
     }
-    _layoutReady = true;
     scene.add(pathTileGroup);
 
     // Restore pen size
@@ -2396,7 +2443,7 @@ async function init() {
     initTrees(saved && saved.trees);
 
     // Snap buildings to grid (for initial default positions)
-    if (!saved) {
+    if (!saved || !saved.buildings) {
         [workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab].forEach(b => {
             b.position.x = snapToGrid(b.position.x);
             b.position.z = snapToGrid(b.position.z);

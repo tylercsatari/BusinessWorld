@@ -3575,18 +3575,32 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     if (r2Data) existing = JSON.parse(r2Data.toString());
                 } catch (_) { /* no existing layout, start fresh */ }
 
+                // Stale-writer guard: if someone saved since this client loaded,
+                // this client's copy of the world is old — writing it would put
+                // the buildings back where they were (the idle-tab clobber bug).
+                // A writer may always overwrite its OWN latest save (beacons
+                // can't read responses to rebase their stamp).
+                if (existing._savedAt && incoming._basedOn !== existing._savedAt && incoming._writer !== existing._writer) {
+                    res.writeHead(409, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'stale layout', savedAt: existing._savedAt }));
+                    return;
+                }
+
                 const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Video Lab'];
                 const MISSING_DEFAULTS = {
                     'Chocolate Bar': { x: 42, z: 12 },
                     'Gym': { x: 15, z: 30 },
                 };
 
-                // Merge buildings: keep R2 position when incoming is 0,0
+                // Merge buildings: keep R2 position when incoming is 0,0.
+                // Union of names so a building added in the client never gets
+                // silently dropped by a stale server-side list.
                 const existingBuildings = existing.buildings || {};
                 const incomingBuildings = incoming.buildings || {};
                 const merged = {};
 
-                for (const name of BUILDING_NAMES) {
+                const allNames = new Set([...BUILDING_NAMES, ...Object.keys(incomingBuildings), ...Object.keys(existingBuildings)]);
+                for (const name of allNames) {
                     const inc = incomingBuildings[name];
                     const ext = existingBuildings[name];
 
@@ -3603,13 +3617,15 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     // else: not in either source and no default — omit
                 }
 
-                // Build final layout: non-building fields from incoming, merged buildings
-                const finalLayout = { ...incoming, buildings: merged };
+                // Build final layout: non-building fields from incoming, merged buildings,
+                // stamped so the next save can prove it's based on this one
+                const finalLayout = { ...incoming, buildings: merged, _savedAt: new Date().toISOString(), _writer: incoming._writer || '' };
+                delete finalLayout._basedOn;
 
                 await cloud.uploadToR2('layout/layout.json', Buffer.from(JSON.stringify(finalLayout)), 'application/json');
                 console.log('Layout saved to R2 (merged)');
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end('{"ok":true}');
+                res.end(JSON.stringify({ ok: true, savedAt: finalLayout._savedAt }));
             } catch (e) {
                 res.writeHead(400);
                 res.end('Invalid JSON');
@@ -4000,11 +4016,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         }
         try {
             const buf = await cloud.downloadFromR2('layout/layout.json');
-            if (buf) {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(buf.toString('utf8'));
-                return;
-            }
+            // null = key doesn't exist yet (fresh start) — that's a valid empty
+            // layout, NOT an error; clients may save. 503 only on real R2 errors.
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(buf ? buf.toString('utf8') : '{}');
+            return;
         } catch (e) {
             console.warn('R2 layout load failed:', e.message);
         }
