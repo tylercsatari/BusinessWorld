@@ -129,14 +129,31 @@ const PipelineStages = (() => {
             test: (v) => !!(v.voPath)
         },
         animation: {
-            desc: 'auto: done once the hook video is linked (Hook Type = animation)',
-            test: (v) => v.hookType === 'animation' && !!(v.hookVideoPath)
+            desc: 'auto: done once every ANIMATION hook instance has its video linked',
+            test: (v) => {
+                const a = hooksOf(v).filter(h => h.type === 'animation');
+                return a.length > 0 && a.every(h => !!h.videoPath);
+            }
         },
         hookfilm: {
-            desc: 'auto: done once the hook video is linked (Hook Type = practical)',
-            test: (v) => v.hookType === 'practical' && !!(v.hookVideoPath)
+            desc: 'auto: done once every PRACTICAL hook instance has its video linked',
+            test: (v) => {
+                const p = hooksOf(v).filter(h => h.type === 'practical');
+                return p.length > 0 && p.every(h => !!h.videoPath);
+            }
         }
     };
+
+    // Hook instances: split-test variants of the hook, each typed
+    // (animation/practical) with its own footage file. Legacy single-hook
+    // fields (hookType/hookVideoPath) read as one instance.
+    function hooksOf(video) {
+        if (video && Array.isArray(video.hooks) && video.hooks.length) return video.hooks;
+        if (video && video.hookType) {
+            return [{ id: 'legacy', type: video.hookType, label: '', videoPath: video.hookVideoPath || '', videoName: video.hookVideoName || '' }];
+        }
+        return [];
+    }
 
     const stageById = {};
     STAGES.forEach(s => { stageById[s.id] = s; });
@@ -290,6 +307,6 @@ const PipelineStages = (() => {
         layerOf: id => layerOf[id] ?? 0,
         autoDesc: id => (AUTO_CHECKS[id] ? AUTO_CHECKS[id].desc : ''),
         stateOf, effectiveState, isDone, isReady, frontier, isComplete, progress,
-        branchesDecided, blockers, isInPipeline
+        branchesDecided, blockers, isInPipeline, hooksOf
     };
 })();

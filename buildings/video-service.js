@@ -123,9 +123,10 @@ const VideoService = (() => {
                         deps: Array.isArray(videoData.deps) ? videoData.deps : [],   // typed: [{kind:'video'|'component'|'order', id}]
                         voPath: videoData.voPath || '',                  // Dropbox path of the linked voiceover
                         voName: videoData.voName || '',
-                        hookType: videoData.hookType || '',              // 'animation' | 'practical' — flips those branches
-                        hookVideoPath: videoData.hookVideoPath || '',    // Dropbox path of the hook footage (<project>/hook/)
+                        hookType: videoData.hookType || '',              // legacy single-hook fields (read as one instance)
+                        hookVideoPath: videoData.hookVideoPath || '',
                         hookVideoName: videoData.hookVideoName || '',
+                        hooks: Array.isArray(videoData.hooks) ? videoData.hooks : [],  // hook instances: [{id, type, label, videoPath, videoName}]
                         requiredInventoryIds: Array.isArray(videoData.requiredInventoryIds) ? videoData.requiredInventoryIds : [],
                         producesInventoryIds: Array.isArray(videoData.producesInventoryIds) ? videoData.producesInventoryIds : []
                     })

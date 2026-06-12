@@ -557,7 +557,6 @@ const WorkshopUI = (() => {
             if (ev && panel.querySelector(`.wsp-stage-video[data-id="${expandedStageVideoId}"] #workshop-name`)) {
                 bindDetailFields(ev);
                 initMediaSection(ev, 'vo');
-                initMediaSection(ev, 'hook');
                 panel.querySelectorAll('[data-inline-post]').forEach(b => b.addEventListener('click', () => postVideoAction(VideoService.getById(expandedStageVideoId))));
                 panel.querySelectorAll('[data-inline-library]').forEach(b => b.addEventListener('click', () => backToLibraryAction(VideoService.getById(expandedStageVideoId))));
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
@@ -1354,23 +1353,15 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">🪝 Hook <span class="wsp-hint">— write it and Hook Development completes itself; the hook FOOTAGE below gates Editing</span></div>
+                <div class="wsp-subsection-title">🪝 Hook <span class="wsp-hint">— write the hook, then add hook INSTANCES to produce & split-test (animation / practical, as many of each as you want). Each instance needs its footage before its stage clears.</span></div>
                 <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
-                <div class="wsp-add-row">
-                    <label class="wsp-hint" style="font-style:normal;font-weight:700;">Hook Type:</label>
-                    <select id="wsp-hook-type" class="wsp-inline-select" title="Sets the branch automatically: animation → Animation stage; practical → Practical Hook Filming">
-                        <option value="">— not decided —</option>
-                        <option value="animation" ${v.hookType === 'animation' ? 'selected' : ''}>🎞️ Animation</option>
-                        <option value="practical" ${v.hookType === 'practical' ? 'selected' : ''}>🎯 Practical</option>
-                    </select>
-                    <span class="wsp-hint">${v.hookType === 'animation' ? 'waits at Animation until the hook video is linked' : v.hookType === 'practical' ? 'waits at Practical Hook Filming until the hook video is linked' : 'pick one — it flips the Animation / Practical Hook branches automatically'}</span>
+                ${v.project ? '' : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — hook footage lives in that project\'s hook/ folder in Dropbox.</div></div>'}
+                <div id="wsp-hook-instances">
+                    ${PS().hooksOf(v).map((h, i) => hookInstanceRowHtml(v, h, i)).join('')}
                 </div>
-                <div id="wsp-hookvid-section">
-                    ${v.hookVideoPath
-                        ? '' /* filled by initMediaSection */
-                        : v.project
-                            ? '<div class="wsp-hint">Checking the hook/ folder…</div>'
-                            : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the hook video lives in that project\'s Dropbox folder.</div></div>'}
+                <div class="wsp-add-row">
+                    <button class="wsp-mini-btn done" id="wsp-add-hooki">＋ Add hook instance</button>
+                    ${PS().hooksOf(v).length === 0 ? '<span class="wsp-hint">none yet — add one and pick its type; the Animation / Practical branches flip automatically</span>' : ''}
                 </div>
             </div>
 
@@ -1459,15 +1450,8 @@ const WorkshopUI = (() => {
         // Branch decisions (the decomposition validation gate)
         get('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
 
-        // Hook type → deterministically flips the animation/hookfilm branches
-        get('wsp-hook-type').addEventListener('change', async (e) => {
-            const hookType = e.target.value;
-            const branches = { ...(VideoService.getById(v.id)?.branches || v.branches || {}) };
-            if (hookType === 'animation') { branches.animation = true; branches.hookfilm = false; }
-            else if (hookType === 'practical') { branches.hookfilm = true; branches.animation = false; }
-            await VideoService.update(v.id, { hookType, branches, status: normalizedStatus(v) });
-            rerender();
-        });
+        // Hook instances (add/type/label/delete/footage)
+        bindHookInstances(v, root, rerender);
 
         // Veto: jump straight to any stage
         get('wsp-move-stage').addEventListener('change', async (e) => {
@@ -1615,9 +1599,9 @@ const WorkshopUI = (() => {
         bindCompStatusRows(el, () => rerenderEditor(v.id));
         bindOrderRows(el);
 
-        // Voiceover + hook video sections (async — talk to Dropbox)
+        // Voiceover section (async — talks to Dropbox; hook instances are
+        // wired inside bindDetailFields)
         initMediaSection(v, 'vo');
-        initMediaSection(v, 'hook');
 
         // 3D egg preview
         if (v.project && window.EggRenderer) {
@@ -1637,6 +1621,170 @@ const WorkshopUI = (() => {
         });
     }
 
+    // ============ HOOK INSTANCES (split-test hooks, footage in <project>/hook/) ============
+
+    const HOOK_TYPE_META = { animation: { icon: '🎞️', label: 'Animation' }, practical: { icon: '🎯', label: 'Practical' } };
+
+    function hookInstanceRowHtml(v, h, i) {
+        const meta = HOOK_TYPE_META[h.type];
+        const linked = !!h.videoPath;
+        return `<div class="wsp-hooki" data-hooki="${escAttr(h.id)}">
+            <div class="wsp-add-row">
+                <span class="wsp-hint" style="font-style:normal;font-weight:800;">#${i + 1}</span>
+                <select data-hooki-type="${escAttr(h.id)}" class="wsp-inline-select">
+                    <option value="" ${!h.type ? 'selected' : ''}>type…</option>
+                    <option value="animation" ${h.type === 'animation' ? 'selected' : ''}>🎞️ Animation</option>
+                    <option value="practical" ${h.type === 'practical' ? 'selected' : ''}>🎯 Practical</option>
+                </select>
+                <input type="text" data-hooki-label="${escAttr(h.id)}" placeholder="label (optional, e.g. 'POV version')" value="${escAttr(h.label || '')}">
+                <button class="wsp-mini-btn danger" data-hooki-del="${escAttr(h.id)}">✕</button>
+            </div>
+            ${linked
+                ? `<div class="wsp-row" style="border-left: 3px solid ${h.type === 'animation' ? '#4a9eff' : '#e8a020'}">
+                    <span class="wsp-row-name">${meta ? meta.icon : '🎬'} ${escHtml(h.videoName || h.videoPath.split('/').pop())} <span class="wsp-hint">linked ✅</span></span>
+                    <button class="wsp-mini-btn" data-hooki-open="${escAttr(h.id)}">▶ Open</button>
+                    <button class="wsp-mini-btn danger" data-hooki-unlink="${escAttr(h.id)}">✕ Unlink</button>
+                </div>`
+                : `<div class="wsp-add-row wsp-hooki-media" data-hooki-media="${escAttr(h.id)}" data-empty="1">
+                    <span class="wsp-hint">${v.project ? 'loading footage controls…' : 'select a Channel Project to attach footage'}</span>
+                </div>`}
+        </div>`;
+    }
+
+    function hooksWithEdits(videoId) {
+        return PS().hooksOf(VideoService.getById(videoId) || {}).map(h => ({ ...h }));
+    }
+
+    // Writing the instances also derives the branches deterministically:
+    // any animation instance → Animation stage on; any practical → Practical
+    // Hook Filming on. Legacy single-hook fields are retired on first write.
+    async function saveHooks(videoId, hooks) {
+        const fresh = VideoService.getById(videoId);
+        const branches = { ...((fresh && fresh.branches) || {}) };
+        branches.animation = hooks.some(h => h.type === 'animation');
+        branches.hookfilm = hooks.some(h => h.type === 'practical');
+        await VideoService.update(videoId, {
+            hooks, branches,
+            hookType: '', hookVideoPath: '', hookVideoName: '',
+            status: normalizedStatus(fresh || { status: 'pipeline' })
+        });
+    }
+
+    function bindHookInstances(v, root, rerender) {
+        root.querySelector('#wsp-add-hooki')?.addEventListener('click', async () => {
+            const hooks = hooksWithEdits(v.id);
+            hooks.push({ id: 'h' + Math.random().toString(36).slice(2, 10), type: '', label: '', videoPath: '', videoName: '' });
+            await saveHooks(v.id, hooks);
+            rerender();
+        });
+        root.querySelectorAll('[data-hooki-type]').forEach(sel => sel.addEventListener('change', async () => {
+            const hooks = hooksWithEdits(v.id);
+            const h = hooks.find(x => x.id === sel.dataset.hookiType);
+            if (!h) return;
+            h.type = sel.value;
+            await saveHooks(v.id, hooks);
+            rerender();
+        }));
+        root.querySelectorAll('[data-hooki-label]').forEach(inp => {
+            let t = null;
+            inp.addEventListener('input', () => {
+                clearTimeout(t);
+                t = setTimeout(async () => {
+                    const hooks = hooksWithEdits(v.id);
+                    const h = hooks.find(x => x.id === inp.dataset.hookiLabel);
+                    if (!h) return;
+                    h.label = inp.value;
+                    await saveHooks(v.id, hooks);
+                }, 1000);
+            });
+        });
+        root.querySelectorAll('[data-hooki-del]').forEach(b => b.addEventListener('click', async () => {
+            if (!confirm('Remove this hook instance? (Any linked file stays in Dropbox.)')) return;
+            await saveHooks(v.id, hooksWithEdits(v.id).filter(x => x.id !== b.dataset.hookiDel));
+            rerender();
+        }));
+        root.querySelectorAll('[data-hooki-open]').forEach(b => b.addEventListener('click', async () => {
+            const h = hooksWithEdits(v.id).find(x => x.id === b.dataset.hookiOpen);
+            if (!h || !h.videoPath) return;
+            const r = await fetch('/api/dropbox/get_temporary_link', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: h.videoPath })
+            });
+            const data = await r.json();
+            if (data.link) window.open(data.link, '_blank');
+            else alert('Could not load the hook video: ' + (data.error_summary || 'no link'));
+        }));
+        root.querySelectorAll('[data-hooki-unlink]').forEach(b => b.addEventListener('click', async () => {
+            if (!confirm('Unlink this hook video? (The file stays in Dropbox.)')) return;
+            const hooks = hooksWithEdits(v.id);
+            const h = hooks.find(x => x.id === b.dataset.hookiUnlink);
+            if (!h) return;
+            h.videoPath = ''; h.videoName = '';
+            await saveHooks(v.id, hooks);
+            rerender();
+        }));
+        initHookInstanceMedia(v, root, rerender);
+    }
+
+    // Async: fill in the link/upload controls for instances without footage
+    // (one Dropbox folder listing for the whole section)
+    async function initHookInstanceMedia(v, root, rerender) {
+        if (!v.project) return;
+        const pending = [...root.querySelectorAll('[data-hooki-media][data-empty="1"]')];
+        if (!pending.length) return;
+        const rootPath = await dropboxRootPath();
+        const folder = `${rootPath}/${v.project}/hook`;
+        let files = [];
+        try {
+            const r = await fetch('/api/dropbox/list_folder', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: folder })
+            });
+            const data = await r.json();
+            if (Array.isArray(data.entries)) files = data.entries.filter(e => e['.tag'] === 'file');
+        } catch (e) { /* folder doesn't exist yet — created on first upload */ }
+        if (!root.isConnected) return; // user navigated away
+
+        pending.forEach(el => {
+            const hid = el.dataset.hookiMedia;
+            el.innerHTML = `
+                ${files.length ? `<select data-hooki-pick="${escAttr(hid)}" class="wsp-inline-select"><option value="">Link existing from ${escHtml(v.project)}/hook…</option>${files.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}</select>` : ''}
+                <input type="file" data-hooki-file="${escAttr(hid)}" accept="video/*" style="font-size:11px;flex:1 1 140px;">
+                <button class="wsp-mini-btn done" data-hooki-up="${escAttr(hid)}">⬆ Upload</button>`;
+        });
+
+        const setFootage = async (hid, path, name) => {
+            const hooks = hooksWithEdits(v.id);
+            const h = hooks.find(x => x.id === hid);
+            if (!h) return;
+            h.videoPath = path; h.videoName = name;
+            await saveHooks(v.id, hooks);
+            rerender();
+        };
+        root.querySelectorAll('[data-hooki-pick]').forEach(sel => sel.addEventListener('change', () => {
+            if (!sel.value) return;
+            setFootage(sel.dataset.hookiPick, sel.value, sel.options[sel.selectedIndex].textContent);
+        }));
+        root.querySelectorAll('[data-hooki-up]').forEach(btn => btn.addEventListener('click', async () => {
+            const hid = btn.dataset.hookiUp;
+            const input = root.querySelector(`[data-hooki-file="${hid}"]`);
+            const file = input && input.files && input.files[0];
+            if (!file) { alert('Choose a video file first.'); return; }
+            btn.textContent = 'Uploading…'; btn.disabled = true;
+            try {
+                const r = await fetch(`/api/dropbox/upload?path=${encodeURIComponent(`${folder}/${file.name}`)}`, { method: 'POST', body: file });
+                const meta = await r.json();
+                if (!r.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `upload failed (${r.status})`);
+                toast(`🪝 hook video uploaded to ${v.project}/hook`);
+                await setFootage(hid, meta.path_display || meta.path_lower, meta.name || file.name);
+            } catch (e) {
+                console.warn('hook video upload failed', e);
+                alert('Hook video upload failed: ' + e.message);
+                btn.textContent = '⬆ Upload'; btn.disabled = false;
+            }
+        }));
+    }
+
     // ============ DROPBOX MEDIA SECTIONS (voiceover <project>/vo/, hook video <project>/hook/) ============
 
     async function dropboxRootPath() {
@@ -1647,8 +1795,7 @@ const WorkshopUI = (() => {
     }
 
     const MEDIA_SECTIONS = {
-        vo:   { elId: 'wsp-vo-section',      folder: 'vo',   pathField: 'voPath',        nameField: 'voName',        accept: 'audio/*', icon: '🎙️', noun: 'voiceover',  color: '#8e44ad' },
-        hook: { elId: 'wsp-hookvid-section', folder: 'hook', pathField: 'hookVideoPath', nameField: 'hookVideoName', accept: 'video/*', icon: '🪝', noun: 'hook video', color: '#e8a020' }
+        vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*', icon: '🎙️', noun: 'voiceover', color: '#8e44ad' }
     };
 
     async function initMediaSection(v, key) {
@@ -1783,9 +1930,9 @@ const WorkshopUI = (() => {
         if (anc.has('hook') && (v.hook || '').trim().length < 10) missing.push('• Hook — write at least a line in the Hook field');
         if (anc.has('script') && (v.script || '').trim().length < 100) missing.push('• Script — the Script field needs real content');
         if (anc.has('voiceover') && !v.voPath) missing.push('• Voiceover — link or upload one first');
-        const hookStageActive = (v.branches && (v.branches.animation === true || v.branches.hookfilm === true));
-        if ((anc.has('animation') || anc.has('hookfilm')) && hookStageActive && !v.hookVideoPath) {
-            missing.push('• Hook video — link or upload the hook footage first');
+        const typedHooks = PS().hooksOf(v).filter(h => h.type === 'animation' || h.type === 'practical');
+        if ((anc.has('animation') || anc.has('hookfilm')) && typedHooks.length && typedHooks.some(h => !h.videoPath)) {
+            missing.push('• Hook footage — every declared hook instance needs its video linked');
         }
         if (missing.length) {
             alert(`Can't move to ${target.label} yet — the move would skip past mandatory fields that are still empty:\n\n${missing.join('\n')}`);
