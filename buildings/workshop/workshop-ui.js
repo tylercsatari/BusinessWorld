@@ -691,17 +691,35 @@ const WorkshopUI = (() => {
                 <span class="wsp-row-name">🧩 ${escHtml(c.name)}</span>
                 <span class="wsp-pill active">${c.status}</span>
             </div>`).join('');
+        // The two hook branches are NOT decided here — they derive from the
+        // hook instances in the Hook section (any animation instance →
+        // Animation on, any practical → Practical Hook Filming on). Shown
+        // read-only so the modal can't contradict the instance list.
+        const hookCounts = { animation: 0, practical: 0 };
+        PS().hooksOf(v).forEach(h => { if (hookCounts[h.type] !== undefined) hookCounts[h.type]++; });
+        const DERIVED_FLAGS = { hookfilm: 'practical', animation: 'animation' };
+        const branchRowHtml = (q) => {
+            const hookType = DERIVED_FLAGS[q.flag];
+            if (!hookType) return `
+                        <label class="wsp-branch-row">
+                            <input type="checkbox" data-flag="${q.flag}" ${b[q.flag] === true ? 'checked' : ''}>
+                            <span class="wsp-branch-label">${q.label}</span>
+                            <span class="wsp-hint">${escHtml(q.hint)}</span>
+                        </label>`;
+            const n = hookCounts[hookType];
+            return `
+                        <label class="wsp-branch-row" style="opacity:.75;cursor:default;">
+                            <input type="checkbox" disabled ${n > 0 ? 'checked' : ''}>
+                            <span class="wsp-branch-label">${q.label}</span>
+                            <span class="wsp-hint">auto — ${n ? `${n} ${hookType} hook instance${n === 1 ? '' : 's'} declared` : `no ${hookType} hook instances`}; add/remove them in the 🪝 Hook section</span>
+                        </label>`;
+        };
         overlay.innerHTML = `
             <div class="wsp-picker wsp-branch-modal">
                 <div class="wsp-picker-header"><span>🧩 Decomposition — break "${escHtml(v.name)}" down</span><button class="wsp-picker-close" data-close>✕</button></div>
                 <div class="wsp-branch-list">
                     <div class="wsp-hint">Only branches switched ON will ever see this video — everything else is skipped automatically. That's the validation: nobody gets handed work that doesn't apply.</div>
-                    ${PS().BRANCH_QUESTIONS.map(q => `
-                        <label class="wsp-branch-row">
-                            <input type="checkbox" data-flag="${q.flag}" ${b[q.flag] === true ? 'checked' : ''}>
-                            <span class="wsp-branch-label">${q.label}</span>
-                            <span class="wsp-hint">${escHtml(q.hint)}</span>
-                        </label>`).join('')}
+                    ${PS().BRANCH_QUESTIONS.map(branchRowHtml).join('')}
                     <div class="wsp-subsection-title" style="margin-top:6px;">🧩 Components <span class="wsp-hint">— things to build/make for this video; each flows through the pipeline on its own and the video waits for it</span></div>
                     <div id="wsp-bd-comps">${compListHtml()}</div>
                     <div class="wsp-add-row">
@@ -741,6 +759,10 @@ const WorkshopUI = (() => {
             const branches = {};
             overlay.querySelectorAll('input[data-flag]').forEach(i => { branches[i.dataset.flag] = i.checked; });
             const fresh = VideoService.getById(videoId) || v;
+            // Hook branches always derive from the instance list, never from this modal
+            const hooks = PS().hooksOf(fresh);
+            branches.animation = hooks.some(h => h.type === 'animation');
+            branches.hookfilm = hooks.some(h => h.type === 'practical');
             const changes = { branches, status: normalizedStatus(fresh) };
             if (alsoDone) changes.stageState = { ...(fresh.stageState || {}), decomp: 'done' };
             await VideoService.update(videoId, changes);
