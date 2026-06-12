@@ -164,7 +164,7 @@ const WorkshopUI = (() => {
                         <button class="wsp-tab active" data-tab="pipeline">Pipeline</button>
                         <button class="wsp-tab" data-tab="projects">Projects</button>
                         <button class="wsp-tab" data-tab="orders">Orders</button>
-                        <button class="wsp-tab" data-tab="inventory">Inventory</button>
+                        <button class="wsp-tab" data-tab="inventory">Storage Room</button>
                     </div>
                     <div class="wsp-tab-body" id="wsp-tab-body">
                         <div class="workshop-empty">Loading pipeline…</div>
@@ -322,6 +322,34 @@ const WorkshopUI = (() => {
         return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
     }
 
+    // Edges that span multiple columns route AROUND the nodes in between
+    // (through a clear channel above/below them) instead of passing under them.
+    function edgePathSmart(fromId, toId, pos) {
+        const a = pos[fromId], b = pos[toId];
+        const lf = PS().layerOf(fromId), lt = PS().layerOf(toId);
+        if (lt - lf <= 1) return edgePath(a, b);
+
+        let minTop = Infinity, maxBottom = -Infinity;
+        for (let li = lf + 1; li < lt; li++) {
+            PS().LAYERS[li].forEach(id => {
+                minTop = Math.min(minTop, pos[id].y);
+                maxBottom = Math.max(maxBottom, pos[id].y + NODE_H);
+            });
+        }
+        const aboveY = Math.max(minTop - 16, 10);
+        const belowY = maxBottom + 16;
+        const midY = (a.y + b.y) / 2 + NODE_H / 2;
+        const cy = Math.abs(midY - aboveY) <= Math.abs(midY - belowY) ? aboveY : belowY;
+
+        const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2;
+        const x2 = b.x - 5, y2 = b.y + NODE_H / 2;
+        const xc1 = x1 + GAP_X * 0.8;        // where the channel starts
+        const xc2 = x2 - GAP_X * 0.8;        // where it ends
+        return `M ${x1} ${y1} C ${x1 + GAP_X * 0.5} ${y1}, ${xc1 - GAP_X * 0.4} ${cy}, ${xc1} ${cy} ` +
+               `L ${xc2} ${cy} ` +
+               `C ${xc2 + GAP_X * 0.4} ${cy}, ${x2 - GAP_X * 0.5} ${y2}, ${x2} ${y2}`;
+    }
+
     // Dot strip: one dot per item, colored by type — the at-a-glance view
     function dotsRow(dots) {
         if (!dots.length) return '';
@@ -396,7 +424,7 @@ const WorkshopUI = (() => {
             </marker>
         </defs>` +
         PS().EDGES.map(([f, t]) => {
-            return `<path d="${edgePath(pos[f], pos[t])}" class="wsp-edge" marker-end="url(#wspArrow)" />`;
+            return `<path d="${edgePathSmart(f, t, pos)}" class="wsp-edge" marker-end="url(#wspArrow)" />`;
         }).join('') +
         // dashed reference edge: Ordering ↔ Component Library (check inventory before buying)
         `<path d="M ${pos['order'].x + NODE_W / 2} ${pos['order'].y + NODE_H} L ${pos['_inventory'].x + NODE_W / 2} ${pos['_inventory'].y}" class="wsp-edge ref" />`;
@@ -426,7 +454,7 @@ const WorkshopUI = (() => {
         const invDots = invItems.map(i => ({ color: INV_STATUS_COLORS[i.status] || '#b0a8a0', title: `🗃️ ${i.name} (${i.status})` }));
         const readyInv = invItems.filter(i => i.status === 'ready').length;
         const invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:64px;">
-            <div class="wsp-node-label">🗃️ Component Library</div>
+            <div class="wsp-node-label">🗃️ Storage Room</div>
             <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready</span></div>
             ${dotsRow(invDots)}
         </div>`;
@@ -456,6 +484,8 @@ const WorkshopUI = (() => {
         renderStagePanel();
     }
 
+    // Video row — works inside a stage panel (stage given: Done/Decide actions)
+    // or in the all-items list (stage null: frontier chips instead of actions)
     function stageVideoRowHtml(v, stage) {
         const dl = deadlineInfo(v);
         const expanded = expandedStageVideoId === v.id;
@@ -464,24 +494,25 @@ const WorkshopUI = (() => {
         // Decomposition can't be completed without the branch decisions —
         // that's the validation gate that keeps irrelevant videos away from
         // CAD/design/build people.
-        const needsDecisions = stage.id === 'decomp' && !PS().branchesDecided(v);
+        const needsDecisions = stage && stage.id === 'decomp' && !PS().branchesDecided(v);
+        const actions = !stage ? ''
+            : needsDecisions
+                ? `<button class="wsp-mini-btn done" data-decide="${v.id}" title="Decide which branches this video needs before completing Decomposition">🧩 Decide</button>`
+                : `<button class="wsp-mini-btn done" data-done="${v.id}" title="Mark ${escAttr(stage.label)} done for this video">✓ Done</button>`;
         return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}" data-id="${v.id}">
             <div class="wsp-stage-video-head" data-expand="${v.id}">
                 <span class="wsp-caret">${expanded ? '▾' : '▸'}</span>
                 <div class="wsp-stage-video-main">
                     <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}</div>
                     <div class="wsp-stage-video-meta">
+                        ${!stage ? frontierChips(v, 3) : ''}
                         ${v.videoType ? `<span class="wsp-type-chip">${escHtml(v.videoType)}</span>` : ''}
                         ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
-                        ${stage.id === 'order' && openOrders ? `<span class="wsp-deadline soon">📦 ${openOrders} order${openOrders === 1 ? '' : 's'} open</span>` : ''}
+                        ${stage && stage.id === 'order' && openOrders ? `<span class="wsp-deadline soon">📦 ${openOrders} order${openOrders === 1 ? '' : 's'} open</span>` : ''}
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
                     </div>
                 </div>
-                <div class="wsp-stage-video-actions">
-                    ${needsDecisions
-                        ? `<button class="wsp-mini-btn done" data-decide="${v.id}" title="Decide which branches this video needs before completing Decomposition">🧩 Decide</button>`
-                        : `<button class="wsp-mini-btn done" data-done="${v.id}" title="Mark ${escAttr(stage.label)} done for this video">✓ Done</button>`}
-                </div>
+                <div class="wsp-stage-video-actions">${actions}</div>
             </div>
             ${expanded ? stageVideoBodyHtml(v) : ''}
         </div>`;
@@ -493,13 +524,14 @@ const WorkshopUI = (() => {
             const p = SVC().projects.getById(id);
             return p ? `<span class="wsp-proj-chip">🛠️ ${escHtml(p.name)}</span>` : '';
         }).join('');
-        const field = (label, text, limit) => text
-            ? `<div class="wsp-svb-field"><span class="wsp-svb-label">${label}</span>${escHtml(limit ? text.slice(0, limit) + (text.length > limit ? '…' : '') : text)}</div>`
+        // Full content — the page scrolls, so show the whole video
+        const field = (label, text) => text
+            ? `<div class="wsp-svb-field"><span class="wsp-svb-label">${label}</span>${escHtml(text)}</div>`
             : '';
         return `<div class="wsp-stage-video-body">
             ${field('Hook', (v.hook || '').trim())}
-            ${field('Context', (v.context || '').trim(), 300)}
-            ${script ? field('Script', script, 400) : '<div class="wsp-svb-field"><span class="wsp-svb-label">Script</span><span class="wsp-hint">none yet</span></div>'}
+            ${field('Context', (v.context || '').trim())}
+            ${script ? field('Script', script) : '<div class="wsp-svb-field"><span class="wsp-svb-label">Script</span><span class="wsp-hint">none yet</span></div>'}
             <div class="wsp-stage-video-meta">
                 ${frontierChips(v, 5)}
                 ${projChips}
@@ -510,12 +542,78 @@ const WorkshopUI = (() => {
         </div>`;
     }
 
+    // Shared row bindings for the stage panel and the all-items list
+    function bindPanelRows(panel) {
+        panel.querySelectorAll('[data-expand]').forEach(head => head.addEventListener('click', (ev) => {
+            if (ev.target.closest('button')) return; // buttons act, don't toggle
+            const id = head.dataset.expand;
+            expandedStageVideoId = expandedStageVideoId === id ? null : id;
+            renderStagePanel();
+        }));
+        panel.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.open)));
+        panel.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => openBranchDialog(b.dataset.decide, true)));
+        panel.querySelectorAll('[data-comp]').forEach(row => {
+            const compId = row.dataset.comp;
+            row.querySelectorAll('[data-comp-status]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    await SVC().components.update(compId, { status: btn.dataset.compStatus });
+                    renderTab();
+                });
+            });
+        });
+        bindOrderRows(panel);
+    }
+
+    // No stage selected → show EVERYTHING currently in flight (filter-driven)
+    function renderAllPanel(panel) {
+        const vids = showTypes.video ? filteredVideos() : [];
+        const comps = showTypes.component ? filteredComponents() : [];
+        const orders = showTypes.order ? filteredOrders() : [];
+        const inv = showTypes.inventory ? filteredInventory() : [];
+        const total = vids.length + comps.length + orders.length + inv.length;
+
+        const breakdown = [
+            showTypes.video ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">🎬 ${vids.length}</span>` : '',
+            showTypes.component ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">🧩 ${comps.length}</span>` : '',
+            showTypes.order ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">📦 ${orders.length}</span>` : '',
+            showTypes.inventory ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.inventory}">🗃️ ${inv.length}</span>` : ''
+        ].join('');
+
+        const INV_STATUS_COLORS = { ready: '#27ae60', building: '#e8a020', planned: '#b0a8a0' };
+
+        panel.innerHTML = `
+            <div class="wsp-stage-panel-header">
+                <div class="wsp-stage-panel-headmain">
+                    <div class="wsp-stage-panel-title">🌐 Everything in flight ${breakdown}</div>
+                    <div class="wsp-stage-panel-desc">All work matching the filters above. Click a stage node on the board to focus on one stage.</div>
+                </div>
+            </div>
+            <div class="wsp-stage-panel-list">
+                ${total === 0 ? '<div class="workshop-empty">Nothing matches the current filters. Queue an idea from the Library to feed the pipeline!</div>' : ''}
+                ${vids.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.video}">🎬 Videos in the pipeline</div>${vids.map(v => stageVideoRowHtml(v, null)).join('')}` : ''}
+                ${comps.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">🧩 Components being built</div>${comps.map(c => `
+                    <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
+                        <span class="wsp-row-name">🧩 ${escHtml(c.name)} ${projectName(c.projectId) ? `<span class="wsp-hint">🛠️ ${escHtml(projectName(c.projectId))}</span>` : ''}</span>
+                        <div class="wsp-status-cycle">
+                            ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
+                        </div>
+                    </div>`).join('')}` : ''}
+                ${orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">📦 Open orders</div>${orders.map(orderRowHtml).join('')}` : ''}
+                ${inv.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.inventory}">🗃️ Storage room (Component Library)</div>${inv.map(i => `
+                    <div class="wsp-row" style="border-left: 3px solid ${INV_STATUS_COLORS[i.status] || '#b0a8a0'}">
+                        <span class="wsp-row-name">${INV_TYPE_ICONS[i.type] || '📦'} ${escHtml(i.name)} ${projectName(i.projectId) ? `<span class="wsp-hint">🛠️ ${escHtml(projectName(i.projectId))}</span>` : ''}</span>
+                        <span class="wsp-pill ${i.status === 'ready' ? 'active' : ''}">${i.status}</span>
+                    </div>`).join('')}` : ''}
+            </div>
+        `;
+        bindPanelRows(panel);
+    }
+
     function renderStagePanel() {
         const panel = document.getElementById('wsp-stage-panel');
         if (!panel) return;
         if (!selectedStageId) {
-            const total = pipelineVideos().length;
-            panel.innerHTML = `<div class="wsp-stage-panel-hint">Click a stage to see everything sitting there — videos, components and orders. ${total ? '' : 'Queue an idea from the Library to start the pipeline.'}</div>`;
+            renderAllPanel(panel);
             return;
         }
         const stage = PS().get(selectedStageId);
@@ -571,29 +669,12 @@ const WorkshopUI = (() => {
         document.getElementById('wsp-stage-owner').addEventListener('change', (ev) => {
             SVC().setStageOwner(selectedStageId, ev.target.value).catch(err => console.warn('stage owner save failed', err));
         });
-        panel.querySelectorAll('[data-expand]').forEach(head => head.addEventListener('click', (ev) => {
-            if (ev.target.closest('button')) return; // buttons act, don't toggle
-            const id = head.dataset.expand;
-            expandedStageVideoId = expandedStageVideoId === id ? null : id;
-            renderStagePanel();
-        }));
-        panel.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.open)));
-        panel.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => openBranchDialog(b.dataset.decide, true)));
         panel.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', async () => {
             b.disabled = true;
             await setStageState(b.dataset.done, selectedStageId, 'done');
             renderTab();
         }));
-        panel.querySelectorAll('[data-comp]').forEach(row => {
-            const compId = row.dataset.comp;
-            row.querySelectorAll('[data-comp-status]').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    await SVC().components.update(compId, { status: btn.dataset.compStatus });
-                    renderTab();
-                });
-            });
-        });
-        bindOrderRows(panel);
+        bindPanelRows(panel);
     }
 
     // The Decomposition validation gate: explicit yes/no per branch.
@@ -960,7 +1041,7 @@ const WorkshopUI = (() => {
 
         el.innerHTML = `
             <div class="wsp-section-head">
-                <span class="wsp-section-title">Component Library — what exists & what's usable right now</span>
+                <span class="wsp-section-title">Storage Room (Component Library) — what physically exists & what's usable right now. Ordering checks here before buying.</span>
             </div>
             <div class="wsp-filterbar">
                 <select id="wsp-inv-type"><option value="">All types</option>${INVENTORY_TYPES.map(t => `<option ${invType === t ? 'selected' : ''}>${t}</option>`).join('')}</select>

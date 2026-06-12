@@ -23,6 +23,7 @@ const StorageUI = (() => {
     let sortBy = 'alpha'; // 'default' | 'alpha' | 'alpha-desc' | 'most-items' | 'least-items' | 'fullest'
     let undoStack = []; // array of {description, undoFn}
     const MAX_UNDO = 20;
+    let agentHistory = []; // conversational agent turns (role/content), in-memory per open session
     function pushUndo(description, undoFn) {
         undoStack.push({ description, undoFn });
         if (undoStack.length > MAX_UNDO) undoStack.shift();
@@ -127,6 +128,7 @@ const StorageUI = (() => {
                         <h3>Activity History</h3>
                         <div class="storage-history-list" id="storage-history-list"></div>
                     </div>
+                    <div class="storage-workshop-inv" id="storage-workshop-inv"></div>
                 </div>
                 <div class="storage-chat">
                     <div class="storage-chat-header">
@@ -136,7 +138,7 @@ const StorageUI = (() => {
                         </button>
                     </div>
                     <div class="storage-chat-log" id="storage-chat-log">
-                        <div class="storage-chat-msg system">Welcome! Type or speak commands like "add 3 batteries to box A" or ask "where are the scissors?"</div>
+                        <div class="storage-chat-msg system">Hi — I'm your storage assistant. Just talk to me naturally. Try a long command like "put 3 batteries and 2 rolls of tape in box A, move the scissors to box B, and start a new box called camera gear with my tripod in it."</div>
                     </div>
                     <div class="storage-voice-preview" id="storage-voice-preview" style="display:none;">Listening...</div>
                     <div class="storage-chat-input-row">
@@ -925,51 +927,57 @@ const StorageUI = (() => {
         }
     }
 
-    // --- AI Chat (OpenAI with inventory context) ---
-    async function askAI(question) {
-        const boxes = StorageService.getBoxes();
-        const inventory = boxes.map(b => {
-            const bItems = StorageService.getItemsByBox(b.id);
-            const list = bItems.map(i => `  - ${i.name} (qty: ${i.quantity})`).join('\n');
-            return `Box ${b.name}:\n${list || '  (empty)'}`;
-        }).join('\n');
-
-        try {
-            const response = await StorageIntent.gptChat([
-                {
-                    role: 'system',
-                    content: `You are a helpful storage inventory assistant. You have access to the user's physical storage inventory organized in labeled boxes. Here is the current inventory:\n\n${inventory}\n\nAnswer questions about the inventory concisely. If the user asks where something is, search through the inventory. If you can't find an exact match, suggest similar items.`
-                },
-                { role: 'user', content: question }
-            ], 0.7);
-            addChatMsg(response, 'ai');
-            await speakTTS(response);
-        } catch (e) {
-            addChatMsg(`AI error: ${e.message}`, 'error');
-        }
+    // --- Process user input (routed through the conversational StorageAgent) ---
+    async function processUserInput(text) {
+        // Conversational tool-calling agent (replaces the old regex/enum NLU).
+        // Handles long, natural, multi-operation commands; acts then validates;
+        // asks only when genuinely unsure.
+        await StorageAgent.run(text, {
+            addChatMsg,
+            speak: speakTTS,
+            onStateChange: () => { renderBoxes(); updateStats(); },
+            pushUndo,
+            history: agentHistory
+        });
     }
 
-    // --- Process user input (unified flow) ---
-    async function processUserInput(text) {
-        // Try multi-intent extraction for compound commands
-        const intents = await StorageIntent.parseMulti(text);
-        if (intents && intents.length > 0) {
-            if (intents.length > 1) {
-                addChatMsg(`Processing ${intents.length} operations...`, 'system');
-            }
-            for (const intent of intents) {
-                await handleIntent(intent);
-            }
-        } else {
-            // No structured intent found — ask AI
-            await askAI(text);
-        }
+    // --- Workshop Component Library — the pipeline's inventory lives in the
+    // Storage room. Whoever handles Ordering looks HERE before buying. ---
+    async function renderWorkshopInventory() {
+        const el = document.getElementById('storage-workshop-inv');
+        if (!el || typeof PipelineService === 'undefined') return;
+        await PipelineService.inventory.sync().catch(() => {});
+        const items = [...PipelineService.inventory.getAll()].sort((a, b) =>
+            (a.status === 'ready' ? 0 : a.status === 'building' ? 1 : 2) - (b.status === 'ready' ? 0 : b.status === 'building' ? 1 : 2) ||
+            (a.name || '').localeCompare(b.name || ''));
+        const STATUS_COLORS = { ready: '#27ae60', building: '#e8a020', planned: '#b0a8a0' };
+        const TYPE_ICONS = { prop: '🪛', footage: '🎞️', set: '🏠', material: '🧱', other: '📦' };
+        const ready = items.filter(i => i.status === 'ready').length;
+
+        el.innerHTML = `
+            <div style="margin-top:14px;border-top:2px dashed #d8cfc0;padding-top:10px;">
+                <div style="font-size:13px;font-weight:800;color:#5a3e1b;margin-bottom:2px;">🗃️ Workshop Component Library <span style="font-weight:600;color:#998a72;">— ${ready}/${items.length} ready</span></div>
+                <div style="font-size:11px;color:#998a72;font-style:italic;margin-bottom:8px;">Props, footage & sets the video pipeline draws from. Ordering checks this shelf before buying anything.</div>
+                ${items.length === 0 ? '<div style="color:#998a72;font-style:italic;font-size:12px;">Nothing yet — items added in the Workshop\'s Storage Room tab (or produced by posted videos) appear here.</div>' : items.map(i => `
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #ece4d6;border-left:3px solid ${STATUS_COLORS[i.status] || '#b0a8a0'};border-radius:8px;padding:6px 10px;margin-bottom:5px;">
+                        <span style="flex:1;min-width:120px;font-size:12.5px;font-weight:600;color:#4a3a26;">${TYPE_ICONS[i.type] || '📦'} ${escHtml(i.name)}</span>
+                        <div style="display:flex;gap:3px;">
+                            ${['planned', 'building', 'ready'].map(s => `<button data-winv="${i.id}" data-winv-status="${s}" style="border:1px solid ${i.status === s ? STATUS_COLORS[s] : '#e0d6c6'};background:${i.status === s ? STATUS_COLORS[s] : '#faf6ee'};color:${i.status === s ? '#fff' : '#998a72'};border-radius:10px;font-size:9.5px;font-weight:700;padding:2px 8px;cursor:pointer;">${s}</button>`).join('')}
+                        </div>
+                    </div>`).join('')}
+            </div>`;
+
+        el.querySelectorAll('[data-winv-status]').forEach(btn => btn.addEventListener('click', async () => {
+            await PipelineService.inventory.update(btn.dataset.winv, { status: btn.dataset.winvStatus }).catch(() => {});
+            renderWorkshopInventory();
+        }));
     }
 
     return {
         async open(bodyEl) {
             container = bodyEl;
             container.innerHTML = render();
+            agentHistory = [];
             await loadHistory();
 
             try {
@@ -980,6 +988,7 @@ const StorageUI = (() => {
                 const grid = document.getElementById('storage-boxes-grid');
                 if (grid) grid.innerHTML = `<div class="storage-chat-msg error" style="margin:20px;">Failed to load inventory: ${escHtml(e.message)}</div>`;
             }
+            renderWorkshopInventory().catch(() => {});
             initialized = true;
         },
 
@@ -1002,6 +1011,7 @@ const StorageUI = (() => {
             initialized = false;
             historyVisible = false;
             editingItemId = null;
+            agentHistory = [];
         },
 
         onMicToggle() {

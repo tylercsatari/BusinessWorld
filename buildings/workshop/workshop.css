@@ -332,8 +332,10 @@
 
 /* --- Pipeline board --- */
 .wsp-board-wrap {
-    overflow: auto; -webkit-overflow-scrolling: touch;
-    flex: 0 0 auto; max-height: 55%;
+    /* horizontal scroll for the wide graph; the TAB BODY scrolls vertically
+       past the board so long lists below are fully reachable */
+    overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+    flex: 0 0 auto;
     background:
         radial-gradient(circle, #e8e2d6 1px, transparent 1px),
         #faf7f2;
@@ -381,7 +383,7 @@
 }
 
 /* Stage side panel under the board */
-.wsp-stage-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wsp-stage-panel { flex: 0 0 auto; }
 .wsp-stage-panel-hint { padding: 18px; color: #999; font-style: italic; font-size: 13px; text-align: center; }
 .wsp-stage-panel-header {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -393,7 +395,7 @@
     border-radius: 9px; padding: 1px 7px; vertical-align: middle;
 }
 .wsp-stage-panel-desc { font-size: 12px; color: #999; margin-top: 2px; max-width: 560px; }
-.wsp-stage-panel-list { flex: 1; overflow-y: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.wsp-stage-panel-list { padding: 8px 12px 24px; display: flex; flex-direction: column; gap: 6px; }
 .wsp-stage-video {
     background: #fff; border: 1px solid #ece8e0; border-radius: 10px;
     overflow: hidden;
@@ -717,7 +719,6 @@
 .egg-hatch-overlay.done { opacity: 0; transition: opacity 0.4s ease; }
 
 @media (max-width: 600px) {
-    .wsp-board-wrap { max-height: 46%; }
     .wsp-field-grid { grid-template-columns: 1fr 1fr; }
     .wsp-order-cols { grid-template-columns: 1fr; }
     .wsp-grid { grid-template-columns: 1fr 1fr; }
