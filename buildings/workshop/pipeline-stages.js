@@ -36,7 +36,7 @@ const PipelineStages = (() => {
         { id: 'cad',        label: 'CAD',                     icon: '📐', group: 'Planning',    desc: 'CAD models for precision parts. Only videos flagged as needing CAD land here — no confused texts from the CAD desk.' },
         { id: 'order',      label: 'Ordering',                icon: '📦', group: 'Procurement', bottleneck: true, desc: 'BOTTLENECK — everything passes through here. Check the Storage Room first: if it\'s already on the shelf, don\'t buy it. Auto-completes when every order for the video is received; if nothing needs buying, marking it done IS the validation.' },
         { id: 'precision',  label: 'Precision Manufacturing', icon: '⚙️', group: 'Build',       desc: '3D printing / CNC of CAD parts. Gated behind Ordering — materials validated or bought first.' },
-        { id: 'software',   label: 'Software Development',    icon: '💻', group: 'Build',       desc: 'Code / firmware for the video. Runs parallel to manufacturing — Filming waits for both. Only videos flagged as needing software land here.' },
+        { id: 'software',   label: 'Software Development',    icon: '💻', group: 'Build',       desc: 'Code / firmware for the build. Runs parallel to Precision Manufacturing and feeds into Assembly — the build comes together with both its parts and its software. Only flagged videos land here.' },
         { id: 'assembly',   label: 'Manufacturing Assembly',  icon: '🔧', group: 'Build',       desc: 'General manufacturing & assembly of the build.' },
         { id: 'artistic',   label: 'Artistic Design',         icon: '🖌️', group: 'Build',       desc: 'Paint, finish, look — make it pretty.' },
         { id: 'hookfilm',   label: 'Practical Hook Filming',  icon: '🎯', group: 'Production',  desc: 'Film the practical hook as soon as its parts arrive.' },
@@ -66,9 +66,9 @@ const PipelineStages = (() => {
         ['order', 'assembly'],
         ['order', 'hookfilm'],
         ['precision', 'assembly'],
+        ['software', 'assembly'],     // code/firmware feeds the build — assembly needs both parts and software
         ['assembly', 'artistic'],
         ['artistic', 'film'],
-        ['software', 'film'],         // parallel to the build chain — Filming waits for both
         ['hookfilm', 'film'],
         ['film', 'voiceover'],        // VO gate sits between the shoot and the edit
         ['voiceover', 'edit'],
