@@ -523,50 +523,46 @@ const WorkshopUI = (() => {
         </div>`;
     }
 
+    // The drop-down IS the full editor — same fields as the detail page,
+    // in pipeline order, plus the action buttons.
     function stageVideoBodyHtml(v) {
-        const script = (v.script || '').trim();
-        const projChips = (v.projectIds || []).map(id => {
-            const p = SVC().projects.getById(id);
-            return p ? `<span class="wsp-proj-chip">🛠️ ${escHtml(p.name)}</span>` : '';
-        }).join('');
-        // Full content — the page scrolls, so show the whole video
-        const field = (label, text) => text
-            ? `<div class="wsp-svb-field"><span class="wsp-svb-label">${label}</span>${escHtml(text)}</div>`
-            : '';
         return `<div class="wsp-stage-video-body">
-            ${field('Hook', (v.hook || '').trim())}
-            ${field('Context', (v.context || '').trim())}
-            ${script ? field('Script', script) : '<div class="wsp-svb-field"><span class="wsp-svb-label">Script</span><span class="wsp-hint">none yet</span></div>'}
-            <div class="wsp-stage-video-meta">
-                ${frontierChips(v, 5)}
-                ${projChips}
-                ${componentsForVideo(v.id).map(c => `<span class="wsp-proj-chip" style="background:#e3f2fd;">🧩 ${escHtml(c.name)} (${c.status})</span>`).join('')}
+            <div class="workshop-detail-fields wsp-inline-editor">${detailFieldsHtml(v)}</div>
+            <div class="wsp-svb-actions">
+                <button class="workshop-action-btn post-btn" data-inline-post="${v.id}">Post Video</button>
+                <button class="workshop-action-btn" data-inline-library="${v.id}">Return to Library</button>
+                <button class="workshop-action-btn danger-btn" data-inline-delete="${v.id}">Delete</button>
             </div>
-            ${progressBar(v)}
-            <div class="wsp-svb-actions"><button class="wsp-mini-btn" data-open="${v.id}">Open full editor →</button></div>
         </div>`;
     }
 
     // Shared row bindings for the stage panel and the all-items list
     function bindPanelRows(panel) {
         panel.querySelectorAll('[data-expand]').forEach(head => head.addEventListener('click', (ev) => {
-            if (ev.target.closest('button')) return; // buttons act, don't toggle
+            if (ev.target.closest('button, select, input, textarea, a, audio, label')) return; // form controls act, don't toggle
             const id = head.dataset.expand;
+            // save whatever was being edited in the previously open drop-down
+            if (expandedStageVideoId) saveFieldsFor(VideoService.getById(expandedStageVideoId), true).catch(() => {});
             expandedStageVideoId = expandedStageVideoId === id ? null : id;
             renderStagePanel();
         }));
         panel.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.open)));
         panel.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => openBranchDialog(b.dataset.decide, true)));
-        panel.querySelectorAll('[data-comp]').forEach(row => {
-            const compId = row.dataset.comp;
-            row.querySelectorAll('[data-comp-status]').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    await SVC().components.update(compId, { status: btn.dataset.compStatus });
-                    renderTab();
-                });
-            });
-        });
+        bindCompStatusRows(panel, () => renderTab());
         bindOrderRows(panel);
+
+        // An expanded row holds the full editor — wire it up
+        if (expandedStageVideoId) {
+            const ev = VideoService.getById(expandedStageVideoId);
+            if (ev && panel.querySelector(`.wsp-stage-video[data-id="${expandedStageVideoId}"] #workshop-name`)) {
+                bindDetailFields(ev);
+                initMediaSection(ev, 'vo');
+                initMediaSection(ev, 'hook');
+                panel.querySelectorAll('[data-inline-post]').forEach(b => b.addEventListener('click', () => postVideoAction(VideoService.getById(expandedStageVideoId))));
+                panel.querySelectorAll('[data-inline-library]').forEach(b => b.addEventListener('click', () => backToLibraryAction(VideoService.getById(expandedStageVideoId))));
+                panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
+            }
+        }
     }
 
     // No stage selected → show EVERYTHING currently in flight (filter-driven)
@@ -1216,6 +1212,8 @@ const WorkshopUI = (() => {
     function openDetail(id) {
         selectedVideo = VideoService.getById(id);
         if (!selectedVideo) return;
+        // collapse any inline editor — only one editor may be mounted at a time
+        if (expandedStageVideoId) { expandedStageVideoId = null; renderTab(); }
         currentPage = 'detail';
         const panel = container.querySelector('.workshop-panel');
         panel.classList.remove('show-list');
@@ -1231,6 +1229,9 @@ const WorkshopUI = (() => {
         const panel = container.querySelector('.workshop-panel');
         panel.classList.remove('show-detail');
         panel.classList.add('show-list');
+        // clear the detail DOM so its field ids can't shadow an inline editor
+        const det = document.getElementById('workshop-detail');
+        if (det) det.innerHTML = '';
         renderTab();
     }
 
@@ -1263,18 +1264,22 @@ const WorkshopUI = (() => {
         return items.map(i => `<span class="wsp-chip">${escHtml(i.label)} <button class="wsp-chip-x" ${removeAttr}="${i.id}">✕</button></span>`).join('');
     }
 
-    function renderDetail() {
-        const el = document.getElementById('workshop-detail');
-        if (!el || !selectedVideo) return;
-        const v = VideoService.getById(selectedVideo.id) || selectedVideo;
-        selectedVideo = v;
+    // Re-render whichever editor (detail page or inline drop-down) shows this video
+    function rerenderEditor(videoId) {
+        if (currentPage === 'detail' && selectedVideo && selectedVideo.id === videoId) renderDetail();
+        else renderTab();
+    }
 
+    // The full video editor — ordered to MIRROR THE PIPELINE: concept work
+    // (hook/script) on top, decomposition & procurement in the middle,
+    // pre-edit assets (voiceover) at the bottom. Used by BOTH the detail
+    // page and the inline drop-down in the stage panel.
+    function detailFieldsHtml(v) {
         let sourceIdeaHtml = '';
         if (v.sourceIdeaId) {
             const idea = NotesService.getById(v.sourceIdeaId);
             sourceIdeaHtml = `<div class="workshop-source-idea">Source Idea: ${escHtml(idea ? idea.name : v.sourceIdeaId)}</div>`;
         }
-
         const blockers = videoBlockers(v);
         const sponsors = SVC().sponsors.getAll();
         const allProjects = SVC().projects.getAll().filter(p => p.status !== 'archived');
@@ -1299,6 +1304,285 @@ const WorkshopUI = (() => {
         const depCompOpts = SVC().components.getAll().filter(c => c.status !== 'done' && !depSet.has('component:' + c.id));
         const depOrderOpts = SVC().orders.getAll().filter(o => o.status !== 'received' && !depSet.has('order:' + o.id));
 
+        return `
+            <div class="workshop-detail-summary">${sourceIdeaHtml}</div>
+
+            ${blockers.length ? `<div class="wsp-blockers-box">
+                <div class="wsp-blockers-title">🔒 Waiting on:</div>
+                ${blockers.map(b => `<div class="wsp-blocker-line">${DEP_ICONS[b.kind] || '🗃️'} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
+            </div>` : ''}
+
+            <label>Video Name</label>
+            <input type="text" id="workshop-name" value="${escAttr(v.name)}">
+
+            <div class="wsp-field-grid">
+                <div>
+                    <label>Deadline <span class="wsp-hint">(optional)</span></label>
+                    <input type="date" id="workshop-deadline" value="${escAttr(v.deadline || '')}">
+                </div>
+                <div>
+                    <label>Sponsor</label>
+                    <select id="workshop-sponsor">
+                        <option value="">No sponsor</option>
+                        ${sponsors.map(s => `<option value="${s.id}" ${v.sponsorId === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label>Channel Project (egg)</label>
+                    <select id="workshop-project">
+                        <option value="">No project</option>
+                        ${dropboxProjects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+
+            <div class="wsp-progress-head">
+                <label>Pipeline Progress</label>
+                <div class="wsp-progress-head-actions">
+                    <select id="wsp-move-stage" class="wsp-inline-select" title="Veto: jump this video to any stage — everything before it gets marked done (hook/script/voiceover/hook video must exist if the move passes them)">
+                        <option value="">⏩ Move to stage…</option>
+                        ${PS().STAGES.map(s => `<option value="${s.id}">${s.icon} ${escHtml(s.label)}</option>`).join('')}
+                    </select>
+                    <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
+                </div>
+            </div>
+            ${stageChecklistHtml(v)}
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">💡 Context <span class="wsp-hint">— ideation notes, angles, details</span></div>
+                <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
+            </div>
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">🪝 Hook <span class="wsp-hint">— write it and Hook Development completes itself; the hook FOOTAGE below gates Editing</span></div>
+                <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
+                <div class="wsp-add-row">
+                    <label class="wsp-hint" style="font-style:normal;font-weight:700;">Hook Type:</label>
+                    <select id="wsp-hook-type" class="wsp-inline-select" title="Sets the branch automatically: animation → Animation stage; practical → Practical Hook Filming">
+                        <option value="">— not decided —</option>
+                        <option value="animation" ${v.hookType === 'animation' ? 'selected' : ''}>🎞️ Animation</option>
+                        <option value="practical" ${v.hookType === 'practical' ? 'selected' : ''}>🎯 Practical</option>
+                    </select>
+                    <span class="wsp-hint">${v.hookType === 'animation' ? 'waits at Animation until the hook video is linked' : v.hookType === 'practical' ? 'waits at Practical Hook Filming until the hook video is linked' : 'pick one — it flips the Animation / Practical Hook branches automatically'}</span>
+                </div>
+                <div id="wsp-hookvid-section">
+                    ${v.hookVideoPath
+                        ? '' /* filled by initMediaSection */
+                        : v.project
+                            ? '<div class="wsp-hint">Checking the hook/ folder…</div>'
+                            : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the hook video lives in that project\'s Dropbox folder.</div></div>'}
+                </div>
+            </div>
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">📝 Script <span class="wsp-hint">— fill it in and Script Writing completes itself</span></div>
+                ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
+            </div>
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">🧩 Components <span class="wsp-hint">— broken out at Decomposition; each flows through the pipeline on its own and the video waits for it</span></div>
+                ${myComps.map(c => `
+                    <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
+                        <span class="wsp-row-name">🧩 ${escHtml(c.name)}</span>
+                        <div class="wsp-status-cycle">
+                            ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
+                        </div>
+                        <button class="wsp-mini-btn danger" data-comp-del="${c.id}">✕</button>
+                    </div>`).join('')}
+                <div class="wsp-add-row">
+                    <input type="text" id="wsp-new-vcomp" placeholder="Add component (e.g. 'Doc Ock arm')">
+                    <button class="wsp-mini-btn done" id="wsp-add-vcomp">Add</button>
+                </div>
+            </div>
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">⛓️ Waiting on <span class="wsp-hint">— a video, component or order that must finish first. Finished things never block.</span></div>
+                <div class="wsp-chips">${chipListHtml(depChips, 'data-undep')}</div>
+                <div class="wsp-add-row">
+                    <select id="wsp-add-dep">
+                        <option value="">Add something to wait on…</option>
+                        ${depVideoOpts.length ? `<optgroup label="🎬 Videos in the pipeline">${depVideoOpts.map(o => `<option value="video:${o.id}">${escHtml(o.name)}</option>`).join('')}</optgroup>` : ''}
+                        ${depCompOpts.length ? `<optgroup label="🧩 Components not done">${depCompOpts.map(c => `<option value="component:${c.id}">${escHtml(c.name)} (${c.status})</option>`).join('')}</optgroup>` : ''}
+                        ${depOrderOpts.length ? `<optgroup label="📦 Orders not received">${depOrderOpts.map(o => `<option value="order:${o.id}">${escHtml(o.name)} (${o.status})</option>`).join('')}</optgroup>` : ''}
+                    </select>
+                </div>
+            </div>
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">📦 Orders for this video</div>
+                ${myOrders.map(orderRowHtml).join('')}
+                ${addOrderRowHtml({ videoId: v.id })}
+            </div>
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">🛠️ Build projects <span class="wsp-hint">— shared builds this video uses (project components live in the Projects tab)</span></div>
+                <div class="wsp-chips">${chipListHtml(linkedProjects.map(p => ({ id: p.id, label: p.name })), 'data-unlink-project')}</div>
+                <div class="wsp-add-row">
+                    <select id="wsp-link-project">
+                        <option value="">Link a project…</option>
+                        ${allProjects.filter(p => !(v.projectIds || []).includes(p.id)).map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
+                        <option value="__new__">＋ New project…</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="wsp-subsection">
+                <div class="wsp-subsection-title">🎙️ Voiceover <span class="wsp-hint">— one per video, stored in the project's vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.</span></div>
+                <div id="wsp-vo-section">
+                    ${v.voPath
+                        ? '' /* filled by initMediaSection */
+                        : v.project
+                            ? '<div class="wsp-hint">Checking the vo/ folder…</div>'
+                            : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the voiceover lives in that project\'s Dropbox folder, so no project means nowhere to put it.</div></div>'}
+                </div>
+            </div>`;
+    }
+
+    // Wire up the editor fields (works for the detail page AND the inline
+    // drop-down — only one editor is ever mounted at a time).
+    function bindDetailFields(v) {
+        const get = (id) => document.getElementById(id);
+        const nameEl = get('workshop-name');
+        if (!nameEl) return;
+        const root = nameEl.closest('.workshop-detail-fields');
+        const rerender = () => rerenderEditor(v.id);
+
+        // Autosave the simple fields — no Back button needed in the drop-down
+        let saveTimer = null;
+        const scheduleSave = () => {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => saveFieldsFor(VideoService.getById(v.id) || v, true), 1200);
+        };
+        ['workshop-name', 'workshop-hook', 'workshop-context'].forEach(id => get(id)?.addEventListener('input', scheduleSave));
+        ['workshop-deadline', 'workshop-sponsor', 'workshop-project'].forEach(id => get(id)?.addEventListener('change', scheduleSave));
+
+        // Branch decisions (the decomposition validation gate)
+        get('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
+
+        // Hook type → deterministically flips the animation/hookfilm branches
+        get('wsp-hook-type').addEventListener('change', async (e) => {
+            const hookType = e.target.value;
+            const branches = { ...(VideoService.getById(v.id)?.branches || v.branches || {}) };
+            if (hookType === 'animation') { branches.animation = true; branches.hookfilm = false; }
+            else if (hookType === 'practical') { branches.hookfilm = true; branches.animation = false; }
+            await VideoService.update(v.id, { hookType, branches, status: normalizedStatus(v) });
+            rerender();
+        });
+
+        // Veto: jump straight to any stage
+        get('wsp-move-stage').addEventListener('change', async (e) => {
+            const target = e.target.value;
+            e.target.value = '';
+            if (!target) return;
+            await saveFieldsFor(VideoService.getById(v.id) || v, true); // capture edits before validating
+            const moved = await moveVideoToStage(VideoService.getById(v.id) || v, target);
+            if (moved) rerender();
+        });
+
+        // Stage checklist
+        root.querySelectorAll('.wsp-check').forEach(row => {
+            const stageId = row.dataset.stage;
+            row.querySelectorAll('.wsp-check-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const fresh = VideoService.getById(v.id) || v;
+                    const cur = PS().stateOf(fresh, stageId);
+                    const want = btn.dataset.act; // 'done' | 'na'
+                    const next = cur === want ? '' : want;
+                    if (stageId === 'post' && next === 'done') {
+                        await saveFieldsFor(fresh, false);
+                        await postVideoAction(VideoService.getById(v.id) || fresh);
+                        return;
+                    }
+                    // Completing Decomposition requires the branch decisions
+                    if (stageId === 'decomp' && next === 'done' && !PS().branchesDecided(fresh)) {
+                        openBranchDialog(v.id, true);
+                        return;
+                    }
+                    await setStageState(v.id, stageId, next);
+                    rerender();
+                });
+            });
+        });
+
+        // Project links
+        get('wsp-link-project').addEventListener('change', async (e) => {
+            let pid = e.target.value;
+            if (!pid) return;
+            if (pid === '__new__') {
+                const name = prompt('New project name:');
+                if (!name || !name.trim()) { rerender(); return; }
+                const p = await SVC().projects.create({ name: name.trim(), description: '', status: 'active', deadline: '', notes: '' });
+                pid = p.id;
+            }
+            const fresh = VideoService.getById(v.id) || v;
+            const projectIds = [...new Set([...(fresh.projectIds || []), pid])];
+            await VideoService.update(v.id, { projectIds, status: normalizedStatus(fresh) });
+            rerender();
+        });
+        root.querySelectorAll('[data-unlink-project]').forEach(b => b.addEventListener('click', async () => {
+            const fresh = VideoService.getById(v.id) || v;
+            const projectIds = (fresh.projectIds || []).filter(id => id !== b.dataset.unlinkProject);
+            await VideoService.update(v.id, { projectIds, status: normalizedStatus(fresh) });
+            rerender();
+        }));
+
+        // Components broken out of this video (the video waits for them)
+        const addVComp = async () => {
+            const input = get('wsp-new-vcomp');
+            const name = input.value.trim();
+            if (!name) return;
+            const fresh = VideoService.getById(v.id) || v;
+            const comp = await SVC().components.create({
+                videoId: v.id,
+                projectId: (fresh.projectIds || [])[0] || '',
+                parentComponentId: '',
+                name, status: 'design', notes: ''
+            });
+            // deterministic: a component of this video automatically blocks it
+            await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
+            rerender();
+        };
+        get('wsp-add-vcomp').addEventListener('click', addVComp);
+        get('wsp-new-vcomp').addEventListener('keydown', (e) => { if (e.key === 'Enter') addVComp(); });
+        root.querySelectorAll('[data-comp-del]').forEach(b => b.addEventListener('click', async () => {
+            if (!confirm('Remove this component?')) return;
+            await SVC().components.remove(b.dataset.compDel);
+            const fresh = VideoService.getById(v.id) || v;
+            await saveDeps(fresh, videoDeps(fresh).filter(d => !(d.kind === 'component' && d.id === b.dataset.compDel)));
+            rerender();
+        }));
+
+        // Typed dependencies
+        get('wsp-add-dep').addEventListener('change', async (e) => {
+            if (!e.target.value) return;
+            const [kind, id] = e.target.value.split(':');
+            const fresh = VideoService.getById(v.id) || v;
+            await saveDeps(fresh, [...videoDeps(fresh), { kind, id }]);
+            rerender();
+        });
+        root.querySelectorAll('[data-undep]').forEach(b => b.addEventListener('click', async () => {
+            const [kind, id] = b.dataset.undep.split(':');
+            const fresh = VideoService.getById(v.id) || v;
+            await saveDeps(fresh, videoDeps(fresh).filter(d => !(d.kind === kind && d.id === id)));
+            rerender();
+        }));
+
+        // Inline script editor
+        if (window.EggRenderer) {
+            window.EggRenderer.initInlineScriptEditor('workshop-inline-script', {
+                get: () => (VideoService.getById(v.id) || v).script || '',
+                save: async (text) => { await VideoService.update(v.id, { script: text }); }
+            });
+        }
+    }
+
+    function renderDetail() {
+        const el = document.getElementById('workshop-detail');
+        if (!el || !selectedVideo) return;
+        const v = VideoService.getById(selectedVideo.id) || selectedVideo;
+        selectedVideo = v;
+
         el.innerHTML = `
             <div class="workshop-detail-toolbar">
                 <button class="workshop-back-btn" id="workshop-back-btn">
@@ -1316,275 +1600,20 @@ const WorkshopUI = (() => {
                     ${v.project ? `<canvas id="workshop-detail-egg-canvas" class="workshop-egg-preview-canvas" width="160" height="200"></canvas>` : window.EggRenderer ? window.EggRenderer.renderSilhouetteEgg() : ''}
                     ${progressBar(v)}
                 </div>
-                <div class="workshop-detail-fields">
-                    <div class="workshop-detail-summary">${sourceIdeaHtml}</div>
-
-                    ${blockers.length ? `<div class="wsp-blockers-box">
-                        <div class="wsp-blockers-title">🔒 Waiting on:</div>
-                        ${blockers.map(b => `<div class="wsp-blocker-line">${DEP_ICONS[b.kind] || '🗃️'} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
-                    </div>` : ''}
-
-                    <label>Video Name</label>
-                    <input type="text" id="workshop-name" value="${escAttr(v.name)}">
-
-                    <div class="wsp-field-grid">
-                        <div>
-                            <label>Deadline <span class="wsp-hint">(optional)</span></label>
-                            <input type="date" id="workshop-deadline" value="${escAttr(v.deadline || '')}">
-                        </div>
-                        <div>
-                            <label>Sponsor</label>
-                            <select id="workshop-sponsor">
-                                <option value="">No sponsor</option>
-                                ${sponsors.map(s => `<option value="${s.id}" ${v.sponsorId === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div>
-                            <label>Channel Project (egg)</label>
-                            <select id="workshop-project">
-                                <option value="">No project</option>
-                                ${dropboxProjects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">🎙️ Voiceover <span class="wsp-hint">— one per video, stored in the project's vo/ folder in Dropbox. The Voiceover stage completes itself the moment one is linked.</span></div>
-                        <div id="wsp-vo-section">
-                            ${v.voPath
-                                ? '' /* filled by initMediaSection */
-                                : v.project
-                                    ? '<div class="wsp-hint">Checking the vo/ folder…</div>'
-                                    : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the voiceover lives in that project\'s Dropbox folder, so no project means nowhere to put it.</div></div>'}
-                        </div>
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">🪝 Hook Video <span class="wsp-hint">— the hook footage, separate from the body so editors get it clean. Stored in the project's hook/ folder; ${v.hookType === 'animation' ? 'the Animation stage' : v.hookType === 'practical' ? 'Practical Hook Filming' : 'pick a Hook Type and that stage'} completes itself once one is linked, unlocking Editing.</span></div>
-                        <div class="wsp-add-row">
-                            <label class="wsp-hint" style="font-style:normal;font-weight:700;">Hook Type:</label>
-                            <select id="wsp-hook-type" class="wsp-inline-select" title="Sets the branch automatically: animation → Animation stage; practical → Practical Hook Filming">
-                                <option value="">— not decided —</option>
-                                <option value="animation" ${v.hookType === 'animation' ? 'selected' : ''}>🎞️ Animation</option>
-                                <option value="practical" ${v.hookType === 'practical' ? 'selected' : ''}>🎯 Practical</option>
-                            </select>
-                        </div>
-                        <div id="wsp-hookvid-section">
-                            ${v.hookVideoPath
-                                ? '' /* filled by initMediaSection */
-                                : v.project
-                                    ? '<div class="wsp-hint">Checking the hook/ folder…</div>'
-                                    : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the hook video lives in that project\'s Dropbox folder.</div></div>'}
-                        </div>
-                    </div>
-
-                    <div class="wsp-progress-head">
-                        <label>Pipeline Progress</label>
-                        <div class="wsp-progress-head-actions">
-                            <select id="wsp-move-stage" class="wsp-inline-select" title="Veto: jump this video to any stage — everything before it gets marked done (hook/script/voiceover must exist if the move passes them)">
-                                <option value="">⏩ Move to stage…</option>
-                                ${PS().STAGES.map(s => `<option value="${s.id}">${s.icon} ${escHtml(s.label)}</option>`).join('')}
-                            </select>
-                            <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
-                        </div>
-                    </div>
-                    ${stageChecklistHtml(v)}
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">🧩 Components <span class="wsp-hint">— broken out at Decomposition; each flows through the pipeline on its own and the video waits for it</span></div>
-                        ${myComps.map(c => `
-                            <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
-                                <span class="wsp-row-name">🧩 ${escHtml(c.name)}</span>
-                                <div class="wsp-status-cycle">
-                                    ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
-                                </div>
-                                <button class="wsp-mini-btn danger" data-comp-del="${c.id}">✕</button>
-                            </div>`).join('')}
-                        <div class="wsp-add-row">
-                            <input type="text" id="wsp-new-vcomp" placeholder="Add component (e.g. 'Doc Ock arm')">
-                            <button class="wsp-mini-btn done" id="wsp-add-vcomp">Add</button>
-                        </div>
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">⛓️ Waiting on <span class="wsp-hint">— a video, component or order that must finish first. Finished things never block.</span></div>
-                        <div class="wsp-chips">${chipListHtml(depChips, 'data-undep')}</div>
-                        <div class="wsp-add-row">
-                            <select id="wsp-add-dep">
-                                <option value="">Add something to wait on…</option>
-                                ${depVideoOpts.length ? `<optgroup label="🎬 Videos in the pipeline">${depVideoOpts.map(o => `<option value="video:${o.id}">${escHtml(o.name)}</option>`).join('')}</optgroup>` : ''}
-                                ${depCompOpts.length ? `<optgroup label="🧩 Components not done">${depCompOpts.map(c => `<option value="component:${c.id}">${escHtml(c.name)} (${c.status})</option>`).join('')}</optgroup>` : ''}
-                                ${depOrderOpts.length ? `<optgroup label="📦 Orders not received">${depOrderOpts.map(o => `<option value="order:${o.id}">${escHtml(o.name)} (${o.status})</option>`).join('')}</optgroup>` : ''}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">📦 Orders for this video</div>
-                        ${myOrders.map(orderRowHtml).join('')}
-                        ${addOrderRowHtml({ videoId: v.id })}
-                    </div>
-
-                    <div class="wsp-subsection">
-                        <div class="wsp-subsection-title">🛠️ Build projects <span class="wsp-hint">— shared builds this video uses (project components live in the Projects tab)</span></div>
-                        <div class="wsp-chips">${chipListHtml(linkedProjects.map(p => ({ id: p.id, label: p.name })), 'data-unlink-project')}</div>
-                        <div class="wsp-add-row">
-                            <select id="wsp-link-project">
-                                <option value="">Link a project…</option>
-                                ${allProjects.filter(p => !(v.projectIds || []).includes(p.id)).map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
-                                <option value="__new__">＋ New project…</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <label>Hook <span class="wsp-hint">— fill it in and Hook Development completes itself</span></label>
-                    <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
-                    <label>Context</label>
-                    <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
-                    <label>Script <span class="wsp-hint">— fill it in and Script Writing completes itself</span></label>
-                    ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
-                </div>
+                <div class="workshop-detail-fields">${detailFieldsHtml(v)}</div>
             </div>
         `;
 
-        // --- bindings ---
         document.getElementById('workshop-back-btn').addEventListener('click', () => saveAndBack());
-        document.getElementById('workshop-post').addEventListener('click', () => postFromDetail());
-        document.getElementById('workshop-to-library').addEventListener('click', () => backToLibrary());
-        document.getElementById('workshop-delete').addEventListener('click', async () => {
-            if (!confirm(`Delete "${v.name}"? The source idea (if any) stays in the Library.`)) return;
-            await VideoService.remove(v.id);
-            showList();
-        });
+        document.getElementById('workshop-post').addEventListener('click', () => postVideoAction(selectedVideo));
+        document.getElementById('workshop-to-library').addEventListener('click', () => backToLibraryAction(selectedVideo));
+        document.getElementById('workshop-delete').addEventListener('click', () => deleteVideoAction(selectedVideo));
 
-        // Branch decisions (the decomposition validation gate)
-        document.getElementById('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
-
-        // Hook type → deterministically flips the animation/hookfilm branches
-        document.getElementById('wsp-hook-type').addEventListener('change', async (e) => {
-            const hookType = e.target.value;
-            const branches = { ...(VideoService.getById(v.id)?.branches || v.branches || {}) };
-            if (hookType === 'animation') { branches.animation = true; branches.hookfilm = false; }
-            else if (hookType === 'practical') { branches.hookfilm = true; branches.animation = false; }
-            await VideoService.update(v.id, { hookType, branches, status: normalizedStatus(v) });
-            renderDetail();
-        });
-
-        // Veto: jump straight to any stage
-        document.getElementById('wsp-move-stage').addEventListener('change', async (e) => {
-            const target = e.target.value;
-            e.target.value = '';
-            if (!target) return;
-            await saveFields(true); // capture any hook/script edits before validating
-            const moved = await moveVideoToStage(VideoService.getById(v.id) || v, target);
-            if (moved) renderDetail();
-        });
-
-        // Stage checklist
-        el.querySelectorAll('.wsp-check').forEach(row => {
-            const stageId = row.dataset.stage;
-            row.querySelectorAll('.wsp-check-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const cur = PS().stateOf(v, stageId);
-                    const want = btn.dataset.act; // 'done' | 'na'
-                    const next = cur === want ? '' : want;
-                    if (stageId === 'post' && next === 'done') {
-                        await saveFields(false);
-                        await postFromDetail();
-                        return;
-                    }
-                    // Completing Decomposition requires the branch decisions
-                    if (stageId === 'decomp' && next === 'done' && !PS().branchesDecided(v)) {
-                        openBranchDialog(v.id, true);
-                        return;
-                    }
-                    await setStageState(v.id, stageId, next);
-                    renderDetail();
-                });
-            });
-        });
-
-        // Project links
-        document.getElementById('wsp-link-project').addEventListener('change', async (e) => {
-            let pid = e.target.value;
-            if (!pid) return;
-            if (pid === '__new__') {
-                const name = prompt('New project name:');
-                if (!name || !name.trim()) { renderDetail(); return; }
-                const p = await SVC().projects.create({ name: name.trim(), description: '', status: 'active', deadline: '', notes: '' });
-                pid = p.id;
-            }
-            const projectIds = [...new Set([...(v.projectIds || []), pid])];
-            await VideoService.update(v.id, { projectIds, status: normalizedStatus(v) });
-            renderDetail();
-        });
-        el.querySelectorAll('[data-unlink-project]').forEach(b => b.addEventListener('click', async () => {
-            const projectIds = (v.projectIds || []).filter(id => id !== b.dataset.unlinkProject);
-            await VideoService.update(v.id, { projectIds, status: normalizedStatus(v) });
-            renderDetail();
-        }));
-
-        // Components broken out of this video (the video waits for them)
-        const addVComp = async () => {
-            const input = document.getElementById('wsp-new-vcomp');
-            const name = input.value.trim();
-            if (!name) return;
-            const comp = await SVC().components.create({
-                videoId: v.id,
-                projectId: (v.projectIds || [])[0] || '',
-                parentComponentId: '',
-                name, status: 'design', notes: ''
-            });
-            // deterministic: a component of this video automatically blocks it
-            const deps = [...videoDeps(v), { kind: 'component', id: comp.id }];
-            await saveDeps(v, deps);
-            renderDetail();
-        };
-        document.getElementById('wsp-add-vcomp').addEventListener('click', addVComp);
-        document.getElementById('wsp-new-vcomp').addEventListener('keydown', (e) => { if (e.key === 'Enter') addVComp(); });
-        el.querySelectorAll('[data-comp]').forEach(row => {
-            const compId = row.dataset.comp;
-            row.querySelectorAll('[data-comp-status]').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    await SVC().components.update(compId, { status: btn.dataset.compStatus });
-                    renderDetail();
-                });
-            });
-        });
-        el.querySelectorAll('[data-comp-del]').forEach(b => b.addEventListener('click', async () => {
-            if (!confirm('Remove this component?')) return;
-            await SVC().components.remove(b.dataset.compDel);
-            await saveDeps(v, videoDeps(v).filter(d => !(d.kind === 'component' && d.id === b.dataset.compDel)));
-            renderDetail();
-        }));
-
-        // Typed dependencies
-        document.getElementById('wsp-add-dep').addEventListener('change', async (e) => {
-            if (!e.target.value) return;
-            const [kind, id] = e.target.value.split(':');
-            await saveDeps(v, [...videoDeps(v), { kind, id }]);
-            renderDetail();
-        });
-        el.querySelectorAll('[data-undep]').forEach(b => b.addEventListener('click', async () => {
-            const [kind, id] = b.dataset.undep.split(':');
-            await saveDeps(v, videoDeps(v).filter(d => !(d.kind === kind && d.id === id)));
-            renderDetail();
-        }));
-
+        bindDetailFields(v);
+        // Detail context: bind comp-status + order rows here (the stage panel
+        // binds them itself in the drop-down context)
+        bindCompStatusRows(el, () => rerenderEditor(v.id));
         bindOrderRows(el);
-
-        // Inline script editor
-        if (window.EggRenderer) {
-            window.EggRenderer.initInlineScriptEditor('workshop-inline-script', {
-                get: () => (selectedVideo && selectedVideo.script) || '',
-                save: async (text) => {
-                    if (!selectedVideo) return;
-                    selectedVideo.script = text;
-                    await VideoService.update(selectedVideo.id, { script: text });
-                }
-            });
-        }
 
         // Voiceover + hook video sections (async — talk to Dropbox)
         initMediaSection(v, 'vo');
@@ -1594,6 +1623,18 @@ const WorkshopUI = (() => {
         if (v.project && window.EggRenderer) {
             requestAnimationFrame(() => window.EggRenderer.initEggPreview('workshop-detail-egg-canvas', v.project));
         }
+    }
+
+    function bindCompStatusRows(scope, rerenderFn) {
+        scope.querySelectorAll('[data-comp]').forEach(row => {
+            const compId = row.dataset.comp;
+            row.querySelectorAll('[data-comp-status]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    await SVC().components.update(compId, { status: btn.dataset.compStatus });
+                    rerenderFn();
+                });
+            });
+        });
     }
 
     // ============ DROPBOX MEDIA SECTIONS (voiceover <project>/vo/, hook video <project>/hook/) ============
@@ -1655,7 +1696,7 @@ const WorkshopUI = (() => {
             document.getElementById(`${cfg.elId}-unlink`).addEventListener('click', async () => {
                 if (!confirm(`Unlink this ${cfg.noun}? (The file stays in Dropbox.)`)) return;
                 await VideoService.update(v.id, { [cfg.pathField]: '', [cfg.nameField]: '', status: normalizedStatus(v) });
-                renderDetail();
+                rerenderEditor(v.id);
             });
             return;
         }
@@ -1699,7 +1740,7 @@ const WorkshopUI = (() => {
             if (!pick.value) return;
             const name = pick.options[pick.selectedIndex].textContent;
             await VideoService.update(v.id, { [cfg.pathField]: pick.value, [cfg.nameField]: name, status: normalizedStatus(v) });
-            renderDetail();
+            rerenderEditor(v.id);
         });
         document.getElementById(`${cfg.elId}-upload`).addEventListener('click', async () => {
             const input = document.getElementById(`${cfg.elId}-file`);
@@ -1718,7 +1759,7 @@ const WorkshopUI = (() => {
                     status: normalizedStatus(v)
                 });
                 toast(`${cfg.icon} ${cfg.noun} uploaded to ${v.project}/${cfg.folder}`);
-                renderDetail();
+                rerenderEditor(v.id);
             } catch (e) {
                 console.warn(`${cfg.noun} upload failed`, e);
                 alert(`${cfg.noun} upload failed: ` + e.message);
@@ -1791,57 +1832,62 @@ const WorkshopUI = (() => {
         await VideoService.update(v.id, { deps: clean, dependsOn: [], status: normalizedStatus(v) });
     }
 
-    async function saveFields(silent) {
-        if (!selectedVideo) return;
-        const name = document.getElementById('workshop-name')?.value.trim() || selectedVideo.name;
-        const project = document.getElementById('workshop-project')?.value || '';
-        const hook = document.getElementById('workshop-hook')?.value || '';
-        const context = document.getElementById('workshop-context')?.value || '';
-        const deadline = document.getElementById('workshop-deadline')?.value || '';
-        const sponsorId = document.getElementById('workshop-sponsor')?.value || '';
+    // Save the editor's simple fields for a specific video — works whether
+    // the editor is the detail page or the inline drop-down (only one is
+    // ever mounted, so the field ids are unambiguous).
+    async function saveFieldsFor(v, silent) {
+        if (!v) return;
+        const get = id => document.getElementById(id);
+        if (!get('workshop-name')) return; // no editor mounted
+        const name = get('workshop-name').value.trim() || v.name;
+        const project = get('workshop-project')?.value || '';
+        const hook = get('workshop-hook')?.value || '';
+        const context = get('workshop-context')?.value || '';
+        const deadline = get('workshop-deadline')?.value || '';
+        const sponsorId = get('workshop-sponsor')?.value || '';
         try {
-            await VideoService.saveWithIdeaSync(selectedVideo.id, {
+            await VideoService.saveWithIdeaSync(v.id, {
                 name, project, hook, context, deadline, sponsorId,
-                status: normalizedStatus(selectedVideo)
+                status: normalizedStatus(v)
             });
         } catch (e) {
             console.warn('Workshop: save failed', e);
             if (!silent) alert('Failed to save. Check connection.');
         }
     }
+    function saveFields(silent) { return saveFieldsFor(selectedVideo, silent); }
 
     async function saveAndBack() {
         await saveFields(true);
         showList();
     }
 
-    async function postFromDetail() {
-        const v = selectedVideo;
+    function closeEditorContext() {
+        expandedStageVideoId = null;
+        if (currentPage === 'detail') setTimeout(() => showList(), 100);
+        else renderTab();
+    }
+
+    async function postVideoAction(v) {
         if (!v) return;
         if (!v.script && !document.getElementById('workshop-inline-script-textarea')?.value) {
             if (!confirm('No script on this video. Post anyway?')) return;
         }
-        const btn = document.getElementById('workshop-post');
-        if (btn) { btn.textContent = 'Posting...'; btn.disabled = true; }
         try {
-            await saveFields(true);
-            const stageState = { ...(VideoService.getById(v.id)?.stageState || {}), post: 'done' };
-            await postVideoRecord(VideoService.getById(v.id) || v, stageState);
-            setTimeout(() => showList(), 100);
+            await saveFieldsFor(v, true);
+            const fresh = VideoService.getById(v.id) || v;
+            await postVideoRecord(fresh, { ...(fresh.stageState || {}), post: 'done' });
+            closeEditorContext();
         } catch (e) {
             console.warn('Workshop: post failed', e);
             alert('Failed to post video. Check connection.');
-            if (btn) { btn.textContent = 'Post Video'; btn.disabled = false; }
         }
     }
 
-    async function backToLibrary() {
-        if (!selectedVideo) return;
+    async function backToLibraryAction(v) {
+        if (!v) return;
         if (!confirm('Move this back to the Library as an idea? The pipeline entry will be removed (the idea and script are kept).')) return;
-        const btn = document.getElementById('workshop-to-library');
-        if (btn) { btn.textContent = 'Moving...'; btn.disabled = true; }
         try {
-            const v = selectedVideo;
             if (v.sourceIdeaId) {
                 const idea = NotesService.getById(v.sourceIdeaId);
                 if (idea) {
@@ -1860,12 +1906,18 @@ const WorkshopUI = (() => {
             await VideoService.remove(v.id);
             if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
             toast('Moved back to Library');
-            showList();
+            closeEditorContext();
         } catch (e) {
             console.warn('Workshop: back to library failed', e);
             alert('Failed to move back to Library. Check connection.');
-            if (btn) { btn.textContent = 'Return to Library'; btn.disabled = false; }
         }
+    }
+
+    async function deleteVideoAction(v) {
+        if (!v) return;
+        if (!confirm(`Delete "${v.name}"? The source idea (if any) stays in the Library.`)) return;
+        await VideoService.remove(v.id);
+        closeEditorContext();
     }
 
     // ============ PUBLIC API ============
@@ -1889,6 +1941,8 @@ const WorkshopUI = (() => {
         close() {
             if (currentPage === 'detail' && selectedVideo) {
                 saveFields(true).catch(() => {});
+            } else if (expandedStageVideoId) {
+                saveFieldsFor(VideoService.getById(expandedStageVideoId), true).catch(() => {});
             }
             const previewCanvas = document.getElementById('workshop-detail-egg-canvas');
             if (previewCanvas && previewCanvas._cleanup) previewCanvas._cleanup();

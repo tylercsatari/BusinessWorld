@@ -795,3 +795,8 @@
 
 /* Move-to-stage veto control */
 .wsp-progress-head-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* Inline editor inside the drop-down */
+.wsp-inline-editor { padding: 2px 0 6px; }
+.wsp-stage-video-body .wsp-svb-actions { gap: 8px; border-top: 1px dashed #ece8e0; padding-top: 10px; }
+.wsp-stage-video-body .wsp-checklist { background: #fff; }
