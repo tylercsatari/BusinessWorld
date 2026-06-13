@@ -170,10 +170,10 @@ const WorkshopUI = (() => {
                         <button class="wsp-header-btn primary" id="wsp-new-video-btn">＋ New Video</button>
                     </div>
                     <div class="wsp-tabs">
-                        <button class="wsp-tab active" data-tab="pipeline">Pipeline</button>
-                        <button class="wsp-tab" data-tab="projects">Projects</button>
-                        <button class="wsp-tab" data-tab="orders">Orders</button>
-                        <button class="wsp-tab" data-tab="inventory">Storage Room</button>
+                        <button class="wsp-tab active" data-tab="pipeline">Pipeline <span class="wsp-tab-count" data-tabcount="pipeline"></span></button>
+                        <button class="wsp-tab" data-tab="projects">Projects <span class="wsp-tab-count" data-tabcount="projects"></span></button>
+                        <button class="wsp-tab" data-tab="orders">Orders <span class="wsp-tab-count" data-tabcount="orders"></span></button>
+                        <button class="wsp-tab" data-tab="inventory">Storage Room <span class="wsp-tab-count" data-tabcount="inventory"></span></button>
                     </div>
                     <div class="wsp-tab-body" id="wsp-tab-body">
                         <div class="workshop-empty">Loading pipeline…</div>
@@ -224,6 +224,18 @@ const WorkshopUI = (() => {
     function updateCount() {
         const el = document.getElementById('wsp-count');
         if (el) el.textContent = `${pipelineVideos().length} in pipeline`;
+        // Live counts on every tab so the numbers are visible without clicking in
+        const counts = {
+            pipeline: pipelineVideos().length,
+            projects: SVC().projects.getAll().filter(p => p.status !== 'archived').length,
+            orders: SVC().orders.getAll().filter(o => o.status !== 'received').length,
+            inventory: SVC().inventory.getAll().length
+        };
+        document.querySelectorAll('[data-tabcount]').forEach(el2 => {
+            const n = counts[el2.dataset.tabcount];
+            el2.textContent = n || '';
+            el2.style.display = n ? '' : 'none';
+        });
     }
 
     // ============ TAB 1: PIPELINE BOARD — the single view of everything ============
@@ -359,27 +371,24 @@ const WorkshopUI = (() => {
                `C ${xc2 + GAP_X * 0.4} ${cy}, ${x2 - GAP_X * 0.5} ${y2}, ${x2} ${y2}`;
     }
 
-    // Dot strip: one dot per item, colored by type — the at-a-glance view
-    function dotsRow(dots) {
-        if (!dots.length) return '';
-        const MAX = 16;
-        const shown = dots.slice(0, MAX);
-        return `<div class="wsp-node-dots">${shown.map(d =>
-            `<span class="wsp-dot" style="background:${d.color}" title="${escAttr(d.title)}"></span>`).join('')}${dots.length > MAX ? `<span class="wsp-dot-more">+${dots.length - MAX}</span>` : ''}</div>`;
-    }
-
     function pipelineFilterBarHtml() {
         const all = pipelineVideos();
         const projects = SVC().projects.getAll().filter(p => p.status !== 'archived');
         const sponsors = [...new Set(all.map(v => v.sponsorId).filter(Boolean))].map(id => SVC().sponsors.getById(id)).filter(Boolean);
+        const legendCounts = {
+            video: filteredVideos().length,
+            component: filteredComponents().length,
+            order: filteredOrders().length,
+            inventory: filteredInventory().length
+        };
         const legend = [
-            ['video', '🎬 Videos'], ['component', '🧩 Components'], ['order', '📦 Orders'], ['inventory', '🗃️ Inventory']
+            ['video', '🎬', 'Videos'], ['component', '🧩', 'Components'], ['order', '📦', 'Orders'], ['inventory', '🗃️', 'Storage']
         ];
         return `<div class="wsp-filterbar wsp-pipeline-filters">
             <div class="wsp-legend">
-                ${legend.map(([key, label]) => `
-                    <button class="wsp-legend-chip${showTypes[key] ? ' on' : ''}" data-toggle-type="${key}" style="--dotcolor:${DOT_COLORS[key]}">
-                        <span class="wsp-dot" style="background:${DOT_COLORS[key]}"></span>${label}
+                ${legend.map(([key, icon, label]) => `
+                    <button class="wsp-legend-chip${showTypes[key] ? ' on' : ''}" data-toggle-type="${key}" style="--dotcolor:${DOT_COLORS[key]}" title="${showTypes[key] ? 'Hide' : 'Show'} ${escAttr(label)} on the board">
+                        <span class="wsp-legend-num">${legendCounts[key]}</span>${icon} ${label}
                     </button>`).join('')}
             </div>
             <input type="text" class="wsp-search" id="wsp-f-search" placeholder="Search everything…" value="${escAttr(fSearch)}">
@@ -440,29 +449,36 @@ const WorkshopUI = (() => {
             const e = entities[s.id];
             const total = e.videos.length + e.components.length + e.orders.length;
             const blockedHere = e.videos.filter(v => videoBlockers(v).length > 0).length;
-            const dots = [
-                ...e.videos.map(v => ({ color: DOT_COLORS.video, title: `🎬 ${v.name}` })),
-                ...e.components.map(c => ({ color: DOT_COLORS.component, title: `🧩 ${c.name}${projectName(c.projectId) ? ' · ' + projectName(c.projectId) : ''}` })),
-                ...e.orders.map(o => ({ color: DOT_COLORS.order, title: `📦 ${o.name} (${o.status})` }))
-            ];
+            // Compact numeric breakdown by type (only nonzero) — numbers, not dots
+            const counts = [
+                e.videos.length ? `<span class="wsp-nc" style="--c:${DOT_COLORS.video}">🎬 ${e.videos.length}</span>` : '',
+                e.components.length ? `<span class="wsp-nc" style="--c:${DOT_COLORS.component}">🧩 ${e.components.length}</span>` : '',
+                e.orders.length ? `<span class="wsp-nc" style="--c:${DOT_COLORS.order}">📦 ${e.orders.length}</span>` : ''
+            ].join('');
             return `<div class="wsp-node${s.bottleneck ? ' bottleneck' : ''}${selectedStageId === s.id ? ' selected' : ''}${total ? ' has-videos' : ''}"
                         data-stage="${s.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px;height:${NODE_H}px;--groupcolor:${GROUP_COLORS[s.group] || '#ccc'};">
-                <div class="wsp-node-label">${s.icon} ${escHtml(s.label)}</div>
-                <div class="wsp-node-sub">${s.bottleneck ? '<span class="wsp-bottleneck-tag">bottleneck</span>' : `<span class="wsp-node-group" style="color:${GROUP_COLORS[s.group]}">${escHtml(s.group)}</span>`}</div>
-                ${dotsRow(dots)}
+                <div class="wsp-node-top">
+                    <span class="wsp-node-icon">${s.icon}</span>
+                    <span class="wsp-node-label">${escHtml(s.label)}</span>
+                </div>
+                <div class="wsp-node-sub">${total
+                    ? `<span class="wsp-node-counts">${counts}</span>`
+                    : `<span class="wsp-node-group">${s.bottleneck ? '◆ bottleneck' : escHtml(s.group)}</span>`}</div>
+                ${total ? `<span class="wsp-node-count">${total}</span>` : ''}
                 ${blockedHere ? `<span class="wsp-node-blocked" title="${blockedHere} blocked here">🔒</span>` : ''}
             </div>`;
         }).join('');
 
-        // Component Library node: inventory dots colored by readiness
+        // Component Library (Storage Room) node — readiness summary
         const invItems = showTypes.inventory ? filteredInventory() : [];
-        const INV_STATUS_COLORS = { ready: '#27ae60', building: '#e8a020', planned: '#b0a8a0' };
-        const invDots = invItems.map(i => ({ color: INV_STATUS_COLORS[i.status] || '#b0a8a0', title: `🗃️ ${i.name} (${i.status})` }));
         const readyInv = invItems.filter(i => i.status === 'ready').length;
         const invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:64px;">
-            <div class="wsp-node-label">🗃️ Storage Room</div>
-            <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready</span></div>
-            ${dotsRow(invDots)}
+            <div class="wsp-node-top">
+                <span class="wsp-node-icon">🗃️</span>
+                <span class="wsp-node-label">Storage Room</span>
+            </div>
+            <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready on the shelf</span></div>
+            ${invItems.length ? `<span class="wsp-node-count inv">${invItems.length}</span>` : ''}
         </div>`;
 
         el.innerHTML = `

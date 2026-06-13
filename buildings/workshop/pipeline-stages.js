@@ -34,6 +34,7 @@ const PipelineStages = (() => {
         { id: 'design',     label: 'Design Research',         icon: '🔬', group: 'Planning',    desc: 'Research & engineering design. Only videos flagged as needing design land here.' },
         { id: 'propdesign', label: 'Props / Set Design',      icon: '🎨', group: 'Planning',    desc: 'Plan props and set design. Only flagged videos land here.' },
         { id: 'cad',        label: 'CAD',                     icon: '📐', group: 'Planning',    desc: 'CAD models for precision parts. Only videos flagged as needing CAD land here — no confused texts from the CAD desk.' },
+        { id: 'pcb',        label: 'PCB Design',              icon: '🔌', group: 'Planning',    desc: 'Design custom circuit boards. Runs parallel to CAD after Design Research, and feeds Ordering so boards get fabbed/bought with everything else. Only videos flagged as needing a PCB land here.' },
         { id: 'order',      label: 'Ordering',                icon: '📦', group: 'Procurement', bottleneck: true, desc: 'BOTTLENECK — everything passes through here. Check the Storage Room first: if it\'s already on the shelf, don\'t buy it. Auto-completes when every order for the video is received; if nothing needs buying, marking it done IS the validation.' },
         { id: 'precision',  label: 'Precision Manufacturing', icon: '⚙️', group: 'Build',       desc: '3D printing / CNC of CAD parts. Gated behind Ordering — materials validated or bought first.' },
         { id: 'software',   label: 'Software Development',    icon: '💻', group: 'Build',       desc: 'Code / firmware for the build. Runs parallel to Precision Manufacturing and feeds into Assembly — the build comes together with both its parts and its software. Only flagged videos land here.' },
@@ -58,9 +59,11 @@ const PipelineStages = (() => {
         ['decomp', 'design'],
         ['decomp', 'propdesign'],
         ['design', 'cad'],            // design feeds CAD…
+        ['design', 'pcb'],            // …and PCB design (parallel to CAD)
         ['design', 'order'],
         ['propdesign', 'order'],
         ['cad', 'order'],             // …but CAD output is still bottlenecked at Ordering
+        ['pcb', 'order'],             // PCB boards get fabbed/ordered through the bottleneck too
         ['order', 'precision'],       // nothing gets manufactured before Ordering clears it
         ['order', 'software'],        // dev boards/licenses get ordered too
         ['order', 'assembly'],
@@ -86,6 +89,7 @@ const PipelineStages = (() => {
         design: 'design',
         propdesign: 'propdesign',
         cad: 'cad',
+        pcb: 'pcb',
         precision: 'cad',
         software: 'software',
         assembly: 'assembly',
@@ -96,6 +100,7 @@ const PipelineStages = (() => {
         { flag: 'design',     label: '🔬 Design research needed?',        hint: 'engineering/research before building' },
         { flag: 'propdesign', label: '🎨 Props / set design needed?',     hint: 'props to plan or a set to design' },
         { flag: 'cad',        label: '📐 CAD needed?',                    hint: 'parts to model → also enables Precision Manufacturing' },
+        { flag: 'pcb',        label: '🔌 PCB needed?',                    hint: 'a custom circuit board to design before ordering' },
         { flag: 'software',   label: '💻 Software needed?',               hint: 'code/firmware to develop — runs parallel to manufacturing' },
         { flag: 'assembly',   label: '🔧 Build / assembly needed?',       hint: 'something physical gets built' },
         { flag: 'artistic',   label: '🖌️ Artistic finishing needed?',    hint: 'paint / finish / look' },
