@@ -814,3 +814,9 @@
 .wsp-save-status.saved { color: #34c759; }
 .wsp-save-status.saving { color: #ff9500; }
 .wsp-save-status.failed { color: #e74c3c; }
+
+/* Dropbox upload progress (VO + hook footage) */
+.wsp-upload-progress { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 24px; }
+.wsp-upload-bar { flex: 1 1 80px; height: 8px; background: #eee5d4; border-radius: 4px; overflow: hidden; }
+.wsp-upload-fill { height: 100%; width: 0; background: linear-gradient(90deg, #34c759, #2aa84c); border-radius: 4px; transition: width .15s ease; }
+.wsp-upload-label { font-size: 11px; font-weight: 600; color: #777; white-space: nowrap; }

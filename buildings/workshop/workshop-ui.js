@@ -1817,22 +1817,61 @@ const WorkshopUI = (() => {
             const input = root.querySelector(`[data-hooki-file="${hid}"]`);
             const file = input && input.files && input.files[0];
             if (!file) { alert('Choose a video file first.'); return; }
-            btn.textContent = 'Uploading…'; btn.disabled = true;
+            const rowEl = root.querySelector(`[data-hooki-media="${hid}"]`);
+            const bar = uploadProgressBar(rowEl, file.name);
             try {
-                const r = await fetch(`/api/dropbox/upload?path=${encodeURIComponent(`${folder}/${file.name}`)}`, { method: 'POST', body: file });
-                const meta = await r.json();
-                if (!r.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `upload failed (${r.status})`);
+                const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                bar.stage('Linking to this hook…');
                 toast(`🪝 hook video uploaded to ${v.project}/hook`);
                 await setFootage(hid, meta.path_display || meta.path_lower, meta.name || file.name);
             } catch (e) {
                 console.warn('hook video upload failed', e);
                 alert('Hook video upload failed: ' + e.message);
-                btn.textContent = '⬆ Upload'; btn.disabled = false;
+                rerender(); // restores the pick/upload controls
             }
         }));
     }
 
     // ============ DROPBOX MEDIA SECTIONS (voiceover <project>/vo/, hook video <project>/hook/) ============
+
+    // XHR (fetch can't report upload progress). onProgress(loaded, total)
+    // covers browser→server; the server then forwards to Dropbox before
+    // responding, so 100% switches to a "processing" stage until resolve.
+    function uploadToDropbox(destPath, file, onProgress) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `/api/dropbox/upload?path=${encodeURIComponent(destPath)}`);
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total); };
+            xhr.onload = () => {
+                try {
+                    const meta = JSON.parse(xhr.responseText);
+                    if (xhr.status >= 200 && xhr.status < 300 && (meta.path_display || meta.path_lower)) resolve(meta);
+                    else reject(new Error(meta.error_summary || meta.error || `upload failed (${xhr.status})`));
+                } catch (e) { reject(new Error(`upload failed (${xhr.status})`)); }
+            };
+            xhr.onerror = () => reject(new Error('network error during upload'));
+            xhr.send(file);
+        });
+    }
+
+    // Swap an element's content for a live progress bar; returns updaters.
+    function uploadProgressBar(hostEl, fileName) {
+        hostEl.innerHTML = `<div class="wsp-upload-progress" title="${escAttr(fileName)}">
+            <div class="wsp-upload-bar"><div class="wsp-upload-fill" style="width:0%"></div></div>
+            <span class="wsp-upload-label">Starting upload…</span>
+        </div>`;
+        const fill = hostEl.querySelector('.wsp-upload-fill');
+        const label = hostEl.querySelector('.wsp-upload-label');
+        const fmt = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+        return {
+            progress(loaded, total) {
+                const pct = Math.min(100, Math.round(loaded / total * 100));
+                fill.style.width = pct + '%';
+                label.textContent = pct >= 100 ? 'Sending to Dropbox…' : `Uploading ${pct}% — ${fmt(loaded)} of ${fmt(total)}`;
+            },
+            stage(text) { fill.style.width = '100%'; label.textContent = text; }
+        };
+    }
 
     async function dropboxRootPath() {
         try {
@@ -1943,24 +1982,22 @@ const WorkshopUI = (() => {
             const input = document.getElementById(`${cfg.elId}-file`);
             const file = input.files && input.files[0];
             if (!file) { alert(`Choose a file first.`); return; }
-            const btn = document.getElementById(`${cfg.elId}-upload`);
-            btn.textContent = 'Uploading…'; btn.disabled = true;
+            const bar = uploadProgressBar(el, file.name);
             try {
-                const dest = `${folder}/${file.name}`;
-                const r = await fetch(`/api/dropbox/upload?path=${encodeURIComponent(dest)}`, { method: 'POST', body: file });
-                const meta = await r.json();
-                if (!r.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `upload failed (${r.status})`);
+                const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                bar.stage('Linking to this video…');
                 await VideoService.update(v.id, {
                     [cfg.pathField]: meta.path_display || meta.path_lower,
                     [cfg.nameField]: meta.name || file.name,
                     status: normalizedStatus(v)
                 });
+                bar.stage('Done ✓');
                 toast(`${cfg.icon} ${cfg.noun} uploaded to ${v.project}/${cfg.folder}`);
                 rerenderEditor(v.id);
             } catch (e) {
                 console.warn(`${cfg.noun} upload failed`, e);
                 alert(`${cfg.noun} upload failed: ` + e.message);
-                btn.textContent = '⬆ Upload & link'; btn.disabled = false;
+                rerenderEditor(v.id); // restores the pick/upload controls
             }
         });
     }
