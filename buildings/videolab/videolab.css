@@ -1,0 +1,98 @@
+/* Video Lab building panel — fills the modal body and scrolls */
+.vlab-root { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 22px; color: #e8ecf4; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.vlab-root > * { max-width: 920px; margin-left: auto; margin-right: auto; }
+.vlab-root::-webkit-scrollbar { width: 10px; }
+.vlab-root::-webkit-scrollbar-thumb { background: #2a3550; border-radius: 5px; }
+.vlab-header { margin-bottom: 16px; }
+.vlab-title { font-size: 22px; font-weight: 800; color: #c4b5fd; }
+.vlab-sub { font-size: 12px; color: #94a3b8; line-height: 1.55; margin-top: 4px; max-width: 680px; }
+
+.vlab-input-card { background: #0e1426; border: 1px solid #25304a; border-radius: 12px; padding: 16px; }
+.vlab-drop { border: 2px dashed #3a4a6a; border-radius: 10px; padding: 22px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+.vlab-drop:hover, .vlab-drop.drag { border-color: #7c3aed; background: rgba(124,58,237,0.06); }
+.vlab-drop-icon { font-size: 26px; color: #7c3aed; }
+.vlab-drop-inner { color: #cbd5e1; font-size: 14px; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.vlab-link { color: #a78bfa; text-decoration: underline; }
+.vlab-drop-hint { font-size: 11px; color: #64748b; }
+.vlab-or { text-align: center; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; margin: 10px 0; }
+.vlab-url-row { display: flex; gap: 8px; }
+.vlab-url-row input { flex: 1; background: #060a14; border: 1px solid #25304a; border-radius: 8px; padding: 9px 12px; color: #e2e8f0; font-size: 13px; }
+.vlab-url-row input:focus { outline: none; border-color: #7c3aed; }
+
+.vlab-btn { border: 0; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.vlab-btn.primary { background: #7c3aed; color: #fff; }
+.vlab-btn.primary:hover { background: #8b4ff0; }
+.vlab-btn:disabled { opacity: .55; cursor: default; }
+
+.vlab-status { margin-top: 12px; font-size: 12px; min-height: 16px; }
+.vlab-status.busy { color: #fbbf24; }
+.vlab-status.ok { color: #34d399; }
+.vlab-status.err { color: #f87171; }
+
+.vlab-section-title { font-size: 15px; font-weight: 700; color: #f1f5f9; margin: 20px 0 10px; }
+.vlab-model { font-size: 10px; color: #64748b; font-weight: 500; margin-left: 6px; }
+
+.vlab-obs { background: #0e1426; border: 1px solid #25304a; border-radius: 12px; padding: 16px; }
+.vlab-obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; }
+.vlab-k { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; margin-bottom: 2px; }
+.vlab-pill { display: inline-block; background: #1e293b; color: #cbd5e1; border-radius: 10px; padding: 1px 8px; font-size: 10px; margin-left: 4px; }
+.vlab-pill.good { background: rgba(52,211,153,.15); color: #34d399; }
+.vlab-pill.warn { background: rgba(251,191,36,.15); color: #fbbf24; }
+.vlab-beats { font-size: 12px; color: #cbd5e1; line-height: 1.7; margin: 6px 0 0; padding-left: 18px; }
+#vlab-advise-btn { margin-top: 14px; }
+
+.vlab-report { background: #0e1426; border: 1px solid #25304a; border-radius: 12px; padding: 16px; margin-top: 16px; }
+.vlab-score-row { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
+.vlab-score { background: #060a14; border: 1px solid #7c3aed; border-radius: 10px; padding: 10px 16px; text-align: center; }
+.vlab-score-num { font-size: 28px; font-weight: 800; color: #a78bfa; }
+.vlab-score-lbl { font-size: 10px; color: #64748b; text-transform: uppercase; }
+.vlab-vscorpus { font-size: 13px; color: #cbd5e1; }
+.vlab-summary { font-size: 13px; color: #cbd5e1; line-height: 1.6; background: #0a1020; border-left: 3px solid #7c3aed; padding: 10px 12px; border-radius: 0 8px 8px 0; margin-bottom: 14px; }
+
+.vlab-tips { display: flex; flex-direction: column; gap: 10px; }
+.vlab-tip { display: flex; gap: 12px; background: #0a1020; border: 1px solid #1e293b; border-radius: 10px; padding: 12px; }
+.vlab-tip-rank { flex: 0 0 28px; height: 28px; border-radius: 50%; background: #7c3aed; color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.vlab-tip-body { flex: 1; min-width: 0; }
+.vlab-tip-title { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+.vlab-tip-change { font-size: 13px; color: #a78bfa; margin-top: 3px; }
+.vlab-tip-why { font-size: 12px; color: #94a3b8; line-height: 1.55; margin-top: 4px; }
+.vlab-tip-evidence { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.vlab-ev { font-size: 11px; background: #11203a; color: #93c5fd; border-radius: 6px; padding: 2px 8px; }
+.vlab-ev.impact { background: rgba(52,211,153,.12); color: #34d399; }
+.vlab-ev.brain { background: rgba(167,139,250,.12); color: #c4b5fd; }
+.vlab-ev-src { font-size: 11px; color: #64748b; padding: 2px 4px; }
+.vlab-empty { color: #64748b; font-size: 13px; }
+
+/* Video player + indicator timeline */
+.vlab-player-wrap { margin-bottom: 14px; }
+.vlab-video { width: 100%; max-height: 46vh; background: #000; border-radius: 10px; display: block; }
+.vlab-timeline { position: relative; height: 46px; margin-top: 8px; background: #0a1020; border: 1px solid #1e293b; border-radius: 8px; }
+.vlab-tl-beats { position: absolute; inset: 0; }
+.vlab-tl-beat { position: absolute; top: 0; bottom: 0; background: rgba(124,58,237,0.10); border-left: 1px solid rgba(124,58,237,0.25); }
+.vlab-tl-marker { position: absolute; top: -4px; transform: translateX(-50%); cursor: pointer; z-index: 2; }
+.vlab-tl-dot { width: 22px; height: 22px; border-radius: 50%; background: #7c3aed; color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid #0a1020; box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+.vlab-tl-marker:hover .vlab-tl-dot { background: #a78bfa; }
+.vlab-tl-stem { width: 2px; height: 24px; background: #7c3aed; margin: 0 auto; }
+.vlab-tl-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #34d399; z-index: 3; pointer-events: none; }
+.vlab-tl-labels { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px; }
+.vlab-tip.active { border-color: #7c3aed; box-shadow: 0 0 0 1px #7c3aed; }
+.vlab-tip-ts { font-size: 11px; color: #34d399; cursor: pointer; font-weight: 700; }
+.vlab-tip-ts:hover { text-decoration: underline; }
+
+/* Saved reasoning log */
+.vlab-details { margin-top: 12px; border: 1px solid #1e293b; border-radius: 8px; background: #0a1020; }
+.vlab-details > summary { cursor: pointer; padding: 10px 12px; font-size: 12px; font-weight: 600; color: #93c5fd; user-select: none; }
+.vlab-details[open] > summary { border-bottom: 1px solid #1e293b; }
+.vlab-log .vlab-log-data { font-size: 12px; color: #cbd5e1; padding: 10px 12px; }
+.vlab-log-step { padding: 8px 12px; border-top: 1px solid #131c30; }
+.vlab-log-name { font-size: 11px; font-weight: 700; color: #a78bfa; text-transform: uppercase; letter-spacing: .04em; display: flex; gap: 8px; align-items: center; }
+.vlab-log-time { color: #475569; font-weight: 400; }
+.vlab-log-note { font-size: 12px; color: #94a3b8; margin-top: 3px; }
+.vlab-log-err { font-size: 12px; color: #f87171; margin-top: 3px; }
+.vlab-log-pre { font-size: 11px; color: #cbd5e1; background: #060a14; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; margin: 6px 0 0; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Menlo, monospace; }
+.vlab-details .vlab-details { margin: 8px 12px; }
+.vlab-history { margin: 8px 0 0; }
+.vlab-hist-item { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border: 1px solid #1e293b; border-radius: 8px; background: #0a1020; cursor: pointer; margin-bottom: 6px; font-size: 12px; }
+.vlab-hist-item:hover { border-color: #7c3aed; }
+.vlab-hist-score { font-weight: 800; color: #a78bfa; }
+@media (max-width: 600px) { .vlab-obs-grid { grid-template-columns: 1fr; } }
