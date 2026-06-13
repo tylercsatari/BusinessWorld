@@ -1333,7 +1333,7 @@ const WorkshopUI = (() => {
                 ${blockers.map(b => `<div class="wsp-blocker-line">${DEP_ICONS[b.kind] || '🗃️'} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
             </div>` : ''}
 
-            <label>Video Name</label>
+            <label>Video Name <span class="wsp-save-status saved" id="wsp-save-status">Saved</span></label>
             <input type="text" id="workshop-name" value="${escAttr(v.name)}">
 
             <div class="wsp-field-grid">
@@ -1460,14 +1460,39 @@ const WorkshopUI = (() => {
         const root = nameEl.closest('.workshop-detail-fields');
         const rerender = () => rerenderEditor(v.id);
 
-        // Autosave the simple fields — no Back button needed in the drop-down
-        let saveTimer = null;
-        const scheduleSave = () => {
-            clearTimeout(saveTimer);
-            saveTimer = setTimeout(() => saveFieldsFor(VideoService.getById(v.id) || v, true), 1200);
+        // Autosave with a visible status (Editing… → Saving… → Saved ✓),
+        // same pattern as the inline script editor. Typed fields debounce
+        // briefly and flush the moment you leave the field; dropdowns save
+        // IMMEDIATELY — and a project change re-renders so the hook/VO
+        // upload sections unlock right away instead of staying blocked.
+        const statusEl = get('wsp-save-status');
+        const setStatus = (s) => {
+            if (!statusEl) return;
+            statusEl.textContent = s === 'editing' ? 'Editing…' : s === 'saving' ? 'Saving…' : s === 'saved' ? 'Saved ✓' : 'Save failed — retrying on next edit';
+            statusEl.className = 'wsp-save-status' + (s === 'saved' ? ' saved' : s === 'saving' ? ' saving' : s === 'failed' ? ' failed' : '');
         };
-        ['workshop-name', 'workshop-hook', 'workshop-context'].forEach(id => get(id)?.addEventListener('input', scheduleSave));
-        ['workshop-deadline', 'workshop-sponsor', 'workshop-project'].forEach(id => get(id)?.addEventListener('change', scheduleSave));
+        let saveTimer = null;
+        const doSave = async (thenRerender) => {
+            clearTimeout(saveTimer); saveTimer = null;
+            setStatus('saving');
+            const ok = await saveFieldsFor(VideoService.getById(v.id) || v, true);
+            setStatus(ok ? 'saved' : 'failed');
+            if (ok && thenRerender) rerender();
+        };
+        const scheduleSave = () => {
+            setStatus('editing');
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => doSave(false), 600);
+        };
+        ['workshop-name', 'workshop-hook', 'workshop-context'].forEach(id => {
+            const el = get(id);
+            if (!el) return;
+            el.addEventListener('input', scheduleSave);
+            el.addEventListener('blur', () => { if (saveTimer) doSave(false); });
+        });
+        get('workshop-deadline')?.addEventListener('change', () => doSave(false));
+        get('workshop-sponsor')?.addEventListener('change', () => doSave(false));
+        get('workshop-project')?.addEventListener('change', () => doSave(true));
 
         // Branch decisions (the decomposition validation gate)
         get('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
@@ -2005,9 +2030,9 @@ const WorkshopUI = (() => {
     // the editor is the detail page or the inline drop-down (only one is
     // ever mounted, so the field ids are unambiguous).
     async function saveFieldsFor(v, silent) {
-        if (!v) return;
+        if (!v) return true;
         const get = id => document.getElementById(id);
-        if (!get('workshop-name')) return; // no editor mounted
+        if (!get('workshop-name')) return true; // no editor mounted — nothing to save
         const name = get('workshop-name').value.trim() || v.name;
         const project = get('workshop-project')?.value || '';
         const hook = get('workshop-hook')?.value || '';
@@ -2019,9 +2044,11 @@ const WorkshopUI = (() => {
                 name, project, hook, context, deadline, sponsorId,
                 status: normalizedStatus(v)
             });
+            return true;
         } catch (e) {
             console.warn('Workshop: save failed', e);
             if (!silent) alert('Failed to save. Check connection.');
+            return false;
         }
     }
     function saveFields(silent) { return saveFieldsFor(selectedVideo, silent); }
