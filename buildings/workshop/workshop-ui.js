@@ -40,6 +40,49 @@ const WorkshopUI = (() => {
     const INVENTORY_TYPES = ['prop', 'footage', 'set', 'material', 'other'];
     const INV_TYPE_ICONS = { prop: '🪛', footage: '🎞️', set: '🏠', material: '🧱', other: '📦' };
 
+    // ============ CLEAN LINE ICONS (Feather-style, replace emoji) ============
+    // One stroke icon per pipeline stage + per entity type. Rendered as inline
+    // SVG so they inherit color (white inside the colored node badge, the text
+    // color inside chips/checklist) and scale with font-size.
+    const ICON_PATHS = {
+        // stages
+        ideate:     '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3Z"/>',
+        hook:       '<circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/>',
+        script:     '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+        animation:  '<rect x="2" y="2" width="20" height="20" rx="2.5"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/>',
+        decomp:     '<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+        design:     '<path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7 14h10"/>',
+        propdesign: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+        cad:        '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+        pcb:        '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
+        order:      '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
+        precision:  '<circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>',
+        software:   '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+        assembly:   '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+        artistic:   '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>',
+        hookfilm:   '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+        film:       '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+        voiceover:  '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+        edit:       '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>',
+        splittest:  '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+        post:       '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+        // entity types + storage
+        inventory:  '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
+        video:      '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+        component:  '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+        // generic (detail sections)
+        clock:      '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+        lock:       '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+        link:       '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+        briefcase:  '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+        flag:       '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+        _default:   '<circle cx="12" cy="12" r="9"/>'
+    };
+    function icon(name, cls) {
+        const p = ICON_PATHS[name] || ICON_PATHS._default;
+        return `<svg class="wsp-ic${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+    }
+
     // ============ HELPERS ============
 
     function pipelineVideos() {
@@ -127,10 +170,10 @@ const WorkshopUI = (() => {
         const shown = max ? f.slice(0, max) : f;
         let html = shown.map(id => {
             const st = PS().get(id);
-            return `<span class="wsp-stage-chip${st.bottleneck ? ' bottleneck' : ''}">${st.icon} ${escHtml(st.label)}</span>`;
+            return `<span class="wsp-stage-chip${st.bottleneck ? ' bottleneck' : ''}">${icon(id, 'wsp-chip-ic')} ${escHtml(st.label)}</span>`;
         }).join('');
         if (max && f.length > max) html += `<span class="wsp-stage-chip more">+${f.length - max}</span>`;
-        if (!f.length) html = `<span class="wsp-stage-chip done-chip">✅ Complete</span>`;
+        if (!f.length) html = `<span class="wsp-stage-chip done-chip">✓ Complete</span>`;
         return html;
     }
 
@@ -240,11 +283,11 @@ const WorkshopUI = (() => {
 
     // ============ TAB 1: PIPELINE BOARD — the single view of everything ============
 
-    const NODE_W = 152, NODE_H = 72, GAP_X = 60, GAP_Y = 26, PAD = 24;
+    const NODE_W = 178, NODE_H = 66, GAP_X = 56, GAP_Y = 22, PAD = 26;
 
     // One color per entity type — same colors everywhere (dots, legend, panel)
     const DOT_COLORS = { video: '#00b894', component: '#1565c0', order: '#e8a020', inventory: '#8e44ad' };
-    const GROUP_COLORS = { Concept: '#4a9eff', Planning: '#e8a020', Procurement: '#e67e22', Build: '#7f8c9b', Production: '#e74c3c', Post: '#27ae60' };
+    const GROUP_COLORS = { Concept: '#4a9eff', Planning: '#e8a020', Procurement: '#e67e22', Build: '#14b8a6', Production: '#e74c3c', Post: '#27ae60' };
     // Where a component's build status lives on the video pipeline
     const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', software: 'software', manufacturing: 'precision', assembly: 'assembly' };
 
@@ -382,13 +425,13 @@ const WorkshopUI = (() => {
             inventory: filteredInventory().length
         };
         const legend = [
-            ['video', '🎬', 'Videos'], ['component', '🧩', 'Components'], ['order', '📦', 'Orders'], ['inventory', '🗃️', 'Storage']
+            ['video', 'video', 'Videos'], ['component', 'component', 'Components'], ['order', 'order', 'Orders'], ['inventory', 'inventory', 'Storage']
         ];
         return `<div class="wsp-filterbar wsp-pipeline-filters">
             <div class="wsp-legend">
-                ${legend.map(([key, icon, label]) => `
+                ${legend.map(([key, iconName, label]) => `
                     <button class="wsp-legend-chip${showTypes[key] ? ' on' : ''}" data-toggle-type="${key}" style="--dotcolor:${DOT_COLORS[key]}" title="${showTypes[key] ? 'Hide' : 'Show'} ${escAttr(label)} on the board">
-                        <span class="wsp-legend-num">${legendCounts[key]}</span>${icon} ${label}
+                        <span class="wsp-legend-num">${legendCounts[key]}</span>${icon(iconName, 'wsp-legend-ic')} ${label}
                     </button>`).join('')}
             </div>
             <input type="text" class="wsp-search" id="wsp-f-search" placeholder="Search everything…" value="${escAttr(fSearch)}">
@@ -449,21 +492,22 @@ const WorkshopUI = (() => {
             const e = entities[s.id];
             const total = e.videos.length + e.components.length + e.orders.length;
             const blockedHere = e.videos.filter(v => videoBlockers(v).length > 0).length;
-            // Compact numeric breakdown by type (only nonzero) — numbers, not dots
+            // Compact numeric breakdown by type (only nonzero) — colored dot + number, no emoji
             const counts = [
-                e.videos.length ? `<span class="wsp-nc" style="--c:${DOT_COLORS.video}">🎬 ${e.videos.length}</span>` : '',
-                e.components.length ? `<span class="wsp-nc" style="--c:${DOT_COLORS.component}">🧩 ${e.components.length}</span>` : '',
-                e.orders.length ? `<span class="wsp-nc" style="--c:${DOT_COLORS.order}">📦 ${e.orders.length}</span>` : ''
+                e.videos.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.video}"></i>${e.videos.length}</span>` : '',
+                e.components.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.component}"></i>${e.components.length}</span>` : '',
+                e.orders.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.order}"></i>${e.orders.length}</span>` : ''
             ].join('');
+            const gc = GROUP_COLORS[s.group] || '#9a8f78';
             return `<div class="wsp-node${s.bottleneck ? ' bottleneck' : ''}${selectedStageId === s.id ? ' selected' : ''}${total ? ' has-videos' : ''}"
-                        data-stage="${s.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px;height:${NODE_H}px;--groupcolor:${GROUP_COLORS[s.group] || '#ccc'};">
-                <div class="wsp-node-top">
-                    <span class="wsp-node-icon">${s.icon}</span>
-                    <span class="wsp-node-label">${escHtml(s.label)}</span>
+                        data-stage="${s.id}" style="left:${p.x}px;top:${p.y}px;width:${NODE_W}px;height:${NODE_H}px;--groupcolor:${gc};">
+                <div class="wsp-node-badge" style="background-color:${gc};box-shadow:0 3px 9px ${gc}55, inset 0 1px 2px rgba(255,255,255,0.35);">${icon(s.id)}</div>
+                <div class="wsp-node-text">
+                    <div class="wsp-node-label">${escHtml(s.label)}</div>
+                    <div class="wsp-node-sub">${total
+                        ? `<span class="wsp-node-counts">${counts}</span>`
+                        : `<span class="wsp-node-group">${s.bottleneck ? 'bottleneck' : escHtml(s.group)}</span>`}</div>
                 </div>
-                <div class="wsp-node-sub">${total
-                    ? `<span class="wsp-node-counts">${counts}</span>`
-                    : `<span class="wsp-node-group">${s.bottleneck ? '◆ bottleneck' : escHtml(s.group)}</span>`}</div>
                 ${total ? `<span class="wsp-node-count">${total}</span>` : ''}
                 ${blockedHere ? `<span class="wsp-node-blocked" title="${blockedHere} blocked here">🔒</span>` : ''}
             </div>`;
@@ -472,12 +516,13 @@ const WorkshopUI = (() => {
         // Component Library (Storage Room) node — readiness summary
         const invItems = showTypes.inventory ? filteredInventory() : [];
         const readyInv = invItems.filter(i => i.status === 'ready').length;
-        const invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:64px;">
-            <div class="wsp-node-top">
-                <span class="wsp-node-icon">🗃️</span>
-                <span class="wsp-node-label">Storage Room</span>
+        const invCol = DOT_COLORS.inventory;
+        const invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:62px;">
+            <div class="wsp-node-badge" style="background-color:${invCol};box-shadow:0 3px 9px ${invCol}55, inset 0 1px 2px rgba(255,255,255,0.35);">${icon('inventory')}</div>
+            <div class="wsp-node-text">
+                <div class="wsp-node-label">Storage Room</div>
+                <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready on the shelf</span></div>
             </div>
-            <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready on the shelf</span></div>
             ${invItems.length ? `<span class="wsp-node-count inv">${invItems.length}</span>` : ''}
         </div>`;
 
@@ -589,10 +634,10 @@ const WorkshopUI = (() => {
         const total = vids.length + comps.length + orders.length + inv.length;
 
         const breakdown = [
-            showTypes.video ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">🎬 ${vids.length}</span>` : '',
-            showTypes.component ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">🧩 ${comps.length}</span>` : '',
-            showTypes.order ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">📦 ${orders.length}</span>` : '',
-            showTypes.inventory ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.inventory}">🗃️ ${inv.length}</span>` : ''
+            showTypes.video ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">${icon('video', 'wsp-cc-ic')} ${vids.length}</span>` : '',
+            showTypes.component ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">${icon('component', 'wsp-cc-ic')} ${comps.length}</span>` : '',
+            showTypes.order ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${orders.length}</span>` : '',
+            showTypes.inventory ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.inventory}">${icon('inventory', 'wsp-cc-ic')} ${inv.length}</span>` : ''
         ].join('');
 
         const INV_STATUS_COLORS = { ready: '#27ae60', building: '#e8a020', planned: '#b0a8a0' };
@@ -600,22 +645,22 @@ const WorkshopUI = (() => {
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
                 <div class="wsp-stage-panel-headmain">
-                    <div class="wsp-stage-panel-title">🌐 Everything in flight ${breakdown}</div>
+                    <div class="wsp-stage-panel-title">Everything in flight ${breakdown}</div>
                     <div class="wsp-stage-panel-desc">All work matching the filters above. Click a stage node on the board to focus on one stage.</div>
                 </div>
             </div>
             <div class="wsp-stage-panel-list">
                 ${total === 0 ? '<div class="workshop-empty">Nothing matches the current filters. Queue an idea from the Library to feed the pipeline!</div>' : ''}
-                ${vids.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.video}">🎬 Videos in the pipeline</div>${vids.map(v => stageVideoRowHtml(v, null)).join('')}` : ''}
-                ${comps.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">🧩 Components being built</div>${comps.map(c => `
+                ${vids.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.video}">${icon('video', 'wsp-sec-ic')} Videos in the pipeline</div>${vids.map(v => stageVideoRowHtml(v, null)).join('')}` : ''}
+                ${comps.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being built</div>${comps.map(c => `
                     <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
                         <span class="wsp-row-name">🧩 ${escHtml(c.name)} ${projectName(c.projectId) ? `<span class="wsp-hint">🛠️ ${escHtml(projectName(c.projectId))}</span>` : ''}</span>
                         <div class="wsp-status-cycle">
                             ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
                         </div>
                     </div>`).join('')}` : ''}
-                ${orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">📦 Open orders</div>${orders.map(orderRowHtml).join('')}` : ''}
-                ${inv.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.inventory}">🗃️ Storage room (Component Library)</div>${inv.map(i => `
+                ${orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">${icon('order', 'wsp-sec-ic')} Open orders</div>${orders.map(orderRowHtml).join('')}` : ''}
+                ${inv.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.inventory}">${icon('inventory', 'wsp-sec-ic')} Storage room (Component Library)</div>${inv.map(i => `
                     <div class="wsp-row" style="border-left: 3px solid ${INV_STATUS_COLORS[i.status] || '#b0a8a0'}">
                         <span class="wsp-row-name">${INV_TYPE_ICONS[i.type] || '📦'} ${escHtml(i.name)} ${projectName(i.projectId) ? `<span class="wsp-hint">🛠️ ${escHtml(projectName(i.projectId))}</span>` : ''}</span>
                         <span class="wsp-pill ${i.status === 'ready' ? 'active' : ''}">${i.status}</span>
@@ -639,14 +684,14 @@ const WorkshopUI = (() => {
         const names = rosterNames(owner ? [owner] : []);
 
         const breakdown = [
-            e.videos.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">🎬 ${e.videos.length}</span>` : '',
-            e.components.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">🧩 ${e.components.length}</span>` : '',
-            e.orders.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">📦 ${e.orders.length}</span>` : ''
+            e.videos.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">${icon('video', 'wsp-cc-ic')} ${e.videos.length}</span>` : '',
+            e.components.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">${icon('component', 'wsp-cc-ic')} ${e.components.length}</span>` : '',
+            e.orders.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${e.orders.length}</span>` : ''
         ].join('');
 
         const compRows = e.components.map(c => `
             <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
-                <span class="wsp-row-name">🧩 ${escHtml(c.name)} ${projectName(c.projectId) ? `<span class="wsp-hint">🛠️ ${escHtml(projectName(c.projectId))}</span>` : ''}</span>
+                <span class="wsp-row-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)} ${projectName(c.projectId) ? `<span class="wsp-hint">${escHtml(projectName(c.projectId))}</span>` : ''}</span>
                 <div class="wsp-status-cycle">
                     ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
                 </div>
@@ -655,7 +700,7 @@ const WorkshopUI = (() => {
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
                 <div class="wsp-stage-panel-headmain">
-                    <div class="wsp-stage-panel-title">${stage.icon} ${escHtml(stage.label)} ${breakdown}</div>
+                    <div class="wsp-stage-panel-title">${icon(stage.id, 'wsp-title-ic')} ${escHtml(stage.label)} ${breakdown}</div>
                     <div class="wsp-stage-panel-desc">${escHtml(stage.desc || '')}</div>
                     ${autoDesc ? `<div class="wsp-auto-desc">⚡ ${escHtml(autoDesc)}</div>` : ''}
                 </div>
@@ -672,8 +717,8 @@ const WorkshopUI = (() => {
             <div class="wsp-stage-panel-list">
                 ${e.videos.length === 0 && !compRows && e.orders.length === 0 ? '<div class="workshop-empty">Nothing at this stage (with current filters).</div>' : ''}
                 ${e.videos.map(v => stageVideoRowHtml(v, stage)).join('')}
-                ${compRows ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">🧩 Components being worked here</div>${compRows}` : ''}
-                ${e.orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">📦 Open orders</div>${e.orders.map(orderRowHtml).join('')}` : ''}
+                ${compRows ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being worked here</div>${compRows}` : ''}
+                ${e.orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">${icon('order', 'wsp-sec-ic')} Open orders</div>${e.orders.map(orderRowHtml).join('')}` : ''}
             </div>
         `;
 
@@ -1286,7 +1331,7 @@ const WorkshopUI = (() => {
                     const autoTag = state === 'auto' ? '<span class="wsp-auto-tag">auto</span>' : '';
                     return `<div class="wsp-check ${cls}" data-stage="${id}" title="${escAttr((st.desc || '') + (PS().autoDesc(id) ? '\n⚡ ' + PS().autoDesc(id) : ''))}">
                         <span class="wsp-check-mark">${mark}</span>
-                        <span class="wsp-check-label">${st.icon} ${escHtml(st.label)}${autoTag}</span>
+                        <span class="wsp-check-label">${icon(id, 'wsp-check-ic')} ${escHtml(st.label)}${autoTag}</span>
                         <span class="wsp-check-actions">
                             <button class="wsp-check-btn" data-act="done" title="Mark done">✓</button>
                             <button class="wsp-check-btn" data-act="na" title="Not applicable for this video">N/A</button>
@@ -1329,14 +1374,17 @@ const WorkshopUI = (() => {
         const deps = videoDeps(v);
         const depKey = d => d.kind + ':' + d.id;
         const depSet = new Set(deps.map(depKey));
-        const DEP_ICONS = { video: '🎬', component: '🧩', order: '📦' };
+        const DEP_ICON_NAME = { video: 'video', component: 'component', order: 'order' };
         const depChips = deps.map(d => {
             let label = '(missing)', done = false;
             if (d.kind === 'video') { const o = VideoService.getById(d.id); if (o) { label = o.name; done = o.status === 'posted'; } }
             else if (d.kind === 'component') { const c = SVC().components.getById(d.id); if (c) { label = c.name; done = c.status === 'done'; } }
             else if (d.kind === 'order') { const o = SVC().orders.getById(d.id); if (o) { label = o.name; done = o.status === 'received'; } }
-            return { id: depKey(d), label: `${DEP_ICONS[d.kind]} ${label}${done ? ' ✅' : ' ⏳'}` };
+            return { id: depKey(d), label: `${label}${done ? ' ✓' : ''}` };
         });
+        // Clean section header: line-icon + title + optional muted hint
+        const subTitle = (iconName, title, hint) =>
+            `<div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span>${hint ? ` <span class="wsp-hint">${hint}</span>` : ''}</div>`;
         const depVideoOpts = VideoService.getPipeline().filter(o => o.id !== v.id && !depSet.has('video:' + o.id));
         const depCompOpts = SVC().components.getAll().filter(c => c.status !== 'done' && !depSet.has('component:' + c.id));
         const depOrderOpts = SVC().orders.getAll().filter(o => o.status !== 'received' && !depSet.has('order:' + o.id));
@@ -1345,8 +1393,8 @@ const WorkshopUI = (() => {
             <div class="workshop-detail-summary">${sourceIdeaHtml}</div>
 
             ${blockers.length ? `<div class="wsp-blockers-box">
-                <div class="wsp-blockers-title">🔒 Waiting on:</div>
-                ${blockers.map(b => `<div class="wsp-blocker-line">${DEP_ICONS[b.kind] || '🗃️'} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
+                <div class="wsp-blockers-title">${icon('lock', 'wsp-sub-ic')} Waiting on</div>
+                ${blockers.map(b => `<div class="wsp-blocker-line">${icon(DEP_ICON_NAME[b.kind] || 'inventory', 'wsp-row-ic')} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
             </div>` : ''}
 
             <label>Video Name <span class="wsp-save-status saved" id="wsp-save-status">Saved</span></label>
@@ -1377,23 +1425,23 @@ const WorkshopUI = (() => {
                 <label>Pipeline Progress</label>
                 <div class="wsp-progress-head-actions">
                     <select id="wsp-move-stage" class="wsp-inline-select" title="Veto: jump this video to any stage — everything before it gets marked done (hook/script/voiceover/hook video must exist if the move passes them)">
-                        <option value="">⏩ Move to stage…</option>
-                        ${PS().STAGES.map(s => `<option value="${s.id}">${s.icon} ${escHtml(s.label)}</option>`).join('')}
+                        <option value="">Move to stage…</option>
+                        ${PS().STAGES.map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`).join('')}
                     </select>
-                    <button class="wsp-mini-btn" id="wsp-edit-branches">🧩 ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
+                    <button class="wsp-mini-btn" id="wsp-edit-branches">${icon('decomp', 'wsp-sub-ic')} ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
                 </div>
             </div>
             ${stageChecklistHtml(v)}
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">💡 Context <span class="wsp-hint">— ideation notes, angles, details</span></div>
+                ${subTitle('ideate', 'Context', '— ideation notes, angles, details')}
                 <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">🪝 Hook <span class="wsp-hint">— write the hook, then add hook INSTANCES to produce & split-test (animation / practical, as many of each as you want). Each instance needs its footage before its stage clears.</span></div>
+                ${subTitle('hook', 'Hook', '— write the hook, then add hook instances to produce &amp; split-test (animation / practical). Each instance needs its footage before its stage clears.')}
                 <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
-                ${v.project ? '' : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — hook footage lives in that project\'s hook/ folder in Dropbox.</div></div>'}
+                ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — hook footage lives in that project's hook/ folder in Dropbox.</div></div>`}
                 <div id="wsp-hook-instances">
                     ${PS().hooksOf(v).map((h, i) => hookInstanceRowHtml(v, h, i)).join('')}
                 </div>
@@ -1404,15 +1452,15 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">📝 Script <span class="wsp-hint">— fill it in and Script Writing completes itself</span></div>
+                ${subTitle('script', 'Script', '— fill it in and Script Writing completes itself')}
                 ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">🧩 Components <span class="wsp-hint">— broken out at Decomposition; each flows through the pipeline on its own and the video waits for it</span></div>
+                ${subTitle('component', 'Components', '— broken out at Decomposition; each flows through the pipeline on its own and the video waits for it')}
                 ${myComps.map(c => `
                     <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
-                        <span class="wsp-row-name">🧩 ${escHtml(c.name)}</span>
+                        <span class="wsp-row-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)}</span>
                         <div class="wsp-status-cycle">
                             ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
                         </div>
@@ -1425,26 +1473,26 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">⛓️ Waiting on <span class="wsp-hint">— a video, component or order that must finish first. Finished things never block.</span></div>
+                ${subTitle('clock', 'Waiting on', '— a video, component or order that must finish first. Finished things never block.')}
                 <div class="wsp-chips">${chipListHtml(depChips, 'data-undep')}</div>
                 <div class="wsp-add-row">
                     <select id="wsp-add-dep">
                         <option value="">Add something to wait on…</option>
-                        ${depVideoOpts.length ? `<optgroup label="🎬 Videos in the pipeline">${depVideoOpts.map(o => `<option value="video:${o.id}">${escHtml(o.name)}</option>`).join('')}</optgroup>` : ''}
-                        ${depCompOpts.length ? `<optgroup label="🧩 Components not done">${depCompOpts.map(c => `<option value="component:${c.id}">${escHtml(c.name)} (${c.status})</option>`).join('')}</optgroup>` : ''}
-                        ${depOrderOpts.length ? `<optgroup label="📦 Orders not received">${depOrderOpts.map(o => `<option value="order:${o.id}">${escHtml(o.name)} (${o.status})</option>`).join('')}</optgroup>` : ''}
+                        ${depVideoOpts.length ? `<optgroup label="Videos in the pipeline">${depVideoOpts.map(o => `<option value="video:${o.id}">${escHtml(o.name)}</option>`).join('')}</optgroup>` : ''}
+                        ${depCompOpts.length ? `<optgroup label="Components not done">${depCompOpts.map(c => `<option value="component:${c.id}">${escHtml(c.name)} (${c.status})</option>`).join('')}</optgroup>` : ''}
+                        ${depOrderOpts.length ? `<optgroup label="Orders not received">${depOrderOpts.map(o => `<option value="order:${o.id}">${escHtml(o.name)} (${o.status})</option>`).join('')}</optgroup>` : ''}
                     </select>
                 </div>
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">📦 Orders for this video</div>
+                ${subTitle('order', 'Orders for this video', '')}
                 ${myOrders.map(orderRowHtml).join('')}
                 ${addOrderRowHtml({ videoId: v.id })}
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">🛠️ Build projects <span class="wsp-hint">— shared builds this video uses (project components live in the Projects tab)</span></div>
+                ${subTitle('briefcase', 'Build projects', '— shared builds this video uses (project components live in the Projects tab)')}
                 <div class="wsp-chips">${chipListHtml(linkedProjects.map(p => ({ id: p.id, label: p.name })), 'data-unlink-project')}</div>
                 <div class="wsp-add-row">
                     <select id="wsp-link-project">
@@ -1456,13 +1504,13 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">🎙️ Voiceover <span class="wsp-hint">— one per video (audio or video file), stored in the project's vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.</span></div>
+                ${subTitle('voiceover', 'Voiceover', '— one per video (audio or video file), stored in the project\'s vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.')}
                 <div id="wsp-vo-section">
                     ${v.voPath
                         ? '' /* filled by initMediaSection */
                         : v.project
                             ? '<div class="wsp-hint">Checking the vo/ folder…</div>'
-                            : '<div class="wsp-blockers-box"><div class="wsp-blocker-line">⛔ Select a Channel Project first — the voiceover lives in that project\'s Dropbox folder, so no project means nowhere to put it.</div></div>'}
+                            : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — the voiceover lives in that project's Dropbox folder, so no project means nowhere to put it.</div></div>`}
                 </div>
             </div>`;
     }
@@ -1696,15 +1744,15 @@ const WorkshopUI = (() => {
                 <span class="wsp-hint" style="font-style:normal;font-weight:800;">#${i + 1}</span>
                 <select data-hooki-type="${escAttr(h.id)}" class="wsp-inline-select">
                     <option value="" ${!h.type ? 'selected' : ''}>type…</option>
-                    <option value="animation" ${h.type === 'animation' ? 'selected' : ''}>🎞️ Animation</option>
-                    <option value="practical" ${h.type === 'practical' ? 'selected' : ''}>🎯 Practical</option>
+                    <option value="animation" ${h.type === 'animation' ? 'selected' : ''}>Animation</option>
+                    <option value="practical" ${h.type === 'practical' ? 'selected' : ''}>Practical</option>
                 </select>
                 <input type="text" data-hooki-label="${escAttr(h.id)}" placeholder="label (optional, e.g. 'POV version')" value="${escAttr(h.label || '')}">
                 <button class="wsp-mini-btn danger" data-hooki-del="${escAttr(h.id)}">✕</button>
             </div>
             ${linked
                 ? `<div class="wsp-row" style="border-left: 3px solid ${h.type === 'animation' ? '#4a9eff' : '#e8a020'}">
-                    <span class="wsp-row-name">${meta ? meta.icon : '🎬'} ${escHtml(h.videoName || h.videoPath.split('/').pop())} <span class="wsp-hint">linked ✅</span></span>
+                    <span class="wsp-row-name">${icon(h.type === 'animation' ? 'animation' : 'hookfilm', 'wsp-row-ic')} ${escHtml(h.videoName || h.videoPath.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
                     <button class="wsp-mini-btn" data-hooki-open="${escAttr(h.id)}">▶ Open</button>
                     <button class="wsp-mini-btn danger" data-hooki-unlink="${escAttr(h.id)}">✕ Unlink</button>
                 </div>`
@@ -1897,7 +1945,7 @@ const WorkshopUI = (() => {
     }
 
     const MEDIA_SECTIONS = {
-        vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*,video/*', icon: '🎙️', noun: 'voiceover', color: '#8e44ad' }
+        vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*,video/*', icon: '🎙️', iconName: 'voiceover', noun: 'voiceover', color: '#8e44ad' }
     };
     const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'];
 
@@ -1914,7 +1962,7 @@ const WorkshopUI = (() => {
             const isAudio = !VIDEO_EXTS.includes((name.split('.').pop() || '').toLowerCase());
             el.innerHTML = `
                 <div class="wsp-row" style="border-left: 3px solid ${cfg.color}">
-                    <span class="wsp-row-name">${cfg.icon} ${escHtml(name)} <span class="wsp-hint">linked ✅</span></span>
+                    <span class="wsp-row-name">${icon(cfg.iconName || 'inventory', 'wsp-row-ic')} ${escHtml(name)} <span class="wsp-hint">linked ✓</span></span>
                     <button class="wsp-mini-btn" id="${cfg.elId}-play">${isAudio ? '▶ Play' : '▶ Open'}</button>
                     <button class="wsp-mini-btn danger" id="${cfg.elId}-unlink">✕ Unlink</button>
                     ${isAudio ? `<audio id="${cfg.elId}-audio" style="display:none"></audio>` : ''}

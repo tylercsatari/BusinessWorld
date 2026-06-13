@@ -354,26 +354,35 @@
 .wsp-edge { fill: none; stroke: #c9c2b4; stroke-width: 2; }
 .wsp-edge.ref { stroke: #d4a060; stroke-dasharray: 5 4; }
 
+/* Inline line-icons (replace emoji everywhere) */
+.wsp-ic { width: 1em; height: 1em; flex-shrink: 0; display: inline-block; vertical-align: -0.14em; }
+
 .wsp-node {
     position: absolute;
     background: linear-gradient(180deg, #ffffff, #fdfbf6);
     border: 1px solid #e6e0d4;
-    border-radius: 12px; padding: 8px 11px; cursor: pointer;
+    border-radius: 13px; padding: 8px 11px; cursor: pointer;
     box-shadow: 0 1px 3px rgba(70,58,34,0.07);
     transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
-    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+    display: flex; flex-direction: row; align-items: center; gap: 10px;
     box-sizing: border-box;
 }
-.wsp-node:hover { transform: translateY(-2px); box-shadow: 0 7px 18px rgba(70,58,34,0.14); border-color: #d8d0be; }
-.wsp-node.has-videos { border-color: var(--groupcolor, #b5ae9f); box-shadow: 0 2px 9px rgba(70,58,34,0.11); }
-.wsp-node.selected { border-color: #00b894; box-shadow: 0 0 0 3px rgba(0,184,148,0.22), 0 7px 18px rgba(70,58,34,0.13); }
+.wsp-node:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(70,58,34,0.15); border-color: #d8d0be; }
+.wsp-node.has-videos { border-color: var(--groupcolor, #b5ae9f); box-shadow: 0 2px 10px rgba(70,58,34,0.12); }
+.wsp-node.selected { border-color: #00b894; box-shadow: 0 0 0 3px rgba(0,184,148,0.22), 0 8px 20px rgba(70,58,34,0.14); }
 .wsp-node.bottleneck { background: linear-gradient(180deg, #fffaf1, #fff2e0); border-color: #edc78d; }
 .wsp-node.bottleneck.has-videos { border-color: #e8a020; }
-.wsp-node.bottleneck.selected { border-color: #e8a020; box-shadow: 0 0 0 3px rgba(232,160,32,0.22), 0 7px 18px rgba(70,58,34,0.13); }
+.wsp-node.bottleneck.selected { border-color: #e8a020; box-shadow: 0 0 0 3px rgba(232,160,32,0.22), 0 8px 20px rgba(70,58,34,0.14); }
 .wsp-node.inv-node { background: linear-gradient(180deg, #f6fbf6, #edf6ee); border: 1px dashed #9cc6a4; }
 
-.wsp-node-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.wsp-node-icon { font-size: 14px; flex-shrink: 0; line-height: 1; }
+/* Circular icon badge (infographic style) */
+.wsp-node-badge {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; background-image: linear-gradient(145deg, rgba(255,255,255,0.30), rgba(0,0,0,0.12));
+}
+.wsp-node-badge .wsp-ic { width: 18px; height: 18px; vertical-align: 0; }
+.wsp-node-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .wsp-node-label {
     font-size: 12px; font-weight: 700; color: #3a3328; line-height: 1.15; letter-spacing: -0.1px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -383,11 +392,12 @@
 .wsp-node.bottleneck .wsp-node-group { color: #c79234; }
 .wsp-node-counts { display: flex; gap: 4px; flex-wrap: wrap; }
 .wsp-nc {
-    display: inline-flex; align-items: center; gap: 3px;
+    display: inline-flex; align-items: center; gap: 4px;
     font-size: 10px; font-weight: 800; color: #4a4336;
-    background: #faf7f1; border: 1px solid #ece6d8; border-left: 2.5px solid var(--c, #ccc);
-    border-radius: 5px; padding: 0 5px; line-height: 16px;
+    background: #faf7f1; border: 1px solid #ece6d8;
+    border-radius: 6px; padding: 0 6px; line-height: 16px;
 }
+.wsp-nc i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .wsp-node-count {
     position: absolute; top: -9px; right: -9px;
     background: #00b894; color: #fff; font-size: 11px; font-weight: 800;
@@ -401,6 +411,16 @@
     position: absolute; bottom: -7px; right: -6px; font-size: 12px;
     filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2));
 }
+
+/* Icon sizing in chips / checklist / titles / sections */
+.wsp-chip-ic { width: 12px; height: 12px; vertical-align: -0.12em; }
+.wsp-check-ic { width: 13px; height: 13px; vertical-align: -0.12em; color: #8a7f68; }
+.wsp-check.done .wsp-check-ic { color: #2e9e5b; }
+.wsp-title-ic { width: 17px; height: 17px; vertical-align: -0.16em; }
+.wsp-sec-ic { width: 13px; height: 13px; vertical-align: -0.12em; }
+.wsp-cc-ic { width: 12px; height: 12px; vertical-align: -0.1em; }
+.wsp-row-ic { width: 14px; height: 14px; vertical-align: -0.15em; color: #1565c0; }
+.wsp-legend-ic { width: 13px; height: 13px; vertical-align: -0.12em; }
 
 /* Stage side panel under the board */
 .wsp-stage-panel { flex: 0 0 auto; }
@@ -565,8 +585,15 @@
 /* Rows (components, orders, linked videos) */
 .wsp-proj-body { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
 .wsp-subsection { padding: 10px 16px 4px; display: flex; flex-direction: column; gap: 6px; }
-.workshop-detail-fields .wsp-subsection { padding: 8px 0 0; }
-.wsp-subsection-title { font-size: 12px; font-weight: 800; color: #5a3e1b; }
+/* In the video editor: clean dividers between sections for calm separation */
+.workshop-detail-fields .wsp-subsection { padding: 13px 0 2px; border-top: 1px solid #efeae0; }
+.wsp-subsection-title {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    font-size: 12.5px; font-weight: 800; color: #5a4a32;
+}
+.wsp-sub-ic { width: 14px; height: 14px; vertical-align: -0.15em; flex-shrink: 0; }
+.wsp-subsection-title .wsp-sub-name { color: #463c2c; }
+.wsp-subsection-title .wsp-hint { font-weight: 500; }
 .wsp-hint { font-size: 11px; color: #aaa; font-weight: 500; font-style: italic; }
 .wsp-row {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -644,7 +671,8 @@
 .wsp-blockers-box {
     background: #fdf0ee; border: 1px solid #f5c6bd; border-radius: 10px; padding: 10px 12px;
 }
-.wsp-blockers-title { font-size: 12.5px; font-weight: 800; color: #c0392b; margin-bottom: 4px; }
+.wsp-blockers-title { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 800; color: #c0392b; margin-bottom: 4px; }
+.wsp-blocker-line .wsp-row-ic { color: #c0392b; }
 .wsp-blocker-line { font-size: 12.5px; color: #7b241c; padding: 2px 0; }
 .wsp-chips { display: flex; gap: 5px; flex-wrap: wrap; }
 .wsp-chip {
@@ -756,10 +784,7 @@
    UNIFIED BOARD: dots, legend, group colors
    =================================================================== */
 
-/* Group color accent on nodes (left edge = pipeline group) */
-.wsp-node { border-left: 3.5px solid var(--groupcolor, #e0dcd6); }
-.wsp-node.bottleneck { border-left-color: #e8a020; }
-.wsp-node.inv-node { border-left-color: #9cc6a4; }
+/* Group color now lives in the circular icon badge — no left-edge accent needed */
 
 /* Legend: clickable type toggles */
 .wsp-legend { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
@@ -789,10 +814,11 @@
 /* Stage panel breakdown chips & section titles */
 .wsp-count-chip {
     display: inline-flex; align-items: center; gap: 4px;
-    font-size: 11px; font-weight: 800; color: #555;
-    background: #faf7f1; border: 1px solid #ece8e0; border-left: 3px solid var(--dotcolor, #ccc);
-    border-radius: 7px; padding: 1px 8px; vertical-align: middle;
+    font-size: 11px; font-weight: 800; color: #5a5142;
+    background: #faf7f1; border: 1px solid #ece8e0;
+    border-radius: 8px; padding: 1px 8px; vertical-align: middle;
 }
+.wsp-count-chip .wsp-cc-ic { color: var(--dotcolor, #999); }
 .wsp-panel-section-title {
     font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
     margin-top: 8px; padding: 0 2px;
