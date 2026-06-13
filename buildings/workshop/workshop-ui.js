@@ -1440,7 +1440,7 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection">
-                <div class="wsp-subsection-title">🎙️ Voiceover <span class="wsp-hint">— one per video, stored in the project's vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.</span></div>
+                <div class="wsp-subsection-title">🎙️ Voiceover <span class="wsp-hint">— one per video (audio or video file), stored in the project's vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.</span></div>
                 <div id="wsp-vo-section">
                     ${v.voPath
                         ? '' /* filled by initMediaSection */
@@ -1842,8 +1842,9 @@ const WorkshopUI = (() => {
     }
 
     const MEDIA_SECTIONS = {
-        vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*', icon: '🎙️', noun: 'voiceover', color: '#8e44ad' }
+        vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*,video/*', icon: '🎙️', noun: 'voiceover', color: '#8e44ad' }
     };
+    const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'];
 
     async function initMediaSection(v, key) {
         const cfg = MEDIA_SECTIONS[key];
@@ -1854,7 +1855,8 @@ const WorkshopUI = (() => {
         // --- A file is linked: play/open it or unlink it ---
         if (linkedPath) {
             const name = v[cfg.nameField] || linkedPath.split('/').pop();
-            const isAudio = cfg.accept.startsWith('audio');
+            // VO can be audio OR video — inline-play audio, open video in a tab
+            const isAudio = !VIDEO_EXTS.includes((name.split('.').pop() || '').toLowerCase());
             el.innerHTML = `
                 <div class="wsp-row" style="border-left: 3px solid ${cfg.color}">
                     <span class="wsp-row-name">${cfg.icon} ${escHtml(name)} <span class="wsp-hint">linked ✅</span></span>
@@ -1913,10 +1915,11 @@ const WorkshopUI = (() => {
             }
         } catch (e) { /* folder doesn't exist yet — created on first upload */ }
 
-        const stillThere = document.getElementById(cfg.elId);
-        if (!stillThere || !selectedVideo || selectedVideo.id !== v.id) return; // user navigated away
+        // The drop-down editor has no selectedVideo — what matters is whether
+        // OUR element is still mounted (a re-render/navigation replaces it)
+        if (!el.isConnected) return;
 
-        stillThere.innerHTML = `
+        el.innerHTML = `
             ${files.length ? `<div class="wsp-add-row">
                 <select id="${cfg.elId}-pick">
                     <option value="">Link an existing file from ${escHtml(v.project)}/${cfg.folder}…</option>
