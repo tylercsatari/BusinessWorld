@@ -1875,7 +1875,56 @@ const WorkshopUI = (() => {
         try { rec.start(); } catch (e) { stop(); }
     }
 
-    // ============ AI COMPONENT SUGGESTIONS (uses the connected chat model) ============
+    // ============ AI COMPONENT SUGGESTIONS (Kimi K2.6 via Fireworks) ============
+    // Kimi reasons before answering, so we forbid prose AND extract the JSON
+    // object even if some thinking leaks in. Falls back to OpenAI if Kimi is
+    // unavailable (e.g. FIREWORKS_API_KEY not set on the server).
+    // Balanced-brace, string-aware parse of the object beginning at `from`.
+    function parseBalancedAt(text, from) {
+        let depth = 0, inStr = false, esc = false;
+        for (let i = from; i < text.length; i++) {
+            const ch = text[i];
+            if (inStr) {
+                if (esc) esc = false;
+                else if (ch === '\\') esc = true;
+                else if (ch === '"') inStr = false;
+            } else if (ch === '"') inStr = true;
+            else if (ch === '{') depth++;
+            else if (ch === '}') { depth--; if (depth === 0) { try { return JSON.parse(text.slice(from, i + 1)); } catch (e) { return null; } } }
+        }
+        return null;
+    }
+    // Robust to a reasoning model leaking prose around the JSON. When anchorKey
+    // is given, lock onto the object that actually holds that key.
+    function extractJsonObject(text, anchorKey) {
+        if (!text) return null;
+        try { return JSON.parse(text); } catch (e) {}
+        if (anchorKey) {
+            const a = text.indexOf('"' + anchorKey + '"');
+            if (a >= 0) {
+                const open = text.lastIndexOf('{', a);
+                if (open >= 0) { const o = parseBalancedAt(text, open); if (o) return o; }
+            }
+        }
+        const s = text.indexOf('{');
+        return s >= 0 ? parseBalancedAt(text, s) : null;
+    }
+    // Ask Kimi first (lots of token headroom since it reasons before the JSON);
+    // validate its output parses, otherwise fall back to OpenAI's strict JSON
+    // mode. validate(content) → parsed object, or null if unusable.
+    async function aiJson(messages, validate) {
+        try {
+            // Kimi K2.6 reasons before answering — give it room to finish AND
+            // emit the final JSON, which the anchored extractor then pulls out.
+            const r = await fetch('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.2, max_tokens: 8000 }) });
+            if (r.ok) { const c = (await r.json()).choices?.[0]?.message?.content; const v = validate(c); if (v) return v; }
+        } catch (e) { /* fall through */ }
+        const r2 = await fetch('/api/openai/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.3, max_tokens: 1200, response_format: { type: 'json_object' } }) });
+        if (!r2.ok) throw new Error(`AI request failed (${r2.status})`);
+        const v2 = validate((await r2.json()).choices?.[0]?.message?.content);
+        if (!v2) throw new Error('AI returned malformed output');
+        return v2;
+    }
     async function suggestComponents(videoId, btn) {
         const v = VideoService.getById(videoId);
         if (!v) return;
@@ -1883,18 +1932,13 @@ const WorkshopUI = (() => {
         btn.disabled = true; btn.textContent = '✨ Thinking…';
         try {
             const existing = componentsForVideo(videoId).map(c => c.name);
-            const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the physical COMPONENTS that must be built or bought to pull it off. For each, decide whether it is built in-house or ordered, and which production steps it needs. Reply with ONLY JSON of the form: {"components":[{"name":"short concrete name","source":"build"|"order","needs":["design","propdesign","cad","pcb","software","assembly","artistic"]}]}. "needs" is a subset of that allowed list (only the steps that component truly requires). 3-8 components. No prose.`;
+            const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the physical COMPONENTS that must be built or bought to pull it off. Output ONLY a JSON object and nothing else — no prose, no markdown fences, do not explain, do not think out loud. Schema: {"components":[{"name":"short concrete name","source":"build"|"order","needs":[...]}]}. "source" is "build" if you'd make it in-house, "order" if you'd buy it. "needs" is an array containing ONLY values from this EXACT set of production steps: design, propdesign, cad, pcb, software, assembly, artistic. These are stages of work, NOT other components — never put a component name in "needs". Use [] when a component needs none of those steps (e.g. an off-the-shelf part you just order). 3-8 components.`;
             const user = `Video title: ${v.name}\nHook: ${v.hook || '(none)'}\nScript: ${(v.script || '(none)').slice(0, 2000)}\nContext: ${v.context || '(none)'}\nAlready added (don't repeat): ${existing.join(', ') || 'none'}`;
-            const res = await fetch('/api/openai/chat', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], temperature: 0.4, response_format: { type: 'json_object' }, max_tokens: 900 })
-            });
-            if (!res.ok) throw new Error(`AI request failed (${res.status})`);
-            const data = await res.json();
-            const content = data.choices?.[0]?.message?.content || '{}';
-            let parsed = {};
-            try { parsed = JSON.parse(content); } catch (e) { throw new Error('AI returned malformed output'); }
-            const list = (parsed.components || []).filter(c => c && c.name);
+            const parsed = await aiJson(
+                [{ role: 'system', content: sys }, { role: 'user', content: user }],
+                (content) => { const o = extractJsonObject(content, 'components'); return (o && Array.isArray(o.components) && o.components.length) ? o : null; }
+            );
+            const list = parsed.components.filter(c => c && c.name);
             if (!list.length) { alert('AI did not suggest any components. Add more context and try again.'); return; }
             showComponentSuggestions(videoId, list);
         } catch (e) {

@@ -589,6 +589,31 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
+    // API: Kimi K2.6 Chat (Fireworks, OpenAI-compatible)  /api/kimi/chat
+    // Same shape as /api/openai/chat. Needs FIREWORKS_API_KEY.
+    // =========================================
+    if (pathname === '/api/kimi/chat' && req.method === 'POST') {
+        if (!process.env.FIREWORKS_API_KEY) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'FIREWORKS_API_KEY not set' }));
+            return;
+        }
+        const body = await readBody(req);
+        const payload = {
+            model: body.model || process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6',
+            messages: body.messages,
+            temperature: body.temperature ?? 0.2
+        };
+        if (body.max_tokens) payload.max_tokens = body.max_tokens;
+        await proxyFetch(res, 'https://api.fireworks.ai/inference/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.FIREWORKS_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        return;
+    }
+
+    // =========================================
     // API: OpenAI Embeddings  /api/openai/embeddings
     // =========================================
     if (pathname === '/api/openai/embeddings' && req.method === 'POST') {
