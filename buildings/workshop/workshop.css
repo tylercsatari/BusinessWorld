@@ -990,3 +990,6 @@
 .wsp-suggest-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .wsp-suggest-name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #233; }
 .wsp-suggest-name .wsp-row-ic { color: #1565c0; }
+
+/* Component detail footer (delete) */
+.wsp-cd-footer { display: flex; justify-content: flex-end; padding-top: 4px; border-top: 1px solid #f0ece4; margin-top: 2px; }

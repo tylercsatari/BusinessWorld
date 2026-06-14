@@ -1559,14 +1559,7 @@ const WorkshopUI = (() => {
         };
         get('wsp-add-vcomp').addEventListener('click', addVComp);
         get('wsp-new-vcomp').addEventListener('keydown', (e) => { if (e.key === 'Enter') addVComp(); });
-        root.querySelectorAll('[data-comp-del]').forEach(b => b.addEventListener('click', async () => {
-            if (!confirm('Remove this component?')) return;
-            await SVC().components.remove(b.dataset.compDel);
-            const fresh = VideoService.getById(v.id) || v;
-            await saveDeps(fresh, videoDeps(fresh).filter(d => !(d.kind === 'component' && d.id === b.dataset.compDel)));
-            rerender();
-        }));
-        // (component rows' click-to-open is bound by bindCompStatusRows, which
+        // (component rows' click-to-open AND delete are bound by bindCompStatusRows, which
         // runs for both the detail page and the drop-down editor)
 
         // AI-suggest components from the hook / script / context
@@ -1669,6 +1662,31 @@ const WorkshopUI = (() => {
         </div>`;
     }
 
+    // Delete a component from anywhere. The remove must always take effect on
+    // screen — its dependency-cleanup is best-effort and its failure must NOT
+    // skip the re-render (that was the "can't delete" bug: a throw after the
+    // remove left the row on screen).
+    async function deleteComponentById(id, rerenderFn) {
+        const c = SVC().components.getById(id);
+        if (!c) return false;
+        if (!confirm(`Delete component "${c.name || 'this component'}"? This can't be undone.`)) return false;
+        try {
+            await SVC().components.remove(id);
+        } catch (e) {
+            console.warn('component delete failed', e);
+            alert('Could not delete the component: ' + e.message);
+            return false;
+        }
+        if (c.videoId) {
+            try {
+                const v = VideoService.getById(c.videoId);
+                if (v) await saveDeps(v, videoDeps(v).filter(d => !(d.kind === 'component' && d.id === id)));
+            } catch (e) { console.warn('dep cleanup after component delete failed (non-fatal)', e); }
+        }
+        try { if (rerenderFn) rerenderFn(); } catch (e) { console.warn('rerender after delete failed', e); }
+        return true;
+    }
+
     function bindCompStatusRows(scope, rerenderFn) {
         scope.querySelectorAll('[data-comp]').forEach(row => {
             const compId = row.dataset.comp;
@@ -1683,6 +1701,11 @@ const WorkshopUI = (() => {
         scope.querySelectorAll('[data-open-comp]').forEach(el => el.addEventListener('click', (e) => {
             e.stopPropagation();
             openComponentDetail(el.dataset.openComp);
+        }));
+        // Delete (✕) — works in the editor list AND the board panels
+        scope.querySelectorAll('[data-comp-del]').forEach(btn => btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteComponentById(btn.dataset.compDel, rerenderFn);
         }));
     }
 
@@ -1762,6 +1785,10 @@ const WorkshopUI = (() => {
                         <div class="wsp-cd-label">Notes / info</div>
                         <textarea id="cd-notes" placeholder="Anything else about this component…">${escHtml(c.notes || '')}</textarea>
                     </div>
+
+                    <div class="wsp-cd-footer">
+                        <button class="wsp-mini-btn danger" id="cd-delete">🗑 Delete component</button>
+                    </div>
                 </div>
             </div>`;
 
@@ -1790,6 +1817,10 @@ const WorkshopUI = (() => {
         const close = () => { overlay.remove(); if (dirty) rerenderEditor(selectedVideo ? selectedVideo.id : (video ? video.id : null)); };
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
         q('[data-close]').addEventListener('click', close);
+        q('#cd-delete').addEventListener('click', async () => {
+            const gone = await deleteComponentById(componentId, null);
+            if (gone) { overlay.remove(); rerenderEditor(selectedVideo ? selectedVideo.id : (video ? video.id : null)); }
+        });
 
         // Name (debounced)
         let nameT = null;
