@@ -25,7 +25,9 @@ const WorkshopUI = (() => {
     // Pipeline board filters (apply to everything: dots, counts, stage panel)
     let fSearch = '', fType = '', fProject = '', fSponsor = '', fAssignee = '', fFlag = '';
     // Which entity types are visible on the board (legend toggles)
-    let showTypes = { video: true, component: true, order: true, inventory: true };
+    // The Workshop board tracks two entities: videos and the components they
+    // spawn. Orders/Storage live in their own tabs, not on the pipeline board.
+    let showTypes = { video: true, component: true, order: false, inventory: false };
     // Inventory tab filters
     let invType = '', invStatus = '';
 
@@ -425,7 +427,7 @@ const WorkshopUI = (() => {
             inventory: filteredInventory().length
         };
         const legend = [
-            ['video', 'video', 'Videos'], ['component', 'component', 'Components'], ['order', 'order', 'Orders'], ['inventory', 'inventory', 'Storage']
+            ['video', 'video', 'Videos'], ['component', 'component', 'Components']
         ];
         return `<div class="wsp-filterbar wsp-pipeline-filters">
             <div class="wsp-legend">
@@ -484,8 +486,8 @@ const WorkshopUI = (() => {
         PS().EDGES.map(([f, t]) => {
             return `<path d="${edgePathSmart(f, t, pos)}" class="wsp-edge" marker-end="url(#wspArrow)" />`;
         }).join('') +
-        // dashed reference edge: Ordering ↔ Component Library (check inventory before buying)
-        `<path d="M ${pos['order'].x + NODE_W / 2} ${pos['order'].y + NODE_H} L ${pos['_inventory'].x + NODE_W / 2} ${pos['_inventory'].y}" class="wsp-edge ref" />`;
+        // dashed reference edge to the Storage Room node (only when shown)
+        (showTypes.inventory ? `<path d="M ${pos['order'].x + NODE_W / 2} ${pos['order'].y + NODE_H} L ${pos['_inventory'].x + NODE_W / 2} ${pos['_inventory'].y}" class="wsp-edge ref" />` : '');
 
         const nodesHtml = PS().STAGES.map(s => {
             const p = pos[s.id];
@@ -513,18 +515,21 @@ const WorkshopUI = (() => {
             </div>`;
         }).join('');
 
-        // Component Library (Storage Room) node — readiness summary
-        const invItems = showTypes.inventory ? filteredInventory() : [];
-        const readyInv = invItems.filter(i => i.status === 'ready').length;
-        const invCol = DOT_COLORS.inventory;
-        const invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:62px;">
-            <div class="wsp-node-badge" style="background-color:${invCol};box-shadow:0 3px 9px ${invCol}55, inset 0 1px 2px rgba(255,255,255,0.35);">${icon('inventory')}</div>
-            <div class="wsp-node-text">
-                <div class="wsp-node-label">Storage Room</div>
-                <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready on the shelf</span></div>
-            </div>
-            ${invItems.length ? `<span class="wsp-node-count inv">${invItems.length}</span>` : ''}
-        </div>`;
+        // Component Library (Storage Room) node — only on the board when toggled on
+        let invNode = '';
+        if (showTypes.inventory) {
+            const invItems = filteredInventory();
+            const readyInv = invItems.filter(i => i.status === 'ready').length;
+            const invCol = DOT_COLORS.inventory;
+            invNode = `<div class="wsp-node inv-node" data-goto="inventory" style="left:${pos['_inventory'].x}px;top:${pos['_inventory'].y}px;width:${NODE_W}px;height:62px;">
+                <div class="wsp-node-badge" style="background-color:${invCol};box-shadow:0 3px 9px ${invCol}55, inset 0 1px 2px rgba(255,255,255,0.35);">${icon('inventory')}</div>
+                <div class="wsp-node-text">
+                    <div class="wsp-node-label">Storage Room</div>
+                    <div class="wsp-node-sub"><span class="wsp-node-group">${readyInv}/${invItems.length} ready on the shelf</span></div>
+                </div>
+                ${invItems.length ? `<span class="wsp-node-count inv">${invItems.length}</span>` : ''}
+            </div>`;
+        }
 
         el.innerHTML = `
             ${pipelineFilterBarHtml()}
@@ -652,13 +657,7 @@ const WorkshopUI = (() => {
             <div class="wsp-stage-panel-list">
                 ${total === 0 ? '<div class="workshop-empty">Nothing matches the current filters. Queue an idea from the Library to feed the pipeline!</div>' : ''}
                 ${vids.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.video}">${icon('video', 'wsp-sec-ic')} Videos in the pipeline</div>${vids.map(v => stageVideoRowHtml(v, null)).join('')}` : ''}
-                ${comps.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being built</div>${comps.map(c => `
-                    <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
-                        <span class="wsp-row-name">🧩 ${escHtml(c.name)} ${projectName(c.projectId) ? `<span class="wsp-hint">🛠️ ${escHtml(projectName(c.projectId))}</span>` : ''}</span>
-                        <div class="wsp-status-cycle">
-                            ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
-                        </div>
-                    </div>`).join('')}` : ''}
+                ${comps.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being built</div>${comps.map(c => componentRowHtml(c)).join('')}` : ''}
                 ${orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">${icon('order', 'wsp-sec-ic')} Open orders</div>${orders.map(orderRowHtml).join('')}` : ''}
                 ${inv.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.inventory}">${icon('inventory', 'wsp-sec-ic')} Storage room (Component Library)</div>${inv.map(i => `
                     <div class="wsp-row" style="border-left: 3px solid ${INV_STATUS_COLORS[i.status] || '#b0a8a0'}">
@@ -689,13 +688,7 @@ const WorkshopUI = (() => {
             e.orders.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${e.orders.length}</span>` : ''
         ].join('');
 
-        const compRows = e.components.map(c => `
-            <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
-                <span class="wsp-row-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)} ${projectName(c.projectId) ? `<span class="wsp-hint">${escHtml(projectName(c.projectId))}</span>` : ''}</span>
-                <div class="wsp-status-cycle">
-                    ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
-                </div>
-            </div>`).join('');
+        const compRows = e.components.map(c => componentRowHtml(c)).join('');
 
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
@@ -1416,8 +1409,11 @@ const WorkshopUI = (() => {
             ${stageChecklistHtml(v)}
 
             <div class="wsp-subsection" style="--accent:#a87d3c">
-                ${subTitle('ideate', 'Context', '— ideation notes, angles, details')}
-                <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
+                ${subTitle('ideate', 'Context', '— speak or type ideation notes, angles, details')}
+                <div class="wsp-field-with-mic">
+                    <textarea id="workshop-context" placeholder="Describe what you want to build, the angles, the details…">${escHtml(v.context || '')}</textarea>
+                    <button class="wsp-mic-btn" id="wsp-context-mic" title="Dictate — speak and it transcribes into Context">${icon('voiceover')}</button>
+                </div>
             </div>
 
             <div class="wsp-subsection" style="--accent:#3d8bf0">
@@ -1439,11 +1435,12 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection wsp-decomp-section" style="--accent:#e8a020">
-                ${subTitle('decomp', 'Decomposition', '— break the build into components. Each one you add becomes its own entity in the pipeline (with its own stages) while staying linked to this video, which waits for it.')}
-                ${myComps.map(c => componentRowHtml(c)).join('')}
+                ${subTitle('decomp', 'Decomposition', '— break the build into components. Each becomes its own entity in the pipeline (its own stages &amp; needs) while staying linked to this video, which waits for it. Click a component to open it.')}
+                <div id="wsp-comp-list">${myComps.map(c => componentRowHtml(c)).join('')}</div>
                 <div class="wsp-add-row wsp-decomp-add">
                     <input type="text" id="wsp-new-vcomp" placeholder="What do you need to build? (e.g. 'Doc Ock arm')">
                     <button class="wsp-mini-btn done" id="wsp-add-vcomp">＋ Add component</button>
+                    <button class="wsp-mini-btn wsp-ai-btn" id="wsp-ai-suggest" title="Let AI read the hook, script &amp; context and suggest components">✨ AI suggest</button>
                 </div>
             </div>
 
@@ -1569,6 +1566,16 @@ const WorkshopUI = (() => {
             await saveDeps(fresh, videoDeps(fresh).filter(d => !(d.kind === 'component' && d.id === b.dataset.compDel)));
             rerender();
         }));
+        // (component rows' click-to-open is bound by bindCompStatusRows, which
+        // runs for both the detail page and the drop-down editor)
+
+        // AI-suggest components from the hook / script / context
+        get('wsp-ai-suggest')?.addEventListener('click', (e) => suggestComponents(v.id, e.currentTarget));
+
+        // Voice dictation into the Context field
+        const micBtn = get('wsp-context-mic');
+        const ctxEl = get('workshop-context');
+        if (micBtn && ctxEl) micBtn.addEventListener('click', () => startDictation(ctxEl, micBtn));
 
         // Inline script editor
         if (window.EggRenderer) {
@@ -1627,15 +1634,36 @@ const WorkshopUI = (() => {
         }
     }
 
+    // What a component can require downstream (the per-component causality the
+    // user sets at Decomposition). Subset of the video's branch stages.
+    const COMPONENT_NEEDS = [
+        { flag: 'design',     label: 'Design',   icon: 'design' },
+        { flag: 'propdesign', label: 'Props',    icon: 'propdesign' },
+        { flag: 'cad',        label: 'CAD',      icon: 'cad' },
+        { flag: 'pcb',        label: 'PCB',      icon: 'pcb' },
+        { flag: 'software',   label: 'Software', icon: 'software' },
+        { flag: 'assembly',   label: 'Assembly', icon: 'assembly' },
+        { flag: 'artistic',   label: 'Finish',   icon: 'artistic' }
+    ];
+    const COMPONENT_NEED_LABEL = Object.fromEntries(COMPONENT_NEEDS.map(n => [n.flag, n.label]));
+
     // A component is its own pipeline entity — created at Decomposition,
     // permanently linked to the video it came from (component.videoId), and it
     // flows the build stages on its own (status = where it is now). The video
-    // automatically waits on every component it spawned.
+    // automatically waits on every component it spawned. Click to open its full
+    // detail (assets, links, contacts, needs, stage).
     function componentRowHtml(c) {
+        const needs = Array.isArray(c.needs) ? c.needs : [];
+        const linkCount = Array.isArray(c.links) ? c.links.length : 0;
         return `<div class="wsp-comp-row" data-comp="${c.id}">
-            <span class="wsp-comp-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)}</span>
-            <div class="wsp-status-cycle">
-                ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}" title="Mark this component at the ${s} stage">${s}</button>`).join('')}
+            <button class="wsp-comp-name wsp-clickable" data-open-comp="${c.id}" title="Open this component">
+                ${icon('component', 'wsp-row-ic')} <span class="wsp-comp-name-text">${escHtml(c.name)}</span>
+                ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : c.source === 'build' ? '<span class="wsp-comp-tag build">build</span>' : ''}
+            </button>
+            <div class="wsp-comp-meta">
+                ${needs.map(f => `<span class="wsp-need-chip">${escHtml(COMPONENT_NEED_LABEL[f] || f)}</span>`).join('')}
+                ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
+                <span class="wsp-comp-stage">${escHtml(c.status || 'design')}</span>
             </div>
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
         </div>`;
@@ -1650,6 +1678,284 @@ const WorkshopUI = (() => {
                     rerenderFn();
                 });
             });
+        });
+        // Click a component name anywhere → open its full detail
+        scope.querySelectorAll('[data-open-comp]').forEach(el => el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openComponentDetail(el.dataset.openComp);
+        }));
+    }
+
+    // ============ COMPONENT DETAIL — components as first-class objects ============
+    // A component opens like a video: its linked video, the stage it's on, what
+    // it needs (per-component causality), its assets/links, contacts and notes —
+    // all in one place, all autosaving.
+
+    function linkRowHtml(l, i) {
+        return `<div class="wsp-row wsp-cd-linkrow" data-linki="${i}">
+            <span class="wsp-row-name">${icon('link', 'wsp-row-ic')} ${escHtml(l.label || l.url || 'link')}</span>
+            ${l.url ? `<button class="wsp-mini-btn" data-link-open="${i}">↗ Open</button>` : ''}
+            <button class="wsp-mini-btn danger" data-link-del="${i}">✕</button>
+        </div>`;
+    }
+
+    function openComponentDetail(componentId) {
+        const c = SVC().components.getById(componentId);
+        if (!c) return;
+        const video = c.videoId ? VideoService.getById(c.videoId) : null;
+        const needs = Array.isArray(c.needs) ? c.needs : [];
+        const links = Array.isArray(c.links) ? c.links : [];
+        const source = c.source || '';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `
+            <div class="wsp-picker wsp-comp-detail">
+                <div class="wsp-picker-header wsp-comp-detail-head">
+                    <span class="wsp-cd-titlewrap">${icon('component', 'wsp-title-ic')}
+                        <input id="cd-name" class="wsp-cd-name-input" value="${escAttr(c.name)}" placeholder="Component name">
+                    </span>
+                    <span class="wsp-save-status saved" id="cd-status">Saved</span>
+                    <button class="wsp-picker-close" data-close>✕</button>
+                </div>
+                <div class="wsp-comp-detail-body">
+                    ${video
+                        ? `<div class="wsp-comp-fromvideo" data-open-video="${video.id}">${icon('video', 'wsp-row-ic')} <span>From video <b>${escHtml(video.name)}</b></span> <span class="wsp-link">open ↗</span></div>`
+                        : '<div class="wsp-hint">Standalone component (not linked to a video)</div>'}
+
+                    <div class="wsp-cd-section">
+                        <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now</span></div>
+                        <div class="wsp-status-cycle" data-comp="${c.id}">
+                            ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
+                        </div>
+                    </div>
+
+                    <div class="wsp-cd-section">
+                        <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step this component requires</span></div>
+                        <div class="wsp-needs-btns">
+                            ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needs.includes(n.flag) ? 'on' : ''}" data-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
+                        </div>
+                        <div class="wsp-cd-label" style="margin-top:10px;">Source</div>
+                        <div class="wsp-needs-btns">
+                            <button class="wsp-need-btn ${source === 'build' ? 'on' : ''}" data-source="build">${icon('assembly', 'wsp-need-ic')} Build in-house</button>
+                            <button class="wsp-need-btn ${source === 'order' ? 'on' : ''}" data-source="order">${icon('order', 'wsp-need-ic')} Order it</button>
+                        </div>
+                    </div>
+
+                    <div class="wsp-cd-section">
+                        <div class="wsp-cd-label">Assets &amp; links <span class="wsp-hint">— 3D models, datasheets, references</span></div>
+                        <div id="cd-links">${links.map((l, i) => linkRowHtml(l, i)).join('')}</div>
+                        <div class="wsp-add-row">
+                            <input type="text" id="cd-link-label" placeholder="label (e.g. 'STL model')">
+                            <input type="text" id="cd-link-url" placeholder="https://…">
+                            <button class="wsp-mini-btn done" id="cd-link-add">＋ Add</button>
+                        </div>
+                    </div>
+
+                    <div class="wsp-cd-section">
+                        <div class="wsp-cd-label">Contacts</div>
+                        <input type="text" id="cd-contacts" placeholder="People / suppliers / who to ask" value="${escAttr(c.contacts || '')}">
+                    </div>
+
+                    <div class="wsp-cd-section">
+                        <div class="wsp-cd-label">Notes / info</div>
+                        <textarea id="cd-notes" placeholder="Anything else about this component…">${escHtml(c.notes || '')}</textarea>
+                    </div>
+                </div>
+            </div>`;
+
+        const panel = container.querySelector('.workshop-panel');
+        panel.appendChild(overlay);
+        const q = (sel) => overlay.querySelector(sel);
+        const statusEl = q('#cd-status');
+        const flashSaved = () => { statusEl.textContent = 'Saved ✓'; statusEl.className = 'wsp-save-status saved'; };
+        const flashSaving = () => { statusEl.textContent = 'Saving…'; statusEl.className = 'wsp-save-status saving'; };
+        // Serialize PATCHes so rapid edits (toggling several needs) can't race
+        // and drop each other's fields at the store level.
+        let saveChain = Promise.resolve();
+        const saveComp = (changes) => {
+            flashSaving();
+            saveChain = saveChain.catch(() => {}).then(async () => {
+                try { await SVC().components.update(componentId, changes); flashSaved(); }
+                catch (e) { statusEl.textContent = 'Save failed'; statusEl.className = 'wsp-save-status failed'; }
+            });
+            return saveChain;
+        };
+        const cur = () => SVC().components.getById(componentId) || c;
+        // Local, synchronously-updated copy of needs so concurrent toggles
+        // accumulate instead of overwriting (each read was seeing stale data).
+        const needsSet = new Set(Array.isArray(c.needs) ? c.needs : []);
+        let dirty = false;
+        const close = () => { overlay.remove(); if (dirty) rerenderEditor(selectedVideo ? selectedVideo.id : (video ? video.id : null)); };
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+        q('[data-close]').addEventListener('click', close);
+
+        // Name (debounced)
+        let nameT = null;
+        q('#cd-name').addEventListener('input', (e) => {
+            clearTimeout(nameT); flashSaving(); dirty = true;
+            nameT = setTimeout(() => saveComp({ name: e.target.value.trim() || 'Component' }), 600);
+        });
+        // Open the linked video
+        const fv = q('[data-open-video]');
+        if (fv) fv.addEventListener('click', () => { close(); openDetail(fv.dataset.openVideo); });
+        // Stage
+        q('.wsp-status-cycle').querySelectorAll('[data-cd-status]').forEach(btn => btn.addEventListener('click', async () => {
+            dirty = true;
+            await saveComp({ status: btn.dataset.cdStatus });
+            q('.wsp-status-cycle').querySelectorAll('[data-cd-status]').forEach(b => b.classList.toggle('active', b === btn));
+        }));
+        // Needs (multi-select) — toggle the local set synchronously; debounce
+        // so toggling several in a row coalesces into ONE save of the full set
+        let needsT = null;
+        overlay.querySelectorAll('[data-need]').forEach(btn => btn.addEventListener('click', () => {
+            dirty = true;
+            const flag = btn.dataset.need;
+            if (needsSet.has(flag)) needsSet.delete(flag); else needsSet.add(flag);
+            btn.classList.toggle('on');
+            flashSaving();
+            clearTimeout(needsT);
+            needsT = setTimeout(() => saveComp({ needs: [...needsSet] }), 400);
+        }));
+        // Source (single-select)
+        overlay.querySelectorAll('[data-source]').forEach(btn => btn.addEventListener('click', async () => {
+            dirty = true;
+            const val = cur().source === btn.dataset.source ? '' : btn.dataset.source;
+            overlay.querySelectorAll('[data-source]').forEach(b => b.classList.toggle('on', b === btn && !!val));
+            await saveComp({ source: val });
+        }));
+        // Links
+        const renderLinks = () => { q('#cd-links').innerHTML = (cur().links || []).map((l, i) => linkRowHtml(l, i)).join(''); bindLinks(); };
+        const bindLinks = () => {
+            q('#cd-links').querySelectorAll('[data-link-del]').forEach(b => b.addEventListener('click', async () => {
+                dirty = true;
+                const links2 = (cur().links || []).filter((_, i) => i !== Number(b.dataset.linkDel));
+                await saveComp({ links: links2 }); renderLinks();
+            }));
+            q('#cd-links').querySelectorAll('[data-link-open]').forEach(b => b.addEventListener('click', () => {
+                const l = (cur().links || [])[Number(b.dataset.linkOpen)];
+                if (l && l.url) window.open(l.url, '_blank');
+            }));
+        };
+        bindLinks();
+        q('#cd-link-add').addEventListener('click', async () => {
+            const label = q('#cd-link-label').value.trim();
+            let url = q('#cd-link-url').value.trim();
+            if (!label && !url) return;
+            if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+            dirty = true;
+            await saveComp({ links: [...(cur().links || []), { label: label || url, url }] });
+            q('#cd-link-label').value = ''; q('#cd-link-url').value = '';
+            renderLinks();
+        });
+        // Contacts + notes (debounced)
+        let cT = null, nT = null;
+        q('#cd-contacts').addEventListener('input', (e) => { clearTimeout(cT); flashSaving(); dirty = true; cT = setTimeout(() => saveComp({ contacts: e.target.value }), 600); });
+        q('#cd-notes').addEventListener('input', (e) => { clearTimeout(nT); flashSaving(); dirty = true; nT = setTimeout(() => saveComp({ notes: e.target.value }), 600); });
+    }
+
+    // ============ VOICE DICTATION (Web Speech API) ============
+    function startDictation(targetEl, btn) {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { alert('Voice input is not supported in this browser. Try Chrome.'); return; }
+        if (btn._rec) { btn._rec.stop(); return; }
+        const rec = new SR();
+        rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = true;
+        const base = targetEl.value ? targetEl.value.trimEnd() + ' ' : '';
+        rec.onresult = (e) => {
+            let txt = '';
+            for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+            targetEl.value = base + txt;
+            targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        const stop = () => { btn.classList.remove('recording'); btn._rec = null; };
+        rec.onend = stop; rec.onerror = stop;
+        btn._rec = rec; btn.classList.add('recording');
+        try { rec.start(); } catch (e) { stop(); }
+    }
+
+    // ============ AI COMPONENT SUGGESTIONS (uses the connected chat model) ============
+    async function suggestComponents(videoId, btn) {
+        const v = VideoService.getById(videoId);
+        if (!v) return;
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '✨ Thinking…';
+        try {
+            const existing = componentsForVideo(videoId).map(c => c.name);
+            const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the physical COMPONENTS that must be built or bought to pull it off. For each, decide whether it is built in-house or ordered, and which production steps it needs. Reply with ONLY JSON of the form: {"components":[{"name":"short concrete name","source":"build"|"order","needs":["design","propdesign","cad","pcb","software","assembly","artistic"]}]}. "needs" is a subset of that allowed list (only the steps that component truly requires). 3-8 components. No prose.`;
+            const user = `Video title: ${v.name}\nHook: ${v.hook || '(none)'}\nScript: ${(v.script || '(none)').slice(0, 2000)}\nContext: ${v.context || '(none)'}\nAlready added (don't repeat): ${existing.join(', ') || 'none'}`;
+            const res = await fetch('/api/openai/chat', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], temperature: 0.4, response_format: { type: 'json_object' }, max_tokens: 900 })
+            });
+            if (!res.ok) throw new Error(`AI request failed (${res.status})`);
+            const data = await res.json();
+            const content = data.choices?.[0]?.message?.content || '{}';
+            let parsed = {};
+            try { parsed = JSON.parse(content); } catch (e) { throw new Error('AI returned malformed output'); }
+            const list = (parsed.components || []).filter(c => c && c.name);
+            if (!list.length) { alert('AI did not suggest any components. Add more context and try again.'); return; }
+            showComponentSuggestions(videoId, list);
+        } catch (e) {
+            console.warn('suggestComponents failed', e);
+            alert('AI suggest failed: ' + e.message);
+        } finally {
+            btn.disabled = false; btn.textContent = orig;
+        }
+    }
+
+    function showComponentSuggestions(videoId, list) {
+        const ALLOWED = new Set(COMPONENT_NEEDS.map(n => n.flag));
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `
+            <div class="wsp-picker wsp-suggest-modal">
+                <div class="wsp-picker-header"><span>✨ AI-suggested components</span><button class="wsp-picker-close" data-close>✕</button></div>
+                <div class="wsp-suggest-list">
+                    <div class="wsp-hint" style="padding:0 2px 4px;">Add the ones that fit — each becomes its own pipeline entity linked to this video.</div>
+                    ${list.map((c, i) => {
+                        const needs = (c.needs || []).filter(f => ALLOWED.has(f));
+                        return `<div class="wsp-suggest-row" data-sug="${i}">
+                            <div class="wsp-suggest-main">
+                                <div class="wsp-suggest-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)} ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : '<span class="wsp-comp-tag build">build</span>'}</div>
+                                <div class="wsp-comp-meta">${needs.map(f => `<span class="wsp-need-chip">${escHtml(COMPONENT_NEED_LABEL[f] || f)}</span>`).join('') || '<span class="wsp-hint">no special steps</span>'}</div>
+                            </div>
+                            <button class="wsp-mini-btn done" data-add-sug="${i}">＋ Add</button>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <div class="wsp-branch-actions">
+                    <button class="wsp-mini-btn" data-close>Close</button>
+                    <button class="wsp-mini-btn done" id="wsp-add-all-sug">Add all</button>
+                </div>
+            </div>`;
+        const panel = container.querySelector('.workshop-panel');
+        panel.appendChild(overlay);
+        const close = () => { overlay.remove(); rerenderEditor(videoId); };
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+        overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', close));
+
+        const addOne = async (i, rowBtn) => {
+            const c = list[i];
+            if (!c || c._added) return;
+            c._added = true;
+            if (rowBtn) { rowBtn.disabled = true; rowBtn.textContent = '✓ Added'; }
+            const fresh = VideoService.getById(videoId);
+            const comp = await SVC().components.create({
+                videoId, projectId: (fresh.projectIds || [])[0] || '', parentComponentId: '',
+                name: c.name, status: 'design', notes: '',
+                needs: (c.needs || []).filter(f => ALLOWED.has(f)),
+                source: c.source === 'order' ? 'order' : 'build', links: []
+            });
+            await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
+        };
+        overlay.querySelectorAll('[data-add-sug]').forEach(b => b.addEventListener('click', () => addOne(Number(b.dataset.addSug), b)));
+        overlay.querySelector('#wsp-add-all-sug').addEventListener('click', async (e) => {
+            e.target.disabled = true; e.target.textContent = 'Adding…';
+            for (let i = 0; i < list.length; i++) await addOne(i, overlay.querySelector(`[data-add-sug="${i}"]`));
+            close();
         });
     }
 

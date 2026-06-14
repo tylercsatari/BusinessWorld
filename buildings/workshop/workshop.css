@@ -885,3 +885,108 @@
 .wsp-upload-bar { flex: 1 1 80px; height: 8px; background: #eee5d4; border-radius: 4px; overflow: hidden; }
 .wsp-upload-fill { height: 100%; width: 0; background: linear-gradient(90deg, #34c759, #2aa84c); border-radius: 4px; transition: width .15s ease; }
 .wsp-upload-label { font-size: 11px; font-weight: 600; color: #777; white-space: nowrap; }
+
+/* ===================================================================
+   COMPONENTS AS FIRST-CLASS OBJECTS (detail, needs, assets) + voice/AI
+   =================================================================== */
+
+/* Decomposition / panel component rows — clickable, with needs + stage */
+.wsp-comp-row {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #fff; border: 1px solid #e6e0d4; border-left: 3px solid #1565c0;
+    border-radius: 9px; padding: 5px 8px;
+}
+.wsp-comp-name {
+    display: inline-flex; align-items: center; gap: 6px;
+    flex: 1 1 140px; min-width: 0;
+    background: none; border: none; font-family: inherit; cursor: pointer;
+    font-size: 13px; font-weight: 700; color: #233; text-align: left; padding: 2px;
+    border-radius: 6px;
+}
+.wsp-comp-name:hover { background: #f0f5fc; color: #1565c0; }
+.wsp-comp-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wsp-comp-row .wsp-row-ic { color: #1565c0; flex-shrink: 0; }
+.wsp-comp-meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.wsp-need-chip {
+    font-size: 9.5px; font-weight: 800; color: #4a4336;
+    background: #f3eee4; border: 1px solid #e7ddc8; border-radius: 5px; padding: 0 5px; line-height: 16px;
+    text-transform: uppercase; letter-spacing: 0.2px;
+}
+.wsp-comp-assets { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 800; color: #8a7d63; }
+.wsp-comp-stage {
+    font-size: 10px; font-weight: 800; color: #1565c0; text-transform: lowercase;
+    background: #eaf2fd; border-radius: 6px; padding: 1px 7px; white-space: nowrap;
+}
+.wsp-comp-tag {
+    font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;
+    border-radius: 5px; padding: 0 5px; line-height: 15px;
+}
+.wsp-comp-tag.build { background: #e6f7f1; color: #0a7a63; }
+.wsp-comp-tag.order { background: #fff3e0; color: #b06000; }
+.wsp-decomp-add .wsp-ai-btn { border-color: #8e5cd6; color: #6b3fb0; background: #f7f2fd; }
+.wsp-decomp-add .wsp-ai-btn:hover { background: #efe6fb; }
+
+/* Voice mic on the Context field */
+.wsp-field-with-mic { position: relative; }
+.wsp-field-with-mic textarea { width: 100%; box-sizing: border-box; padding-right: 40px; }
+.wsp-mic-btn {
+    position: absolute; top: 8px; right: 8px;
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid #e0dcd6; background: #fff; color: #8a7d63;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: all 0.15s;
+}
+.wsp-mic-btn .wsp-ic { width: 15px; height: 15px; }
+.wsp-mic-btn:hover { background: #faf5eb; color: #5a4a32; }
+.wsp-mic-btn.recording { background: #e74c3c; border-color: #e74c3c; color: #fff; animation: micPulse 1.1s ease-in-out infinite; }
+@keyframes micPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.45); } 50% { box-shadow: 0 0 0 6px rgba(231,76,60,0); } }
+
+/* Component detail overlay */
+.wsp-comp-detail { max-width: 560px; width: 94%; max-height: 88%; }
+.wsp-comp-detail-head { gap: 8px; }
+.wsp-cd-titlewrap { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: #1565c0; }
+.wsp-cd-name-input {
+    flex: 1; min-width: 0; border: 1px solid transparent; border-radius: 8px;
+    font-size: 16px; font-weight: 800; color: #233; padding: 4px 8px; font-family: inherit; background: transparent;
+}
+.wsp-cd-name-input:hover { background: #f6f3ee; }
+.wsp-cd-name-input:focus { outline: none; background: #fff; border-color: #cfe0f7; }
+.wsp-comp-detail-body { padding: 12px 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.wsp-comp-fromvideo {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    background: #f3f8f4; border: 1px solid #d8ecdd; border-radius: 9px; padding: 8px 11px;
+    font-size: 12.5px; color: #2a4a36; font-weight: 600;
+}
+.wsp-comp-fromvideo:hover { background: #eaf5ee; }
+.wsp-comp-fromvideo .wsp-row-ic { color: #00b894; }
+.wsp-comp-fromvideo .wsp-link { margin-left: auto; }
+.wsp-cd-section { display: flex; flex-direction: column; gap: 7px; }
+.wsp-cd-label { font-size: 11px; font-weight: 800; color: #8a7d63; text-transform: uppercase; letter-spacing: 0.5px; }
+.wsp-cd-label .wsp-hint { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.wsp-needs-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.wsp-need-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid #e0dcd6; background: #fff; border-radius: 9px;
+    padding: 5px 11px; font-size: 12px; font-weight: 700; color: #777; cursor: pointer; font-family: inherit;
+    transition: all 0.13s;
+}
+.wsp-need-btn .wsp-need-ic { width: 14px; height: 14px; }
+.wsp-need-btn:hover { background: #f5f2ed; }
+.wsp-need-btn.on { background: #1565c0; border-color: #1565c0; color: #fff; box-shadow: 0 2px 6px rgba(21,101,192,0.25); }
+.wsp-cd-linkrow .wsp-row-ic { color: #1565c0; }
+.wsp-comp-detail-body textarea, .wsp-comp-detail-body input[type="text"] {
+    border: 1px solid #e0dcd6; border-radius: 9px; padding: 8px 11px;
+    font-size: 13px; font-family: inherit; background: #faf8f5; outline: none; resize: vertical; width: 100%; box-sizing: border-box;
+}
+.wsp-comp-detail-body textarea { min-height: 60px; }
+
+/* AI suggestion modal */
+.wsp-suggest-modal { max-width: 520px; width: 94%; max-height: 84%; }
+.wsp-suggest-list { padding: 10px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
+.wsp-suggest-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid #ece8e0; border-left: 3px solid #1565c0; border-radius: 10px; padding: 8px 11px;
+}
+.wsp-suggest-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wsp-suggest-name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #233; }
+.wsp-suggest-name .wsp-row-ic { color: #1565c0; }
