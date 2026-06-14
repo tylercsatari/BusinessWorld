@@ -3575,17 +3575,9 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     if (r2Data) existing = JSON.parse(r2Data.toString());
                 } catch (_) { /* no existing layout, start fresh */ }
 
-                // Stale-writer guard: if someone saved since this client loaded,
-                // this client's copy of the world is old — writing it would put
-                // the buildings back where they were (the idle-tab clobber bug).
-                // A writer may always overwrite its OWN latest save (beacons
-                // can't read responses to rebase their stamp).
-                if (existing._savedAt && incoming._basedOn !== existing._savedAt && incoming._writer !== existing._writer) {
-                    res.writeHead(409, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'stale layout', savedAt: existing._savedAt }));
-                    return;
-                }
-
+                // Latest write always wins — no stale-writer rejection. The
+                // merge below still preserves a position when a client sends
+                // 0,0 (building not yet created on that client).
                 const BUILDING_NAMES = ['Workshop','Storage','Money Pit','The Pen','Employee Island','Science Center','Jarvis','Library','Finance','The House','Movie Theatre','Gym','Chocolate Bar','Video Lab'];
                 const MISSING_DEFAULTS = {
                     'Chocolate Bar': { x: 42, z: 12 },

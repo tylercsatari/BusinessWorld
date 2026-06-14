@@ -1364,30 +1364,12 @@ const WorkshopUI = (() => {
         }
         const blockers = videoBlockers(v);
         const sponsors = SVC().sponsors.getAll();
-        const allProjects = SVC().projects.getAll().filter(p => p.status !== 'archived');
-        const linkedProjects = (v.projectIds || []).map(id => SVC().projects.getById(id)).filter(Boolean);
-        const myOrders = SVC().ordersForVideo(v.id);
         const myComps = componentsForVideo(v.id);
-
-        // Typed dependencies (video / component / order) — only unfinished
-        // things are offerable; finished things are never blockers.
-        const deps = videoDeps(v);
-        const depKey = d => d.kind + ':' + d.id;
-        const depSet = new Set(deps.map(depKey));
+        // Blocker rows still show which kind is holding the video up
         const DEP_ICON_NAME = { video: 'video', component: 'component', order: 'order' };
-        const depChips = deps.map(d => {
-            let label = '(missing)', done = false;
-            if (d.kind === 'video') { const o = VideoService.getById(d.id); if (o) { label = o.name; done = o.status === 'posted'; } }
-            else if (d.kind === 'component') { const c = SVC().components.getById(d.id); if (c) { label = c.name; done = c.status === 'done'; } }
-            else if (d.kind === 'order') { const o = SVC().orders.getById(d.id); if (o) { label = o.name; done = o.status === 'received'; } }
-            return { id: depKey(d), label: `${label}${done ? ' ✓' : ''}` };
-        });
         // Clean section header: line-icon + title + optional muted hint
         const subTitle = (iconName, title, hint) =>
             `<div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span>${hint ? ` <span class="wsp-hint">${hint}</span>` : ''}</div>`;
-        const depVideoOpts = VideoService.getPipeline().filter(o => o.id !== v.id && !depSet.has('video:' + o.id));
-        const depCompOpts = SVC().components.getAll().filter(c => c.status !== 'done' && !depSet.has('component:' + c.id));
-        const depOrderOpts = SVC().orders.getAll().filter(o => o.status !== 'received' && !depSet.has('order:' + o.id));
 
         return `
             <div class="workshop-detail-summary">${sourceIdeaHtml}</div>
@@ -1433,12 +1415,12 @@ const WorkshopUI = (() => {
             </div>
             ${stageChecklistHtml(v)}
 
-            <div class="wsp-subsection">
+            <div class="wsp-subsection" style="--accent:#a87d3c">
                 ${subTitle('ideate', 'Context', '— ideation notes, angles, details')}
                 <textarea id="workshop-context" placeholder="More details, angles, notes...">${escHtml(v.context || '')}</textarea>
             </div>
 
-            <div class="wsp-subsection">
+            <div class="wsp-subsection" style="--accent:#3d8bf0">
                 ${subTitle('hook', 'Hook', '— write the hook, then add hook instances to produce &amp; split-test (animation / practical). Each instance needs its footage before its stage clears.')}
                 <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
                 ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — hook footage lives in that project's hook/ folder in Dropbox.</div></div>`}
@@ -1451,59 +1433,21 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
-            <div class="wsp-subsection">
+            <div class="wsp-subsection" style="--accent:#27ae72">
                 ${subTitle('script', 'Script', '— fill it in and Script Writing completes itself')}
                 ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
             </div>
 
-            <div class="wsp-subsection">
-                ${subTitle('component', 'Components', '— broken out at Decomposition; each flows through the pipeline on its own and the video waits for it')}
-                ${myComps.map(c => `
-                    <div class="wsp-row" data-comp="${c.id}" style="border-left: 3px solid ${DOT_COLORS.component}">
-                        <span class="wsp-row-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)}</span>
-                        <div class="wsp-status-cycle">
-                            ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
-                        </div>
-                        <button class="wsp-mini-btn danger" data-comp-del="${c.id}">✕</button>
-                    </div>`).join('')}
-                <div class="wsp-add-row">
-                    <input type="text" id="wsp-new-vcomp" placeholder="Add component (e.g. 'Doc Ock arm')">
-                    <button class="wsp-mini-btn done" id="wsp-add-vcomp">Add</button>
+            <div class="wsp-subsection wsp-decomp-section" style="--accent:#e8a020">
+                ${subTitle('decomp', 'Decomposition', '— break the build into components. Each one you add becomes its own entity in the pipeline (with its own stages) while staying linked to this video, which waits for it.')}
+                ${myComps.map(c => componentRowHtml(c)).join('')}
+                <div class="wsp-add-row wsp-decomp-add">
+                    <input type="text" id="wsp-new-vcomp" placeholder="What do you need to build? (e.g. 'Doc Ock arm')">
+                    <button class="wsp-mini-btn done" id="wsp-add-vcomp">＋ Add component</button>
                 </div>
             </div>
 
-            <div class="wsp-subsection">
-                ${subTitle('clock', 'Waiting on', '— a video, component or order that must finish first. Finished things never block.')}
-                <div class="wsp-chips">${chipListHtml(depChips, 'data-undep')}</div>
-                <div class="wsp-add-row">
-                    <select id="wsp-add-dep">
-                        <option value="">Add something to wait on…</option>
-                        ${depVideoOpts.length ? `<optgroup label="Videos in the pipeline">${depVideoOpts.map(o => `<option value="video:${o.id}">${escHtml(o.name)}</option>`).join('')}</optgroup>` : ''}
-                        ${depCompOpts.length ? `<optgroup label="Components not done">${depCompOpts.map(c => `<option value="component:${c.id}">${escHtml(c.name)} (${c.status})</option>`).join('')}</optgroup>` : ''}
-                        ${depOrderOpts.length ? `<optgroup label="Orders not received">${depOrderOpts.map(o => `<option value="order:${o.id}">${escHtml(o.name)} (${o.status})</option>`).join('')}</optgroup>` : ''}
-                    </select>
-                </div>
-            </div>
-
-            <div class="wsp-subsection">
-                ${subTitle('order', 'Orders for this video', '')}
-                ${myOrders.map(orderRowHtml).join('')}
-                ${addOrderRowHtml({ videoId: v.id })}
-            </div>
-
-            <div class="wsp-subsection">
-                ${subTitle('briefcase', 'Build projects', '— shared builds this video uses (project components live in the Projects tab)')}
-                <div class="wsp-chips">${chipListHtml(linkedProjects.map(p => ({ id: p.id, label: p.name })), 'data-unlink-project')}</div>
-                <div class="wsp-add-row">
-                    <select id="wsp-link-project">
-                        <option value="">Link a project…</option>
-                        ${allProjects.filter(p => !(v.projectIds || []).includes(p.id)).map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
-                        <option value="__new__">＋ New project…</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="wsp-subsection">
+            <div class="wsp-subsection" style="--accent:#8e44ad">
                 ${subTitle('voiceover', 'Voiceover', '— one per video (audio or video file), stored in the project\'s vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.')}
                 <div id="wsp-vo-section">
                     ${v.voPath
@@ -1600,28 +1544,6 @@ const WorkshopUI = (() => {
             });
         });
 
-        // Project links
-        get('wsp-link-project').addEventListener('change', async (e) => {
-            let pid = e.target.value;
-            if (!pid) return;
-            if (pid === '__new__') {
-                const name = prompt('New project name:');
-                if (!name || !name.trim()) { rerender(); return; }
-                const p = await SVC().projects.create({ name: name.trim(), description: '', status: 'active', deadline: '', notes: '' });
-                pid = p.id;
-            }
-            const fresh = VideoService.getById(v.id) || v;
-            const projectIds = [...new Set([...(fresh.projectIds || []), pid])];
-            await VideoService.update(v.id, { projectIds, status: normalizedStatus(fresh) });
-            rerender();
-        });
-        root.querySelectorAll('[data-unlink-project]').forEach(b => b.addEventListener('click', async () => {
-            const fresh = VideoService.getById(v.id) || v;
-            const projectIds = (fresh.projectIds || []).filter(id => id !== b.dataset.unlinkProject);
-            await VideoService.update(v.id, { projectIds, status: normalizedStatus(fresh) });
-            rerender();
-        }));
-
         // Components broken out of this video (the video waits for them)
         const addVComp = async () => {
             const input = get('wsp-new-vcomp');
@@ -1645,21 +1567,6 @@ const WorkshopUI = (() => {
             await SVC().components.remove(b.dataset.compDel);
             const fresh = VideoService.getById(v.id) || v;
             await saveDeps(fresh, videoDeps(fresh).filter(d => !(d.kind === 'component' && d.id === b.dataset.compDel)));
-            rerender();
-        }));
-
-        // Typed dependencies
-        get('wsp-add-dep').addEventListener('change', async (e) => {
-            if (!e.target.value) return;
-            const [kind, id] = e.target.value.split(':');
-            const fresh = VideoService.getById(v.id) || v;
-            await saveDeps(fresh, [...videoDeps(fresh), { kind, id }]);
-            rerender();
-        });
-        root.querySelectorAll('[data-undep]').forEach(b => b.addEventListener('click', async () => {
-            const [kind, id] = b.dataset.undep.split(':');
-            const fresh = VideoService.getById(v.id) || v;
-            await saveDeps(fresh, videoDeps(fresh).filter(d => !(d.kind === kind && d.id === id)));
             rerender();
         }));
 
@@ -1718,6 +1625,20 @@ const WorkshopUI = (() => {
         if (v.project && window.EggRenderer) {
             requestAnimationFrame(() => window.EggRenderer.initEggPreview('workshop-detail-egg-canvas', v.project));
         }
+    }
+
+    // A component is its own pipeline entity — created at Decomposition,
+    // permanently linked to the video it came from (component.videoId), and it
+    // flows the build stages on its own (status = where it is now). The video
+    // automatically waits on every component it spawned.
+    function componentRowHtml(c) {
+        return `<div class="wsp-comp-row" data-comp="${c.id}">
+            <span class="wsp-comp-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)}</span>
+            <div class="wsp-status-cycle">
+                ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}" title="Mark this component at the ${s} stage">${s}</button>`).join('')}
+            </div>
+            <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
+        </div>`;
     }
 
     function bindCompStatusRows(scope, rerenderFn) {
