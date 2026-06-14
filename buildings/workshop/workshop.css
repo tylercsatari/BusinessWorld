@@ -993,3 +993,16 @@
 
 /* Component detail footer (delete) */
 .wsp-cd-footer { display: flex; justify-content: flex-end; padding-top: 4px; border-top: 1px solid #f0ece4; margin-top: 2px; }
+
+/* Queue-Idea preview (scope out an idea before queueing it) */
+.wsp-idea-preview { padding: 10px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.wsp-idea-preview #wsp-idea-back { align-self: flex-start; }
+.wsp-idea-title { margin: 2px 0 0; font-size: 17px; font-weight: 800; color: #2a2418; }
+.wsp-idea-field { display: flex; flex-direction: column; gap: 3px; }
+.wsp-idea-text { font-size: 13px; color: #4a4336; line-height: 1.5; white-space: pre-wrap; }
+.wsp-idea-script {
+    background: #faf8f5; border: 1px solid #efeae0; border-radius: 9px; padding: 9px 11px;
+    max-height: 260px; overflow-y: auto;
+}
+.wsp-idea-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid #f0ece4; margin-top: 2px; }
+.wsp-idea-actions .done { font-size: 13px; padding: 7px 16px; }

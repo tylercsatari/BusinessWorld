@@ -1210,24 +1210,59 @@ const WorkshopUI = (() => {
         const overlay = document.getElementById('wsp-picker-overlay');
         const listEl = document.getElementById('wsp-picker-list');
         if (!overlay || !listEl) return;
-        document.getElementById('wsp-picker-title').textContent = 'Queue an idea into the pipeline';
+        renderIdeaList(listEl);
+        overlay.style.display = 'flex';
+    }
 
-        const ideas = NotesService.getAll().filter(n => n.type === 'idea');
+    // Newest first, like the Library (most-recently-edited at the top)
+    function ideaTimeKey(n) { return n.lastEdited || n.createdAt || n.createdTime || ''; }
+
+    function renderIdeaList(listEl) {
+        document.getElementById('wsp-picker-title').textContent = 'Queue an idea into the pipeline';
+        const ideas = NotesService.getAll().filter(n => n.type === 'idea')
+            .sort((a, b) => ideaTimeKey(b).localeCompare(ideaTimeKey(a)));
         if (ideas.length === 0) {
             listEl.innerHTML = '<div class="workshop-empty">No unqueued ideas in the Library. Write ideas there first — good or bad, they all live in the Library.</div>';
-        } else {
-            listEl.innerHTML = ideas.map(n => {
-                const preview = n.hook || n.context || '';
-                return `<div class="wsp-picker-item" data-id="${n.id}">
-                    <div class="wsp-picker-name">${escHtml(n.name)}${n.script ? ' <span class="wsp-hint">📜 has script</span>' : ''}</div>
-                    <div class="wsp-picker-preview">${escHtml(preview.substring(0, 90))}</div>
-                </div>`;
-            }).join('');
-            listEl.querySelectorAll('.wsp-picker-item').forEach(item => {
-                item.addEventListener('click', () => queueIdea(item.dataset.id));
-            });
+            return;
         }
-        overlay.style.display = 'flex';
+        listEl.innerHTML = ideas.map(n => {
+            const preview = n.hook || n.context || '';
+            return `<div class="wsp-picker-item" data-id="${n.id}">
+                <div class="wsp-picker-name">${escHtml(n.name)}${n.script ? ' <span class="wsp-hint">📜 has script</span>' : ''}</div>
+                <div class="wsp-picker-preview">${escHtml(preview.substring(0, 90))}</div>
+            </div>`;
+        }).join('');
+        // Click an idea to SCOPE IT OUT first (preview), not queue immediately
+        listEl.querySelectorAll('.wsp-picker-item').forEach(item => {
+            item.addEventListener('click', () => showIdeaPreview(item.dataset.id));
+        });
+    }
+
+    // Preview an idea fully before deciding to bring it into the pipeline
+    function showIdeaPreview(noteId) {
+        const listEl = document.getElementById('wsp-picker-list');
+        const n = NotesService.getById(noteId);
+        if (!listEl || !n) return;
+        document.getElementById('wsp-picker-title').textContent = 'Scope out this idea';
+        const already = !!VideoService.getByIdeaId(noteId);
+        const field = (label, val, cls) => val ? `<div class="wsp-idea-field"><div class="wsp-cd-label">${label}</div><div class="wsp-idea-text ${cls || ''}">${escHtml(val)}</div></div>` : '';
+        listEl.innerHTML = `
+            <div class="wsp-idea-preview">
+                <button class="wsp-mini-btn" id="wsp-idea-back">← Back to ideas</button>
+                <h3 class="wsp-idea-title">${escHtml(n.name)}</h3>
+                ${n.project ? `<div class="wsp-chip">${icon('flag', 'wsp-cc-ic')} ${escHtml(n.project)}</div>` : ''}
+                ${field('Hook', n.hook)}
+                ${field('Context', n.context)}
+                ${n.script ? field('Script', n.script, 'wsp-idea-script') : '<div class="wsp-hint">No script yet — you can write it once it\'s in the pipeline.</div>'}
+                <div class="wsp-idea-actions">
+                    ${already
+                        ? '<span class="wsp-hint">Already in the pipeline.</span>'
+                        : '<button class="wsp-mini-btn done" id="wsp-idea-queue">Bring to pipeline →</button>'}
+                </div>
+            </div>`;
+        listEl.querySelector('#wsp-idea-back').addEventListener('click', () => renderIdeaList(listEl));
+        const qb = listEl.querySelector('#wsp-idea-queue');
+        if (qb) qb.addEventListener('click', () => queueIdea(noteId));
     }
 
     function hidePicker() {
