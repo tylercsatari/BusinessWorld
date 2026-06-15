@@ -193,6 +193,7 @@
     <div class="control-row"><span class="key-badge">R-Click</span><span class="control-desc">Rotate camera</span></div>
     <div class="control-row"><span class="key-badge">L-Click</span><span class="control-desc">Inspect building / character</span></div>
     <div class="control-row"><span class="key-badge">Esc</span><span class="control-desc">Close menus & popups</span></div>
+    <div id="menu-owner-sections">
     <div class="divider"></div>
     <h3>Edit Mode</h3>
     <div class="control-row"><span class="key-badge">L-Click</span><span class="control-desc">Drag buildings to move</span></div>
@@ -214,6 +215,7 @@
     <h3>Settings</h3>
     <div id="menu-yt-settings" style="margin-bottom:12px;">
         <div style="color:#888;font-size:13px;">Loading...</div>
+    </div>
     </div>
 </div>
 
@@ -613,6 +615,9 @@ function initTrees(savedTrees) {
 // ============================================================
 function makeClickable(group, name, type = 'building') {
     group.userData = { name, type, isClickable: true, isDraggable: true };
+    // A building loaded after the access gate has applied must hide itself
+    // immediately (model loads can finish out of order / after applyAccess).
+    if (window.__access && !window.__access.all) group.visible = (window.__access.buildings || []).includes(name);
     scene.add(group); clickables.push(group); draggables.push(group);
     return group;
 }
@@ -2926,6 +2931,7 @@ window.toggleMenu = function () {
 };
 
 function renderYouTubeSettings() {
+    if (window.__access && !window.__access.all) return; // owner-only; members don't see YouTube settings
     const el = document.getElementById('menu-yt-settings');
     if (!el) return;
     el.innerHTML = '<div style="color:#888;font-size:13px;">Checking...</div>';
@@ -3034,6 +3040,7 @@ window.applyAccess = function (perms) {
     const setVis = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
     setVis('money-display', full);            // level/money: owner only
     setVis('edit-btn', full); setVis('path-btn', full); // world editing: owner only
+    setVis('menu-owner-sections', full);      // Edit Mode + Buildings legend + YouTube settings: owner only
     // HUD shortcuts derive from the matching Library section grant
     const sg = (s) => full || (allowed.has('Library') && window.sectionGranted && window.sectionGranted('Library', s));
     setVis('todo-bell-btn', sg('todo'));
