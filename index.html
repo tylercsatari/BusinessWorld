@@ -3169,7 +3169,7 @@ window.applyAccess = function (perms) {
     const allowed = new Set((perms && perms.buildings) || []);
     BUILDING_NAMES.forEach(name => { const b = getBuildingByName(name); if (b) b.visible = full || allowed.has(name); });
     employees.forEach(e => { e.visible = full; });   // other characters (incl. Tennille): owner only
-    if (typeof zeusMesh !== 'undefined' && zeusMesh) zeusMesh.visible = full; // Zeus the cat: owner only too
+    if (typeof zeusMesh !== 'undefined' && zeusMesh) zeusMesh.visible = true; // Zeus the cat: visible in EVERY world
     // World entities don't leak across buildings: pen creatures + project flags
     // only show with their explicit grant (under The Pen).
     const penVid = window.canSeePenVideos ? window.canSeePenVideos() : full;
