@@ -336,6 +336,13 @@ const DagFlowchart = (() => {
             });
         }
 
+        // Cycle-safe: any node Kahn never reached (it's part of, or downstream of, a
+        // cycle — e.g. order↔library, design↔order in the production pipeline) would
+        // otherwise get NO layer and NO position, leaving x/y undefined and the whole
+        // chart broken. Append them so EVERY node is laid out.
+        const seen = new Set(topo);
+        nodes.forEach(n => { if (!seen.has(n.id)) topo.push(n.id); });
+
         // Assign layers (longest path from source)
         const layer = new Map();
         topo.forEach(id => {

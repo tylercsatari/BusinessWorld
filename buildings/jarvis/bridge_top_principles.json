@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-04-16T06:42:01.364Z",
+  "generated_at": "2026-05-14T21:52:02.973Z",
   "ranking": "chain_strength_specificity_weighted (|chain_strength| × mechanism IDF)",
   "excluded_target_proxy_indicators": [
     "log_views",

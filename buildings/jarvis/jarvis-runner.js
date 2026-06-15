@@ -4,6 +4,8 @@
  * Uses jarvis-store.js for R2 persistence, jarvis-metrics.js for stats.
  */
 
+require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
+
 const fs = require('fs');
 const path = require('path');
 const metrics = require('./jarvis-metrics');

@@ -1,26 +1,42 @@
 {
-  "version": "1.0",
-  "overall_status": "completed",
-  "started_at": "2026-04-16T04:21:45.919Z",
-  "finished_at": "2026-04-16T06:42:01.607Z",
-  "current_phase": null,
-  "current_phase_started_at": null,
-  "current_phase_progress": null,
-  "completed_phases": [
-    "phase_1_init",
-    "phase_2_mechanisms",
-    "phase_3_components",
-    "phase_4_principles",
-    "phase_5_bridge",
-    "phase_6_persist"
+  "build_id": "jarvis-phase1-2026-05-12",
+  "timestamp": "2026-05-12T11:44:00Z",
+  "status": "completed",
+  "current_phase": "phase_1_init",
+  "phase_description": "Core data structures and API contracts established",
+  "artifacts_created": [
+    "jarvis_registry.json",
+    "jarvis_data.json",
+    "jarvis_rules.json",
+    "jarvis_architecture.json",
+    "jarvis_modules.json",
+    "jarvis_commands.json"
   ],
-  "failed_phase": null,
-  "failure_reason": null,
+  "next_phase": "Phase 2: UI Integration",
+  "next_steps": [
+    "Connect jarvis-ui.js to live data endpoints",
+    "Implement real-time status updates",
+    "Add user interaction handlers"
+  ],
+  "server_port": 8002,
+  "data_server_port": 8003,
+  "health": "healthy",
+  "message": "All Phase 1 artifacts generated. Jarvis world ready for UI integration.",
+  "overall_status": "failed",
+  "started_at": "2026-05-13T01:33:20.299Z",
+  "failed_phase": "phase_1_init",
+  "failure_reason": "exit code 1",
+  "updated_at": "2026-05-23T19:37:46.567Z",
+  "current_phase_started_at": "2026-05-23T19:37:32.466Z",
+  "current_phase_progress": {
+    "step": "starting",
+    "started_at": "2026-05-23T19:37:32.768Z"
+  },
   "phase_results": {
     "phase_1_init": {
       "status": "completed",
-      "started_at": "2026-04-16T04:21:45.962Z",
-      "completed_at": "2026-04-16T04:21:46.292Z",
+      "started_at": "2026-05-14T21:51:56.700Z",
+      "completed_at": "2026-05-14T21:52:00.162Z",
       "written": {
         "mechanisms": {
           "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanisms.json",
@@ -44,20 +60,20 @@
         },
         "research_questions": {
           "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/research_questions.json",
-          "bytes": 26149,
+          "bytes": 536158459,
           "n_questions": 36
         },
         "indicator_registry": {
           "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/indicator-registry.json",
-          "bytes": 4734038,
-          "n_entries": 23000
+          "bytes": 96034965,
+          "n_entries": 445978
         }
       }
     },
     "phase_2_mechanisms": {
       "status": "completed",
-      "started_at": "2026-04-16T06:41:59.365Z",
-      "completed_at": "2026-04-16T06:42:00.328Z",
+      "started_at": "2026-05-14T21:52:00.240Z",
+      "completed_at": "2026-05-14T21:52:01.536Z",
       "n_videos_processed": 372,
       "n_observations": 41119,
       "n_mechanism_ids": 2444,
@@ -66,16 +82,16 @@
     },
     "phase_3_components": {
       "status": "completed",
-      "started_at": "2026-04-16T06:42:00.369Z",
-      "completed_at": "2026-04-16T06:42:00.384Z",
+      "started_at": "2026-05-14T21:52:01.608Z",
+      "completed_at": "2026-05-14T21:52:01.646Z",
       "n_components": 87,
       "n_mechanisms_decomposed": 2444,
       "coverage_pct": 100
     },
     "phase_4_principles": {
       "status": "completed",
-      "started_at": "2026-04-16T06:42:00.422Z",
-      "completed_at": "2026-04-16T06:42:00.738Z",
+      "started_at": "2026-05-14T21:52:01.712Z",
+      "completed_at": "2026-05-14T21:52:01.971Z",
       "n_principles": 312,
       "n_gaps": 54,
       "n_dropped_tautological": 49,
@@ -83,8 +99,8 @@
     },
     "phase_5_bridge": {
       "status": "completed",
-      "started_at": "2026-04-16T06:42:00.796Z",
-      "completed_at": "2026-04-16T06:42:01.364Z",
+      "started_at": "2026-05-14T21:52:02.040Z",
+      "completed_at": "2026-05-14T21:52:02.974Z",
       "n_principles_validated": 312,
       "n_dropped_tautological": 0,
       "n_videos_used": 372,
@@ -95,14 +111,22 @@
     },
     "phase_6_persist": {
       "status": "completed",
-      "started_at": "2026-04-16T06:42:01.404Z",
-      "completed_at": "2026-04-16T06:42:01.597Z",
+      "started_at": "2026-05-14T21:52:03.037Z",
+      "completed_at": "2026-05-14T21:52:09.325Z",
       "graph_merged_in_place": true,
       "graph_extension_file": null,
-      "new_mech_nodes": 2444,
+      "new_mech_nodes": 0,
       "new_mech_edges": 361
     }
   },
+  "completed_phases": [
+    "phase_1_init",
+    "phase_2_mechanisms",
+    "phase_3_components",
+    "phase_4_principles",
+    "phase_5_bridge",
+    "phase_6_persist"
+  ],
   "totals": {
     "n_videos_processed": 372,
     "n_mechanism_observations": 41119,
@@ -111,11 +135,5 @@
     "n_principles": 312,
     "n_bridges_validated": 312
   },
-  "notes": [
-    "This file is the live status feed for the overnight orchestrator.",
-    "It is overwritten at every phase transition and updated periodically during long phases.",
-    "Parent agents can read this file to monitor progress without interrupting the orchestrator."
-  ],
-  "updated_at": "2026-04-16T06:42:01.607Z",
-  "resumed_from": "phase_2_mechanisms"
+  "finished_at": "2026-05-23T19:37:46.567Z"
 }

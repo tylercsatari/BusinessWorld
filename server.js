@@ -485,7 +485,20 @@ const server = http.createServer(async (req, res) => {
         if (!acct) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not signed in' })); return; }
         const perms = await auth.permsForAccount(acct);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id: acct.id, email: acct.email, name: acct.name, role: acct.role, perms }));
+        res.end(JSON.stringify({ id: acct.id, email: acct.email, name: acct.name, displayName: acct.displayName || '', color: acct.color || '', role: acct.role, perms }));
+        return;
+    }
+    // Self-service: a signed-in user updates their OWN display name + character color.
+    if (pathname === '/api/me' && req.method === 'PATCH') {
+        const acct = await auth.accountForRequest(req, url);
+        if (!acct) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not signed in' })); return; }
+        const body = await readBody(req);
+        const patch = {};
+        if (typeof body.displayName === 'string') patch.displayName = body.displayName.trim().slice(0, 40);
+        if (typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color)) patch.color = body.color.toLowerCase();
+        const updated = Object.keys(patch).length ? await dataStore.update('accounts', acct.id, patch) : acct;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: updated.id, email: updated.email, name: updated.name, displayName: updated.displayName || '', color: updated.color || '' }));
         return;
     }
     // AUTH: owner-only profile management (named permission templates)

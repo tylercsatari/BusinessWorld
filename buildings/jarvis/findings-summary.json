@@ -64,7 +64,7 @@
         "prev_views_sq",
         "indestructible_x_prev_keep"
       ],
-      "notes": "Milestone: CV > 0.50. Channel momentum + concept\u00d7momentum interactions"
+      "notes": "Milestone: CV > 0.50. Channel momentum + concept×momentum interactions"
     },
     {
       "model": "v17",
@@ -152,20 +152,20 @@
         "engage_ratio",
         "rpv"
       ],
-      "notes": "CORRUPTED: Contains circular outcome features (like_ratio, svf_log, engage_ratio, rpv). R\u00b2=0.94 is meaningless for prediction."
+      "notes": "CORRUPTED: Contains circular outcome features (like_ratio, svf_log, engage_ratio, rpv). R²=0.94 is meaningless for prediction."
     }
   ],
   "kept_signals": [
     {
       "signal": "keep_sq",
       "delta_r2": "+0.031",
-      "meaning": "Non-linear keep rate \u2014 accelerating returns above 75%. Marginal keep above 75 doubles hit rate.",
+      "meaning": "Non-linear keep rate — accelerating returns above 75%. Marginal keep above 75 doubles hit rate.",
       "signal_kind": "quality"
     },
     {
       "signal": "max_cliff",
       "delta_r2": "+0.093",
-      "meaning": "Biggest single-point retention drop. Signals initial virality spike (high initial replay \u2192 big drop). Counter-intuitive: bigger drops = more views.",
+      "meaning": "Biggest single-point retention drop. Signals initial virality spike (high initial replay → big drop). Counter-intuitive: bigger drops = more views.",
       "signal_kind": "quality"
     },
     {
@@ -189,13 +189,13 @@
     {
       "signal": "deriv_entropy",
       "delta_r2": "+0.008",
-      "meaning": "Pacing complexity \u2014 entropy of retention curve derivative. Varied pacing beats monotonic.",
+      "meaning": "Pacing complexity — entropy of retention curve derivative. Varied pacing beats monotonic.",
       "signal_kind": "quality"
     },
     {
       "signal": "duration_x_retention",
       "delta_r2": "+0.018",
-      "meaning": "Duration \u00d7 retention = total watch time proxy. Algorithm rewards absolute watch minutes.",
+      "meaning": "Duration × retention = total watch time proxy. Algorithm rewards absolute watch minutes.",
       "signal_kind": "content"
     },
     {
@@ -213,13 +213,13 @@
     {
       "signal": "indestructible_x_prev_keep",
       "delta_r2": "+0.026",
-      "meaning": "Indestructible concept \u00d7 previous keep rate. RELEASE STRATEGY: indestructible after high-keep = super-viral.",
+      "meaning": "Indestructible concept × previous keep rate. RELEASE STRATEGY: indestructible after high-keep = super-viral.",
       "signal_kind": "concept"
     },
     {
       "signal": "prev_views",
       "delta_r2": "+0.034",
-      "meaning": "Previous video's log10 views. Channel momentum \u2014 algorithm gives bigger push after a hit.",
+      "meaning": "Previous video's log10 views. Channel momentum — algorithm gives bigger push after a hit.",
       "signal_kind": "momentum"
     },
     {
@@ -293,7 +293,7 @@
     {
       "discovery": "combined_score",
       "r_partial": 0.32,
-      "meaning": "body_hold*10 + d7d1 - retVar*5. Best multi-signal combo \u2014 captures 3 independent dimensions.",
+      "meaning": "body_hold*10 + d7d1 - retVar*5. Best multi-signal combo — captures 3 independent dimensions.",
       "loop": "B"
     },
     {
@@ -361,7 +361,7 @@
       "signal": "narrative_arc_score",
       "r_vs_parent": 0.13,
       "parent_metric": "keep",
-      "meaning": "Narrative arc quality (hook\u2192climax\u2192payoff). Weak: r=0.13 vs keep, r=-0.01 vs retention. Arc quality doesn't predict retention.",
+      "meaning": "Narrative arc quality (hook→climax→payoff). Weak: r=0.13 vs keep, r=-0.01 vs retention. Arc quality doesn't predict retention.",
       "loop": "C"
     },
     {
@@ -410,7 +410,7 @@
     },
     {
       "pattern": "Late visceral amplification",
-      "evidence": "'crazy' at Q1=+0.000, Q4=+0.060. Visceral words 60x more effective later in narrative \u2014 context amplifies impact.",
+      "evidence": "'crazy' at Q1=+0.000, Q4=+0.060. Visceral words 60x more effective later in narrative — context amplifies impact.",
       "loop": "D"
     },
     {
@@ -419,8 +419,8 @@
       "loop": "D"
     },
     {
-      "pattern": "Duration \u00d7 retention sweet spot",
-      "evidence": "Duration r=-0.57 vs retention (longer = lower retention) but duration\u00d7retention r=+0.35 vs views. Algorithm rewards total watch minutes.",
+      "pattern": "Duration × retention sweet spot",
+      "evidence": "Duration r=-0.57 vs retention (longer = lower retention) but duration×retention r=+0.35 vs views. Algorithm rewards total watch minutes.",
       "loop": "D"
     }
   ],
@@ -428,17 +428,17 @@
     "hook_clarity": "LLM vision score 1-10. r=+0.21 vs views individually but hurts regression (too noisy at n=203). r=-0.02 vs keep.",
     "visual_surprise": "LLM vision score 1-10. r=+0.30 vs keep but too noisy for regression. Delta=-0.037.",
     "face_presence": "80% of videos have faces. r=+0.12 vs views but hurts model. Too uniform a distribution.",
-    "vz_score": "Removed in backward elimination \u2014 captured by keep_sq and other features. Originally r=+0.30 individually.",
-    "z_score": "Removed in backward elimination \u2014 captured by other features in v6.",
+    "vz_score": "Removed in backward elimination — captured by keep_sq and other features. Originally r=+0.30 individually.",
+    "z_score": "Removed in backward elimination — captured by other features in v6.",
     "net_novelty": "Perfectly collinear with novelty - cognitive_load already in model.",
-    "roughness": "Mean abs 2nd derivative. r=+0.12. Collinear with max_cliff \u2014 doesn't add incremental value.",
+    "roughness": "Mean abs 2nd derivative. r=+0.12. Collinear with max_cliff — doesn't add incremental value.",
     "title_caps_ratio": "Uppercase ratio in title. Holdout +0.024 but CV drops. Unstable/noise at n=203.",
     "hook_word_density": "Dropped in backward elimination v16. Captured by other features (has_text_overlay, hook_silence).",
-    "fft_features": "Signal-processing features from retention curve FFT. All hurt \u2014 curve info already captured by max_cliff.",
+    "fft_features": "Signal-processing features from retention curve FFT. All hurt — curve info already captured by max_cliff.",
     "knn_k7": "KNN regression doesn't beat OLS at n=203. Best k=7: holdout 0.538 vs OLS 0.566.",
     "curve_clusters": "Retention curve clustering (k=2,3,4). No improvement over linear features.",
     "LLM_content_scores": "5+ rounds of LLM-scored content attributes (hook quality, specificity, open loop). Consistently too noisy at n=200.",
-    "duration_buckets": "Only 10 shorts in dataset. Long videos R\u00b2=0.50 stratified but buckets don't help regression.",
+    "duration_buckets": "Only 10 shorts in dataset. Long videos R²=0.50 stratified but buckets don't help regression.",
     "deep_curve_features": "66 deep retention curve features tested. All collinear with max_cliff. Curve signal fully captured.",
     "RF_GBM_at_n203": "Random Forest and GBM both underperform OLS at n=203. RF overfits. OLS dominates at small n.",
     "upload_day": "Saturday avg 14M views but CV delta < 0.01. Day of week is noise.",
@@ -446,12 +446,12 @@
     "nonsub_fraction": "DATA LEAK: r=0.86 vs views. Algorithm pushes to non-subscribers. Consequence not cause."
   },
   "overnight": {
-    "run_at": "2026-04-16T06:42:01.444Z",
+    "run_at": "2026-05-14T21:52:03.102Z",
     "phase_results": {
       "phase_1_init": {
         "status": "completed",
-        "started_at": "2026-04-16T04:21:45.962Z",
-        "completed_at": "2026-04-16T04:21:46.292Z",
+        "started_at": "2026-05-14T21:51:56.700Z",
+        "completed_at": "2026-05-14T21:52:00.162Z",
         "written": {
           "mechanisms": {
             "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/mechanisms.json",
@@ -475,20 +475,20 @@
           },
           "research_questions": {
             "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/research_questions.json",
-            "bytes": 26149,
+            "bytes": 536158459,
             "n_questions": 36
           },
           "indicator_registry": {
             "file": "/Users/tylercsatari/Desktop/BusinessHub/BusinessWorld/buildings/jarvis/indicator-registry.json",
-            "bytes": 4734038,
-            "n_entries": 23000
+            "bytes": 96034965,
+            "n_entries": 445978
           }
         }
       },
       "phase_2_mechanisms": {
         "status": "completed",
-        "started_at": "2026-04-16T06:41:59.365Z",
-        "completed_at": "2026-04-16T06:42:00.328Z",
+        "started_at": "2026-05-14T21:52:00.240Z",
+        "completed_at": "2026-05-14T21:52:01.536Z",
         "n_videos_processed": 372,
         "n_observations": 41119,
         "n_mechanism_ids": 2444,
@@ -497,16 +497,16 @@
       },
       "phase_3_components": {
         "status": "completed",
-        "started_at": "2026-04-16T06:42:00.369Z",
-        "completed_at": "2026-04-16T06:42:00.384Z",
+        "started_at": "2026-05-14T21:52:01.608Z",
+        "completed_at": "2026-05-14T21:52:01.646Z",
         "n_components": 87,
         "n_mechanisms_decomposed": 2444,
         "coverage_pct": 100
       },
       "phase_4_principles": {
         "status": "completed",
-        "started_at": "2026-04-16T06:42:00.422Z",
-        "completed_at": "2026-04-16T06:42:00.738Z",
+        "started_at": "2026-05-14T21:52:01.712Z",
+        "completed_at": "2026-05-14T21:52:01.971Z",
         "n_principles": 312,
         "n_gaps": 54,
         "n_dropped_tautological": 49,
@@ -514,8 +514,8 @@
       },
       "phase_5_bridge": {
         "status": "completed",
-        "started_at": "2026-04-16T06:42:00.796Z",
-        "completed_at": "2026-04-16T06:42:01.364Z",
+        "started_at": "2026-05-14T21:52:02.040Z",
+        "completed_at": "2026-05-14T21:52:02.974Z",
         "n_principles_validated": 312,
         "n_dropped_tautological": 0,
         "n_videos_used": 372,
@@ -526,12 +526,12 @@
       },
       "phase_6_persist": {
         "status": "completed",
-        "started_at": "2026-04-16T04:21:48.335Z",
-        "completed_at": "2026-04-16T04:21:48.482Z",
+        "started_at": "2026-05-14T21:50:08.309Z",
+        "completed_at": "2026-05-14T21:50:14.408Z",
         "graph_merged_in_place": true,
         "graph_extension_file": null,
-        "new_mech_nodes": 501,
-        "new_mech_edges": 224
+        "new_mech_nodes": 0,
+        "new_mech_edges": 361
       }
     },
     "n_videos_processed": 372,

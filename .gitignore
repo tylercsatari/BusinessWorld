@@ -32,3 +32,6 @@ buildings/jarvis/watch-sync.log
 buildings/jarvis/autorun_overnight.log
 # TRIBE v2 brain analysis: model weights cache (~1 GB) — do not commit
 buildings/jarvis/tribe-analysis/cache/
+
+# Video Lab cached videos (local only)
+.videolab-cache/
