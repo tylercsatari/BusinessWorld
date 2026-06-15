@@ -3152,7 +3152,7 @@ window.openModal = function openModal(n, t, opts) {
         const videoId = opts && opts.videoId;
         BuildingRegistry.get('The Pen').open(body, videoId ? { openVideoId: videoId } : undefined);
     } else {
-        body.textContent = t === 'character' ? `This is ${n}. Assign them by dragging in edit mode!` : t === 'tree' ? 'A lovely tree. Move it around in edit mode!' : 'Nothing here yet... Check back soon!';
+        body.textContent = t === 'character' ? (opts && opts.isCat ? `You found ${n} the cat! 🐱` : `This is ${n}. Assign them by dragging in edit mode!`) : t === 'tree' ? 'A lovely tree. Move it around in edit mode!' : 'Nothing here yet... Check back soon!';
         document.getElementById('modal-overlay').classList.add('visible');
     }
 }
@@ -3271,7 +3271,7 @@ renderer.domElement.addEventListener('mousedown', e => {
                     dragOffset.copy(hit.position).sub(hp);
                     renderer.domElement.style.cursor = 'grabbing';
                 } else if (!editMode) {
-                    openModal(hit.userData.name, hit.userData.type, { videoId: hit.userData.videoId });
+                    openModal(hit.userData.name, hit.userData.type, { videoId: hit.userData.videoId, isCat: hit.userData.isCat });
                 }
             }
         }
@@ -3532,7 +3532,7 @@ if (isTouchDevice && joystickZone) {
                     const hits = touchHitTest(t.clientX, t.clientY);
                     if (hits.length > 0) {
                         const hit = hits[0].object.userData.parentClickable;
-                        if (hit) openModal(hit.userData.name, hit.userData.type, { videoId: hit.userData.videoId });
+                        if (hit) openModal(hit.userData.name, hit.userData.type, { videoId: hit.userData.videoId, isCat: hit.userData.isCat });
                     }
                 }
             }
