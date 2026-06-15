@@ -1665,13 +1665,14 @@ const WorkshopUI = (() => {
     // What a component can require downstream (the per-component causality the
     // user sets at Decomposition). Subset of the video's branch stages.
     const COMPONENT_NEEDS = [
-        { flag: 'design',     label: 'Design',   icon: 'design' },
-        { flag: 'propdesign', label: 'Props',    icon: 'propdesign' },
-        { flag: 'cad',        label: 'CAD',      icon: 'cad' },
-        { flag: 'pcb',        label: 'PCB',      icon: 'pcb' },
-        { flag: 'software',   label: 'Software', icon: 'software' },
-        { flag: 'assembly',   label: 'Assembly', icon: 'assembly' },
-        { flag: 'artistic',   label: 'Finish',   icon: 'artistic' }
+        { flag: 'design',     label: 'Design',        icon: 'design' },
+        { flag: 'propdesign', label: 'Props',         icon: 'propdesign' },
+        { flag: 'cad',        label: 'CAD',           icon: 'cad' },
+        { flag: 'pcb',        label: 'PCB',           icon: 'pcb' },
+        { flag: 'precision',  label: 'Precision Mfg', icon: 'precision' },
+        { flag: 'software',   label: 'Software',      icon: 'software' },
+        { flag: 'assembly',   label: 'Assembly',      icon: 'assembly' },
+        { flag: 'artistic',   label: 'Artistic',      icon: 'artistic' }
     ];
     const COMPONENT_NEED_LABEL = Object.fromEntries(COMPONENT_NEEDS.map(n => [n.flag, n.label]));
 
@@ -1757,12 +1758,40 @@ const WorkshopUI = (() => {
         </div>`;
     }
 
+    const MEDIA_EXTS_VIDEO = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'];
+    function mediaKind(name) {
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'bmp'].includes(ext)) return 'image';
+        if (MEDIA_EXTS_VIDEO.includes(ext)) return 'video';
+        if (ext === 'pdf') return 'pdf';
+        return 'file';
+    }
+    function mediaTileHtml(m, i) {
+        const kind = mediaKind(m.name || m.path || '');
+        const ic = kind === 'video' ? 'film' : kind === 'image' ? 'propdesign' : 'script';
+        return `<div class="wsp-media-tile" data-mediai="${i}" title="${escAttr(m.name || '')}">
+            <button class="wsp-media-open" data-media-open="${i}">${icon(ic, 'wsp-media-ic')}<span class="wsp-media-name">${escHtml(m.name || 'file')}</span></button>
+            <button class="wsp-media-del" data-media-del="${i}" title="Remove">✕</button>
+        </div>`;
+    }
+    function sketchTileHtml(s, i) {
+        return `<div class="wsp-sketch-tile" data-sketchi="${i}" title="${escAttr(s.name || 'sketch')}">
+            <button class="wsp-sketch-open" data-sketch-edit="${i}">
+                ${s.thumb ? `<img class="wsp-sketch-thumb" src="${escAttr(s.thumb)}" alt="">` : '<div class="wsp-sketch-thumb empty">✏️</div>'}
+                <span class="wsp-media-name">${escHtml(s.name || 'Sketch')}</span>
+            </button>
+            <button class="wsp-media-del" data-sketch-del="${i}" title="Remove">✕</button>
+        </div>`;
+    }
+
     function openComponentDetail(componentId) {
         const c = SVC().components.getById(componentId);
         if (!c) return;
         const video = c.videoId ? VideoService.getById(c.videoId) : null;
         const needs = Array.isArray(c.needs) ? c.needs : [];
         const links = Array.isArray(c.links) ? c.links : [];
+        const media = Array.isArray(c.media) ? c.media : [];
+        const sketches = Array.isArray(c.sketches) ? c.sketches : [];
         const source = c.source || '';
 
         const overlay = document.createElement('div');
@@ -1802,6 +1831,24 @@ const WorkshopUI = (() => {
                     </div>
 
                     <div class="wsp-cd-section">
+                        <div class="wsp-cd-label">Media <span class="wsp-hint">— photos, videos, drawings, spec sheets</span></div>
+                        <div id="cd-media" class="wsp-cd-media-grid">${media.map((m, i) => mediaTileHtml(m, i)).join('')}</div>
+                        <div class="wsp-add-row">
+                            <input type="file" id="cd-media-file" accept="image/*,video/*,application/pdf" multiple style="font-size:11.5px;flex:1 1 160px;">
+                            <button class="wsp-mini-btn done" id="cd-media-up">⬆ Upload</button>
+                        </div>
+                        ${video && video.project ? '' : '<div class="wsp-hint">Tip: link this component\'s video to a Channel Project to enable uploads (sketches below work regardless).</div>'}
+                    </div>
+
+                    <div class="wsp-cd-section">
+                        <div class="wsp-cd-label">Sketches <span class="wsp-hint">— draw your own design ideas, edit them anytime</span></div>
+                        <div id="cd-sketches" class="wsp-cd-sketch-grid">${sketches.map((s, i) => sketchTileHtml(s, i)).join('')}</div>
+                        <div class="wsp-add-row">
+                            <button class="wsp-mini-btn done" id="cd-sketch-new">✏️ New sketch</button>
+                        </div>
+                    </div>
+
+                    <div class="wsp-cd-section">
                         <div class="wsp-cd-label">Assets &amp; links <span class="wsp-hint">— 3D models, datasheets, references</span></div>
                         <div id="cd-links">${links.map((l, i) => linkRowHtml(l, i)).join('')}</div>
                         <div class="wsp-add-row">
@@ -1809,11 +1856,6 @@ const WorkshopUI = (() => {
                             <input type="text" id="cd-link-url" placeholder="https://…">
                             <button class="wsp-mini-btn done" id="cd-link-add">＋ Add</button>
                         </div>
-                    </div>
-
-                    <div class="wsp-cd-section">
-                        <div class="wsp-cd-label">Contacts</div>
-                        <input type="text" id="cd-contacts" placeholder="People / suppliers / who to ask" value="${escAttr(c.contacts || '')}">
                     </div>
 
                     <div class="wsp-cd-section">
@@ -1915,10 +1957,169 @@ const WorkshopUI = (() => {
             q('#cd-link-label').value = ''; q('#cd-link-url').value = '';
             renderLinks();
         });
-        // Contacts + notes (debounced)
-        let cT = null, nT = null;
-        q('#cd-contacts').addEventListener('input', (e) => { clearTimeout(cT); flashSaving(); dirty = true; cT = setTimeout(() => saveComp({ contacts: e.target.value }), 600); });
+        // Media (uploaded files in the project's Dropbox folder)
+        const renderMedia = () => { q('#cd-media').innerHTML = (cur().media || []).map((m, i) => mediaTileHtml(m, i)).join(''); bindMedia(); };
+        const bindMedia = () => {
+            q('#cd-media').querySelectorAll('[data-media-open]').forEach(b => b.addEventListener('click', async () => {
+                const m = (cur().media || [])[Number(b.dataset.mediaOpen)];
+                if (!m || !m.path) return;
+                try {
+                    const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: m.path }) });
+                    const data = await r.json();
+                    if (data.link) window.open(data.link, '_blank'); else alert('Could not open: ' + (data.error_summary || 'no link'));
+                } catch (e) { alert('Could not open media: ' + e.message); }
+            }));
+            q('#cd-media').querySelectorAll('[data-media-del]').forEach(b => b.addEventListener('click', async () => {
+                dirty = true;
+                const media2 = (cur().media || []).filter((_, i) => i !== Number(b.dataset.mediaDel));
+                await saveComp({ media: media2 }); renderMedia();
+            }));
+        };
+        bindMedia();
+        q('#cd-media-up').addEventListener('click', async () => {
+            const input = q('#cd-media-file');
+            const files = input.files ? [...input.files] : [];
+            if (!files.length) { alert('Choose one or more files first.'); return; }
+            const project = video && video.project;
+            if (!project) { alert('Link this component\'s video to a Channel Project first — uploads go to that project\'s Dropbox folder.'); return; }
+            const root = await dropboxRootPath();
+            const folder = `${root}/${project}/components`;
+            const btn = q('#cd-media-up'); btn.disabled = true; const orig = btn.textContent;
+            for (const file of files) {
+                btn.textContent = `Uploading ${file.name}…`;
+                try {
+                    const meta = await uploadToDropbox(`${folder}/${file.name}`, file, null);
+                    dirty = true;
+                    await saveComp({ media: [...(cur().media || []), { path: meta.path_display || meta.path_lower, name: meta.name || file.name }] });
+                } catch (e) { console.warn('media upload failed', e); alert('Upload failed for ' + file.name + ': ' + e.message); }
+            }
+            input.value = ''; btn.disabled = false; btn.textContent = orig;
+            renderMedia();
+        });
+
+        // Sketches (inline editable drawings — strokes stored on the component)
+        const renderSketches = () => { q('#cd-sketches').innerHTML = (cur().sketches || []).map((s, i) => sketchTileHtml(s, i)).join(''); bindSketches(); };
+        const bindSketches = () => {
+            q('#cd-sketches').querySelectorAll('[data-sketch-edit]').forEach(b => b.addEventListener('click', () => {
+                const i = Number(b.dataset.sketchEdit);
+                const s = (cur().sketches || [])[i];
+                openSketchModal({
+                    name: s ? s.name : '', strokes: s ? (s.strokes || []) : [],
+                    onSave: async (strokes, thumb, name) => {
+                        dirty = true;
+                        const list = [...(cur().sketches || [])];
+                        list[i] = { ...(list[i] || {}), id: (s && s.id) || ('sk' + Math.random().toString(36).slice(2, 9)), name, strokes, thumb };
+                        await saveComp({ sketches: list }); renderSketches();
+                    }
+                });
+            }));
+            q('#cd-sketches').querySelectorAll('[data-sketch-del]').forEach(b => b.addEventListener('click', async () => {
+                if (!confirm('Delete this sketch?')) return;
+                dirty = true;
+                const list = (cur().sketches || []).filter((_, i) => i !== Number(b.dataset.sketchDel));
+                await saveComp({ sketches: list }); renderSketches();
+            }));
+        };
+        bindSketches();
+        q('#cd-sketch-new').addEventListener('click', () => {
+            openSketchModal({
+                name: '', strokes: [],
+                onSave: async (strokes, thumb, name) => {
+                    dirty = true;
+                    const list = [...(cur().sketches || []), { id: 'sk' + Math.random().toString(36).slice(2, 9), name: name || `Sketch ${(cur().sketches || []).length + 1}`, strokes, thumb }];
+                    await saveComp({ sketches: list }); renderSketches();
+                }
+            });
+        });
+
+        // Notes (debounced)
+        let nT = null;
         q('#cd-notes').addEventListener('input', (e) => { clearTimeout(nT); flashSaving(); dirty = true; nT = setTimeout(() => saveComp({ notes: e.target.value }), 600); });
+    }
+
+    // ============ SKETCH PAD — simple in-app drawing, strokes stored on the component ============
+    // A lightweight vector sketcher: pen/eraser, color, size, undo, clear. Saves
+    // the strokes (so it re-opens for editing) plus a small PNG thumbnail.
+    function openSketchModal(opts) {
+        const W = 900, H = 620;
+        const strokes = (opts.strokes || []).map(s => ({ color: s.color, size: s.size, erase: !!s.erase, points: [...(s.points || [])] }));
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay wsp-sketch-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `
+            <div class="wsp-sketch-modal">
+                <div class="wsp-sketch-toolbar">
+                    <input type="text" id="sk-name" class="wsp-sketch-nameinput" placeholder="Sketch name" value="${escAttr(opts.name || '')}">
+                    <span class="wsp-sketch-tools">
+                        ${['#1a1a1a', '#e74c3c', '#2bb673', '#3d8bf0', '#e8a020', '#8e44ad'].map((c, i) => `<button class="wsp-sk-color${i === 0 ? ' active' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+                        <button class="wsp-sk-tool" id="sk-pen" title="Pen">✏️</button>
+                        <button class="wsp-sk-tool" id="sk-eraser" title="Eraser">🧽</button>
+                        <label class="wsp-sk-size">Size <input type="range" id="sk-size" min="1" max="24" value="3"></label>
+                        <button class="wsp-mini-btn" id="sk-undo">↶ Undo</button>
+                        <button class="wsp-mini-btn" id="sk-clear">Clear</button>
+                    </span>
+                    <span class="wsp-sketch-actions">
+                        <button class="wsp-mini-btn" id="sk-cancel">Cancel</button>
+                        <button class="wsp-mini-btn done" id="sk-save">Save sketch</button>
+                    </span>
+                </div>
+                <div class="wsp-sketch-canvas-wrap">
+                    <canvas id="sk-canvas" width="${W}" height="${H}"></canvas>
+                </div>
+            </div>`;
+        (container.querySelector('.workshop-panel') || document.body).appendChild(overlay);
+
+        const canvas = overlay.querySelector('#sk-canvas');
+        const ctx = canvas.getContext('2d');
+        let color = '#1a1a1a', size = 3, erasing = false, drawing = false, current = null;
+
+        const redraw = () => {
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            for (const s of strokes) {
+                if (!s.points.length) continue;
+                ctx.strokeStyle = s.erase ? '#ffffff' : s.color;
+                ctx.lineWidth = s.erase ? s.size * 2.5 : s.size;
+                ctx.beginPath();
+                ctx.moveTo(s.points[0].x, s.points[0].y);
+                for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+                if (s.points.length === 1) ctx.lineTo(s.points[0].x + 0.1, s.points[0].y + 0.1);
+                ctx.stroke();
+            }
+        };
+        redraw();
+
+        const pos = (e) => {
+            const r = canvas.getBoundingClientRect();
+            const cx = (e.touches ? e.touches[0].clientX : e.clientX), cy = (e.touches ? e.touches[0].clientY : e.clientY);
+            return { x: (cx - r.left) * (W / r.width), y: (cy - r.top) * (H / r.height) };
+        };
+        const start = (e) => { e.preventDefault(); drawing = true; current = { color, size, erase: erasing, points: [pos(e)] }; strokes.push(current); redraw(); };
+        const move = (e) => { if (!drawing) return; e.preventDefault(); current.points.push(pos(e)); redraw(); };
+        const end = () => { drawing = false; current = null; };
+        canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+        canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end);
+
+        const setActiveColor = (btn) => overlay.querySelectorAll('.wsp-sk-color').forEach(b => b.classList.toggle('active', b === btn));
+        overlay.querySelectorAll('.wsp-sk-color').forEach(b => b.addEventListener('click', () => { color = b.dataset.color; erasing = false; setActiveColor(b); overlay.querySelector('#sk-pen').classList.add('active'); overlay.querySelector('#sk-eraser').classList.remove('active'); }));
+        overlay.querySelector('#sk-pen').addEventListener('click', () => { erasing = false; overlay.querySelector('#sk-pen').classList.add('active'); overlay.querySelector('#sk-eraser').classList.remove('active'); });
+        overlay.querySelector('#sk-eraser').addEventListener('click', () => { erasing = true; overlay.querySelector('#sk-eraser').classList.add('active'); overlay.querySelector('#sk-pen').classList.remove('active'); });
+        overlay.querySelector('#sk-size').addEventListener('input', (e) => { size = Number(e.target.value); });
+        overlay.querySelector('#sk-undo').addEventListener('click', () => { strokes.pop(); redraw(); });
+        overlay.querySelector('#sk-clear').addEventListener('click', () => { if (confirm('Clear the whole sketch?')) { strokes.length = 0; redraw(); } });
+        overlay.querySelector('#sk-pen').classList.add('active');
+
+        const closeModal = () => overlay.remove();
+        overlay.querySelector('#sk-cancel').addEventListener('click', closeModal);
+        overlay.querySelector('#sk-save').addEventListener('click', () => {
+            // small thumbnail for the tile
+            const t = document.createElement('canvas'); t.width = 200; t.height = Math.round(200 * H / W);
+            t.getContext('2d').drawImage(canvas, 0, 0, t.width, t.height);
+            const thumb = t.toDataURL('image/png');
+            const name = overlay.querySelector('#sk-name').value.trim() || opts.name || 'Sketch';
+            opts.onSave(strokes, thumb, name);
+            closeModal();
+        });
     }
 
     // ============ VOICE DICTATION (Web Speech API) ============
