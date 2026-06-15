@@ -17,7 +17,7 @@
  */
 const StorageAgent = (() => {
     const MODEL = 'gpt-4o';
-    const MAX_ITERATIONS = 10;
+    const MAX_ITERATIONS = 18;
 
     // ── Tool schemas (OpenAI function-calling format) ──
     const TOOLS = [
@@ -133,6 +133,48 @@ const StorageAgent = (() => {
                     required: ['fromBox', 'toBox']
                 }
             }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'rename_box',
+                description: 'Rename / relabel an existing box, keeping all its items.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        name: { type: 'string', description: 'Current box label.' },
+                        newName: { type: 'string', description: 'New box label.' }
+                    },
+                    required: ['name', 'newName']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'set_quantity',
+                description: 'Set an item\'s quantity to an exact number (0 deletes it). Use when the user states a total rather than a delta.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        name: { type: 'string', description: 'Item name.' },
+                        quantity: { type: 'number', description: 'The exact new quantity.' }
+                    },
+                    required: ['name', 'quantity']
+                }
+            }
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'search_history',
+                description: 'Search the change history — what happened to an item, where it used to be, when it was moved or removed. Use this to answer questions like "where was the tripod before I took it out?" or "what did I remove yesterday?".',
+                parameters: {
+                    type: 'object',
+                    properties: { query: { type: 'string', description: 'Item name or term to look up in the history.' } },
+                    required: ['query']
+                }
+            }
         }
     ];
 
@@ -150,7 +192,7 @@ const StorageAgent = (() => {
     }
 
     function systemPrompt() {
-        return `You are JARVIS, the assistant for a physical storage room. You manage real items kept in labeled boxes.
+        return `You are JARVIS, the voice/chat brain of a physical storage room. You manage real items kept in labeled boxes, and you have the FULL current contents below plus tools to change anything.
 
 CONSTRAINTS OF THE STORAGE ROOM:
 - Every item has a quantity and lives in exactly one box.
@@ -159,15 +201,19 @@ CONSTRAINTS OF THE STORAGE ROOM:
 - Semantic search backs item lookup; a confident match needs similarity >= ${CONFIG.search.semanticMatchThreshold}.
 
 HOW TO BEHAVE:
-- The user may give a long, natural command describing MANY operations at once. Carry out ALL of them by calling tools — one tool call per operation, as many as needed.
-- ACT, then VALIDATE: make the changes, then in your final reply briefly state what is now true (e.g. "Box A now has 5 batteries and 2 tapes"). Use search_inventory if you need to confirm a result.
-- ASK ONLY WHEN GENUINELY UNSURE: if a remove/move tool returns needsClarification (no confident semantic match), ask the user which item they meant using the suggestions — do NOT guess. If a request is contradictory or impossible given the constraints, ask.
-- When confident, just do it. Create boxes automatically when the user names a new one.
-- Keep replies SHORT and conversational — they are spoken aloud. No markdown, no bullet lists, no headers. One or two sentences.
+- You are fully agentic. The user may give ONE long, messy, natural command describing MANY operations ("clear box C, move the cables and the tripod into camera gear, make a new box for screws and put 50 in it, and toss the dead batteries"). Carry out EVERY operation by calling tools — as many tool calls as it takes, in a sensible order. Don't stop after one or two; keep going until the whole request is done.
+- Plan the order yourself: create/rename a box before moving things into it; clear a box before removing it; search first if you're unsure which item is meant.
+- ACT, then VALIDATE: make the changes, then in your final reply briefly state what is now true (e.g. "Box A now has 5 batteries and 2 tapes; camera gear has the tripod and cables"). Use search_inventory to confirm when useful.
+- HISTORY: the user can ask where something used to be, what they removed, or to put something back. Use search_history to answer "where was X before I removed it" type questions.
+- ASK ONLY WHEN GENUINELY UNSURE: if a remove/move returns needsClarification (no confident match), ask which item they meant using the suggestions — don't guess. If a request is truly contradictory, ask. Otherwise just do it and create boxes as needed.
+- Keep spoken replies SHORT and natural — one or two sentences, no markdown, no lists, no headers.
 
 CURRENT INVENTORY:
 ${inventorySnapshot()}`;
     }
+
+    // Structured change log (causality + restore). Best-effort.
+    function logHist(entry) { try { if (window.StorageHistory) StorageHistory.log(entry); } catch (e) {} }
 
     // ── Tool executors → existing StorageService methods ──
     // Each returns { result, modified, undo } where result is sent back to the model.
@@ -185,6 +231,7 @@ ${inventorySnapshot()}`;
                 const r = args.force
                     ? await StorageService.addItemForce(args.name, qty, args.box)
                     : await StorageService.addItem(args.name, qty, args.box);
+                logHist({ action: 'add', item: r.item.name, qty, toBox: r.boxName, summary: `Added ${qty}× ${r.item.name} to box ${r.boxName}${r.merged ? ' (merged)' : ''}` });
                 return {
                     result: {
                         ok: true,
@@ -206,6 +253,8 @@ ${inventorySnapshot()}`;
                     return { result: { needsClarification: true, message: r.error, suggestions: (r.suggestions || []).map(s => ({ name: s.name, box: s.boxName, score: +(+s.score).toFixed(2) })) } };
                 }
                 const snap = { name: r.item.name, box: r.boxName };
+                const removedQty = r.deleted ? (r.item.quantity || qty) : qty;
+                logHist({ action: 'remove', item: r.item.name, qty: removedQty >= 9999 ? 1 : removedQty, fromBox: r.boxName, summary: `Removed ${r.deleted ? 'all ' : removedQty + '× '}${r.item.name} from box ${r.boxName}` });
                 return {
                     result: { ok: true, item: r.item.name, box: r.boxName, removedAll: !!r.deleted, remaining: r.deleted ? 0 : r.item.quantity },
                     modified: true,
@@ -223,6 +272,7 @@ ${inventorySnapshot()}`;
                 if (r.error) {
                     return { result: { needsClarification: !!r.suggestions, message: r.error, suggestions: (r.suggestions || []).map(s => ({ name: s.name, box: s.boxName, score: +(+s.score).toFixed(2) })) } };
                 }
+                logHist({ action: 'move', item: r.item.name, fromBox: sourceBox, toBox: r.toBox, summary: `Moved ${r.item.name}${sourceBox ? ' from ' + sourceBox : ''} to box ${r.toBox}` });
                 return {
                     result: { ok: true, item: r.item.name, toBox: r.toBox },
                     modified: true,
@@ -233,11 +283,13 @@ ${inventorySnapshot()}`;
             case 'create_box': {
                 const r = await StorageService.addBox(args.name);
                 if (r.error) return { result: { ok: false, message: r.error } };
+                logHist({ action: 'create_box', toBox: r.box.name, summary: `Created box ${r.box.name}` });
                 return { result: { ok: true, box: r.box.name }, modified: true, undo: async () => { await StorageService.removeBox(r.box.name); } };
             }
             case 'remove_box': {
                 const r = await StorageService.removeBox(args.name);
                 if (r.error) return { result: { ok: false, message: r.error } };
+                logHist({ action: 'remove_box', fromBox: r.box.name, summary: `Removed box ${r.box.name}` });
                 return { result: { ok: true, removedBox: r.box.name }, modified: true };
             }
             case 'clear_box': {
@@ -246,6 +298,7 @@ ${inventorySnapshot()}`;
                 const snapshot = box ? StorageService.getItemsByBox(box.id).map(i => ({ name: i.name, qty: i.quantity, box: box.name })) : [];
                 const r = await StorageService.clearBox(args.name);
                 if (r.error) return { result: { ok: false, message: r.error } };
+                logHist({ action: 'clear_box', fromBox: r.box.name, snapshot, summary: `Cleared box ${r.box.name} (${r.count} item${r.count === 1 ? '' : 's'})` });
                 return {
                     result: { ok: true, box: r.box.name, cleared: r.count },
                     modified: true,
@@ -255,7 +308,32 @@ ${inventorySnapshot()}`;
             case 'move_all_items': {
                 const r = await StorageService.moveAllItems(args.fromBox, args.toBox);
                 if (r.error) return { result: { ok: false, message: r.error } };
+                logHist({ action: 'move_all', fromBox: r.fromBox, toBox: r.toBox, summary: `Moved all ${r.count} item(s) from ${r.fromBox} to ${r.toBox}` });
                 return { result: { ok: true, moved: r.count, fromBox: r.fromBox, toBox: r.toBox }, modified: true };
+            }
+            case 'rename_box': {
+                const box = StorageService.findBoxByName(args.name);
+                if (!box) return { result: { ok: false, message: `Box "${args.name}" not found.` } };
+                const oldName = box.name;
+                const r = await StorageService.renameBox(box.id, args.newName);
+                if (r.error) return { result: { ok: false, message: r.error } };
+                logHist({ action: 'rename_box', fromBox: oldName, toBox: r.box.name, summary: `Renamed box ${oldName} to ${r.box.name}` });
+                return { result: { ok: true, from: oldName, to: r.box.name }, modified: true };
+            }
+            case 'set_quantity': {
+                const f = await StorageService.findItem(args.name);
+                if (!f.results || !f.results.length) return { result: { needsClarification: true, message: `No item matching "${args.name}".`, suggestions: (f.suggestions || []).map(s => ({ name: s.name, box: s.boxName })) } };
+                const found = f.results[0];
+                const it = StorageService.getItems().find(i => i.name === found.name);
+                if (!it) return { result: { ok: false, message: 'Could not resolve item.' } };
+                const prev = it.quantity;
+                await StorageService.setItemQuantity(it.id, args.quantity);
+                logHist({ action: 'set_qty', item: it.name, qty: args.quantity, fromBox: found.box, summary: `Set ${it.name} quantity to ${args.quantity} (was ${prev})` });
+                return { result: { ok: true, item: it.name, quantity: args.quantity, was: prev }, modified: true };
+            }
+            case 'search_history': {
+                const hits = window.StorageHistory ? StorageHistory.search(args.query || '', 8) : [];
+                return { result: { history: hits } };
             }
             default:
                 return { result: { ok: false, message: `Unknown tool: ${name}` } };
@@ -297,8 +375,15 @@ ${inventorySnapshot()}`;
             history.push({ role: 'user', content: userText });
 
             let anyModified = false;
+            const actionLog = []; // reflexion: what tools ran this turn
 
             for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+                // Reflexion (jarv1s-style): before each call, remind the model of
+                // what it has already done this turn so it doesn't loop or forget
+                // remaining operations on a long multi-step request.
+                if (actionLog.length) {
+                    messages.push({ role: 'system', content: `[Done so far this turn: ${actionLog.slice(-12).join('; ')}. Continue with any remaining operations from the user's request, then give your final summary.]` });
+                }
                 let msg;
                 try {
                     msg = await chat(messages);
@@ -343,6 +428,10 @@ ${inventorySnapshot()}`;
                             ctx.pushUndo(`${tc.function.name} ${args.name || args.box || args.fromBox || ''}`.trim(), exec.undo);
                         }
                     }
+                    // record for reflexion (ok vs needs-clarification vs error)
+                    const r = exec.result || {};
+                    const outcome = r.needsClarification ? 'needs clarification' : (r.ok === false ? 'failed: ' + (r.message || '') : 'ok');
+                    actionLog.push(`${tc.function.name}(${args.name || args.box || args.fromBox || args.query || ''}) → ${outcome}`);
                     messages.push({
                         role: 'tool',
                         tool_call_id: tc.id,

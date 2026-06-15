@@ -24,6 +24,7 @@ const StorageUI = (() => {
     let undoStack = []; // array of {description, undoFn}
     const MAX_UNDO = 20;
     let agentHistory = []; // conversational agent turns (role/content), in-memory per open session
+    let ttsEnabled = (localStorage.getItem('storageTTS') !== 'off'); // whether the assistant talks back
     function pushUndo(description, undoFn) {
         undoStack.push({ description, undoFn });
         if (undoStack.length > MAX_UNDO) undoStack.shift();
@@ -55,48 +56,44 @@ const StorageUI = (() => {
     }
 
     async function loadHistory() {
-        // Airtable is the sole source of truth — no localStorage
-        try {
-            const records = await StorageAirtable.listHistory();
-            history = records.sort((a, b) => a.time.localeCompare(b.time));
-        } catch (e) {
-            console.warn('History: Airtable load failed', e);
-            history = [];
-        }
+        // Structured, restorable history lives in R2 (StorageHistory).
+        try { await StorageHistory.load(true); } catch (e) { console.warn('History load failed', e); }
     }
 
-    async function addHistory(action, details) {
-        const time = new Date().toISOString();
-        const entry = { time, action, details };
-        // Add to in-memory list for immediate display
-        history.push(entry);
-        if (historyVisible) renderHistory();
-        // Write to Airtable — await so we know if it fails
-        try {
-            await StorageAirtable.addHistoryRecord(action, details, time);
-        } catch (e) {
-            console.warn('History: Airtable write failed', e);
-        }
-    }
+    // Manual (button) ops also feed the structured history so it's complete.
+    function logHist(entry) { try { StorageHistory.log(entry); } catch (e) {} if (historyVisible) setTimeout(renderHistory, 300); }
+
+    const HIST_ICON = { add: '＋', remove: '－', move: '→', create_box: '▣', remove_box: '▢', clear_box: '⊘', move_all: '⇒', rename_box: '✎', set_qty: '#', restore: '↺' };
+    const RESTORABLE = new Set(['add', 'remove', 'move', 'clear_box', 'remove_box', 'create_box', 'move_all']);
 
     function renderHistory() {
         const list = document.getElementById('storage-history-list');
         if (!list) return;
-        if (history.length === 0) {
-            list.innerHTML = '<div style="padding:10px;color:#999;font-style:italic;">No activity yet.</div>';
+        const entries = StorageHistory.list();
+        if (!entries.length) {
+            list.innerHTML = '<div style="padding:10px;color:#999;font-style:italic;">No activity yet. Every add, move, and removal will show up here — with one-click restore.</div>';
             return;
         }
-        // Show newest first
-        list.innerHTML = history.slice().reverse().map(h => {
-            const d = new Date(h.time);
-            const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        list.innerHTML = entries.slice().reverse().map(h => {
+            const d = new Date(h.ts);
+            const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-            return `<div class="storage-history-entry">
-                <span class="storage-history-action">${escHtml(h.action)}</span>
-                <span class="storage-history-details">${escHtml(h.details)}</span>
+            const where = h.fromBox && h.toBox ? `${escHtml(h.fromBox)} → ${escHtml(h.toBox)}` : (h.toBox ? `→ ${escHtml(h.toBox)}` : (h.fromBox ? `from ${escHtml(h.fromBox)}` : ''));
+            const canRestore = !h.restored && RESTORABLE.has(h.action) && h.id;
+            return `<div class="storage-history-entry${h.restored ? ' restored' : ''}">
+                <span class="storage-history-icon">${HIST_ICON[h.action] || '•'}</span>
+                <span class="storage-history-details">${escHtml(h.summary || h.action)}${where ? ` <span class="storage-history-where">${where}</span>` : ''}</span>
                 <span class="storage-history-time">${date} ${time}</span>
+                ${canRestore ? `<button class="storage-history-restore" data-restore="${escAttr(h.id)}">↺ Restore</button>` : (h.restored ? '<span class="storage-history-done">restored</span>' : '')}
             </div>`;
         }).join('');
+        list.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true; b.textContent = '…';
+            const r = await StorageHistory.restore(b.dataset.restore);
+            addChatMsg(r.ok ? ('Restored — ' + r.message) : ('Could not restore: ' + r.message), r.ok ? 'system' : 'error');
+            if (r.ok) { renderBoxes(); updateStats(); }
+            renderHistory();
+        }));
     }
 
     // --- Rendering ---
@@ -132,10 +129,13 @@ const StorageUI = (() => {
                 </div>
                 <div class="storage-chat">
                     <div class="storage-chat-header">
-                        <span>Chat</span>
-                        <button class="storage-mic-btn" id="storage-mic-btn" onclick="StorageUI.onMicToggle()" title="Voice input">
-                            <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" fill="currentColor"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" fill="currentColor"/></svg>
-                        </button>
+                        <span>Assistant</span>
+                        <div class="storage-chat-header-actions">
+                            <button class="storage-tts-btn" id="storage-tts-btn" onclick="StorageUI.onToggleTTS()" title="Toggle whether the assistant talks back">${ttsEnabled ? '🔊 Voice on' : '🔇 Muted'}</button>
+                            <button class="storage-mic-btn" id="storage-mic-btn" onclick="StorageUI.onMicToggle()" title="Hold to speak — talk to your storage room">
+                                <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" fill="currentColor"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" fill="currentColor"/></svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="storage-chat-log" id="storage-chat-log">
                         <div class="storage-chat-msg system">Hi — I'm your storage assistant. Just talk to me naturally. Try a long command like "put 3 batteries and 2 rolls of tape in box A, move the scissors to box B, and start a new box called camera gear with my tripod in it."</div>
@@ -728,6 +728,7 @@ const StorageUI = (() => {
     }
 
     async function speakTTS(text) {
+        if (!ttsEnabled) return; // user has the assistant on mute (text-only)
         // Try OpenAI TTS first for high-quality voice
         try {
             const res = await fetch('/api/openai/tts', {
@@ -830,7 +831,7 @@ const StorageUI = (() => {
                         ? `Merged with existing "${r.mergedWith}" in box ${r.boxName} (${(r.score * 100).toFixed(0)}% match). Now ${r.item.quantity}x total.`
                         : `Added ${qty}x ${r.item.name} to box ${r.boxName}.`;
                     addChatMsg(msg, 'system');
-                    addHistory('ADD', `${qty}x ${r.item.name} → Box ${r.boxName}`);
+                    logHist({ action: 'add', item: r.item.name, qty, toBox: r.boxName, summary: `Added ${qty}× ${r.item.name} to box ${r.boxName}` });
                     await speakTTS(msg);
                     break;
                 }
@@ -846,7 +847,7 @@ const StorageUI = (() => {
                         ? `Removed all ${r.item.name}${fromBox}.`
                         : `Removed ${parsed.quantity || 1}x ${r.item.name}${fromBox}. ${r.item.quantity} remaining.`;
                     addChatMsg(msg, 'system');
-                    addHistory('REMOVE', r.deleted ? `All ${r.item.name}${fromBox}` : `${parsed.quantity || 1}x ${r.item.name}${fromBox} (${r.item.quantity} left)`);
+                    logHist({ action: 'remove', item: r.item.name, qty: r.deleted ? (r.item.quantity || 1) : (parsed.quantity || 1), fromBox: r.boxName, summary: r.deleted ? `Removed all ${r.item.name} from box ${r.boxName}` : `Removed ${parsed.quantity || 1}× ${r.item.name} from box ${r.boxName}` });
                     await speakTTS(msg);
                     break;
                 }
@@ -880,7 +881,7 @@ const StorageUI = (() => {
                     }
                     const msg = `Moved ${r.item.name} to box ${r.toBox}.`;
                     addChatMsg(msg, 'system');
-                    addHistory('MOVE', `${r.item.name} → Box ${r.toBox}`);
+                    logHist({ action: 'move', item: r.item.name, toBox: r.toBox, summary: `Moved ${r.item.name} to box ${r.toBox}` });
                     await speakTTS(msg);
                     break;
                 }
@@ -894,7 +895,7 @@ const StorageUI = (() => {
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     const msg = `Created box ${r.box.name}.`;
                     addChatMsg(msg, 'system');
-                    addHistory('ADD BOX', r.box.name);
+                    logHist({ action: 'create_box', toBox: r.box.name, summary: `Created box ${r.box.name}` });
                     await speakTTS(msg);
                     break;
                 }
@@ -903,7 +904,7 @@ const StorageUI = (() => {
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     const msg = `Removed box ${r.box.name}.`;
                     addChatMsg(msg, 'system');
-                    addHistory('REMOVE BOX', r.box.name);
+                    logHist({ action: 'remove_box', fromBox: r.box.name, summary: `Removed box ${r.box.name}` });
                     await speakTTS(msg);
                     break;
                 }
@@ -912,7 +913,7 @@ const StorageUI = (() => {
                     if (r.error) { addChatMsg(r.error, 'error'); return; }
                     const msg = `Cleared ${r.count} items from box ${r.box.name}.`;
                     addChatMsg(msg, 'system');
-                    addHistory('CLEAR BOX', `${r.count} items from ${r.box.name}`);
+                    logHist({ action: 'clear_box', fromBox: r.box.name, summary: `Cleared ${r.count} item(s) from box ${r.box.name}` });
                     await speakTTS(msg);
                     break;
                 }
@@ -1054,7 +1055,16 @@ const StorageUI = (() => {
             historyVisible = !historyVisible;
             grid.style.display = historyVisible ? 'none' : '';
             hist.style.display = historyVisible ? 'block' : 'none';
-            if (historyVisible) renderHistory();
+            if (historyVisible) { StorageHistory.load(true).then(renderHistory); renderHistory(); }
+        },
+
+        onToggleTTS() {
+            ttsEnabled = !ttsEnabled;
+            localStorage.setItem('storageTTS', ttsEnabled ? 'on' : 'off');
+            const btn = document.getElementById('storage-tts-btn');
+            if (btn) btn.textContent = ttsEnabled ? '🔊 Voice on' : '🔇 Muted';
+            if (!ttsEnabled && ttsAudio) { try { ttsAudio.pause(); } catch (e) {} }
+            if (!ttsEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
         },
 
         onAddItem() {

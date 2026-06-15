@@ -692,3 +692,32 @@
     background: rgba(251,191,36,0.25);
     border-color: #fbbf24;
 }
+
+/* ===== Storage: causality history + voice toggle ===== */
+.storage-chat-header-actions { display: flex; align-items: center; gap: 8px; }
+.storage-tts-btn {
+    border: 1px solid #d8cfc0; background: #fff; border-radius: 16px;
+    padding: 3px 10px; font-size: 11px; font-weight: 700; color: #6a5a40; cursor: pointer; white-space: nowrap;
+}
+.storage-tts-btn:hover { background: #faf5eb; }
+
+.storage-history-entry {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border-bottom: 1px solid #efe7d8; font-size: 12.5px;
+}
+.storage-history-entry.restored { opacity: 0.55; }
+.storage-history-icon {
+    flex-shrink: 0; width: 20px; height: 20px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    background: #f0e8d8; color: #8a7553; font-weight: 800; font-size: 12px;
+}
+.storage-history-details { flex: 1; min-width: 0; color: #4a3a26; line-height: 1.35; }
+.storage-history-where { color: #998a72; font-weight: 700; font-size: 11px; white-space: nowrap; }
+.storage-history-time { flex-shrink: 0; font-size: 10.5px; color: #b3a282; font-weight: 600; white-space: nowrap; }
+.storage-history-restore {
+    flex-shrink: 0; border: 1px solid #cdbfa6; background: #fff; border-radius: 8px;
+    padding: 3px 9px; font-size: 11px; font-weight: 700; color: #5a3e1b; cursor: pointer; white-space: nowrap;
+}
+.storage-history-restore:hover { background: #00b894; border-color: #00b894; color: #fff; }
+.storage-history-restore:disabled { opacity: 0.6; cursor: default; }
+.storage-history-done { flex-shrink: 0; font-size: 10.5px; color: #27ae60; font-weight: 700; }
