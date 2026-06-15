@@ -3082,7 +3082,7 @@ window.setPlayerColor = function (hex) {
 };
 // Populate Employee Island from the approved accounts (name + their chosen color).
 // Owner-only data; called after the accounts are fetched. Zeus & Tennille stay.
-window.syncEmployeeAccounts = function (accounts) {
+window.syncEmployeeAccounts = function (accounts, profiles) {
     // remove previously-spawned account characters
     employees.slice().forEach(e => {
         if (!e.userData.fromAccount) return;
@@ -3094,20 +3094,24 @@ window.syncEmployeeAccounts = function (accounts) {
     if (!employeeIsland) return;
     const base = employeeIsland.position;
     const profById = {};
-    (window.__profiles || []).forEach(p => { profById[p.id] = p.name; });
+    (profiles || window.__profiles || []).forEach(p => { profById[p.id] = p.name; });
     const roleLabel = (a) => a.role === 'owner' ? 'Owner' : (!a.role || a.role === 'pending') ? 'Pending' : (profById[a.role] || 'Member');
     // ALL accounts who've signed in — including pending — each with their colour
-    // Radius scales with headcount so nobody overlaps / hides behind another.
+    // Stand them ON the island surface (grass top), in a ring that stays within the
+    // island's radius (~5) so nobody ends up in the water or buried in the island.
     const list = (accounts || []).filter(a => a && a.email);
-    const r = 2.6 + list.length * 0.45;
+    const surfaceY = (base.y || 0) + 0.2;
+    const r = Math.min(4, 1.8 + list.length * 0.3);
     list.forEach((a, i) => {
         const name = a.displayName || a.email || 'Member';
         let color = 0x3498db; try { if (a.color) color = new THREE.Color(a.color).getHex(); } catch (e) {}
         const ang = (i / Math.max(1, list.length)) * Math.PI * 2;
         const e = addEmployee(`${name} · ${roleLabel(a)}`, color, base.x + Math.cos(ang) * r, base.z + Math.sin(ang) * r);
+        e.position.y = surfaceY;   // on top of the island, not at world ground level
         e.userData.fromAccount = true;
-        e.visible = true;   // owner view — always show the full roster
+        e.visible = true;          // owner view — always show the full roster
     });
+    console.log('[island] placed', list.length, 'account characters at', base.x.toFixed(1) + ',' + base.z.toFixed(1));
 };
 // Trace the path back from each VISIBLE building to the center spawn tile (0,0)
 // along the existing path tiles, and show only those tiles. Owner sees all tiles.

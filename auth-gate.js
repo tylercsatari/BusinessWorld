@@ -236,26 +236,27 @@
                 else if (++n > 40) clearInterval(t);
             }, 300);
         }
-        if (_account.role === 'owner') {
-            Promise.all([
-                fetch('/api/accounts').then(r => r.ok ? r.json() : []).catch(() => []),
-                fetch('/api/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
-            ]).then(([list, profiles]) => {
-                window.__profiles = profiles;
-                // Employee Island roster panel = the real accounts (no hard-coded people)
+        if (_account.role !== 'owner') return;
+        Promise.all([
+            fetch('/api/accounts').then(r => r.ok ? r.json() : []).catch(() => []),
+            fetch('/api/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
+        ]).then(([list, profiles]) => {
+            list = Array.isArray(list) ? list : [];
+            profiles = Array.isArray(profiles) ? profiles : [];
+            window.__profiles = profiles;
+            // Re-apply on every pass: the 3D sprites AND the roster panel both reflect
+            // the real accounts, overriding any later hydrate() from the saved layout.
+            const place = () => {
                 if (window.EmployeeService && window.EmployeeService.setFromAccounts) window.EmployeeService.setFromAccounts(list, profiles);
-                let n = 0;
-                const t = setInterval(() => {
-                    // wait for the SAVED layout so the island is at its real position
-                    // (else the characters spawn around its default spot and look missing)
-                    if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island') && window.__layoutReady) {
-                        window.syncEmployeeAccounts(list, profiles);
-                        setTimeout(() => window.syncEmployeeAccounts(list, profiles), 3000); // re-place once everything settles
-                        clearInterval(t);
-                    } else if (++n > 60) { if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) window.syncEmployeeAccounts(list, profiles); clearInterval(t); }
-                }, 350);
-            }).catch(() => {});
-        }
+                if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) { window.syncEmployeeAccounts(list, profiles); return true; }
+                return false;
+            };
+            // Spawn the 3D sprites as soon as the island exists, then RE-place as the
+            // saved layout settles the island into its final spot (don't block on it).
+            let n = 0;
+            const t = setInterval(() => { const ok = place(); if (ok && window.__layoutReady) clearInterval(t); else if (++n > 80) clearInterval(t); }, 400);
+            [2500, 6000, 10000].forEach(ms => setTimeout(place, ms));
+        }).catch(() => {});
     }
 
     // The 3D world builds asynchronously; hide buildings/HUD as soon as the
