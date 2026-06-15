@@ -784,6 +784,23 @@ const JarvisQRD = (() => {
         return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto">${svg}</svg>`;
     }
 
+    // Per-fold R² as a confidence range: each fold a dot, mean line, ±1σ band.
+    // Turns the "scores carry confidence ranges" discipline from text into a picture.
+    function vizFoldCI(scores, mu, sd, color) {
+        if (!scores || !scores.length) return '';
+        const w = 320, h = 96, pad = 26;
+        const lo = Math.min(0, ...scores, mu - sd), hi = Math.max(...scores, mu + sd, 0.1);
+        const Y = v => h - pad - ((v - lo) / (hi - lo || 1)) * (h - pad * 1.5);
+        const X = i => pad + (scores.length === 1 ? (w - pad * 2) / 2 : (i / (scores.length - 1)) * (w - pad * 2));
+        let svg = `<rect x="${pad}" y="${Y(mu + sd)}" width="${w - pad * 2}" height="${Math.max(1, Y(mu - sd) - Y(mu + sd))}" fill="${color}" opacity="0.12"/>`;
+        svg += `<line x1="${pad}" y1="${Y(mu)}" x2="${w - pad}" y2="${Y(mu)}" stroke="${color}" stroke-dasharray="4 3"/>`;
+        if (lo < 0) svg += `<line x1="${pad}" y1="${Y(0)}" x2="${w - pad}" y2="${Y(0)}" stroke="${C.border2}"/>`;
+        scores.forEach((s, i) => { svg += `<circle cx="${X(i)}" cy="${Y(s)}" r="3.5" fill="${color}"/><text x="${X(i)}" y="${Y(s) - 7}" text-anchor="middle" fill="${C.mute}" font-size="8">${fmt(s, 2)}</text>`; });
+        svg += `<text x="${pad}" y="${h - 6}" fill="${C.mute}" font-size="8">fold 1</text><text x="${w - pad}" y="${h - 6}" text-anchor="end" fill="${C.mute}" font-size="8">fold ${scores.length}</text>`;
+        svg += `<text x="${w - pad}" y="${Math.max(10, Y(mu) - 4)}" text-anchor="end" fill="${color}" font-size="9">mean ${fmt(mu, 2)} ± ${fmt(sd, 2)}</text>`;
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;max-width:340px">${svg}</svg>`;
+    }
+
     // Retention curve + simple-baseline summary (§6)
     function vizCurve(rowsRetention, opts = {}) {
         // build an average retention curve from ret_25/50/75/90 anchors (0,25,50,75,90,100)
@@ -1431,7 +1448,8 @@ const JarvisQRD = (() => {
                     ${stat('Typical error', '±' + fmt(a.maeNat, 1) + ' ' + natUnit, C.dim)}
                 </div>
                 ${vizPredVsActual(a.cv.oofAct, a.cv.oofPred, { unit, color: col })}
-                <div style="font-size:10.5px;color:${C.faint};margin-top:4px">${a.cv.oofAct.length} out-of-fold predictions across ${a.cv.folds} time-ordered validation blocks. Points hugging the dashed line = accurate. In-sample ${fmt(a.inSample, 2)} → out-of-fold ${fmt(a.r2oof, 2)} = overfit gap ${fmt(gap, 2)} ${gap < 0.2 ? '(tight — trustworthy)' : '(wide — read with caution)'}.</div>`);
+                ${a.cv.scores && a.cv.scores.length > 1 ? `<div style="font-size:10.5px;color:${C.mute};margin-top:8px">Per-fold R² — the confidence range. Tight cluster = stable; wide spread = the single number is noisy:</div>${vizFoldCI(a.cv.scores, a.cv.mean, a.cv.std, col)}` : ''}
+                <div style="font-size:10.5px;color:${C.faint};margin-top:4px">${a.cv.oofAct.length} out-of-fold predictions across ${a.cv.folds} validation blocks. Points hugging the dashed line = accurate. In-sample ${fmt(a.inSample, 2)} → out-of-fold ${fmt(a.r2oof, 2)} = overfit gap ${fmt(gap, 2)} ${gap < 0.2 ? '(tight — trustworthy)' : '(wide — read with caution)'}.</div>`);
         });
         h += `</div>`;
 
