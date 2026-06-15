@@ -982,17 +982,16 @@ const StorageUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             agentHistory = [];
-            await loadHistory();
-
-            try {
-                await StorageService.sync();
-                renderBoxes();
-                updateStats();
-            } catch (e) {
-                const grid = document.getElementById('storage-boxes-grid');
-                if (grid) grid.innerHTML = `<div class="storage-chat-msg error" style="margin:20px;">Failed to load inventory: ${escHtml(e.message)}</div>`;
-            }
-            renderWorkshopInventory().catch(() => {});
+            // Load inventory + history IN PARALLEL, and paint the boxes the moment
+            // the inventory is ready instead of waiting for history too.
+            loadHistory().catch(() => {});
+            const invP = StorageService.sync()
+                .then(() => { renderBoxes(); updateStats(); })
+                .catch((e) => {
+                    const grid = document.getElementById('storage-boxes-grid');
+                    if (grid) grid.innerHTML = `<div class="storage-chat-msg error" style="margin:20px;">Failed to load inventory: ${escHtml(e.message)}</div>`;
+                });
+            await invP;
             initialized = true;
         },
 

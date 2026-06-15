@@ -3101,10 +3101,9 @@ window.syncEmployeeAccounts = function (accounts, profiles) {
     const profById = {};
     (profiles || window.__profiles || []).forEach(p => { profById[p.id] = p.name; });
     const roleLabel = (a) => a.role === 'owner' ? 'Owner' : (!a.role || a.role === 'pending') ? 'Pending' : (profById[a.role] || 'Member');
-    // ALL accounts who've signed in — including pending — each with their colour
-    // Stand them ON the island surface (grass top), in a ring that stays within the
-    // island's radius (~5) so nobody ends up in the water or buried in the island.
-    const list = (accounts || []).filter(a => a && a.email);
+    // Every OTHER account (exclude me — I'm the player walking around), each with
+    // their own colour. Stand them ON the island surface within its radius.
+    const list = (accounts || []).filter(a => a && a.email && a.id !== window.__myAccountId);
     const surfaceY = (base.y || 0) + 0.2;
     const r = Math.min(4, 1.8 + list.length * 0.3);
     list.forEach((a, i) => {
@@ -3169,7 +3168,8 @@ window.applyAccess = function (perms) {
     const full = !perms || perms.all;
     const allowed = new Set((perms && perms.buildings) || []);
     BUILDING_NAMES.forEach(name => { const b = getBuildingByName(name); if (b) b.visible = full || allowed.has(name); });
-    employees.forEach(e => { e.visible = full; });   // other characters: owner only
+    employees.forEach(e => { e.visible = full; });   // other characters (incl. Tennille): owner only
+    if (typeof zeusMesh !== 'undefined' && zeusMesh) zeusMesh.visible = full; // Zeus the cat: owner only too
     // World entities don't leak across buildings: pen creatures + project flags
     // only show with their explicit grant (under The Pen).
     const penVid = window.canSeePenVideos ? window.canSeePenVideos() : full;

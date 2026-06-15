@@ -40,7 +40,7 @@ const EmployeeUI = (() => {
 
     function avatarHtml(emp, size) {
         const sz = size || 56;
-        return `<canvas class="employee-avatar-canvas" data-worker="${escAttr(emp.name)}" data-size="${sz}" width="${sz}" height="${sz}"></canvas>`;
+        return `<canvas class="employee-avatar-canvas" data-worker="${escAttr(emp.name)}" data-color="${escAttr(emp.colorHex || '')}" data-size="${sz}" width="${sz}" height="${sz}"></canvas>`;
     }
 
     function renderGrid() {
@@ -84,7 +84,7 @@ const EmployeeUI = (() => {
             // Use data-size (immutable) — canvas.width gets mutated by the renderer
             // to a higher internal resolution, which would compound on each re-render.
             const size = parseInt(canvas.dataset.size, 10) || 48;
-            window.EggRenderer.renderCharacterAvatar(canvas.dataset.worker, canvas, Math.round(size / 2));
+            window.EggRenderer.renderCharacterAvatar(canvas.dataset.worker, canvas, Math.round(size / 2), canvas.dataset.color || null);
         });
     }
 

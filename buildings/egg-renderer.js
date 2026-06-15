@@ -522,10 +522,12 @@
         return CHARACTER_HEX[name] || 0x888888;
     }
 
-    function renderCharacterAvatar(name, canvas, size) {
+    function renderCharacterAvatar(name, canvas, size, colorOverride) {
         const T = window.THREE;
         if (!T || !canvas) return;
-        const color = colorForEmployeeName(name);
+        const color = colorOverride != null
+            ? (typeof colorOverride === 'string' ? parseInt(colorOverride.replace('#', ''), 16) : colorOverride)
+            : colorForEmployeeName(name);
 
         const w = size || 32;
         const res = w * 4;

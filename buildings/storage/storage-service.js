@@ -104,7 +104,8 @@ const StorageService = (() => {
                     const boxId = res.id;
                     for (const n of ['test item one', 'test item two', 'test item three']) {
                         const ir = await DataLayer.addItem(n, 1, boxId);
-                        try { await StorageEmbeddings.indexItem({ id: ir.id, name: n, quantity: 1, boxIds: [boxId] }, 'DEFAULT BOX'); } catch (e) {}
+                        // index in the background — don't make the first load wait on embeddings
+                        StorageEmbeddings.indexItem({ id: ir.id, name: n, quantity: 1, boxIds: [boxId] }, 'DEFAULT BOX').catch(() => {});
                     }
                     [boxes, items] = await Promise.all([DataLayer.listBoxes(), DataLayer.listItems()]);
                 } catch (e) { console.warn('Storage: seeding default box failed (non-fatal):', e.message); }
