@@ -85,6 +85,40 @@
     window.canSeePenVideos = () => penEntity('videos');   // posted-video creatures
     window.canSeePenFlags = () => penEntity('flags');     // project flags in the world
 
+    // Field-level visibility inside a video / component (so people only see the
+    // sections relevant to them). Each is data-vfield / data-cfield in the editor.
+    // Stored as features["Workshop:vfield:<id>"] / ["Workshop:cfield:<id>"].
+    // No keys for a kind = all of that kind's fields visible (back-compat).
+    window.VIDEO_FIELDS = [
+        ['sourceidea', 'Source idea'], ['waiting', 'Waiting on'], ['name', 'Video name'],
+        ['deadline', 'Deadline'], ['sponsor', 'Sponsor'], ['project', 'Channel project'],
+        ['progress', 'Pipeline progress'], ['context', 'Context'], ['hook', 'Hook'],
+        ['script', 'Script'], ['decomp', 'Decomposition'], ['voiceover', 'Voiceover']
+    ];
+    window.COMPONENT_FIELDS = [
+        ['status', 'Stage'], ['needs', 'Needs & source'], ['media', 'Media'],
+        ['sketches', 'Sketches'], ['links', 'Assets & links'], ['notes', 'Notes']
+    ];
+    const fieldVisible = (kind, id) => {
+        const a = window.__access;
+        if (!a || a.all) return true;
+        if (!(a.buildings || []).includes('Workshop')) return true; // not a Workshop concern
+        const feats = a.features || {}, prefix = 'Workshop:' + kind + ':';
+        const keys = Object.keys(feats).filter(k => k.indexOf(prefix) === 0);
+        if (!keys.length) return true;
+        return !!feats[prefix + id];
+    };
+    window.videoFieldVisible = (id) => fieldVisible('vfield', id);
+    window.componentFieldVisible = (id) => fieldVisible('cfield', id);
+    // Hide ungranted sections after the editor renders.
+    function gateFields(root, attr, check) {
+        const a = window.__access;
+        if (!a || a.all || !root) return;
+        root.querySelectorAll('[' + attr + ']').forEach(el => { el.style.display = check(el.getAttribute(attr)) ? '' : 'none'; });
+    }
+    window.applyVideoFieldGating = (root) => gateFields(root, 'data-vfield', window.videoFieldVisible);
+    window.applyComponentFieldGating = (root) => gateFields(root, 'data-cfield', window.componentFieldVisible);
+
     // Is a whole building visible to the current user?
     window.hasBuilding = function (b) {
         const a = window.__access;

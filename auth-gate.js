@@ -237,10 +237,14 @@
             }, 300);
         }
         if (_account.role === 'owner') {
-            fetch('/api/accounts').then(r => r.ok ? r.json() : []).then(list => {
+            Promise.all([
+                fetch('/api/accounts').then(r => r.ok ? r.json() : []).catch(() => []),
+                fetch('/api/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
+            ]).then(([list, profiles]) => {
+                window.__profiles = profiles;
                 let n = 0;
                 const t = setInterval(() => {
-                    if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) { window.syncEmployeeAccounts(list); clearInterval(t); }
+                    if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) { window.syncEmployeeAccounts(list, profiles); clearInterval(t); }
                     else if (++n > 40) clearInterval(t);
                 }, 350);
             }).catch(() => {});
@@ -421,6 +425,25 @@
                         g.items.map(s => `<div class="authgate-stagerow"><span>${escA(s.label)}</span>${sel(s.id)}</div>`).join('')).join('')}
                 </div>`;
             };
+            // Which sections inside videos / components a profile sees (declutter).
+            const fieldRows = () => {
+                const granted = b.has('Workshop');
+                const vf = window.VIDEO_FIELDS || [], cf = window.COMPONENT_FIELDS || [];
+                if (!vf.length && !cf.length) return '';
+                const grp = (title, fields, kind) => {
+                    const keys = Object.keys(feats).filter(k => k.indexOf('Workshop:' + kind + ':') === 0);
+                    const noRestriction = keys.length === 0;
+                    return `<div class="authgate-staggrp">${title}</div><div class="authgate-subgrid">` +
+                        fields.map(([id, lbl]) => {
+                            const checked = noRestriction ? true : !!feats['Workshop:' + kind + ':' + id];
+                            return `<label class="authgate-subcheck"><input type="checkbox" data-pvf="${escA(p.id)}" data-vkind="${kind}" value="${escA(id)}" ${checked ? 'checked' : ''} ${granted ? '' : 'disabled'}> ${escA(lbl)}</label>`;
+                        }).join('') + `</div>`;
+                };
+                return `<div class="authgate-stagewrap">
+                    <div class="authgate-stagehint">Sections inside videos / components (all = show everything)</div>
+                    ${grp('Video sections', vf, 'vfield')}${grp('Component sections', cf, 'cfield')}
+                </div>`;
+            };
             return `<div class="authgate-profile-card">
                 <div class="authgate-profile-head">
                     <input class="authgate-profile-name" data-pname="${escA(p.id)}" value="${escA(p.name || '')}" placeholder="Profile name">
@@ -429,7 +452,7 @@
                 <div class="authgate-profile-label">Buildings &amp; what they can see inside</div>
                 ${ALL_BUILDINGS.map(name => `<div class="authgate-bldrow">
                     <label class="authgate-check authgate-bldcheck"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> <strong>${escA(name)}</strong>${name === 'Workshop' ? ' <span class="authgate-bldhint">— pick stage access below</span>' : (BUILDING_SECTIONS[name] ? ' <span class="authgate-bldhint">— pick tabs below</span>' : '')}</label>
-                    ${name === 'Workshop' ? stageRows() : sectionRows(name)}
+                    ${name === 'Workshop' ? (stageRows() + fieldRows()) : sectionRows(name)}
                 </div>`).join('')}
                 <div class="authgate-profile-foot"><button class="authgate-menu-item" style="margin:0;width:auto" data-psave="${escA(p.id)}">Save</button><span class="authgate-pnote" id="ag-pnote-${escA(p.id)}"></span></div>
             </div>`;
@@ -447,14 +470,20 @@
             body.querySelectorAll('[data-pbuild]').forEach(cb => cb.onchange = () => {
                 const pid = cb.dataset.pbuild, name = cb.value;
                 body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"][data-pfbuild="${CSS.escape(name)}"]`).forEach(s => { s.disabled = !cb.checked; if (cb.checked) s.checked = true; });
-                if (name === 'Workshop') body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
+                if (name === 'Workshop') {
+                    body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
+                    body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
+                }
             });
             body.querySelectorAll('[data-psave]').forEach(btn => btn.onclick = async () => {
                 const pid = btn.dataset.psave;
                 const name = body.querySelector(`[data-pname="${CSS.escape(pid)}"]`).value.trim() || 'Untitled profile';
                 const buildings = [...body.querySelectorAll(`[data-pbuild="${CSS.escape(pid)}"]:checked`)].map(c => c.value);
                 const features = {}; body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"]:checked`).forEach(c => { if (buildings.includes(c.dataset.pfbuild)) features[c.value] = true; });
-                if (buildings.includes('Workshop')) body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { if (s.value !== 'none') features['Workshop:stage:' + s.dataset.stageid] = s.value; });
+                if (buildings.includes('Workshop')) {
+                    body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { if (s.value !== 'none') features['Workshop:stage:' + s.dataset.stageid] = s.value; });
+                    body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]:checked`).forEach(c => { features['Workshop:' + c.dataset.vkind + ':' + c.value] = true; });
+                }
                 btn.disabled = true; btn.textContent = 'Saving…';
                 const r = await fetch('/api/profiles/' + pid, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, buildings, features }) });
                 btn.disabled = false; btn.textContent = 'Save';

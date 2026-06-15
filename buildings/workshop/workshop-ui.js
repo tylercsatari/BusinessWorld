@@ -1421,29 +1421,31 @@ const WorkshopUI = (() => {
             `<div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span>${hint ? ` <span class="wsp-hint">${hint}</span>` : ''}</div>`;
 
         return `
-            <div class="workshop-detail-summary">${sourceIdeaHtml}</div>
+            <div class="workshop-detail-summary" data-vfield="sourceidea">${sourceIdeaHtml}</div>
 
-            ${blockers.length ? `<div class="wsp-blockers-box">
+            ${blockers.length ? `<div class="wsp-blockers-box" data-vfield="waiting">
                 <div class="wsp-blockers-title">${icon('lock', 'wsp-sub-ic')} Waiting on</div>
                 ${blockers.map(b => `<div class="wsp-blocker-line">${icon(DEP_ICON_NAME[b.kind] || 'inventory', 'wsp-row-ic')} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
             </div>` : ''}
 
-            <label>Video Name <span class="wsp-save-status saved" id="wsp-save-status">Saved</span></label>
-            <input type="text" id="workshop-name" value="${escAttr(v.name)}">
+            <div data-vfield="name">
+                <label>Video Name <span class="wsp-save-status saved" id="wsp-save-status">Saved</span></label>
+                <input type="text" id="workshop-name" value="${escAttr(v.name)}">
+            </div>
 
             <div class="wsp-field-grid">
-                <div>
+                <div data-vfield="deadline">
                     <label>Deadline <span class="wsp-hint">(optional)</span></label>
                     <input type="date" id="workshop-deadline" value="${escAttr(v.deadline || '')}">
                 </div>
-                <div>
+                <div data-vfield="sponsor">
                     <label>Sponsor</label>
                     <select id="workshop-sponsor">
                         <option value="">No sponsor</option>
                         ${sponsors.map(s => `<option value="${s.id}" ${v.sponsorId === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
                     </select>
                 </div>
-                <div>
+                <div data-vfield="project">
                     <label>Channel Project (egg)</label>
                     <select id="workshop-project">
                         <option value="">No project</option>
@@ -1452,6 +1454,7 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
+            <div data-vfield="progress">
             <div class="wsp-progress-head">
                 <label>Pipeline Progress</label>
                 <div class="wsp-progress-head-actions">
@@ -1463,8 +1466,9 @@ const WorkshopUI = (() => {
                 </div>
             </div>
             ${stageChecklistHtml(v)}
+            </div>
 
-            <div class="wsp-subsection" style="--accent:#a87d3c">
+            <div class="wsp-subsection" data-vfield="context" style="--accent:#a87d3c">
                 ${subTitle('ideate', 'Context', '— speak or type ideation notes, angles, details')}
                 <div class="wsp-field-with-mic">
                     <textarea id="workshop-context" placeholder="Describe what you want to build, the angles, the details…">${escHtml(v.context || '')}</textarea>
@@ -1472,7 +1476,7 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
-            <div class="wsp-subsection" style="--accent:#3d8bf0">
+            <div class="wsp-subsection" data-vfield="hook" style="--accent:#3d8bf0">
                 ${subTitle('hook', 'Hook', '— write the hook, then add hook instances to produce &amp; split-test (animation / practical). Each instance needs its footage before its stage clears.')}
                 <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
                 ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — hook footage lives in that project's hook/ folder in Dropbox.</div></div>`}
@@ -1485,12 +1489,12 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
-            <div class="wsp-subsection" style="--accent:#27ae72">
+            <div class="wsp-subsection" data-vfield="script" style="--accent:#27ae72">
                 ${subTitle('script', 'Script', '— fill it in and Script Writing completes itself')}
                 ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
             </div>
 
-            <div class="wsp-subsection wsp-decomp-section" style="--accent:#e8a020">
+            <div class="wsp-subsection wsp-decomp-section" data-vfield="decomp" style="--accent:#e8a020">
                 ${subTitle('decomp', 'Decomposition', '— break the build into components. Each becomes its own entity in the pipeline (its own stages &amp; needs) while staying linked to this video, which waits for it. Click a component to open it.')}
                 <div id="wsp-comp-list">${myComps.map(c => componentRowHtml(c)).join('')}</div>
                 <div class="wsp-add-row wsp-decomp-add">
@@ -1500,7 +1504,7 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
-            <div class="wsp-subsection" style="--accent:#8e44ad">
+            <div class="wsp-subsection" data-vfield="voiceover" style="--accent:#8e44ad">
                 ${subTitle('voiceover', 'Voiceover', '— one per video (audio or video file), stored in the project\'s vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.')}
                 <div id="wsp-vo-section">
                     ${v.voPath
@@ -1519,6 +1523,7 @@ const WorkshopUI = (() => {
         const nameEl = get('workshop-name');
         if (!nameEl) return;
         const root = nameEl.closest('.workshop-detail-fields');
+        if (window.applyVideoFieldGating) window.applyVideoFieldGating(root);  // hide sections this profile can't see
         const rerender = () => rerenderEditor(v.id);
 
         // Autosave with a visible status (Editing… → Saving… → Saved ✓),
@@ -1832,14 +1837,14 @@ const WorkshopUI = (() => {
                         ? `<div class="wsp-comp-fromvideo" data-open-video="${video.id}">${icon('video', 'wsp-row-ic')} <span>From video <b>${escHtml(video.name)}</b></span> <span class="wsp-link">open ↗</span></div>`
                         : '<div class="wsp-hint">Standalone component (not linked to a video)</div>'}
 
-                    <div class="wsp-cd-section">
+                    <div class="wsp-cd-section" data-cfield="status">
                         <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now</span></div>
                         <div class="wsp-status-cycle" data-comp="${c.id}">
                             ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
                         </div>
                     </div>
 
-                    <div class="wsp-cd-section">
+                    <div class="wsp-cd-section" data-cfield="needs">
                         <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step this component requires</span></div>
                         <div class="wsp-needs-btns">
                             ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needs.includes(n.flag) ? 'on' : ''}" data-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
@@ -1851,7 +1856,7 @@ const WorkshopUI = (() => {
                         </div>
                     </div>
 
-                    <div class="wsp-cd-section">
+                    <div class="wsp-cd-section" data-cfield="media">
                         <div class="wsp-cd-label">Media <span class="wsp-hint">— photos, videos, drawings, spec sheets</span></div>
                         <div id="cd-media" class="wsp-cd-media-grid">${media.map((m, i) => mediaTileHtml(m, i)).join('')}</div>
                         <div class="wsp-add-row">
@@ -1861,7 +1866,7 @@ const WorkshopUI = (() => {
                         ${video && video.project ? '' : '<div class="wsp-hint">Tip: link this component\'s video to a Channel Project to enable uploads (sketches below work regardless).</div>'}
                     </div>
 
-                    <div class="wsp-cd-section">
+                    <div class="wsp-cd-section" data-cfield="sketches">
                         <div class="wsp-cd-label">Sketches <span class="wsp-hint">— draw your own design ideas, edit them anytime</span></div>
                         <div id="cd-sketches" class="wsp-cd-sketch-grid">${sketches.map((s, i) => sketchTileHtml(s, i)).join('')}</div>
                         <div class="wsp-add-row">
@@ -1869,7 +1874,7 @@ const WorkshopUI = (() => {
                         </div>
                     </div>
 
-                    <div class="wsp-cd-section">
+                    <div class="wsp-cd-section" data-cfield="links">
                         <div class="wsp-cd-label">Assets &amp; links <span class="wsp-hint">— 3D models, datasheets, references</span></div>
                         <div id="cd-links">${links.map((l, i) => linkRowHtml(l, i)).join('')}</div>
                         <div class="wsp-add-row">
@@ -1879,7 +1884,7 @@ const WorkshopUI = (() => {
                         </div>
                     </div>
 
-                    <div class="wsp-cd-section">
+                    <div class="wsp-cd-section" data-cfield="notes">
                         <div class="wsp-cd-label">Notes / info</div>
                         <textarea id="cd-notes" placeholder="Anything else about this component…">${escHtml(c.notes || '')}</textarea>
                     </div>
@@ -1892,6 +1897,7 @@ const WorkshopUI = (() => {
 
         const panel = container.querySelector('.workshop-panel');
         panel.appendChild(overlay);
+        if (window.applyComponentFieldGating) window.applyComponentFieldGating(overlay);  // hide sections this profile can't see
         const q = (sel) => overlay.querySelector(sel);
         const statusEl = q('#cd-status');
         const flashSaved = () => { statusEl.textContent = 'Saved ✓'; statusEl.className = 'wsp-save-status saved'; };
