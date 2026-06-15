@@ -15,6 +15,10 @@
 const WorkshopUI = (() => {
     let container = null;
     let dropboxProjects = []; // legacy Dropbox folder names (egg colors/flags)
+    // Per-stage permission helpers (provided by access-registry.js). Default to
+    // full access when absent (owner / local dev) so nothing breaks.
+    const stageVisible = (id) => (typeof window.canSeeStage !== 'function') || window.canSeeStage(id);
+    const stageWritable = (id) => (typeof window.canWriteStage !== 'function') || window.canWriteStage(id);
     let activeTab = 'pipeline';
     let selectedVideo = null;
     let selectedStageId = null;
@@ -242,6 +246,11 @@ const WorkshopUI = (() => {
         });
         document.getElementById('wsp-queue-idea-btn').addEventListener('click', showIdeaPicker);
         document.getElementById('wsp-new-video-btn').addEventListener('click', newVideoDraft);
+        // Creating a video enters the pipeline at Ideation — only offer it to
+        // profiles that can write that entry stage.
+        if (!stageWritable('ideate')) {
+            ['wsp-queue-idea-btn', 'wsp-new-video-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
+        }
         document.getElementById('wsp-picker-close').addEventListener('click', hidePicker);
         document.getElementById('wsp-picker-overlay').addEventListener('click', (e) => {
             if (e.target.id === 'wsp-picker-overlay') hidePicker();
@@ -481,13 +490,13 @@ const WorkshopUI = (() => {
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#b3a98f"/>
             </marker>
         </defs>` +
-        PS().EDGES.map(([f, t]) => {
+        PS().EDGES.filter(([f, t]) => stageVisible(f) && stageVisible(t)).map(([f, t]) => {
             return `<path d="${edgePathSmart(f, t, pos)}" class="wsp-edge" marker-end="url(#wspArrow)" />`;
         }).join('') +
         // dashed reference edge to the Storage Room node (only when shown)
         (showTypes.inventory ? `<path d="M ${pos['order'].x + NODE_W / 2} ${pos['order'].y + NODE_H} L ${pos['_inventory'].x + NODE_W / 2} ${pos['_inventory'].y}" class="wsp-edge ref" />` : '');
 
-        const nodesHtml = PS().STAGES.map(s => {
+        const nodesHtml = PS().STAGES.filter(s => stageVisible(s.id)).map(s => {
             const p = pos[s.id];
             const e = entities[s.id];
             const total = e.videos.length + e.components.length + e.orders.length;
@@ -727,6 +736,14 @@ const WorkshopUI = (() => {
             renderTab();
         }));
         bindPanelRows(panel);
+        // Read-only stage: you can view/expand everything but not change it. Disable
+        // the write controls (owner, done, status pills, moves) and keep navigation.
+        if (!stageWritable(selectedStageId)) {
+            panel.classList.add('wsp-readonly');
+            panel.querySelectorAll('#wsp-stage-owner, [data-done], .wsp-pill, [data-comp-status], [data-order-status], [data-cd-status], [data-inv-status], [data-move], [data-advance]').forEach(el => {
+                el.disabled = true; el.style.pointerEvents = 'none'; el.style.opacity = '0.55';
+            });
+        }
     }
 
     // The Decomposition validation gate: explicit yes/no per branch.
@@ -2611,6 +2628,11 @@ const WorkshopUI = (() => {
     async function moveVideoToStage(v, targetId) {
         const target = PS().get(targetId);
         if (!v || !target) return false;
+        // A profile can only move work INTO a stage it has write access to.
+        if (!stageWritable(targetId)) {
+            alert(`You don't have write access to ${target.label}, so you can't move work there.`);
+            return false;
+        }
 
         const anc = new Set(PS().ancestorsOf(targetId));
         const missing = [];

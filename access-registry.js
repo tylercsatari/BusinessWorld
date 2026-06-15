@@ -31,6 +31,48 @@
 
     window.sectionsFor = (b) => (window.ACCESS_REGISTRY[b] && window.ACCESS_REGISTRY[b].sections) || null;
 
+    // The pipeline stages (nodes) — kept in sync with buildings/workshop/pipeline-stages.js.
+    // A profile grants each stage one of: none | read | write. This drives the
+    // profile editor and the per-node gating inside the Workshop.
+    window.WORKSHOP_STAGES = [
+        { id: 'ideate', label: 'Video Ideation', group: 'Concept' },
+        { id: 'hook', label: 'Hook Development', group: 'Concept' },
+        { id: 'script', label: 'Script Writing', group: 'Concept' },
+        { id: 'animation', label: 'Animation', group: 'Concept' },
+        { id: 'decomp', label: 'Decomposition', group: 'Planning' },
+        { id: 'design', label: 'Design Research', group: 'Planning' },
+        { id: 'propdesign', label: 'Props / Set Design', group: 'Planning' },
+        { id: 'cad', label: 'CAD', group: 'Planning' },
+        { id: 'pcb', label: 'PCB Design', group: 'Planning' },
+        { id: 'order', label: 'Ordering', group: 'Procurement' },
+        { id: 'precision', label: 'Precision Manufacturing', group: 'Build' },
+        { id: 'software', label: 'Software Development', group: 'Build' },
+        { id: 'assembly', label: 'Manufacturing Assembly', group: 'Build' },
+        { id: 'artistic', label: 'Artistic Design', group: 'Build' },
+        { id: 'hookfilm', label: 'Practical Hook Filming', group: 'Production' },
+        { id: 'film', label: 'Filming / Production', group: 'Production' },
+        { id: 'voiceover', label: 'Voiceover', group: 'Post' },
+        { id: 'edit', label: 'Editing', group: 'Post' },
+        { id: 'splittest', label: 'Split Test Trials', group: 'Post' },
+        { id: 'post', label: 'Posting', group: 'Post' }
+    ];
+
+    // What access does the current user have to a pipeline stage? none | read | write.
+    // owner → write everywhere; Workshop not granted → none; Workshop granted with NO
+    // per-stage keys → write everywhere (whole-pipeline access, backward compatible).
+    window.stageAccess = function (stageId) {
+        const a = window.__access;
+        if (!a || a.all) return 'write';
+        if (!(a.buildings || []).includes('Workshop')) return 'none';
+        const feats = a.features || {};
+        const keys = Object.keys(feats).filter(k => k.indexOf('Workshop:stage:') === 0);
+        if (!keys.length) return 'write';
+        const v = feats['Workshop:stage:' + stageId];
+        return v === 'write' ? 'write' : v === 'read' ? 'read' : 'none';
+    };
+    window.canSeeStage = (id) => window.stageAccess(id) !== 'none';
+    window.canWriteStage = (id) => window.stageAccess(id) === 'write';
+
     // Is a whole building visible to the current user?
     window.hasBuilding = function (b) {
         const a = window.__access;

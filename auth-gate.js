@@ -106,6 +106,12 @@
     .authgate-subcheck { display:flex; align-items:center; gap:5px; font-size:11.5px; color:#6a5a44; font-weight:600; cursor:pointer; }
     .authgate-subcheck input { margin:0; }
     .authgate-subcheck input:disabled + * , .authgate-subcheck:has(input:disabled) { opacity:.4; }
+    .authgate-stagewrap { margin:4px 0 2px 22px; }
+    .authgate-stagehint { font-size:10.5px; font-weight:700; color:#c3ad88; margin-bottom:3px; }
+    .authgate-staggrp { font-size:9.5px; font-weight:800; color:#b09a78; text-transform:uppercase; letter-spacing:.4px; margin:6px 0 2px; }
+    .authgate-stagerow { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11.5px; color:#6a5a44; font-weight:600; padding:1px 0; }
+    .authgate-stagesel { font-size:11px; padding:1px 4px; border:1px solid #e0d6c5; border-radius:6px; background:#fff; color:#4a3a26; }
+    .authgate-stagesel:disabled { opacity:.4; }
     .authgate-profile-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
     .authgate-pnote { font-size:12px; font-weight:800; }
     .authgate-storage-shell { position: fixed; inset: 0; z-index: 9000; background: #faf7f2; display: flex; flex-direction: column; }
@@ -328,6 +334,27 @@
                 }).join('');
                 return `<div class="authgate-subgrid">${cells}</div>`;
             };
+            // Workshop = the pipeline: per-stage None / Read / Read-write.
+            const stageRows = () => {
+                const stages = window.WORKSHOP_STAGES || [];
+                if (!stages.length) return '';
+                const granted = b.has('Workshop');
+                const groups = [];
+                stages.forEach(s => { let g = groups.find(x => x.name === s.group); if (!g) { g = { name: s.group, items: [] }; groups.push(g); } g.items.push(s); });
+                const sel = (id) => {
+                    const v = feats['Workshop:stage:' + id] || 'none';
+                    return `<select class="authgate-stagesel" data-pstage="${escA(p.id)}" data-stageid="${escA(id)}" ${granted ? '' : 'disabled'}>
+                        <option value="none" ${v === 'none' ? 'selected' : ''}>None</option>
+                        <option value="read" ${v === 'read' ? 'selected' : ''}>Read</option>
+                        <option value="write" ${v === 'write' ? 'selected' : ''}>Read-write</option>
+                    </select>`;
+                };
+                return `<div class="authgate-stagewrap">
+                    <div class="authgate-stagehint">Pipeline stages (leave all None = full pipeline)</div>
+                    ${groups.map(g => `<div class="authgate-staggrp">${escA(g.name)}</div>` +
+                        g.items.map(s => `<div class="authgate-stagerow"><span>${escA(s.label)}</span>${sel(s.id)}</div>`).join('')).join('')}
+                </div>`;
+            };
             return `<div class="authgate-profile-card">
                 <div class="authgate-profile-head">
                     <input class="authgate-profile-name" data-pname="${escA(p.id)}" value="${escA(p.name || '')}" placeholder="Profile name">
@@ -335,8 +362,8 @@
                 </div>
                 <div class="authgate-profile-label">Buildings &amp; what they can see inside</div>
                 ${ALL_BUILDINGS.map(name => `<div class="authgate-bldrow">
-                    <label class="authgate-check authgate-bldcheck"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> <strong>${escA(name)}</strong>${BUILDING_SECTIONS[name] ? ' <span class="authgate-bldhint">— pick tabs below</span>' : ''}</label>
-                    ${sectionRows(name)}
+                    <label class="authgate-check authgate-bldcheck"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> <strong>${escA(name)}</strong>${name === 'Workshop' ? ' <span class="authgate-bldhint">— pick stage access below</span>' : (BUILDING_SECTIONS[name] ? ' <span class="authgate-bldhint">— pick tabs below</span>' : '')}</label>
+                    ${name === 'Workshop' ? stageRows() : sectionRows(name)}
                 </div>`).join('')}
                 <div class="authgate-profile-foot"><button class="authgate-menu-item" style="margin:0;width:auto" data-psave="${escA(p.id)}">Save</button><span class="authgate-pnote" id="ag-pnote-${escA(p.id)}"></span></div>
             </div>`;
@@ -354,12 +381,14 @@
             body.querySelectorAll('[data-pbuild]').forEach(cb => cb.onchange = () => {
                 const pid = cb.dataset.pbuild, name = cb.value;
                 body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"][data-pfbuild="${CSS.escape(name)}"]`).forEach(s => { s.disabled = !cb.checked; if (cb.checked) s.checked = true; });
+                if (name === 'Workshop') body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
             });
             body.querySelectorAll('[data-psave]').forEach(btn => btn.onclick = async () => {
                 const pid = btn.dataset.psave;
                 const name = body.querySelector(`[data-pname="${CSS.escape(pid)}"]`).value.trim() || 'Untitled profile';
                 const buildings = [...body.querySelectorAll(`[data-pbuild="${CSS.escape(pid)}"]:checked`)].map(c => c.value);
                 const features = {}; body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"]:checked`).forEach(c => { if (buildings.includes(c.dataset.pfbuild)) features[c.value] = true; });
+                if (buildings.includes('Workshop')) body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { if (s.value !== 'none') features['Workshop:stage:' + s.dataset.stageid] = s.value; });
                 btn.disabled = true; btn.textContent = 'Saving…';
                 const r = await fetch('/api/profiles/' + pid, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, buildings, features }) });
                 btn.disabled = false; btn.textContent = 'Save';

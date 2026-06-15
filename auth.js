@@ -115,7 +115,8 @@ function routeSection(pathname) {
     if (/^\/api\/data\/(sponsors|sponsorvideos)/.test(pathname)) return ['Library', 'sponsors'];
     if (/^\/api\/data\/ideas/.test(pathname) || /^\/api\/ideas\//.test(pathname)) return ['Library', 'notes'];
     if (/^\/api\/data\/notes/.test(pathname)) return ['Library', 'freenotes'];
-    if (/^\/api\/data\/orders/.test(pathname)) return ['Workshop', 'orders'];
+    // Workshop is the pipeline now (no Orders tab); its data is building-level +
+    // per-stage gating is enforced in the UI. No Workshop route-section here.
     return null;
 }
 // A section is allowed if the building grants no section restrictions (full), else
