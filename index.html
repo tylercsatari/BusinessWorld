@@ -2608,8 +2608,8 @@ function createCat(name = 'Zeus', mainColor = 0x222222, patchColor = 0xeeeeee) {
 function initCharacters() {
     playerMesh = createCharacter(0x3498db, 'You');
     scene.add(playerMesh); clickables.push(playerMesh);
-    addEmployee('Robin', 0xe74c3c, -23, -14);
-    addEmployee('Jordan', 0x9b59b6, -27, -13);
+    // Robin & Jordan removed — Employee Island is populated from approved accounts
+    // (see window.syncEmployeeAccounts). Tennille & Zeus stay hard-coded.
     // Tennille near The House (pink)
     addEmployee('Tennille', 0xff69b4, -26, 24);
     // Zeus the cat (black and white)
@@ -3064,6 +3064,38 @@ window.buildingAllowed = function (n) {
     const a = window.__access;
     if (!a || a.all) return true;
     return (a.buildings || []).includes(n);
+};
+// Recolor the player's own character (their chosen account color).
+window.setPlayerColor = function (hex) {
+    if (!playerMesh || !hex) return;
+    let col; try { col = new THREE.Color(hex); } catch (e) { return; }
+    playerMesh.traverse(m => {
+        if (!m.material) return;
+        const mats = Array.isArray(m.material) ? m.material : [m.material];
+        mats.forEach(mat => { if (mat.uniforms && mat.uniforms.uColor) mat.uniforms.uColor.value.copy(col); });
+    });
+};
+// Populate Employee Island from the approved accounts (name + their chosen color).
+// Owner-only data; called after the accounts are fetched. Zeus & Tennille stay.
+window.syncEmployeeAccounts = function (accounts) {
+    // remove previously-spawned account characters
+    employees.slice().forEach(e => {
+        if (!e.userData.fromAccount) return;
+        scene.remove(e);
+        let i = employees.indexOf(e); if (i >= 0) employees.splice(i, 1);
+        i = clickables.indexOf(e); if (i >= 0) clickables.splice(i, 1);
+        i = draggables.indexOf(e); if (i >= 0) draggables.splice(i, 1);
+    });
+    if (!employeeIsland) return;
+    const base = employeeIsland.position;
+    const approved = (accounts || []).filter(a => a.role && a.role !== 'pending');
+    approved.forEach((a, i) => {
+        const name = a.displayName || a.email || 'Member';
+        let color = 0x3498db; try { if (a.color) color = new THREE.Color(a.color).getHex(); } catch (e) {}
+        const ang = (i / Math.max(1, approved.length)) * Math.PI * 2, r = 3.2;
+        const e = addEmployee(name, color, base.x + Math.cos(ang) * r, base.z + Math.sin(ang) * r);
+        e.userData.fromAccount = true;
+    });
 };
 // Trace the path back from each VISIBLE building to the center spawn tile (0,0)
 // along the existing path tiles, and show only those tiles. Owner sees all tiles.

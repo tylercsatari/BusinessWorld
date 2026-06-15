@@ -112,6 +112,13 @@
     .authgate-stagerow { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11.5px; color:#6a5a44; font-weight:600; padding:1px 0; }
     .authgate-stagesel { font-size:11px; padding:1px 4px; border:1px solid #e0d6c5; border-radius:6px; background:#fff; color:#4a3a26; }
     .authgate-stagesel:disabled { opacity:.4; }
+    .authgate-menu-greet { font-family:'Fredoka One',cursive,sans-serif; color:#5a3e1b; font-size:18px; margin:2px 0 10px; }
+    .authgate-acct-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .authgate-acct-lbl { font-size:13px; font-weight:700; color:#6a5a44; flex:1; }
+    .authgate-name-input { flex:1; border:1px solid #d8cbb6; border-radius:8px; padding:7px 10px; font-size:13px; font-family:inherit; color:#4a3a26; }
+    .authgate-mini { background:#5a3e1b; color:#fff; border:none; border-radius:8px; padding:7px 12px; font-size:12px; font-weight:800; cursor:pointer; }
+    .authgate-mini:hover { background:#7a542a; }
+    .authgate-color { width:42px; height:30px; border:1px solid #d8cbb6; border-radius:8px; background:none; cursor:pointer; padding:2px; }
     .authgate-profile-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
     .authgate-pnote { font-size:12px; font-weight:800; }
     .authgate-storage-shell { position: fixed; inset: 0; z-index: 9000; background: #faf7f2; display: flex; flex-direction: column; }
@@ -216,6 +223,28 @@
         if (typeof window.__bootApp === 'function') window.__bootApp();
         mountMenuItems();
         applyAccessWhenReady(perms);
+        applyPersonalization();
+    }
+
+    // Apply the user's own character colour once the player exists, and (owner only)
+    // populate Employee Island from the approved accounts (name + colour).
+    function applyPersonalization() {
+        if (_account.color) {
+            let n = 0;
+            const t = setInterval(() => {
+                if (window.setPlayerColor && window._bw && window._bw.playerMesh) { window.setPlayerColor(_account.color); clearInterval(t); }
+                else if (++n > 40) clearInterval(t);
+            }, 300);
+        }
+        if (_account.role === 'owner') {
+            fetch('/api/accounts').then(r => r.ok ? r.json() : []).then(list => {
+                let n = 0;
+                const t = setInterval(() => {
+                    if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) { window.syncEmployeeAccounts(list); clearInterval(t); }
+                    else if (++n > 40) clearInterval(t);
+                }, 350);
+            }).catch(() => {});
+        }
     }
 
     // The 3D world builds asynchronously; hide buildings/HUD as soon as the
@@ -250,15 +279,47 @@
     function mountMenuItems() {
         const panel = document.getElementById('menu-panel');
         if (!panel || document.getElementById('authgate-menu-section')) return;
+        const dn = _account.displayName || '', email = _account.email || '';
+        const color = /^#[0-9a-fA-F]{6}$/.test(_account.color || '') ? _account.color : '#3498db';
+        const roleLabel = (_account.perms && _account.perms.profileName) || _account.role;
         const section = el('div', { id: 'authgate-menu-section' });
         section.innerHTML = `
             <h3>Account</h3>
-            <div class="authgate-menu-who">${_account.email || ''} <span class="authgate-menu-role">${(_account.perms && _account.perms.profileName) || _account.role}</span></div>
+            <div class="authgate-menu-greet">Hello, <b id="ag-greet"></b> 👋</div>
+            <div class="authgate-acct-row">
+                <input id="ag-name-input" class="authgate-name-input" maxlength="40">
+                <button class="authgate-mini" id="ag-name-save">Save</button>
+            </div>
+            <div class="authgate-acct-row">
+                <span class="authgate-acct-lbl">My character colour</span>
+                <input type="color" id="ag-color-input" class="authgate-color">
+            </div>
+            <div class="authgate-menu-who"><span id="ag-email"></span> <span class="authgate-menu-role" id="ag-rolebadge"></span></div>
             ${_account.role === 'owner' ? '<button class="authgate-menu-item" id="ag-menu-people">👥 People &amp; permissions</button>' : ''}
             <button class="authgate-menu-item signout" id="ag-menu-signout">↩ Sign out</button>
             <div class="divider"></div>`;
-        // place it right under the menu title
         panel.insertBefore(section, panel.children[1] || null);
+        // set user-supplied values safely (no HTML injection)
+        section.querySelector('#ag-greet').textContent = dn || email || 'there';
+        const nameInput = section.querySelector('#ag-name-input'); nameInput.value = dn; nameInput.placeholder = email || 'Set your name';
+        const colorInput = section.querySelector('#ag-color-input'); colorInput.value = color;
+        section.querySelector('#ag-email').textContent = email;
+        section.querySelector('#ag-rolebadge').textContent = roleLabel;
+        section.querySelector('#ag-name-save').onclick = async () => {
+            const v = nameInput.value.trim(), btn = section.querySelector('#ag-name-save');
+            btn.disabled = true; btn.textContent = '…';
+            try {
+                const r = await fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: v }) });
+                if (r.ok) { const u = await r.json(); _account.displayName = u.displayName; section.querySelector('#ag-greet').textContent = u.displayName || email || 'there'; }
+            } catch (e) {}
+            btn.disabled = false; btn.textContent = 'Saved ✓'; setTimeout(() => btn.textContent = 'Save', 1500);
+        };
+        colorInput.onchange = async () => {
+            const c = colorInput.value;
+            if (window.setPlayerColor) window.setPlayerColor(c);
+            _account.color = c;
+            try { await fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ color: c }) }); } catch (e) {}
+        };
         const pe = section.querySelector('#ag-menu-people');
         if (pe) pe.onclick = () => { if (window.toggleMenu) window.toggleMenu(); openPeople(); };
         section.querySelector('#ag-menu-signout').onclick = signOut;
