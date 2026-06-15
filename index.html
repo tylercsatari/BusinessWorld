@@ -2356,6 +2356,7 @@ function retryLayoutLoad() {
         applySavedBuildings(saved);
         if (saved.paths) saved.paths.forEach(k => { const [gx, gz] = k.split(',').map(Number); addPathTile(gx, gz); });
         _layoutReady = true;
+        if (window.__access && !window.__access.all && window.applyAccess) window.applyAccess(window.__access);
         console.log('Layout loaded after retry — saving enabled');
     }, 15000);
 }
@@ -2411,6 +2412,10 @@ async function init() {
         retryLayoutLoad();     // load FAILED: keep this session read-only for layout until it loads
     }
     scene.add(pathTileGroup);
+    // Paths + building positions are final now. The early applyAccess (fired the
+    // moment the building objects existed) ran BEFORE paths loaded, so re-apply
+    // here to trim the pathways to the buildings this profile can actually reach.
+    if (window.__access && !window.__access.all && window.applyAccess) window.applyAccess(window.__access);
 
     // Restore pen size
     if (saved && saved.penSize) {

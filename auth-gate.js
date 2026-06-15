@@ -215,7 +215,10 @@
         const t = setInterval(() => {
             if (typeof window.applyAccess === 'function' && window.getBuildingByName && window.getBuildingByName('Storage')) {
                 window.applyAccess(perms);
-                setTimeout(() => window.applyAccess(perms), 1800);
+                // Re-apply a few times: paths + building positions stream in from the
+                // saved layout AFTER the buildings first appear, so the first pass
+                // can't trim the pathways yet.
+                [1200, 3000, 6000].forEach(ms => setTimeout(() => window.applyAccess(perms), ms));
                 clearInterval(t);
             } else if (++tries > 100) clearInterval(t);
         }, 200);
