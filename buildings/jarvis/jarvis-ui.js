@@ -1,7 +1,7 @@
 /* ── Jarvis Building ── Analytical Intelligence Hub ── */
 const JarvisUI = (() => {
     let container = null;
-    let activeTab = 'analytical';
+    let activeTab = 'qrd';
     let dataset = null;
     let activeToolId = null;
     let toolResults = {};
@@ -105,6 +105,7 @@ const JarvisUI = (() => {
 
     // ── Tab structure ──
     const TABS = [
+        { id: 'qrd', label: '🔬 Quant Decoder' },
         { id: 'analytical', label: 'Analytical' },
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
@@ -202,6 +203,7 @@ const JarvisUI = (() => {
 
     function renderTab() {
         switch (activeTab) {
+            case 'qrd': return '<div id="qrd-root"></div>';
             case 'analytical': return renderAnalytical();
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
@@ -274,9 +276,10 @@ const JarvisUI = (() => {
             return '<div style="color:#475569;padding:20px;text-align:center">Loading tools...</div>';
         }
 
-        // Count totals for summary
+        // Count totals for summary. The derived list is capped to the top-N by |r|
+        // (huge dataset), so use the true total reported by the server.
         const atomicCount = experiments.length;
-        const derivedCount = derived.length;
+        const derivedCount = v2DerivedTotal || derived.length;
         const totalCount = atomicCount + derivedCount;
 
         const summaryHtml = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
@@ -1247,6 +1250,7 @@ const JarvisUI = (() => {
     // ── v2 data cache (compact summaries — no dataset arrays) ──
     let v2Indicators = null;
     let v2DerivedExperiments = null;
+    let v2DerivedTotal = 0;   // true count of all derived experiments (list is capped to top-N)
     let v2Graph = null;
     let v2Tools = null;
     let v2Resolutions = null;
@@ -1265,6 +1269,7 @@ const JarvisUI = (() => {
             ]);
             v2Indicators = await iRes.json();
             v2DerivedExperiments = await dRes.json();
+            v2DerivedTotal = parseInt(dRes.headers.get('X-Total-Count') || '', 10) || (v2DerivedExperiments ? v2DerivedExperiments.length : 0);
             v2Graph = await gRes.json();
             v2Tools = await tRes.json();
             v2Resolutions = await rRes.json();
@@ -1573,7 +1578,7 @@ const JarvisUI = (() => {
         return `<div style="margin-top:14px;border-top:1px solid #1e293b;padding-top:10px">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
                 <span style="font-size:12px;font-weight:600;color:#a78bfa">Interaction Experiments</span>
-                <span style="font-size:10px;color:#64748b">(${derived.length} total, top ${top.length} by |r|)</span>
+                <span style="font-size:10px;color:#64748b">(${(v2DerivedTotal || derived.length).toLocaleString()} total, top ${top.length} by |r|)</span>
             </div>
             <div style="font-size:10px;color:#64748b;margin-bottom:6px">Derived relationships between base indicators. These are not standalone signals.</div>
             <div style="max-height:300px;overflow-y:auto;border:1px solid #1e293b;border-radius:6px;background:rgba(15,23,42,0.5)">
@@ -7538,6 +7543,88 @@ const JarvisUI = (() => {
     let brainRunStatus = null;         // { videoId, status, log }
     let brainLoading = false;
     let brainPollTimer = null;
+    let brainScrubberSec = null;
+    let brainExpandedRegion = null;
+    let brainColorMode = 'mean';       // 'mean' | 'peak'
+    let brainViewMode = 'top';         // 'top' | 'side'
+    let brainRawExpanded = false;
+    let brainRawRowExpanded = {};
+    let brainPeakDetail = null;
+    let brainScrubDragging = false;
+    let brainScrubberCtx = null;
+    let _brainScrubGlobalsBound = false;
+    let brainEnabledRegions = new Set();
+    let brainShowEngagementCurve = true;
+    let brainSelectedScale = '1s_window';
+    let brainChartResolution = '1s_raw';
+    let brainSelectedComponent = null;
+    let brainComponentSpatialOn = false;
+    let brainFunctionalGroupsExpanded = false;  // FIX 4 panel
+    let brainDestrieuxExpanded = false;         // FIX 6 panel
+    let brainDestrieuxFilter = '';              // search input
+    let brainDestrieuxHemiFilter = 'all';       // 'all' | 'frontal' | 'parietal' | 'temporal' | 'occipital' | 'cingulate' | 'insular' | 'other'
+    let brainEnabledDestrieux = new Set();      // Destrieux region keys overlaid on the main chart
+    let brainExplainerExpanded = false;         // top-of-pane "How to read this brain data" panel
+    let brainActiveDetailTab = 'regions';       // which bottom-tab is shown in the detail pane
+    let brainInfoExpanded = false;              // whether the collapsed info strip is expanded
+    let brainVideoPlaying = false;
+    let brainVideoRafId = null;
+    let brainVideoEl = null; // reference to the <video> DOM element
+    let brainBatchStatus = null;        // { total, done, running, videos: [...] }
+    let brainBatchExpanded = true;      // collapsible panel state
+    let brainBatchAutoRefreshTimer = null;
+
+    const REGION_COLORS = {
+        auditory:          "#06b6d4",
+        visual:            "#10b981",
+        motor:             "#ec4899",
+        language_broca:    "#f59e0b",
+        language_wernicke: "#f97316",
+        prefrontal:        "#8b5cf6",
+        default_mode:      "#6366f1",
+        attention:         "#84cc16",
+        emotion:           "#ef4444",
+        memory:            "#a78bfa",
+    };
+
+    const BRAIN_REGIONS_META = {
+        auditory:          { icon: '👂', label: "Auditory Cortex",     desc: "Superior temporal gyrus — sound, music, voice. Heschl's gyrus (primary auditory cortex)." },
+        visual:            { icon: '👁', label: "Visual Cortex",        desc: "Occipital lobe — cuneus, lingual gyrus, V1. Primary and secondary visual processing." },
+        motor:             { icon: '🤸', label: "Motor / Somatosensory",desc: "Pre/postcentral gyrus + central sulcus. Movement planning, execution, and sensory feedback." },
+        language_broca:    { icon: '💬', label: "Broca's Area",         desc: "Inferior frontal gyrus (opercular, triangular, orbital parts). Speech production, syntax." },
+        language_wernicke: { icon: '📖', label: "Wernicke's Area",      desc: "Superior temporal plane (planum temporale). Language comprehension, phonological processing." },
+        prefrontal:        { icon: '🧩', label: "Prefrontal Cortex",    desc: "Superior/middle frontal gyrus, frontomarginal gyrus. Working memory, executive function, decision-making." },
+        default_mode:      { icon: '💭', label: "Default Mode Network", desc: "Posterior/anterior cingulate + precuneus. Self-referential thought, mind-wandering, narrative processing." },
+        attention:         { icon: '🎯', label: "Attention Network",    desc: "Superior parietal lobule, intraparietal sulcus. Top-down attention, spatial salience." },
+        emotion:           { icon: '💛', label: "Insular / Emotion",    desc: "Insular cortex (short and long gyri). Interoception, emotional awareness, disgust, empathy." },
+        memory:            { icon: '🧠', label: "Memory / Hippocampal", desc: "Parahippocampal gyrus, lingual gyrus. Episodic memory encoding, scene recognition." },
+    };
+
+    const BRAIN_TOP_POSITIONS = {
+        prefrontal:        { x: 235, y: 60 },
+        default_mode:      { x: 195, y: 92 },
+        language_broca:    { x: 250, y: 115 },
+        motor:             { x: 130, y: 130 },
+        attention:         { x: 248, y: 152 },
+        auditory:          { x: 90,  y: 175 },
+        emotion:           { x: 158, y: 195 },
+        language_wernicke: { x: 100, y: 220 },
+        memory:            { x: 200, y: 235 },
+        visual:            { x: 142, y: 270 },
+    };
+
+    const BRAIN_SIDE_POSITIONS = {
+        prefrontal:        { x: 80,  y: 100 },
+        default_mode:      { x: 65,  y: 138 },
+        language_broca:    { x: 100, y: 158 },
+        motor:             { x: 165, y: 95 },
+        attention:         { x: 200, y: 130 },
+        auditory:          { x: 165, y: 178 },
+        language_wernicke: { x: 215, y: 175 },
+        memory:            { x: 270, y: 130 },
+        emotion:           { x: 175, y: 200 },
+        visual:            { x: 305, y: 170 },
+    };
 
     function renderBrainAnalysis() {
         if (!brainVideos && !brainLoading) {
@@ -7603,12 +7690,42 @@ const JarvisUI = (() => {
                         brainSelectedAnalysis._avgPercentViewed = vd.avgPercentViewed;
                     }
                 } catch {}
+                // Fetch transcript words for frame captions (best-effort).
+                try {
+                    const tr = await fetch(`/api/tribe/transcript/${encodeURIComponent(videoId)}`);
+                    if (tr.ok) {
+                        const td = await tr.json();
+                        brainSelectedAnalysis._transcriptWords = Array.isArray(td.words) ? td.words : [];
+                        brainSelectedAnalysis._transcriptFullText = td.fullText || '';
+                    }
+                } catch {}
             } else {
                 brainSelectedAnalysis = { _pending: true, ...j };
             }
         } catch (e) {
             brainSelectedAnalysis = { _error: e.message };
         }
+        // Auto-start the 3D brain once the canvas is on the page.
+        setTimeout(() => {
+            if (document.getElementById('jarvis-brain-3d-canvas') && brainSelectedAnalysis && !brainSelectedAnalysis._error && !brainSelectedAnalysis._pending) {
+                initBrain3D(brainSelectedAnalysis);
+            }
+        }, 100);
+    }
+
+    // Pull the transcript words spoken in a ±1s window around `second`.
+    function brainTranscriptAt(second) {
+        const a = brainSelectedAnalysis;
+        const words = a && a._transcriptWords;
+        if (!Array.isArray(words) || !words.length) return '';
+        const lo = second - 1.0, hi = second + 1.0;
+        const out = [];
+        for (const w of words) {
+            const t = Number(w && w.timestamp);
+            if (!Number.isFinite(t)) continue;
+            if (t >= lo && t <= hi) out.push(String(w.word || ''));
+        }
+        return out.join(' ').trim();
     }
 
     function startBrainPolling() {
@@ -7633,12 +7750,142 @@ const JarvisUI = (() => {
         }, 4000);
     }
 
+    async function loadBrainBatchStatus() {
+        try {
+            const r = await fetch('/api/tribe/batch-status');
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            brainBatchStatus = await r.json();
+        } catch (e) {
+            brainBatchStatus = { _error: e.message, total: 0, done: 0, running: 0, videos: [] };
+        }
+        scheduleBrainBatchAutoRefresh();
+    }
+
+    function scheduleBrainBatchAutoRefresh() {
+        if (brainBatchAutoRefreshTimer) {
+            clearTimeout(brainBatchAutoRefreshTimer);
+            brainBatchAutoRefreshTimer = null;
+        }
+        const anyRunning = brainBatchStatus && Array.isArray(brainBatchStatus.videos)
+            && brainBatchStatus.videos.some(v => v.status === 'running' || v.status === 'queued');
+        if (!anyRunning) return;
+        brainBatchAutoRefreshTimer = setTimeout(async () => {
+            if (activeTab !== 'brainAnalysis') return;
+            await loadBrainBatchStatus();
+            refreshBrainTab();
+        }, 30000);
+    }
+
+    function brainBatchStatusIcon(status) {
+        if (status === 'done') return '✅ done';
+        if (status === 'running') return '🔄 running';
+        if (status === 'queued') return '⏳ queued';
+        if (status === 'failed') return '❌ failed';
+        return '⏳ pending';
+    }
+
+    function renderBrainBatchPanel() {
+        if (!brainBatchStatus) {
+            return `
+                <div style="background:#0d1525;border:1px solid #1e293b;border-radius:8px;padding:14px;margin-bottom:14px;color:#64748b;font-size:12px">
+                    Loading batch status…
+                </div>`;
+        }
+
+        const bs = brainBatchStatus;
+        const total = bs.total || 0;
+        const done = bs.done || 0;
+        const pct = total > 0 ? (done / total * 100) : 0;
+        const pctLabel = pct.toFixed(1) + '%';
+        const running = (bs.videos || []).filter(v => v.status === 'running').slice(0, 4);
+        const top20 = (bs.videos || []).slice(0, 20);
+
+        const headerRow = `
+            <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none" id="brain-batch-header">
+                <div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#a78bfa;font-weight:700">
+                    <span id="brain-batch-caret" style="display:inline-block;width:14px">${brainBatchExpanded ? '▾' : '▸'}</span>
+                    Batch Brain Analysis — ${done} / ${total} complete (${pctLabel})
+                </div>
+                <div style="font-size:10px;color:#64748b">${bs._error ? `<span style="color:#f87171">${escapeHtml(bs._error)}</span>` : ''}</div>
+            </div>`;
+
+        if (!brainBatchExpanded) {
+            return `<div style="background:#0d1525;border:1px solid #1e293b;border-radius:8px;padding:12px 14px;margin-bottom:14px">${headerRow}</div>`;
+        }
+
+        const barWidth = Math.max(0, Math.min(100, pct));
+        const progressBar = `
+            <div style="margin-top:10px;background:#020617;border:1px solid #1e293b;border-radius:4px;height:14px;overflow:hidden;position:relative">
+                <div style="width:${barWidth}%;height:100%;background:linear-gradient(90deg,#7c3aed,#22c55e);transition:width 0.4s"></div>
+            </div>`;
+
+        const runningRow = running.length ? `
+            <div style="margin-top:10px;font-size:11px;color:#cbd5e1">
+                <span style="color:#64748b">Currently running:</span>
+                ${running.map(v => `<span style="margin-left:8px;color:#fbbf24">🔄 ${escapeHtml((v.title || v.videoId).slice(0, 40))}</span>`).join('')}
+            </div>` : `
+            <div style="margin-top:10px;font-size:11px;color:#64748b">No jobs currently running.</div>`;
+
+        const buttons = `
+            <div style="display:flex;gap:8px;margin-top:10px">
+                <button id="brain-batch-queue4" class="jarvis-btn" style="background:#7c3aed;color:#fff;border:0;border-radius:4px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Queue Next 4</button>
+                <button id="brain-batch-refresh" class="jarvis-btn" style="background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:4px;padding:6px 14px;font-size:12px;cursor:pointer">Refresh</button>
+            </div>`;
+
+        const tableRows = top20.map((v, i) => {
+            const statusColor = v.status === 'done' ? '#22c55e'
+                : v.status === 'running' ? '#fbbf24'
+                : v.status === 'failed' ? '#f87171'
+                : v.status === 'queued' ? '#a78bfa'
+                : '#64748b';
+            const statusText = brainBatchStatusIcon(v.status) +
+                (v.status === 'done' && v.engagement_score != null ? ` (${Number(v.engagement_score).toFixed(4)})` : '');
+            return `
+                <tr style="border-bottom:1px solid #1e293b">
+                    <td style="padding:4px 8px;color:#64748b;font-family:monospace">${i + 1}</td>
+                    <td style="padding:4px 8px;color:#e2e8f0;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(v.title || v.videoId)}</td>
+                    <td style="padding:4px 8px;color:#94a3b8;font-family:monospace;text-align:right">${fmtViewCount(v.views || 0)}</td>
+                    <td style="padding:4px 8px;color:${statusColor};font-family:monospace">${statusText}</td>
+                </tr>`;
+        }).join('');
+
+        const table = `
+            <div style="margin-top:12px;max-height:360px;overflow:auto;border:1px solid #1e293b;border-radius:4px">
+                <table style="width:100%;border-collapse:collapse;font-size:11px">
+                    <thead style="background:#0a1628;position:sticky;top:0">
+                        <tr style="color:#64748b;text-transform:uppercase;letter-spacing:0.06em;font-size:10px">
+                            <th style="padding:6px 8px;text-align:left">#</th>
+                            <th style="padding:6px 8px;text-align:left">Title</th>
+                            <th style="padding:6px 8px;text-align:right">Views</th>
+                            <th style="padding:6px 8px;text-align:left">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tableRows}</tbody>
+                </table>
+            </div>
+            <div style="margin-top:6px;font-size:10px;color:#475569">Top 20 of ${total} videos (sorted by views).</div>`;
+
+        return `
+            <div style="background:#0d1525;border:1px solid #1e293b;border-radius:8px;padding:14px;margin-bottom:14px">
+                ${headerRow}
+                ${progressBar}
+                ${runningRow}
+                ${buttons}
+                ${table}
+            </div>`;
+    }
+
     function renderBrainBody() {
         if (brainAnalysisError && !brainVideos) {
             return `<div style="color:#f87171;padding:14px">Failed to load: ${escapeHtml(brainAnalysisError)}</div>`;
         }
         if (!brainVideos) {
             return `<div style="color:#64748b;padding:14px">Loading videos…</div>`;
+        }
+        if (brainBatchStatus === null) {
+            // Kick off initial batch fetch (fire-and-forget; will refresh tab when done).
+            brainBatchStatus = { _loading: true, total: 0, done: 0, running: 0, videos: [] };
+            loadBrainBatchStatus().then(() => refreshBrainTab());
         }
 
         const completed = (brainAvailable && brainAvailable.completed) || [];
@@ -7704,9 +7951,12 @@ const JarvisUI = (() => {
                             const isSel = brainSelectedVideoId === c.videoId;
                             const score = (c.engagement_score || 0).toFixed(3);
                             const dur = c.duration_s ? `${Math.round(c.duration_s)}s` : '';
-                            return `<div class="jarvis-brain-row" data-vid="${escapeHtml(c.videoId)}" style="padding:8px;margin-bottom:4px;border-radius:4px;cursor:pointer;background:${isSel ? '#1e293b' : 'transparent'};border:1px solid ${isSel ? '#7c3aed' : 'transparent'}">
-                                <div style="font-size:12px;color:#e2e8f0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(v ? v.name : c.videoId)}</div>
-                                <div style="font-size:10px;color:#94a3b8;margin-top:2px">engagement ${score} · ${dur}</div>
+                            return `<div class="jarvis-brain-row" data-vid="${escapeHtml(c.videoId)}" style="padding:8px;margin-bottom:4px;border-radius:4px;cursor:pointer;background:${isSel ? '#1e293b' : 'transparent'};border:1px solid ${isSel ? '#7c3aed' : 'transparent'};display:flex;align-items:center;gap:6px">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:12px;color:#e2e8f0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(v ? v.name : c.videoId)}</div>
+                                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">engagement ${score} · ${dur}</div>
+                                </div>
+                                <button class="brain-delete-btn" data-vid="${escapeHtml(c.videoId)}" style="color:#ef4444;background:none;border:none;cursor:pointer;font-size:11px;padding:2px 6px" title="Delete analysis">🗑</button>
                             </div>`;
                         }).join('')}
                     </div>
@@ -7719,7 +7969,847 @@ const JarvisUI = (() => {
                 No analyses yet. Pick a video above and click <strong>Run TRIBE v2 Analysis</strong>.
              </div>`;
 
-        return headerHtml + runnerHtml + completedHtml;
+        return renderBrainBatchPanel() + headerHtml + runnerHtml + completedHtml;
+    }
+
+    function brainColorForActivation(v) {
+        v = Math.max(0, Math.min(1, v || 0));
+        const stops = [
+            { p: 0.0, c: [59, 130, 246] },
+            { p: 0.5, c: [34, 197, 94] },
+            { p: 0.7, c: [245, 158, 11] },
+            { p: 1.0, c: [239, 68, 68] },
+        ];
+        let lo = stops[0], hi = stops[stops.length - 1];
+        for (let i = 0; i < stops.length - 1; i++) {
+            if (v >= stops[i].p && v <= stops[i + 1].p) { lo = stops[i]; hi = stops[i + 1]; break; }
+        }
+        const t = hi.p === lo.p ? 0 : (v - lo.p) / (hi.p - lo.p);
+        const c = lo.c.map((x, i) => Math.round(x + (hi.c[i] - x) * t));
+        return `rgb(${c[0]},${c[1]},${c[2]})`;
+    }
+
+    function brainColorForTime(t, durationSec) {
+        const v = durationSec > 0 ? Math.max(0, Math.min(1, t / durationSec)) : 0;
+        const stops = [
+            { p: 0.0, c: [59, 130, 246] },
+            { p: 0.5, c: [167, 139, 250] },
+            { p: 1.0, c: [239, 68, 68] },
+        ];
+        let lo = stops[0], hi = stops[stops.length - 1];
+        for (let i = 0; i < stops.length - 1; i++) {
+            if (v >= stops[i].p && v <= stops[i + 1].p) { lo = stops[i]; hi = stops[i + 1]; break; }
+        }
+        const tt = hi.p === lo.p ? 0 : (v - lo.p) / (hi.p - lo.p);
+        const c = lo.c.map((x, i) => Math.round(x + (hi.c[i] - x) * tt));
+        return `rgb(${c[0]},${c[1]},${c[2]})`;
+    }
+
+    function brainInterpAt(pts, sec, getT, getV) {
+        if (!pts || !pts.length) return null;
+        const first = pts[0], last = pts[pts.length - 1];
+        if (sec <= getT(first)) return getV(first);
+        if (sec >= getT(last)) return getV(last);
+        for (let i = 1; i < pts.length; i++) {
+            if (getT(pts[i]) >= sec) {
+                const a = pts[i - 1], b = pts[i];
+                const dt = getT(b) - getT(a);
+                if (dt <= 0) return getV(a);
+                return getV(a) + (getV(b) - getV(a)) * ((sec - getT(a)) / dt);
+            }
+        }
+        return getV(last);
+    }
+
+    function renderBrainTopStats(a) {
+        const features = (a.features_used || []).map(f =>
+            `<span style="background:#1e293b;color:#a78bfa;padding:2px 6px;border-radius:3px;font-size:10px;font-family:monospace">${escapeHtml(f)}</span>`
+        ).join(' ');
+
+        const card = (label, value, sub, color, big) => `
+            <div style="flex:1;min-width:130px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px">
+                <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">${label}</div>
+                <div style="font-size:${big ? '20px' : '14px'};color:${color};font-weight:700;margin-top:4px;font-family:monospace">${value}</div>
+                ${sub ? `<div style="font-size:10px;color:#94a3b8;margin-top:3px">${sub}</div>` : ''}
+            </div>`;
+
+        const meta = a.analysis_metadata || {};
+        const hrfOff = (meta.hrf_offset_seconds != null) ? meta.hrf_offset_seconds : 5.0;
+        const maxBrainSec = a.max_activation_second != null ? a.max_activation_second : 0;
+        const maxStimSec = a.max_activation_stimulus_second != null
+            ? a.max_activation_stimulus_second
+            : Math.max(0, maxBrainSec - hrfOff);
+
+        const es = a.engagement_stats || null;
+        const engagementCard = es ? `
+            <div style="flex:1.4;min-width:200px;background:#0a1628;border:1px solid #7c3aed;border-radius:6px;padding:10px">
+                <div style="font-size:9px;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em">📊 Z-score Engagement</div>
+                <div style="font-size:11px;color:#cbd5e1;margin-top:6px;font-family:monospace;line-height:1.5">
+                    mean&nbsp;<span style="color:#fff">${(es.mean_zscore ?? 0).toFixed(2)}</span> ·
+                    max&nbsp;<span style="color:#22c55e">${(es.max_zscore ?? 0).toFixed(2)}</span> ·
+                    pct99&nbsp;<span style="color:#fbbf24">${(es.pct99_zscore ?? 0).toFixed(2)}</span><br/>
+                    above&nbsp;${(es.threshold_zscore ?? 0.6)}σ:&nbsp;<span style="color:#22c55e">${es.n_above_threshold || 0}</span>/${a.n_timesteps || 0}
+                    <span style="color:#64748b">(${(es.pct_above_threshold ?? 0).toFixed(1)}%)</span>
+                </div>
+            </div>` : '';
+
+        return `
+            <div style="background:#0a1628;border:1px solid #7c3aed;border-radius:6px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#cbd5e1;line-height:1.5">
+                ⏱️ <strong style="color:#a78bfa">HRF lag = ${hrfOff}s.</strong>
+                Brain activations are offset ${hrfOff}s from the video stimulus (hemodynamic response function delay).
+                <strong style="color:#fbbf24">stimulus_second</strong> = when the video CONTENT caused each brain response.
+                <strong style="color:#a78bfa">second</strong> = when the brain activation peaks.
+                Use stimulus_second to identify <em>what video content</em> drove each brain response.
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+                ${card('Engagement Score', (a.engagement_score || 0).toFixed(4), 'main score', '#a78bfa', true)}
+                ${card('Duration', `${(a.duration_s || 0).toFixed(1)}s`, '', '#e2e8f0')}
+                ${card('Timesteps', `${a.n_timesteps || 0}`, '1 Hz', '#e2e8f0')}
+                ${card('Vertices', `${(a.n_vertices || 0).toLocaleString()}`, 'fsaverage5', '#e2e8f0')}
+                ${card('Mode', escapeHtml(a.mode || '—'), '', '#fbbf24')}
+                ${card('Inference', `${(a.inference_time_minutes || 0).toFixed(1)}m`, '', '#e2e8f0')}
+                ${card('Brain Peak (sec)', `${maxBrainSec.toFixed(1)}s`, `stim ${maxStimSec.toFixed(1)}s`, '#fbbf24')}
+                ${card('Peak Moments', `${(a.peak_moments || []).length}`, 'top 10%', '#e2e8f0')}
+                ${engagementCard}
+                <div style="flex:1;min-width:170px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px">
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Features Used</div>
+                    <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${features || '<span style="color:#64748b;font-size:10px">—</span>'}</div>
+                </div>
+                <div style="flex:1.5;min-width:200px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px">
+                    <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Analyzed At</div>
+                    <div style="font-size:11px;color:#cbd5e1;margin-top:4px;font-family:monospace;word-break:break-all">${escapeHtml(a.analyzed_at || '—')}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderBrainScrubberReadout(brainCurve, retentionPts, scrubberSec, hrfOffset) {
+        const offset = (hrfOffset != null) ? hrfOffset : 5.0;
+        if (scrubberSec == null) {
+            return `<div id="jarvis-brain-scrub-readout" style="margin-top:6px;font-size:11px;color:#64748b;font-family:monospace">📍 Click or drag on chart — scrubber position will appear here</div>`;
+        }
+        const bv = brainInterpAt(brainCurve, scrubberSec, p => p.second, p => p.activation);
+        const bz = brainInterpAt(brainCurve, scrubberSec, p => p.second, p => (p.activation_zscore != null ? p.activation_zscore : 0));
+        const rv = retentionPts ? brainInterpAt(retentionPts, scrubberSec, p => p.second, p => p.retention) : null;
+        const stimSec = Math.max(0, scrubberSec - offset);
+        return `<div id="jarvis-brain-scrub-readout" style="margin-top:6px;font-size:12px;color:#cbd5e1;font-family:monospace;line-height:1.55">
+            📍 brain&nbsp;<span style="color:#a78bfa">t=${scrubberSec.toFixed(1)}s</span> &nbsp;·&nbsp;
+            🎬 stimulus&nbsp;<span style="color:#fbbf24">t=${stimSec.toFixed(1)}s</span>
+            &nbsp;<span style="color:#475569">(HRF ${offset}s)</span><br/>
+            <span style="color:#a78bfa">Activation: ${bv != null ? bv.toFixed(3) : '—'}</span>
+            &nbsp;·&nbsp; <span style="color:#a78bfa">Z-score: ${bz != null ? bz.toFixed(2) : '—'}σ</span>
+            ${rv != null ? `&nbsp;·&nbsp; <span style="color:#fbbf24">Retention: ${rv.toFixed(3)}</span>` : ''}
+        </div>`;
+    }
+
+    function renderRegionTimeSeries(regionName, analysis) {
+        const region = analysis && analysis.region_activations && analysis.region_activations[regionName];
+        if (!region) return '';
+        const W = 240, H = 60, padL = 5, padR = 5, padT = 5, padB = 15;
+        const innerW = W - padL - padR, innerH = H - padT - padB;
+
+        if (!region.timeseries || !Array.isArray(region.timeseries) || !region.timeseries.length) {
+            return `<div style="margin-top:6px;font-size:9px;color:#64748b;background:#020617;border-radius:4px;padding:8px;text-align:center;font-style:italic">Re-run analysis to see time-series data</div>`;
+        }
+        const ts = region.timeseries;
+        // Normalize to 0-1 so each region chart shows its own pattern clearly
+        const tsMin = Math.min(...ts);
+        const tsMax = Math.max(...ts);
+        const tsSpan = tsMax - tsMin;
+        const tsNorm = tsSpan > 1e-9 ? ts.map(v => (v - tsMin) / tsSpan) : ts.map(() => 0.5);
+        const seconds = (analysis.seconds && analysis.seconds.length === ts.length)
+            ? analysis.seconds
+            : ts.map((_, i) => i);
+        const maxT = seconds[seconds.length - 1] || ts.length - 1 || 1;
+
+        const xOf = t => padL + (maxT > 0 ? (t / maxT) * innerW : 0);
+        const yOf = v => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
+
+        const path = tsNorm.map((v, i) => `${i === 0 ? 'M' : 'L'}${xOf(seconds[i] || i).toFixed(1)},${yOf(v).toFixed(1)}`).join(' ');
+
+        let retPath = '';
+        if (analysis._retentionCurve && analysis._retentionCurve.length && analysis._durationSec) {
+            const rMax = Math.max(...analysis._retentionCurve.map(p => p.retention ?? p.value ?? 0)) || 1;
+            const ret = analysis._retentionCurve;
+            retPath = ret.map((p, i) => {
+                const frac = p.second ?? p.time ?? p.t ?? 0;
+                const sec = frac * analysis._durationSec;
+                const val = (p.retention ?? p.value ?? 0) / rMax;
+                return `${i === 0 ? 'M' : 'L'}${xOf(sec).toFixed(1)},${yOf(val).toFixed(1)}`;
+            }).join(' ');
+        }
+
+        const grid = [0.25, 0.5, 0.75].map(g => {
+            const y = yOf(g).toFixed(1);
+            return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+        }).join('');
+
+        const safeId = regionName.replace(/_/g, '-');
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:60px;display:block;margin-top:6px" data-region-ts="${escapeHtml(regionName)}">
+            <rect width="${W}" height="${H}" fill="#020617" rx="4"/>
+            ${grid}
+            ${retPath ? `<path d="${retPath}" fill="none" stroke="#fbbf24" stroke-width="1" opacity="0.6"/>` : ''}
+            <path d="${path}" fill="none" stroke="#a78bfa" stroke-width="1.5"/>
+            <text x="${padL}" y="${H-3}" fill="#475569" font-size="7">0s · raw: ${tsMin.toFixed(3)}-${tsMax.toFixed(3)}</text>
+            <text x="${W - padR}" y="${H - 3}" fill="#475569" font-size="8" text-anchor="end">${maxT.toFixed ? maxT.toFixed(0) : maxT}s</text>
+            <line id="brain-region-scrubber-${safeId}" data-maxt="${maxT}" data-padl="${padL}" data-innerw="${innerW}" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + innerH}" stroke="#ef4444" stroke-width="1" opacity="0"/>
+        </svg>`;
+    }
+
+    function renderBrainRegions(regionActivations, expandedKey, analysis) {
+        const entries = Object.entries(regionActivations || {});
+        if (!entries.length) return '';
+        entries.sort((a, b) => (b[1].mean_activation || 0) - (a[1].mean_activation || 0));
+
+        const cards = entries.map(([key, v]) => {
+            const meta = BRAIN_REGIONS_META[key] || { icon: '🧠', label: key, desc: '' };
+            const isExpanded = expandedKey === key;
+            const meanColor = brainColorForActivation(v.mean_activation);
+            const peakColor = brainColorForActivation(v.peak_activation);
+            const interp = v.mean_activation > 0.5
+                ? `Strong engagement — ${meta.label.toLowerCase()} is driving attention`
+                : v.mean_activation > 0.35
+                    ? `Moderate engagement throughout the video`
+                    : `Low average engagement — only spikes briefly`;
+            const tsHtml = renderRegionTimeSeries(key, analysis);
+
+            return `
+                <div class="jarvis-brain-region-card brain-region-card" data-region="${escapeHtml(key)}"
+                     style="background:#0a1628;border:1px solid ${isExpanded ? '#7c3aed' : '#1e293b'};border-radius:6px;padding:10px;cursor:pointer;transition:border-color 0.15s">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:13px;color:#e2e8f0;font-weight:600">${meta.icon} ${escapeHtml(meta.label)}</div>
+                            <div style="font-size:10px;color:#94a3b8;margin-top:2px">${escapeHtml(meta.desc)}</div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0">
+                            <div style="font-size:14px;color:${meanColor};font-weight:700;font-family:monospace">${(v.mean_activation || 0).toFixed(3)}</div>
+                            <div style="font-size:9px;color:#64748b">mean</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px">
+                        <div style="height:6px;background:#020617;border-radius:3px;overflow:hidden">
+                            <div style="height:100%;width:${((v.mean_activation || 0) * 100).toFixed(0)}%;background:${meanColor}"></div>
+                        </div>
+                        <div style="font-size:9px;color:#64748b;margin-top:2px">peak: <span style="color:${peakColor}">${(v.peak_activation || 0).toFixed(3)}</span> · ${v.n_vertices} vertices</div>
+                    </div>
+                    ${tsHtml}
+                    ${isExpanded ? `
+                        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b">
+                            <div style="font-size:11px;color:#cbd5e1;line-height:1.5">${escapeHtml(interp)}</div>
+                            <div style="display:flex;gap:6px;margin-top:8px">
+                                <div style="flex:1;background:#020617;border-radius:4px;padding:6px">
+                                    <div style="font-size:9px;color:#64748b">Mean</div>
+                                    <div style="font-size:13px;color:${meanColor};font-weight:700;font-family:monospace">${(v.mean_activation || 0).toFixed(4)}</div>
+                                </div>
+                                <div style="flex:1;background:#020617;border-radius:4px;padding:6px">
+                                    <div style="font-size:9px;color:#64748b">Peak</div>
+                                    <div style="font-size:13px;color:${peakColor};font-weight:700;font-family:monospace">${(v.peak_activation || 0).toFixed(4)}</div>
+                                </div>
+                                <div style="flex:1;background:#020617;border-radius:4px;padding:6px">
+                                    <div style="font-size:9px;color:#64748b">Vertices</div>
+                                    <div style="font-size:13px;color:#cbd5e1;font-weight:700;font-family:monospace">${v.n_vertices}</div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div style="margin-top:18px">
+                <div style="font-size:13px;color:#f1f5f9;font-weight:700;margin-bottom:4px">🧠 Per-Region Activation</div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:8px">Sorted by mean activation. Click a region to expand details.</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">${cards}</div>
+            </div>
+        `;
+    }
+
+    // Compact normalized mini-chart for an arbitrary timeseries array
+    function renderTimeseriesMiniSvg(ts, opts) {
+        opts = opts || {};
+        const W = opts.W || 200, H = opts.H || 50, padL = 4, padR = 4, padT = 4, padB = 12;
+        const innerW = W - padL - padR, innerH = H - padT - padB;
+        if (!Array.isArray(ts) || !ts.length) return '';
+        const tsMin = Math.min(...ts);
+        const tsMax = Math.max(...ts);
+        const tsSpan = tsMax - tsMin;
+        const norm = tsSpan > 1e-9 ? ts.map(v => (v - tsMin) / tsSpan) : ts.map(() => 0.5);
+        const xOf = i => padL + (ts.length > 1 ? (i / (ts.length - 1)) * innerW : 0);
+        const yOf = v => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
+        const d = norm.map((v, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(' ');
+        const stroke = opts.stroke || '#a78bfa';
+        return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;margin-top:4px">
+            <rect width="${W}" height="${H}" fill="#020617" rx="3"/>
+            <path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.4"/>
+            <text x="${padL}" y="${H-2}" fill="#475569" font-size="7">raw: ${tsMin.toFixed(3)}-${tsMax.toFixed(3)}</text>
+        </svg>`;
+    }
+
+    // FIX 4: panel that shows the 10 functional groups labelled with their
+    // real Destrieux composition (matched_regions). Collapsible.
+    function renderFunctionalGroupsComposition(analysis) {
+        const ra = analysis && analysis.region_activations;
+        if (!ra || !Object.keys(ra).length) return '';
+        const entries = Object.entries(ra).sort((a, b) => (b[1].mean_activation || 0) - (a[1].mean_activation || 0));
+
+        const headerCount = entries.length;
+        const expanded = brainFunctionalGroupsExpanded;
+        const cards = expanded ? entries.map(([key, v]) => {
+            const matched = Array.isArray(v.matched_regions) ? v.matched_regions : [];
+            const composition = matched.length
+                ? `<span style="color:#64748b">(${matched.map(m => escapeHtml(m)).join(', ')})</span>`
+                : `<span style="color:#475569;font-style:italic">(composition not stored)</span>`;
+            const ts = Array.isArray(v.timeseries) ? v.timeseries : [];
+            const mini = renderTimeseriesMiniSvg(ts, { stroke: REGION_COLORS[key] || '#a78bfa', H: 48 });
+            return `<div style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                    <div style="font-size:12px;color:#e2e8f0;font-weight:700">${escapeHtml(key)}</div>
+                    <div style="font-size:11px;color:#a78bfa;font-family:monospace">${(v.mean_activation || 0).toFixed(3)}</div>
+                </div>
+                <div style="font-size:10px;line-height:1.5;margin-top:4px">${composition}</div>
+                <div style="font-size:9px;color:#64748b;margin-top:3px">${v.n_vertices} vertices · peak ${(v.peak_activation || 0).toFixed(3)}</div>
+                ${mini}
+            </div>`;
+        }).join('') : '';
+
+        return `
+            <div style="margin-top:18px">
+                <button id="brain-funcgroups-toggle" style="background:#0a1628;border:1px solid #1e293b;color:#f1f5f9;border-radius:6px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center">
+                    <span>🔬 Anatomical Composition (${headerCount} functional groups · Destrieux atlas)</span>
+                    <span style="font-size:11px;color:#94a3b8">${expanded ? '▼ hide' : '▶ show'}</span>
+                </button>
+                ${expanded ? `
+                    <div style="font-size:10px;color:#64748b;margin:8px 0">Each functional group is a union of multiple Destrieux anatomical regions. Mini-charts are normalized to each group's own 0-1 range.</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">${cards}</div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    // FIX 6: render all 75 individual Destrieux anatomical regions as small
+    // cards with search/filter and lobe grouping. Only renders when the
+    // analysis includes destrieux_region_activations.
+    // Destrieux region → lobe color (for chart overlay lines)
+    function destrieuxLobeColor(name) {
+        const n = name || '';
+        if (n.startsWith('G_front') || n.startsWith('S_front')) return '#3b82f6'; // frontal — blue
+        if (n.startsWith('G_parietal') || n.startsWith('S_parietal') || n.startsWith('G_pariet')) return '#10b981'; // parietal — green
+        if (n.startsWith('G_temp') || n.startsWith('S_temporal') || n.startsWith('Lat_Fis')) return '#f59e0b'; // temporal — amber
+        if (n.startsWith('G_occipital') || n.startsWith('G_cuneus') || n.startsWith('G_lingual')
+            || n.startsWith('S_calcarine') || n.startsWith('Pole_occipital')) return '#ef4444'; // occipital — red
+        if (n.includes('cingul') || n.includes('cingulate')) return '#8b5cf6'; // cingulate — purple
+        if (n.startsWith('G_insular') || n.startsWith('S_circular') || n.startsWith('G_Ins')) return '#f97316'; // insular — orange
+        return '#94a3b8'; // default — grey
+    }
+
+    function destrieuxLobeOf(name) {
+        const n = name.toLowerCase();
+        if (n.includes('cingul') || n.includes('pericallosal') || n.includes('subcallosal')) return 'cingulate';
+        if (n.includes('insula') || n.includes('ins_lg') || n.includes('insular')) return 'insular';
+        if (n.includes('front') || n.includes('orbital') || n.includes('rectus') || n.includes('precentral') || n.includes('paracentral') || n.includes('subcentral') || n.includes('frontomargin') || n.includes('frontopol') || n.includes('suborbital')) return 'frontal';
+        if (n.includes('pariet') || n.includes('postcentral') || n.includes('precuneus') || n.includes('subparietal') || n.includes('intrapariet') || n.includes('supramar') || n.includes('angular') || n.includes('cingul-marginalis')) return 'parietal';
+        if (n.includes('temp') || n.includes('parahip') || n.includes('fusifor') || n.includes('collat') || n.includes('lat_fis')) return 'temporal';
+        if (n.includes('occip') || n.includes('calcarine') || n.includes('cuneus') || n.includes('lingual') || n.includes('lunatus') || n.includes('parieto_occipital')) return 'occipital';
+        if (n.includes('central')) return 'frontal';
+        return 'other';
+    }
+
+    function renderDestrieuxRegions(analysis) {
+        const dra = analysis && analysis.destrieux_region_activations;
+        if (!dra || !Object.keys(dra).length) return '';
+
+        const entries = Object.entries(dra);
+        const headerCount = entries.length;
+        const expanded = brainDestrieuxExpanded;
+
+        let body = '';
+        if (expanded) {
+            const filter = (brainDestrieuxFilter || '').toLowerCase().trim();
+            const hemi = brainDestrieuxHemiFilter || 'all';
+            const filtered = entries
+                .filter(([k]) => !filter || k.toLowerCase().includes(filter))
+                .filter(([k]) => hemi === 'all' || destrieuxLobeOf(k) === hemi)
+                .sort((a, b) => {
+                    const za = (a[1] && a[1].mean_zscore != null) ? a[1].mean_zscore : (a[1].mean_activation || 0);
+                    const zb = (b[1] && b[1].mean_zscore != null) ? b[1].mean_zscore : (b[1].mean_activation || 0);
+                    return zb - za;
+                });
+
+            const lobes = ['frontal', 'parietal', 'temporal', 'occipital', 'cingulate', 'insular', 'other'];
+            const lobeChips = ['all', ...lobes].map(l => {
+                const active = hemi === l;
+                return `<button class="brain-destrieux-lobe" data-lobe="${l}" style="background:${active ? '#7c3aed' : '#0a1628'};border:1px solid ${active ? '#7c3aed' : '#1e293b'};color:${active ? '#fff' : '#94a3b8'};border-radius:10px;padding:3px 9px;font-size:10px;cursor:pointer;font-weight:600;text-transform:capitalize">${l}</button>`;
+            }).join('');
+
+            const cards = filtered.map(([name, v]) => {
+                const ts = Array.isArray(v.timeseries) ? v.timeseries : [];
+                const mini = renderTimeseriesMiniSvg(ts, { stroke: '#a78bfa', H: 42 });
+                const meanColor = brainColorForActivation(v.mean_activation);
+                return `<div style="background:#0a1628;border:1px solid #1e293b;border-radius:5px;padding:7px">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+                        <div style="font-size:10px;color:#e2e8f0;font-weight:600;font-family:monospace;line-height:1.2;word-break:break-all">${escapeHtml(name)}</div>
+                        <div style="font-size:11px;color:${meanColor};font-weight:700;font-family:monospace;flex-shrink:0">${(v.mean_activation || 0).toFixed(3)}</div>
+                    </div>
+                    <div style="font-size:8px;color:#64748b;margin-top:2px">${v.n_vertices}v · peak ${(v.peak_activation || 0).toFixed(3)}</div>
+                    ${mini}
+                </div>`;
+            }).join('');
+
+            body = `
+                <div style="margin:8px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                    <input id="brain-destrieux-filter" type="text" placeholder="Filter by name (e.g. front, temp, cingul)…" value="${escapeHtml(filter)}"
+                        style="flex:1;min-width:200px;background:#0a1628;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:5px 9px;font-size:11px;font-family:monospace"/>
+                    <span style="font-size:10px;color:#64748b">${filtered.length}/${entries.length}</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">${lobeChips}</div>
+                ${filtered.length
+                    ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${cards}</div>`
+                    : `<div style="font-size:11px;color:#64748b;padding:14px;text-align:center;background:#0a1628;border-radius:6px">No regions match filter.</div>`}
+            `;
+        }
+
+        return `
+            <div style="margin-top:18px">
+                <button id="brain-destrieux-toggle" style="background:#0a1628;border:1px solid #1e293b;color:#f1f5f9;border-radius:6px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center">
+                    <span>🧬 Individual Anatomical Regions (${headerCount} Destrieux)</span>
+                    <span style="font-size:11px;color:#94a3b8">${expanded ? '▼ hide' : '▶ show'}</span>
+                </button>
+                ${body}
+            </div>
+        `;
+    }
+
+    function renderBrainResolution(resolutionNamed, durationSec) {
+        if (!resolutionNamed) return '';
+        const SEGMENTS = [
+            { key: 'hook_0_10pct',   label: 'Hook',   frac: [0.00, 0.10], note: 'First impression — opening engagement' },
+            { key: 'setup_10_25pct', label: 'Setup',  frac: [0.10, 0.25], note: 'Story setup — context building' },
+            { key: 'mid_25_75pct',   label: 'Mid',    frac: [0.25, 0.75], note: 'Body — main content engagement' },
+            { key: 'end_75_95pct',   label: 'End',    frac: [0.75, 0.95], note: 'Wrap-up — payoff and resolution' },
+            { key: 'final_5pct',     label: 'Final',  frac: [0.95, 1.00], note: 'Last 5% — outro' },
+        ];
+
+        const present = SEGMENTS.filter(s => resolutionNamed[s.key]);
+        if (!present.length) return '';
+        const maxMean = Math.max(...present.map(s => resolutionNamed[s.key].mean));
+
+        const rows = present.map(s => {
+            const v = resolutionNamed[s.key];
+            const isStrongest = v.mean === maxMean;
+            const startSec = (durationSec * s.frac[0]).toFixed(1);
+            const endSec = (durationSec * s.frac[1]).toFixed(1);
+            const color = brainColorForActivation(v.mean);
+            const peakColor = brainColorForActivation(v.peak);
+            return `
+                <div style="background:#0a1628;border:1px solid ${isStrongest ? '#22c55e' : '#1e293b'};border-radius:6px;padding:10px">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                        <div>
+                            <div style="font-size:12px;color:#e2e8f0;font-weight:700">${escapeHtml(s.label)} ${isStrongest ? '<span style="color:#22c55e;font-size:10px">★ strongest</span>' : ''}</div>
+                            <div style="font-size:10px;color:#94a3b8">${startSec}s – ${endSec}s · ${(s.frac[0] * 100).toFixed(0)}–${(s.frac[1] * 100).toFixed(0)}%</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div style="font-size:14px;color:${color};font-weight:700;font-family:monospace">${v.mean.toFixed(3)}</div>
+                            <div style="font-size:9px;color:#64748b">peak <span style="color:${peakColor}">${v.peak.toFixed(3)}</span></div>
+                        </div>
+                    </div>
+                    <div style="height:8px;background:#020617;border-radius:4px;margin-top:8px;overflow:hidden">
+                        <div style="height:100%;width:${(v.mean * 100).toFixed(0)}%;background:${color}"></div>
+                    </div>
+                    <div style="font-size:10px;color:#64748b;margin-top:6px">${escapeHtml(s.note)}</div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div style="margin-top:18px">
+                <div style="font-size:13px;color:#f1f5f9;font-weight:700;margin-bottom:8px">📊 Video Segment Analysis</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">${rows}</div>
+            </div>
+        `;
+    }
+
+    function renderBrainSurface(analysis) {
+        const vd = analysis && analysis.vertex_data;
+        if (!vd || !vd.mean_activation_per_vertex || !vd.mean_activation_per_vertex.length) {
+            return `<div style="margin-top:18px;color:#64748b;font-size:11px;padding:14px">No vertex data available for 3D brain.</div>`;
+        }
+        const btnStyle = `background:#1e293b;color:#fff;border:0;border-radius:4px;padding:5px 10px;font-size:11px;cursor:pointer;font-weight:600;transition:background 0.15s`;
+        const btnActiveStyle = `background:#7c3aed;color:#fff;border:0;border-radius:4px;padding:5px 10px;font-size:11px;cursor:pointer;font-weight:600;transition:background 0.15s`;
+        return `
+            <div style="margin-top:8px">
+                <div id="jarvis-brain-3d-container" style="position:relative;width:100%;height:600px;background:#020617;border-radius:12px;overflow:hidden;border:1px solid #1e293b">
+                    <canvas id="jarvis-brain-3d-canvas" style="width:100%;height:100%;display:block"></canvas>
+                    <div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;z-index:10;flex-wrap:wrap">
+                        <button id="brain3d-color-activation" class="brain3d-btn" style="${btnActiveStyle}">Mean Activation</button>
+                        <button id="brain3d-color-timing" class="brain3d-btn" style="${btnStyle}">Peak Timing</button>
+                        <button id="brain3d-lh" class="brain3d-btn" style="${btnActiveStyle}">LH</button>
+                        <button id="brain3d-rh" class="brain3d-btn" style="${btnActiveStyle}">RH</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Legacy function kept as a stub — old SVG surface replaced by 3D version.
+    function renderBrainSurfaceSvgLegacyUnused(a, viewMode, colorMode) {
+        const positions = viewMode === 'side' ? BRAIN_SIDE_POSITIONS : BRAIN_TOP_POSITIONS;
+        const regions = a.region_activations || {};
+        const vd = a.vertex_data || {};
+        const meanArr = vd.mean_activation_per_vertex || [];
+        const peakArr = vd.peak_second_per_vertex || [];
+        const hemiSplit = vd.hemisphere_split || 10242;
+        const durationSec = a.duration_s || 1;
+
+        const W = 380, H = 320;
+        const cx = W / 2, cy = H / 2;
+        const cortexD = viewMode === 'side'
+            ? `M 30 165 C 30 80, 120 30, 210 30 C 300 30, 350 90, 358 165 C 360 220, 320 268, 240 280 C 180 285, 100 270, 50 230 C 22 200, 25 178, 30 165 Z`
+            : `M ${W / 2} 22 C 90 32, 30 130, 50 230 C 80 290, 140 305, ${W / 2} 305 C 240 305, 300 290, 330 230 C 350 130, 290 32, ${W / 2} 22 Z`;
+
+        const midline = viewMode === 'side' ? '' :
+            `<line x1="${W / 2}" y1="22" x2="${W / 2}" y2="304" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3"/>`;
+
+        const dotStep = 100;
+        const dots = [];
+        if (meanArr.length) {
+            for (let i = 0; i < meanArr.length; i += dotStep) {
+                const isLH = i < hemiSplit;
+                const seed1 = (i * 9301 + 49297) % 233280;
+                const seed2 = (i * 7919 + 12345) % 233280;
+                const u = seed1 / 233280;
+                const v = seed2 / 233280;
+                let dx, dy;
+                if (viewMode === 'side') {
+                    const ang = u * 2 * Math.PI;
+                    const r = Math.sqrt(v);
+                    dx = cx + Math.cos(ang) * 140 * r;
+                    dy = cy + Math.sin(ang) * 100 * r;
+                } else {
+                    const halfCx = isLH ? W * 0.30 : W * 0.70;
+                    const ang = u * 2 * Math.PI;
+                    const r = Math.sqrt(v);
+                    dx = halfCx + Math.cos(ang) * 70 * r;
+                    dy = cy + Math.sin(ang) * 130 * r;
+                }
+                const color = colorMode === 'peak'
+                    ? brainColorForTime(peakArr[i] || 0, durationSec)
+                    : brainColorForActivation(meanArr[i]);
+                dots.push(`<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="2" fill="${color}" opacity="0.7"/>`);
+            }
+        }
+
+        const regionEllipses = Object.entries(regions).map(([key, v]) => {
+            const pos = positions[key];
+            if (!pos) return '';
+            const meta = BRAIN_REGIONS_META[key] || { icon: '', label: key };
+            const color = brainColorForActivation(v.mean_activation);
+            const shortLabel = meta.label.split(' ')[0];
+            return `
+                <g class="brain-region-ellipse" data-region="${escapeHtml(key)}" style="cursor:pointer">
+                    <ellipse cx="${pos.x}" cy="${pos.y}" rx="26" ry="18"
+                             fill="${color}" opacity="0.7" stroke="#0a1628" stroke-width="1.5"/>
+                    <text x="${pos.x}" y="${pos.y - 1}" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" pointer-events="none">${meta.icon}</text>
+                    <text x="${pos.x}" y="${pos.y + 10}" font-size="7" fill="#0a1628" text-anchor="middle" font-weight="700" pointer-events="none">${escapeHtml(shortLabel)}</text>
+                    <title>${escapeHtml(meta.label)}: mean ${(v.mean_activation || 0).toFixed(3)} · peak ${(v.peak_activation || 0).toFixed(3)} · ${v.n_vertices} vertices</title>
+                </g>
+            `;
+        }).join('');
+
+        const labels = viewMode === 'top' ? `
+            <text x="${W * 0.27}" y="14" font-size="10" fill="#64748b" text-anchor="middle">LH</text>
+            <text x="${W * 0.73}" y="14" font-size="10" fill="#64748b" text-anchor="middle">RH</text>
+            <text x="${W / 2}" y="318" font-size="9" fill="#475569" text-anchor="middle">Anterior ↑ · Posterior ↓</text>
+        ` : `
+            <text x="60" y="20" font-size="10" fill="#64748b" text-anchor="middle">Frontal</text>
+            <text x="330" y="20" font-size="10" fill="#64748b" text-anchor="middle">Occipital</text>
+            <text x="${W / 2}" y="318" font-size="9" fill="#475569" text-anchor="middle">Lateral view (left hemisphere)</text>
+        `;
+
+        const colorScale = colorMode === 'peak'
+            ? `<defs><linearGradient id="brainTimeGrad"><stop offset="0%" stop-color="rgb(59,130,246)"/><stop offset="50%" stop-color="rgb(167,139,250)"/><stop offset="100%" stop-color="rgb(239,68,68)"/></linearGradient></defs>
+               <rect x="60" y="294" width="120" height="6" fill="url(#brainTimeGrad)"/>
+               <text x="60" y="290" font-size="8" fill="#94a3b8">early</text>
+               <text x="180" y="290" font-size="8" fill="#94a3b8" text-anchor="end">late</text>`
+            : `<defs><linearGradient id="brainActGrad"><stop offset="0%" stop-color="rgb(59,130,246)"/><stop offset="50%" stop-color="rgb(34,197,94)"/><stop offset="70%" stop-color="rgb(245,158,11)"/><stop offset="100%" stop-color="rgb(239,68,68)"/></linearGradient></defs>
+               <rect x="60" y="294" width="120" height="6" fill="url(#brainActGrad)"/>
+               <text x="60" y="290" font-size="8" fill="#94a3b8">low</text>
+               <text x="180" y="290" font-size="8" fill="#94a3b8" text-anchor="end">high</text>`;
+
+        const colorLabel = colorMode === 'peak' ? 'Peak Timing (when active)' : 'Mean Activation';
+        const btnStyle = (active) => `background:${active ? '#7c3aed' : '#1e293b'};color:#fff;border:0;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer`;
+
+        return `
+            <div style="margin-top:18px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+                    <div style="font-size:13px;color:#f1f5f9;font-weight:700">🧠 Brain Surface Activation</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <button class="jarvis-brain-view-btn" data-view="top" style="${btnStyle(viewMode === 'top')}">Top View</button>
+                        <button class="jarvis-brain-view-btn" data-view="side" style="${btnStyle(viewMode === 'side')}">Side View</button>
+                        <span style="display:inline-block;width:1px;height:18px;background:#1e293b;margin:0 4px"></span>
+                        <button class="jarvis-brain-color-btn" data-color="mean" style="${btnStyle(colorMode === 'mean')}">Color: Mean</button>
+                        <button class="jarvis-brain-color-btn" data-color="peak" style="${btnStyle(colorMode === 'peak')}">Color: Peak Timing</button>
+                    </div>
+                </div>
+                <div style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:12px;display:flex;justify-content:center">
+                    <svg viewBox="0 0 ${W} ${H}" style="max-width:480px;width:100%;height:auto;background:#020617;border-radius:4px">
+                        <path d="${cortexD}" fill="#0d1525" stroke="#1e293b" stroke-width="2"/>
+                        ${midline}
+                        ${dots.join('')}
+                        ${regionEllipses}
+                        ${labels}
+                        <text x="190" y="288" font-size="9" fill="#94a3b8" text-anchor="middle">Color: ${escapeHtml(colorLabel)}</text>
+                        ${colorScale}
+                    </svg>
+                </div>
+                <div style="font-size:10px;color:#64748b;margin-top:6px;line-height:1.5">
+                    Note: 3D activation shown as ${colorMode === 'peak' ? '<strong>peak timing</strong> (when each vertex is most active)' : '<strong>mean across full video</strong>'}.
+                    Vertex dots sample every 100th of ${(vd.n_vertices || 0).toLocaleString()} vertices. Real-time vertex animation would require streaming 20K×55 float values; showing peak_second_per_vertex as heat instead.
+                    Click a region ellipse to jump to its detail card.
+                </div>
+            </div>
+        `;
+    }
+
+    function renderBrainFrameIntegration() {
+        return `
+            <div style="margin-top:14px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px;font-size:11px;color:#94a3b8;line-height:1.5">
+                📹 <strong>Video frame at scrubber position:</strong> Direct video playback is not available in this UI context.
+                The scrubber on the engagement chart shows brain activation at each second — drag it to inspect any moment of the video.
+            </div>
+        `;
+    }
+
+    function renderBrainRawVars(a, expanded, rowExpanded) {
+        if (!expanded) {
+            return `
+                <div style="margin-top:18px">
+                    <div id="jarvis-brain-raw-toggle" style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px;cursor:pointer">
+                        <div style="font-size:13px;color:#f1f5f9;font-weight:700">🔬 Raw TRIBE v2 Variables (all inputs & outputs) ▸</div>
+                        <div style="font-size:10px;color:#64748b;margin-top:2px">Click to expand. Shows every variable in the analysis JSON.</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const row = (k, v) => `
+            <tr style="border-bottom:1px solid #1e293b">
+                <td style="padding:6px 10px;font-family:monospace;font-size:11px;color:#a78bfa;vertical-align:top;white-space:nowrap">${escapeHtml(k)}</td>
+                <td style="padding:6px 10px;font-family:monospace;font-size:11px;color:#cbd5e1;word-break:break-word">${v}</td>
+            </tr>
+        `;
+
+        const fmtNum = n => typeof n === 'number' ? n.toFixed(4) : escapeHtml(String(n));
+
+        const peaksTable = `
+            <table style="width:100%;border-collapse:collapse;background:#020617;margin-top:6px">
+                <thead><tr style="background:#1e293b">
+                    <th style="padding:4px 8px;text-align:left;font-size:10px;color:#94a3b8">second</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">activation</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">percentile</th>
+                </tr></thead>
+                <tbody>${(a.peak_moments || []).map(p => `
+                    <tr><td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1">${p.second}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${p.activation.toFixed(4)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${p.percentile}</td></tr>
+                `).join('')}</tbody>
+            </table>
+        `;
+
+        const quartTable = a.resolution_quartiles ? `
+            <table style="width:100%;border-collapse:collapse;background:#020617;margin-top:6px">
+                <thead><tr style="background:#1e293b">
+                    <th style="padding:4px 8px;text-align:left;font-size:10px;color:#94a3b8">segment</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">mean</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">peak</th>
+                </tr></thead>
+                <tbody>${Object.entries(a.resolution_quartiles).map(([k, v]) => `
+                    <tr><td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1">${escapeHtml(k)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${fmtNum(v.mean)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${fmtNum(v.peak)}</td></tr>
+                `).join('')}</tbody>
+            </table>` : '<span style="color:#64748b">none</span>';
+
+        const namedTable = a.resolution_named ? `
+            <table style="width:100%;border-collapse:collapse;background:#020617;margin-top:6px">
+                <thead><tr style="background:#1e293b">
+                    <th style="padding:4px 8px;text-align:left;font-size:10px;color:#94a3b8">segment</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">mean</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">peak</th>
+                </tr></thead>
+                <tbody>${Object.entries(a.resolution_named).map(([k, v]) => `
+                    <tr><td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1">${escapeHtml(k)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${fmtNum(v.mean)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${fmtNum(v.peak)}</td></tr>
+                `).join('')}</tbody>
+            </table>` : '<span style="color:#64748b">none</span>';
+
+        const segmentsList = Array.isArray(a.segments) ? a.segments : [];
+        const segmentsTable = segmentsList.length ? `
+            <table style="width:100%;border-collapse:collapse;background:#020617;margin-top:6px">
+                <thead><tr style="background:#1e293b">
+                    <th style="padding:4px 8px;text-align:left;font-size:10px;color:#94a3b8">#</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">start</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">end</th>
+                    <th style="padding:4px 8px;text-align:left;font-size:10px;color:#94a3b8">type</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">duration</th>
+                </tr></thead>
+                <tbody>${segmentsList.map((s, i) => {
+                    const start = s.start ?? s.t ?? s.second ?? s.time;
+                    const end = s.end;
+                    const type = s.type;
+                    const duration = (s.duration != null) ? s.duration
+                        : (typeof start === 'number' && typeof end === 'number') ? (end - start)
+                        : null;
+                    const f = v => (typeof v === 'number') ? v.toFixed(3) : (v != null ? escapeHtml(String(v)) : '—');
+                    return `<tr>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#64748b">${i}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${f(start)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${f(end)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#a78bfa">${type != null ? escapeHtml(String(type)) : '—'}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${f(duration)}</td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>` : '<span style="color:#64748b">none</span>';
+
+        const regionTable = a.region_activations ? `
+            <table style="width:100%;border-collapse:collapse;background:#020617;margin-top:6px">
+                <thead><tr style="background:#1e293b">
+                    <th style="padding:4px 8px;text-align:left;font-size:10px;color:#94a3b8">region</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">mean</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">peak</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">n_vertices</th>
+                </tr></thead>
+                <tbody>${Object.entries(a.region_activations).map(([k, v]) => `
+                    <tr><td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1">${escapeHtml(k)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${fmtNum(v.mean_activation)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${fmtNum(v.peak_activation)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${v.n_vertices}</td></tr>
+                `).join('')}</tbody>
+            </table>` : '<span style="color:#64748b">none</span>';
+
+        const curveExpanded = !!rowExpanded.brain_engagement_curve;
+        const curveCell = curveExpanded
+            ? `<pre style="margin:0;background:#020617;padding:8px;border-radius:4px;max-height:240px;overflow:auto;font-size:10px;color:#94a3b8">${escapeHtml(JSON.stringify(a.brain_engagement_curve || [], null, 2))}</pre>
+               <span class="jarvis-brain-raw-row" data-row="brain_engagement_curve" style="cursor:pointer;color:#7c3aed;font-size:10px">▾ collapse</span>`
+            : `<span class="jarvis-brain-raw-row" data-row="brain_engagement_curve" style="cursor:pointer;color:#7c3aed">[${(a.brain_engagement_curve || []).length} timesteps] — click to expand</span>`;
+
+        const rawCurveExpanded = !!rowExpanded.raw_engagement_curve;
+        const rawCurveCell = a.raw_engagement_curve
+            ? (rawCurveExpanded
+                ? `<pre style="margin:0;background:#020617;padding:8px;border-radius:4px;max-height:240px;overflow:auto;font-size:10px;color:#94a3b8">${escapeHtml(JSON.stringify(a.raw_engagement_curve || [], null, 2))}</pre>
+                   <span class="jarvis-brain-raw-row" data-row="raw_engagement_curve" style="cursor:pointer;color:#7c3aed;font-size:10px">▾ collapse</span>`
+                : `<span class="jarvis-brain-raw-row" data-row="raw_engagement_curve" style="cursor:pointer;color:#7c3aed">[${(a.raw_engagement_curve || []).length} raw values] — click to expand</span>`)
+            : '<span style="color:#64748b">none</span>';
+
+        const pgs = a.preds_global_stats || null;
+        const pgsCell = pgs ? `
+            <table style="width:100%;border-collapse:collapse;background:#020617;margin-top:6px">
+                <thead><tr style="background:#1e293b">
+                    <th style="padding:4px 8px;text-align:left;font-size:10px;color:#94a3b8">stat</th>
+                    <th style="padding:4px 8px;text-align:right;font-size:10px;color:#94a3b8">value</th>
+                </tr></thead>
+                <tbody>${Object.entries(pgs).map(([k, v]) => `
+                    <tr><td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1">${escapeHtml(k)}</td>
+                        <td style="padding:3px 8px;font-family:monospace;font-size:10px;color:#cbd5e1;text-align:right">${fmtNum(v)}</td></tr>
+                `).join('')}</tbody>
+            </table>` : '<span style="color:#64748b">none</span>';
+
+        const vd = a.vertex_data || {};
+
+        return `
+            <div style="margin-top:18px">
+                <div id="jarvis-brain-raw-toggle" style="background:#0a1628;border:1px solid #7c3aed;border-radius:6px 6px 0 0;padding:10px;cursor:pointer">
+                    <div style="font-size:13px;color:#f1f5f9;font-weight:700">🔬 Raw TRIBE v2 Variables ▾</div>
+                    <div style="font-size:10px;color:#64748b;margin-top:2px">All inputs & outputs from the analysis pipeline. Click to collapse.</div>
+                </div>
+                <div style="background:#0a1628;border:1px solid #1e293b;border-top:0;border-radius:0 0 6px 6px;padding:10px">
+                    <table style="width:100%;border-collapse:collapse">
+                        <tbody>
+                            ${row('video_path', escapeHtml(a.video_path || '—'))}
+                            ${row('analyzed_at', escapeHtml(a.analyzed_at || '—'))}
+                            ${row('duration_s', `${a.duration_s ?? '—'}`)}
+                            ${row('n_timesteps', `${a.n_timesteps ?? '—'}`)}
+                            ${row('n_vertices', `${(a.n_vertices ?? 0).toLocaleString()}`)}
+                            ${row('mode', escapeHtml(a.mode || '—'))}
+                            ${row('features_used', escapeHtml((a.features_used || []).join(', ')))}
+                            ${row('inference_time_minutes', `${a.inference_time_minutes ?? '—'}`)}
+                            ${row('engagement_score', `${a.engagement_score ?? '—'}`)}
+                            ${row('max_activation_second', `${a.max_activation_second ?? '—'}`)}
+                            ${row('brain_engagement_curve', curveCell)}
+                            ${row('raw_engagement_curve', rawCurveCell)}
+                            ${row('preds_global_stats', pgsCell)}
+                            ${row('peak_moments', `[${(a.peak_moments || []).length} moments]${peaksTable}`)}
+                            ${row('resolution_quartiles', quartTable)}
+                            ${row('resolution_named', namedTable)}
+                            ${row('region_activations', regionTable)}
+                            ${row('segments', `[${segmentsList.length} segments]${segmentsTable}`)}
+                            ${row('vertex_data.n_vertices', `${vd.n_vertices ?? '—'}`)}
+                            ${row('vertex_data.hemisphere_split', `${vd.hemisphere_split ?? '—'}`)}
+                            ${row('vertex_data.description', escapeHtml(vd.description || '—'))}
+                            ${row('vertex_data.mean_activation_per_vertex', `[${(vd.mean_activation_per_vertex || []).length} values] — too large to render in UI`)}
+                            ${row('vertex_data.peak_second_per_vertex', `[${(vd.peak_second_per_vertex || []).length} values] — too large to render in UI`)}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    // Single-line scrubber readout strip showing brain second, stimulus second,
+    // z-score, retention %, and a colored pill for each of the 10 functional
+    // region values at the current scrubber position.
+    function renderBrainScrubberReadoutFull(a, scrubberSec, hrfOffset) {
+        const offset = (hrfOffset != null) ? hrfOffset : 5.0;
+        const curve = a.brain_engagement_curve || [];
+        const durationSec = Number(a._durationSec || a.duration_s || 0) || 0;
+        let retentionPts = null;
+        const rawRetention = a._retentionCurve || null;
+        if (rawRetention && rawRetention.length && durationSec > 0) {
+            retentionPts = rawRetention.map(p => ({
+                second: (p.second ?? p.time ?? p.t ?? 0) * durationSec,
+                retention: Number(p.retention ?? p.value ?? 0),
+            })).filter(p => Number.isFinite(p.second) && Number.isFinite(p.retention));
+        }
+
+        if (scrubberSec == null) {
+            return `<div id="jarvis-brain-scrub-readout" style="margin-top:10px;padding:8px 12px;background:#020617;border:1px solid #1e293b;border-radius:6px;font-size:11px;color:#64748b;font-family:monospace">📍 Click or drag on the chart — full readout will appear here</div>`;
+        }
+
+        const bv = brainInterpAt(curve, scrubberSec, p => p.second, p => p.activation);
+        const bz = brainInterpAt(curve, scrubberSec, p => p.second, p => (p.activation_zscore != null ? p.activation_zscore : 0));
+        const rv = retentionPts ? brainInterpAt(retentionPts, scrubberSec, p => p.second, p => p.retention) : null;
+        const stimSec = Math.max(0, scrubberSec - offset);
+
+        const regions = a.region_activations || {};
+        const seconds = Array.isArray(a.seconds) ? a.seconds : null;
+        const pills = Object.keys(REGION_COLORS).map(k => {
+            const region = regions[k];
+            if (!region) return '';
+            let value = null;
+            if (region.timeseries && Array.isArray(region.timeseries) && region.timeseries.length) {
+                const tsLen = region.timeseries.length;
+                const grid = (seconds && seconds.length === tsLen)
+                    ? seconds
+                    : region.timeseries.map((_, i) => i);
+                const pts = region.timeseries.map((v, i) => ({ second: grid[i], val: v }));
+                value = brainInterpAt(pts, scrubberSec, p => p.second, p => p.val);
+            }
+            const meta = BRAIN_REGIONS_META[k] || { icon: '·', label: k };
+            const color = REGION_COLORS[k];
+            return `<span title="${escapeHtml(meta.label)}" style="display:inline-flex;align-items:center;gap:4px;background:${color}22;border:1px solid ${color};border-radius:10px;padding:2px 8px;font-size:10px;color:${color};font-weight:600;font-family:monospace">${meta.icon}<span>${value != null ? value.toFixed(3) : '—'}</span></span>`;
+        }).filter(Boolean).join('');
+
+        const retPct = rv != null ? `${(rv * 100).toFixed(0)}%` : '—';
+        return `<div id="jarvis-brain-scrub-readout" style="margin-top:10px;padding:8px 12px;background:#020617;border:1px solid #1e293b;border-radius:6px;font-size:11px;color:#cbd5e1;font-family:monospace;display:flex;flex-wrap:wrap;align-items:center;gap:10px;line-height:1.6">
+            <span>📍 brain&nbsp;<span style="color:#a78bfa">t=${scrubberSec.toFixed(1)}s</span></span>
+            <span>🎬 stim&nbsp;<span style="color:#fbbf24">${stimSec.toFixed(1)}s</span></span>
+            <span style="color:#a78bfa">act&nbsp;${bv != null ? bv.toFixed(3) : '—'}</span>
+            <span style="color:#a78bfa">${bz != null ? bz.toFixed(2) : '—'}σ</span>
+            ${rv != null ? `<span style="color:#fbbf24">ret&nbsp;${retPct}</span>` : ''}
+            <span style="color:#475569">|</span>
+            ${pills}
+        </div>`;
     }
 
     function renderBrainDetailPane() {
@@ -7736,8 +8826,6 @@ const JarvisUI = (() => {
         const rawRetention = a._retentionCurve || null;
         const durationSec = Number(a._durationSec || a.duration_s || 0) || 0;
 
-        // YouTube retention curves use `second` as a 0–1 fraction of total length.
-        // Convert to real seconds so it shares an x-axis with the brain curve.
         let retentionPts = null;
         if (rawRetention && rawRetention.length && durationSec > 0) {
             retentionPts = rawRetention.map(p => {
@@ -7749,80 +8837,294 @@ const JarvisUI = (() => {
             }).filter(p => Number.isFinite(p.second) && Number.isFinite(p.retention));
         }
 
-        const metrics = computeBrainRetentionMetrics(curve, retentionPts);
-        const chartHtml = renderBrainCurveSvg(curve, retentionPts, peaks, durationSec);
+        const hrfOffset = (a.analysis_metadata && a.analysis_metadata.hrf_offset_seconds != null)
+            ? a.analysis_metadata.hrf_offset_seconds : 5.0;
 
-        const peaksHtml = peaks.length ? `
-            <div style="margin-top:12px">
-                <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Peak Brain Moments (top 10%)</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">
-                    ${peaks.map(p => `<span style="background:#7c3aed22;color:#a78bfa;padding:3px 8px;border-radius:4px;font-size:11px;font-family:monospace">${p.second.toFixed(1)}s · p${p.percentile}</span>`).join('')}
+        // Expose Destrieux selection so renderBrainCurveSvg can pick it up.
+        window._brainEnabledDestrieux = brainEnabledDestrieux;
+
+        const metrics = computeBrainRetentionMetrics(curve, retentionPts);
+        const chartHtml = renderBrainCurveSvg(curve, retentionPts, peaks, durationSec, brainScrubberSec, brainEnabledRegions, a, brainChartResolution);
+        const readoutFullHtml = renderBrainScrubberReadoutFull(a, brainScrubberSec, hrfOffset);
+        const regionTogglesHtml = renderBrainRegionToggles(a);
+        const destrieuxChartTogglesHtml = renderDestrieuxChartToggles(a);
+        const resolutionToggleHtml = renderBrainResolutionToggle(a);
+
+        const titleHtml = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px">
+                <div>
+                    <div style="font-size:14px;color:#e2e8f0;font-weight:700">${escapeHtml(a._title || brainSelectedVideoId)}</div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">${escapeHtml(brainSelectedVideoId)} · ${a.n_timesteps || 0} timesteps · ${(a.duration_s || 0).toFixed(1)}s · engagement <span style="color:#a78bfa">${(a.engagement_score || 0).toFixed(4)}</span></div>
                 </div>
-            </div>` : '';
+                <button id="brain-info-toggle" style="background:#0a1628;border:1px solid #334155;color:#cbd5e1;border-radius:14px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600">${brainInfoExpanded ? '▲ Hide Info' : 'ℹ Info'}</button>
+            </div>`;
+
+        const infoBodyHtml = brainInfoExpanded ? `<div style="margin-bottom:14px">${renderBrainTopStats(a)}</div>` : '';
+
+        const nSteps = (Array.isArray(a.preds_shape) && a.preds_shape.length) ? a.preds_shape[0] : (a.n_timesteps || 'N');
+        const explainerArrow = brainExplainerExpanded ? '▲ collapse' : '▼ expand';
+        const explainerHtml = `
+        <div style="background:#0d1525;border:1px solid #1e3a5f;border-radius:8px;margin-bottom:10px">
+          <div id="brain-explainer-toggle" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none">
+            <div style="font-size:11px;font-weight:700;color:#60a5fa">📖 How to read this brain data</div>
+            <span style="color:#60a5fa;font-size:10px">${explainerArrow}</span>
+          </div>
+          <div id="brain-explainer-body" style="display:${brainExplainerExpanded ? 'block' : 'none'};padding:0 12px 12px;font-size:11px;color:#94a3b8;line-height:1.7">
+            <p><strong style="color:#a78bfa">TRIBE model output:</strong> For each second of this video, TRIBE predicts how strongly each of the 20,484 brain surface vertices activated. The result is a ${nSteps}×20,484 matrix of z-scores (standard deviations from mean).</p>
+            <p><strong style="color:#a78bfa">Purple line:</strong> mean across all 20,484 vertices.</p>
+            <p><strong style="color:#a78bfa">Colored region lines:</strong> means within each functional group's vertex set.</p>
+            <p><strong style="color:#a78bfa">HRF lag (5s):</strong> Brain BOLD signal peaks ~5s after the stimulus.</p>
+          </div>
+        </div>`;
 
         const fmtSec = s => (s == null ? '—' : `${Number(s).toFixed(1)}s`);
         const fmtR = r => (r == null ? '—' : (r >= 0 ? `+${r.toFixed(3)}` : r.toFixed(3)));
         const rColor = r => r == null ? '#94a3b8'
             : r >= 0.5 ? '#22c55e' : r >= 0.2 ? '#86efac'
             : r >= -0.2 ? '#fbbf24' : r >= -0.5 ? '#fb923c' : '#f87171';
-
-        const metricCard = (label, value, sub, color) => `
-            <div style="flex:1;min-width:140px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px">
-                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">${label}</div>
-                <div style="font-size:18px;color:${color};font-weight:700;line-height:1.2;margin-top:4px;font-family:monospace">${value}</div>
-                ${sub ? `<div style="font-size:10px;color:#94a3b8;margin-top:3px">${sub}</div>` : ''}
+        const compareHtml = `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:10px;font-family:monospace">
+                <span style="background:#0a1628;border:1px solid #1e293b;border-radius:10px;padding:4px 10px;color:#a78bfa"><strong>🧠 Peak</strong> ${fmtSec(metrics.brainPeakSec)}</span>
+                <span style="background:#0a1628;border:1px solid #1e293b;border-radius:10px;padding:4px 10px;color:#fbbf24"><strong>📈 Ret peak</strong> ${fmtSec(metrics.retentionPeakSec)}</span>
+                <span style="background:#0a1628;border:1px solid #1e293b;border-radius:10px;padding:4px 10px;color:${rColor(metrics.pearsonR)}"><strong>⚖️ r</strong> ${fmtR(metrics.pearsonR)}</span>
+                <span style="background:#0a1628;border:1px solid #1e293b;border-radius:10px;padding:4px 10px;color:#f87171"><strong>🚨 Gap</strong> ${fmtSec(metrics.biggestGapSec)}</span>
             </div>`;
 
-        const metricsHtml = `
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
-                ${metricCard(
-                    '🧠 Brain peak',
-                    fmtSec(metrics.brainPeakSec),
-                    `activation ${metrics.brainPeakVal != null ? metrics.brainPeakVal.toFixed(3) : '—'}`,
-                    '#a78bfa'
-                )}
-                ${metricCard(
-                    '📈 Retention peak',
-                    fmtSec(metrics.retentionPeakSec),
-                    metrics.retentionPeakVal != null ? `${metrics.retentionPeakVal.toFixed(2)} (relative)` : '(no retention)',
-                    '#fbbf24'
-                )}
-                ${metricCard(
-                    '⚖️ Brain↔Retention r',
-                    fmtR(metrics.pearsonR),
-                    metrics.pearsonR == null ? '(no overlap)'
-                        : metrics.pearsonR > 0.3 ? 'aligned — edit follows brain'
-                        : metrics.pearsonR < -0.3 ? 'inverted — edit fights brain'
-                        : 'weak link',
-                    rColor(metrics.pearsonR)
-                )}
-                ${metricCard(
-                    '🚨 Biggest gap',
-                    fmtSec(metrics.biggestGapSec),
-                    metrics.biggestGapKind
-                        ? (metrics.biggestGapKind === 'brain_high_retention_low'
-                            ? 'brain wants more, retention dropped'
-                            : 'retention high, brain low')
-                        : '—',
-                    '#f87171'
-                )}
+        const peakStimSec = brainPeakDetail
+            ? Math.max(0, brainPeakDetail.second - hrfOffset)
+            : 0;
+        const peakZ = brainPeakDetail && brainPeakDetail.activation_zscore != null
+            ? brainPeakDetail.activation_zscore
+            : null;
+        const peakDetailHtml = brainPeakDetail ? `
+            <div style="margin-top:6px;background:#0a1628;border:1px solid #a78bfa;border-radius:6px;padding:6px 10px;font-size:11px;color:#cbd5e1;line-height:1.4">
+                <strong style="color:#a78bfa">Peak</strong> brain&nbsp;${brainPeakDetail.second.toFixed(1)}s ·
+                <span style="color:#fbbf24">stim ${peakStimSec.toFixed(1)}s</span> ·
+                ${brainPeakDetail.activation.toFixed(3)}${peakZ != null ? ` · <span style="color:#a78bfa">${peakZ.toFixed(2)}σ</span>` : ''} ·
+                p${brainPeakDetail.percentile}
+            </div>` : '';
+
+        const extendedPeaksHtml = renderExtendedPeaksStrip(a, durationSec);
+
+        const tabs = [
+            { key: 'regions',     label: '🧠 Regions' },
+            { key: 'destrieux',   label: '🧬 Destrieux 75' },
+            { key: 'multi',       label: '📊 Multi-Scale' },
+            { key: 'correlation', label: '🔗 Correlation' },
+            { key: '3d',          label: '🌐 3D Brain' },
+            { key: 'raw',         label: '🔬 Raw Data' },
+        ];
+        const tabBarHtml = `
+            <div style="margin-top:18px;border-bottom:1px solid #1e293b;display:flex;gap:0;overflow-x:auto">
+                ${tabs.map(t => {
+                    const active = brainActiveDetailTab === t.key;
+                    return `<button class="brain-detail-tab" data-tab="${t.key}" style="background:${active ? '#0a1628' : 'transparent'};border:0;border-bottom:2px solid ${active ? '#7c3aed' : 'transparent'};color:${active ? '#e2e8f0' : '#64748b'};padding:10px 16px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap;transition:all 0.15s">${t.label}</button>`;
+                }).join('')}
             </div>`;
+
+        let tabContentHtml = '';
+        switch (brainActiveDetailTab) {
+            case 'destrieux':
+                tabContentHtml = renderDestrieuxRegions(a);
+                break;
+            case 'multi':
+                tabContentHtml = renderBrainResolution(a.resolution_named, durationSec)
+                    + renderBrainRtgStructure(a, durationSec)
+                    + renderBrainMultiScale(a, durationSec, brainSelectedScale);
+                break;
+            case 'correlation':
+                tabContentHtml = renderBrainCorrelationMatrix(a) + renderBrainFunctionalNetworks(a, durationSec);
+                break;
+            case '3d':
+                tabContentHtml = renderBrainSurface(a);
+                break;
+            case 'raw':
+                tabContentHtml = renderBrainRawVars(a, brainRawExpanded, brainRawRowExpanded);
+                break;
+            case 'regions':
+            default:
+                tabContentHtml = renderBrainRegions(a.region_activations, brainExpandedRegion, a)
+                    + renderFunctionalGroupsComposition(a);
+                break;
+        }
+
+        const curveToggleActive = brainShowEngagementCurve;
+        const curveToggleHtml = `
+            <button id="brain-curve-toggle" style="background:${curveToggleActive ? '#fbbf2422' : '#0a1628'};border:1px solid ${curveToggleActive ? '#fbbf24' : '#334155'};color:${curveToggleActive ? '#fbbf24' : '#64748b'};border-radius:14px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:4px;margin-bottom:6px">
+                <span style="color:#a78bfa">●</span><span>Brain Curve</span>
+            </button>`;
 
         return `
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:8px">
-                <div>
-                    <div style="font-size:14px;color:#e2e8f0;font-weight:700">${escapeHtml(a._title || brainSelectedVideoId)}</div>
-                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">${escapeHtml(brainSelectedVideoId)} · ${a.n_timesteps || 0} timesteps · ${(a.duration_s || 0).toFixed(1)}s</div>
+            ${titleHtml}
+            ${infoBodyHtml}
+            ${explainerHtml}
+
+            <div style="display:flex;align-items:flex-start;gap:0;min-height:0">
+                <div style="position:sticky;top:0;width:420px;flex-shrink:0;max-height:100vh;overflow-y:auto;background:#030712">
+                    ${renderBrainVideoPlayer(brainSelectedVideoId, durationSec, brainScrubberSec != null ? brainScrubberSec : 0)}
                 </div>
-                <div style="text-align:right">
-                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Engagement</div>
-                    <div style="font-size:24px;color:#a78bfa;font-weight:700;line-height:1">${(a.engagement_score || 0).toFixed(3)}</div>
+                <div style="flex:1;min-width:0;overflow-y:visible;padding-left:14px">
+                    <div style="font-size:13px;color:#f1f5f9;font-weight:700;margin-bottom:6px">📈 Brain Engagement vs Retention</div>
+                    ${resolutionToggleHtml}
+                    ${curveToggleHtml}
+                    <div id="jarvis-brain-chart-container">${chartHtml}</div>
+                    ${regionTogglesHtml}
+                    ${destrieuxChartTogglesHtml}
+                    ${readoutFullHtml}
+                    ${compareHtml}
+                    ${extendedPeaksHtml}
+                    ${peakDetailHtml}
+
+                    <div id="brain-detail-tabs">
+                        ${tabBarHtml}
+                        <div id="brain-detail-tab-content" style="padding-top:10px">
+                            ${tabContentHtml}
+                        </div>
+                    </div>
                 </div>
             </div>
-            ${chartHtml}
-            ${metricsHtml}
-            ${peaksHtml}
         `;
+    }
+
+    function renderBrainRegionToggles(analysis) {
+        const regions = analysis && analysis.region_activations ? analysis.region_activations : null;
+        if (!regions) return '';
+        const keys = Object.keys(BRAIN_REGIONS_META).filter(k => regions[k]);
+        if (!keys.length) return '';
+
+        const chips = keys.map(k => {
+            const meta = BRAIN_REGIONS_META[k] || { icon: '·', label: k };
+            const color = REGION_COLORS[k] || '#94a3b8';
+            const active = brainEnabledRegions.has(k);
+            const bg = active ? `${color}22` : '#0a1628';
+            const border = active ? color : '#1e293b';
+            const txt = active ? color : '#64748b';
+            return `<button class="brain-region-toggle${active ? ' active' : ''}" data-region="${escapeHtml(k)}"
+                style="background:${bg};border:1px solid ${border};color:${txt};border-radius:14px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:4px">
+                <span>${meta.icon}</span><span>${escapeHtml(meta.label)}</span>
+            </button>`;
+        }).join('');
+
+        return `<div style="margin-top:8px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Regions</span>
+                <button id="brain-regions-show-all" style="background:#0a1628;border:1px solid #334155;color:#cbd5e1;border-radius:10px;padding:2px 8px;font-size:10px;cursor:pointer;font-weight:600">Show All</button>
+                <button id="brain-regions-hide-all" style="background:#0a1628;border:1px solid #334155;color:#cbd5e1;border-radius:10px;padding:2px 8px;font-size:10px;cursor:pointer;font-weight:600">Hide All</button>
+                <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
+                    <span style="font-size:9px;color:#64748b">Y-scale:</span>
+                    <button id="brain-norm-independent" onclick="window._brainNormMode='independent';['independent','absolute','shared'].forEach(id=>{const b=document.getElementById('brain-norm-'+id);if(b)b.style.background=(id==='independent'?'#7c3aed':'transparent');if(b)b.style.color=(id==='independent'?'#fff':'#64748b')});window.rerenderBrainChart&&window.rerenderBrainChart()" style="background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:10px;padding:2px 8px;font-size:9px;cursor:pointer;font-weight:600" title="Each region normalized to its own 0-1 — shows the shape/pattern of each region">Per-Region</button>
+                    <button id="brain-norm-absolute" onclick="window._brainNormMode='absolute';['independent','absolute','shared'].forEach(id=>{const b=document.getElementById('brain-norm-'+id);if(b)b.style.background=(id==='absolute'?'#7c3aed':'transparent');if(b)b.style.color=(id==='absolute'?'#fff':'#64748b')});window.rerenderBrainChart&&window.rerenderBrainChart()" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:10px;padding:2px 8px;font-size:9px;cursor:pointer;font-weight:600" title="All regions scaled to actual TRIBE z-score range — consistent across all regions and videos">Z-score (raw TRIBE)</button>
+                    <button id="brain-norm-shared" onclick="window._brainNormMode='brain_scale';['independent','absolute','shared'].forEach(id=>{const b=document.getElementById('brain-norm-'+id);if(b)b.style.background=(id==='shared'?'#7c3aed':'transparent');if(b)b.style.color=(id==='shared'?'#fff':'#64748b')});window.rerenderBrainChart&&window.rerenderBrainChart()" style="background:transparent;color:#64748b;border:1px solid #334155;border-radius:10px;padding:2px 8px;font-size:9px;cursor:pointer;font-weight:600" title="All scaled to 0-1 — comparable to brain engagement curve">Shared 0-1</button>
+                </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+                ${chips}
+            </div>
+            <div style="font-size:9px;color:#475569;margin-top:6px;line-height:1.4">
+                <strong style="color:#64748b">Purple line</strong> = mean across all 20,484 brain vertices (already 0–1). <strong style="color:#64748b">Colored region lines</strong> = mean within ~3,000 vertices of that region (raw: 0.02–0.13). Use <em>Per-Region</em> to see each region's <em>pattern</em>, <em>Shared 0-1</em> to compare regions with each other and with the brain curve on the same scale, <em>Absolute</em> to see which regions have stronger raw activation.
+            </div>
+        </div>`;
+    }
+
+    // Compact toggle strip for the 75 Destrieux atlas regions, drawn under
+    // the main chart's functional-group chips. Clicking a chip overlays the
+    // region's z-score timeseries on the chart as a thin dashed line.
+    function renderDestrieuxChartToggles(analysis) {
+        const dra = analysis && analysis.destrieux_region_activations;
+        if (!dra || !Object.keys(dra).length) return '';
+
+        const keys = Object.keys(dra).sort((ka, kb) => {
+            const ma = (dra[ka] && dra[ka].mean_zscore != null) ? dra[ka].mean_zscore : (dra[ka]?.mean_activation || 0);
+            const mb = (dra[kb] && dra[kb].mean_zscore != null) ? dra[kb].mean_zscore : (dra[kb]?.mean_activation || 0);
+            return mb - ma;
+        });
+
+        const chips = keys.map(k => {
+            const active = brainEnabledDestrieux.has(k);
+            const color = destrieuxLobeColor(k);
+            const bg = active ? `${color}33` : '#0a1628';
+            const border = active ? color : '#1e293b';
+            const txt = active ? color : '#64748b';
+            const short = (k || '').slice(0, 20);
+            return `<button class="brain-destrieux-chip" data-region="${escapeHtml(k)}" title="${escapeHtml(k)}"
+                style="background:${bg};border:1px solid ${border};color:${txt};border-radius:10px;padding:3px 6px;font-size:9px;cursor:pointer;font-weight:600;font-family:monospace;text-align:left;line-height:1.2">${escapeHtml(short)}</button>`;
+        }).join('');
+
+        return `<div style="margin-top:10px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <button id="brain-destrieux-show-all-75" style="background:#7c3aed;border:1px solid #7c3aed;color:#fff;border-radius:14px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:700;letter-spacing:0.04em">▦ Show All 75 Regions</button>
+                <button id="brain-destrieux-clear-75" style="background:#0a1628;border:1px solid #f87171;color:#f87171;border-radius:14px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:700;letter-spacing:0.04em">✕ Clear All 75</button>
+                <span style="font-size:11px;color:#a78bfa;margin-left:auto;font-weight:600">${brainEnabledDestrieux.size}/${keys.length} on</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+                <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">75 Anatomical Regions (Destrieux atlas)</span>
+                <button id="brain-destrieux-chip-top10" style="background:#0a1628;border:1px solid #334155;color:#cbd5e1;border-radius:10px;padding:2px 8px;font-size:10px;cursor:pointer;font-weight:600">Show top 10 by activation</button>
+                <button id="brain-destrieux-chip-clear" style="background:#0a1628;border:1px solid #334155;color:#cbd5e1;border-radius:10px;padding:2px 8px;font-size:10px;cursor:pointer;font-weight:600">Clear all</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">${chips}</div>
+            <div style="font-size:9px;color:#475569;margin-top:6px;line-height:1.4">
+                Each chip overlays one Destrieux atlas region as a thin dashed line on the chart, normalized to its own min/max. Color = lobe (blue=frontal, green=parietal, amber=temporal, red=occipital, purple=cingulate, orange=insular).
+            </div>
+        </div>`;
+    }
+
+    function renderVideoFrame(videoId, brainSecond, hrfOffset) {
+        if (!videoId) return '';
+        const offset = (hrfOffset != null) ? hrfOffset : 5.0;
+        const brainSec = Number(brainSecond) || 0;
+        const stimulusSec = Math.max(0, brainSec - offset);
+        const stimSecLabel = stimulusSec.toFixed(1);
+        const brainSecLabel = brainSec.toFixed(1);
+        const captionText = brainTranscriptAt(stimulusSec);
+        return `<div style="margin-top:10px">
+            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">
+                📹 Video Frame at <span style="color:#fbbf24">stimulus t=${stimSecLabel}s</span>
+                <span style="color:#475569;text-transform:none;letter-spacing:0">(brain peak ${brainSecLabel}s − ${offset}s HRF lag)</span>
+            </div>
+            <img id="brain-video-frame" src="/api/tribe/frame/${encodeURIComponent(videoId)}/${stimSecLabel}"
+                 style="width:100%;max-height:240px;object-fit:contain;border-radius:6px;background:#000;display:block"
+                 onerror="this.style.display='none';const e=document.getElementById('brain-video-frame-err');if(e)e.style.display='block'"/>
+            <div id="brain-video-frame-err" style="display:none;color:#64748b;font-size:11px;padding:8px;background:#0a1628;border-radius:6px;margin-top:4px">📹 Frame not available (video file may not be present)</div>
+            <div id="brain-video-frame-caption" style="margin-top:6px;font-size:12px;color:#cbd5e1;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:8px;font-style:italic;line-height:1.4;${captionText ? '' : 'display:none'}">📝 ${escapeHtml(captionText)}</div>
+        </div>`;
+    }
+
+    function renderBrainVideoPlayer(videoId, durationSec, brainSec) {
+        if (!videoId) return '';
+        const stimSec = Math.max(0, (brainSec || 0) - 5.0);
+        return `
+        <div style="margin-top:14px;background:#020617;border:1px solid #1e293b;border-radius:10px;overflow:hidden">
+          <div style="padding:8px 12px;border-bottom:1px solid #1e293b;display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:11px;font-weight:700;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.08em">📹 Video</div>
+            <div style="font-size:10px;color:#64748b">
+              Brain t=<span id="brain-vp-brain-t">${(brainSec||0).toFixed(1)}</span>s
+              · Stimulus t=<span id="brain-vp-stim-t">${stimSec.toFixed(1)}</span>s
+              · <span id="brain-vp-status" style="color:#d9ff00">paused</span>
+            </div>
+          </div>
+          <video id="brain-video-player"
+            src="/api/tribe/video/${encodeURIComponent(videoId)}"
+            style="width:100%;max-height:280px;display:block;background:#000"
+            preload="metadata"
+            playsinline
+          ></video>
+          <div style="padding:10px 12px;border-top:1px solid #1e293b">
+            <div id="brain-vp-scrub-track" style="width:100%;height:6px;background:#1e293b;border-radius:3px;cursor:pointer;position:relative;margin-bottom:10px">
+              <div id="brain-vp-scrub-fill" style="height:100%;background:#d9ff00;border-radius:3px;width:0%;pointer-events:none"></div>
+              <div id="brain-vp-scrub-thumb" style="position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;background:#d9ff00;border-radius:50%;left:0%;pointer-events:none;box-shadow:0 0 8px rgba(217,255,0,0.6)"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button id="brain-vp-play" style="background:#d9ff00;color:#000;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:800;cursor:pointer">▶ Play</button>
+              <button id="brain-vp-pause" style="display:none;background:#475569;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:800;cursor:pointer">⏸ Pause</button>
+              <div style="font-size:11px;color:#64748b;margin-left:auto">
+                <span id="brain-vp-time">0.0</span>s / ${(durationSec||55).toFixed(1)}s
+              </div>
+            </div>
+            <div style="font-size:10px;color:#475569;margin-top:6px">
+              ← Drag the yellow scrub bar to any point. Press Play to watch graphs animate in real time.
+            </div>
+          </div>
+        </div>`;
     }
 
     // Returns brain peak / retention peak / pearson r (interpolated to common time
@@ -7923,38 +9225,141 @@ const JarvisUI = (() => {
         return out;
     }
 
-    function renderBrainCurveSvg(brainCurve, retentionPts, peaks, durationSec) {
-        const W = 560, H = 180, padL = 32, padR = 8, padT = 10, padB = 22;
+    function renderExtendedPeaksStrip(analysis, durationSec) {
+        const peaks = analysis && analysis.extended_peaks_25pct;
+        if (!Array.isArray(peaks) || !peaks.length) return '';
+        const maxT = durationSec || peaks[peaks.length - 1].second || 1;
+        const W = 720, H = 28, padL = 40, padR = 14, padT = 4, padB = 4;
         const innerW = W - padL - padR;
         const innerH = H - padT - padB;
-        if (!brainCurve.length) return `<div style="color:#64748b;font-size:11px;padding:14px">No curve data.</div>`;
 
-        const maxT = Math.max(
-            ...brainCurve.map(p => p.second),
-            ...(retentionPts ? retentionPts.map(p => p.second) : [0]),
-            durationSec || 0,
-        );
-        const xOf = (t) => padL + (maxT > 0 ? (t / maxT) * innerW : 0);
-        const yOf = (v) => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
+        // Color by activation strength within the top 25% (blue→red)
+        const acts = peaks.map(p => p.activation || 0);
+        const lo = Math.min(...acts), hi = Math.max(...acts);
+        const span = hi - lo;
+        const colorFor = (a) => {
+            const t = span > 1e-9 ? (a - lo) / span : 0;
+            // Blue (low) → purple → red (high)
+            const r = Math.round(60 + t * 195);
+            const g = Math.round(80 - t * 60);
+            const b = Math.round(220 - t * 180);
+            return `rgb(${r},${g},${b})`;
+        };
 
-        const brainPath = brainCurve.map((p, i) =>
-            `${i === 0 ? 'M' : 'L'}${xOf(p.second).toFixed(1)},${yOf(p.activation).toFixed(1)}`
-        ).join(' ');
+        const dots = peaks.map(p => {
+            const x = padL + (p.second / maxT) * innerW;
+            const cy = padT + innerH / 2;
+            const c = colorFor(p.activation || 0);
+            return `<circle class="brain-extpeak-dot" data-second="${p.second}" data-activation="${p.activation}" data-percentile="${p.percentile}" cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="${c}" stroke="#0a1628" stroke-width="0.75" style="cursor:pointer"><title>${p.second.toFixed(1)}s · ${(p.activation||0).toFixed(3)} · p${p.percentile}</title></circle>`;
+        }).join('');
 
-        let retentionPath = '';
-        if (retentionPts && retentionPts.length) {
-            // Normalize retention to 0–1 using max so the two curves share a y-axis.
-            const rMax = Math.max(...retentionPts.map(p => p.retention)) || 1;
-            retentionPath = retentionPts.map((p, i) =>
-                `${i === 0 ? 'M' : 'L'}${xOf(p.second).toFixed(1)},${yOf(p.retention / rMax).toFixed(1)}`
-            ).join(' ');
+        return `
+            <div style="margin-top:8px">
+                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">🌟 Top 25% peak moments (${peaks.length})</div>
+                <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:32px;background:#020617;border:1px solid #1e293b;border-radius:6px;display:block">
+                    <line x1="${padL}" y1="${padT + innerH/2}" x2="${W - padR}" y2="${padT + innerH/2}" stroke="#1e293b" stroke-width="0.5"/>
+                    ${dots}
+                </svg>
+                <div style="font-size:9px;color:#475569;margin-top:2px;display:flex;justify-content:space-between"><span>0s</span><span>color: blue (low) → red (high) within top 25%</span><span>${maxT.toFixed ? maxT.toFixed(0) : maxT}s</span></div>
+            </div>
+        `;
+    }
+
+    const REGION_ABBREVIATIONS = {
+        auditory:          "Aud",
+        visual:            "Vis",
+        motor:             "Mot",
+        language_broca:    "Broca",
+        language_wernicke: "Wern",
+        prefrontal:        "PFC",
+        default_mode:      "DMN",
+        attention:         "Attn",
+        emotion:           "Ins",
+        memory:            "Mem",
+    };
+
+    const MULTI_SCALE_KEYS = ['1s_window', '2s_window', '4s_window', '8s_window', '16s_window'];
+    const SCALE_LABELS = {
+        '1s_window':  '1s',
+        '2s_window':  '2s',
+        '4s_window':  '4s',
+        '8s_window':  '8s',
+        '16s_window': '16s',
+    };
+    const RESOLUTION_OPTIONS = [
+        { key: '1s_raw',    label: '1s raw' },
+        { key: '2s_window', label: '2s smooth' },
+        { key: '4s_window', label: '4s smooth' },
+        { key: '8s_window', label: '8s smooth' },
+    ];
+
+    function renderBrainResolutionToggle(analysis) {
+        const ms = analysis && analysis.multi_scale_analysis;
+        if (!ms || typeof ms !== 'object') return '';
+        const opts = RESOLUTION_OPTIONS.filter(opt => opt.key === '1s_raw' || ms[opt.key]);
+        if (opts.length <= 1) return '';
+        const buttons = opts.map(opt => {
+            const isActive = brainChartResolution === opt.key;
+            const bg = isActive ? '#7c3aed' : '#0a1628';
+            const color = isActive ? '#fff' : '#cbd5e1';
+            const border = isActive ? '#7c3aed' : '#1e293b';
+            return `<button class="brain-resolution-btn" data-resolution="${escapeHtml(opt.key)}" style="background:${bg};color:${color};border:1px solid ${border};border-radius:14px;padding:3px 10px;font-size:10px;cursor:pointer;font-weight:600">${escapeHtml(opt.label)}</button>`;
+        }).join('');
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+            <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Resolution:</span>
+            ${buttons}
+        </div>`;
+    }
+
+    function renderBrainMultiScale(analysis, durationSec, selectedScale) {
+        const ms = analysis && analysis.multi_scale_analysis;
+        if (!ms || typeof ms !== 'object') return '';
+        const seconds = Array.isArray(analysis.seconds) ? analysis.seconds : null;
+        const availableKeys = MULTI_SCALE_KEYS.filter(k => ms[k] && Array.isArray(ms[k].activation_curve_normalized));
+        if (!availableKeys.length) return '';
+
+        const variance = (arr) => {
+            if (!arr || !arr.length) return 0;
+            const n = arr.length;
+            let mean = 0;
+            for (const v of arr) mean += v;
+            mean /= n;
+            let sum = 0;
+            for (const v of arr) sum += (v - mean) * (v - mean);
+            return sum / n;
+        };
+
+        const variances = {};
+        for (const k of availableKeys) variances[k] = variance(ms[k].activation_curve_normalized);
+
+        let smoothestKey = availableKeys[0], spikiestKey = availableKeys[0];
+        for (const k of availableKeys) {
+            if (variances[k] < variances[smoothestKey]) smoothestKey = k;
+            if (variances[k] > variances[spikiestKey]) spikiestKey = k;
         }
 
-        const peakDots = peaks.map(p =>
-            `<circle cx="${xOf(p.second).toFixed(1)}" cy="${yOf(p.activation).toFixed(1)}" r="3" fill="#fbbf24" stroke="#0a1628" stroke-width="1"><title>${p.second.toFixed(1)}s · activation ${p.activation.toFixed(3)} · p${p.percentile}</title></circle>`
-        ).join('');
+        const activeScale = availableKeys.includes(selectedScale) ? selectedScale : availableKeys[0];
 
-        // x-axis ticks (seconds)
+        const buttons = availableKeys.map(k => {
+            const isActive = k === activeScale;
+            const bg = isActive ? '#7c3aed' : '#0a1628';
+            const color = isActive ? '#fff' : '#cbd5e1';
+            const border = isActive ? '#7c3aed' : '#1e293b';
+            return `<button class="brain-scale-btn" data-scale="${escapeHtml(k)}" style="background:${bg};color:${color};border:1px solid ${border};border-radius:14px;padding:4px 14px;font-size:11px;cursor:pointer;font-weight:600">${escapeHtml(SCALE_LABELS[k] || k)}</button>`;
+        }).join('');
+
+        const curve = ms[activeScale].activation_curve_normalized;
+        const W = 700, H = 160, padL = 36, padR = 14, padT = 10, padB = 22;
+        const innerW = W - padL - padR, innerH = H - padT - padB;
+        const maxT = durationSec || (seconds && seconds[seconds.length - 1]) || (curve.length || 1);
+        const xOf = (t) => padL + (t / maxT) * innerW;
+        const yOf = (v) => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
+
+        const path = curve.map((v, i) => {
+            const t = (seconds && seconds[i] != null) ? seconds[i] : (curve.length > 1 ? (i / (curve.length - 1)) * maxT : 0);
+            return `${i === 0 ? 'M' : 'L'}${xOf(t).toFixed(1)},${yOf(v).toFixed(1)}`;
+        }).join(' ');
+
         const tickStep = maxT <= 30 ? 5 : (maxT <= 120 ? 10 : 30);
         const ticks = [];
         for (let t = 0; t <= maxT; t += tickStep) {
@@ -7962,28 +9367,1284 @@ const JarvisUI = (() => {
             ticks.push(`<text x="${x}" y="${H - 6}" fill="#475569" font-size="9" text-anchor="middle">${t}s</text>`);
             ticks.push(`<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#1e293b" stroke-width="0.5"/>`);
         }
+        const gridLines = [0.25, 0.5, 0.75].map(g => {
+            const y = yOf(g).toFixed(1);
+            return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+        }).join('');
 
-        return `
-            <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:#020617;border-radius:6px;border:1px solid #1e293b" preserveAspectRatio="none">
+        const winSec = ms[activeScale].window_seconds || activeScale;
+
+        const chartSvg = `
+            <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:auto;background:#020617;border:1px solid #1e293b;border-radius:6px;display:block">
                 <text x="${padL - 4}" y="${padT + 4}" fill="#475569" font-size="9" text-anchor="end">1.0</text>
+                <text x="${padL - 4}" y="${padT + innerH / 2 + 3}" fill="#475569" font-size="9" text-anchor="end">0.5</text>
                 <text x="${padL - 4}" y="${padT + innerH}" fill="#475569" font-size="9" text-anchor="end">0</text>
+                ${gridLines}
                 ${ticks.join('')}
-                ${retentionPath ? `<path d="${retentionPath}" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.85"/>` : ''}
-                <path d="${brainPath}" fill="none" stroke="#a78bfa" stroke-width="2"/>
-                ${peakDots}
-                <g transform="translate(${padL + 6}, ${padT + 6})">
-                    <rect x="0" y="0" width="170" height="${retentionPath ? 30 : 16}" fill="#020617" stroke="#1e293b" rx="3"/>
-                    <line x1="6" y1="8" x2="20" y2="8" stroke="#a78bfa" stroke-width="2"/>
-                    <text x="24" y="11" fill="#cbd5e1" font-size="9">Brain engagement (TRIBE v2)</text>
-                    ${retentionPath ? `<line x1="6" y1="22" x2="20" y2="22" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3"/><text x="24" y="25" fill="#cbd5e1" font-size="9">YouTube retention (norm.)</text>` : ''}
-                </g>
+                <path d="${path}" fill="none" stroke="#a78bfa" stroke-width="2"/>
+                <text x="${W - padR - 6}" y="${padT + 12}" fill="#a78bfa" font-size="10" text-anchor="end" font-weight="700">${winSec}s rolling avg</text>
             </svg>
         `;
+
+        const fmtVar = (v) => v.toFixed(5);
+        const varianceSummary = `
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px;background:#0a1628;border:1px solid #166534;border-radius:6px;padding:10px">
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Smoothest (most sustained)</div>
+                    <div style="font-size:14px;color:#22c55e;font-weight:700;margin-top:4px">${escapeHtml(SCALE_LABELS[smoothestKey] || smoothestKey)} window</div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">variance ${fmtVar(variances[smoothestKey])} — lowest variance, sustained response</div>
+                </div>
+                <div style="flex:1;min-width:200px;background:#0a1628;border:1px solid #7f1d1d;border-radius:6px;padding:10px">
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Spikiest (most transient)</div>
+                    <div style="font-size:14px;color:#f87171;font-weight:700;margin-top:4px">${escapeHtml(SCALE_LABELS[spikiestKey] || spikiestKey)} window</div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px">variance ${fmtVar(variances[spikiestKey])} — highest variance, transient response</div>
+                </div>
+            </div>
+        `;
+
+        const regionCurves = ms[activeScale].region_curves || {};
+        const regionKeys = Object.keys(BRAIN_REGIONS_META).filter(k => Array.isArray(regionCurves[k]) && regionCurves[k].length);
+        const sparkW = 120, sparkH = 40;
+        const sparklineCards = regionKeys.map(rk => {
+            const meta = BRAIN_REGIONS_META[rk] || { icon: '·', label: rk };
+            const color = REGION_COLORS[rk] || '#94a3b8';
+            const ts = regionCurves[rk];
+            let lo = Infinity, hi = -Infinity;
+            for (const v of ts) { if (v < lo) lo = v; if (v > hi) hi = v; }
+            const span = hi - lo;
+            const sparkPath = ts.map((v, i) => {
+                const x = (ts.length > 1 ? (i / (ts.length - 1)) : 0) * (sparkW - 4) + 2;
+                const norm = span > 1e-9 ? (v - lo) / span : 0.5;
+                const y = sparkH - 4 - norm * (sparkH - 8);
+                return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+            return `
+                <div style="background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:6px">
+                    <div style="font-size:10px;color:#cbd5e1;font-weight:600;margin-bottom:2px">${meta.icon} ${escapeHtml(meta.label)}</div>
+                    <svg viewBox="0 0 ${sparkW} ${sparkH}" preserveAspectRatio="none" style="width:100%;height:${sparkH}px;display:block">
+                        <path d="${sparkPath}" fill="none" stroke="${color}" stroke-width="1.5"/>
+                    </svg>
+                    <div style="font-size:9px;color:#475569;margin-top:2px">range ${lo.toFixed(3)}–${hi.toFixed(3)}</div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div style="margin-top:18px">
+                <div style="font-size:13px;color:#f1f5f9;font-weight:700;margin-bottom:4px">📊 Multi-Scale Activation Analysis</div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:8px">Same brain data viewed at different time resolutions (1s/2s/4s/8s/16s rolling windows)</div>
+                <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">${buttons}</div>
+                ${chartSvg}
+                ${varianceSummary}
+                ${sparklineCards ? `
+                    <div style="margin-top:12px">
+                        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Per-region sparklines @ ${escapeHtml(SCALE_LABELS[activeScale] || activeScale)}</div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px">${sparklineCards}</div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    const COMPONENT_COLORS = ['#94a3b8', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899', '#06b6d4'];
+
+    function renderBrainFunctionalNetworks(analysis, durationSec) {
+        const fn = analysis && analysis.functional_networks;
+        if (!fn || typeof fn !== 'object') return '';
+        const keys = Object.keys(fn).sort((a, b) => {
+            const ai = (fn[a] && fn[a].component_index) || 0;
+            const bi = (fn[b] && fn[b].component_index) || 0;
+            return ai - bi;
+        });
+        if (!keys.length) return '';
+
+        const seconds = Array.isArray(analysis.seconds) ? analysis.seconds : null;
+        const chips = keys.map(k => {
+            const c = fn[k] || {};
+            const idx = c.component_index || 1;
+            const color = COMPONENT_COLORS[(idx - 1) % COMPONENT_COLORS.length];
+            const isActive = brainSelectedComponent === k;
+            const variance = c.variance_explained_pct != null ? c.variance_explained_pct : 0;
+            // Brightness scales with variance — clamp to reasonable opacity range
+            const opacity = Math.max(0.45, Math.min(1.0, 0.45 + (variance / 100) * 1.4));
+            const bg = isActive ? color : `${color}33`;
+            const border = isActive ? color : `${color}88`;
+            const txt = isActive ? '#0a1628' : color;
+            const posRegions = Array.isArray(c.top_positive_regions) ? c.top_positive_regions : [];
+            const negRegions = Array.isArray(c.top_negative_regions) ? c.top_negative_regions : [];
+            const regionHtml = posRegions.length ? `
+                <div style="font-size:9px;color:#94a3b8;margin-top:4px">
+                    Positive: ${escapeHtml(posRegions.slice(0,3).map(r => r.region).join(', '))}
+                </div>` : '';
+            const negRegionHtml = negRegions.length ? `
+                <div style="font-size:9px;color:#64748b;margin-top:2px">
+                    Negative: ${escapeHtml(negRegions.slice(0,3).map(r => r.region).join(', '))}
+                </div>` : '';
+            return `<div style="display:flex;flex-direction:column;align-items:flex-start;max-width:200px">
+                <button class="brain-component-chip" data-component="${escapeHtml(k)}"
+                    style="background:${bg};border:1px solid ${border};color:${txt};opacity:${opacity.toFixed(2)};border-radius:14px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:700;font-family:monospace">
+                    C${idx} ${variance.toFixed(0)}%
+                </button>
+                ${regionHtml}
+                ${negRegionHtml}
+            </div>`;
+        }).join('');
+
+        let detailHtml = '';
+        if (brainSelectedComponent && fn[brainSelectedComponent]) {
+            const c = fn[brainSelectedComponent];
+            const idx = c.component_index || 1;
+            const color = COMPONENT_COLORS[(idx - 1) % COMPONENT_COLORS.length];
+            const ts = Array.isArray(c.timeseries_normalized) ? c.timeseries_normalized : [];
+            const W = 700, H = 160, padL = 36, padR = 14, padT = 10, padB = 22;
+            const innerW = W - padL - padR, innerH = H - padT - padB;
+            const maxT = durationSec || (seconds && seconds[seconds.length - 1]) || (ts.length || 1);
+            const xOf = (t) => padL + (t / maxT) * innerW;
+            const yOf = (v) => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
+            const path = ts.map((v, i) => {
+                const t = (seconds && seconds[i] != null) ? seconds[i] : (ts.length > 1 ? (i / (ts.length - 1)) * maxT : 0);
+                return `${i === 0 ? 'M' : 'L'}${xOf(t).toFixed(1)},${yOf(v).toFixed(1)}`;
+            }).join(' ');
+
+            const tickStep = maxT <= 30 ? 5 : (maxT <= 120 ? 10 : 30);
+            const ticks = [];
+            for (let t = 0; t <= maxT; t += tickStep) {
+                const x = xOf(t).toFixed(1);
+                ticks.push(`<text x="${x}" y="${H - 6}" fill="#475569" font-size="9" text-anchor="middle">${t}s</text>`);
+                ticks.push(`<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#1e293b" stroke-width="0.5"/>`);
+            }
+            const gridLines = [0.25, 0.5, 0.75].map(g => {
+                const y = yOf(g).toFixed(1);
+                return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+            }).join('');
+
+            const chartSvg = `
+                <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:auto;background:#020617;border:1px solid #1e293b;border-radius:6px;display:block">
+                    <text x="${padL - 4}" y="${padT + 4}" fill="#475569" font-size="9" text-anchor="end">1.0</text>
+                    <text x="${padL - 4}" y="${padT + innerH / 2 + 3}" fill="#475569" font-size="9" text-anchor="end">0.5</text>
+                    <text x="${padL - 4}" y="${padT + innerH}" fill="#475569" font-size="9" text-anchor="end">0</text>
+                    ${gridLines}
+                    ${ticks.join('')}
+                    <path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>
+                    <text x="${W - padR - 6}" y="${padT + 12}" fill="${color}" font-size="10" text-anchor="end" font-weight="700">${escapeHtml(c.label || `Component ${idx}`)}</text>
+                </svg>
+            `;
+
+            const spatialBg = brainComponentSpatialOn ? color : '#0a1628';
+            const spatialBorder = brainComponentSpatialOn ? color : '#334155';
+            const spatialColor = brainComponentSpatialOn ? '#0a1628' : '#cbd5e1';
+            detailHtml = `
+                <div style="margin-top:10px">${chartSvg}</div>
+                <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                    <div style="font-size:11px;color:#cbd5e1;background:#0a1628;border:1px solid ${color};border-radius:6px;padding:6px 10px">
+                        <strong style="color:${color}">${escapeHtml(c.label || `C${idx}`)}</strong> · variance ${(c.variance_explained_pct || 0).toFixed(2)}% · peak ${(c.peak_second != null ? c.peak_second.toFixed(1) : '—')}s
+                    </div>
+                    <button id="brain-component-spatial-toggle" style="background:${spatialBg};border:1px solid ${spatialBorder};color:${spatialColor};border-radius:14px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:600">
+                        ${brainComponentSpatialOn ? '✓ Spatial map ON' : 'Show spatial map'}
+                    </button>
+                </div>
+                <div style="margin-top:8px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px;font-size:11px;color:#cbd5e1;line-height:1.5">
+                    <strong style="color:${color}">Interpretation:</strong> ${escapeHtml(c.interpretation || '')}
+                </div>
+            `;
+        }
+
+        return `
+            <div style="margin-top:18px">
+                <div style="font-size:13px;color:#f1f5f9;font-weight:700;margin-bottom:4px">🧬 Independent Brain Networks (PCA)</div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:8px;line-height:1.5">Data-driven functional patterns — these are the ACTUALLY DISTINCT signals in the brain, not arbitrary region averages. Component 1 = global signal (all regions). Components 2+ = what makes different brain areas genuinely different.</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
+                ${detailHtml}
+            </div>
+        `;
+    }
+
+    function renderBrainRtgStructure(analysis, durationSec) {
+        const rtg = analysis && analysis.rtg_structure;
+        if (!rtg || typeof rtg !== 'object') return '';
+        const phaseDef = [
+            { key: 'hook',   label: 'Hook',   range: '0–15%',   color: '#22c55e', bg: '#052e16', border: '#166534' },
+            { key: 'build',  label: 'Build',  range: '15–60%',  color: '#3b82f6', bg: '#0c1e3a', border: '#1d4ed8' },
+            { key: 'payoff', label: 'Payoff', range: '60–100%', color: '#a78bfa', bg: '#1e1338', border: '#7c3aed' },
+        ];
+        const trendArrow = (t) => t === 'rising' ? '↗' : (t === 'falling' ? '↘' : '→');
+        const fmt3 = (v) => (v == null || !Number.isFinite(v)) ? '—' : Number(v).toFixed(3);
+        const fmt1s = (v) => (v == null || !Number.isFinite(v)) ? '—' : Number(v).toFixed(1) + 's';
+
+        const cards = phaseDef.map(p => {
+            const v = rtg[p.key] || {};
+            return `
+                <div style="flex:1;min-width:200px;background:${p.bg};border:1px solid ${p.border};border-radius:8px;padding:12px">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                        <div>
+                            <div style="font-size:13px;color:${p.color};font-weight:700">${p.label}</div>
+                            <div style="font-size:10px;color:#94a3b8">${p.range}</div>
+                        </div>
+                        <div style="font-size:20px;color:${p.color};font-weight:700">${trendArrow(v.trend)}</div>
+                    </div>
+                    <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                        <div>
+                            <div style="font-size:9px;color:#64748b;text-transform:uppercase">Mean</div>
+                            <div style="font-size:14px;color:#e2e8f0;font-weight:700;font-family:monospace">${fmt3(v.mean_activation)}</div>
+                            <div style="font-size:9px;color:#475569">norm ${fmt3(v.normalized_mean)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:9px;color:#64748b;text-transform:uppercase">Peak @</div>
+                            <div style="font-size:14px;color:#e2e8f0;font-weight:700;font-family:monospace">${fmt1s(v.peak_second)}</div>
+                            <div style="font-size:9px;color:#475569">trend ${escapeHtml(v.trend || '—')}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const transitions = Array.isArray(rtg.attention_transitions) ? rtg.attention_transitions : [];
+        let transitionsStrip = '';
+        if (transitions.length) {
+            const W = 720, H = 32, padL = 40, padR = 14, padT = 4, padB = 4;
+            const innerW = W - padL - padR;
+            const innerH = H - padT - padB;
+            const maxT = durationSec || (transitions[transitions.length - 1].second || 1);
+            const deltas = transitions.map(t => t.delta || 0);
+            let lo = Infinity, hi = -Infinity;
+            for (const d of deltas) { if (d < lo) lo = d; if (d > hi) hi = d; }
+            const span = hi - lo;
+            const colorFor = (d) => {
+                const t = span > 1e-9 ? (d - lo) / span : 0;
+                const r = Math.round(60 + t * 195);
+                const g = Math.round(80 - t * 60);
+                const b = Math.round(220 - t * 180);
+                return `rgb(${r},${g},${b})`;
+            };
+            const dots = transitions.map(t => {
+                const x = padL + (t.second / maxT) * innerW;
+                const cy = padT + innerH / 2;
+                const c = colorFor(t.delta || 0);
+                return `<circle class="brain-transition-dot" data-second="${t.second}" cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="4" fill="${c}" stroke="#0a1628" stroke-width="0.75" style="cursor:pointer"><title>${t.second.toFixed(1)}s · Δ${(t.delta||0).toFixed(3)} · p${t.percentile}</title></circle>`;
+            }).join('');
+            transitionsStrip = `
+                <div style="margin-top:12px">
+                    <div style="font-size:11px;color:#cbd5e1;font-weight:600;margin-bottom:4px">⚡ Attention Transitions</div>
+                    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:36px;background:#020617;border:1px solid #1e293b;border-radius:6px;display:block">
+                        <line x1="${padL}" y1="${padT + innerH / 2}" x2="${W - padR}" y2="${padT + innerH / 2}" stroke="#1e293b" stroke-width="0.5"/>
+                        ${dots}
+                    </svg>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:4px">
+                        ${rtg.n_major_transitions || transitions.length} major transitions detected · avg Δ ${(rtg.avg_transition_delta || 0).toFixed(4)} · click a dot to scrub there
+                    </div>
+                </div>
+            `;
+        }
+
+        const hookN = (rtg.hook && rtg.hook.normalized_mean) || 0;
+        const buildN = (rtg.build && rtg.build.normalized_mean) || 0;
+        const payoffN = (rtg.payoff && rtg.payoff.normalized_mean) || 0;
+        let interp;
+        if (hookN > payoffN && hookN >= buildN) {
+            interp = `Front-loaded attention — hook (${hookN.toFixed(3)}) outperforms payoff (${payoffN.toFixed(3)}). Consider a stronger ending.`;
+        } else if (payoffN > hookN && payoffN >= buildN) {
+            interp = `Back-loaded attention — payoff (${payoffN.toFixed(3)}) outperforms hook (${hookN.toFixed(3)}). Strong finish carries the video.`;
+        } else if (buildN > hookN && buildN > payoffN) {
+            interp = `Mid-loaded attention — build (${buildN.toFixed(3)}) outperforms both hook and payoff. Consider tightening the opening or ending.`;
+        } else {
+            interp = `Balanced attention — hook ${hookN.toFixed(3)}, build ${buildN.toFixed(3)}, payoff ${payoffN.toFixed(3)}.`;
+        }
+
+        return `
+            <div style="margin-top:18px">
+                <div style="font-size:13px;color:#f1f5f9;font-weight:700;margin-bottom:4px">🎯 RTG Structure Analysis</div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:8px">Hook → Build → Payoff brain engagement pattern</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">${cards}</div>
+                ${transitionsStrip}
+                <div style="margin-top:10px;background:#0a1628;border:1px solid #1e293b;border-radius:6px;padding:10px;font-size:11px;color:#cbd5e1;line-height:1.5">
+                    <strong style="color:#a78bfa">Interpretation:</strong> ${escapeHtml(interp)}
+                </div>
+            </div>
+        `;
+    }
+
+    function renderBrainCorrelationMatrix(analysis) {
+        const cm = analysis && analysis.region_correlation_matrix;
+        if (!cm || typeof cm !== 'object') return '';
+        const keys = Object.keys(BRAIN_REGIONS_META).filter(k => cm[k]);
+        if (!keys.length) return '';
+
+        const corrColor = (r) => {
+            const cl = (a, b, t) => Math.round(a * (1 - t) + b * t);
+            if (r >= 0) {
+                const t = Math.min(1, r);
+                return `rgb(${cl(255,178,t)},${cl(255,30,t)},${cl(255,38,t)})`;
+            } else {
+                const t = Math.min(1, -r);
+                return `rgb(${cl(255,28,t)},${cl(255,52,t)},${cl(255,180,t)})`;
+            }
+        };
+        const textColor = (r) => Math.abs(r) > 0.55 ? '#fff' : '#0a1628';
+
+        const cellSize = 28;
+        const headerCell = (label) => `<th style="background:#020617;color:#94a3b8;font-weight:600;font-size:9px;padding:4px 2px;border:1px solid #1e293b;text-align:center;min-width:${cellSize}px">${escapeHtml(label)}</th>`;
+
+        const headerRow = `<tr>
+            <th style="background:#020617;border:1px solid #1e293b"></th>
+            ${keys.map(k => headerCell(REGION_ABBREVIATIONS[k] || k)).join('')}
+        </tr>`;
+
+        const rows = keys.map(rk => {
+            const cells = keys.map(ck => {
+                const r = (cm[rk] && typeof cm[rk][ck] === 'number') ? cm[rk][ck] : 0;
+                const bg = corrColor(r);
+                const fg = textColor(r);
+                const labelA = BRAIN_REGIONS_META[rk] ? BRAIN_REGIONS_META[rk].label : rk;
+                const labelB = BRAIN_REGIONS_META[ck] ? BRAIN_REGIONS_META[ck].label : ck;
+                return `<td title="${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}: r=${r.toFixed(3)}" style="background:${bg};color:${fg};border:1px solid #1e293b;width:${cellSize}px;height:${cellSize}px;text-align:center;font-size:9px;font-family:monospace;font-weight:600">${r.toFixed(2)}</td>`;
+            }).join('');
+            return `<tr>
+                <th style="background:#020617;color:#94a3b8;font-weight:600;font-size:9px;padding:2px 6px;border:1px solid #1e293b;text-align:right">${escapeHtml(REGION_ABBREVIATIONS[rk] || rk)}</th>
+                ${cells}
+            </tr>`;
+        }).join('');
+
+        return `
+            <div style="margin-top:18px">
+                <div style="font-size:13px;color:#f1f5f9;font-weight:700;margin-bottom:4px">🔗 Region Co-activation Matrix</div>
+                <div style="font-size:10px;color:#64748b;margin-bottom:8px">Which brain regions activate together (Pearson r)</div>
+                <div style="font-size:9px;color:#475569;margin-bottom:6px">
+                  Regions are non-overlapping (each Destrieux vertex assigned to exactly one group).
+                  Pearson r computed from raw TRIBE activation values. Values near 1.0 = co-activate together; values near -1.0 = anti-correlated.
+                </div>
+                <div style="overflow:auto;border:1px solid #1e293b;border-radius:6px;background:#020617;padding:6px">
+                    <table style="border-collapse:collapse;margin:0 auto">
+                        <thead>${headerRow}</thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:10px;color:#64748b">
+                    <span>r = -1</span>
+                    <div style="flex:1;height:8px;border-radius:4px;background:linear-gradient(to right, rgb(28,52,180), rgb(255,255,255), rgb(178,30,38));max-width:200px"></div>
+                    <span>r = +1</span>
+                    <span style="margin-left:auto">Hover a cell for region pair details</span>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderBrainCurveSvg(brainCurve, retentionPts, peaks, durationSec, scrubberSec, enabledRegions, regionData, chartResolution) {
+        const W = 700, H = 280, padL = 40, padR = 14, padT = 14, padB = 26;
+        const innerW = W - padL - padR;
+        const innerH = H - padT - padB;
+
+        // Optionally swap to a multi-scale rolling-window view of the brain curve
+        // and per-region timeseries. The 1s_raw mode is the default — leaves data alone.
+        let resolutionLabel = '';
+        let altRegionTimeseries = null;
+        if (chartResolution && chartResolution !== '1s_raw' && regionData && regionData.multi_scale_analysis) {
+            const ms = regionData.multi_scale_analysis[chartResolution];
+            if (ms && Array.isArray(ms.activation_curve_normalized) && ms.activation_curve_normalized.length) {
+                const seconds = Array.isArray(regionData.seconds) ? regionData.seconds : null;
+                const norm = ms.activation_curve_normalized;
+                const dSec = durationSec || (seconds && seconds[seconds.length - 1]) || norm.length;
+                brainCurve = norm.map((v, i) => ({
+                    second: (seconds && seconds[i] != null)
+                        ? Number(seconds[i])
+                        : (norm.length > 1 ? (i / (norm.length - 1)) * dSec : 0),
+                    activation: Number(v) || 0,
+                }));
+                altRegionTimeseries = ms.region_curves || null;
+                resolutionLabel = `${ms.window_seconds || chartResolution} rolling average`;
+            }
+        }
+
+        if (!brainCurve.length) return `<div style="color:#64748b;font-size:11px;padding:14px">No curve data.</div>`;
+
+        const enabled = enabledRegions instanceof Set ? enabledRegions : new Set();
+        const regions = regionData && regionData.region_activations ? regionData.region_activations : null;
+        const regionSeconds = regionData && Array.isArray(regionData.seconds) ? regionData.seconds : null;
+
+        const maxT = Math.max(
+            brainCurve[brainCurve.length - 1].second,
+            retentionPts && retentionPts.length ? retentionPts[retentionPts.length - 1].second : 0,
+            durationSec || 0,
+        ) || 1;
+        window._brainChartMaxT = maxT;
+
+        const xOf = (t) => padL + (t / maxT) * innerW;
+        const yOf = (v) => padT + (1 - Math.max(0, Math.min(1, v))) * innerH;
+
+        const gridLines = [0.25, 0.5, 0.75].map(g => {
+            const y = yOf(g).toFixed(1);
+            return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+        }).join('');
+
+        // Right-side z-score axis (raw TRIBE values for the global brain curve).
+        // Top of chart (y_norm=1.0) = per_step_max; bottom (y_norm=0) = per_step_min.
+        let zAxisLabels = '';
+        const pgsZ = regionData && regionData.preds_global_stats;
+        if (pgsZ && typeof pgsZ.per_step_min === 'number' && typeof pgsZ.per_step_max === 'number') {
+            const zLo = pgsZ.per_step_min;
+            const zHi = pgsZ.per_step_max;
+            const xRight = (W - padR + 2);
+            const fracs = [1.0, 0.75, 0.5, 0.25, 0.0];
+            zAxisLabels = fracs.map(f => {
+                const yv = yOf(f).toFixed(1);
+                const zDisplay = (zLo + f * (zHi - zLo)).toFixed(2);
+                return `<text x="${xRight}" y="${yv}" fill="#475569" font-size="8" text-anchor="start" dominant-baseline="middle">${zDisplay}σ</text>`;
+            }).join('');
+        }
+
+        // Normalization modes:
+        // "independent" = each region scaled to its own 0-1 (shows pattern/shape)
+        // "absolute" = all on same raw scale (shows which regions activate more)
+        // "brain_scale" = scale each region to match the brain curve's global range (0-1)
+        const normMode = window._brainNormMode || 'independent';
+
+        let regionPaths = '';
+        if ((regions || altRegionTimeseries) && enabled.size > 0) {
+            for (const regionKey of enabled) {
+                const region = regions ? regions[regionKey] : null;
+                const altTs = altRegionTimeseries && Array.isArray(altRegionTimeseries[regionKey])
+                    ? altRegionTimeseries[regionKey]
+                    : null;
+                const ts = altTs || (region && Array.isArray(region.timeseries) ? region.timeseries : null);
+                if (!ts || !ts.length) continue;
+                const tsSeconds = (regionSeconds && regionSeconds.length === ts.length)
+                    ? regionSeconds
+                    : ts.map((_, i) => (ts.length > 1 ? (i / (ts.length - 1)) * maxT : 0));
+                const color = REGION_COLORS[regionKey] || '#94a3b8';
+
+                // Normalize based on mode
+                let normalized;
+                if (normMode === 'independent') {
+                    // Scale each region to its own min-max → 0-1
+                    const lo = Math.min(...ts), hi = Math.max(...ts);
+                    const span = hi - lo;
+                    normalized = span > 1e-9 ? ts.map(v => (v - lo) / span) : ts.map(() => 0.5);
+                } else if (normMode === 'absolute') {
+                    // Use the actual raw TRIBE output max for consistent absolute scaling
+                    // This means the scale is fixed regardless of which regions are visible
+                    const globalMax = (regionData && regionData.preds_global_stats && regionData.preds_global_stats.per_step_max)
+                        ? regionData.preds_global_stats.per_step_max
+                        : Math.max(...Object.values(regions)
+                              .filter(r => r.timeseries)
+                              .map(r => Math.max(...r.timeseries)));
+                    normalized = ts.map(v => Math.min(1, v / (globalMax || 1)));
+                } else {
+                    // brain_scale: normalize region to same 0-1 as brain curve
+                    // Brain curve is already 0-1. Scale region to 0-1 using its own range.
+                    const lo = Math.min(...ts), hi = Math.max(...ts);
+                    const span = hi - lo;
+                    normalized = span > 1e-9 ? ts.map(v => (v - lo) / span) : ts.map(() => 0.5);
+                }
+
+                const d = normalized.map((v, i) =>
+                    `${i === 0 ? 'M' : 'L'}${xOf(tsSeconds[i] || 0).toFixed(1)},${yOf(v).toFixed(1)}`
+                ).join(' ');
+                regionPaths += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.85"/>`;
+            }
+        }
+
+        // Draw enabled Destrieux region lines (dashed, thin) — independent
+        // min-max normalization per region so the *pattern* is visible.
+        if (regionData && regionData.destrieux_region_activations) {
+            const enabledD = window._brainEnabledDestrieux;
+            if (enabledD && enabledD.size > 0) {
+                for (const dKey of enabledD) {
+                    const dRegion = regionData.destrieux_region_activations[dKey];
+                    if (!dRegion || !Array.isArray(dRegion.timeseries)) continue;
+                    const dts = dRegion.timeseries;
+                    const dSeconds = (Array.isArray(regionData.seconds) && regionData.seconds.length === dts.length)
+                        ? regionData.seconds
+                        : dts.map((_, i) => (dts.length > 1 ? (i / (dts.length - 1)) * maxT : 0));
+                    const color = destrieuxLobeColor(dKey);
+
+                    const lo = Math.min(...dts), hi = Math.max(...dts);
+                    const span = hi - lo;
+                    const norm = span > 1e-9 ? dts.map(v => (v - lo) / span) : dts.map(() => 0.5);
+
+                    const dPath = norm.map((v, i) =>
+                        `${i === 0 ? 'M' : 'L'}${xOf(dSeconds[i] || 0).toFixed(1)},${yOf(v).toFixed(1)}`
+                    ).join(' ');
+                    regionPaths += `<path d="${dPath}" fill="none" stroke="${color}" stroke-width="1" opacity="0.7" stroke-dasharray="4,2"/>`;
+                }
+            }
+        }
+
+        const brainPath = brainCurve.map((p, i) =>
+            `${i === 0 ? 'M' : 'L'}${xOf(p.second).toFixed(1)},${yOf(p.activation).toFixed(1)}`
+        ).join(' ');
+
+        let retentionPath = '';
+        let rMax = 1;
+        if (retentionPts && retentionPts.length) {
+            rMax = Math.max(...retentionPts.map(p => p.retention)) || 1;
+            retentionPath = retentionPts.map((p, i) =>
+                `${i === 0 ? 'M' : 'L'}${xOf(p.second).toFixed(1)},${yOf(p.retention / rMax).toFixed(1)}`
+            ).join(' ');
+        }
+
+        // Selected PCA component overlay (dashed line on main chart)
+        let componentPath = '';
+        let componentColor = '';
+        let componentLabel = '';
+        if (brainSelectedComponent && regionData && regionData.functional_networks
+            && regionData.functional_networks[brainSelectedComponent]) {
+            const c = regionData.functional_networks[brainSelectedComponent];
+            const ts = Array.isArray(c.timeseries_normalized) ? c.timeseries_normalized : [];
+            const idx = c.component_index || 1;
+            componentColor = COMPONENT_COLORS[(idx - 1) % COMPONENT_COLORS.length];
+            componentLabel = c.label || `C${idx}`;
+            const compSeconds = (regionSeconds && regionSeconds.length === ts.length)
+                ? regionSeconds
+                : ts.map((_, i) => (ts.length > 1 ? (i / (ts.length - 1)) * maxT : 0));
+            componentPath = ts.map((v, i) =>
+                `${i === 0 ? 'M' : 'L'}${xOf(compSeconds[i] || 0).toFixed(1)},${yOf(v).toFixed(1)}`
+            ).join(' ');
+        }
+
+        // Peak moment markers are part of the brain curve — hide with it
+        const showPeaks = (typeof brainShowEngagementCurve === 'undefined' || brainShowEngagementCurve);
+        const peakLines = showPeaks ? peaks.map(p => {
+            const x = xOf(p.second).toFixed(1);
+            const stimSec = (p.stimulus_second != null) ? p.stimulus_second : Math.max(0, p.second - 5.0);
+            const zPart = (p.activation_zscore != null) ? ` · ${p.activation_zscore.toFixed(2)}σ` : '';
+            const zAttr = (p.activation_zscore != null) ? ` data-zscore="${p.activation_zscore}"` : '';
+            return `<g class="brain-peak-marker" data-second="${p.second}" data-stimulus-second="${stimSec}" data-activation="${p.activation}"${zAttr} data-percentile="${p.percentile}" style="cursor:pointer">
+                <line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#a78bfa" stroke-dasharray="3,3" stroke-width="1" opacity="0.55"/>
+                <circle cx="${x}" cy="${yOf(p.activation).toFixed(1)}" r="3.5" fill="#a78bfa" stroke="#0a1628" stroke-width="1"/>
+                <text x="${x}" y="${padT - 4}" fill="#a78bfa" font-size="8" text-anchor="middle">p${Math.round(p.percentile)}</text>
+                <title>brain ${p.second.toFixed(1)}s · stim ${stimSec.toFixed(1)}s · activation ${p.activation.toFixed(3)}${zPart} · p${p.percentile}</title>
+            </g>`;
+        }).join('') : '';
+
+        const hrfOff = (regionData && regionData.analysis_metadata && regionData.analysis_metadata.hrf_offset_seconds != null)
+            ? regionData.analysis_metadata.hrf_offset_seconds
+            : 5.0;
+        const tickStep = maxT <= 30 ? 5 : (maxT <= 120 ? 10 : 30);
+        const ticks = [];
+        for (let t = 0; t <= maxT; t += tickStep) {
+            const x = xOf(t).toFixed(1);
+            // Bottom row: brain activation second (purple) — when brain peaks
+            ticks.push(`<text x="${x}" y="${H - 14}" fill="#a78bfa" font-size="9" text-anchor="middle">${t}s</text>`);
+            // Lower row: stimulus second (yellow) — when video content caused it
+            const stim = Math.max(0, t - hrfOff);
+            ticks.push(`<text x="${x}" y="${H - 3}" fill="#fbbf24" font-size="8" text-anchor="middle">[${stim.toFixed(0)}s]</text>`);
+            ticks.push(`<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#1e293b" stroke-width="0.5"/>`);
+        }
+        // Axis labels
+        ticks.push(`<text x="${padL - 4}" y="${H - 14}" fill="#a78bfa" font-size="8" text-anchor="end">brain</text>`);
+        ticks.push(`<text x="${padL - 4}" y="${H - 3}" fill="#fbbf24" font-size="8" text-anchor="end">[stim]</text>`);
+
+        const sx = scrubberSec != null ? xOf(scrubberSec).toFixed(1) : xOf(0).toFixed(1);
+        const scrubVisible = scrubberSec != null;
+
+        return `
+            <svg id="jarvis-brain-chart" viewBox="0 0 ${W} ${H}"
+                 data-maxt="${maxT}" data-padl="${padL}" data-padr="${padR}" data-w="${W}"
+                 style="width:100%;height:auto;background:#020617;border-radius:6px;border:1px solid #1e293b;cursor:crosshair;user-select:none"
+                 preserveAspectRatio="none">
+                <defs>
+                    <filter id="brainScrubGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4"/></filter>
+                </defs>
+                <text x="${padL - 4}" y="${padT + 4}" fill="#475569" font-size="9" text-anchor="end">1.0</text>
+                <text x="${padL - 4}" y="${padT + innerH / 2 + 3}" fill="#475569" font-size="9" text-anchor="end">0.5</text>
+                <text x="${padL - 4}" y="${padT + innerH}" fill="#475569" font-size="9" text-anchor="end">0</text>
+                ${gridLines}
+                ${zAxisLabels}
+                ${ticks.join('')}
+                ${regionPaths}
+                ${retentionPath ? `<path d="${retentionPath}" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.85"/>` : ''}
+                ${componentPath ? `<path d="${componentPath}" fill="none" stroke="${componentColor}" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>` : ''}
+                ${brainShowEngagementCurve ? `<path d="${brainPath}" fill="none" stroke="#a78bfa" stroke-width="2"/>` : ''}
+                ${peakLines}
+                <line id="jarvis-brain-scrubber" x1="${sx}" y1="${padT}" x2="${sx}" y2="${padT + innerH}" stroke="#ef4444" stroke-width="2" filter="url(#brainScrubGlow)" style="pointer-events:none;display:${scrubVisible ? 'inline' : 'none'}"/>
+                <circle id="jarvis-brain-scrubber-dot" cx="${sx}" cy="${padT}" r="4" fill="#ef4444" style="pointer-events:none;display:${scrubVisible ? 'inline' : 'none'}"/>
+                ${resolutionLabel ? `<text x="${W - padR - 6}" y="${padT + 12}" fill="#a78bfa" font-size="11" text-anchor="end" font-weight="700">${resolutionLabel}</text>` : ''}
+            </svg>
+        `;
+    }
+
+    function brainScrubXToSec(ctx, clientX) {
+        const rect = ctx.chart.getBoundingClientRect();
+        const xRel = clientX - rect.left;
+        const xVB = (xRel / rect.width) * ctx.W;
+        const innerW = ctx.W - ctx.padL - ctx.padR;
+        return Math.max(0, Math.min(ctx.maxT, ((xVB - ctx.padL) / innerW) * ctx.maxT));
+    }
+
+    function brainUpdateScrubber(sec) {
+        const ctx = brainScrubberCtx;
+        if (!ctx) return;
+        const maxT = window._brainChartMaxT || ctx.maxT || 999;
+        sec = Math.max(0, Math.min(sec, maxT));
+        brainScrubberSec = sec;
+        // When scrubber is driven from the chart (not the video), keep video in sync.
+        const videoEl = document.getElementById('brain-video-player');
+        if (videoEl && !brainVideoPlaying && videoEl.readyState >= 1) {
+            const stimT = Math.max(0, sec - 5.0);
+            if (Math.abs(videoEl.currentTime - stimT) > 0.5) {
+                try { videoEl.currentTime = stimT; } catch {}
+            }
+        }
+        const innerW = ctx.W - ctx.padL - ctx.padR;
+        const xVB = ctx.padL + (sec / maxT) * innerW;
+        if (ctx.scrubLine) {
+            ctx.scrubLine.setAttribute('x1', xVB.toFixed(1));
+            ctx.scrubLine.setAttribute('x2', xVB.toFixed(1));
+            ctx.scrubLine.style.display = 'inline';
+        }
+        const scrubDot = document.getElementById('jarvis-brain-scrubber-dot');
+        if (scrubDot) {
+            scrubDot.setAttribute('cx', xVB.toFixed(1));
+            scrubDot.style.display = 'inline';
+        }
+        const a = brainSelectedAnalysis;
+        const hrfOff = (a && a.analysis_metadata && a.analysis_metadata.hrf_offset_seconds != null)
+            ? a.analysis_metadata.hrf_offset_seconds : 5.0;
+        const stimSec = Math.max(0, sec - hrfOff);
+        if (ctx.readout) {
+            const bv = brainInterpAt(ctx.curve, sec, p => p.second, p => p.activation);
+            const bz = brainInterpAt(ctx.curve, sec, p => p.second, p => (p.activation_zscore != null ? p.activation_zscore : 0));
+            const rv = ctx.retentionPts ? brainInterpAt(ctx.retentionPts, sec, p => p.second, p => p.retention) : null;
+            ctx.readout.innerHTML = `📍 brain&nbsp;<span style="color:#a78bfa">t=${sec.toFixed(1)}s</span> &nbsp;·&nbsp;
+                🎬 stimulus&nbsp;<span style="color:#fbbf24">t=${stimSec.toFixed(1)}s</span>
+                &nbsp;<span style="color:#475569">(HRF ${hrfOff}s)</span><br/>
+                <span style="color:#a78bfa">Activation: ${bv != null ? bv.toFixed(3) : '—'}</span>
+                &nbsp;·&nbsp; <span style="color:#a78bfa">Z-score: ${bz != null ? bz.toFixed(2) : '—'}σ</span>
+                ${rv != null ? `&nbsp;·&nbsp; <span style="color:#fbbf24">Retention: ${rv.toFixed(3)}</span>` : ''}`;
+        }
+
+        // Update 3D brain time display
+        const timeDisplay = document.getElementById('brain3d-time-display');
+        if (timeDisplay) timeDisplay.textContent = `t = ${sec.toFixed(1)}s`;
+
+        // Animate the 3D brain at this second (vertex colors → activation at t).
+        if (window._brain3d && typeof window._brain3d.updateBrainAtSecond === 'function') {
+            try { window._brain3d.updateBrainAtSecond(sec); } catch {}
+        }
+
+        // Update video frame — fetched at STIMULUS time so we see what content caused the activation
+        const frameImg = document.getElementById('brain-video-frame');
+        if (frameImg && brainSelectedVideoId) {
+            frameImg.src = `/api/tribe/frame/${encodeURIComponent(brainSelectedVideoId)}/${stimSec.toFixed(1)}`;
+            frameImg.style.display = 'block';
+            const errEl = document.getElementById('brain-video-frame-err');
+            if (errEl) errEl.style.display = 'none';
+        }
+        const frameLabel = frameImg && frameImg.previousElementSibling;
+        if (frameLabel && frameLabel.innerHTML && frameLabel.innerHTML.includes('Video Frame')) {
+            frameLabel.innerHTML = `📹 Video Frame at <span style="color:#fbbf24">stimulus t=${stimSec.toFixed(1)}s</span>`
+                + ` <span style="color:#475569;text-transform:none;letter-spacing:0">(brain peak ${sec.toFixed(1)}s − ${hrfOff}s HRF lag)</span>`;
+        }
+
+        // Update transcript caption (±1s window) — at stimulus time
+        const captionEl = document.getElementById('brain-video-frame-caption');
+        if (captionEl) {
+            const text = brainTranscriptAt(stimSec);
+            if (text) {
+                captionEl.textContent = `📝 ${text}`;
+                captionEl.style.display = 'block';
+            } else {
+                captionEl.style.display = 'none';
+            }
+        }
+
+        // Update region mini-chart scrubber lines
+        document.querySelectorAll('[id^="brain-region-scrubber-"]').forEach(line => {
+            const maxT = parseFloat(line.getAttribute('data-maxt')) || 1;
+            const padL = parseFloat(line.getAttribute('data-padl')) || 5;
+            const innerW2 = parseFloat(line.getAttribute('data-innerw')) || 230;
+            const x = padL + (sec / maxT) * innerW2;
+            line.setAttribute('x1', x.toFixed(1));
+            line.setAttribute('x2', x.toFixed(1));
+            line.setAttribute('opacity', '0.8');
+        });
+    }
+
+    function ensureBrainScrubGlobals() {
+        if (_brainScrubGlobalsBound) return;
+        _brainScrubGlobalsBound = true;
+        document.addEventListener('mousemove', e => {
+            if (!brainScrubDragging || !brainScrubberCtx) return;
+            brainUpdateScrubber(brainScrubXToSec(brainScrubberCtx, e.clientX));
+        });
+        document.addEventListener('mouseup', () => { brainScrubDragging = false; });
+    }
+
+    function initBrain3D(analysis) {
+        if (!analysis || !analysis.vertex_data || !analysis.vertex_data.mean_activation_per_vertex) return;
+        if (!document.getElementById('jarvis-brain-3d-canvas')) return;
+        if (!window.THREE) {
+            const existing = document.querySelector('script[data-threejs-loader]');
+            if (!existing) {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+                script.setAttribute('data-threejs-loader', '1');
+                script.onload = () => setupBrain3DScene(analysis);
+                document.head.appendChild(script);
+            } else {
+                existing.addEventListener('load', () => setupBrain3DScene(analysis));
+            }
+        } else {
+            setupBrain3DScene(analysis);
+        }
+    }
+
+    let _brainMeshDataCache = null;
+    async function loadBrainMeshData() {
+        if (_brainMeshDataCache) return _brainMeshDataCache;
+        const r = await fetch('/api/tribe/mesh');
+        if (!r.ok) throw new Error('mesh fetch failed: ' + r.status);
+        _brainMeshDataCache = await r.json();
+        return _brainMeshDataCache;
+    }
+
+    async function setupBrain3DScene(analysis) {
+        const canvas = document.getElementById('jarvis-brain-3d-canvas');
+        if (!canvas) return;
+        const THREE = window.THREE;
+        if (!THREE) return;
+
+        // Tear down any prior scene attached to this canvas
+        if (window._brain3d && window._brain3d.cleanup) {
+            try { window._brain3d.cleanup(); } catch {}
+        }
+
+        let meshData;
+        try {
+            meshData = await loadBrainMeshData();
+        } catch (e) {
+            console.error('[brain3d] mesh load failed', e);
+            return;
+        }
+        if (!document.getElementById('jarvis-brain-3d-canvas')) return; // canvas gone during load
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(canvas.offsetWidth || 600, canvas.offsetHeight || 500, false);
+        renderer.setClearColor(0x020617, 1);
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, (canvas.offsetWidth || 600) / (canvas.offsetHeight || 500), 0.1, 2000);
+        camera.position.set(0, 0, 200);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight1.position.set(1, 1, 1);
+        scene.add(dirLight1);
+        const dirLight2 = new THREE.DirectionalLight(0x7c3aed, 0.3);
+        dirLight2.position.set(-1, -0.5, -1);
+        scene.add(dirLight2);
+
+        // ── Real fsaverage5 mesh geometry ─────────────────────────────
+        const lhCoords = meshData.lh_coords;
+        const rhCoords = meshData.rh_coords;
+        const lhFaces = meshData.lh_faces;
+        const rhFacesRaw = meshData.rh_faces;
+        const lhCurv = meshData.lh_curvature || [];
+        const rhCurv = meshData.rh_curvature || [];
+        const HEMI = lhCoords.length; // 10242
+        const nGeomVerts = HEMI + rhCoords.length; // 20484
+        const allCoords = lhCoords.concat(rhCoords);
+
+        // Center the brain on screen by translating all vertices by -centroid
+        let cx = 0, cy = 0, cz = 0;
+        for (let i = 0; i < nGeomVerts; i++) {
+            const c = allCoords[i];
+            cx += c[0]; cy += c[1]; cz += c[2];
+        }
+        cx /= nGeomVerts; cy /= nGeomVerts; cz /= nGeomVerts;
+        const brainCenter = [cx, cy, cz];
+
+        const positions = new Float32Array(nGeomVerts * 3);
+        for (let i = 0; i < nGeomVerts; i++) {
+            const c = allCoords[i];
+            positions[i * 3]     = c[0] - cx;
+            positions[i * 3 + 1] = c[1] - cy;
+            positions[i * 3 + 2] = c[2] - cz;
+        }
+        function vertexPosCentered(i) {
+            return [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];
+        }
+
+        const nFaces = lhFaces.length + rhFacesRaw.length;
+        const indices = new Uint32Array(nFaces * 3);
+        for (let i = 0; i < lhFaces.length; i++) {
+            const f = lhFaces[i];
+            indices[i * 3] = f[0];
+            indices[i * 3 + 1] = f[1];
+            indices[i * 3 + 2] = f[2];
+        }
+        for (let i = 0; i < rhFacesRaw.length; i++) {
+            const f = rhFacesRaw[i];
+            const base = (lhFaces.length + i) * 3;
+            indices[base] = f[0] + HEMI;
+            indices[base + 1] = f[1] + HEMI;
+            indices[base + 2] = f[2] + HEMI;
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+
+        const colors = new Float32Array(nGeomVerts * 3);
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.computeVertexNormals();
+
+        // ── Activation data from this analysis ──────────────────────
+        const vertexActivations = analysis.vertex_data.mean_activation_per_vertex;
+        const vertexPeakTimes = analysis.vertex_data.peak_second_per_vertex || [];
+        const nVerts = vertexActivations.length;
+        const duration = analysis.duration_s || 55;
+        const activationPerSecond = analysis.vertex_data.activation_per_second || null;
+        const apsSampleStep = analysis.vertex_data.activation_per_second_sample_step || 1;
+        const analysisSeconds = Array.isArray(analysis.seconds) ? analysis.seconds : null;
+
+        function activationToColor(val) {
+            val = Math.max(0, Math.min(1, val));
+            if (val < 0.25) {
+                const t = val * 4;
+                return [t * 0.0, t * 0.5, 1.0 - t * 0.5];
+            } else if (val < 0.5) {
+                const t = (val - 0.25) * 4;
+                return [0, 0.5 + t * 0.5, 1.0 - t];
+            } else if (val < 0.75) {
+                const t = (val - 0.5) * 4;
+                return [t, 1.0 - t * 0.5, 0];
+            } else {
+                const t = (val - 0.75) * 4;
+                return [1.0, 0.5 - t * 0.5, 0];
+            }
+        }
+        function timingToColor(sec) {
+            const t = duration > 0 ? sec / duration : 0;
+            return activationToColor(t);
+        }
+        function curvGray(i) {
+            const curv = i < HEMI ? (lhCurv[i] || 0) : (rhCurv[i - HEMI] || 0);
+            return curv > 0 ? 0.25 : 0.70; // sulci darker, gyri lighter
+        }
+        const ACT_THRESH = 0.15;
+        function vertexBaseColor(i, activation) {
+            const g = curvGray(i);
+            if (activation <= ACT_THRESH) return [g, g, g];
+            const t = Math.min(1, (activation - ACT_THRESH) / (1 - ACT_THRESH));
+            const [ar, ag, ab] = activationToColor(activation);
+            return [g + (ar - g) * t, g + (ag - g) * t, g + (ab - g) * t];
+        }
+
+        // ── Functional → Destrieux atlas mapping ────────────────────
+        const FUNC_TO_DESTRIEUX = {
+            visual:            ['G_cuneus','G_occipital_middle','G_occipital_sup','G_and_S_occipital_inf','G_oc-temp_lat-fusifor','G_lingual','Pole_occipital','S_calcarine'],
+            auditory:          ['G_temp_sup-G_T_transv','G_temp_sup-Lateral','G_temp_sup-Plan_polar','Lat_Fis-ant-Horizont','Lat_Fis-ant-Vertical','Lat_Fis-post'],
+            motor:             ['G_precentral','G_postcentral','S_central','G_and_S_paracentral','G_and_S_subcentral'],
+            language_broca:    ['G_front_inf-Opercular','G_front_inf-Orbital','G_front_inf-Triangul','S_front_inf'],
+            language_wernicke: ['G_temp_sup-Plan_tempo','G_parietal_inf-Supramar'],
+            prefrontal:        ['G_front_sup','G_front_middle','G_and_S_frontomargin','G_and_S_transv_frontopol'],
+            default_mode:      ['G_cingul-Post-dorsal','G_cingul-Post-ventral','G_and_S_cingul-Ant','G_and_S_cingul-Mid-Ant','G_and_S_cingul-Mid-Post','G_precuneus','S_subparietal'],
+            attention:         ['G_parietal_sup','S_intrapariet_and_P_trans','G_parietal_inf-Angular'],
+            emotion:           ['G_insular_short','G_Ins_lg_and_S_cent_ins','S_circular_insula_ant'],
+            memory:            ['G_oc-temp_med-Parahip','G_oc-temp_med-Lingual','S_collat_transv_ant'],
+        };
+        const allDestrieuxRegions = meshData.all_destrieux_regions || {};
+        function collectFuncVerts(funcName) {
+            const dnames = FUNC_TO_DESTRIEUX[funcName];
+            if (!dnames) return [];
+            const out = [];
+            for (const dname of dnames) {
+                const reg = allDestrieuxRegions[dname];
+                if (!reg) continue;
+                if (reg.lh_vertex_indices) for (const v of reg.lh_vertex_indices) out.push(v);
+                if (reg.rh_vertex_indices) for (const v of reg.rh_vertex_indices) out.push(v);
+            }
+            return out;
+        }
+        let colorMode = 'activation';
+        let showLH = true, showRH = true;
+
+        function rebuildColors() {
+            for (let i = 0; i < nGeomVerts; i++) {
+                const isLH = i < HEMI;
+                let r, g, b;
+                if (colorMode === 'activation') {
+                    [r, g, b] = vertexBaseColor(i, vertexActivations[i] || 0);
+                } else {
+                    [r, g, b] = timingToColor(vertexPeakTimes[i] || 0);
+                }
+                const dimmed = (isLH && !showLH) || (!isLH && !showRH);
+                const factor = dimmed ? 0.1 : 1.0;
+                colors[i * 3]     = r * factor;
+                colors[i * 3 + 1] = g * factor;
+                colors[i * 3 + 2] = b * factor;
+            }
+            geometry.attributes.color.needsUpdate = true;
+        }
+
+        function colorAtTimestep(stepIdx) {
+            if (!activationPerSecond || !activationPerSecond.length) return false;
+            const safeStep = Math.max(0, Math.min(activationPerSecond.length - 1, stepIdx));
+            const row = activationPerSecond[safeStep];
+            if (!row || !row.length) return false;
+            let lo = Infinity, hi = -Infinity;
+            for (let k = 0; k < row.length; k++) {
+                const v = row[k];
+                if (v < lo) lo = v;
+                if (v > hi) hi = v;
+            }
+            const span = hi - lo;
+            const norm = span > 1e-9 ? v => (v - lo) / span : () => 0;
+            for (let i = 0; i < nGeomVerts; i++) {
+                const isLH = i < HEMI;
+                const sampledIdx = Math.max(0, Math.min(row.length - 1, Math.floor(i / apsSampleStep)));
+                const val = norm(row[sampledIdx] || 0);
+                const [r, g, b] = vertexBaseColor(i, val);
+                const dimmed = (isLH && !showLH) || (!isLH && !showRH);
+                const factor = dimmed ? 0.1 : 1.0;
+                colors[i * 3]     = r * factor;
+                colors[i * 3 + 1] = g * factor;
+                colors[i * 3 + 2] = b * factor;
+            }
+            geometry.attributes.color.needsUpdate = true;
+            return true;
+        }
+
+        function updateBrainAtSecond(second) {
+            if (!analysisSeconds || !analysisSeconds.length) return;
+            let bestIdx = 0;
+            let bestDiff = Math.abs(analysisSeconds[0] - second);
+            for (let i = 1; i < analysisSeconds.length; i++) {
+                const d = Math.abs(analysisSeconds[i] - second);
+                if (d < bestDiff) { bestDiff = d; bestIdx = i; }
+            }
+            if (colorAtTimestep(bestIdx)) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        rebuildColors();
+
+        const material = new THREE.MeshPhongMaterial({
+            vertexColors: true,
+            shininess: 20,
+            specular: new THREE.Color(0x111111),
+            side: THREE.DoubleSide,
+        });
+        const brain = new THREE.Mesh(geometry, material);
+        scene.add(brain);
+
+        // ── Interaction ─────────────────────────────────────────────
+        let isDragging = false;
+        let prevMouse = { x: 0, y: 0 };
+        let rotX = 0, rotY = 0;
+        const onMouseDown = e => { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; };
+        const onMouseMove = e => {
+            if (!isDragging) return;
+            const dx = e.clientX - prevMouse.x;
+            const dy = e.clientY - prevMouse.y;
+            rotY += dx * 0.005;
+            rotX += dy * 0.005;
+            brain.rotation.y = rotY;
+            brain.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotX));
+            prevMouse = { x: e.clientX, y: e.clientY };
+        };
+        const onMouseUp = () => { isDragging = false; };
+        const onWheel = e => {
+            e.preventDefault();
+            camera.position.z = Math.max(80, Math.min(600, camera.position.z + e.deltaY * 0.3));
+        };
+        canvas.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        canvas.addEventListener('wheel', onWheel, { passive: false });
+
+        const observer = new ResizeObserver(() => {
+            const w = canvas.offsetWidth, h = canvas.offsetHeight;
+            if (!w || !h) return;
+            renderer.setSize(w, h, false);
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+        });
+        observer.observe(canvas);
+
+        // (Region label overlays removed — 3D brain is purely visual.)
+        const fvm = meshData.functional_vertex_map || {};
+
+        let rafId = null;
+        let stopped = false;
+        function animate() {
+            if (stopped) return;
+            rafId = requestAnimationFrame(animate);
+            if (!isDragging) brain.rotation.y += 0.002;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // ── Public actions ──────────────────────────────────────────
+        function setColorMode(mode) {
+            colorMode = mode;
+            const a = document.getElementById('brain3d-color-activation');
+            const t = document.getElementById('brain3d-color-timing');
+            const legend = document.getElementById('brain3d-legend-label');
+            if (a) a.style.background = mode === 'activation' ? '#7c3aed' : '#1e293b';
+            if (t) t.style.background = mode === 'timing' ? '#7c3aed' : '#1e293b';
+            if (legend) legend.textContent = mode === 'timing' ? 'Peak Timing (early → late)' : 'Activation (low → high)';
+            rebuildColors();
+            renderer.render(scene, camera);
+        }
+
+        let componentHighlightActive = false;
+        function highlightComponent(topPositive, topNegative) {
+            const posSet = new Set(topPositive || []);
+            const negSet = new Set(topNegative || []);
+            for (let i = 0; i < nGeomVerts; i++) {
+                const isLH = i < HEMI;
+                const dimmed = (isLH && !showLH) || (!isLH && !showRH);
+                let r, g, b;
+                if (posSet.has(i)) {
+                    r = 1.0; g = 0.15; b = 0.15;
+                } else if (negSet.has(i)) {
+                    r = 0.15; g = 0.45; b = 1.0;
+                } else {
+                    const gray = curvGray(i) * 0.45;
+                    r = gray; g = gray; b = gray;
+                }
+                const factor = dimmed ? 0.1 : 1.0;
+                colors[i * 3]     = r * factor;
+                colors[i * 3 + 1] = g * factor;
+                colors[i * 3 + 2] = b * factor;
+            }
+            geometry.attributes.color.needsUpdate = true;
+            componentHighlightActive = true;
+            renderer.render(scene, camera);
+        }
+        function clearComponentHighlight() {
+            if (!componentHighlightActive) return;
+            componentHighlightActive = false;
+            rebuildColors();
+            renderer.render(scene, camera);
+        }
+        let regionHighlightActive = false;
+        function highlightRegion(regionName) {
+            // Resolve vertex set: prefer FUNC_TO_DESTRIEUX → all_destrieux_regions,
+            // fall back to legacy functional_vertex_map for backwards compat.
+            let vertList = collectFuncVerts(regionName);
+            if (!vertList.length) {
+                const legacy = fvm[regionName];
+                if (legacy && legacy.vertex_indices) vertList = legacy.vertex_indices;
+            }
+            if (!vertList.length) return;
+            const verts = new Set(vertList);
+            for (let i = 0; i < nGeomVerts; i++) {
+                const isLH = i < HEMI;
+                const dimmed = (isLH && !showLH) || (!isLH && !showRH);
+                let r, g, b;
+                if (verts.has(i)) {
+                    r = 1.0; g = 0.8; b = 0.0;
+                } else {
+                    r = 0.15; g = 0.15; b = 0.15;
+                }
+                const factor = dimmed ? 0.1 : 1.0;
+                colors[i * 3]     = r * factor;
+                colors[i * 3 + 1] = g * factor;
+                colors[i * 3 + 2] = b * factor;
+            }
+            geometry.attributes.color.needsUpdate = true;
+            regionHighlightActive = true;
+            renderer.render(scene, camera);
+        }
+        function clearRegionHighlight() {
+            if (!regionHighlightActive) return;
+            regionHighlightActive = false;
+            rebuildColors();
+            renderer.render(scene, camera);
+        }
+        function setHemi(which, on) {
+            if (which === 'lh') showLH = on;
+            else showRH = on;
+            const el = document.getElementById(which === 'lh' ? 'brain3d-lh' : 'brain3d-rh');
+            if (el) el.style.background = on ? '#7c3aed' : '#1e293b';
+            rebuildColors();
+            renderer.render(scene, camera);
+        }
+
+        const elA = document.getElementById('brain3d-color-activation');
+        const elT = document.getElementById('brain3d-color-timing');
+        const elL = document.getElementById('brain3d-lh');
+        const elR = document.getElementById('brain3d-rh');
+        if (elA) elA.onclick = () => setColorMode('activation');
+        if (elT) elT.onclick = () => setColorMode('timing');
+        if (elL) elL.onclick = () => setHemi('lh', !showLH);
+        if (elR) elR.onclick = () => setHemi('rh', !showRH);
+
+        function cleanup() {
+            stopped = true;
+            if (rafId) cancelAnimationFrame(rafId);
+            try { observer.disconnect(); } catch {}
+            try { canvas.removeEventListener('mousedown', onMouseDown); } catch {}
+            try { document.removeEventListener('mousemove', onMouseMove); } catch {}
+            try { document.removeEventListener('mouseup', onMouseUp); } catch {}
+            try { canvas.removeEventListener('wheel', onWheel); } catch {}
+            try { geometry.dispose(); material.dispose(); renderer.dispose(); } catch {}
+        }
+
+        window._brain3d = {
+            scene, renderer, camera, brain, geometry, material,
+            cleanup, setColorMode, setHemi, rebuildColors,
+            updateBrainAtSecond,
+            highlightComponent, clearComponentHighlight,
+            highlightRegion, clearRegionHighlight,
+            activationPerSecond,
+            seconds: analysisSeconds,
+            apsSampleStep,
+        };
+
+        // Re-apply PCA component spatial highlight if it was active before re-init
+        if (brainComponentSpatialOn && brainSelectedComponent
+            && analysis.functional_networks
+            && analysis.functional_networks[brainSelectedComponent]) {
+            const c = analysis.functional_networks[brainSelectedComponent];
+            highlightComponent(c.top_positive_vertices || [], c.top_negative_vertices || []);
+        }
+    }
+
+    function bindBrainChartEvents() {
+        const root = container?.querySelector('.jarvis-brain-root');
+        if (!root) return;
+        const chart = root.querySelector('#jarvis-brain-chart');
+        if (!chart || !brainSelectedAnalysis || brainSelectedAnalysis._error || brainSelectedAnalysis._pending) return;
+
+        const a = brainSelectedAnalysis;
+        const curve = a.brain_engagement_curve || [];
+        const durationSec = Number(a._durationSec || a.duration_s || 0) || 0;
+        const rawRetention = a._retentionCurve || null;
+        let retentionPts = null;
+        if (rawRetention && rawRetention.length && durationSec > 0) {
+            retentionPts = rawRetention.map(p => ({
+                second: (p.second ?? p.time ?? p.t ?? 0) * durationSec,
+                retention: Number(p.retention ?? p.value ?? 0),
+            })).filter(p => Number.isFinite(p.second) && Number.isFinite(p.retention));
+        }
+
+        brainScrubberCtx = {
+            chart,
+            curve,
+            retentionPts,
+            maxT: Number(chart.dataset.maxt) || 1,
+            padL: Number(chart.dataset.padl) || 40,
+            padR: Number(chart.dataset.padr) || 14,
+            W: Number(chart.dataset.w) || 700,
+            scrubLine: chart.querySelector('#jarvis-brain-scrubber'),
+            readout: root.querySelector('#jarvis-brain-scrub-readout'),
+        };
+
+        chart.addEventListener('mousedown', e => {
+            if (e.target && e.target.closest('.brain-peak-marker')) return;
+            brainScrubDragging = true;
+            brainUpdateScrubber(brainScrubXToSec(brainScrubberCtx, e.clientX));
+            e.preventDefault();
+        });
+        chart.addEventListener('click', e => {
+            if (e.target && e.target.closest('.brain-peak-marker')) return;
+            brainUpdateScrubber(brainScrubXToSec(brainScrubberCtx, e.clientX));
+        });
+
+        chart.querySelectorAll('.brain-peak-marker').forEach(m => {
+            m.addEventListener('click', e => {
+                e.stopPropagation();
+                const z = m.dataset.zscore ? Number(m.dataset.zscore) : null;
+                brainPeakDetail = {
+                    second: Number(m.dataset.second),
+                    activation: Number(m.dataset.activation),
+                    activation_zscore: (z != null && !Number.isNaN(z)) ? z : null,
+                    percentile: Number(m.dataset.percentile),
+                };
+                brainScrubberSec = brainPeakDetail.second;
+                refreshBrainTab();
+            });
+        });
+    }
+
+    function rerenderBrainChart() {
+        window.rerenderBrainChart = rerenderBrainChart;
+        const containerEl = document.getElementById('jarvis-brain-chart-container');
+        const a = brainSelectedAnalysis;
+        if (!containerEl || !a || a._error || a._pending) return;
+
+        const curve = a.brain_engagement_curve || [];
+        const peaks = a.peak_moments || [];
+        const durationSec = Number(a._durationSec || a.duration_s || 0) || 0;
+        const rawRetention = a._retentionCurve || null;
+        let retentionPts = null;
+        if (rawRetention && rawRetention.length && durationSec > 0) {
+            retentionPts = rawRetention.map(p => ({
+                second: (p.second ?? p.time ?? p.t ?? 0) * durationSec,
+                retention: Number(p.retention ?? p.value ?? 0),
+            })).filter(p => Number.isFinite(p.second) && Number.isFinite(p.retention));
+        }
+        containerEl.innerHTML = renderBrainCurveSvg(curve, retentionPts, peaks, durationSec, brainScrubberSec, brainEnabledRegions, a, brainChartResolution);
+        bindBrainChartEvents();
+    }
+
+    function updateBrainRegionToggleStyles() {
+        const root = container?.querySelector('.jarvis-brain-root');
+        if (!root) return;
+        root.querySelectorAll('.brain-region-toggle').forEach(btn => {
+            const key = btn.dataset.region;
+            const color = REGION_COLORS[key] || '#94a3b8';
+            const active = brainEnabledRegions.has(key);
+            btn.classList.toggle('active', active);
+            btn.style.background = active ? `${color}22` : '#0a1628';
+            btn.style.borderColor = active ? color : '#1e293b';
+            btn.style.color = active ? color : '#64748b';
+        });
     }
 
     function bindBrainEvents() {
         const root = container?.querySelector('.jarvis-brain-root');
         if (!root) return;
+
+        const batchHeader = root.querySelector('#brain-batch-header');
+        if (batchHeader) {
+            batchHeader.addEventListener('click', () => {
+                brainBatchExpanded = !brainBatchExpanded;
+                refreshBrainTab();
+            });
+        }
+        const batchRefresh = root.querySelector('#brain-batch-refresh');
+        if (batchRefresh) {
+            batchRefresh.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                batchRefresh.disabled = true;
+                batchRefresh.textContent = 'Refreshing…';
+                await loadBrainBatchStatus();
+                refreshBrainTab();
+            });
+        }
+        const batchQueue = root.querySelector('#brain-batch-queue4');
+        if (batchQueue) {
+            batchQueue.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!brainBatchStatus || !Array.isArray(brainBatchStatus.videos)) return;
+                const pending = brainBatchStatus.videos
+                    .filter(v => v.status === 'pending')
+                    .slice(0, 4);
+                if (pending.length === 0) { alert('No pending videos to queue.'); return; }
+                batchQueue.disabled = true;
+                batchQueue.textContent = `Queuing ${pending.length}…`;
+                let ok = 0, failed = 0;
+                for (const v of pending) {
+                    try {
+                        const r = await fetch('/api/tribe/analyze', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ videoId: v.videoId }),
+                        });
+                        if (r.ok) ok++; else failed++;
+                    } catch { failed++; }
+                }
+                await loadBrainBatchStatus();
+                refreshBrainTab();
+                if (failed > 0) alert(`Queued ${ok}, ${failed} failed.`);
+            });
+        }
 
         const pick = root.querySelector('#jarvis-brain-pick');
         if (pick) {
@@ -8016,14 +10677,446 @@ const JarvisUI = (() => {
             });
         }
         root.querySelectorAll('.jarvis-brain-row').forEach(row => {
-            row.addEventListener('click', async () => {
+            row.addEventListener('click', async (e) => {
+                if (e.target && e.target.closest('.brain-delete-btn')) return;
                 brainSelectedVideoId = row.dataset.vid;
                 brainSelectedAnalysis = null;
+                brainScrubberSec = null;
+                brainExpandedRegion = null;
+                brainPeakDetail = null;
+                brainRawExpanded = false;
+                brainRawRowExpanded = {};
+                brainScrubberCtx = null;
+                brainEnabledRegions = new Set();
+                brainEnabledDestrieux = new Set();
+                window._brainEnabledDestrieux = brainEnabledDestrieux;
+                brainSelectedScale = '1s_window';
+                brainChartResolution = '1s_raw';
                 refreshBrainTab();
                 await loadBrainAnalysisFor(brainSelectedVideoId);
                 refreshBrainTab();
             });
         });
+
+        root.querySelectorAll('.brain-delete-btn').forEach(btn => {
+            btn.onclick = async (e) => {
+                e.stopPropagation();
+                const vid = btn.dataset.vid;
+                if (!confirm(`Delete analysis for ${vid}?`)) return;
+                try {
+                    const r = await fetch(`/api/tribe/results/${encodeURIComponent(vid)}`, { method: 'DELETE' });
+                    if (r.ok) {
+                        await loadBrainData();
+                        if (brainSelectedVideoId === vid) {
+                            brainSelectedVideoId = null;
+                            brainSelectedAnalysis = null;
+                        }
+                        refreshBrainTab();
+                    } else {
+                        alert('Delete failed: ' + (await r.text()));
+                    }
+                } catch (err) { alert('Error: ' + err.message); }
+            };
+        });
+
+        ensureBrainScrubGlobals();
+        bindBrainChartEvents();
+
+        // Brain curve (purple line) on/off toggle
+        const curveToggleBtn = root.querySelector('#brain-curve-toggle');
+        if (curveToggleBtn) {
+            curveToggleBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                brainShowEngagementCurve = !brainShowEngagementCurve;
+                const active = brainShowEngagementCurve;
+                curveToggleBtn.style.background = active ? '#fbbf2422' : '#0a1628';
+                curveToggleBtn.style.borderColor = active ? '#fbbf24' : '#334155';
+                curveToggleBtn.style.color = active ? '#fbbf24' : '#64748b';
+                rerenderBrainChart();
+            });
+        }
+
+        // Region toggle chips
+        root.querySelectorAll('.brain-region-toggle').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const key = btn.dataset.region;
+                if (!key) return;
+                if (brainEnabledRegions.has(key)) brainEnabledRegions.delete(key);
+                else brainEnabledRegions.add(key);
+                rerenderBrainChart();
+                updateBrainRegionToggleStyles();
+            });
+        });
+
+        const showAllBtn = root.querySelector('#brain-regions-show-all');
+        if (showAllBtn) {
+            showAllBtn.addEventListener('click', () => {
+                const a = brainSelectedAnalysis;
+                if (!a || !a.region_activations) return;
+                Object.keys(a.region_activations).forEach(k => brainEnabledRegions.add(k));
+                rerenderBrainChart();
+                updateBrainRegionToggleStyles();
+            });
+        }
+        const hideAllBtn = root.querySelector('#brain-regions-hide-all');
+        if (hideAllBtn) {
+            hideAllBtn.addEventListener('click', () => {
+                brainEnabledRegions.clear();
+                rerenderBrainChart();
+                updateBrainRegionToggleStyles();
+            });
+        }
+
+        // Extended-peak dots (top 25% timeline strip): click to scrub
+        root.querySelectorAll('.brain-extpeak-dot').forEach(dot => {
+            dot.addEventListener('click', e => {
+                e.stopPropagation();
+                const sec = Number(dot.dataset.second);
+                if (!Number.isFinite(sec)) return;
+                if (brainScrubberCtx) {
+                    brainUpdateScrubber(Math.max(0, Math.min(brainScrubberCtx.maxT, sec)));
+                } else {
+                    brainScrubberSec = sec;
+                    refreshBrainTab();
+                }
+            });
+        });
+
+        // Multi-scale section scale-selector buttons
+        root.querySelectorAll('.brain-scale-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const scale = btn.dataset.scale;
+                if (!scale || scale === brainSelectedScale) return;
+                brainSelectedScale = scale;
+                refreshBrainTab();
+            });
+        });
+
+        // Functional-networks (PCA) component chips
+        root.querySelectorAll('.brain-component-chip').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const k = btn.dataset.component;
+                if (!k) return;
+                if (brainSelectedComponent === k) {
+                    brainSelectedComponent = null;
+                    brainComponentSpatialOn = false;
+                    if (window._brain3d && typeof window._brain3d.clearComponentHighlight === 'function') {
+                        try { window._brain3d.clearComponentHighlight(); } catch {}
+                    }
+                } else {
+                    brainSelectedComponent = k;
+                    brainComponentSpatialOn = false;
+                }
+                refreshBrainTab();
+            });
+        });
+
+        const spatialToggle = root.querySelector('#brain-component-spatial-toggle');
+        if (spatialToggle) {
+            spatialToggle.addEventListener('click', e => {
+                e.stopPropagation();
+                brainComponentSpatialOn = !brainComponentSpatialOn;
+                if (brainComponentSpatialOn && brainSelectedComponent && brainSelectedAnalysis
+                    && brainSelectedAnalysis.functional_networks
+                    && brainSelectedAnalysis.functional_networks[brainSelectedComponent]
+                    && window._brain3d && typeof window._brain3d.highlightComponent === 'function') {
+                    const c = brainSelectedAnalysis.functional_networks[brainSelectedComponent];
+                    try {
+                        window._brain3d.highlightComponent(c.top_positive_vertices || [], c.top_negative_vertices || []);
+                    } catch {}
+                } else if (window._brain3d && typeof window._brain3d.clearComponentHighlight === 'function') {
+                    try { window._brain3d.clearComponentHighlight(); } catch {}
+                }
+                refreshBrainTab();
+            });
+        }
+
+        // Main-chart resolution toggle buttons
+        root.querySelectorAll('.brain-resolution-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const res = btn.dataset.resolution;
+                if (!res || res === brainChartResolution) return;
+                brainChartResolution = res;
+                refreshBrainTab();
+            });
+        });
+
+        // RTG attention transition dots: click to scrub
+        root.querySelectorAll('.brain-transition-dot').forEach(dot => {
+            dot.addEventListener('click', e => {
+                e.stopPropagation();
+                const sec = Number(dot.dataset.second);
+                if (!Number.isFinite(sec)) return;
+                if (brainScrubberCtx) {
+                    brainUpdateScrubber(Math.max(0, Math.min(brainScrubberCtx.maxT, sec)));
+                } else {
+                    brainScrubberSec = sec;
+                    refreshBrainTab();
+                }
+            });
+        });
+
+        root.querySelectorAll('.jarvis-brain-region-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const key = card.dataset.region;
+                brainExpandedRegion = brainExpandedRegion === key ? null : key;
+                refreshBrainTab();
+            });
+        });
+
+        root.querySelectorAll('.brain-region-ellipse').forEach(el => {
+            el.addEventListener('click', () => {
+                const key = el.dataset.region;
+                brainExpandedRegion = key;
+                refreshBrainTab();
+                const card = container?.querySelector(`.jarvis-brain-region-card[data-region="${key}"]`);
+                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        });
+
+        // 3D brain initialization (replaces old SVG view/color toggles)
+        if (brainSelectedAnalysis && !brainSelectedAnalysis._error && !brainSelectedAnalysis._pending) {
+            initBrain3D(brainSelectedAnalysis);
+        }
+
+        const rawToggle = root.querySelector('#jarvis-brain-raw-toggle');
+        if (rawToggle) {
+            rawToggle.addEventListener('click', () => {
+                brainRawExpanded = !brainRawExpanded;
+                refreshBrainTab();
+            });
+        }
+
+        root.querySelectorAll('.jarvis-brain-raw-row').forEach(rowEl => {
+            rowEl.addEventListener('click', e => {
+                e.stopPropagation();
+                const k = rowEl.dataset.row;
+                brainRawRowExpanded[k] = !brainRawRowExpanded[k];
+                refreshBrainTab();
+            });
+        });
+
+        const fgToggle = root.querySelector('#brain-funcgroups-toggle');
+        if (fgToggle) {
+            fgToggle.addEventListener('click', () => {
+                brainFunctionalGroupsExpanded = !brainFunctionalGroupsExpanded;
+                refreshBrainTab();
+            });
+        }
+
+        const dToggle = root.querySelector('#brain-destrieux-toggle');
+        if (dToggle) {
+            dToggle.addEventListener('click', () => {
+                brainDestrieuxExpanded = !brainDestrieuxExpanded;
+                refreshBrainTab();
+            });
+        }
+
+        const dFilter = root.querySelector('#brain-destrieux-filter');
+        if (dFilter) {
+            dFilter.addEventListener('input', e => {
+                brainDestrieuxFilter = e.target.value || '';
+                refreshBrainTab();
+                // Restore focus + caret after re-render
+                setTimeout(() => {
+                    const f = container?.querySelector('#brain-destrieux-filter');
+                    if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+                }, 0);
+            });
+        }
+
+        root.querySelectorAll('.brain-destrieux-lobe').forEach(btn => {
+            btn.addEventListener('click', () => {
+                brainDestrieuxHemiFilter = btn.dataset.lobe || 'all';
+                refreshBrainTab();
+            });
+        });
+
+        // Top-of-pane explainer panel — local DOM toggle (no rerender).
+        const explainerToggle = root.querySelector('#brain-explainer-toggle');
+        if (explainerToggle) {
+            explainerToggle.addEventListener('click', () => {
+                brainExplainerExpanded = !brainExplainerExpanded;
+                const body = root.querySelector('#brain-explainer-body');
+                const arrow = explainerToggle.querySelector('span');
+                if (body) body.style.display = brainExplainerExpanded ? 'block' : 'none';
+                if (arrow) arrow.textContent = brainExplainerExpanded ? '▲ collapse' : '▼ expand';
+            });
+        }
+
+        // Info chip toggle — collapsed top-stats card.
+        const infoToggle = root.querySelector('#brain-info-toggle');
+        if (infoToggle) {
+            infoToggle.addEventListener('click', () => {
+                brainInfoExpanded = !brainInfoExpanded;
+                refreshBrainTab();
+            });
+        }
+
+        // HUD bottom-half tab switcher.
+        root.querySelectorAll('.brain-detail-tab').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const k = btn.dataset.tab;
+                if (!k || k === brainActiveDetailTab) return;
+                brainActiveDetailTab = k;
+                refreshBrainTab();
+            });
+        });
+
+        // 75 Destrieux atlas chips under the main chart — toggle overlay lines.
+        root.querySelectorAll('.brain-destrieux-chip').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                const key = btn.dataset.region;
+                if (!key) return;
+                if (brainEnabledDestrieux.has(key)) brainEnabledDestrieux.delete(key);
+                else brainEnabledDestrieux.add(key);
+                window._brainEnabledDestrieux = brainEnabledDestrieux;
+                refreshBrainTab();
+            });
+        });
+
+        const destTop10 = root.querySelector('#brain-destrieux-chip-top10');
+        if (destTop10) {
+            destTop10.addEventListener('click', () => {
+                const a = brainSelectedAnalysis;
+                const dra = a && a.destrieux_region_activations;
+                if (!dra) return;
+                const top = Object.entries(dra)
+                    .sort(([,va], [,vb]) => {
+                        const za = (va && va.mean_zscore != null) ? va.mean_zscore : (va.mean_activation || 0);
+                        const zb = (vb && vb.mean_zscore != null) ? vb.mean_zscore : (vb.mean_activation || 0);
+                        return zb - za;
+                    })
+                    .slice(0, 10)
+                    .map(([k]) => k);
+                brainEnabledDestrieux = new Set(top);
+                window._brainEnabledDestrieux = brainEnabledDestrieux;
+                refreshBrainTab();
+            });
+        }
+
+        const destClear = root.querySelector('#brain-destrieux-chip-clear');
+        if (destClear) {
+            destClear.addEventListener('click', () => {
+                brainEnabledDestrieux.clear();
+                window._brainEnabledDestrieux = brainEnabledDestrieux;
+                refreshBrainTab();
+            });
+        }
+
+        const destShowAll75 = root.querySelector('#brain-destrieux-show-all-75');
+        if (destShowAll75) {
+            destShowAll75.addEventListener('click', () => {
+                const a = brainSelectedAnalysis;
+                const dra = a && a.destrieux_region_activations;
+                if (!dra) return;
+                Object.keys(dra).forEach(k => brainEnabledDestrieux.add(k));
+                window._brainEnabledDestrieux = brainEnabledDestrieux;
+                rerenderBrainChart();
+                refreshBrainTab();
+            });
+        }
+        const destClear75 = root.querySelector('#brain-destrieux-clear-75');
+        if (destClear75) {
+            destClear75.addEventListener('click', () => {
+                brainEnabledDestrieux.clear();
+                window._brainEnabledDestrieux = brainEnabledDestrieux;
+                rerenderBrainChart();
+                refreshBrainTab();
+            });
+        }
+
+        // ── VIDEO PLAYER ──────────────────────────────────────────────────
+        function bindBrainVideoPlayer() {
+            const videoEl = root.querySelector('#brain-video-player');
+            const playBtn = root.querySelector('#brain-vp-play');
+            const pauseBtn = root.querySelector('#brain-vp-pause');
+            const scrubTrack = root.querySelector('#brain-vp-scrub-track');
+            const scrubFill = root.querySelector('#brain-vp-scrub-fill');
+            const scrubThumb = root.querySelector('#brain-vp-scrub-thumb');
+            const timeLabel = root.querySelector('#brain-vp-time');
+            const brainTLabel = root.querySelector('#brain-vp-brain-t');
+            const stimTLabel = root.querySelector('#brain-vp-stim-t');
+            const statusLabel = root.querySelector('#brain-vp-status');
+            if (!videoEl || !scrubTrack) return;
+
+            brainVideoEl = videoEl;
+            const a = brainSelectedAnalysis;
+            const fallbackDur = (a && (a._durationSec || a.duration_s)) || 55;
+            const getDuration = () => (videoEl.duration && Number.isFinite(videoEl.duration) ? videoEl.duration : fallbackDur);
+
+            // Brain time = video (stimulus) time + 5s HRF lag
+            // Drive all brain charts from the video's currentTime.
+            function syncFromVideo() {
+                const t = videoEl.currentTime;
+                const dur = getDuration();
+                const pct = dur > 0 ? (t / dur) * 100 : 0;
+                if (scrubFill) scrubFill.style.width = pct + '%';
+                if (scrubThumb) scrubThumb.style.left = pct + '%';
+                if (timeLabel) timeLabel.textContent = t.toFixed(1);
+                const brainT = t + 5.0;
+                if (brainTLabel) brainTLabel.textContent = brainT.toFixed(1);
+                if (stimTLabel) stimTLabel.textContent = t.toFixed(1);
+                if (brainScrubberCtx) {
+                    brainUpdateScrubber(Math.max(0, Math.min(brainScrubberCtx.maxT, brainT)));
+                }
+            }
+
+            if (playBtn) playBtn.onclick = () => {
+                videoEl.play();
+                playBtn.style.display = 'none';
+                if (pauseBtn) pauseBtn.style.display = '';
+                if (statusLabel) statusLabel.textContent = 'playing';
+                brainVideoPlaying = true;
+            };
+            if (pauseBtn) pauseBtn.onclick = () => {
+                videoEl.pause();
+                pauseBtn.style.display = 'none';
+                if (playBtn) playBtn.style.display = '';
+                if (statusLabel) statusLabel.textContent = 'paused';
+                brainVideoPlaying = false;
+            };
+
+            videoEl.addEventListener('loadedmetadata', () => {
+                if (Number.isFinite(videoEl.duration) && brainSelectedAnalysis) {
+                    brainSelectedAnalysis._durationSec = videoEl.duration;
+                    refreshBrainTab();
+                }
+            });
+
+            videoEl.addEventListener('timeupdate', syncFromVideo);
+            videoEl.addEventListener('ended', () => {
+                if (pauseBtn) pauseBtn.style.display = 'none';
+                if (playBtn) playBtn.style.display = '';
+                if (statusLabel) statusLabel.textContent = 'ended';
+                brainVideoPlaying = false;
+            });
+
+            let isDragging = false;
+            function scrubToX(clientX) {
+                const rect = scrubTrack.getBoundingClientRect();
+                const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                const t = pct * getDuration();
+                videoEl.currentTime = t;
+                syncFromVideo();
+            }
+            scrubTrack.addEventListener('mousedown', e => { isDragging = true; scrubToX(e.clientX); e.preventDefault(); });
+            const onMove = e => { if (isDragging) scrubToX(e.clientX); };
+            const onUp = () => { isDragging = false; };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            scrubTrack.addEventListener('touchstart', e => { isDragging = true; scrubToX(e.touches[0].clientX); e.preventDefault(); }, { passive: false });
+            document.addEventListener('touchmove', e => { if (isDragging) scrubToX(e.touches[0].clientX); }, { passive: false });
+            document.addEventListener('touchend', () => { isDragging = false; });
+        }
+
+        setTimeout(bindBrainVideoPlayer, 100);
     }
 
     function bindEvents() {
@@ -8041,12 +11134,19 @@ const JarvisUI = (() => {
         container.querySelectorAll('.jarvis-tool-execute').forEach(btn => {
             btn.addEventListener('click', () => executeTool(btn.dataset.tool));
         });
+
+        // QRD (Quant Research Decoded): hand off the mounted root to the
+        // self-contained module, which manages its own data, render & events.
+        if (activeTab === 'qrd' && window.JarvisQRD) {
+            const qrdRoot = container.querySelector('#qrd-root');
+            if (qrdRoot) window.JarvisQRD.mount(qrdRoot);
+        }
     }
 
     // ── Public API ──
     function open(bodyEl) {
         container = bodyEl;
-        activeTab = 'analytical';
+        activeTab = 'qrd';
         dataset = null;
         activeToolId = null;
         toolResults = {};

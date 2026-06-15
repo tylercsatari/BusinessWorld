@@ -208,6 +208,11 @@
         if (_booted) { if (window.applyAccess) window.applyAccess(perms); return; } // re-apply on refresh
         _booted = true;
         clearOverlays();
+        // Re-show the world's loading screen during boot. start() hid it so the
+        // login screen was clean; if we don't bring it back, the seconds while the
+        // 3D world loads show a BLACK screen (worse on a cold start). init() hides
+        // it again when the world is ready.
+        const _ld = document.getElementById('loading-overlay'); if (_ld) _ld.style.display = '';
         if (typeof window.__bootApp === 'function') window.__bootApp();
         mountMenuItems();
         applyAccessWhenReady(perms);
@@ -407,7 +412,10 @@
     async function refreshRole() {
         if (!_token) return;
         try {
-            const r = await fetch('/api/me');
+            const ctrl = new AbortController();
+            const to = setTimeout(() => ctrl.abort(), 12000);
+            const r = await fetch('/api/me', { signal: ctrl.signal });
+            clearTimeout(to);
             if (!r.ok) return;
             const account = await r.json();
             bootForRole(account);

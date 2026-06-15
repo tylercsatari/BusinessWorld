@@ -2395,21 +2395,23 @@ async function init() {
         console.error('Model loading failed:', e);
         setLoadProgress(100, 'Error loading models - using fallback...');
     }
-    // Create buildings from loaded models
-    workshop = createWorkshop();
-    storage = createStorage();
-    moneyPit = createMoneyPit();
-    pen = createPen();
-    employeeIsland = createEmployeeIsland();
-    scienceCenter = createScienceCenter();
-    jarvis = createJarvis();
-    library = createLibrary();
-    finance = createFinance();
-    house = createHouse();
-    movieTheatre = createMovieTheatre();
-    gym = createGym();
-    chocolateBar = createChocolateBar();
-    videoLab = createVideoLab();
+    // Create buildings from loaded models. Per-building try/catch so one bad
+    // build can't abort the whole world (the others + the player still load).
+    const _mk = (fn, label) => { try { return fn(); } catch (e) { console.error('Building build failed:', label, e); return null; } };
+    workshop = _mk(createWorkshop, 'workshop');
+    storage = _mk(createStorage, 'storage');
+    moneyPit = _mk(createMoneyPit, 'moneyPit');
+    pen = _mk(createPen, 'pen');
+    employeeIsland = _mk(createEmployeeIsland, 'employeeIsland');
+    scienceCenter = _mk(createScienceCenter, 'scienceCenter');
+    jarvis = _mk(createJarvis, 'jarvis');
+    library = _mk(createLibrary, 'library');
+    finance = _mk(createFinance, 'finance');
+    house = _mk(createHouse, 'house');
+    movieTheatre = _mk(createMovieTheatre, 'movieTheatre');
+    gym = _mk(createGym, 'gym');
+    chocolateBar = _mk(createChocolateBar, 'chocolateBar');
+    videoLab = _mk(createVideoLab, 'videoLab');
 
     // Load saved layout or use defaults
     const saved = await loadLayout();
@@ -2443,7 +2445,7 @@ async function init() {
     if (saved && saved.penSize) {
         penSize.w = saved.penSize.w;
         penSize.d = saved.penSize.d;
-        buildPenFence(pen);
+        if (pen) buildPenFence(pen);
     }
 
     // Restore or create trees
@@ -2452,6 +2454,7 @@ async function init() {
     // Snap buildings to grid (for initial default positions)
     if (!saved || !saved.buildings) {
         [workshop, storage, moneyPit, pen, employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab].forEach(b => {
+            if (!b) return;
             b.position.x = snapToGrid(b.position.x);
             b.position.z = snapToGrid(b.position.z);
         });
@@ -3588,8 +3591,10 @@ const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
     const dt = clock.getDelta(), time = clock.getElapsedTime();
+  try {
     // Player
     const spd = 10; let mx = 0, mz = 0;
+    if (!playerMesh) throw new Error('no player yet');
     if (keys['w'] || keys['arrowup']) mz -= 1; if (keys['s'] || keys['arrowdown']) mz += 1;
     if (keys['a'] || keys['arrowleft']) mx -= 1; if (keys['d'] || keys['arrowright']) mx += 1;
     // Mobile joystick input
@@ -3726,8 +3731,16 @@ function animate() {
     // Building count badges
     fetchBuildingCounts();
     updateBuildingBadges();
-    composer.render();
+  } catch (e) {
+    if (!window.__animErrLogged) { console.error('animate frame error (still rendering):', e); window.__animErrLogged = true; }
+  }
+  // ALWAYS render — a per-frame error (e.g. a half-loaded world) must never leave a black screen.
+  try { composer.render(); } catch (e) {}
 }
+// Start the render loop the moment it's defined — BEFORE init() loads the world.
+// The scene already has lights/ground/sky, so the canvas shows them immediately
+// (never black); init() just fills in the buildings as they load.
+if (!window.__animating) { window.__animating = true; try { animate(); } catch (e) { console.error('initial animate failed', e); } }
 Object.defineProperty(window, 'cameraDistance', { get() { return cameraDistance; }, set(v) { cameraDistance = v; } });
 Object.defineProperty(window, 'cameraAngle', { get() { return cameraAngle; }, set(v) { cameraAngle = v; } });
 Object.defineProperty(window, 'cameraPitch', { get() { return cameraPitch; }, set(v) { cameraPitch = v; } });

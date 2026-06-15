@@ -27,6 +27,7 @@ const jarvisStore = require('./buildings/jarvis/jarvis-store');
 const jarvisRunner = require('./buildings/jarvis/jarvis-runner');
 const jarvisVariableCatalog = require('./buildings/jarvis/jarvis-variable-catalog');
 const jarvisMetrics = require('./buildings/jarvis/jarvis-metrics');
+const streamJson = require('./buildings/jarvis/stream-json');
 const viralIdeaEngine = require('./buildings/jarvis/viral-idea-engine');
 const PDFDocument = require('pdfkit');
 const { spawn } = require('child_process');
@@ -4983,8 +4984,11 @@ Respond ONLY as valid JSON (no markdown):
     if (pathname.startsWith('/api/jarvis/v2/indicator/') && req.method === 'GET') {
         try {
             const key = decodeURIComponent(pathname.slice('/api/jarvis/v2/indicator/'.length));
-            const data = await jarvisStore.loadJson('indicators', []);
-            const found = data.find(i => i.key === key);
+            const fp = path.join(__dirname, 'buildings', 'jarvis', 'indicators.json');
+            // Streaming find-by-key: stops at the match, peak RAM = one record.
+            const found = fs.existsSync(fp)
+                ? await streamJson.findOne(fp, (i) => i && i.key === key)
+                : ((await jarvisStore.loadJson('indicators', [])).find(i => i.key === key) || null);
             if (!found) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
             const enriched = jarvisVariableCatalog.enrichIndicator(found);
             // Merge extraction-level detail from jarvis-metrics into metric_definition
@@ -5010,8 +5014,11 @@ Respond ONLY as valid JSON (no markdown):
     if (pathname.startsWith('/api/jarvis/v2/derived-experiment/') && req.method === 'GET') {
         try {
             const key = decodeURIComponent(pathname.slice('/api/jarvis/v2/derived-experiment/'.length));
-            const data = await jarvisStore.loadJson('derived_experiments', []);
-            const found = data.find(d => d.key === key);
+            const fp = path.join(__dirname, 'buildings', 'jarvis', 'derived_experiments.json');
+            // Streaming find-by-key: stops at the match, peak RAM = one record.
+            const found = fs.existsSync(fp)
+                ? await streamJson.findOne(fp, (d) => d && d.key === key)
+                : ((await jarvisStore.loadJson('derived_experiments', [])).find(d => d.key === key) || null);
             if (!found) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'not found' })); return; }
             sendJsonGz(req, res, jarvisVariableCatalog.enrichDerivedExperiment(found));
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
@@ -5223,8 +5230,19 @@ Respond ONLY as valid JSON (no markdown):
                     const bridge = safeRead('bridge_validation.json', { rows: [], n_principles_validated: 0, n_chains_with_both_legs_nonzero: 0, n_videos_in_pool: null, generated_at: null });
                     const bridgeTop = safeRead('bridge_top_principles.json', { top: [], generated_at: null });
                     const gaps = safeRead('principle_gaps.json', { gaps: [], n_gaps: 0 });
-                    const questions = safeRead('research_questions.json', { questions: [] });
                     const answers = safeRead('research_answers.json', { answers: {} });
+                    // research_questions.json can be hundreds of MB (it accretes a
+                    // recursive `legacy` snapshot every run). Never parse it whole on a
+                    // 2GB box — count via bounded streaming when it's large.
+                    let researchQuestionsCount = null;  // null = too large to count cheaply
+                    try {
+                        const rqPath = path.join(dir, 'research_questions.json');
+                        if (fs.existsSync(rqPath) && fs.statSync(rqPath).size < 20 * 1024 * 1024) {
+                            const q = safeRead('research_questions.json', { questions: [] });
+                            researchQuestionsCount = Array.isArray(q.questions) ? q.questions.length : 0;
+                        }
+                        // else: leave null — don't parse hundreds of MB for a stat card.
+                    } catch { researchQuestionsCount = null; }
                     const overview = {
                         overnight: {
                             overall_status: status.overall_status || null,
@@ -5248,10 +5266,10 @@ Respond ONLY as valid JSON (no markdown):
                             bridge_top: Array.isArray(bridgeTop.top) ? bridgeTop.top.length : 0,
                             bridge_n_chains_both_legs_nonzero: bridge.n_chains_with_both_legs_nonzero || 0,
                             principle_gaps: gaps.n_gaps || (Array.isArray(gaps.gaps) ? gaps.gaps.length : 0),
-                            research_questions: Array.isArray(questions.questions) ? questions.questions.length : 0,
+                            research_questions: researchQuestionsCount,
                             research_answers: Array.isArray(answers.answers)
                                 ? answers.answers.length
-                                : (questions.questions ? questions.questions.filter(q => q.status === 'answered').length : Object.keys(answers.answers || {}).length),
+                                : Object.keys(answers.answers || {}).length,
                             n_videos_pool: mechanisms.n_videos_pool || null,
                         },
                         thresholds: principles.thresholds || null,
@@ -5312,33 +5330,25 @@ Respond ONLY as valid JSON (no markdown):
                 }
                 return;
             }
-            // Generic file passthrough — used for full-list loads
+            // Generic file passthrough — used for full-list loads. STREAMED from
+            // disk through gzip so the server never buffers the whole file (some,
+            // like research_questions.json, are hundreds of MB). Peak RAM = chunk.
             if (KNOWLEDGE_FILES[name] && req.method === 'GET') {
                 const fp = path.join(__dirname, 'buildings', 'jarvis', KNOWLEDGE_FILES[name]);
-                try {
-                    const buf = fs.readFileSync(fp);
-                    const accepts = (req.headers['accept-encoding'] || '');
-                    if (accepts.includes('gzip')) {
-                        zlib.gzip(buf, (err, compressed) => {
-                            if (err) {
-                                res.writeHead(200, { 'Content-Type': 'application/json' });
-                                res.end(buf);
-                            } else {
-                                res.writeHead(200, {
-                                    'Content-Type': 'application/json',
-                                    'Content-Encoding': 'gzip',
-                                    'Vary': 'Accept-Encoding',
-                                });
-                                res.end(compressed);
-                            }
-                        });
-                    } else {
-                        res.writeHead(200, { 'Content-Type': 'application/json' });
-                        res.end(buf);
-                    }
-                } catch (e) {
+                if (!fs.existsSync(fp)) {
                     res.writeHead(404, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: `Not found: ${KNOWLEDGE_FILES[name]}` }));
+                    return;
+                }
+                const accepts = (req.headers['accept-encoding'] || '');
+                const src = fs.createReadStream(fp);
+                src.on('error', () => { try { res.destroy(); } catch {} });
+                if (accepts.includes('gzip')) {
+                    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' });
+                    src.pipe(zlib.createGzip()).pipe(res);
+                } else {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    src.pipe(res);
                 }
                 return;
             }
@@ -5353,10 +5363,19 @@ Respond ONLY as valid JSON (no markdown):
         return;
     }
     if (pathname === '/api/jarvis/v2/resolutions' && req.method === 'GET') {
+        // Only 79 resolutions, but each carries a multi-MB `indicator_keys` array
+        // (~28MB total) the UI never uses. Stream + drop that one field → ~10KB.
         try {
-            if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('resolutions');
-            const data = await jarvisStore.loadJson('resolutions', []);
-            sendJsonGz(req, res, data);
+            const fp = path.join(__dirname, 'buildings', 'jarvis', 'resolutions.json');
+            if (!fs.existsSync(fp)) { sendJsonGz(req, res, '[]'); return; }
+            // One record (r0 "Full Video") carries a ~26MB indicator_keys array. Strip
+            // it at the string level BEFORE parsing so it never materializes in heap
+            // (parsing it spikes to ~1GB). maxElem raised so the record isn't skipped.
+            const items = await streamJson.projectAll(fp, (r) => r, {
+                maxElem: 48 * 1024 * 1024,
+                transform: (t) => streamJson.stripField(t, 'indicator_keys'),
+            });
+            sendJsonGz(req, res, items);
         } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
@@ -5365,18 +5384,18 @@ Respond ONLY as valid JSON (no markdown):
     // mini defs so the UI's experiment detail cards can show provenance
     // without a separate catalog fetch. Pass ?nodef=1 to opt out.
     if (pathname === '/api/jarvis/v2/derived-experiments' && req.method === 'GET') {
+        // Bounded-RAM: stream the (huge, ~700K-row) file and keep only the top-N
+        // by |r| plus the true total. Never parses the whole file into heap, so a
+        // 2GB box survives. Total count goes back in X-Total-Count.
         try {
             const wantDef = url.searchParams.get('nodef') !== '1';
             const enrich = (list) => wantDef ? list.map(jarvisVariableCatalog.enrichDerivedExperimentMini) : list;
-            if (url.searchParams.get('full') === '1') {
-                if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCache('derived_experiments');
-                const data = await jarvisStore.loadJson('derived_experiments', []);
-                sendJsonGz(req, res, enrich(data));
-            } else {
-                if (url.searchParams.get('fresh') === '1') jarvisStore.invalidateCompactCache('derived_experiments');
-                const compact = await jarvisStore.loadCompactJson('derived_experiments', []);
-                sendJsonGz(req, res, enrich(compact));
-            }
+            const limit = Math.min(parseInt(url.searchParams.get('limit') || '5000', 10) || 5000, 20000);
+            const fp = path.join(__dirname, 'buildings', 'jarvis', 'derived_experiments.json');
+            if (!fs.existsSync(fp)) { sendJsonGz(req, res, '[]'); return; }
+            const { items, total } = await streamJson.topN(fp, { scoreKey: 'r', n: limit });
+            res.setHeader('X-Total-Count', String(total));
+            sendJsonGz(req, res, enrich(items));
         } catch { sendJsonGz(req, res, '[]'); }
         return;
     }
