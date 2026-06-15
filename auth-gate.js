@@ -67,9 +67,14 @@
     .authgate-pending h2 { font-family: 'Fredoka One', cursive, sans-serif; font-size: 26px; margin: 16px 0 8px; }
     .authgate-pending p { font-size: 15px; opacity: .9; max-width: 320px; margin: 0 auto 18px; line-height: 1.5; }
     .authgate-ghost { background: rgba(255,255,255,.15); color: #fff; border: 1.5px solid rgba(255,255,255,.4); border-radius: 11px; padding: 9px 18px; font-weight: 800; cursor: pointer; font-family: inherit; }
-    /* Owner People panel */
-    #authgate-people-btn { position: fixed; top: 14px; right: 14px; z-index: 9000; background: rgba(255,255,255,.92); border: 1.5px solid #cdbfa6; border-radius: 12px; padding: 8px 13px; font-weight: 800; font-size: 13px; color: #2d5016; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.18); font-family: inherit; }
-    #authgate-people-btn:hover { background: #fff; }
+    /* Account section injected into the left slide-out menu */
+    #authgate-menu-section h3 { font-family: 'Fredoka One', cursive, sans-serif; color: #8B5E3C; font-size: 18px; margin: 4px 0 8px; }
+    .authgate-menu-who { font-size: 12px; color: #998a72; margin-bottom: 10px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .authgate-menu-role { background: #e8f5e9; color: #2e7d32; border-radius: 6px; padding: 1px 7px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
+    .authgate-menu-item { display: block; width: 100%; text-align: left; background: #fff; border: 1.5px solid #e0d6c6; border-radius: 10px; padding: 10px 13px; font-size: 14px; font-weight: 800; color: #5a3e1b; cursor: pointer; margin-bottom: 8px; font-family: inherit; }
+    .authgate-menu-item:hover { background: #faf5eb; border-color: #cdbfa6; }
+    .authgate-menu-item.signout { color: #c0392b; border-color: #f0d0c8; }
+    .authgate-menu-item.signout:hover { background: #fdf0ee; }
     .authgate-people-modal { background:#fff; border-radius:16px; width:94%; max-width:560px; max-height:84%; display:flex; flex-direction:column; overflow:hidden; }
     .authgate-people-head { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid #eee; }
     .authgate-people-head h3 { margin:0; font-size:18px; color:#2d5016; }
@@ -176,7 +181,7 @@
             bootStorageOnly();
         } else { // owner (and any future full-access role)
             if (typeof window.__bootApp === 'function') window.__bootApp();
-            mountPeopleButton();
+            mountMenuItems();
         }
     }
 
@@ -192,13 +197,22 @@
         else if (window.BuildingRegistry) window.BuildingRegistry.get && window.BuildingRegistry.get('Storage')?.open(body);
     }
 
-    // ── Owner People admin panel ──
-    function mountPeopleButton() {
-        if (document.getElementById('authgate-people-btn')) return;
-        const btn = el('button', { id: 'authgate-people-btn' }, '👥 People');
-        btn.onclick = openPeople;
-        document.body.appendChild(btn);
-        // also a small sign-out in the People panel
+    // ── Account section in the left hamburger menu (People + Sign out) ──
+    function mountMenuItems() {
+        const panel = document.getElementById('menu-panel');
+        if (!panel || document.getElementById('authgate-menu-section')) return;
+        const section = el('div', { id: 'authgate-menu-section' });
+        section.innerHTML = `
+            <h3>Account</h3>
+            <div class="authgate-menu-who">${_account.email || ''} <span class="authgate-menu-role">${_account.role}</span></div>
+            ${_account.role === 'owner' ? '<button class="authgate-menu-item" id="ag-menu-people">👥 People &amp; permissions</button>' : ''}
+            <button class="authgate-menu-item signout" id="ag-menu-signout">↩ Sign out</button>
+            <div class="divider"></div>`;
+        // place it right under the menu title
+        panel.insertBefore(section, panel.children[1] || null);
+        const pe = section.querySelector('#ag-menu-people');
+        if (pe) pe.onclick = () => { if (window.toggleMenu) window.toggleMenu(); openPeople(); };
+        section.querySelector('#ag-menu-signout').onclick = signOut;
     }
     async function openPeople() {
         const o = overlay('authgate-people');
