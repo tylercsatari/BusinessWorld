@@ -238,9 +238,10 @@
         }
         if (_account.role !== 'owner') return;
         window.__myAccountId = _account.id;   // so the island excludes ME (I'm the player)
+        const bust = '?_=' + Date.now();      // skip any HTTP caching of the GET
         Promise.all([
-            fetch('/api/accounts').then(r => r.ok ? r.json() : []).catch(() => []),
-            fetch('/api/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
+            fetch('/api/accounts' + bust).then(r => r.ok ? r.json() : []).catch(() => []),
+            fetch('/api/profiles' + bust).then(r => r.ok ? r.json() : []).catch(() => [])
         ]).then(([list, profiles]) => {
             list = Array.isArray(list) ? list : [];
             profiles = Array.isArray(profiles) ? profiles : [];

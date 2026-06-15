@@ -3103,6 +3103,7 @@ window.syncEmployeeAccounts = function (accounts, profiles) {
     const roleLabel = (a) => a.role === 'owner' ? 'Owner' : (!a.role || a.role === 'pending') ? 'Pending' : (profById[a.role] || 'Member');
     // Every OTHER account (exclude me — I'm the player walking around), each with
     // their own colour. Stand them ON the island surface within its radius.
+    console.log('[island] received accounts:', (accounts || []).map(a => `${a.displayName || a.email}|color=${a.color || 'none'}|id=${a.id}`).join('  ·  '), '|| myId=', window.__myAccountId);
     const list = (accounts || []).filter(a => a && a.email && a.id !== window.__myAccountId);
     const surfaceY = (base.y || 0) + 0.2;
     const r = Math.min(4, 1.8 + list.length * 0.3);
@@ -3115,7 +3116,7 @@ window.syncEmployeeAccounts = function (accounts, profiles) {
         e.userData.fromAccount = true;
         e.visible = true;          // owner view — always show the full roster
     });
-    console.log('[island] placed', list.length, 'account characters at', base.x.toFixed(1) + ',' + base.z.toFixed(1));
+    console.log('[island] placed', list.length, 'character(s):', list.map(a => `${a.displayName || a.email}(${a.color || 'default-blue'})`).join(', '), 'at', base.x.toFixed(1) + ',' + base.z.toFixed(1));
 };
 // Trace the path back from each VISIBLE building to the center spawn tile (0,0)
 // along the existing path tiles, and show only those tiles. Owner sees all tiles.
