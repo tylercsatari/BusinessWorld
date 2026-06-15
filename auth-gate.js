@@ -139,8 +139,10 @@
         const fn = mode === 'signin' ? supa.auth.signInWithPassword({ email, password: pass }) : supa.auth.signUp({ email, password: pass });
         const { data, error } = await fn;
         if (error) { errEl.textContent = error.message; return; }
-        if (mode === 'signup' && !data.session) { errEl.textContent = 'Check your email to confirm, then sign in.'; return; }
-        // session arrives via onAuthStateChange
+        if (mode === 'signup' && !data.session) { errEl.textContent = "Account created — check your email to confirm, then sign in."; return; }
+        // Boot immediately on a successful sign-in (don't wait on the event)
+        if (data.session) { _token = data.session.access_token; refreshRole(); }
+        else { errEl.textContent = 'Could not start a session. Try again.'; }
     }
 
     // ── show: pending approval ──
@@ -269,9 +271,13 @@
         if (!window.supabase || !window.supabase.createClient) { showLoading('Auth library failed to load. Refresh.'); return; }
         supa = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } });
 
-        supa.auth.onAuthStateChange((_event, session) => {
+        // React to sign-in / sign-out / token refresh. A token arriving (e.g.
+        // after email or Google sign-in) must actually BOOT the app — not just
+        // store the token. (This was the "can't log back in with email" bug.)
+        supa.auth.onAuthStateChange((event, session) => {
             _token = session?.access_token || null;
-            if (!_token) { showLogin(); }
+            if (_token) refreshRole();
+            else if (event === 'SIGNED_OUT') showLogin();
         });
 
         const { data: { session } } = await supa.auth.getSession();
