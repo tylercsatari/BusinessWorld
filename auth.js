@@ -15,9 +15,12 @@
  */
 const dataStore = require('./data-store');
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://fdkmbinqejpkabphyswc.supabase.co').replace(/\/$/, '');
+// Business World's OWN Supabase project (separate from jarv1s) — full control of
+// login methods + redirect URLs. URL + anon key are public/safe to ship; the
+// service-role key is deliberately NOT used (roles live in our R2 `accounts`).
+const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://uavmizkocnxqlcztvflz.supabase.co').replace(/\/$/, '');
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZka21iaW5xZWpwa2FicGh5c3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjAxNzAsImV4cCI6MjA5MDg5NjE3MH0.vUv_5ot8UXHvchfYp0hG5tFtFbQObiH1_gi3JI-iTXg';
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhdm1pemtvY254cWxjenR2Zmx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1MzQ2MTUsImV4cCI6MjA5NzExMDYxNX0.78EgQgG23Yjb9S_IlwaXPzHqGd6c_gyZXhwWRlgiHQE';
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'tylerdaviscsatari@gmail.com').toLowerCase();
 
 const ROLES = ['owner', 'storage', 'pending'];
