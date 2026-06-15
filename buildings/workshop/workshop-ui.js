@@ -214,11 +214,9 @@ const WorkshopUI = (() => {
                         <button class="wsp-header-btn" id="wsp-queue-idea-btn" title="Queue an idea from the Library">📚 Queue Idea</button>
                         <button class="wsp-header-btn primary" id="wsp-new-video-btn">＋ New Video</button>
                     </div>
-                    <div class="wsp-tabs">
+                    <!-- Workshop IS the pipeline now — Projects/Orders/Storage Room tabs removed. -->
+                    <div class="wsp-tabs" style="display:none;">
                         <button class="wsp-tab active" data-tab="pipeline">Pipeline <span class="wsp-tab-count" data-tabcount="pipeline"></span></button>
-                        <button class="wsp-tab" data-tab="projects">Projects <span class="wsp-tab-count" data-tabcount="projects"></span></button>
-                        <button class="wsp-tab" data-tab="orders">Orders <span class="wsp-tab-count" data-tabcount="orders"></span></button>
-                        <button class="wsp-tab" data-tab="inventory">Storage Room <span class="wsp-tab-count" data-tabcount="inventory"></span></button>
                     </div>
                     <div class="wsp-tab-body" id="wsp-tab-body">
                         <div class="workshop-empty">Loading pipeline…</div>

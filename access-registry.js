@@ -23,15 +23,10 @@
                 { id: 'dagflow', label: 'DAG Flow' }
             ]
         },
-        Workshop: {
-            tabSel: '.wsp-tab',
-            sections: [
-                { id: 'pipeline', label: 'Pipeline' },
-                { id: 'projects', label: 'Projects' },
-                { id: 'orders', label: 'Orders' },
-                { id: 'inventory', label: 'Storage Room' }
-            ]
-        }
+        // Workshop is now the pipeline only. Per-stage (node-level) permissions
+        // are defined separately (see WORKSHOP_STAGES) — granting Workshop grants
+        // the pipeline; which stages/nodes a profile sees is gated per-stage.
+        Workshop: { tabSel: '.wsp-tab', sections: [] }
     };
 
     window.sectionsFor = (b) => (window.ACCESS_REGISTRY[b] && window.ACCESS_REGISTRY[b].sections) || null;
