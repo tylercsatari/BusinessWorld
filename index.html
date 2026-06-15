@@ -2313,6 +2313,10 @@ const BUILDING_NAMES = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee
 function getBuildingByName(n) {
     return { 'Workshop': workshop, 'Storage': storage, 'Money Pit': moneyPit, 'The Pen': pen, 'Employee Island': employeeIsland, 'Science Center': scienceCenter, 'Jarvis': jarvis, 'Library': library, 'Finance': finance, 'The House': house, 'Movie Theatre': movieTheatre, 'Gym': gym, 'Chocolate Bar': chocolateBar, 'Video Lab': videoLab }[n];
 }
+// This script is an ES module, so top-level functions are NOT global. auth-gate.js
+// (a separate script) calls window.getBuildingByName for the access poll + the
+// Employee Island spawn — expose it explicitly or those silently no-op.
+window.getBuildingByName = getBuildingByName;
 let _layoutReady = false;   // true only after the saved layout is APPLIED — saving before that would overwrite R2 with default positions
 // Latest write always wins — no cross-tab stale check, no banner. The only
 // guard is _layoutReady, so a tab that never loaded the real layout can't
