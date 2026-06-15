@@ -2377,7 +2377,7 @@ function retryLayoutLoad() {
         clearInterval(t);
         applySavedBuildings(saved);
         if (saved.paths) saved.paths.forEach(k => { const [gx, gz] = k.split(',').map(Number); addPathTile(gx, gz); });
-        _layoutReady = true;
+        _layoutReady = true; window.__layoutReady = true;
         if (window.__access && !window.__access.all && window.applyAccess) window.applyAccess(window.__access);
         console.log('Layout loaded after retry — saving enabled');
     }, 15000);
@@ -2431,7 +2431,7 @@ async function init() {
         } else {
             initDefaultPaths();
         }
-        _layoutReady = true;   // only now is it safe to save — we're based on the real layout
+        _layoutReady = true; window.__layoutReady = true;   // only now is it safe to save — we're based on the real layout
     } else {
         initDefaultPaths();
         retryLayoutLoad();     // load FAILED: keep this session read-only for layout until it loads
@@ -3097,13 +3097,16 @@ window.syncEmployeeAccounts = function (accounts) {
     (window.__profiles || []).forEach(p => { profById[p.id] = p.name; });
     const roleLabel = (a) => a.role === 'owner' ? 'Owner' : (!a.role || a.role === 'pending') ? 'Pending' : (profById[a.role] || 'Member');
     // ALL accounts who've signed in — including pending — each with their colour
+    // Radius scales with headcount so nobody overlaps / hides behind another.
     const list = (accounts || []).filter(a => a && a.email);
+    const r = 2.6 + list.length * 0.45;
     list.forEach((a, i) => {
         const name = a.displayName || a.email || 'Member';
         let color = 0x3498db; try { if (a.color) color = new THREE.Color(a.color).getHex(); } catch (e) {}
-        const ang = (i / Math.max(1, list.length)) * Math.PI * 2, r = 3.2;
+        const ang = (i / Math.max(1, list.length)) * Math.PI * 2;
         const e = addEmployee(`${name} · ${roleLabel(a)}`, color, base.x + Math.cos(ang) * r, base.z + Math.sin(ang) * r);
         e.userData.fromAccount = true;
+        e.visible = true;   // owner view — always show the full roster
     });
 };
 // Trace the path back from each VISIBLE building to the center spawn tile (0,0)

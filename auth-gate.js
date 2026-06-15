@@ -244,8 +244,13 @@
                 window.__profiles = profiles;
                 let n = 0;
                 const t = setInterval(() => {
-                    if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) { window.syncEmployeeAccounts(list, profiles); clearInterval(t); }
-                    else if (++n > 40) clearInterval(t);
+                    // wait for the SAVED layout so the island is at its real position
+                    // (else the characters spawn around its default spot and look missing)
+                    if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island') && window.__layoutReady) {
+                        window.syncEmployeeAccounts(list, profiles);
+                        setTimeout(() => window.syncEmployeeAccounts(list, profiles), 3000); // re-place once everything settles
+                        clearInterval(t);
+                    } else if (++n > 60) { if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) window.syncEmployeeAccounts(list, profiles); clearInterval(t); }
                 }, 350);
             }).catch(() => {});
         }
@@ -499,17 +504,34 @@
     }
 
     // ── role refresh (after approval / on load) ──
-    async function refreshRole() {
+    async function refreshRole(attempt) {
         if (!_token) return;
+        attempt = attempt || 0;
         try {
             const ctrl = new AbortController();
-            const to = setTimeout(() => ctrl.abort(), 12000);
+            const to = setTimeout(() => ctrl.abort(), 25000);   // generous — Render free tier cold-starts slowly
             const r = await fetch('/api/me', { signal: ctrl.signal });
             clearTimeout(to);
-            if (!r.ok) return;
+            if (!r.ok) throw new Error('me ' + r.status);
             const account = await r.json();
             bootForRole(account);
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            // Transient (cold start / blip): retry instead of hanging on "Signing you in…".
+            if (!_booted && attempt < 6) {
+                showLoading(attempt ? 'Waking the server up…' : 'Signing you in…');
+                setTimeout(() => refreshRole(attempt + 1), 2500);
+            } else if (!_booted) {
+                showStuck();
+            }
+        }
+    }
+    // Last resort if the server never answers — offer a reload instead of a dead screen.
+    function showStuck() {
+        clearOverlays();
+        const o = overlay('authgate-loading');
+        const card = el('div', { className: 'authgate-pending' }, `<p style="margin-bottom:14px">Couldn't reach the server.</p><button class="authgate-menu-item" id="ag-reload" style="width:auto">↻ Reload</button>`);
+        o.appendChild(card);
+        const btn = card.querySelector('#ag-reload'); if (btn) btn.onclick = () => location.reload();
     }
 
     // ── init ──
@@ -518,6 +540,9 @@
         const ov = document.getElementById('loading-overlay');
         if (ov) ov.style.display = 'none';
         showLoading('Signing you in…');
+        // Watchdog: if we're still stuck on a loading/sign-in screen and never booted
+        // (auth hang of any kind), surface a Reload instead of a permanent dead screen.
+        setTimeout(() => { if (!_booted && document.getElementById('authgate-loading') && !document.getElementById('ag-reload')) showStuck(); }, 40000);
         let cfg;
         try { cfg = await _origFetch('/api/auth/config').then(r => r.json()); }
         catch (e) { showLoading('Auth unavailable. Refresh to retry.'); return; }
