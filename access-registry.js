@@ -26,7 +26,10 @@
         // Workshop is now the pipeline only. Per-stage (node-level) permissions
         // are defined separately (see WORKSHOP_STAGES) — granting Workshop grants
         // the pipeline; which stages/nodes a profile sees is gated per-stage.
-        Workshop: { tabSel: '.wsp-tab', sections: [] }
+        Workshop: { tabSel: '.wsp-tab', sections: [] },
+        // The Pen's world entities are gated separately so granting another
+        // building never leaks them: posted-video creatures + project flags.
+        'The Pen': { tabSel: null, sections: [{ id: 'videos', label: 'Posted videos' }, { id: 'flags', label: 'Project flags' }] }
     };
 
     window.sectionsFor = (b) => (window.ACCESS_REGISTRY[b] && window.ACCESS_REGISTRY[b].sections) || null;
@@ -73,6 +76,15 @@
     window.canSeeStage = (id) => window.stageAccess(id) !== 'none';
     window.canWriteStage = (id) => window.stageAccess(id) === 'write';
 
+    // World entities gated under "The Pen" so other buildings never leak them.
+    const penEntity = (section) => {
+        const a = window.__access;
+        if (!a || a.all) return true;
+        return (a.buildings || []).includes('The Pen') && window.sectionGranted('The Pen', section);
+    };
+    window.canSeePenVideos = () => penEntity('videos');   // posted-video creatures
+    window.canSeePenFlags = () => penEntity('flags');     // project flags in the world
+
     // Is a whole building visible to the current user?
     window.hasBuilding = function (b) {
         const a = window.__access;
@@ -97,7 +109,7 @@
     window.applySectionGating = function (building) {
         const reg = window.ACCESS_REGISTRY[building];
         const a = window.__access;
-        if (!reg || !a || a.all) return;
+        if (!reg || !reg.tabSel || !a || a.all) return;
         const body = document.getElementById('modal-body');
         if (!body) return;
         const tabs = body.querySelectorAll(reg.tabSel);
@@ -115,7 +127,7 @@
     // Re-apply gating whenever a building re-renders its tabs (debounced).
     window.watchSectionGating = function (building) {
         if (window.__secObs) { window.__secObs.disconnect(); window.__secObs = null; }
-        if (!window.ACCESS_REGISTRY[building]) return;
+        if (!window.ACCESS_REGISTRY[building] || !window.ACCESS_REGISTRY[building].tabSel) return;
         const a = window.__access;
         if (!a || a.all) return;
         const body = document.getElementById('modal-body');

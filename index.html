@@ -2251,6 +2251,7 @@ function createProjectFlag(name, x, z) {
         projectName: name
     };
 
+    if (window.canSeePenFlags && !window.canSeePenFlags()) group.visible = false;
     scene.add(group);
     clickables.push(group);
     draggables.push(group);
@@ -2809,6 +2810,7 @@ async function spawnPostedCreatures(skipSync) {
                 0,
                 pen.position.z + Math.sin(angle) * r
             );
+            if (window.canSeePenVideos && !window.canSeePenVideos()) c.visible = false;
             scene.add(c);
             clickables.push(c);
             penCreatures.push(c);
@@ -3149,6 +3151,12 @@ window.applyAccess = function (perms) {
     const allowed = new Set((perms && perms.buildings) || []);
     BUILDING_NAMES.forEach(name => { const b = getBuildingByName(name); if (b) b.visible = full || allowed.has(name); });
     employees.forEach(e => { e.visible = full; });   // other characters: owner only
+    // World entities don't leak across buildings: pen creatures + project flags
+    // only show with their explicit grant (under The Pen).
+    const penVid = window.canSeePenVideos ? window.canSeePenVideos() : full;
+    const penFlg = window.canSeePenFlags ? window.canSeePenFlags() : full;
+    penCreatures.forEach(c => { c.visible = penVid; });
+    projectFlags.forEach(f => { f.visible = penFlg; });
     applyPathVisibility();                            // trim paths to only reach visible buildings
     const setVis = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
     setVis('money-display', full);            // level/money: owner only

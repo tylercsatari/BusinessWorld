@@ -349,7 +349,9 @@
     background-size: 22px 22px;
     border-bottom: 1px solid #ece8e0;
 }
-.wsp-board { position: relative; }
+/* margin-inline:auto centres a compact board (few visible nodes) but pins a wide
+   one to the left so its start is never scrolled off — clean for every profile. */
+.wsp-board { position: relative; margin-inline: auto; }
 .wsp-edges { position: absolute; top: 0; left: 0; pointer-events: none; }
 .wsp-edge { fill: none; stroke: #c9c2b4; stroke-width: 2; }
 .wsp-edge.ref { stroke: #d4a060; stroke-dasharray: 5 4; }

@@ -301,25 +301,31 @@ const WorkshopUI = (() => {
     const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', software: 'software', manufacturing: 'precision', assembly: 'assembly' };
 
     function boardPositions() {
-        // Column = topological layer, row = index within layer (centered vertically)
-        const layers = PS().LAYERS;
-        const maxRows = Math.max(...layers.map(l => l.length), 2);
-        const boardH = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y + 96; // +96 for the inventory node row
+        // Column = topological layer, row = index within layer (centered vertically).
+        // Keep only the stages this profile can see and drop now-empty layers, so the
+        // board REBUILDS compactly around the accessible nodes — one node lands right
+        // up front instead of being lost in a full-width chart.
+        const layers = PS().LAYERS.map(l => l.filter(id => stageVisible(id))).filter(l => l.length);
+        if (!layers.length) return { pos: {}, boardW: PAD * 2, boardH: 220 };
+        const maxRows = Math.max(...layers.map(l => l.length), 1);
+        const hasInv = !!pos_orderVisible();
+        const invPad = hasInv ? 96 : 0; // only reserve the inventory row if Ordering is shown
+        const boardH = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y + invPad;
         const pos = {};
         layers.forEach((ids, li) => {
             const x = PAD + li * (NODE_W + GAP_X);
             const totalH = ids.length * NODE_H + (ids.length - 1) * GAP_Y;
-            const y0 = (boardH - 96 - totalH) / 2 + PAD / 2;
+            const y0 = (boardH - invPad - totalH) / 2 + PAD / 2;
             ids.forEach((id, ri) => {
                 pos[id] = { x, y: y0 + ri * (NODE_H + GAP_Y) };
             });
         });
         const boardW = PAD * 2 + layers.length * NODE_W + (layers.length - 1) * GAP_X;
-        // Component Library (Inventory) reference node sits under Ordering
-        const orderPos = pos['order'];
-        pos['_inventory'] = { x: orderPos.x, y: boardH - 80 };
+        // Component Library (Inventory) reference node sits under Ordering — only if shown
+        if (pos['order']) pos['_inventory'] = { x: pos['order'].x, y: boardH - 80 };
         return { pos, boardW, boardH };
     }
+    function pos_orderVisible() { return stageVisible('order'); }
 
     // --- Filters (apply to the whole board: dots, counts, stage panel) ---
 
@@ -493,8 +499,8 @@ const WorkshopUI = (() => {
         PS().EDGES.filter(([f, t]) => stageVisible(f) && stageVisible(t)).map(([f, t]) => {
             return `<path d="${edgePathSmart(f, t, pos)}" class="wsp-edge" marker-end="url(#wspArrow)" />`;
         }).join('') +
-        // dashed reference edge to the Storage Room node (only when shown)
-        (showTypes.inventory ? `<path d="M ${pos['order'].x + NODE_W / 2} ${pos['order'].y + NODE_H} L ${pos['_inventory'].x + NODE_W / 2} ${pos['_inventory'].y}" class="wsp-edge ref" />` : '');
+        // dashed reference edge to the Storage Room node (only when shown + Ordering visible)
+        (showTypes.inventory && pos['order'] && pos['_inventory'] ? `<path d="M ${pos['order'].x + NODE_W / 2} ${pos['order'].y + NODE_H} L ${pos['_inventory'].x + NODE_W / 2} ${pos['_inventory'].y}" class="wsp-edge ref" />` : '');
 
         const nodesHtml = PS().STAGES.filter(s => stageVisible(s.id)).map(s => {
             const p = pos[s.id];
