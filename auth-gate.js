@@ -99,6 +99,13 @@
     .authgate-checkgrid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
     .authgate-check { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#4a3a26; font-weight:600; cursor:pointer; }
     .authgate-check input { margin:0; }
+    .authgate-bldrow { border-bottom:1px solid #f2ece1; padding:5px 0; }
+    .authgate-bldcheck { font-size:13px; }
+    .authgate-bldhint { font-size:10.5px; font-weight:700; color:#c3ad88; }
+    .authgate-subgrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:2px 8px; margin:3px 0 2px 22px; }
+    .authgate-subcheck { display:flex; align-items:center; gap:5px; font-size:11.5px; color:#6a5a44; font-weight:600; cursor:pointer; }
+    .authgate-subcheck input { margin:0; }
+    .authgate-subcheck input:disabled + * , .authgate-subcheck:has(input:disabled) { opacity:.4; }
     .authgate-profile-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
     .authgate-pnote { font-size:12px; font-weight:800; }
     .authgate-storage-shell { position: fixed; inset: 0; z-index: 9000; background: #faf7f2; display: flex; flex-direction: column; }
@@ -243,7 +250,13 @@
         section.querySelector('#ag-menu-signout').onclick = signOut;
     }
     const ALL_BUILDINGS = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Video Lab'];
-    const HUD_OPTIONS = [['todo', 'To-do bell'], ['calendar', 'Calendar'], ['sponsors', 'Sponsors']];
+    // Buildings with internal tabs that can be granted individually (mirrors access-registry.js).
+    const BUILDING_SECTIONS = (window.ACCESS_REGISTRY
+        ? Object.fromEntries(Object.entries(window.ACCESS_REGISTRY).map(([b, r]) => [b, r.sections.map(s => [s.id, s.label])]))
+        : {
+            Library: [['notes', 'Ideas'], ['freenotes', 'Notes'], ['todo', 'To-Do'], ['calendar', 'Calendar'], ['projects', 'Projects'], ['sponsors', 'Sponsors'], ['ideamap', 'Idea Map'], ['dagflow', 'DAG Flow']],
+            Workshop: [['pipeline', 'Pipeline'], ['projects', 'Projects'], ['orders', 'Orders'], ['inventory', 'Storage Room']]
+        });
     const escA = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
     async function openPeople() {
@@ -298,16 +311,30 @@
         }
 
         function profileCardHtml(p) {
-            const b = new Set(p.buildings || []); const hud = p.hud || {};
+            const b = new Set(p.buildings || []);
+            const feats = p.features || {};
+            const sectionRows = (name) => {
+                const secs = BUILDING_SECTIONS[name];
+                if (!secs) return '';
+                const granted = b.has(name);
+                const keys = Object.keys(feats).filter(k => k.indexOf(name + ':') === 0);
+                const noRestriction = keys.length === 0;   // granted whole building → all sections
+                const cells = secs.map(([id, lbl]) => {
+                    const checked = noRestriction ? true : !!feats[name + ':' + id];
+                    return `<label class="authgate-subcheck"><input type="checkbox" data-pfeat="${escA(p.id)}" data-pfbuild="${escA(name)}" value="${escA(name + ':' + id)}" ${checked ? 'checked' : ''} ${granted ? '' : 'disabled'}> ${escA(lbl)}</label>`;
+                }).join('');
+                return `<div class="authgate-subgrid">${cells}</div>`;
+            };
             return `<div class="authgate-profile-card">
                 <div class="authgate-profile-head">
                     <input class="authgate-profile-name" data-pname="${escA(p.id)}" value="${escA(p.name || '')}" placeholder="Profile name">
                     <button class="authgate-profile-del" data-pdel="${escA(p.id)}">✕</button>
                 </div>
-                <div class="authgate-profile-label">Buildings they can see</div>
-                <div class="authgate-checkgrid">${ALL_BUILDINGS.map(name => `<label class="authgate-check"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> ${name}</label>`).join('')}</div>
-                <div class="authgate-profile-label">Top-bar</div>
-                <div class="authgate-checkgrid">${HUD_OPTIONS.map(([k, lbl]) => `<label class="authgate-check"><input type="checkbox" data-phud="${escA(p.id)}" value="${k}" ${hud[k] ? 'checked' : ''}> ${lbl}</label>`).join('')}</div>
+                <div class="authgate-profile-label">Buildings &amp; what they can see inside</div>
+                ${ALL_BUILDINGS.map(name => `<div class="authgate-bldrow">
+                    <label class="authgate-check authgate-bldcheck"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> <strong>${escA(name)}</strong>${BUILDING_SECTIONS[name] ? ' <span class="authgate-bldhint">— pick tabs below</span>' : ''}</label>
+                    ${sectionRows(name)}
+                </div>`).join('')}
                 <div class="authgate-profile-foot"><button class="authgate-menu-item" style="margin:0;width:auto" data-psave="${escA(p.id)}">Save</button><span class="authgate-pnote" id="ag-pnote-${escA(p.id)}"></span></div>
             </div>`;
         }
@@ -319,14 +346,19 @@
                 ${profiles.map(profileCardHtml).join('')}
                 <button class="authgate-menu-item" id="ag-new-profile" style="margin-top:4px">＋ New profile</button>
             </div>`;
-            body.querySelector('#ag-new-profile').onclick = async () => { await fetch('/api/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'New profile', buildings: [], hud: {} }) }); renderProfiles(); };
+            body.querySelector('#ag-new-profile').onclick = async () => { await fetch('/api/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'New profile', buildings: [], features: {} }) }); renderProfiles(); };
+            // toggling a building enables/disables its section checkboxes
+            body.querySelectorAll('[data-pbuild]').forEach(cb => cb.onchange = () => {
+                const pid = cb.dataset.pbuild, name = cb.value;
+                body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"][data-pfbuild="${CSS.escape(name)}"]`).forEach(s => { s.disabled = !cb.checked; if (cb.checked) s.checked = true; });
+            });
             body.querySelectorAll('[data-psave]').forEach(btn => btn.onclick = async () => {
                 const pid = btn.dataset.psave;
                 const name = body.querySelector(`[data-pname="${CSS.escape(pid)}"]`).value.trim() || 'Untitled profile';
                 const buildings = [...body.querySelectorAll(`[data-pbuild="${CSS.escape(pid)}"]:checked`)].map(c => c.value);
-                const hud = {}; body.querySelectorAll(`[data-phud="${CSS.escape(pid)}"]:checked`).forEach(c => hud[c.value] = true);
+                const features = {}; body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"]:checked`).forEach(c => { if (buildings.includes(c.dataset.pfbuild)) features[c.value] = true; });
                 btn.disabled = true; btn.textContent = 'Saving…';
-                const r = await fetch('/api/profiles/' + pid, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, buildings, hud }) });
+                const r = await fetch('/api/profiles/' + pid, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, buildings, features }) });
                 btn.disabled = false; btn.textContent = 'Save';
                 const note = document.getElementById('ag-pnote-' + pid); if (note) { note.textContent = r.ok ? 'Saved ✓' : 'Failed'; note.style.color = r.ok ? '#27ae60' : '#e74c3c'; setTimeout(() => note.textContent = '', 2500); }
             });

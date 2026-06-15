@@ -218,6 +218,7 @@
 </div>
 
 <script src="config.js"></script>
+<script src="access-registry.js"></script>
 <script src="buildings/building-registry.js"></script>
 <script src="buildings/storage/storage-canonicalize.js"></script>
 <script src="buildings/storage/storage-airtable.js"></script>
@@ -3023,23 +3024,21 @@ window.__access = { all: true };
 window.buildingAllowed = function (n) {
     const a = window.__access;
     if (!a || a.all) return true;
-    if ((a.buildings || []).includes(n)) return true;
-    // HUD shortcuts (to-do / calendar / sponsors) open the Library — allow it
-    if (n === 'Library' && a.hud && (a.hud.todo || a.hud.calendar || a.hud.sponsors)) return true;
-    return false;
+    return (a.buildings || []).includes(n);
 };
 window.applyAccess = function (perms) {
     window.__access = perms || { all: true };
     const full = !perms || perms.all;
     const allowed = new Set((perms && perms.buildings) || []);
     BUILDING_NAMES.forEach(name => { const b = getBuildingByName(name); if (b) b.visible = full || allowed.has(name); });
-    const hud = (perms && perms.hud) || {};
     const setVis = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
     setVis('money-display', full);            // level/money: owner only
     setVis('edit-btn', full); setVis('path-btn', full); // world editing: owner only
-    setVis('todo-bell-btn', full || !!hud.todo);
-    setVis('calendar-hud-btn', full || !!hud.calendar);
-    setVis('sponsors-hud-btn', full || !!hud.sponsors);
+    // HUD shortcuts derive from the matching Library section grant
+    const sg = (s) => full || (allowed.has('Library') && window.sectionGranted && window.sectionGranted('Library', s));
+    setVis('todo-bell-btn', sg('todo'));
+    setVis('calendar-hud-btn', sg('calendar'));
+    setVis('sponsors-hud-btn', sg('sponsors'));
     setVis('bw-badge-library', full || allowed.has('Library'));
     setVis('bw-badge-workshop', full || allowed.has('Workshop'));
 };
@@ -3057,6 +3056,7 @@ window.openModal = function openModal(n, t, opts) {
         body.innerHTML = '';
         document.getElementById('modal-overlay').classList.add('visible');
         BuildingRegistry.get(n).open(body, opts);
+        if (window.watchSectionGating) window.watchSectionGating(n);
     } else if (t === 'creature') {
         // Creature clicked — open The Pen and navigate to this video
         title.textContent = 'The Pen';
@@ -3075,6 +3075,7 @@ window.closeModal = function () {
     const modal = document.getElementById('modal');
     const titleEl = document.getElementById('modal-title');
     const title = titleEl.textContent;
+    if (window.stopSectionGating) window.stopSectionGating();
     if (BuildingRegistry.has(title)) {
         BuildingRegistry.get(title).close();
     }

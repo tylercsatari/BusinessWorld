@@ -108,6 +108,24 @@ function routeBuilding(pathname) {
     if (/^\/api\/data\/settings/.test(pathname)) return 'shared';
     return 'owner';
 }
+// Data routes that map to a single building tab/section, for section-level gating.
+function routeSection(pathname) {
+    if (/^\/api\/data\/todos/.test(pathname)) return ['Library', 'todo'];
+    if (/^\/api\/data\/calendar/.test(pathname)) return ['Library', 'calendar'];
+    if (/^\/api\/data\/(sponsors|sponsorvideos)/.test(pathname)) return ['Library', 'sponsors'];
+    if (/^\/api\/data\/ideas/.test(pathname) || /^\/api\/ideas\//.test(pathname)) return ['Library', 'notes'];
+    if (/^\/api\/data\/notes/.test(pathname)) return ['Library', 'freenotes'];
+    if (/^\/api\/data\/orders/.test(pathname)) return ['Workshop', 'orders'];
+    return null;
+}
+// A section is allowed if the building grants no section restrictions (full), else
+// only if that specific section feature is set.
+function sectionAllow(perms, building, section) {
+    const feats = perms.features || {};
+    const keys = Object.keys(feats).filter(k => k.indexOf(building + ':') === 0);
+    if (!keys.length) return true;
+    return !!feats[building + ':' + section];
+}
 function permsAllow(perms, pathname, method) {
     if (perms.all) return true;
     if (perms.none) return false;
@@ -115,8 +133,11 @@ function permsAllow(perms, pathname, method) {
     if (b === 'shared') return true;
     if (b === 'owner') return false;
     const bs = perms.buildings || [];
-    if (b === 'Storage+Workshop') return bs.includes('Storage') || bs.includes('Workshop');
-    return bs.includes(b);
+    const buildingOk = (b === 'Storage+Workshop') ? (bs.includes('Storage') || bs.includes('Workshop')) : bs.includes(b);
+    if (!buildingOk) return false;
+    const sec = routeSection(pathname);
+    if (sec && bs.includes(sec[0])) return sectionAllow(perms, sec[0], sec[1]);
+    return true;
 }
 
 // Public paths that never require auth.
