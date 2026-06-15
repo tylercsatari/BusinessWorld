@@ -3618,8 +3618,12 @@ function animate() {
 Object.defineProperty(window, 'cameraDistance', { get() { return cameraDistance; }, set(v) { cameraDistance = v; } });
 Object.defineProperty(window, 'cameraAngle', { get() { return cameraAngle; }, set(v) { cameraAngle = v; } });
 Object.defineProperty(window, 'cameraPitch', { get() { return cameraPitch; }, set(v) { cameraPitch = v; } });
-// Start the game
-init();
+// Start the game — but only once auth has authorized it. AuthGate calls this
+// for owners (full world); storage-only users get a standalone Storage page.
+window.__bootApp = init;
+window.dispatchEvent(new Event('app-ready'));
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="auth-gate.js"></script>
 </body>
 </html>

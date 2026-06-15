@@ -20,6 +20,7 @@ const videolabCoordinator = require('./videolab-coordinator');
 const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
+const auth = require('./auth');
 const shortsCrawler = require('./shorts-crawler');
 const financeService = require('./buildings/finance/finance-service');
 const jarvisStore = require('./buildings/jarvis/jarvis-store');
@@ -464,8 +465,73 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, X-QRD-Type, X-QRD-Ext');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-QRD-Type, X-QRD-Ext');
         if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    }
+
+    // =========================================
+    // AUTH: public Supabase config for the login screen
+    // =========================================
+    if (pathname === '/api/auth/config' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ url: auth.SUPABASE_URL, anonKey: auth.SUPABASE_ANON_KEY }));
+        return;
+    }
+    // AUTH: who am I — verifies token, returns the account (auto-creates pending).
+    if (pathname === '/api/me' && req.method === 'GET') {
+        const acct = await auth.accountForRequest(req, url);
+        if (!acct) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not signed in' })); return; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: acct.id, email: acct.email, name: acct.name, role: acct.role }));
+        return;
+    }
+    // AUTH: owner-only account management (list signups, grant roles)
+    if (pathname === '/api/accounts' || /^\/api\/accounts\/[^/]+$/.test(pathname)) {
+        const acct = await auth.accountForRequest(req, url);
+        if (!acct) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Sign in required' })); return; }
+        if (acct.role !== 'owner') { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Owner only' })); return; }
+        if (pathname === '/api/accounts' && req.method === 'GET') {
+            const list = await dataStore.getAll('accounts');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(list.map(a => ({ id: a.id, email: a.email, name: a.name, role: a.role, createdAt: a.createdAt }))));
+            return;
+        }
+        const m = pathname.match(/^\/api\/accounts\/([^/]+)$/);
+        if (m && req.method === 'PATCH') {
+            const id = m[1];
+            const body = await readBody(req);
+            const role = body && body.role;
+            if (!auth.ROLES.includes(role)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Invalid role' })); return; }
+            if (id === acct.id && role !== 'owner') { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: "You can't remove your own owner access." })); return; }
+            const updated = await dataStore.update('accounts', id, { role });
+            if (!updated) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Account not found' })); return; }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: updated.id, email: updated.email, name: updated.name, role: updated.role }));
+            return;
+        }
+        if (m && req.method === 'DELETE') {
+            const id = m[1];
+            if (id === acct.id) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: "You can't delete your own account." })); return; }
+            await dataStore.remove('accounts', id);
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+        res.writeHead(405, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Method not allowed' }));
+        return;
+    }
+
+    // =========================================
+    // AUTH GATE — everything below is access-controlled by role.
+    // Public paths (static page/assets, /api/me, shares, /api/v1) pass through.
+    // =========================================
+    {
+        const decision = await auth.gate(req, url);
+        if (!decision.allow) {
+            res.writeHead(decision.status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(decision.body));
+            return;
+        }
+        req._account = decision.account;
     }
 
     // =========================================
