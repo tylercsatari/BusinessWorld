@@ -477,12 +477,58 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ url: auth.SUPABASE_URL, anonKey: auth.SUPABASE_ANON_KEY }));
         return;
     }
-    // AUTH: who am I — verifies token, returns the account (auto-creates pending).
+    // AUTH: who am I — verifies token, returns the account + resolved permissions
+    // (which buildings / HUD this person can see). Auto-creates a pending account.
     if (pathname === '/api/me' && req.method === 'GET') {
         const acct = await auth.accountForRequest(req, url);
         if (!acct) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not signed in' })); return; }
+        const perms = await auth.permsForAccount(acct);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ id: acct.id, email: acct.email, name: acct.name, role: acct.role }));
+        res.end(JSON.stringify({ id: acct.id, email: acct.email, name: acct.name, role: acct.role, perms }));
+        return;
+    }
+    // AUTH: owner-only profile management (named permission templates)
+    if (pathname === '/api/profiles' || /^\/api\/profiles\/[^/]+$/.test(pathname)) {
+        const acct = await auth.accountForRequest(req, url);
+        if (!acct) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Sign in required' })); return; }
+        if (acct.role !== 'owner') { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Owner only' })); return; }
+        if (pathname === '/api/profiles' && req.method === 'GET') {
+            const list = await dataStore.getAll('profiles');
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(list));
+            return;
+        }
+        if (pathname === '/api/profiles' && req.method === 'POST') {
+            const body = await readBody(req);
+            const rec = await dataStore.create('profiles', {
+                name: (body.name || 'Untitled profile').trim(),
+                buildings: Array.isArray(body.buildings) ? body.buildings : [],
+                hud: body.hud || {}, features: body.features || {}
+            });
+            res.writeHead(201, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(rec));
+            return;
+        }
+        const pm = pathname.match(/^\/api\/profiles\/([^/]+)$/);
+        if (pm && req.method === 'PATCH') {
+            const body = await readBody(req);
+            const patch = {};
+            if (body.name != null) patch.name = String(body.name).trim();
+            if (Array.isArray(body.buildings)) patch.buildings = body.buildings;
+            if (body.hud) patch.hud = body.hud;
+            if (body.features) patch.features = body.features;
+            const updated = await dataStore.update('profiles', pm[1], patch);
+            if (!updated) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Profile not found' })); return; }
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(updated));
+            return;
+        }
+        if (pm && req.method === 'DELETE') {
+            // un-assign this profile from any accounts (→ pending) before deleting
+            const accts = await dataStore.getAll('accounts');
+            for (const a of accts) { if (a.role === pm[1]) await dataStore.update('accounts', a.id, { role: 'pending' }); }
+            await dataStore.remove('profiles', pm[1]);
+            res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true }));
+            return;
+        }
+        res.writeHead(405, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Method not allowed' }));
         return;
     }
     // AUTH: owner-only account management (list signups, grant roles)
@@ -501,7 +547,10 @@ const server = http.createServer(async (req, res) => {
             const id = m[1];
             const body = await readBody(req);
             const role = body && body.role;
-            if (!auth.ROLES.includes(role)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Invalid role' })); return; }
+            // role is 'owner', 'pending', or an existing profile id
+            const validProfile = role && role !== 'owner' && role !== 'pending'
+                ? (await dataStore.getAll('profiles')).some(p => p.id === role) : true;
+            if (!role || !validProfile) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Invalid role/profile' })); return; }
             if (id === acct.id && role !== 'owner') { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: "You can't remove your own owner access." })); return; }
             const updated = await dataStore.update('accounts', id, { role });
             if (!updated) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Account not found' })); return; }

@@ -3018,7 +3018,33 @@ window.togglePathMode = function () {
     document.getElementById('path-btn').textContent = pathPlaceMode ? 'Done Paths' : 'Place Paths';
     document.getElementById('edit-indicator').textContent = pathPlaceMode ? 'PATH MODE - Click grid to place/remove paths' : 'EDIT MODE - Drag to rearrange';
 };
+// ── Permission gate: a profile only sees the buildings + HUD it's granted ──
+window.__access = { all: true };
+window.buildingAllowed = function (n) {
+    const a = window.__access;
+    if (!a || a.all) return true;
+    if ((a.buildings || []).includes(n)) return true;
+    // HUD shortcuts (to-do / calendar / sponsors) open the Library — allow it
+    if (n === 'Library' && a.hud && (a.hud.todo || a.hud.calendar || a.hud.sponsors)) return true;
+    return false;
+};
+window.applyAccess = function (perms) {
+    window.__access = perms || { all: true };
+    const full = !perms || perms.all;
+    const allowed = new Set((perms && perms.buildings) || []);
+    BUILDING_NAMES.forEach(name => { const b = getBuildingByName(name); if (b) b.visible = full || allowed.has(name); });
+    const hud = (perms && perms.hud) || {};
+    const setVis = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
+    setVis('money-display', full);            // level/money: owner only
+    setVis('edit-btn', full); setVis('path-btn', full); // world editing: owner only
+    setVis('todo-bell-btn', full || !!hud.todo);
+    setVis('calendar-hud-btn', full || !!hud.calendar);
+    setVis('sponsors-hud-btn', full || !!hud.sponsors);
+    setVis('bw-badge-library', full || allowed.has('Library'));
+    setVis('bw-badge-workshop', full || allowed.has('Workshop'));
+};
 window.openModal = function openModal(n, t, opts) {
+    if (BuildingRegistry.has(n) && !window.buildingAllowed(n)) return; // locked building
     const modal = document.getElementById('modal');
     const title = document.getElementById('modal-title');
     const body = document.getElementById('modal-body');

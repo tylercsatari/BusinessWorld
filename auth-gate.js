@@ -85,6 +85,22 @@
     .authgate-person-email { font-size:12px; color:#999; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .authgate-person select { border:1px solid #e0dcd6; border-radius:9px; padding:6px 9px; font-weight:700; font-family:inherit; font-size:13px; }
     .authgate-role-pending { color:#e67e22; } .authgate-role-owner { color:#00b894; } .authgate-role-storage { color:#1565c0; }
+    .authgate-tabs { display:flex; gap:4px; padding:8px 16px 0; border-bottom:1px solid #eee; }
+    .authgate-tab { background:none; border:none; border-bottom:2.5px solid transparent; padding:8px 14px; font-size:13px; font-weight:800; color:#999; cursor:pointer; font-family:inherit; }
+    .authgate-tab.active { color:#2d5016; border-bottom-color:#2d5016; }
+    .authgate-tabbody { overflow-y:auto; flex:1; min-height:0; }
+    .authgate-profiles { padding:12px 16px 16px; display:flex; flex-direction:column; gap:12px; }
+    .authgate-profile-hint { font-size:12px; color:#998a72; line-height:1.4; }
+    .authgate-profile-card { border:1px solid #ece4d6; border-radius:12px; padding:12px 14px; background:#fffdf9; }
+    .authgate-profile-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .authgate-profile-name { flex:1; border:1px solid #e0dcd6; border-radius:9px; padding:7px 10px; font-size:14px; font-weight:800; color:#5a3e1b; font-family:inherit; }
+    .authgate-profile-del { background:#fdf0ee; border:1px solid #f5c6bd; color:#c0392b; border-radius:8px; width:28px; height:28px; cursor:pointer; font-weight:800; flex-shrink:0; }
+    .authgate-profile-label { font-size:10.5px; font-weight:800; color:#b09a78; text-transform:uppercase; letter-spacing:.5px; margin:8px 0 5px; }
+    .authgate-checkgrid { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; }
+    .authgate-check { display:flex; align-items:center; gap:6px; font-size:12.5px; color:#4a3a26; font-weight:600; cursor:pointer; }
+    .authgate-check input { margin:0; }
+    .authgate-profile-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
+    .authgate-pnote { font-size:12px; font-weight:800; }
     .authgate-storage-shell { position: fixed; inset: 0; z-index: 9000; background: #faf7f2; display: flex; flex-direction: column; }
     .authgate-storage-top { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:#2d5016; color:#fff; }
     .authgate-storage-top b { font-family:'Fredoka One',cursive,sans-serif; font-size:16px; }
@@ -168,33 +184,43 @@
         location.reload();
     }
 
-    // ── role-based boot ──
+    // ── boot ── everyone gets the SAME unified world; their profile just hides
+    // the buildings / HUD they don't have. owner = full, pending = no access.
     let _booted = false;
     function bootForRole(account) {
         _account = account;
         if (window.__agPoll) clearInterval(window.__agPoll);
-        if (account.role === 'pending') { showPending(account.email); return; }
-        if (_booted) return; // already in the app
+        const perms = account.perms || (account.role === 'owner' ? { all: true } : { none: true });
+        if (perms.none) { showPending(account.email); return; }
+        if (_booted) { if (window.applyAccess) window.applyAccess(perms); return; } // re-apply on refresh
         _booted = true;
         clearOverlays();
-        const overlayEl = document.getElementById('loading-overlay');
-        if (account.role === 'storage') {
-            if (overlayEl) overlayEl.style.display = 'none';
-            bootStorageOnly();
-        } else { // owner (and any future full-access role)
-            if (typeof window.__bootApp === 'function') window.__bootApp();
-            mountMenuItems();
-        }
+        if (typeof window.__bootApp === 'function') window.__bootApp();
+        mountMenuItems();
+        applyAccessWhenReady(perms);
     }
 
-    function bootStorageOnly() {
+    // The 3D world builds asynchronously; hide buildings/HUD as soon as the
+    // building objects exist, then once more after everything mounts.
+    function applyAccessWhenReady(perms) {
+        if (perms.all) return; // owner — nothing to hide
+        let tries = 0;
+        const t = setInterval(() => {
+            if (typeof window.applyAccess === 'function' && window.getBuildingByName && window.getBuildingByName('Storage')) {
+                window.applyAccess(perms);
+                setTimeout(() => window.applyAccess(perms), 1800);
+                clearInterval(t);
+            } else if (++tries > 100) clearInterval(t);
+        }, 200);
+    }
+
+    function _unusedStorageShell() {
         const shell = el('div', { className: 'authgate-storage-shell' });
         shell.appendChild(el('div', { className: 'authgate-storage-top' }, `<b>Storage Room</b><button class="authgate-ghost" id="ag-so-out" style="padding:6px 14px">Sign out</button>`));
         const body = el('div', { className: 'authgate-storage-body', id: 'ag-storage-body' });
         shell.appendChild(body);
         document.body.appendChild(shell);
         shell.querySelector('#ag-so-out').onclick = signOut;
-        // open the storage building UI standalone
         if (window.StorageUI && window.StorageUI.open) window.StorageUI.open(body);
         else if (window.BuildingRegistry) window.BuildingRegistry.get && window.BuildingRegistry.get('Storage')?.open(body);
     }
@@ -206,7 +232,7 @@
         const section = el('div', { id: 'authgate-menu-section' });
         section.innerHTML = `
             <h3>Account</h3>
-            <div class="authgate-menu-who">${_account.email || ''} <span class="authgate-menu-role">${_account.role}</span></div>
+            <div class="authgate-menu-who">${_account.email || ''} <span class="authgate-menu-role">${(_account.perms && _account.perms.profileName) || _account.role}</span></div>
             ${_account.role === 'owner' ? '<button class="authgate-menu-item" id="ag-menu-people">👥 People &amp; permissions</button>' : ''}
             <button class="authgate-menu-item signout" id="ag-menu-signout">↩ Sign out</button>
             <div class="divider"></div>`;
@@ -216,36 +242,101 @@
         if (pe) pe.onclick = () => { if (window.toggleMenu) window.toggleMenu(); openPeople(); };
         section.querySelector('#ag-menu-signout').onclick = signOut;
     }
+    const ALL_BUILDINGS = ['Workshop', 'Storage', 'Money Pit', 'The Pen', 'Employee Island', 'Science Center', 'Jarvis', 'Library', 'Finance', 'The House', 'Movie Theatre', 'Gym', 'Chocolate Bar', 'Video Lab'];
+    const HUD_OPTIONS = [['todo', 'To-do bell'], ['calendar', 'Calendar'], ['sponsors', 'Sponsors']];
+    const escA = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
     async function openPeople() {
         const o = overlay('authgate-people');
         const modal = el('div', { className: 'authgate-people-modal' });
-        modal.innerHTML = `<div class="authgate-people-head"><h3>👥 People &amp; permissions</h3><button class="authgate-ghost" id="ag-people-close" style="padding:6px 12px;background:#eee;color:#555;border-color:#ddd">Close</button></div><div class="authgate-people-list" id="ag-people-list"><div style="padding:20px;text-align:center;color:#999">Loading…</div></div><div style="padding:10px 18px;border-top:1px solid #eee;text-align:right"><button class="authgate-ghost" id="ag-people-signout" style="background:#fdf0ee;color:#c0392b;border-color:#f5c6bd">Sign out</button></div>`;
+        modal.innerHTML = `
+            <div class="authgate-people-head">
+                <h3>👥 People &amp; permissions</h3>
+                <button class="authgate-ghost" id="ag-people-close" style="padding:6px 12px;background:#eee;color:#555;border-color:#ddd">Close</button>
+            </div>
+            <div class="authgate-tabs">
+                <button class="authgate-tab active" data-tab="people">People</button>
+                <button class="authgate-tab" data-tab="profiles">Profiles</button>
+            </div>
+            <div class="authgate-tabbody" id="ag-tabbody"><div style="padding:24px;text-align:center;color:#999">Loading…</div></div>`;
         o.appendChild(modal);
         o.onclick = (e) => { if (e.target === o) o.remove(); };
         modal.querySelector('#ag-people-close').onclick = () => o.remove();
-        modal.querySelector('#ag-people-signout').onclick = signOut;
-        const list = modal.querySelector('#ag-people-list');
-        try {
-            const accts = await (await fetch('/api/accounts')).json();
-            if (!Array.isArray(accts)) throw new Error(accts.error || 'failed');
+        const body = modal.querySelector('#ag-tabbody');
+        let profiles = [];
+        const loadProfiles = async () => { try { const r = await (await fetch('/api/profiles')).json(); profiles = Array.isArray(r) ? r : []; } catch (e) { profiles = []; } };
+
+        modal.querySelectorAll('.authgate-tab').forEach(t => t.onclick = () => {
+            modal.querySelectorAll('.authgate-tab').forEach(x => x.classList.toggle('active', x === t));
+            (t.dataset.tab === 'people' ? renderPeople : renderProfiles)();
+        });
+
+        async function renderPeople() {
+            body.innerHTML = '<div style="padding:24px;text-align:center;color:#999">Loading…</div>';
+            await loadProfiles();
+            let accts;
+            try { accts = await (await fetch('/api/accounts')).json(); if (!Array.isArray(accts)) throw new Error(accts.error || 'failed'); }
+            catch (e) { body.innerHTML = `<div style="padding:24px;text-align:center;color:#e74c3c">${escA(e.message)}</div>`; return; }
             accts.sort((a, b) => (a.role === 'pending' ? -1 : 1) - (b.role === 'pending' ? -1 : 1) || (a.email || '').localeCompare(b.email || ''));
-            list.innerHTML = accts.map(a => `
-                <div class="authgate-person" data-id="${a.id}">
+            const opts = (cur) => `<option value="pending" ${cur === 'pending' ? 'selected' : ''}>No access</option>` +
+                profiles.map(p => `<option value="${escA(p.id)}" ${cur === p.id ? 'selected' : ''}>${escA(p.name)}</option>`).join('') +
+                `<option value="owner" ${cur === 'owner' ? 'selected' : ''}>Owner (full)</option>`;
+            body.innerHTML = `<div class="authgate-people-list">${accts.length ? accts.map(a => `
+                <div class="authgate-person">
                     <div class="authgate-person-main">
-                        <div class="authgate-person-name">${a.name || a.email || '(no name)'} ${a.role === 'pending' ? '<span style="color:#e67e22;font-size:11px;font-weight:800">• NEW</span>' : ''}</div>
-                        <div class="authgate-person-email">${a.email || ''}</div>
+                        <div class="authgate-person-name">${escA(a.name || a.email || '(no name)')} ${a.role === 'pending' ? '<span style="color:#e67e22;font-size:11px;font-weight:800">• NEW</span>' : ''}</div>
+                        <div class="authgate-person-email">${escA(a.email || '')}</div>
                     </div>
-                    <select data-role="${a.id}">
-                        ${['pending', 'storage', 'owner'].map(r => `<option value="${r}" ${a.role === r ? 'selected' : ''}>${r === 'pending' ? 'No access' : r === 'storage' ? 'Storage only' : 'Owner (full)'}</option>`).join('')}
-                    </select>
-                </div>`).join('') || '<div style="padding:20px;text-align:center;color:#999">No accounts yet.</div>';
-            list.querySelectorAll('[data-role]').forEach(sel => sel.addEventListener('change', async () => {
+                    <select data-role="${escA(a.id)}">${opts(a.role)}</select>
+                </div>`).join('') : '<div style="padding:24px;text-align:center;color:#999">No accounts yet.</div>'}</div>`;
+            body.querySelectorAll('[data-role]').forEach(sel => sel.onchange = async () => {
                 sel.disabled = true;
                 const r = await fetch('/api/accounts/' + sel.dataset.role, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: sel.value }) });
                 sel.disabled = false;
-                if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || 'Could not update role'); }
-            }));
-        } catch (e) { list.innerHTML = `<div style="padding:20px;text-align:center;color:#e74c3c">${e.message}</div>`; }
+                if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || 'Could not update'); }
+            });
+        }
+
+        function profileCardHtml(p) {
+            const b = new Set(p.buildings || []); const hud = p.hud || {};
+            return `<div class="authgate-profile-card">
+                <div class="authgate-profile-head">
+                    <input class="authgate-profile-name" data-pname="${escA(p.id)}" value="${escA(p.name || '')}" placeholder="Profile name">
+                    <button class="authgate-profile-del" data-pdel="${escA(p.id)}">✕</button>
+                </div>
+                <div class="authgate-profile-label">Buildings they can see</div>
+                <div class="authgate-checkgrid">${ALL_BUILDINGS.map(name => `<label class="authgate-check"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> ${name}</label>`).join('')}</div>
+                <div class="authgate-profile-label">Top-bar</div>
+                <div class="authgate-checkgrid">${HUD_OPTIONS.map(([k, lbl]) => `<label class="authgate-check"><input type="checkbox" data-phud="${escA(p.id)}" value="${k}" ${hud[k] ? 'checked' : ''}> ${lbl}</label>`).join('')}</div>
+                <div class="authgate-profile-foot"><button class="authgate-menu-item" style="margin:0;width:auto" data-psave="${escA(p.id)}">Save</button><span class="authgate-pnote" id="ag-pnote-${escA(p.id)}"></span></div>
+            </div>`;
+        }
+        async function renderProfiles() {
+            body.innerHTML = '<div style="padding:24px;text-align:center;color:#999">Loading…</div>';
+            await loadProfiles();
+            body.innerHTML = `<div class="authgate-profiles">
+                <div class="authgate-profile-hint">A profile is a reusable permission set. Pick which buildings and top-bar items it grants, then assign it to people on the People tab.</div>
+                ${profiles.map(profileCardHtml).join('')}
+                <button class="authgate-menu-item" id="ag-new-profile" style="margin-top:4px">＋ New profile</button>
+            </div>`;
+            body.querySelector('#ag-new-profile').onclick = async () => { await fetch('/api/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'New profile', buildings: [], hud: {} }) }); renderProfiles(); };
+            body.querySelectorAll('[data-psave]').forEach(btn => btn.onclick = async () => {
+                const pid = btn.dataset.psave;
+                const name = body.querySelector(`[data-pname="${CSS.escape(pid)}"]`).value.trim() || 'Untitled profile';
+                const buildings = [...body.querySelectorAll(`[data-pbuild="${CSS.escape(pid)}"]:checked`)].map(c => c.value);
+                const hud = {}; body.querySelectorAll(`[data-phud="${CSS.escape(pid)}"]:checked`).forEach(c => hud[c.value] = true);
+                btn.disabled = true; btn.textContent = 'Saving…';
+                const r = await fetch('/api/profiles/' + pid, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, buildings, hud }) });
+                btn.disabled = false; btn.textContent = 'Save';
+                const note = document.getElementById('ag-pnote-' + pid); if (note) { note.textContent = r.ok ? 'Saved ✓' : 'Failed'; note.style.color = r.ok ? '#27ae60' : '#e74c3c'; setTimeout(() => note.textContent = '', 2500); }
+            });
+            body.querySelectorAll('[data-pdel]').forEach(btn => btn.onclick = async () => {
+                if (!confirm('Delete this profile? Anyone using it loses access until reassigned.')) return;
+                await fetch('/api/profiles/' + btn.dataset.pdel, { method: 'DELETE' });
+                renderProfiles();
+            });
+        }
+        renderPeople();
     }
 
     // ── role refresh (after approval / on load) ──

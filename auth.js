@@ -74,21 +74,49 @@ async function accountForRequest(req, url) {
     return getOrCreateAccount(user);
 }
 
-// ── Authorization: which API paths a role may touch ──
-const STORAGE_OPENAI = /^\/api\/openai\/(chat|embeddings|transcribe|tts)$/;
-function roleAllows(role, pathname, method) {
-    if (role === 'owner') return true;
-    if (role === 'storage') {
-        return /^\/api\/airtable\//.test(pathname)
-            || /^\/api\/pinecone\//.test(pathname)
-            || pathname === '/api/data/storagehistory' || /^\/api\/data\/storagehistory\/[^/]+$/.test(pathname)
-            || (/^\/api\/data\/inventory(\/[^/]+)?$/.test(pathname) && method === 'GET')
-            || STORAGE_OPENAI.test(pathname)
-            || /^\/api\/kimi\//.test(pathname)
-            || pathname === '/load-layout'
-            || pathname === '/api/config' || pathname === '/config.js';
-    }
-    return false; // pending / unknown
+// ── Permissions: resolve an account to what it can see/do ──
+// role is 'owner' | 'pending' | <profileId>. Profiles (R2 `profiles`) define
+// { buildings:[], hud:{}, features:{} }. owner = everything; pending = nothing.
+async function permsForAccount(account) {
+    if (!account) return { none: true, role: null };
+    if (account.role === 'owner') return { all: true, role: 'owner' };
+    if (account.role === 'pending' || !account.role) return { none: true, role: 'pending' };
+    const profiles = await dataStore.getAll('profiles');
+    const p = profiles.find(x => x.id === account.role);
+    if (!p) return { none: true, role: 'pending', profileMissing: true };
+    return {
+        role: account.role, profileId: p.id, profileName: p.name,
+        buildings: Array.isArray(p.buildings) ? p.buildings : [],
+        hud: p.hud || {}, features: p.features || {}
+    };
+}
+
+// Which building "owns" an API route (for authorization). 'shared' = any signed-in
+// member; 'owner' = owner only (safe default for anything unmapped).
+function routeBuilding(pathname) {
+    if (/^\/api\/airtable\//.test(pathname) || /^\/api\/pinecone\//.test(pathname) || /^\/api\/data\/storagehistory/.test(pathname)) return 'Storage';
+    if (/^\/api\/data\/inventory/.test(pathname)) return 'Storage+Workshop';
+    if (/^\/api\/data\/(videos|components|orders|projects)/.test(pathname)) return 'Workshop';
+    if (/^\/api\/dropbox\//.test(pathname)) return 'Workshop';
+    if (/^\/api\/data\/(ideas|notes|todos|calendar|sponsors|sponsorvideos)/.test(pathname) || /^\/api\/ideas\//.test(pathname)) return 'Library';
+    if (/^\/api\/(finance|plaid)\//.test(pathname)) return 'Finance';
+    if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return 'Money Pit';
+    if (/^\/api\/jarvis\//.test(pathname) || /^\/api\/tribe\//.test(pathname)) return 'Jarvis';
+    if (/^\/api\/(gemini|videolab)\//.test(pathname)) return 'Video Lab';
+    if (/^\/api\/(openai|kimi)\//.test(pathname)) return 'shared';      // AI used across buildings
+    if (pathname === '/load-layout' || pathname === '/api/config' || pathname === '/config.js') return 'shared';
+    if (/^\/api\/data\/settings/.test(pathname)) return 'shared';
+    return 'owner';
+}
+function permsAllow(perms, pathname, method) {
+    if (perms.all) return true;
+    if (perms.none) return false;
+    const b = routeBuilding(pathname);
+    if (b === 'shared') return true;
+    if (b === 'owner') return false;
+    const bs = perms.buildings || [];
+    if (b === 'Storage+Workshop') return bs.includes('Storage') || bs.includes('Workshop');
+    return bs.includes(b);
 }
 
 // Public paths that never require auth.
@@ -115,14 +143,15 @@ async function gate(req, url) {
 
     const account = await accountForRequest(req, url);
     if (!account) return { allow: false, status: 401, body: { error: 'Sign in required' } };
-    if (account.role === 'pending') return { allow: false, status: 403, body: { error: 'pending', message: 'Your account is awaiting approval.' } };
-    if (!roleAllows(account.role, pathname, method)) {
-        return { allow: false, status: 403, body: { error: 'forbidden', message: 'Your role does not have access to this.' } };
+    const perms = await permsForAccount(account);
+    if (perms.none) return { allow: false, status: 403, body: { error: 'pending', message: 'Your account is awaiting access.' } };
+    if (!permsAllow(perms, pathname, method)) {
+        return { allow: false, status: 403, body: { error: 'forbidden', message: 'Your profile does not have access to this.' } };
     }
-    return { allow: true, account };
+    return { allow: true, account, perms };
 }
 
 module.exports = {
     SUPABASE_URL, SUPABASE_ANON_KEY, OWNER_EMAIL, ROLES,
-    verifyToken, getOrCreateAccount, accountForRequest, gate
+    verifyToken, getOrCreateAccount, accountForRequest, gate, permsForAccount
 };

@@ -6,7 +6,7 @@
 const crypto = require('crypto');
 const { uploadToR2, downloadFromR2, deleteFromR2, isR2Ready } = require('./cloud-storage');
 
-const COLLECTIONS = ['videos', 'ideas', 'todos', 'calendar', 'invoices', 'notes', 'sponsors', 'sponsorvideos', 'projects', 'components', 'orders', 'inventory', 'settings', 'storagehistory', 'accounts'];
+const COLLECTIONS = ['videos', 'ideas', 'todos', 'calendar', 'invoices', 'notes', 'sponsors', 'sponsorvideos', 'projects', 'components', 'orders', 'inventory', 'settings', 'storagehistory', 'accounts', 'profiles'];
 const cache = {};  // { collectionName: { lastModified, records } }
 const cacheTime = {};  // { collectionName: timestamp }
 const TTL_MS = 60 * 1000; // 60 seconds
