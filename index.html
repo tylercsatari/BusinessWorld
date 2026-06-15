@@ -367,12 +367,21 @@ function setLoadProgress(pct, text) {
     if (status) status.textContent = text;
 }
 
-async function loadModel(name, path) {
-    return new Promise((resolve, reject) => {
-        gltfLoader.load(path, (gltf) => {
-            modelCache[name] = gltf.scene;
-            resolve(gltf.scene);
-        }, undefined, reject);
+function loadModel(name, path, tries = 2) {
+    // Never rejects: on timeout/error it retries, then resolves null so one flaky
+    // asset (common on a Render cold start) can't abort the whole boot.
+    return new Promise((resolve) => {
+        let settled = false;
+        const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+        const timer = setTimeout(() => { if (!settled) { console.warn('Model load timed out:', name); done(null); } }, 15000);
+        gltfLoader.load(path,
+            (gltf) => { clearTimeout(timer); modelCache[name] = gltf.scene; done(gltf.scene); },
+            undefined,
+            () => {
+                clearTimeout(timer);
+                if (tries > 0) loadModel(name, path, tries - 1).then(done);
+                else { console.warn('Model failed to load:', name); done(null); }
+            });
     });
 }
 
@@ -398,6 +407,15 @@ async function loadAllModels() {
 
 // Prepare a loaded model: clone, scale, brighten materials, enable shadows, center at ground
 function prepareModel(name, scale = 5) {
+    if (!modelCache[name]) {
+        // Model didn't load — return a simple placeholder so the building still
+        // appears and the world boots, instead of crashing on undefined.clone().
+        const g = new THREE.Group();
+        const box = new THREE.Mesh(new THREE.BoxGeometry(scale * 0.8, scale * 0.8, scale * 0.8),
+            new THREE.MeshStandardMaterial({ color: 0xb08968, roughness: 0.85 }));
+        box.position.y = scale * 0.4; box.castShadow = true; box.receiveShadow = true; g.add(box);
+        return g;
+    }
     const model = modelCache[name].clone();
     model.scale.setScalar(scale);
     // Brighten and enhance all mesh materials for a sunny, vibrant look
@@ -2325,7 +2343,10 @@ function saveLayout(useBeacon) {
 }
 async function loadLayout() {
     try {
-        const res = await fetch('/load-layout');
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 12000);   // don't let a slow server hang the boot
+        const res = await fetch('/load-layout', { signal: ctrl.signal });
+        clearTimeout(to);
         if (res.ok) {
             const data = await res.json();
             if (data && typeof data === 'object') return data;   // {} = nothing saved yet (fresh start)
@@ -2367,6 +2388,7 @@ window.saveLayout = saveLayout;
 
 // --- Async Init: Load models, create buildings, start game ---
 async function init() {
+  try {
     try {
         await loadAllModels();
     } catch(e) {
@@ -2461,17 +2483,19 @@ async function init() {
     initAmbientParticles();
     // Set initial gold fill level
     updateMoney();
-    // Hide loading screen
+  } catch (e) {
+    console.error('World boot error — revealing the world anyway:', e);
+  } finally {
+    // ALWAYS reveal the world and start rendering, even on partial failure, so a
+    // flaky model/layout load can never strand the user on a stuck screen.
     setLoadProgress(100, 'Ready!');
-    document.getElementById('loading-overlay').style.display = 'none';
-    // Start animation
-    animate();
-    // Pen scale slider
-    document.getElementById('pen-scale-slider').addEventListener('input', () => _applyPenCreatureScales());
-    // Expose for testing
-    window._bw = { playerMesh, camera, cameraTarget, scene, workshop, storage, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab };
+    const _ov = document.getElementById('loading-overlay'); if (_ov) _ov.style.display = 'none';
+    if (!window.__animating) { window.__animating = true; try { animate(); } catch (e) { console.error('animate() failed:', e); } }
+    try { document.getElementById('pen-scale-slider').addEventListener('input', () => _applyPenCreatureScales()); } catch (e) {}
+    window._bw = window._bw || { playerMesh: (typeof playerMesh !== 'undefined' ? playerMesh : null), camera, cameraTarget, scene, workshop, storage, moneyPit, pen, island: employeeIsland, scienceCenter, jarvis, library, finance, house, videoLab };
     console.log('Business World loaded!');
-    fetchPlaidBalance();
+    try { fetchPlaidBalance(); } catch (e) {}
+  }
 }
 
 // --- Character ---
