@@ -2504,6 +2504,7 @@ function addEmployee(name, color, x, z) {
     const e = createCharacter(color, name);
     e.userData.isDraggable = true; e.userData.assignedTo = null;
     e.position.set(x, 0, z);
+    if (window.__access && !window.__access.all) e.visible = false; // other characters: owner only
     scene.add(e); clickables.push(e); draggables.push(e); employees.push(e);
     return e;
 }
@@ -3032,11 +3033,49 @@ window.buildingAllowed = function (n) {
     if (!a || a.all) return true;
     return (a.buildings || []).includes(n);
 };
+// Trace the path back from each VISIBLE building to the center spawn tile (0,0)
+// along the existing path tiles, and show only those tiles. Owner sees all tiles.
+// Overlapping branches are fine — it's a union of shortest paths.
+function applyPathVisibility() {
+    const a = window.__access;
+    const meshes = pathTileMeshes || {};
+    if (!a || a.all) { Object.values(meshes).forEach(m => { m.visible = true; }); return; }
+    if (!pathTiles.size) return;
+    // start = center spawn (0,0), else the path tile nearest the origin
+    let start = '0,0';
+    if (!pathTiles.has(start)) {
+        let bd = Infinity; pathTiles.forEach(k => { const [x, z] = k.split(',').map(Number); const d = x * x + z * z; if (d < bd) { bd = d; start = k; } });
+    }
+    // BFS over the path-tile graph (8-connected) recording each tile's parent
+    const parent = { [start]: null }, queue = [start];
+    while (queue.length) {
+        const [x, z] = queue.shift().split(',').map(Number), cur = `${x},${z}`;
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+            if (!dx && !dz) continue;
+            const nk = `${x + dx},${z + dz}`;
+            if (pathTiles.has(nk) && !(nk in parent)) { parent[nk] = cur; queue.push(nk); }
+        }
+    }
+    // for each visible building, find its nearest path tile and walk back to start
+    const keep = new Set([start]);
+    (a.buildings || []).forEach(name => {
+        const b = getBuildingByName(name);
+        if (!b || b.visible === false) return;
+        const bgx = Math.round(b.position.x / GRID_SIZE), bgz = Math.round(b.position.z / GRID_SIZE);
+        let tgt = null, bd = Infinity;
+        pathTiles.forEach(k => { const [x, z] = k.split(',').map(Number); const d = (x - bgx) ** 2 + (z - bgz) ** 2; if (d < bd) { bd = d; tgt = k; } });
+        let cur = tgt;
+        while (cur != null && (cur in parent)) { keep.add(cur); cur = parent[cur]; }
+    });
+    Object.entries(meshes).forEach(([k, m]) => { m.visible = keep.has(k); });
+}
 window.applyAccess = function (perms) {
     window.__access = perms || { all: true };
     const full = !perms || perms.all;
     const allowed = new Set((perms && perms.buildings) || []);
     BUILDING_NAMES.forEach(name => { const b = getBuildingByName(name); if (b) b.visible = full || allowed.has(name); });
+    employees.forEach(e => { e.visible = full; });   // other characters: owner only
+    applyPathVisibility();                            // trim paths to only reach visible buildings
     const setVis = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
     setVis('money-display', full);            // level/money: owner only
     setVis('edit-btn', full); setVis('path-btn', full); // world editing: owner only
@@ -3143,7 +3182,7 @@ window.editFinance = function(field) {
 updateMoney();
 
 // --- Input ---
-function getHits(e) { const r = renderer.domElement.getBoundingClientRect(); mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1; mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1; raycaster.setFromCamera(mouse, camera); let m = []; clickables.forEach(o => o.traverse(c => { if (c.isMesh) { c.userData.parentClickable = o; m.push(c); } })); return raycaster.intersectObjects(m); }
+function getHits(e) { const r = renderer.domElement.getBoundingClientRect(); mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1; mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1; raycaster.setFromCamera(mouse, camera); let m = []; clickables.forEach(o => { if (o.visible === false) return; o.traverse(c => { if (c.isMesh) { c.userData.parentClickable = o; m.push(c); } }); }); return raycaster.intersectObjects(m); }
 function getGroundHit(e) {
     const r = renderer.domElement.getBoundingClientRect();
     mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
@@ -3328,7 +3367,7 @@ if (isTouchDevice && joystickZone) {
         mouse.y = -((clientY - r.top) / r.height) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
         let m = [];
-        clickables.forEach(o => o.traverse(c => { if (c.isMesh) { c.userData.parentClickable = o; m.push(c); } }));
+        clickables.forEach(o => { if (o.visible === false) return; o.traverse(c => { if (c.isMesh) { c.userData.parentClickable = o; m.push(c); } }); });
         return raycaster.intersectObjects(m);
     }
 
@@ -3491,6 +3530,7 @@ function updateBuildingBadges() {
     for (const b of badges) {
         const el = document.getElementById(b.id);
         if (!el || !b.building || b.count === null) { if (el) el.style.display = 'none'; continue; }
+        if (b.building.visible === false) { el.style.display = 'none'; continue; } // building hidden for this profile
         if (b.count === 0) { el.style.display = 'none'; continue; }
         const pos = new THREE.Vector3(b.building.position.x, b.heightOffset, b.building.position.z);
         pos.project(camera);
