@@ -3051,16 +3051,25 @@ function applyPathVisibility() {
     if (!pathTiles.has(start)) {
         let bd = Infinity; pathTiles.forEach(k => { const [x, z] = k.split(',').map(Number); const d = x * x + z * z; if (d < bd) { bd = d; start = k; } });
     }
-    // BFS over the path-tile graph (8-connected) recording each tile's parent
-    const parent = { [start]: null }, queue = [start];
-    while (queue.length) {
-        const [x, z] = queue.shift().split(',').map(Number), cur = `${x},${z}`;
-        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
-            if (!dx && !dz) continue;
-            const nk = `${x + dx},${z + dz}`;
-            if (pathTiles.has(nk) && !(nk in parent)) { parent[nk] = cur; queue.push(nk); }
+    // BFS over the path-tile graph recording each tile's parent. ortho=true uses
+    // only side-adjacent neighbours so the traced route is a continuous, side-
+    // touching path (tiles share an edge, never just a corner). 8-way is a
+    // fallback for a building that can't be reached orthogonally.
+    const bfs = (ortho) => {
+        const parent = { [start]: null }, queue = [start];
+        while (queue.length) {
+            const [x, z] = queue.shift().split(',').map(Number), cur = `${x},${z}`;
+            for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+                if (!dx && !dz) continue;
+                if (ortho && dx && dz) continue;       // skip diagonals
+                const nk = `${x + dx},${z + dz}`;
+                if (pathTiles.has(nk) && !(nk in parent)) { parent[nk] = cur; queue.push(nk); }
+            }
         }
-    }
+        return parent;
+    };
+    const parent4 = bfs(true);
+    let parent8 = null;
     // for each visible building, find its nearest path tile and walk back to start
     const keep = new Set([start]);
     (a.buildings || []).forEach(name => {
@@ -3069,6 +3078,7 @@ function applyPathVisibility() {
         const bgx = Math.round(b.position.x / GRID_SIZE), bgz = Math.round(b.position.z / GRID_SIZE);
         let tgt = null, bd = Infinity;
         pathTiles.forEach(k => { const [x, z] = k.split(',').map(Number); const d = (x - bgx) ** 2 + (z - bgz) ** 2; if (d < bd) { bd = d; tgt = k; } });
+        const parent = (tgt in parent4) ? parent4 : (parent8 || (parent8 = bfs(false)));
         let cur = tgt;
         while (cur != null && (cur in parent)) { keep.add(cur); cur = parent[cur]; }
     });
