@@ -242,6 +242,8 @@
                 fetch('/api/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
             ]).then(([list, profiles]) => {
                 window.__profiles = profiles;
+                // Employee Island roster panel = the real accounts (no hard-coded people)
+                if (window.EmployeeService && window.EmployeeService.setFromAccounts) window.EmployeeService.setFromAccounts(list, profiles);
                 let n = 0;
                 const t = setInterval(() => {
                     // wait for the SAVED layout so the island is at its real position
@@ -566,7 +568,16 @@
         await refreshRole();
     }
 
-    // wait for supabase CDN + app script
-    if (window.supabase) start();
-    else window.addEventListener('app-ready', () => start(), { once: true });
+    // Don't start until BOTH the Supabase lib AND the app's boot entry point exist.
+    // The app is a deferred ES module, so window.__bootApp can be defined LATER than
+    // this (regular) script runs — starting too early meant bootForRole called an
+    // undefined __bootApp and the world never loaded (the "reload to fix" bug).
+    let _waited = 0;
+    (function go() {
+        const supaReady = window.supabase && window.supabase.createClient;
+        const appReady = typeof window.__bootApp === 'function';
+        if (supaReady && appReady) { start(); return; }
+        if (++_waited > 200) { start(); return; }   // ~20s safety net — start anyway (will surface an error)
+        setTimeout(go, 100);
+    })();
 })();

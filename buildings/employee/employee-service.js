@@ -10,12 +10,9 @@
  * EmployeeService.getNames() rather than hardcoding names.
  */
 const EmployeeService = (() => {
-    const SEEDS = [
-        { id: 'you',      name: 'You',      role: 'Founder',      specialty: 'Direction',  colorHex: '#3498db', physical: true },
-        { id: 'robin',    name: 'Robin',    role: 'Creator',      specialty: 'Ideas',      colorHex: '#e74c3c', physical: true },
-        { id: 'jordan',   name: 'Jordan',   role: 'Editor',       specialty: 'Editing',    colorHex: '#9b59b6', physical: true },
-        { id: 'tennille', name: 'Tennille', role: 'Producer',     specialty: 'Production', colorHex: '#ff69b4', physical: true },
-    ];
+    // No hard-coded people — the roster is the real signed-in accounts
+    // (see setFromAccounts), so Employee Island shows who actually has access.
+    const SEEDS = [];
 
     let roster = SEEDS.map(s => defaults(s));
     const listeners = new Set();
@@ -116,12 +113,37 @@ const EmployeeService = (() => {
 
     function serialize() {
         // Everything except derived fields. Persisted in layout.json.
-        return roster.map(e => ({
+        // Account-derived entries are NOT persisted (re-derived from /api/accounts).
+        return roster.filter(e => !e.fromAccount).map(e => ({
             id: e.id, name: e.name, role: e.role, summary: e.summary,
             strengths: e.strengths, traits: e.traits, specialty: e.specialty,
             notes: e.notes, stats: e.stats, colorHex: e.colorHex,
             physical: e.physical, createdAt: e.createdAt,
         }));
+    }
+
+    // Roster from the real signed-in accounts (owner view). Account entries are
+    // marked fromAccount so they're NOT persisted into the shared layout (privacy)
+    // — they're re-derived from /api/accounts each load. Manually-added employees
+    // and any stale hard-coded seeds are dropped.
+    function setFromAccounts(accounts, profiles) {
+        const profById = {};
+        (profiles || []).forEach(p => { profById[p.id] = p.name; });
+        const label = (a) => a.role === 'owner' ? 'Owner' : (!a.role || a.role === 'pending') ? 'Pending' : (profById[a.role] || 'Member');
+        const entries = (accounts || []).filter(a => a && a.email).map(a => {
+            const r = defaults({
+                id: a.id,
+                name: a.displayName || a.email,
+                role: label(a),
+                specialty: label(a),
+                colorHex: (a.color && /^#[0-9a-fA-F]{6}$/.test(a.color)) ? a.color : colorForName(a.displayName || a.email),
+                physical: false,
+            });
+            r.fromAccount = true;
+            return r;
+        });
+        roster = roster.filter(e => !e.fromAccount && !e.physical).concat(entries);
+        notify();
     }
 
     function subscribe(fn) {
@@ -138,7 +160,7 @@ const EmployeeService = (() => {
     return {
         hydrate, serialize,
         getAll, getNames, getById, getByName,
-        add, update, remove,
+        add, update, remove, setFromAccounts,
         subscribe,
         colorForName, colorNumberForName,
     };
