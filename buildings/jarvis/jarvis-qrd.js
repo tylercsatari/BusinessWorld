@@ -757,6 +757,33 @@ const JarvisQRD = (() => {
         return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto">${svg}</svg>`;
     }
 
+    // Eigenvalue histogram with the THEORETICAL Marchenko-Pastur noise density
+    // overlaid. Eigenvalues inside [λ₋,λ₊] are indistinguishable from noise; the
+    // cyan curve is the exact MP density f(λ)=√((λ₊−λ)(λ−λ₋))/(2π q λ) for σ²=1.
+    function vizMPDensity(values, mp) {
+        const w = 560, h = 200, pad = 38;
+        const lamMinus = Math.pow(1 - Math.sqrt(mp.q), 2);
+        const lamPlus = mp.lambdaPlus;
+        const maxLam = Math.max(...values, lamPlus) * 1.05 || 1;
+        const X = l => pad + (l / maxLam) * (w - pad * 2);
+        const nb = 24, bw = maxLam / nb, bins = new Array(nb).fill(0);
+        values.forEach(v => { bins[Math.min(nb - 1, Math.max(0, Math.floor(v / bw)))]++; });
+        const maxCount = Math.max(...bins, 1);
+        const dens = l => (l > lamMinus && l < lamPlus) ? Math.sqrt(Math.max(0, (lamPlus - l) * (l - lamMinus))) / (2 * Math.PI * mp.q * l) : 0;
+        const pts = []; let dmax = 0;
+        for (let i = 0; i <= 120; i++) { const l = (i / 120) * maxLam, d = dens(l); if (d > dmax) dmax = d; pts.push([l, d]); }
+        const Yc = c => h - pad - (c / maxCount) * (h - pad * 2);
+        const Yd = d => h - pad - (dmax ? (d / dmax) * (h - pad * 2) : 0);
+        let svg = '';
+        bins.forEach((c, i) => { const l = i * bw, sig = l > lamPlus; svg += `<rect x="${X(l)}" y="${Yc(c)}" width="${Math.max(1, (w - pad * 2) / nb - 1)}" height="${h - pad - Yc(c)}" fill="${sig ? C.green : C.faint}" opacity="0.7"/>`; });
+        let path = ''; pts.forEach(([l, d], i) => { path += (i ? 'L' : 'M') + X(l) + ' ' + Yd(d) + ' '; });
+        svg += `<path d="${path}" fill="none" stroke="${C.cyan}" stroke-width="2"/>`;
+        [['λ₋', lamMinus], ['λ₊', lamPlus]].forEach(([lab, l]) => { svg += `<line x1="${X(l)}" y1="${pad}" x2="${X(l)}" y2="${h - pad}" stroke="${C.red}" stroke-dasharray="4 3" stroke-width="1"/><text x="${X(l)}" y="${pad - 2}" text-anchor="middle" fill="${C.red}" font-size="9">${lab}=${fmt(l, 2)}</text>`; });
+        svg += `<line x1="${pad}" y1="${h - pad}" x2="${w - pad}" y2="${h - pad}" stroke="${C.border2}"/>`;
+        svg += `<text x="${w / 2}" y="${h - 6}" text-anchor="middle" fill="${C.mute}" font-size="10">eigenvalue λ — bars = observed spectrum · cyan = theoretical MP noise density · green = signal beyond λ₊</text>`;
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto">${svg}</svg>`;
+    }
+
     // Retention curve + simple-baseline summary (§6)
     function vizCurve(rowsRetention, opts = {}) {
         // build an average retention curve from ret_25/50/75/90 anchors (0,25,50,75,90,100)
@@ -1258,7 +1285,9 @@ const JarvisQRD = (() => {
         </div>`;
         h += card(`<div style="font-weight:600;color:${C.red};margin-bottom:6px">§7.2 — Marchenko–Pastur: separate signal from noise</div>
             <div style="font-size:12px;color:${C.dim};line-height:1.6;margin-bottom:8px">For a pure-noise covariance, eigenvalues sit below an upper edge <code>λ₊ = σ²(1 + √q)²</code>, <code>q = p/n</code>. Any eigenvalue above the edge is real signal; the rest is noise to discard or shrink. Below: the live eigenvalue spectrum of the standardised feature covariance, with the noise edge drawn in red.</div>
-            ${vizSpectrum(m.eig.values, m.mp, m.nSignal)}`);
+            ${vizSpectrum(m.eig.values, m.mp, m.nSignal)}
+            <div style="font-size:11px;color:${C.mute};margin:12px 0 4px">Same spectrum as a density: the bars are the observed eigenvalue distribution, the cyan curve is the <b>theoretical</b> Marchenko–Pastur noise density between λ₋ and λ₊. Bars that hug the curve are noise; bars to the right of λ₊ are real signal directions.</div>
+            ${vizMPDensity(m.eig.values, m.mp)}`);
         if (m.nSignal === 0) {
             h += note(`<b>Honest read:</b> with these ${m.cols.length} weakly-correlated LLM levers, the top eigenvalue (${fmt(m.eig.values[0], 3)}) sits just <i>under</i> the noise edge (${fmt(m.mp.lambdaPlus, 3)}). The feature space is already near-spherical — there is no dominant shared factor to compress onto. The correct response is to <b>lean on the raw readable features plus Ledoit–Wolf shrinkage rather than aggressive PCA</b>, and to add the extractable audio/visual atoms (§4–5), which carry the correlated structure path signatures are built to exploit. This is exactly the diagnostic Marchenko–Pastur is for.`, C.orange);
         } else {
@@ -1523,6 +1552,24 @@ const JarvisQRD = (() => {
         h += card(`<div style="font-weight:600;color:${C.orange};margin-bottom:4px">§9.1c — Univariate Pearson r vs target</div>
             <div style="font-size:11px;color:${C.mute};margin-bottom:8px">The raw bivariate relationship — the third lens. Where all three agree you have a real driver; where they disagree, the feature is tangled — flag it, don’t trust it.</div>
             ${vizBars(uniItems.map(i => ({ label: i.label, val: i.val })), { signed: true })}`);
+        // 4) SHAP — exact for a linear model: φ_ij = β_j · z_ij (z = standardised feature)
+        const myT = mean(m.y);
+        const shapGlobal = m.cols.map((k, j) => ({
+            label: featLabel(k),
+            val: mean(m.Z.map(r => Math.abs(m.enet.beta[j] * r[j]))),   // mean |contribution|
+        })).sort((a, b) => b.val - a.val);
+        h += card(`<div style="font-weight:600;color:${C.purple};margin-bottom:4px">§9.1d — SHAP values (mean |contribution| per feature)</div>
+            <div style="font-size:11px;color:${C.mute};margin-bottom:8px">The doc's prescribed lens. For a <i>linear</i> model the SHAP value is <b>exact</b>: φ = β·(standardised feature), so this is the mean absolute push each lever makes to a prediction across all ${m.y.length} reels. Note: because φ's sign is just sign(β) here, SHAP agrees with the Elastic-Net coefficient <i>by construction</i> — it becomes a genuinely independent vote only for the nonlinear models (the Python GBM/RF rows below). The independent third lens for this linear fit is the univariate r above.</div>
+            ${vizBars(shapGlobal, { fmtV: v => fmt(v, 3) })}`);
+        // per-reel SHAP waterfall (highest-views reel, illustrative)
+        const wreel = DATA.rows.reduce((best, r) => (r.log_views > (best.log_views ?? -Infinity) ? r : best), DATA.rows[0]);
+        const wi = DATA.rows.indexOf(wreel);
+        const predW = myT + m.cols.reduce((s, k, j) => s + m.enet.beta[j] * m.Z[wi][j], 0);
+        const phi = m.cols.map((k, j) => ({ label: featLabel(k), val: m.enet.beta[j] * m.Z[wi][j] }))
+            .filter(x => Math.abs(x.val) > 1e-6).sort((a, b) => Math.abs(b.val) - Math.abs(a.val)).slice(0, 14);
+        h += card(`<div style="font-weight:600;color:${C.purple};margin-bottom:4px">SHAP waterfall — why this reel scores where it does</div>
+            <div style="font-size:11px;color:${C.mute};margin-bottom:8px"><b>${esc((wreel.name || wreel.ytId).slice(0, 46))}</b> · base ${targetLabel(state.target)} = ${fmt(myT, 2)} → model prediction ${fmt(predW, 2)}. Each bar is that lever's signed contribution for this specific reel (green lifts, red lowers); they sum to the gap from the base.</div>
+            ${vizBars(phi, { signed: true, fmtV: v => (v >= 0 ? '+' : '') + fmt(v, 3) })}`);
         // agreement panel
         const agree = m.cols.map((k, j) => {
             const e = m.enet.beta[j], p = (m.perm.importances.find(x => x.key === k) || {}).drop || 0, u = (m.uni.find(x => x.key === k) || {}).r || 0;
