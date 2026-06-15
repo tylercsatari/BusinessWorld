@@ -63,6 +63,21 @@ async function downloadFromR2(key) {
     }
 }
 
+// Like downloadFromR2 but returns the raw readable stream (no buffering) so the
+// caller can pipe it straight to an HTTP response — bounded RAM for huge objects
+// (e.g. 100MB+ tribe-analysis files) and no local disk caching. Returns null if
+// the key doesn't exist.
+async function getR2Stream(key) {
+    if (!s3) throw new Error('R2 not ready');
+    try {
+        const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+        return resp.Body; // a Node Readable
+    } catch (e) {
+        if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return null;
+        throw e;
+    }
+}
+
 async function getR2SignedUrl(key, expiresIn = 3600) {
     if (!s3) throw new Error('R2 not ready');
     return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn });
@@ -372,7 +387,7 @@ function sanitizeTitle(title) {
 
 module.exports = {
     // R2
-    initR2, isR2Ready, uploadToR2, downloadFromR2, getR2SignedUrl,
+    initR2, isR2Ready, uploadToR2, downloadFromR2, getR2Stream, getR2SignedUrl,
     existsInR2, deleteFromR2, listR2Keys,
     // Dropbox
     getDropboxToken, uploadToDropbox, uploadLargeToDropbox, createDropboxFolder,

@@ -3865,8 +3865,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const brainMatch = v1path.match(/^\/videos\/([a-zA-Z0-9_-]+)\/brain$/);
             if (brainMatch) {
                 const bp = path.join(__dirname, 'buildings', 'jarvis', 'tribe-analysis', `${brainMatch[1]}.json`);
-                if (fs.existsSync(bp)) { json(JSON.parse(fs.readFileSync(bp, 'utf8'))); }
-                else { json({ status: 'no_brain_analysis', videoId: brainMatch[1] }, 404); }
+                // Stream the raw JSON (these files are 100MB+) — local first, then R2.
+                // Never read+parse the whole file into heap.
+                if (fs.existsSync(bp)) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    const s = fs.createReadStream(bp); s.on('error', () => { try { res.destroy(); } catch {} }); s.pipe(res);
+                    return;
+                }
+                if (cloud.isR2Ready()) {
+                    try {
+                        const r2s = await cloud.getR2Stream(`tribe-analysis/${brainMatch[1]}.json`);
+                        if (r2s) { res.writeHead(200, { 'Content-Type': 'application/json' }); r2s.on('error', () => { try { res.destroy(); } catch {} }); r2s.pipe(res); return; }
+                    } catch {}
+                }
+                json({ status: 'no_brain_analysis', videoId: brainMatch[1] }, 404);
                 return;
             }
 
@@ -5865,23 +5877,24 @@ Respond ONLY as valid JSON (no markdown):
             try {
                 const videoId = m[1];
                 const resultPath = path.join(DIR, 'buildings', 'jarvis', 'tribe-analysis', `${videoId}.json`);
+                // Local first (your Mac): stream from disk — bounded RAM, never reads
+                // the whole 100MB+ file into memory.
                 if (fs.existsSync(resultPath)) {
-                    const txt = fs.readFileSync(resultPath, 'utf8');
                     res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(txt);
+                    const s = fs.createReadStream(resultPath);
+                    s.on('error', () => { try { res.destroy(); } catch {} });
+                    s.pipe(res);
                     return;
                 }
-                // Try R2 (results uploaded there after analysis)
+                // Render: stream straight from R2 to the client. No whole-file buffer
+                // and NO local caching (that would fill Render's ephemeral disk with 5GB).
                 if (cloud.isR2Ready()) {
                     try {
-                        const r2Key = `tribe-analysis/${videoId}.json`;
-                        const buf = await cloud.downloadFromR2(r2Key);
-                        if (buf) {
-                            // Cache locally
-                            fs.mkdirSync(path.dirname(resultPath), { recursive: true });
-                            fs.writeFileSync(resultPath, buf);
+                        const r2Stream = await cloud.getR2Stream(`tribe-analysis/${videoId}.json`);
+                        if (r2Stream) {
                             res.writeHead(200, { 'Content-Type': 'application/json' });
-                            res.end(buf);
+                            r2Stream.on('error', () => { try { res.destroy(); } catch {} });
+                            r2Stream.pipe(res);
                             return;
                         }
                     } catch {}
