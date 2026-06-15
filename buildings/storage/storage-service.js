@@ -5,6 +5,9 @@
 const StorageService = (() => {
     let boxes = [];
     let items = [];
+    // Data source: R2 by default (fast, the new stuff); "Old Version" reads Airtable.
+    let DataLayer = (typeof StorageR2 !== 'undefined') ? StorageR2 : StorageAirtable;
+    let _source = (typeof StorageR2 !== 'undefined') ? 'r2' : 'airtable';
 
     // --- Box resolution (fuzzy matching with number word ↔ digit normalization) ---
     function findBoxByName(name) {
@@ -80,11 +83,32 @@ const StorageService = (() => {
             return items.filter(i => i.boxIds && i.boxIds.includes(boxId));
         },
 
+        getSource() { return _source; },
+
+        // Switch between the new R2 store and the legacy Airtable ("Old Version").
+        async setSource(src) {
+            _source = (src === 'airtable') ? 'airtable' : 'r2';
+            DataLayer = (_source === 'airtable') ? StorageAirtable : StorageR2;
+            return this.sync();
+        },
+
         async sync() {
             [boxes, items] = await Promise.all([
-                StorageAirtable.listBoxes(),
-                StorageAirtable.listItems()
+                DataLayer.listBoxes(),
+                DataLayer.listItems()
             ]);
+            // First time on the new R2 store: seed a starter box so it works right away.
+            if (_source === 'r2' && boxes.length === 0 && items.length === 0) {
+                try {
+                    const res = await DataLayer.createBox('DEFAULT BOX');
+                    const boxId = res.id;
+                    for (const n of ['test item one', 'test item two', 'test item three']) {
+                        const ir = await DataLayer.addItem(n, 1, boxId);
+                        try { await StorageEmbeddings.indexItem({ id: ir.id, name: n, quantity: 1, boxIds: [boxId] }, 'DEFAULT BOX'); } catch (e) {}
+                    }
+                    [boxes, items] = await Promise.all([DataLayer.listBoxes(), DataLayer.listItems()]);
+                } catch (e) { console.warn('Storage: seeding default box failed (non-fatal):', e.message); }
+            }
             return { boxes, items };
         },
 
@@ -131,11 +155,11 @@ const StorageService = (() => {
             let box = findBoxByName(boxName);
             if (!box) {
                 const upper = (boxName || 'A').toUpperCase();
-                const res = await StorageAirtable.createBox(upper);
+                const res = await DataLayer.createBox(upper);
                 box = { id: res.id, name: upper };
                 boxes.push(box);
             }
-            const res = await StorageAirtable.addItem(canonical, qty, box.id);
+            const res = await DataLayer.addItem(canonical, qty, box.id);
             const newItem = { id: res.id, name: canonical, quantity: qty, boxIds: [box.id] };
             items.push(newItem);
             try { await StorageEmbeddings.indexItem(newItem, box.name); } catch(e) {}
@@ -159,7 +183,7 @@ const StorageService = (() => {
                     const existing = resolveSemanticToStoreItem(bestMatch);
                     if (existing) {
                         const newQty = existing.quantity + qty;
-                        await StorageAirtable.updateItemQty(existing.id, newQty);
+                        await DataLayer.updateItemQty(existing.id, newQty);
                         existing.quantity = newQty;
                         const existingBox = getBoxName(existing);
                         // Update vector index metadata
@@ -181,12 +205,12 @@ const StorageService = (() => {
             let box = findBoxByName(boxName);
             if (!box) {
                 const upper = (boxName || 'A').toUpperCase();
-                const res = await StorageAirtable.createBox(upper);
+                const res = await DataLayer.createBox(upper);
                 box = { id: res.id, name: upper };
                 boxes.push(box);
             }
 
-            const res = await StorageAirtable.addItem(canonical, qty, box.id);
+            const res = await DataLayer.addItem(canonical, qty, box.id);
             const newItem = { id: res.id, name: canonical, quantity: qty, boxIds: [box.id] };
             items.push(newItem);
 
@@ -236,14 +260,14 @@ const StorageService = (() => {
 
             if (qty >= item.quantity || qty >= 9999) {
                 // Delete entirely
-                await StorageAirtable.deleteItem(item.id);
+                await DataLayer.deleteItem(item.id);
                 try { await StorageEmbeddings.deleteItem(item.id); } catch (e) {}
                 items = items.filter(i => i.id !== item.id);
                 return { item: { ...item, quantity: 0 }, deleted: true, boxName, suggestions };
             }
 
             const newQty = item.quantity - qty;
-            await StorageAirtable.updateItemQty(item.id, newQty);
+            await DataLayer.updateItemQty(item.id, newQty);
             item.quantity = newQty;
             return { item, deleted: false, boxName, suggestions };
         },
@@ -321,7 +345,7 @@ const StorageService = (() => {
                 return { error: `"${item.name}" is already in box ${destBox.name}.` };
             }
 
-            await StorageAirtable.moveItem(item.id, destBox.id);
+            await DataLayer.moveItem(item.id, destBox.id);
             item.boxIds = [destBox.id];
 
             // Update vector index
@@ -334,12 +358,12 @@ const StorageService = (() => {
             const item = items.find(i => i.id === itemId);
             if (!item) throw new Error('Item not found.');
             if (newQty <= 0) {
-                await StorageAirtable.deleteItem(itemId);
+                await DataLayer.deleteItem(itemId);
                 try { await StorageEmbeddings.deleteItem(itemId); } catch (e) {}
                 items = items.filter(i => i.id !== itemId);
                 return { deleted: true };
             }
-            await StorageAirtable.updateItemQty(itemId, newQty);
+            await DataLayer.updateItemQty(itemId, newQty);
             item.quantity = newQty;
             return item;
         },
@@ -347,7 +371,7 @@ const StorageService = (() => {
         async addBox(name) {
             const upper = name.toUpperCase();
             if (findBoxByName(upper)) return { error: `Box "${upper}" already exists.` };
-            const res = await StorageAirtable.createBox(upper);
+            const res = await DataLayer.createBox(upper);
             const box = { id: res.id, name: upper };
             boxes.push(box);
             return { box };
@@ -357,7 +381,7 @@ const StorageService = (() => {
             const box = boxes.find(b => b.id === boxId);
             if (!box) return { error: 'Box not found.' };
             const upper = newName.toUpperCase();
-            await StorageAirtable.renameBox(boxId, upper);
+            await DataLayer.renameBox(boxId, upper);
             box.name = upper;
             return { box };
         },
@@ -367,7 +391,7 @@ const StorageService = (() => {
             if (!box) return { error: `Box "${name}" not found.` };
             const boxItems = items.filter(i => i.boxIds && i.boxIds.includes(box.id));
             if (boxItems.length > 0) return { error: `Box "${box.name}" is not empty (${boxItems.length} items). Clear it first.` };
-            await StorageAirtable.deleteBox(box.id);
+            await DataLayer.deleteBox(box.id);
             boxes = boxes.filter(b => b.id !== box.id);
             return { box };
         },
@@ -377,7 +401,7 @@ const StorageService = (() => {
             if (!box) return { error: `Box "${name}" not found.` };
             const boxItems = items.filter(i => i.boxIds && i.boxIds.includes(box.id));
             for (const item of boxItems) {
-                await StorageAirtable.deleteItem(item.id);
+                await DataLayer.deleteItem(item.id);
                 try { await StorageEmbeddings.deleteItem(item.id); } catch (e) {}
             }
             items = items.filter(i => !(i.boxIds && i.boxIds.includes(box.id)));
@@ -391,7 +415,7 @@ const StorageService = (() => {
             if (!toBox) return { error: `Box "${toBoxName}" not found.` };
             const boxItems = items.filter(i => i.boxIds && i.boxIds.includes(fromBox.id));
             for (const item of boxItems) {
-                await StorageAirtable.moveItem(item.id, toBox.id);
+                await DataLayer.moveItem(item.id, toBox.id);
                 item.boxIds = [toBox.id];
                 try { await StorageEmbeddings.indexItem(item, toBox.name); } catch (e) {}
             }

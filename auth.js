@@ -94,7 +94,7 @@ async function permsForAccount(account) {
 // Which building "owns" an API route (for authorization). 'shared' = any signed-in
 // member; 'owner' = owner only (safe default for anything unmapped).
 function routeBuilding(pathname) {
-    if (/^\/api\/airtable\//.test(pathname) || /^\/api\/pinecone\//.test(pathname) || /^\/api\/data\/storagehistory/.test(pathname)) return 'Storage';
+    if (/^\/api\/airtable\//.test(pathname) || /^\/api\/pinecone\//.test(pathname) || /^\/api\/data\/storage(history|boxes|items)/.test(pathname)) return 'Storage';
     if (/^\/api\/data\/inventory/.test(pathname)) return 'Storage+Workshop';
     if (/^\/api\/data\/(videos|components|orders|projects)/.test(pathname)) return 'Workshop';
     if (/^\/api\/dropbox\//.test(pathname)) return 'Workshop';

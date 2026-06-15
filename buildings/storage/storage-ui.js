@@ -117,6 +117,7 @@ const StorageUI = (() => {
                         <button onclick="StorageUI.onRemoveBox()">- Remove Box</button>
                         <button class="sync-btn" onclick="StorageUI.onSync()">Sync</button>
                         <button class="sync-btn" onclick="StorageUI.onToggleHistory()">History</button>
+                        <button class="sync-btn" id="storage-source-btn" onclick="StorageUI.onToggleSource()" title="The new storage lives on R2 (fast). Old Version pulls your previous Airtable data.">Old Version</button>
                     </div>
                     <div class="storage-boxes-grid" id="storage-boxes-grid">
                         <div class="storage-loading"><div class="storage-spinner"></div></div>
@@ -125,7 +126,6 @@ const StorageUI = (() => {
                         <h3>Activity History</h3>
                         <div class="storage-history-list" id="storage-history-list"></div>
                     </div>
-                    <div class="storage-workshop-inv" id="storage-workshop-inv"></div>
                 </div>
                 <div class="storage-chat">
                     <div class="storage-chat-header">
@@ -945,6 +945,9 @@ const StorageUI = (() => {
     // --- Workshop Component Library — the pipeline's inventory lives in the
     // Storage room. Whoever handles Ordering looks HERE before buying. ---
     async function renderWorkshopInventory() {
+        // Removed — the Workshop Component Library block is gone from the Storage room.
+        return;
+        /* eslint-disable no-unreachable */
         const el = document.getElementById('storage-workshop-inv');
         if (!el || typeof PipelineService === 'undefined') return;
         await PipelineService.inventory.sync().catch(() => {});
@@ -1042,9 +1045,26 @@ const StorageUI = (() => {
                 await StorageService.sync();
                 renderBoxes();
                 updateStats();
-                addChatMsg('Synced with Airtable.', 'system');
+                addChatMsg(StorageService.getSource() === 'airtable' ? 'Synced with the old (Airtable) version.' : 'Synced.', 'system');
             } catch (e) {
                 addChatMsg(`Sync error: ${e.message}`, 'error');
+            }
+        },
+
+        // Toggle between the new R2 store and the legacy Airtable data.
+        async onToggleSource() {
+            const next = StorageService.getSource() === 'r2' ? 'airtable' : 'r2';
+            const grid = document.getElementById('storage-boxes-grid');
+            if (grid) grid.innerHTML = '<div class="storage-loading"><div class="storage-spinner"></div></div>';
+            addChatMsg(next === 'airtable' ? 'Loading your OLD storage (Airtable)…' : 'Back to the new storage (R2)…', 'system');
+            try {
+                await StorageService.setSource(next);
+                renderBoxes();
+                updateStats();
+                const btn = document.getElementById('storage-source-btn');
+                if (btn) btn.textContent = next === 'airtable' ? 'New Version' : 'Old Version';
+            } catch (e) {
+                addChatMsg(`Could not switch version: ${e.message}`, 'error');
             }
         },
 
