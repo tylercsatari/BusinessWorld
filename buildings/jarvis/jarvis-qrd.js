@@ -199,18 +199,32 @@ const JarvisQRD = (() => {
         { n: 0,  name: 'OLS (ridge) baseline',   type: 'Supervised',  role: 'Honest first look; least-squares with shrinkage', ok: 'yes', live: true },
     ];
 
-    // §12 leakage & causality checklist (status computed against how WE built it)
+    // §12 leakage & causality checklist. Each item returns an HONEST status:
+    //   pass   = guaranteed by construction
+    //   na     = the dataset cannot support this rule (marked, never faked)
+    //   manual = needs a human in the loop (A/B test, matched set)
+    // Nothing here returns a hardcoded `true` — that was the old self-certification bug.
     const CHECKLIST = [
-        { id: 'confounds_post', text: 'Account size & all confounds recorded at post time, not today', auto: () => DATA && DATA.confoundsAtPost },
-        { id: 'mediator_out',   text: 'Early engagement left out of the content model (it is a mediator)', auto: () => !state.includeConfounds ? true : !modelUsesMediator() },
-        { id: 'target_safe',    text: 'Target uses log / rank / retention, never raw counts under squared loss', auto: () => true },
-        { id: 'ratio_past',     text: 'Within-account ratio (Target 2A) uses only earlier posts', auto: () => true },
-        { id: 'fit_train',      text: 'Rescaling, noise edge, shrinkage, PCA all fit on the training split only', auto: () => MODEL && MODEL.fitOnTrainOnly },
-        { id: 'split_time',     text: 'Train / validation split by time, not at random', auto: () => MODEL && MODEL.splitByTime },
-        { id: 'sig_baseline',   text: 'Signatures kept only if they beat the simple summary baseline', auto: () => true },
-        { id: 'hypothesis',     text: 'Every finding treated as a hypothesis until an A/B test confirms it', auto: () => true },
-        { id: 'confidence',     text: 'Scores carry confidence ranges; tiny gaps treated as noise', auto: () => MODEL && MODEL.cv && MODEL.cv.std != null },
-        { id: 'matched',        text: 'Comparison set matched on niche & era, checked by clustering overlap', auto: () => false },
+        { id: 'confounds_post', text: 'Confounds recorded at post time, not today',
+          status: () => ({ s: 'na', why: 'These 213 reels carry only duration + a follower-ratio proxy — no post-time snapshot of account size, post hour, topic timing or recommender state. "At post time" cannot be verified.' }) },
+        { id: 'mediator_out', text: 'Early engagement left out of the content model (it is a mediator)',
+          status: () => ({ s: (state.includeConfounds && modelUsesMediator()) ? 'fail' : 'pass', why: 'like_ratio / day3_share / view_accel / subs_gained are never used as predictors of the content model.' }) },
+        { id: 'target_safe', text: 'Target uses log / rank / retention, never raw counts under squared loss',
+          status: () => ({ s: 'pass', why: 'retention & keep are bounded 0–1; views enter only as log_views; swipe uses log1p. No raw counts under squared loss.' }) },
+        { id: 'ratio_past', text: 'Within-account ratio (Target 2) uses only earlier posts',
+          status: () => ({ s: 'na', why: 'Dataset has no account ID and no post order — Target 2 (within-account relative views) is not computable on these reels.' }) },
+        { id: 'fit_train', text: 'Rescaling / shrinkage / PCA fit on the training split only',
+          status: () => ({ s: 'pass', why: 'Reported accuracy comes from cross-validation that standardises inside each train fold. (The Reduction tab\'s covariance/PCA picture is whole-data exploratory — it produces no scored prediction.)' }) },
+        { id: 'split_time', text: 'Train / validation split by time, not at random',
+          status: () => ({ s: 'na', why: 'Dataset has no post timestamp. CV uses an expanding window over row order, which is NOT a true time split — trend leakage cannot be ruled out here.' }) },
+        { id: 'sig_baseline', text: 'Signatures kept only if they beat the simple summary baseline',
+          status: () => ({ s: 'na', why: 'Path signatures are shown for illustration; the live model is driven by the summary/atom features, and the beats-the-baseline gate is not applied to them.' }) },
+        { id: 'hypothesis', text: 'Every finding treated as a hypothesis until an A/B test confirms it',
+          status: () => ({ s: 'manual', why: 'A process discipline — confirm each lever with matched A/B posts (Playbook §10).' }) },
+        { id: 'confidence', text: 'Scores carry confidence ranges; tiny gaps treated as noise',
+          status: () => ({ s: (MODEL && MODEL.cv && MODEL.cv.std != null) ? 'pass' : 'manual', why: 'CV reports mean ± std across folds; the swipe model bootstraps a 90% interval.' }) },
+        { id: 'matched', text: 'Comparison set matched on niche & era, checked by clustering overlap',
+          status: () => ({ s: 'manual', why: 'No matched competitor set collected yet — the clustering-overlap check is pending data.' }) },
     ];
 
     function modelUsesMediator() {
@@ -378,7 +392,7 @@ const JarvisQRD = (() => {
     }
     function standardizeWith(X, mu, sd) { return X.map(r => r.map((v, j) => (v - mu[j]) / (sd[j] || 1))); }
 
-    // Time-ordered expanding-window CV (split by time, not random).
+    // Expanding-window CV over ROW ORDER (not a true time split — no timestamps in data).
     // AIRTIGHT: standardisation is fit on the TRAIN fold only and applied
     // frozen to the validation block — no test-set statistics leak in (§7/§12).
     // Takes the RAW feature matrix X. Returns CV scores + pooled out-of-fold
@@ -508,8 +522,8 @@ const JarvisQRD = (() => {
 
         DATA = {
             rows, n: rows.length, visHit, coverage,
-            accounts: 1,                 // single creator account
-            confoundsAtPost: true,       // sub_view_frac / duration captured at post; not "today"
+            accounts: 1,                 // single creator account (no per-account field in data)
+            confoundsAtPost: false,      // HONEST: data carries no post-time snapshot, only duration + follower proxy
             extractHit,                  // reels with real extracted atoms
             audioReels: audioHit,        // reels with real audio (librosa)
             nExtractedLevers: liveExtractedKeys.length,
@@ -581,7 +595,8 @@ const JarvisQRD = (() => {
         MODEL = {
             cols, y, Z, mu, sd, eig, mp, nSignal, varExplained, proj,
             ols, enet, cv, lvRank, perm, km, cov, confCorr, uni,
-            fitOnTrainOnly: true, splitByTime: true,
+            fitOnTrainOnly: true,        // CV standardises inside each train fold
+            splitByTime: false,          // HONEST: no post timestamps in the data — CV splits on row order, not real time
             target: state.target, includeConfounds: state.includeConfounds,
             alpha: state.enetAlpha, lambda: state.enetLambda, k: state.clusterK,
             swipeOnRet: state.swipeOnRetention,
@@ -598,7 +613,7 @@ const JarvisQRD = (() => {
     }
 
     // Honest accuracy for any target: in-sample R² (optimistic) vs out-of-fold
-    // time-split R² (train-only standardisation), pooled OOF predictions, MAE.
+    // expanding-window R² (train-only standardisation), pooled OOF predictions, MAE.
     function accuracyFor(target) {
         const rows = DATA.rows;
         const { X, cols } = buildFeatureMatrixFor(target);
@@ -1178,12 +1193,14 @@ const JarvisQRD = (() => {
 
     function renderSequence() {
         const rows = DATA.rows;
+        // Real anchors only. The curve starts at (0, 1.0) by definition (everyone
+        // who starts is present); ret_25/50/75/90 are measured. We do NOT invent a
+        // 100%-duration point — the data doesn't carry one.
         const anchors = [
             { t: 25, v: clamp01(mean(rows.map(r => r.ret_25))) },
             { t: 50, v: clamp01(mean(rows.map(r => r.ret_50))) },
             { t: 75, v: clamp01(mean(rows.map(r => r.ret_75))) },
             { t: 90, v: clamp01(mean(rows.map(r => r.ret_90))) },
-            { t: 100, v: clamp01(mean(rows.map(r => r.ret_90)) * 0.95) },
         ];
         let h = h2('Alignment + Sequence Features', '§6 — line up on events, not the clock. Then turn each reel’s bundle of curves into one fixed vector.');
         h += card(`<div style="font-weight:600;color:${C.cyan};margin-bottom:6px">§6.1 — Line up on events, not the clock</div>
@@ -1288,7 +1305,7 @@ const JarvisQRD = (() => {
             ${stat('E-Net non-zero feats', m.enet.nNonzero + '/' + m.cols.length, C.purple)}
             ${stat('Rank check ρ→views', fmt(m.lvRank, 3), C.accent)}
         </div>`;
-        h += note(`Live fit on <b>${state.target}</b> over ${DATA.n} reels, ${state.includeConfounds ? 'confounds included (content read underneath them)' : 'content levers only'}. <b>CV is split by time</b> (train earlier reels, validate later) with an expanding window — random splits would let future trends leak into the past. The small gap between in-sample R² and CV R² is the honesty check: a big gap = overfit. With ~200 points a tiny accuracy gap is noise.`, C.orange);
+        h += note(`Live fit on <b>${state.target}</b> over ${DATA.n} reels, ${state.includeConfounds ? 'confounds included (content read underneath them)' : 'content levers only'}. CV uses an <b>expanding window over row order</b> (train earlier rows, validate later), with standardisation fit inside each train fold. Caveat: this dataset has <b>no post timestamp</b>, so this is only a true split-by-time if the rows are chronological — treat it as ordered, not guaranteed time-ordered. The small gap between in-sample R² and CV R² is the honesty check: a big gap = overfit. With ~200 points a tiny accuracy gap is noise.`, C.orange);
 
         // model roster table
         const okCol = v => v.startsWith('yes') ? C.green : v === 'risk' ? C.orange : C.red;
@@ -1666,25 +1683,33 @@ const JarvisQRD = (() => {
 
     function renderChecklist() {
         ensureModel();
-        let h = h2('Leakage & Causality Checklist', '§12 — the ten disciplines that keep every score honest. Status is computed live against how this pipeline is actually built.');
-        let pass = 0;
-        let items = CHECKLIST.map(c => {
-            const ok = !!c.auto();
-            if (ok) pass++;
-            const col = ok ? C.green : C.orange;
+        let h = h2('Leakage & Causality Checklist', '§12 — status computed honestly against how this pipeline is actually built AND what this dataset can support. Items the data can\'t support are marked, never faked.');
+        const ST = {
+            pass:   { c: C.green,  icon: '☑', tag: 'ENFORCED' },
+            manual: { c: C.orange, icon: '☐', tag: 'MANUAL' },
+            na:     { c: C.mute,   icon: '⊘', tag: 'N/A · DATA' },
+        };
+        let pass = 0, na = 0;
+        const items = CHECKLIST.map(c => {
+            const r = c.status() || { s: 'manual', why: '' };
+            const s = ST[r.s] || ST.manual;
+            if (r.s === 'pass') pass++; else if (r.s === 'na') na++;
             return `<div style="display:flex;align-items:flex-start;gap:12px;padding:11px 14px;border-bottom:1px solid ${C.border}">
-                <div style="font-size:16px;color:${col};min-width:20px">${ok ? '☑' : '☐'}</div>
-                <div style="flex:1;font-size:12.5px;color:${ok ? C.text : C.dim};line-height:1.5">${esc(c.text)}</div>
-                <div>${tag(ok ? 'ENFORCED' : 'MANUAL', col)}</div>
+                <div style="font-size:16px;color:${s.c};min-width:20px">${s.icon}</div>
+                <div style="flex:1">
+                    <div style="font-size:12.5px;color:${r.s === 'pass' ? C.text : C.dim};line-height:1.5">${esc(c.text)}</div>
+                    <div style="font-size:11px;color:${C.mute};margin-top:3px;line-height:1.45">${esc(r.why)}</div>
+                </div>
+                <div>${tag(s.tag, s.c)}</div>
             </div>`;
         }).join('');
         h += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-            ${stat('Auto-enforced', pass + '/' + CHECKLIST.length, pass >= 8 ? C.green : C.orange)}
-            ${stat('Split strategy', 'by time', C.cyan)}
-            ${stat('Target form', state.target === 'log_views' ? 'log/rank' : 'bounded 0–1', C.green)}
+            ${stat('Enforced by build', pass + '/' + CHECKLIST.length, C.green)}
+            ${stat('Blocked by data', na + '/' + CHECKLIST.length, na ? C.orange : C.green)}
+            ${stat('Split strategy', 'ordered (no timestamps)', C.orange)}
         </div>`;
         h += card(items, 0);
-        h += note(`<b>"ENFORCED"</b> = this build guarantees the rule by construction (e.g. time-split CV, log/retention targets, mediator excluded, PCA fit on train). <b>"MANUAL"</b> = the rule needs you in the loop: an A/B test to confirm a finding, or a matched competitor set to check niche/era overlap (not yet collected). The two MANUAL items are the same two data gaps surfaced in §3 and Feature Atoms.`, C.cyan);
+        h += note(`<b>ENFORCED</b> = guaranteed by construction (mediator excluded, transformed targets, train-only CV standardisation, confidence ranges). <b>N/A · DATA</b> = the dataset can't support the rule, so it's marked honestly instead of asserted: these 213 reels carry no account ID and no post timestamp, so within-account relative views (Target 2) and a true split-by-time are not possible here. <b>MANUAL</b> = needs you in the loop (A/B confirmation, a matched competitor set). This replaces the earlier version that reported these as auto-passed.`, C.cyan);
         return h;
     }
 
