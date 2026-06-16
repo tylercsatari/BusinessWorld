@@ -101,26 +101,49 @@
         ['media', 'Media'], ['cad', 'CAD file'], ['pcb', 'PCB file'],
         ['sketches', 'Sketches'], ['links', 'Assets & links'], ['notes', 'Notes']
     ];
-    // Field access is none | read | write (like stages). No keys for a kind =
-    // write everything (back-compat). Legacy stored `true` means write.
+    // Which pipeline STAGE "owns" each video field as its deliverable. A node-
+    // scoped worker writes only the field its node owns and reads the rest.
+    const FIELD_OWNER_STAGE = {
+        context: 'ideate', hook: 'hook', script: 'script', decomp: 'decomp',
+        voiceover: 'voiceover', editing: 'edit'
+    };
+    const isStageScopedProfile = (a) => {
+        if (!a || a.all) return false;
+        const feats = a.features || {};
+        return Object.keys(feats).some(k => k.indexOf('Workshop:stage:') === 0);
+    };
+    // Field access is none | read | write. Precedence:
+    //   owner → write everything
+    //   explicit profile key for this field → that value (legacy `true` = write)
+    //   no key but profile is node-scoped → DELIVERABLE DEFAULT: write only the
+    //     field this worker's node owns, read everything else (so e.g. an animator
+    //     reads context/hook/script and only writes their deliverable)
+    //   no field keys + not scoped → write (full, back-compat)
     const fieldAccess = (kind, id) => {
         const a = window.__access;
         if (!a || a.all) return 'write';
         if (!(a.buildings || []).includes('Workshop')) return 'write'; // not a Workshop concern
         const feats = a.features || {}, prefix = 'Workshop:' + kind + ':';
         const keys = Object.keys(feats).filter(k => k.indexOf(prefix) === 0);
-        if (!keys.length) return 'write';
         const v = feats[prefix + id];
         if (v === true || v === 'write') return 'write';
         if (v === 'read') return 'read';
-        return 'none';
+        if (v === 'none') return 'none';
+        // no explicit value for this field
+        if (keys.length) return 'none';                 // restricted set, not listed → hidden
+        if (kind === 'vfield' && isStageScopedProfile(a)) {
+            const owner = FIELD_OWNER_STAGE[id];
+            if (!owner) return 'read';                  // meta fields (name/deadline/…) read for scoped workers
+            return (window.canWriteStage && window.canWriteStage(owner)) ? 'write' : 'read';
+        }
+        return 'write';                                  // unconfigured + unscoped → full
     };
     window.videoFieldAccess = (id) => fieldAccess('vfield', id);
     window.componentFieldAccess = (id) => fieldAccess('cfield', id);
     window.videoFieldVisible = (id) => fieldAccess('vfield', id) !== 'none';
     window.componentFieldVisible = (id) => fieldAccess('cfield', id) !== 'none';
     // Open/view buttons stay clickable even in a read-only section.
-    const KEEP_CLICKABLE = '[data-link-open],[data-media-open],[data-cf-open],[data-hooki-open],[data-open-comp],[data-open-video],[data-expand]';
+    const KEEP_CLICKABLE = '[data-link-open],[data-media-open],[data-cf-open],[data-hooki-open],[data-anim-asset-open],[data-open-comp],[data-open-video],[data-expand]';
     // Hide ungranted sections; lock read-only ones (inputs disabled, only view buttons live).
     function gateFields(root, attr, access) {
         const a = window.__access;
@@ -133,6 +156,17 @@
             if (acc === 'read') {
                 el.querySelectorAll('input, textarea, select').forEach(c => { c.disabled = true; });
                 el.querySelectorAll('button').forEach(c => { if (!c.matches(KEEP_CLICKABLE)) c.disabled = true; });
+                // A deliverable control (data-deliv-stage) stays WRITABLE inside a
+                // read section if the worker can write that stage — so the animator
+                // can still upload their animation video even though the hook
+                // section is read-only. Marked data-deliv-open for the CSS too.
+                el.querySelectorAll('[data-deliv-stage]').forEach(d => {
+                    const st = d.getAttribute('data-deliv-stage');
+                    if (window.canWriteStage && window.canWriteStage(st)) {
+                        d.setAttribute('data-deliv-open', '1');
+                        d.querySelectorAll('input, textarea, select, button').forEach(c => { c.disabled = false; });
+                    }
+                });
             }
         });
     }

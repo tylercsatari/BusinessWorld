@@ -1717,6 +1717,10 @@ const WorkshopUI = (() => {
             <div class="wsp-progress-head">
                 <label>Pipeline Progress</label>
                 <div class="wsp-progress-head-actions">
+                    ${isOwnerUser() ? `<select id="wsp-move-stage" class="wsp-inline-select" title="Owner only: move this video to any stage — everything before it is marked done, that stage and after reset to pending. Forces the move regardless of deliverables.">
+                        <option value="">⇄ Move to stage…</option>
+                        ${PS().STAGES.map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`).join('')}
+                    </select>` : ''}
                     <button class="wsp-mini-btn" id="wsp-edit-branches">${icon('decomp', 'wsp-sub-ic')} ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
                 </div>
             </div>
@@ -1846,6 +1850,16 @@ const WorkshopUI = (() => {
 
         // Branch decisions (the decomposition validation gate)
         get('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
+
+        // Owner-only: force-move the video to any stage (for organization)
+        get('wsp-move-stage')?.addEventListener('change', async (e) => {
+            const target = e.target.value;
+            e.target.value = '';
+            if (!target) return;
+            await saveFieldsFor(VideoService.getById(v.id) || v, true);
+            const moved = await moveVideoToStage(VideoService.getById(v.id) || v, target);
+            if (moved) rerender();
+        });
 
         // Hook instances (add/type/label/delete/footage)
         bindHookInstances(v, root, rerender);
@@ -2735,17 +2749,17 @@ const WorkshopUI = (() => {
             </div>
             <textarea data-hooki-text="${escAttr(h.id)}" class="wsp-hooki-text" placeholder="Hook LINE — the spoken/on-screen opening words…">${escHtml(h.text || h.label || '')}</textarea>
             <textarea data-hooki-visual="${escAttr(h.id)}" class="wsp-hooki-visual" placeholder="Opening VISUAL — what's literally on screen in the first 1–3s (action/impact/reveal)…">${escHtml(h.visual || '')}</textarea>
+            ${typed ? `<div data-deliv-stage="${h.type === 'animation' ? 'animation' : 'hookfilm'}">
             ${linked
                 ? `<div class="wsp-row" style="border-left: 3px solid ${h.type === 'animation' ? '#4a9eff' : '#e8a020'}">
                     <span class="wsp-row-name">${icon(h.type === 'animation' ? 'animation' : 'hookfilm', 'wsp-row-ic')} ${escHtml(h.videoName || h.videoPath.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
                     <button class="wsp-mini-btn" data-hooki-open="${escAttr(h.id)}">▶ Open</button>
                     <button class="wsp-mini-btn danger" data-hooki-unlink="${escAttr(h.id)}">✕ Unlink</button>
                 </div>`
-                : (typed
-                    ? `<div class="wsp-add-row wsp-hooki-media" data-hooki-media="${escAttr(h.id)}" data-empty="1">
+                : `<div class="wsp-add-row wsp-hooki-media" data-hooki-media="${escAttr(h.id)}" data-empty="1">
                         <span class="wsp-hint">${v.project ? 'loading footage controls…' : 'select a Channel Project to attach footage'}</span>
-                    </div>`
-                    : '')}
+                    </div>`}
+            </div>` : ''}
         </div>`;
     }
 
