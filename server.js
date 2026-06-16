@@ -553,7 +553,7 @@ const server = http.createServer(async (req, res) => {
         if (pathname === '/api/accounts' && req.method === 'GET') {
             const list = await dataStore.getAll('accounts');
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(list.map(a => ({ id: a.id, email: a.email, name: a.name, role: a.role, createdAt: a.createdAt }))));
+            res.end(JSON.stringify(list.map(a => ({ id: a.id, email: a.email, name: a.name, displayName: a.displayName || '', color: a.color || '', role: a.role, createdAt: a.createdAt }))));
             return;
         }
         const m = pathname.match(/^\/api\/accounts\/([^/]+)$/);
