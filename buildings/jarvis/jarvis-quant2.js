@@ -111,9 +111,10 @@ const JarvisQuant2 = (function () {
         DATA = await fetch(base + 'quant2_model.json').then(r => r.json());
         // the real embedding model (DINOv2 hazard + latent + manifold) — optional
         EMB = await fetch('./buildings/jarvis/quant2/quant2_emb_model.json').then(r => r.json()).catch(() => null);
+        CORPUS = await fetch('./buildings/jarvis/quant2/quant2_corpus.json').then(r => r.json()).catch(() => null);
         return DATA;
     }
-    let EMB = null;
+    let EMB = null, CORPUS = null;
     function frameUrl(id, f) { return f ? `/api/video/frame/${encodeURIComponent(id)}/${encodeURIComponent(f)}` : null; }
 
     // ══════════════════════ SECTIONS ══════════════════════
@@ -253,7 +254,22 @@ const JarvisQuant2 = (function () {
             ${card(`<div style="font-weight:700;color:${C.orange};margin-bottom:6px">Most novel (far from neighbours)</div>${mk(byNov.slice(0, 6))}`)}
             ${card(`<div style="font-weight:700;color:${C.cyan};margin-bottom:6px">Most typical (crowded region)</div>${mk(byNov.slice(-6).reverse())}`)}
         </div>`;
-        h += note(`Novelty here is <b>market-relative distance in embedding space</b>, not a human guess — the best novelty is "far enough to be interesting, close enough to be understandable". Once the 2,362-video corpus is embedded, novelty becomes distance from the broader niche, and saturation = cluster density over time (which formats are crowded/decaying).`, C.green);
+        // ── gold vs corpus overlap (the niche-match check) ──
+        if (CORPUS && CORPUS.manifold && CORPUS.manifold.points) {
+            const pts = CORPUS.manifold.points;
+            const xs2 = pts.map(p => p.x), ys2 = pts.map(p => p.y);
+            const mnX = Math.min(...xs2), mxX = Math.max(...xs2), mnY = Math.min(...ys2), mxY = Math.max(...ys2);
+            const X2 = v => pad + ((v - mnX) / (mxX - mnX || 1)) * (w - pad * 2);
+            const Y2 = v => ht - pad - ((v - mnY) / (mxY - mnY || 1)) * (ht - pad * 2);
+            let s2 = '';
+            pts.forEach(p => { const gold = p.tier === 'gold'; s2 += `<circle cx="${X2(p.x)}" cy="${Y2(p.y)}" r="${gold ? 3.5 : 2}" fill="${gold ? C.green : C.faint}" opacity="${gold ? 0.85 : 0.4}"/>`; });
+            const nG = pts.filter(p => p.tier === 'gold').length, nC = pts.length - nG;
+            h += card(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">Niche-overlap check — your reels vs the 100M-view corpus</div>
+                <div style="font-size:11px;color:${C.mute};margin-bottom:8px"><span style="color:${C.green}">●</span> your ${nG} reels &nbsp; <span style="color:${C.faint}">●</span> ${nC} corpus videos (embedded so far). If they form <b>separate clouds</b>, the corpus is a different niche — you'd be modelling era/niche, not craft.</div>
+                <svg viewBox="0 0 ${w} ${ht}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s2}</svg>
+                <div style="font-size:11px;color:${C.orange};margin-top:6px">The teacher-student run confirms it numerically: <b>${CORPUS.pseudo_labels_summary ? CORPUS.pseudo_labels_summary.usable : 0}</b> corpus videos are confidently in your distribution. The corpus teaches what formats <i>exist</i>, but isn't a swipe-label source for your lane.</div>`);
+        }
+        h += note(`Novelty here is <b>market-relative distance in embedding space</b>, not a human guess — the best novelty is "far enough to be interesting, close enough to be understandable". Saturation = cluster density over time (which formats are crowded/decaying). The corpus is still embedding from R2; this view sharpens as it completes.`, C.green);
         return h;
     }
 
@@ -306,7 +322,23 @@ const JarvisQuant2 = (function () {
                'Every pseudo-label stores: predicted swipe · confidence · nearest true examples · teacher version · in/out-of-distribution flag',
                'Validate the student ONLY on real held-out retention. If it does not improve real-label performance → discard pseudo-labelling (it is just laundering guesses).'
             ].map(r => `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid ${C.border};font-size:11.5px;color:${C.dim};line-height:1.5"><span style="color:${C.red}">▸</span><span>${esc(r)}</span></div>`).join('')}`);
-        h += note(`The analogy to language models: a massive text corpus teaches language structure; a small labelled set teaches the task. Here, ~2,000 videos teach <b>content structure</b>; ${DATA.n_reels} true-labelled reels teach the <b>swipe response</b>. You are not faking retention labels — you are making ${DATA.n_reels} real ones far more powerful.`, C.cyan);
+        // ── REAL teacher-student run on the embedded corpus ──
+        if (CORPUS && CORPUS.pseudo_labels_summary) {
+            const P = CORPUS.pseudo_labels_summary;
+            const ood = P.usable === 0;
+            h += card(`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${tag('REAL RUN', ood ? C.red : C.green)}<b style="color:${C.text}">Teacher pseudo-labelled the embedded corpus — what came back?</b></div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+                    ${stat('Gold (teacher trained on)', CORPUS.n_gold, C.green)}
+                    ${stat('Corpus pseudo-labelled', P.n, C.cyan)}
+                    ${stat('Usable (in-dist & conf>0.5)', P.usable, ood ? C.red : C.green)}
+                    ${stat('Mean confidence', fmt(P.mean_confidence, 2), C.orange)}
+                </div>
+                <div style="font-size:12px;color:${ood ? C.red : C.dim};line-height:1.55">${ood
+                    ? `<b>The discipline fired:</b> <b>0 corpus videos</b> are confidently in-distribution to your reels. The 100M-view corpus (generic viral/dance shorts) is a <b>different niche</b> from your content (builds/gadgets/science) — the clustering-overlap check the brief demands <b>fails</b>. Pseudo-labelling it would teach the model <i>niche</i>, not <i>craft</i>. The pipeline correctly refused to launder labels.`
+                    : `${P.usable} corpus videos are in-distribution and high-confidence — these (and only these) may become weak training signal, validated on real held-out retention.`}</div>`);
+            h += note(`<b>The real lesson this surfaced:</b> a bigger generic corpus is <i>not</i> automatically useful — it must <b>overlap your niche</b> (the brief: "comparison set matched on niche & era, checked by clustering that the two sets overlap"). The highest-leverage data move is therefore <b>niche-matched true labels</b> — collaborator analytics in your build/gadget/science lane — not more generic viral videos. The corpus is still valuable for the manifold (what formats exist), just not as a swipe-label source for your niche.`, C.orange);
+        }
+        h += note(`The analogy to language models: a massive text corpus teaches language structure; a small labelled set teaches the task. Here, the corpus teaches <b>content structure</b>; ${DATA.n_reels} true-labelled reels teach the <b>swipe response</b>. You are not faking retention labels — you are making the real ones more powerful, and refusing the ones that don't belong.`, C.cyan);
         return h;
     }
 
