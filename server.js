@@ -52,21 +52,24 @@ function _extractJsonObject(text) {
     }
     return null;
 }
-// Kimi (Fireworks) first — it reasons before the JSON — then OpenAI strict JSON.
+// Kimi K2.6 (Fireworks) is a REASONING model — it writes a long chain-of-thought
+// before the JSON, so it needs a high token ceiling or it gets cut off mid-thought
+// (finish_reason 'length') before ever emitting the JSON. Give it room.
 async function hookLlmJson(messages) {
     if (process.env.FIREWORKS_API_KEY) {
         try {
             const r = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
                 method: 'POST', headers: { 'Authorization': `Bearer ${process.env.FIREWORKS_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6', messages, temperature: 0.4, max_tokens: 4000 })
+                body: JSON.stringify({ model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6', messages, temperature: 0.4, max_tokens: 20000 })
             });
             if (r.ok) { const o = _extractJsonObject((await r.json()).choices?.[0]?.message?.content); if (o) return o; }
         } catch (e) { /* fall through */ }
     }
+    // Last-resort only if Fireworks is unset/unreachable — Kimi is the engine.
     if (process.env.OPENAI_API_KEY) {
         const r = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST', headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o', messages, temperature: 0.5, max_tokens: 1500, response_format: { type: 'json_object' } })
+            body: JSON.stringify({ model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o', messages, temperature: 0.5, max_tokens: 1800, response_format: { type: 'json_object' } })
         });
         if (r.ok) { const o = _extractJsonObject((await r.json()).choices?.[0]?.message?.content); if (o) return o; }
     }

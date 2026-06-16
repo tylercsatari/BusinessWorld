@@ -40,13 +40,16 @@ async function run(opts, llm, memory) {
         ? `\n\nHOOKS THE CREATOR KEPT BEFORE (emulate this taste):\n${memory.wins.slice(0, 8).map(w => `• "${w.line}"${w.visual ? `  [visual: ${w.visual}]` : ''}`).join('\n')}`
         : '';
 
-    const sys = `You are the hook strategist for a maker/experiment YouTube channel. Below is how this channel's ${examples.length} most SIMILAR past videos ACTUALLY opened — the real first words the creator spoke. These are proven hooks (see the view counts).
+    const sys = `You are the hook strategist for a maker/experiment YouTube channel. Below is how this channel's ${examples.length} most SIMILAR past videos ACTUALLY opened — the real transcript of their first ~15 seconds (the hook + how it leads into the video). Learn from these proven openings (see the view counts).
 
-Your job: STUDY these real openings. For each, notice what the hook actually IS — how the very first line grabs attention (a bold claim, a question, an open loop, a "but…"/"wait…" turn), and how it sets up the rest of the video. A hook is not a fixed length — it's whatever opening makes someone keep watching. Then write hooks for the NEW video, modeled on what genuinely works here.
+CRITICAL — what a hook IS:
+- The hook LINE is ONLY the GRAB: the very first 1–2 sentences a viewer hears (roughly 8–25 words). In each real opening below, the hook is just the opening claim/question BEFORE the creator starts explaining how they made it.
+  • e.g. real opening "This is an indestructible chest plate. But can it save my life? Starting with a sheet of titanium I…" → the HOOK is only: "This is an indestructible chest plate. But can it save my life?"
+- Do NOT write a summary of the whole video. Do NOT explain how it's made. Just the punchy opener that makes someone stay: a bold claim, a question, an open loop, a "but…/wait…" turn.
 
-A hook = the LINE (the spoken opening, in the channel's real voice) + the VISUAL (what's literally on screen in the first seconds — action/impact/reveal, never a talking head).
+A hook = the LINE (that short grab, in the channel's real voice) + the VISUAL (what's on screen in the first 1–3 seconds — action/impact/reveal, never a talking head).
 
-=== HOW OUR MOST SIMILAR VIDEOS REALLY OPENED ===
+=== HOW OUR MOST SIMILAR VIDEOS REALLY OPENED (first ~15s; the hook is just their FIRST sentence or two) ===
 ${fmtOpenings(examples)}
 === END REAL OPENINGS ===
 
@@ -58,9 +61,12 @@ What actually happens: ${context || '(none)'}
 Script so far: ${script || '(none)'}
 Existing hooks (make these different): ${(opts.existingHooks || []).join(' | ') || 'none'}
 
-Write 4 distinct hooks for this video, each modeled on a SPECIFIC real opening above. Output ONLY JSON:
-{"hooks":[{"line":"the spoken opening, in our real voice","visual":"the opening shot","modeledOn":"the title of the real video whose opening this is modeled on","why":"one sentence: what makes this grip, tied to that real opening"}]}`;
+Write 4 distinct hook options. Each LINE must be SHORT — the first 1–2 sentences only (8–25 words), the grab, NOT a description of the video. Model each on a SPECIFIC real opening above. Output ONLY JSON:
+{"hooks":[{"line":"the short spoken grab (1-2 sentences max)","visual":"the opening shot","modeledOn":"the title of the real video whose opening style this matches","why":"one short sentence: what makes this grip"}]}`;
 
+    // ONE deep reasoning pass — Kimi K2.6 internally reasons (chain-of-thought)
+    // over the real openings before answering, so a second round-trip just
+    // doubles latency. The prompt makes it self-check before finalizing.
     let drafts = [];
     try { const o = await llm([{ role: 'system', content: sys }, { role: 'user', content: user }]); drafts = (o && o.hooks) || []; }
     catch (e) { return { hooks: [], error: 'llm failed: ' + e.message }; }
@@ -69,22 +75,6 @@ Write 4 distinct hooks for this video, each modeled on a SPECIFIC real opening a
         modeledOn: (h.modeledOn || '').trim(), why: (h.why || '').trim()
     }));
     if (!drafts.length) return { hooks: [], error: 'no drafts' };
-
-    // SELF-CRITIQUE — Kimi judges its own drafts against the real openings and
-    // rewrites any that are weaker than the proven examples. (The "ask itself
-    // what's wrong" step — reasoning, not an arbitrary score.)
-    try {
-        const critMsg = [
-            { role: 'system', content: sys },
-            { role: 'user', content: `Here are 4 hook drafts for the new video:\n${drafts.map((h, i) => `${i + 1}. LINE: "${h.line}"  VISUAL: "${h.visual}"`).join('\n')}\n\nCompare each to the REAL openings above. For any that is more generic, vaguer, or weaker than how our real videos open, REWRITE it to match that proven quality (specific, bold, an open loop, a strong opening word, action visual). Keep the strong ones. Output ONLY JSON in the same 4-item order: {"hooks":[{"line":"...","visual":"...","modeledOn":"...","why":"..."}]}` }
-        ];
-        const o2 = await llm(critMsg);
-        const improved = ((o2 && o2.hooks) || []).map(h => ({
-            line: (h.line || '').trim(), visual: (h.visual || '').trim(),
-            modeledOn: (h.modeledOn || '').trim(), why: (h.why || '').trim()
-        })).filter(h => h.line);
-        if (improved.length >= drafts.length) drafts = improved;
-    } catch (e) { /* keep originals */ }
 
     // attach the real exemplar each was modeled on (for display)
     const byTitle = {}; examples.forEach(e => { byTitle[(e.title || '').toLowerCase()] = e; });
