@@ -771,6 +771,19 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Retrieval: the REAL opening hooks (line + visual + views) of the past
+    // videos most relevant to this video's topic. POST { query, limit }.
+    if (pathname === '/api/workshop/hook-examples' && req.method === 'POST') {
+        let examples = [];
+        try {
+            const body = await readBody(req);
+            examples = require('./buildings/jarvis/hook-intel').examples(body.query || '', body.limit || 12);
+        } catch (e) { examples = []; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ examples }));
+        return;
+    }
+
     // API: Kimi K2.6 Chat (Fireworks, OpenAI-compatible)  /api/kimi/chat
     // Same shape as /api/openai/chat. Needs FIREWORKS_API_KEY.
     // =========================================

@@ -404,14 +404,21 @@ const WorkshopUI = (() => {
     // else. The owner (all stages visible) sees everything. When a video's
     // deliverable is met it leaves that stage's frontier and disappears here.
     function isStageScoped() {
-        return PS().STAGES.some(s => !stageVisible(s.id));
+        try { return PS().STAGES.some(s => !stageVisible(s.id)); } catch (e) { return false; }
+    }
+    // True only when the profile can see NO stage at all (misconfigured) — used to
+    // show a friendly note instead of a blank board.
+    function hasNoVisibleStage() {
+        try { return !PS().STAGES.some(s => stageVisible(s.id)); } catch (e) { return false; }
     }
     function filteredVideos() {
         let list = pipelineVideos();
-        if (isStageScoped()) {
-            const ctx = ctxNow();
-            list = list.filter(v => PS().frontier(v, ctx).some(id => stageVisible(id)));
-        }
+        try {
+            if (isStageScoped()) {
+                const ctx = ctxNow();
+                list = list.filter(v => PS().frontier(v, ctx).some(id => stageVisible(id)));
+            }
+        } catch (e) { console.warn('Workshop: video scoping skipped', e); }
         if (fSearch) {
             const q = fSearch.toLowerCase();
             list = list.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hook || '').toLowerCase().includes(q));
@@ -435,7 +442,8 @@ const WorkshopUI = (() => {
         let list = SVC().components.getAll().filter(c => c.status !== 'done');
         // Restricted accounts only see components/tasks sitting at a stage (node)
         // they have access to — same scoping as videos.
-        if (isStageScoped()) list = list.filter(c => { const sid = componentStageId(c); return sid && stageVisible(sid); });
+        try { if (isStageScoped()) list = list.filter(c => { const sid = componentStageId(c); return sid && stageVisible(sid); }); }
+        catch (e) { console.warn('Workshop: component scoping skipped', e); }
         if (fProject) list = list.filter(c => c.projectId === fProject);
         if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(c => (c.name || '').toLowerCase().includes(q)); }
         return list;
@@ -580,6 +588,15 @@ const WorkshopUI = (() => {
     }
 
     function renderPipelineTab(el) {
+        // Misconfigured profile (Workshop granted but no stage assigned) → a clear
+        // note instead of a blank board.
+        if (hasNoVisibleStage()) {
+            el.innerHTML = `<div class="workshop-empty" style="padding:40px 20px;">
+                You don't have any pipeline stages assigned yet.<br>
+                <span class="wsp-hint">Ask the owner to grant you a stage in your profile (People &amp; permissions → Pipeline stages).</span>
+            </div>`;
+            return;
+        }
         const { pos, boardW, boardH } = boardPositions();
         const entities = boardEntities();
 
@@ -2580,9 +2597,23 @@ const WorkshopUI = (() => {
             // Pull the compact, data-grounded intelligence pack (real swipe /
             // retention findings, design rules, word + visual guidance, principles,
             // exemplar videos). A few KB — distilled server-side from the analytics.
-            let intel = null;
+            const topicQuery = `${v.name || ''} ${v.context || ''} ${(v.script || '').slice(0, 400)}`;
+            let intel = null, examples = [];
             try { intel = await (await fetch('/api/workshop/hook-intel')).json(); } catch (e) {}
+            // Retrieval: the REAL opening hooks of our most TOPICALLY SIMILAR past
+            // videos (actual line + actual opening visual + views). This is the
+            // core grounding — the model learns from proof, not made-up structure.
+            btn.textContent = '✨ Studying old videos…';
+            try {
+                examples = ((await (await fetch('/api/workshop/hook-examples', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: topicQuery, limit: 12 })
+                })).json()).examples) || [];
+            } catch (e) {}
             const fmt = (arr, f) => (arr || []).map(f).join('\n');
+            const examplesText = examples.length
+                ? `REAL OPENING HOOKS from our most SIMILAR past videos — the actual spoken line + the actual opening shot + views. Study what these proven hooks do (the angle, the specificity, the visual) and write in this style for THIS video:\n${examples.map(e => `• "${e.line}"  [VISUAL: ${e.visual || 'n/a'}]  — ${(e.views || 0).toLocaleString()} views`).join('\n')}`
+                : '';
             const intelText = intel && !intel.error ? [
                 `OBJECTIVE: ${intel.objective}`,
                 intel.nVideos ? `(grounded in ${intel.nVideos} of our own posted videos)` : '',
@@ -2595,24 +2626,24 @@ const WorkshopUI = (() => {
                 `\nVISUAL/LANGUAGE — what makes viewers LEAVE (avoid):\n${fmt(intel.retentionDropCauses, c => `• ${c.cause} — ${c.rule}`)}`,
                 `\nWORDS THAT RETAIN: ${(intel.wordsThatRetain || []).join(', ')}`,
                 `WORDS THAT KILL RETENTION (avoid): ${(intel.wordsThatKill || []).join(', ')}`,
-                `\nCAUSAL PRINCIPLES (indicator → outcome, strength):\n${fmt(intel.principles, p => `• ${p.signal} → ${p.outcome}${p.strength != null ? ` (${p.strength})` : ''}`)}`,
-                `\nREAL EXEMPLAR OPENINGS that held the most viewers (title — swipe-away %, lower is better):\n${fmt(intel.exemplars, e => `• "${e.title}" — ${e.swipeAwayPct}% swiped away`)}`
+                `\nCAUSAL PRINCIPLES (indicator → outcome, strength):\n${fmt(intel.principles, p => `• ${p.signal} → ${p.outcome}${p.strength != null ? ` (${p.strength})` : ''}`)}`
             ].filter(Boolean).join('\n') : '';
+            const dataBlock = [examplesText, intelText].filter(Boolean).join('\n\n');
 
             btn.textContent = '✨ Writing hooks…';
-            const sys = `You are the hook strategist for a maker/experiment YouTube channel, optimizing for ONE thing: swipe-through — keeping ≥85% of viewers past the first 3–5 seconds, then high retention at 20s (the strongest predictor of total views). You have the channel's OWN processed analytics below. USE THEM — every choice must trace to this data, not generic advice.
+            const sys = `You are the hook strategist for a maker/experiment YouTube channel, optimizing for ONE thing: swipe-through — keeping ≥85% of viewers past the first 3–5 seconds, then high retention at 20s (the strongest predictor of total views). Below are this channel's OWN real top-performing opening hooks (from similar videos) plus its processed analytics. GROUND every hook in these real examples and findings — do NOT invent generic hook structure.
 
 A hook is TWO things working together and BOTH matter equally:
 1) LINE — the spoken/on-screen opening words (start with action/challenge words from the data, concrete + visceral, an open loop, never self-reference or material/technical words).
 2) VISUAL — what is literally on screen in the first seconds (high-energy action frame / impact / reveal per the data; never a talking head or a static material shot).
 
 === CHANNEL DATA ===
-${intelText}
+${dataBlock}
 === END DATA ===
 
 Output ONLY a JSON object, no prose, no markdown, do not think out loud. Schema:
-{"hooks":[{"line":"the spoken opening line","visual":"what's on screen in the first 1-3 seconds — concrete shot description","why":"one sentence tying this to a SPECIFIC finding/rule above","predictedSwipeThrough":"NN%"}]}
-Give 3–4 DISTINCT hooks taking different angles. predictedSwipeThrough is your honest estimate (aim for 85%+ but be realistic).`;
+{"hooks":[{"line":"the spoken opening line","visual":"what's on screen in the first 1-3 seconds — concrete shot description","why":"one sentence tying this to a SPECIFIC real example or finding above","predictedSwipeThrough":"NN%"}]}
+Give 3–4 DISTINCT hooks taking different angles, modeled on the real examples. predictedSwipeThrough is your honest estimate (aim for 85%+ but be realistic).`;
             const user = `Video title: ${v.name || '(untitled)'}\nWhat actually happens in the video (context): ${v.context || '(none)'}\nScript so far: ${(v.script || '(none)').slice(0, 2000)}\nExisting hooks (make these DIFFERENT): ${PS().hooksOf(v).map(h => h.text || h.label).filter(Boolean).join(' | ') || 'none'}`;
             const parsed = await aiJson(
                 [{ role: 'system', content: sys }, { role: 'user', content: user }],
@@ -2623,7 +2654,7 @@ Give 3–4 DISTINCT hooks taking different angles. predictedSwipeThrough is your
                 .filter(h => h && (h.line || h.text))
                 .map(h => ({ line: (h.line || h.text || '').trim(), visual: (h.visual || '').trim(), why: (h.why || '').trim(), pred: (h.predictedSwipeThrough || h.pred || '').toString().trim() }));
             if (!hooks.length) { alert('AI did not return any hooks. Add more context/script and try again.'); return; }
-            showHookSuggestions(videoId, hooks, !intelText);
+            showHookSuggestions(videoId, hooks, !dataBlock);
         } catch (e) {
             console.warn('suggestHooks failed', e);
             alert('AI hook suggestions failed: ' + e.message);
