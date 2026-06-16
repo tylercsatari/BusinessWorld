@@ -458,16 +458,22 @@ const WorkshopUI = (() => {
     // (through a clear channel above/below them) instead of passing under them.
     function edgePathSmart(fromId, toId, pos) {
         const a = pos[fromId], b = pos[toId];
-        const lf = PS().layerOf(fromId), lt = PS().layerOf(toId);
-        if (lt - lf <= 1) return edgePath(a, b);
-
+        if (!a || !b) return '';   // an endpoint isn't on the board (gated out)
+        // Intermediate nodes = any positioned stage whose column sits strictly
+        // between the two endpoints. Driven by the ACTUAL positions, not the full
+        // layer list — restricted profiles hide stages, so the board is rebuilt
+        // compactly and PS().LAYERS no longer matches pos (reading pos[id].y for a
+        // hidden stage was undefined → "Cannot read properties of undefined").
         let minTop = Infinity, maxBottom = -Infinity;
-        for (let li = lf + 1; li < lt; li++) {
-            PS().LAYERS[li].forEach(id => {
-                minTop = Math.min(minTop, pos[id].y);
-                maxBottom = Math.max(maxBottom, pos[id].y + NODE_H);
-            });
-        }
+        Object.keys(pos).forEach(id => {
+            if (id === fromId || id === toId || id === '_inventory') return;
+            const p = pos[id];
+            if (p && p.x > a.x && p.x < b.x) {
+                minTop = Math.min(minTop, p.y);
+                maxBottom = Math.max(maxBottom, p.y + NODE_H);
+            }
+        });
+        if (minTop === Infinity) return edgePath(a, b);  // adjacent columns / nothing between
         const aboveY = Math.max(minTop - 16, 10);
         const belowY = maxBottom + 16;
         const midY = (a.y + b.y) / 2 + NODE_H / 2;
