@@ -65,17 +65,42 @@ function fmtOpenings(ex) {
     }).join('\n\n');
 }
 
+function loadJson(rel) { try { return JSON.parse(fs.readFileSync(path.join(__dirname, rel), 'utf8')); } catch (e) { return null; } }
+const _tok = s => (String(s || '').toLowerCase().match(/[a-z0-9']+/g) || []);
+
+// SEARCH business world for the working mechanisms relevant to THIS video: the
+// causal experiment chains (bridge_top_principles), the data-derived tone rules,
+// and the visual components — ranked by relevance to the topic + draft hooks.
+function searchMechanisms(topic, drafts) {
+    loadKb();
+    const bridge = loadJson('bridge_top_principles.json');
+    const qset = new Set([..._tok(topic), ...((drafts || []).flatMap(d => _tok((d.line || '') + ' ' + (d.visual || ''))))]);
+    const pool = [];
+    ((bridge && bridge.top) || []).slice(0, 25).forEach(p => { if (p && p.via_indicator) pool.push({ kind: 'experiment', text: `${p.via_indicator} → ${p.to_outcome}`, strength: typeof p.chain_strength === 'number' ? +p.chain_strength.toFixed(2) : null }); });
+    ((_tone && _tone.principles) || []).forEach(p => pool.push({ kind: 'tone-rule', text: `${p.name}: ${p.how}` }));
+    visuals.VISUAL_COMPONENTS.forEach(c => pool.push({ kind: 'visual-mechanism', text: c }));
+    ((_vd && _vd.insights) || []).forEach(i => pool.push({ kind: 'line+visual', text: `${i.name}: ${i.rule}` }));
+    const scored = pool.map(m => { let o = 0; for (const w of _tok(m.text)) if (qset.has(w)) o++; return { ...m, score: o + (m.kind === 'experiment' && m.strength ? Math.abs(m.strength) : 0) }; });
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.filter(m => m.score > 0).slice(0, 8);
+    return top.length ? top : scored.slice(0, 6);
+}
+
 // opts: { title, context, script, existingHooks:[] }
 // llm: async (messages) => parsed JSON object (caller wires Kimi → JSON extraction)
 // memory: { principles:[], wins:[{line,visual}] }
-async function run(opts, llm, memory) {
+// emit: (event) => void  — trace events for the live visualizer (optional)
+async function run(opts, llm, memory, emit) {
+    emit = typeof emit === 'function' ? emit : () => {};
     const title = opts.title || '', context = opts.context || '', script = (opts.script || '').slice(0, 1800);
     const topic = `${title} ${context} ${script}`.trim();
     memory = memory || {};
 
-    const examples = intel.examples(topic, 10);          // REAL openings, most similar first
-    const pack = intel.build();                          // distilled findings (guidance, not structure)
-    if (!examples.length) return { hooks: [], error: 'no corpus' };
+    emit({ stage: 'search', status: 'run', title: 'Searching your past videos', detail: `Scanning ${intel.examples('', 9999).length} real openings for the most similar + best-retained…` });
+    const examples = intel.examples(topic, 10);          // REAL openings, swipe-ranked
+    const pack = intel.build();
+    if (!examples.length) { emit({ stage: 'search', status: 'error', title: 'No corpus' }); return { hooks: [], error: 'no corpus' }; }
+    emit({ stage: 'search', status: 'done', title: `Found ${examples.length} similar best-retained openings`, items: examples.map(e => ({ label: e.title, meta: typeof e.swipe === 'number' ? `${(100 - e.swipe).toFixed(1)}% kept` : `${(e.views || 0).toLocaleString()} views` })) });
 
     const findings = (pack && !pack.error) ? [
         `What keeps this channel's viewers (from our retention analysis): ${(pack.designRules || []).slice(0, 5).join(' ')}`,
@@ -86,6 +111,15 @@ async function run(opts, llm, memory) {
     const wins = (memory.wins && memory.wins.length)
         ? `\n\nHOOKS THE CREATOR KEPT BEFORE (emulate this taste):\n${memory.wins.slice(0, 8).map(w => `• "${w.line}"${w.visual ? `  [visual: ${w.visual}]` : ''}`).join('\n')}`
         : '';
+
+    loadKb();
+    const nTone = ((_tone && _tone.principles) || []).length, nVd = ((_vd && _vd.insights) || []).length;
+    emit({ stage: 'voice', status: 'done', title: `Loaded the channel's viral voice`, detail: `${nTone} tone rules + ${nVd} line+visual rules + ${HOOK_PRINCIPLES.length} swipe principles`, items: ((_tone && _tone.principles) || []).slice(0, 6).map(p => ({ label: p.name })) });
+
+    // SEARCH business world for working mechanisms relevant to this video
+    emit({ stage: 'mechanisms', status: 'run', title: 'Searching Jarvis experiments for working mechanisms' });
+    const mechanisms = searchMechanisms(topic);
+    emit({ stage: 'mechanisms', status: 'done', title: `${mechanisms.length} working mechanisms found`, items: mechanisms.map(m => ({ label: m.text.slice(0, 110), meta: m.kind + (m.strength != null ? ` r=${m.strength}` : '') })) });
 
     const sys = `You are the hook strategist for a maker/experiment YouTube channel. The ONLY metric that matters is the SWIPE RATIO: the % of viewers who keep watching past the first 3–5 seconds instead of swiping away. Everything you write is to minimize swipe-away.
 
@@ -128,29 +162,43 @@ For EACH hook:
 Output ONLY JSON:
 {"hooks":[{"line":"the short grab","visual":"the concrete opening shot (contradiction + human + frozen moment, no text)","principles":["principle names applied to BOTH line and visual"],"why":"one sentence: the causal reason this minimizes swipe-away","modeledOn":"title of the best-retained opening it relates to, or '' if newly constructed"}]}`;
 
-    // ONE deep reasoning pass — Kimi K2.6 internally reasons (chain-of-thought)
-    // over the real openings before answering, so a second round-trip just
-    // doubles latency. The prompt makes it self-check before finalizing.
+    // DRAFT — Kimi reasons over everything and writes 4 wildly-different hooks.
+    emit({ stage: 'draft', status: 'run', title: 'Reasoning + drafting 4 wildly-different hooks', detail: 'Applying the voice, principles, visual mechanics & mechanisms…' });
     let drafts = [];
     try { const o = await llm([{ role: 'system', content: sys }, { role: 'user', content: user }]); drafts = (o && o.hooks) || []; }
-    catch (e) { return { hooks: [], error: 'llm failed: ' + e.message }; }
+    catch (e) { emit({ stage: 'draft', status: 'error', title: 'LLM failed' }); return { hooks: [], error: 'llm failed: ' + e.message }; }
     drafts = drafts.filter(h => h && (h.line || h.text)).map(h => ({
         line: (h.line || h.text || '').trim(), visual: (h.visual || '').trim(),
         principles: Array.isArray(h.principles) ? h.principles.map(p => String(p).trim()).filter(Boolean).slice(0, 4) : [],
         modeledOn: (h.modeledOn || '').trim(), why: (h.why || '').trim()
-    }));
-    if (!drafts.length) return { hooks: [], error: 'no drafts' };
+    })).slice(0, 4);
+    if (!drafts.length) { emit({ stage: 'draft', status: 'error', title: 'No drafts' }); return { hooks: [], error: 'no drafts' }; }
+    emit({ stage: 'draft', status: 'done', title: 'Drafted 4 hooks', items: drafts.map(d => ({ label: d.line })) });
 
-    // attach the real exemplar each relates to (for display)
+    // VALIDATE — check each draft against the working mechanisms + tone rules.
+    emit({ stage: 'validate', status: 'run', title: 'Validating each hook against the mechanisms' });
+    let validations = [];
+    try {
+        const vSys = `You critically validate draft hooks against this channel's WORKING MECHANISMS and its retention tone rules. Be a skeptic — a hook only "passes" if a specific mechanism supports it.`;
+        const vUser = `WORKING MECHANISMS:\n${mechanisms.map(m => `• [${m.kind}] ${m.text}`).join('\n')}\n\n${toneBlock()}\n\nDRAFT HOOKS:\n${drafts.map((d, i) => `${i + 1}. LINE: "${d.line}"  VISUAL: "${d.visual}"`).join('\n')}\n\nFor EACH hook (same order), name the single strongest mechanism/tone-rule that SUPPORTS it, rate its swipe-stopping strength 1-10, and give one concrete concern if any. Output ONLY JSON: {"validations":[{"supportedBy":"the mechanism/rule name","strength":8,"concern":"... or ''"}]}`;
+        const vo = await llm([{ role: 'system', content: vSys }, { role: 'user', content: vUser }]);
+        validations = (vo && Array.isArray(vo.validations)) ? vo.validations : [];
+    } catch (e) { /* validation is best-effort */ }
+    emit({ stage: 'validate', status: 'done', title: 'Validated', items: drafts.map((d, i) => ({ label: d.line, meta: validations[i] ? `${validations[i].strength || '?'}/10 · ${validations[i].supportedBy || ''}` : 'checked' })) });
+
+    // FINALIZE
     const byTitle = {}; examples.forEach(e => { byTitle[(e.title || '').toLowerCase()] = e; });
-    const hooks = drafts.slice(0, 4).map(h => {
+    const hooks = drafts.map((h, i) => {
         const m = byTitle[(h.modeledOn || '').toLowerCase()];
+        const v = validations[i] || {};
         return {
             line: h.line, visual: h.visual, why: h.why, principles: h.principles,
+            validation: (v.strength || v.supportedBy) ? { strength: v.strength || null, supportedBy: v.supportedBy || '', concern: v.concern || '' } : null,
             modeledOn: m ? { title: m.title, views: m.views, swipe: m.swipe } : (h.modeledOn ? { title: h.modeledOn } : null)
         };
     });
-    return { hooks, nExamples: examples.length, nVideos: intel.examples('', 9999).length, principles: HOOK_PRINCIPLES.map(p => p.name) };
+    emit({ stage: 'final', status: 'done', title: 'Done', hooks });
+    return { hooks, nExamples: examples.length, nVideos: intel.examples('', 9999).length, mechanisms, principles: HOOK_PRINCIPLES.map(p => p.name) };
 }
 
-module.exports = { run };
+module.exports = { run, searchMechanisms };

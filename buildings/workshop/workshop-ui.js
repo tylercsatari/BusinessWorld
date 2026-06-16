@@ -2612,16 +2612,40 @@ const WorkshopUI = (() => {
     }
 
     // ===== AI hook suggestions (Kimi, grounded in our channel's principles) =====
+    const STEP_ICON = { search: '\ud83d\udd0e', voice: '\ud83d\udde3\ufe0f', mechanisms: '\u2699\ufe0f', draft: '\u270d\ufe0f', validate: '\ud83e\uddea', final: '\u2705', result: '\u2705', error: '\u26a0\ufe0f' };
     async function suggestHooks(videoId, btn) {
         const v = VideoService.getById(videoId);
         if (!v) return;
         const orig = btn.textContent;
-        btn.disabled = true; btn.textContent = '\u2728 Reasoning through the data\u2026';
+        btn.disabled = true; btn.textContent = '\u2728 Working\u2026';
+        // Open the visualizer overlay immediately \u2014 the user watches it work.
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay'; overlay.style.display = 'flex';
+        overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal wsp-engine-modal">
+            <div class="wsp-picker-header"><span>\u2728 Hook engine <span class="wsp-hint">\u2014 watch it search your data, reason, and validate</span></span><button class="wsp-picker-close" data-close>\u2715</button></div>
+            <div class="wsp-engine-trace" id="wsp-engine-trace"></div>
+            <div class="wsp-suggest-list" id="wsp-engine-hooks"></div>
+        </div>`;
+        (container.querySelector('.workshop-panel') || container).appendChild(overlay);
+        overlay.querySelector('[data-close]').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        const traceEl = overlay.querySelector('#wsp-engine-trace');
+        const steps = {};
+        const renderStep = (ev) => {
+            const id = ev.stage;
+            let row = steps[id];
+            if (!row) { row = document.createElement('div'); row.className = 'wsp-trace-step'; traceEl.appendChild(row); steps[id] = row; }
+            const running = ev.status === 'run';
+            const items = (ev.items || []).map(it => `<div class="wsp-trace-item">${escHtml(it.label || '')}${it.meta ? `<span class="wsp-trace-meta">${escHtml(it.meta)}</span>` : ''}</div>`).join('');
+            row.innerHTML = `<div class="wsp-trace-head ${ev.status === 'error' ? 'err' : running ? 'run' : 'done'}">
+                <span class="wsp-trace-ic">${running ? '<span class="wsp-spin"></span>' : (STEP_ICON[id] || '\u2022')}</span>
+                <span class="wsp-trace-title">${escHtml(ev.title || id)}</span>
+                ${ev.detail ? `<span class="wsp-trace-detail">${escHtml(ev.detail)}</span>` : ''}</div>
+                ${items ? `<div class="wsp-trace-items">${items}</div>` : ''}`;
+            traceEl.scrollTop = traceEl.scrollHeight;
+        };
+
         try {
-            // The server-side Hook Reasoning Engine does the work: retrieve the most
-            // similar REAL past hooks, draft candidates, grade each with the
-            // deterministic retention scorer, refine the weak ones, and rank \u2014
-            // grounded in the channel's data + accumulated memory.
             const res = await fetch('/api/workshop/hook-engine', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2629,48 +2653,57 @@ const WorkshopUI = (() => {
                     existingHooks: PS().hooksOf(v).map(h => h.text || h.label).filter(Boolean)
                 })
             });
-            const data = await res.json().catch(() => ({}));
-            const hooks = (data && data.hooks) || [];
-            if (!hooks.length) { alert('The hook engine returned nothing \u2014 add more context/script and try again.' + (data.error ? '\n(' + data.error + ')' : '')); return; }
-            showHookSuggestions(videoId, hooks, false);
+            if (!res.body) throw new Error('no stream');
+            const reader = res.body.getReader(); const dec = new TextDecoder();
+            let buf = '', finalHooks = null, errMsg = null;
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buf += dec.decode(value, { stream: true });
+                let idx;
+                while ((idx = buf.indexOf('\n\n')) >= 0) {
+                    const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+                    const line = chunk.replace(/^data:\s?/, '');
+                    if (!line) continue;
+                    let ev; try { ev = JSON.parse(line); } catch (e) { continue; }
+                    if (ev.stage === 'result') { finalHooks = (ev.result && ev.result.hooks) || []; }
+                    else if (ev.stage === 'error') { errMsg = ev.error; }
+                    else renderStep(ev);
+                }
+            }
+            if (errMsg) { renderStep({ stage: 'error', status: 'error', title: 'Engine error: ' + errMsg }); return; }
+            const hooks = finalHooks || [];
+            if (!hooks.length) { renderStep({ stage: 'error', status: 'error', title: 'No hooks returned \u2014 add more context/script and retry.' }); return; }
+            renderHookCards(videoId, overlay.querySelector('#wsp-engine-hooks'), hooks, () => overlay.remove());
         } catch (e) {
             console.warn('suggestHooks failed', e);
-            alert('Hook engine failed: ' + e.message);
+            renderStep({ stage: 'error', status: 'error', title: 'Hook engine failed: ' + e.message });
         } finally {
             btn.disabled = false; btn.textContent = orig;
         }
     }
 
-    function showHookSuggestions(videoId, hooks, noData) {
-        const overlay = document.createElement('div');
-        overlay.className = 'wsp-picker-overlay'; overlay.style.display = 'flex';
-        overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal">
-            <div class="wsp-picker-header"><span>✨ Hook engine <span class="wsp-hint">— reasoned from your retention principles toward one metric: swipe-through. Each hook shows the principles it applies + why.</span></span><button class="wsp-picker-close" data-close>✕</button></div>
-            <div class="wsp-suggest-list">
-                ${hooks.map((h, i) => `<div class="wsp-hooksug" data-sug="${i}">
-                    <div class="wsp-hooksug-main">
-                        <div class="wsp-hooksug-line">${icon('hook', 'wsp-row-ic')} <b>${escHtml(h.line)}</b></div>
-                        ${(h.principles && h.principles.length) ? `<div class="wsp-hooksug-princ">${h.principles.map(p => `<span class="wsp-princ-tag">${escHtml(p)}</span>`).join('')}</div>` : ''}
-                        ${h.visual ? `<div class="wsp-hooksug-visual">${icon('film', 'wsp-cc-ic')} <span>${escHtml(h.visual)}</span></div>` : ''}
-                        ${h.why ? `<div class="wsp-hooksug-why">${escHtml(h.why)}</div>` : ''}
-                        ${h.modeledOn && h.modeledOn.title ? `<div class="wsp-hooksug-model">↳ evidence: "${escHtml(h.modeledOn.title)}"${typeof h.modeledOn.swipe === 'number' ? ` — kept ${(100 - h.modeledOn.swipe).toFixed(1)}% past the hook` : (h.modeledOn.views ? ` (${(h.modeledOn.views).toLocaleString()} views)` : '')}</div>` : ''}
-                    </div>
-                    <button class="wsp-mini-btn done" data-use="${i}">＋ Use</button>
-                </div>`).join('')}
-            </div></div>`;
-        const panel = container.querySelector('.workshop-panel');
-        panel.appendChild(overlay);
-        overlay.querySelector('[data-close]').addEventListener('click', () => overlay.remove());
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-        overlay.querySelectorAll('[data-use]').forEach(b => b.addEventListener('click', async () => {
+    // Render the finished hook cards (with validation) into a container.
+    function renderHookCards(videoId, host, hooks, onClose) {
+        host.innerHTML = `<div class="wsp-engine-resulthead">Hooks — each validated against your working mechanisms. Use one, then pick its type.</div>` +
+            hooks.map((h, i) => `<div class="wsp-hooksug" data-sug="${i}">
+                <div class="wsp-hooksug-main">
+                    <div class="wsp-hooksug-line">${icon('hook', 'wsp-row-ic')} <b>${escHtml(h.line)}</b>${h.validation && h.validation.strength ? `<span class="wsp-hooksug-score" title="swipe-stopping strength · ${escAttr(h.validation.supportedBy || '')}">${h.validation.strength}/10</span>` : ''}</div>
+                    ${(h.principles && h.principles.length) ? `<div class="wsp-hooksug-princ">${h.principles.map(p => `<span class="wsp-princ-tag">${escHtml(p)}</span>`).join('')}</div>` : ''}
+                    ${h.visual ? `<div class="wsp-hooksug-visual">${icon('film', 'wsp-cc-ic')} <span>${escHtml(h.visual)}</span></div>` : ''}
+                    ${h.why ? `<div class="wsp-hooksug-why">${escHtml(h.why)}</div>` : ''}
+                    ${h.validation && h.validation.supportedBy ? `<div class="wsp-hooksug-model">✓ validated by: ${escHtml(h.validation.supportedBy)}${h.validation.concern ? ` · ⚠ ${escHtml(h.validation.concern)}` : ''}</div>` : ''}
+                    ${h.modeledOn && h.modeledOn.title ? `<div class="wsp-hooksug-model">↳ evidence: "${escHtml(h.modeledOn.title)}"${typeof h.modeledOn.swipe === 'number' ? ` — kept ${(100 - h.modeledOn.swipe).toFixed(1)}% past the hook` : (h.modeledOn.views ? ` (${(h.modeledOn.views).toLocaleString()} views)` : '')}</div>` : ''}
+                </div>
+                <button class="wsp-mini-btn done" data-use="${i}">＋ Use</button>
+            </div>`).join('');
+        host.querySelectorAll('[data-use]').forEach(b => b.addEventListener('click', async () => {
             const h = hooks[+b.dataset.use];
             const hs = hooksWithEdits(videoId);
             hs.push({ id: 'h' + Math.random().toString(36).slice(2, 10), type: '', text: h.line, visual: h.visual || '', label: '', videoPath: '', videoName: '' });
             await saveHooks(videoId, hs);
-            // Feedback → engine memory: the user kept this one, so it learns to
-            // emulate its style next time.
             fetch('/api/workshop/hook-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: h.line, visual: h.visual || '' }) }).catch(() => {});
-            overlay.remove();
+            if (onClose) onClose();
             rerenderEditor(videoId);
             toast('Hook added — the engine will remember it');
         }));

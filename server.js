@@ -842,22 +842,24 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // The HOOK REASONING ENGINE — runs the draft→score→refine loop server-side,
-    // grounded in real exemplars + the deterministic scorer + accumulated memory.
+    // The HOOK REASONING ENGINE — STREAMS its trace (search → voice → mechanisms
+    // → draft → validate → final) as Server-Sent Events so the UI can visualize
+    // what it's doing live, then the final hooks.
     if (pathname === '/api/workshop/hook-engine' && req.method === 'POST') {
+        const body = await readBody(req);
+        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+        const emit = (ev) => { try { res.write('data: ' + JSON.stringify(ev) + '\n\n'); } catch (e) {} };
         try {
-            const body = await readBody(req);
             const memory = await loadHookMemory();
             const result = await require('./buildings/jarvis/hook-engine').run(
                 { title: body.title, context: body.context, script: body.script, existingHooks: body.existingHooks || [] },
-                hookLlmJson, memory
+                hookLlmJson, memory, emit
             );
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));
+            emit({ stage: 'result', status: 'done', result });
         } catch (e) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message, hooks: [] }));
+            emit({ stage: 'error', status: 'error', error: e.message });
         }
+        res.end();
         return;
     }
 

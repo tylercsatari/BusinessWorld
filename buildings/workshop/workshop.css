@@ -957,6 +957,23 @@
 .wsp-hooksug-pred { background: #e6f7f1; color: #0a7a63; font-weight: 800; font-size: 11px; border-radius: 6px; padding: 1px 7px; }
 .wsp-hooksug-score { margin-left: auto; background: #ede6fb; color: #5b3fb0; font-weight: 800; font-size: 11px; border-radius: 6px; padding: 1px 7px; }
 .wsp-hooksug-model { font-size: 11px; color: #8a7d63; margin-top: 4px; }
+/* Hook engine live visualizer */
+.wsp-engine-modal { max-width: 720px; width: 92vw; }
+.wsp-engine-trace { max-height: 300px; overflow-y: auto; padding: 4px 2px; margin-bottom: 6px; border-bottom: 1px solid #efe9dc; }
+.wsp-trace-step { margin: 2px 0; }
+.wsp-trace-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 6px; border-radius: 8px; }
+.wsp-trace-head.run { background: #eef6ff; }
+.wsp-trace-head.done { color: #1c1c1c; }
+.wsp-trace-head.err { background: #fdecea; color: #b3261e; }
+.wsp-trace-ic { width: 18px; text-align: center; }
+.wsp-trace-title { font-weight: 700; }
+.wsp-trace-detail { color: #8a7d63; font-size: 11.5px; }
+.wsp-trace-items { margin: 2px 0 4px 30px; display: flex; flex-direction: column; gap: 2px; }
+.wsp-trace-item { font-size: 11.5px; color: #5a5446; display: flex; justify-content: space-between; gap: 10px; background: #faf7f1; border-radius: 6px; padding: 2px 8px; }
+.wsp-trace-meta { color: #0a7a63; font-weight: 700; white-space: nowrap; }
+.wsp-spin { display: inline-block; width: 11px; height: 11px; border: 2px solid #cfe2f7; border-top-color: #2b6cb0; border-radius: 50%; animation: wsp-spin 0.7s linear infinite; }
+@keyframes wsp-spin { to { transform: rotate(360deg); } }
+.wsp-engine-resulthead { font-size: 12px; color: #8a7d63; font-weight: 700; padding: 6px 2px 8px; }
 .wsp-hooksug-princ { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .wsp-princ-tag { font-size: 10px; font-weight: 700; color: #6b3fb0; background: #f1ebfb;
     border: 1px solid #ddd0f4; border-radius: 999px; padding: 1px 8px; }
