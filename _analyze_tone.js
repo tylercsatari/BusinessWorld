@@ -30,6 +30,8 @@ async function kimi(messages, maxTok) {
 }
 
 function buildDataset() {
+    const _c = new Date(); _c.setFullYear(_c.getFullYear() - 3);
+    const CUTOFF = _c.toISOString().slice(0, 10).replace(/-/g, '');   // last 3 years
     const tg = JSON.parse(fs.readFileSync('buildings/jarvis/qrd/qrd_targets.json', 'utf8'));
     const base = 'video_data';
     const dirs = fs.readdirSync(base).filter(d => fs.existsSync(path.join(base, d, 'analysis.json')));
@@ -39,7 +41,9 @@ function buildDataset() {
             const a = JSON.parse(fs.readFileSync(path.join(base, d, 'analysis.json'), 'utf8'));
             const id = a.videoId || d; const t = (a.transcript || {}).fullText || '';
             const sw = tg[id] && typeof tg[id].swipe === 'number' ? tg[id].swipe : null;
+            const ud = (a.metadata || {}).uploadDate ? String((a.metadata || {}).uploadDate).replace(/-/g, '').slice(0, 8) : null;
             if (!t || t.length < 120 || sw == null) continue;
+            if (ud && ud < CUTOFF) continue;   // last 3 years only
             const clean = s => s.replace(/\s+/g, ' ').trim();
             const L = t.length;
             // sample the whole arc so the principles reflect the full-video voice

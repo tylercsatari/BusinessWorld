@@ -1,355 +1,355 @@
 {
  "generated": "2026-06-16",
- "nVideos": 211,
+ "nVideos": 138,
  "principles": [
   {
    "rank": 1,
-   "name": "Body-First Framing",
-   "how": "Open every video by stating the extreme physical or emotional experience you will put yourself through, not the object you will build or test.",
-   "why": "Viewers swipe away from object-focused process videos; they stay for human stakes, bodily risk, and personal transformation.",
+   "name": "Anchor to Personal Emotional Stakes",
+   "how": "Open with a specific emotional trigger (revenge, romantic stakes, shame, fear) rather than general curiosity or a product test.",
+   "why": "Curiosity swipes away when the process slows; emotional investment carries viewers through suffering and build phases.",
    "applies": "both"
   },
   {
    "rank": 2,
-   "name": "No Deferred Payoffs",
-   "how": "Deliver the title's central promise with a visible, personal result before the final 10 seconds; never end with 'I'll update you later' or 'Part 2 coming soon' as the only resolution.",
-   "why": "Worst videos defer the climax to future uploads, training viewers to swipe; best videos complete a full emotional arc inside the current video.",
-   "applies": "script"
-  },
-  {
-   "rank": 3,
-   "name": "Present-Tense Survival Mode",
-   "how": "Narrate every beat as if it is happening right now ('my legs are tightening,' 'I am terrified') rather than reflecting on what happened yesterday.",
-   "why": "Present tense creates immediacy and parasocial presence; past tense feels like a detached recap that invites skipping.",
+   "name": "Body as Battleground",
+   "how": "Frame the experiment as a physical transformation of the self (feet, hair, muscles, lungs) instead of an object demonstration.",
+   "why": "Object tests are replaceable and feel like reviews; bodily stakes create visceral empathy and a compulsive need to see the result.",
    "applies": "both"
   },
   {
-   "rank": 4,
-   "name": "Sensory Substitution",
-   "how": "Replace every technical specification (PSI, material name, CAD software) with the physical sensation it causes on your body (pressure, numbness, fear of breaking).",
-   "why": "Technical specs are abstract and skipable; sensory details trigger mirror neurons and force viewers to feel the experience.",
+   "rank": 3,
+   "name": "Escalating Suffering Curve",
+   "how": "Ensure each 25% segment introduces a new, worse physical or emotional problem than the previous segment.",
+   "why": "Flat or improving conditions let attention decay; escalating pain creates a compulsive, can't-look-away rhythm.",
    "applies": "script"
   },
   {
+   "rank": 4,
+   "name": "The Catastrophic Mistake Pivot",
+   "how": "Introduce an unforeseen, mission-threatening problem by the 25% mark that endangers the entire goal, not just a minor build error.",
+   "why": "Technical hiccups are boring; existential threats to the mission create narrative suspense and validate the hook.",
+   "applies": "both"
+  },
+  {
    "rank": 5,
-   "name": "Micro-Conflict Cadence",
-   "how": "Insert a new obstacle, surprise, or escalation every 2-3 sentences; use 'but,' 'however,' or 'then this happened' as mandatory transition words between beats.",
-   "why": "Continuous micro-conflicts prevent the lulls where swipes happen; worst videos have long process explanations without stakes.",
+   "name": "Visceral Sensory Specificity",
+   "how": "Replace technical specs with concrete bodily sensations (numbness, slime between toes, heart rate spike, chemical smell).",
+   "why": "Abstract data distances the viewer; sensory detail triggers mirror neurons and deep immersion.",
    "applies": "script"
   },
   {
    "rank": 6,
-   "name": "Vulnerability-First Hook",
-   "how": "Within the first 15 seconds, confess a fear, shame, weakness, or mistake ('I was terrified,' 'I got called fat,' 'I failed last time').",
-   "why": "Competence is boring; vulnerability creates instant relatability and curiosity about how you will overcome it.",
-   "applies": "hook"
-  },
-  {
-   "rank": 7,
-   "name": "Experiential Framing",
-   "how": "Replace 'I wanted to make/build' with 'I wanted to see what would happen to me if...' in every hook and transition.",
-   "why": "Maker framing promises a process; experiential framing promises a transformation. Viewers retain transformation, not instruction.",
+   "name": "Social Stakes and Public Humiliation",
+   "how": "Perform the challenge in public where strangers react, or anchor it to a named relationship (crush, coach, rival).",
+   "why": "Isolated experiments feel like tutorials; social stakes add embarrassment, judgment, and relatability.",
    "applies": "both"
   },
   {
-   "rank": 8,
-   "name": "Quantified Personal Toll",
-   "how": "Use exact numbers to describe your body or effort (e.g., '33,880 steps,' '144 lbs,' '217 push-ups,' '7,000 calories') instead of vague intensifiers.",
-   "why": "Specific numbers make the pain feel real and measurable; 'a lot' or 'very hard' is forgettable and swipeable.",
+   "rank": 7,
+   "name": "Urgent Breathless Syntax",
+   "how": "Use run-on sentences, minimal punctuation, and chained conjunctions (and then, but then, however) to mimic panic and breathlessness.",
+   "why": "Polished prose signals safety and editing; breathless syntax creates real-time urgency and authenticity.",
    "applies": "script"
   },
   {
+   "rank": 8,
+   "name": "Identity-Level Consequences",
+   "how": "Tie success or failure directly to identity or status (make her proud, embarrassing if I lose, prove him wrong).",
+   "why": "Experiments are entertainment; identity crises are stories that demand resolution.",
+   "applies": "both"
+  },
+  {
    "rank": 9,
-   "name": "Segment Cliffhangers",
-   "how": "End every 25% segment with an explicit reason the viewer must keep watching ('but there's more,' 'this is where things took a turn,' 'you won't believe what happened next').",
-   "why": "Best videos maintain open loops at every quarter mark; worst videos let scenes resolve without forward momentum.",
+   "name": "Definitive Personal Outcome Ending",
+   "how": "Close with a clear emotional judgment (it was insane, I was the weakest Ive ever felt, it wasnt worth it) rather than a product update or CTA.",
+   "why": "Open loops without emotional closure feel like ads; personal resolution satisfies the narrative contract and rewards the watch.",
    "applies": "script"
   },
   {
    "rank": 10,
-   "name": "Narrative Integration of Sponsors",
-   "how": "Introduce the sponsor as a tool that enables the extreme challenge or solves a survival problem within the story, not as a separate endorsement after the action.",
-   "why": "Detached CTAs signal the video is over; integrated tools feel like plot points that extend the adventure and maintain flow.",
+   "name": "Real-Time Discovery Language",
+   "how": "Use phrases like I discovered, I realized, and I learned to mark genuine pivots in understanding, not just plot progression.",
+   "why": "Signals authentic intellectual and emotional engagement rather than a scripted, predetermined demonstration.",
    "applies": "script"
   },
   {
    "rank": 11,
-   "name": "Expectation Violation Hooks",
-   "how": "Start with a common assumption ('you'd probably think this is easy,' 'these shoes are supposed to make you faster') then immediately violate it with a contradictory result.",
-   "why": "Pattern interruption in the first 3 seconds hacks the brain's predictive coding and stops the swipe reflex.",
+   "name": "Underdog and Impossible Odds Framing",
+   "how": "Explicitly state why the challenge is considered impossible or why you are unqualified to do it.",
+   "why": "Creates rooting interest; viewers stay to see if the underdog beats the odds or survives the attempt.",
    "applies": "hook"
   },
   {
    "rank": 12,
-   "name": "Failure Before Success",
-   "how": "Script at least one visible failure, humiliation, or physical breakdown before any achievement or positive result.",
-   "why": "Success without struggle is unsatisfying; struggle creates suspense and makes the payoff feel earned rather than given.",
+   "name": "The 50% Mark Disaster",
+   "how": "Place the worst physical or emotional moment at the 50% or 75% mark, not at the very end.",
+   "why": "Front-loading the disaster creates a recovery arc; saving the pain for the end leaves the middle boring and skippable.",
    "applies": "script"
   },
   {
    "rank": 13,
-   "name": "Second-Person Direct Address",
-   "how": "Use 'you'd probably think,' 'if you've ever wondered,' or 'you can see' at least once in the hook to pull the viewer into your perspective.",
-   "why": "Direct address creates a conversational bond; detached narration feels like a lecture and invites swiping.",
-   "applies": "hook"
+   "name": "Quantify Pain Subjectively",
+   "how": "Describe effort in emotional or bodily terms (starving, exhausted, weakest Ive ever felt) rather than only objective metrics.",
+   "why": "Numbers are cold and external; subjective suffering creates empathy and gives the viewer a felt sense of scale.",
+   "applies": "script"
   },
   {
    "rank": 14,
-   "name": "Breathless Fragment Pacing",
-   "how": "Write sentences under 10 words; use verbal fragments ('Two pounds. Just like that.') and avoid complex subordinate clauses.",
-   "why": "Short fragments force a fast read that matches the dopamine pace of short-form; long sentences feel like work.",
-   "applies": "both"
+   "name": "Organic Tool Integration",
+   "how": "If mentioning a product or app, frame it as a survival necessity or tracking tool within the struggle, never as a feature showcase.",
+   "why": "When the tool is the hero, the human becomes disposable; when it is a lifeline, the human stays central and relatable.",
+   "applies": "script"
   },
   {
    "rank": 15,
-   "name": "Explicit Emotion Labeling",
-   "how": "Name the exact emotion you feel in the moment ('I was embarrassed,' 'this felt relaxing,' 'I got frustrated') rather than describing the scene neutrally.",
-   "why": "Emotional labeling helps viewers mirror your state; neutral descriptions require them to interpret, which costs attention.",
+   "name": "No Update Endings",
+   "how": "Never end with Ill keep you updated or part 2 coming; deliver a definitive result even if you tease a future escalation.",
+   "why": "Update signals the video is incomplete and wastes the viewers time; definitive results reward attention and build trust.",
    "applies": "script"
   },
   {
    "rank": 16,
-   "name": "Transformation Titles",
-   "how": "Title the video as a personal transformation or extreme bodily test ('I became...,' 'What X did to my body,' 'I did...') rather than an object description ('Making...,' 'Testing...').",
-   "why": "Object titles attract makers; transformation titles attract everyone. The algorithm rewards broad retention over niche interest.",
-   "applies": "hook"
+   "name": "Public Vulnerability Over Lab Safety",
+   "how": "Choose locations (Walmart, streets, gyms, restaurants) where real people witness the struggle, not isolated workshops or garages.",
+   "why": "The social gaze amplifies stakes and comedy; lab settings feel controlled, sterile, and therefore skippable.",
+   "applies": "both"
   },
   {
    "rank": 17,
-   "name": "Escalation Transitions",
-   "how": "Use 'but then,' 'however,' 'this is where it got crazy,' or 'the real surprise came' to bridge every beat; never use 'next' or 'then I did.'",
-   "why": "'Next' implies predictable sequence; 'but then' implies chaos and curiosity, which holds viewers through uncertainty.",
+   "name": "However and But Then Pivot Density",
+   "how": "Use a contrast pivot at least once per segment to shift from positive to negative, or from easy to hard.",
+   "why": "Sustained positivity is monotone; rhythmic reversal of fortune creates addictive, novel-like pacing.",
    "applies": "script"
   },
   {
    "rank": 18,
-   "name": "Zero Jargon",
-   "how": "Ban words like 'CAD,' '3D printed,' 'carbon fiber,' 'SolidWorks,' or 'PSI' from the script; translate every mechanic into human impact.",
-   "why": "Jargon excludes casual viewers and signals a slow process video; human impact includes everyone and feels immediate.",
+   "name": "Hyper-Specific Bodily Horror",
+   "how": "Include graphic but authentic physical detail (blisters, dehydration, bleeding feet, leaking slime, hair like plastic).",
+   "why": "Mild discomfort is relatable; extreme bodily consequence is unforgettable, shareable, and proves the cost is real.",
    "applies": "script"
   },
   {
    "rank": 19,
-   "name": "Earned Sequel Tease",
-   "how": "If teasing Part 2, first deliver a full satisfying result (a winner, a number, a visible change) in the current video, then add the tease as a bonus.",
-   "why": "Worst videos use 'to be continued' as a substitute for an ending; best videos use it as an upsell after delivering value.",
+   "name": "Ironic Self-Talk",
+   "how": "Use hyperbolic or ironic internal monologue (this might change the world, I might have made a huge mistake).",
+   "why": "Signals self-awareness and humor, making the creator likable and human even during extreme suffering.",
    "applies": "script"
   },
   {
    "rank": 20,
-   "name": "Hard Deadline Anchor",
-   "how": "Establish a non-negotiable time limit in the first 5 seconds ('before the plane lands,' 'in 24 hours,' 'in one minute').",
-   "why": "Time pressure creates automatic suspense; open-ended projects feel optional and easily swipeable.",
-   "applies": "hook"
+   "name": "Time Pressure and Ticking Clock",
+   "how": "Impose a hard deadline (sunset, competition date, 24 hours, one shot) that is physically barely possible.",
+   "why": "Open-ended experiments lack urgency; deadlines force continuous action with no lulls for the viewer to swipe.",
+   "applies": "both"
   },
   {
    "rank": 21,
-   "name": "Real-Time Body Changes",
-   "how": "Show and narrate your body changing during the video (weight on a scale, blisters forming, heart racing, legs giving out) rather than summarizing at the end.",
-   "why": "Real-time transformation is visual proof that keeps viewers watching for the next physical change.",
+   "name": "The Human Suffers Despite the Tool",
+   "how": "If using advanced equipment (exoskeleton, laser, 3D printer), emphasize how the body still fails, hurts, or exhausts.",
+   "why": "When technology solves everything, there is no story; when the body struggles despite tech, tension and empathy remain.",
    "applies": "script"
   },
   {
    "rank": 22,
-   "name": "Forced Action Verbs",
-   "how": "Replace 'I decided to' with 'I was forced to,' 'I had to,' or 'I couldn't stop' to increase narrative urgency.",
-   "why": "Decisions feel optional; forced actions feel inevitable. Inevitability holds attention because escape is uncertain.",
+   "name": "No Procedural Step Framing",
+   "how": "Never narrate the process as a linear instruction manual (step one, step two); narrate it as a chaotic journey.",
+   "why": "Tutorials are scanned for information and then swiped; journeys are watched for emotion and unpredictability.",
    "applies": "script"
   },
   {
    "rank": 23,
-   "name": "Earned CTA",
-   "how": "Make the call-to-action a result of the challenge ('I earned 1,700 Sweatcoins, you can get the free app') rather than a begging ask ('Subscribe to help me reach 4M').",
-   "why": "Earned CTAs feel like value sharing; begging triggers the swipe reflex because it signals the story is over.",
-   "applies": "script"
+   "name": "Emotional Hook Payoff",
+   "how": "Ensure the final result directly answers the emotional question posed in the hook (the date, the revenge, the fear conquered).",
+   "why": "Technical payoff without emotional payoff feels hollow; resolving the emotional premise validates the entire watch.",
+   "applies": "both"
   },
   {
    "rank": 24,
-   "name": "Mystery Pronoun Payoff",
-   "how": "Use 'THIS' or 'what happened' as a noun to create curiosity gaps ('and THIS happened,' 'watch what this did to my body').",
-   "why": "Vague demonstrative pronouns force the brain to fill the gap by watching; specificity in the hook kills curiosity.",
-   "applies": "hook"
+   "name": "Near-Quitting Moment",
+   "how": "Include a moment where you genuinely consider stopping, then continue out of stubbornness, pride, or desperation.",
+   "Why": "Perfect resilience is robotic and unrelatable; visible fragility followed by persistence creates heroic empathy.",
+   "applies": "script"
   },
   {
    "rank": 25,
-   "name": "Ensemble Reactions",
-   "how": "Include at least one other person speaking or reacting in the first 10 seconds to create social stakes and break up solo narration.",
-   "why": "Solo process narration is monotonous; dialogue and reactions add texture, authenticity, and social proof of the stakes.",
+   "name": "Avoid Sponsor-as-Protagonist",
+   "how": "Never let the brand name, discount code, or product feature list drive the narrative beat or dominate the ending.",
+   "why": "Viewers smell advertorial intent and swipe instantly; the creators skin in the game must remain the driver of the story.",
    "applies": "both"
   },
   {
    "rank": 26,
-   "name": "Three-Sentence Process Cap",
-   "how": "Never explain how something is built or works for more than 3 consecutive sentences; immediately return to the bodily test or consequence.",
-   "why": "Process explanations are where swipes happen; best videos treat mechanics as speed bumps, not destinations.",
-   "applies": "script"
+   "name": "Specific Relationship Anchors",
+   "how": "Name the person whose opinion matters (coach, crush, trainer) and reference them throughout, not just in the hook.",
+   "why": "Abstract stakes dissolve after the hook; named relationships sustain emotional continuity across the entire video.",
+   "applies": "both"
   },
   {
    "rank": 27,
-   "name": "Transformation Ending",
-   "how": "End on a physical or emotional transformation reveal (show the dirty socks, the final weight, the exhausted body) or a shocking consequence, not a verbal promise.",
-   "why": "Visual transformation is proof of payoff; verbal promises feel unfinished and train viewers to swipe next time.",
-   "applies": "script"
-  },
-  {
-   "rank": 28,
-   "name": "Myth-Busting Frame",
-   "how": "Frame the video as testing a specific myth or assumption ('apparently these make you jump higher,' 'you'd think meditation is easy').",
-   "why": "Myths give the viewer a hypothesis to test alongside you, creating active engagement rather than passive observation.",
+   "name": "Second-Person Hook, First-Person Immersion",
+   "how": "Use you or a shocking visual claim in the hook to grab attention, then immediately switch to I for the journey.",
+   "why": "Sustained second person feels gimmicky; first-person immersion creates parasocial attachment and urgency.",
    "applies": "hook"
   },
   {
+   "rank": 28,
+   "name": "The Body Is the Final Reveal",
+   "how": "End by showing the physical change to your body (feet, hair, physique, hands) rather than the object you built.",
+   "why": "Object reveals are anticlimactic and feel like commercials; body reveals are personal and prove the cost was real.",
+   "applies": "script"
+  },
+  {
    "rank": 29,
-   "name": "Micro Three-Act Structure",
-   "how": "Structure even 60-second videos with three acts: Setup (the claim), Crisis (the unexpected pain/problem), Resolution (the twist or result).",
-   "why": "Stories with shape feel complete; shapeless process videos feel like homework that can be abandoned at any point.",
+   "name": "Active Voice Only",
+   "how": "Use active, subject-verb constructions where the body or emotion is the subject (my feet hurt, I panicked).",
+   "why": "Passive voice (it was noticed, the mold was cracked) creates distance; active voice creates immediacy and pain.",
    "applies": "script"
   },
   {
    "rank": 30,
-   "name": "Concrete Antagonist",
-   "how": "Name the active enemy (asthma, the cold, a rival, equipment failure, blisters) and personify it as a force working against you.",
-   "why": "Conflict requires an antagonist; videos without one feel like tutorials rather than stories with stakes.",
+   "name": "Make Failure Funny or Terrifying",
+   "how": "If the experiment fails, frame the failure as absurd, scary, or humiliating, not as a neutral disappointment.",
+   "why": "Neutral failure is a dead end; emotional failure is still entertainment and often more memorable than success.",
    "applies": "script"
   },
   {
    "rank": 31,
-   "name": "No Subscription Begging",
-   "how": "Eliminate 'subscribe,' 'follow for updates,' or 'help me reach X million' from the final 5 seconds; replace with story resolution.",
-   "why": "Subscription begging signals the content is over and trains viewers to leave; story resolution trains them to rewatch.",
-   "applies": "script"
-  },
-  {
-   "rank": 32,
-   "name": "Personal Hyperbole",
-   "how": "Use extreme but personal comparisons ('like a superhero,' 'the most painful thing I've ever done,' 'impossible') tied to your own experience, not generic hype.",
-   "why": "Generic hype is ignored; personal hyperbole is authentic and sets a high stakes bar that demands verification.",
+   "name": "Obsession Scale",
+   "how": "Quantify preparation in obsessive terms (600 hours, months of training, years of fear) rather than casual weekend project language.",
+   "why": "Scale of obsession signals total commitment; casual effort signals low stakes and low reward.",
    "applies": "both"
   },
   {
-   "rank": 33,
-   "name": "Five-Second Brand Rule",
-   "how": "Keep any brand mention under 5 seconds and immediately tie it to an observable outcome ('the noise canceling blocked the wind').",
-   "why": "Long brand reads feel like ads and trigger swipe; brief, outcome-tied mentions feel like plot devices.",
+   "rank": 32,
+   "name": "Direct Audience Questions at Emotional Peaks",
+   "how": "Ask the audience a question (should I keep going?) only after a moment of extreme vulnerability or pain.",
+   "why": "Questions at neutral moments feel like engagement bait; questions at peaks feel like genuine consultation and shared stakes.",
    "applies": "script"
   },
   {
+   "rank": 33,
+   "name": "Avoid I Wanted to See Repetition",
+   "how": "Vary the motivation verb: I needed to, I was forced to, I couldnt stop, I had to prove.",
+   "why": "Wanted to see is passive curiosity; stronger verbs signal compulsion, obsession, and necessity.",
+   "applies": "both"
+  },
+  {
    "rank": 34,
-   "name": "In Media Res Opening",
-   "how": "Start with the most extreme moment of the experience (the jump, the shock, the fall) and only rewind 3-5 seconds for context if needed.",
-   "why": "Starting at the peak creates instant curiosity about how you got there; slow builds lose impatient scrollers.",
-   "applies": "hook"
+   "name": "The 25% Problem Manifestation",
+   "how": "Ensure the physical problem hinted at in the hook actually manifests by the 25% mark.",
+   "why": "Delayed consequences feel like clickbait; early manifestation validates the hooks promise and builds trust.",
+   "applies": "script"
   },
   {
    "rank": 35,
-   "name": "Rule of Three Attempts",
-   "how": "Script escalating attempts in threes: first attempt fails or is underwhelming, second is harder/worse, third produces the unexpected twist.",
-   "why": "The Rule of 3 creates a satisfying rhythm and builds anticipation for the final variation.",
+   "name": "No Hard CTA Closures",
+   "how": "End with a narrative tease or emotional punctuation, not subscribe, check my profile, or link in bio.",
+   "why": "Explicit CTAs at the end trigger the ad reflex swipe; narrative teases feel like story continuation.",
    "applies": "script"
   },
   {
    "rank": 36,
-   "name": "Conversational Roughness",
-   "how": "Preserve verbal roughness ('um,' 'like,' breathlessness, interrupted thoughts) rather than polishing into smooth narration.",
-   "why": "Polished narration feels pre-recorded and detached; roughness feels like a real friend FaceTiming you.",
-   "applies": "both"
+   "name": "Use Smell and Touch",
+   "how": "Explicitly mention smells, textures, and temperatures, not just sights and sounds.",
+   "why": "Visuals are expected; olfactory and tactile details are unexpected and deeply immersive.",
+   "applies": "script"
   },
   {
    "rank": 37,
-   "name": "Co-Conspirator Address",
-   "how": "Share secret realizations with the viewer ('I realized something,' 'I had an idea,' 'I noticed a problem nobody saw') to make them feel inside your head.",
-   "why": "Insider status creates loyalty; external observation creates distance that makes swiping easier.",
+   "name": "The And It Was All For Nothing Beat",
+   "how": "Include a moment where the suffering seems pointless or the payoff underwhelming, then pivot to a deeper meaning.",
+   "why": "Pure triumph is predictable; existential doubt followed by resolution is complex and emotionally satisfying.",
    "applies": "script"
   },
   {
    "rank": 38,
-   "name": "No Retrospective Language",
-   "how": "Ban phrases like 'looking back,' 'in hindsight,' or 'eventually I learned'; stay in the uncertainty of the present moment.",
-   "why": "Retrospection implies you survived and know the answer, killing suspense; present uncertainty keeps viewers hooked.",
+   "name": "No Feature Lists",
+   "how": "Never recite product capabilities (reduces exertion 39%, 10 motors, $20,000 laser) as narrative beats.",
+   "why": "Specs are for reviews and kill momentum; stories are for humans and sustain attention.",
    "applies": "script"
   },
   {
    "rank": 39,
-   "name": "Sensory Adjective Priority",
-   "how": "Use cold, slippery, dizzy, freezing, smoky, numb, and loud instead of strong, big, advanced, or high-quality.",
-   "why": "Sensory words activate the body; evaluative words are abstract and skipable.",
-   "applies": "both"
-  },
-  {
-   "rank": 40,
-   "name": "Build-to-Test Ratio",
-   "how": "If showing a build, limit it to 10% of the runtime and only use it to set up the bodily test that follows.",
-   "why": "Build footage is process; test footage is story. Best videos invert the maker-channel ratio to prioritize story.",
+   "name": "Raw Speech Imperfection",
+   "how": "Keep verbal stumbles, sentence fragments, and repetitive phrasing in the script rather than polishing into fluent prose.",
+   "why": "Fluency feels rehearsed and corporate; imperfection signals authenticity and documentary truth.",
    "applies": "script"
   },
   {
+   "rank": 40,
+   "name": "The Cost Must Be Visible",
+   "how": "Ensure the physical toll is visible to the camera (shaking, redness, limping, dirt) and narrated in real time.",
+   "why": "Invisible suffering is theoretical; visible suffering is proof, spectacle, and emotional evidence.",
+   "applies": "both"
+  },
+  {
    "rank": 41,
-   "name": "Self-Testing Reframe",
-   "how": "Replace 'I built X' with 'I put myself through X' or 'I tested X on my own body' in every title and hook.",
-   "why": "Self-testing implies risk and transformation; building implies craft and time, which swipers avoid.",
+   "name": "Frame the Challenge as Punishment",
+   "how": "Position the experiment as a self-imposed penalty or reckoning (shock collar for slow running, called fat so became bodybuilder).",
+   "why": "Punishment narratives have built-in moral weight and stakes; arbitrary challenges feel like content filler.",
    "applies": "both"
   },
   {
    "rank": 42,
-   "name": "Visual Payoff Close",
-   "how": "Make the final 10 seconds a visual reveal (the dirty socks, the broken shoes, the final push-up count) rather than a verbal summary.",
-   "why": "The brain processes visual proof faster than text; verbal summaries feel like credits rolling.",
+   "name": "No Pretty Good Middle",
+   "how": "Never let the middle of the video feel comfortable or successful for more than a few seconds before introducing a new problem.",
+   "why": "Comfort is the enemy of retention; sustained discomfort is the engine that prevents mid-video swipes.",
    "applies": "script"
   },
   {
    "rank": 43,
-   "name": "Dialogue Snippets",
-   "how": "Drop in off-camera voices, friend reactions, or brief exchanges ('Mom, I don't think that's the best plan') to break narration.",
-   "why": "Pure narration fatigues; dialogue resets attention and adds social proof of the stakes.",
+   "name": "Specific Named Pain",
+   "how": "Use precise medical or bodily terms (blisters, dehydration, numbness, heart rate spike) instead of generic it hurt.",
+   "why": "Precision creates credibility and visceral imagination; vagueness creates boredom and emotional distance.",
    "applies": "script"
   },
   {
    "rank": 44,
-   "name": "Emotional Scoreboard",
-   "how": "When comparing two things (with/without, USA vs Canada), keep the scoreboard personal ('my legs hurt more,' 'I felt slower') rather than purely metric.",
-   "why": "Metrics alone are sterile; personal emotion makes the scoreboard matter and feel relatable.",
+   "name": "Answer the Would You Question",
+   "how": "Frame the conclusion as an answer to whether the viewer should try it (it wasnt worth it, surprisingly it didnt feel hot).",
+   "why": "Viewers implicitly ask should I do this; answering provides utility and narrative closure simultaneously.",
    "applies": "script"
   },
   {
    "rank": 45,
-   "name": "Open Mistake Policy",
-   "how": "Admit at least one miscalculation, embarrassment, or failure openly; never present yourself as fully prepared or expert.",
-   "why": "Competence kills curiosity; mistakes create suspense and relatability that hold viewers through the arc.",
+   "name": "Avoid Build-Process Voyeurism",
+   "how": "If building something, show only the moments where the build fights back or breaks; skip smooth assembly.",
+   "why": "Assembly is process porn for makers only; conflict is story for everyone and sustains broad retention.",
    "applies": "script"
   },
   {
    "rank": 46,
-   "name": "Narrative CTA Escalation",
-   "how": "If selling a product, frame it as the natural next level of the challenge ('to take it to the next level, we built a website/company').",
-   "why": "CTAs that feel like plot continuation maintain momentum; CTAs that feel like commercials end the story.",
+   "name": "Live Event Teases Over Sequel Teases",
+   "how": "Tease future content as a live stream, world record attempt, or public event, not as a YouTube sequel or part 2.",
+   "why": "Live events feel like unmissable appointments; sequels feel like content farming and discourage investment.",
    "applies": "script"
   },
   {
    "rank": 47,
-   "name": "Surprise Discovery Structure",
-   "how": "Replace step-by-step instructions with surprise discoveries narrated in real time ('and then I noticed something I didn't expect').",
-   "why": "Steps are predictable; discoveries are not. Unpredictability is the currency of retention.",
+   "name": "Reaction Before Result",
+   "how": "Show your live reaction to the result before showing the result itself, or intercut them.",
+   "why": "Displaying the result alone is informational; experiencing it through your reaction is emotional and sticky.",
    "applies": "script"
   },
   {
    "rank": 48,
-   "name": "Inclusive We",
-   "how": "Use 'we' when including friends or team to share failure and amplify camaraderie ('we calculated,' 'we brought in water balloons').",
-   "why": "'We' diffuses individual failure and creates ensemble energy; 'I' alone can feel isolating or arrogant.",
+   "name": "No Neutral Summaries",
+   "how": "End with a polarized judgment (loved it, hated it, was insane, wasnt worth it) rather than a balanced recap.",
+   "why": "Neutrality is forgettable; polarization triggers comment engagement, memory, and emotional imprinting.",
    "applies": "script"
   },
   {
    "rank": 49,
-   "name": "Failure-Frame Incomplete",
-   "how": "If the result is genuinely incomplete, frame it as a catastrophic or funny failure rather than a neutral 'to be continued.'",
-   "why": "A funny failure is still a payoff; a neutral tease is a broken promise that trains viewers to swipe next time.",
-   "applies": "script"
+   "name": "Camera as Witness, Not Showcase",
+   "how": "Narrate as if the camera caught you unexpectedly during a private ordeal, not as a polished demonstration.",
+   "why": "Showcase mode triggers skepticism and detachment; witness mode triggers empathy and suspense.",
+   "applies": "both"
   },
   {
    "rank": 50,
-   "name": "Title-Payoff Contract",
-   "how": "Ensure the final frame physically shows the exact promise made in the title/thumbnail (the white socks are dirty, the date is won/lost, the steps are counted).",
-   "why": "Viewers swipe when they feel cheated by the title; delivering the exact visual proof builds trust and rewatch.",
+   "name": "One-Chance Stakes",
+   "how": "Explicitly state that you have only one attempt, one shot, or that failure is permanent and irreversible.",
+   "why": "Multiple attempts feel like practice; single-attempt stakes feel like performance and demand attention.",
    "applies": "both"
   }
  ]

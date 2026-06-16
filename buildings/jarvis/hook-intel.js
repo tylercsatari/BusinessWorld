@@ -39,10 +39,20 @@ function tokens(s) {
 // precomputed from each posted video's analysis.json) — NOT arbitrary fragments.
 // Each entry: { ytId, title, views, opening } where `opening` is the actual first
 // ~600 chars the creator spoke, so the model sees the whole hook in context.
+// Only learn from the LAST 3 YEARS of videos (computed at runtime so it stays
+// current). Cutoff = today minus 3 years, as YYYYMMDD. Entries without a date
+// are kept (can't date them out).
+function recentCutoff() {
+    const d = new Date(); d.setFullYear(d.getFullYear() - 3);
+    return d.toISOString().slice(0, 10).replace(/-/g, '');   // YYYYMMDD
+}
 function corpus() {
     if (_corpus && Date.now() - _corpusAt < CACHE_MS) return _corpus;
     const arr = readJson('hook-corpus.json') || [];
-    _corpus = arr.map(e => ({ ...e, _tok: tokens((e.title || '') + ' ' + (e.opening || '')) }));
+    const cut = recentCutoff();
+    _corpus = arr
+        .filter(e => !e.date || String(e.date) >= cut)   // last 3 years only
+        .map(e => ({ ...e, _tok: tokens((e.title || '') + ' ' + (e.opening || '')) }));
     _corpus.sort((a, b) => (b.views || 0) - (a.views || 0));
     _corpusAt = Date.now();
     return _corpus;
@@ -69,6 +79,7 @@ function examples(query, limit) {
     const top = scored.filter(s => s.score >= 1).slice(0, n).map(s => strip(s.e));
     return top.length ? top : c.slice(0, n).map(strip);
 }
+function corpusSize() { return corpus().length; }
 
 function build() {
     if (_packCache && Date.now() - _packAt < CACHE_MS) return _packCache;
@@ -116,4 +127,4 @@ function build() {
     return _packCache;
 }
 
-module.exports = { build, examples };
+module.exports = { build, examples, corpusSize };

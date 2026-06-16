@@ -96,7 +96,7 @@ async function run(opts, llm, memory, emit) {
     const topic = `${title} ${context} ${script}`.trim();
     memory = memory || {};
 
-    emit({ stage: 'search', status: 'run', title: 'Searching your past videos', detail: `Scanning ${intel.examples('', 9999).length} real openings for the most similar + best-retained…` });
+    emit({ stage: 'search', status: 'run', title: 'Searching your past videos', detail: `Scanning ${intel.corpusSize()} real openings for the most similar + best-retained…` });
     const examples = intel.examples(topic, 10);          // REAL openings, swipe-ranked
     const pack = intel.build();
     if (!examples.length) { emit({ stage: 'search', status: 'error', title: 'No corpus' }); return { hooks: [], error: 'no corpus' }; }
@@ -198,7 +198,7 @@ Output ONLY JSON:
         };
     });
     emit({ stage: 'final', status: 'done', title: 'Done', hooks });
-    return { hooks, nExamples: examples.length, nVideos: intel.examples('', 9999).length, mechanisms, principles: HOOK_PRINCIPLES.map(p => p.name) };
+    return { hooks, nExamples: examples.length, nVideos: intel.corpusSize(), mechanisms, principles: HOOK_PRINCIPLES.map(p => p.name) };
 }
 
 module.exports = { run, searchMechanisms };

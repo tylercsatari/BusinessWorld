@@ -1,81 +1,76 @@
 {
  "generated": "2026-06-16",
- "nMoments": 191,
+ "nMoments": 86,
  "insights": [
   {
-   "name": "Prove the Number",
-   "rule": "If the line states a quantified result (weight, steps, dollars, time), cut to the screen, scale, receipt, or check displaying that exact figure while the line lands.",
-   "why": "Abstract claims are forgettable; visual proof converts the promise into concrete evidence, forcing the viewer to trust the premise immediately."
+   "name": "Extreme Close-Up on Claim",
+   "rule": "If the line names a specific object, body part, or substance, fill the frame with an extreme close-up of exactly that thing.",
+   "why": "Sensory immersion turns a verbal claim into physical evidence the eye can verify."
   },
   {
-   "name": "Show the Named Object",
-   "rule": "The instant the line names a specific object (shoes, slime, device, app), center a close-up of that object in frame; never let the audio outrun the visual.",
-   "why": "Locking audio and visual onto the same subject eliminates confusion and satisfies the brain’s immediate need to identify the topic."
+   "name": "Aftermath Before Cause",
+   "rule": "If the line teases a crazy result or ending, show the physical aftermath—sweat, empty space, or damage—instead of the event that caused it.",
+   "why": "Viewers stay to reverse-engineer what caused the state they see on screen."
   },
   {
-   "name": "Contradict the Audio",
-   "rule": "If the line states an expectation or brag (\"it’s easy,\" \"turned out great\"), show visual evidence of the opposite (a failed timer, a hostile environment, a pained expression).",
-   "why": "Cognitive dissonance between what is heard and seen creates an open loop that the viewer must close by continuing to watch."
+   "name": "Physicalize the Abstract",
+   "rule": "If the line references a digital, conceptual, or app-based idea, show the most absurdly tangible physical version of it.",
+   "why": "Making the intangible concrete creates a curiosity gap between what was said and what is shown."
   },
   {
-   "name": "Start Moving Before Explaining",
-   "rule": "Begin with a body in motion (exiting a car, pulling up shorts, walking away) while the voiceover opens with context like \"here's how\" or \"let me explain.\"",
-   "why": "Movement captures peripheral attention before the ear processes language; the viewer stays to sync the action with the explanation."
+   "name": "Negative Space for Loss",
+   "rule": "If the line states something is gone, missing, or failed, show the empty space or void where that thing should be.",
+   "why": "Absence creates a visual question mark that demands an explanation."
   },
   {
-   "name": "Pair the Mundane with the Extreme",
-   "rule": "Match a philosophical, scientific, or shocking statement with an ordinary, everyday visual (opening a door, walking down steps, stepping over a curb).",
-   "why": "The mismatch generates mystery; viewers cannot resolve why a radical claim is paired with a boring image, so they keep watching."
+   "name": "Premature Payoff",
+   "rule": "If the line sets up a reveal, show the result visually before the audio finishes explaining it.",
+   "why": "Giving the reward first while withholding context makes viewers stick around for the story."
   },
   {
-   "name": "Reveal the Aftermath First",
-   "rule": "Open on the result or emotional aftermath (sweaty face, silhouette by a car, walking away with weights) while the line admits failure or claims an impossible feat.",
-   "why": "Showing the effect before the cause creates a curiosity gap; the audience needs the backstory to explain the visual state."
+   "name": "Stakes-Scale Alignment",
+   "rule": "If the line mentions extreme cost, effort, or scale, show a wide shot, silhouette, or massive apparatus that matches the claim.",
+   "why": "Visual weight justifies the audio stakes and signals that the content is epic, not casual."
   },
   {
-   "name": "Layer Text for Reframe",
-   "rule": "Overlay text that re-frames or intensifies the spoken line (e.g., a timer with \"Extremely painful\" while the line says \"easy,\" or \"Banned\" over a shoe).",
-   "why": "Dual-channel processing (reading + listening) deepens engagement; text can add irony or stakes that audio alone cannot deliver quickly."
+   "name": "Domain Mismatch",
+   "rule": "Pair a line about one domain with a visual from an unexpected or opposite domain.",
+   "why": "Cognitive dissonance forces the brain to stop scrolling to resolve the contradiction."
   },
   {
-   "name": "Introduce the Face Before the Stunt",
-   "rule": "When announcing an extreme challenge, show the speaker looking at the camera or standing in the environment before showing the action.",
-   "why": "Viewers invest in people, not tasks; establishing the human stake creates parasocial buy-in that outlasts pure spectacle."
+   "name": "Freeze the Climax",
+   "rule": "If the line references a specific timed peak or burst, show the frame mid-action, mid-explosion, or mid-fall.",
+   "why": "Peak motion creates kinetic energy and the illusion that the viewer might miss the landing."
   },
   {
-   "name": "Split Screen for Scale",
-   "rule": "When the line describes intensity, complexity, or multiple actors, use a split frame to show simultaneous action rather than sequential cuts.",
-   "why": "A split frame visually proves the claim of intensity; it packs more information into the same seconds, raising perceived value."
+   "name": "Baseline Before Shot",
+   "rule": "If the line references a transformation or timeline, show the clear before state as the visual.",
+   "why": "Establishing the gap between past and present gives the viewer a reason to watch the transformation."
   },
   {
-   "name": "Use Environment as Counterpoint",
-   "rule": "Place the subject in a setting that clashes with the audio goal (snowy street for making a drink, beach for qualifying, sun silhouette for failure).",
-   "why": "Environmental contradiction signals that the story defies normal logic, suggesting the outcome will be unexpected."
+   "name": "Apparatus Over Face",
+   "rule": "If the line describes an experiment, invention, or build, show the machine, setup, or weird object instead of a talking head.",
+   "why": "Complex physical setups signal effort and make the premise feel engineered rather than faked."
   },
   {
-   "name": "Tighten on the Stakes",
-   "rule": "When the line includes a price, ban, or rare label, cut to a tight close-up of the object with overlaid text reinforcing the superlative.",
-   "why": "Close-ups increase perceived value and urgency; they signal that this object is the entire reason for the video."
+   "name": "Human Cost Close-Up",
+   "rule": "If the line describes physical struggle, pain, or failure, cut to a tight shot of the face, sweat, or body in distress.",
+   "why": "Emotional empathy and schadenfreude lock attention on the human consequence of the challenge."
   },
   {
-   "name": "Show the Cast for Social Stakes",
-   "rule": "If the line involves other people (friends, competitors, a crush), show the group or the other person in the frame immediately.",
-   "why": "Social dynamics are inherently sticky; introducing the cast turns an individual claim into a relational drama."
+   "name": "Mirror as Reveal Surface",
+   "rule": "If the line describes a change to personal appearance, show the subject examining themselves in a mirror or reflective surface.",
+   "why": "Mirrors create a self-contained reveal moment that feels intimate and authentic."
   },
   {
-   "name": "Frame Physical Vulnerability",
-   "rule": "When the line admits failure, pain, or exhaustion, show the body in that exact state (sweaty skin, heavy breathing, walking away defeated).",
-   "why": "Authentic physical states trigger empathy; viewers mirror the stress and need to know what caused it."
+   "name": "Understate and Over-Show",
+   "rule": "If the line delivers a flat, mundane, or understated conclusion, pair it with the most extreme or bizarre visual from the story.",
+   "why": "The contrast between mild audio and wild visual is inherently humorous and sticky."
   },
   {
-   "name": "Show Preparation to Validate the Promise",
-   "rule": "While teasing a result or full video, show the preparatory action (putting on gear, stepping over a threshold, holding a remote) rather than a static pose.",
-   "why": "Preparation signals the promise is already in motion, transforming a hypothetical hook into an active narrative."
-  },
-  {
-   "name": "Use Intimate Framing for Emotional Reveals",
-   "rule": "For personal revelations (crushes, pride, failure), use mirrors, close-ups, or bedroom/bathroom settings that feel private and unguarded.",
-   "why": "Intimate framing creates a sense of privileged access; viewers feel they are being confided in, which strengthens retention."
+   "name": "Meta-Visual Proof",
+   "rule": "If the line references the video's own process, livestream, or edit, show the monitor, timeline, or physical evidence of that process.",
+   "why": "Self-reference builds authenticity and gives viewers a behind-the-curtain reason to trust the premise."
   }
  ]
 }
