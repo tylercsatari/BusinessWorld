@@ -40,7 +40,15 @@ function buildDataset() {
             const id = a.videoId || d; const t = (a.transcript || {}).fullText || '';
             const sw = tg[id] && typeof tg[id].swipe === 'number' ? tg[id].swipe : null;
             if (!t || t.length < 120 || sw == null) continue;
-            vids.push({ id, title: ((a.metadata || {}).title || '').slice(0, 100), swipe: sw, opening: t.slice(0, 380).replace(/\s+/g, ' '), mid: t.slice(Math.floor(t.length / 2), Math.floor(t.length / 2) + 300).replace(/\s+/g, ' ') });
+            const clean = s => s.replace(/\s+/g, ' ').trim();
+            const L = t.length;
+            // sample the whole arc so the principles reflect the full-video voice
+            const samp = (frac) => clean(t.slice(Math.floor(L * frac), Math.floor(L * frac) + 280));
+            vids.push({
+                id, title: ((a.metadata || {}).title || '').slice(0, 100), swipe: sw,
+                opening: clean(t.slice(0, 400)),
+                early: samp(0.25), mid: samp(0.5), late: samp(0.78), ending: clean(t.slice(-260))
+            });
         } catch (e) {}
     }
     vids.sort((a, b) => a.swipe - b.swipe);
@@ -51,13 +59,13 @@ async function main() {
     if (!process.env.FIREWORKS_API_KEY) { console.error('Need FIREWORKS_API_KEY'); process.exit(1); }
     const vids = buildDataset();
     console.log('analyzable videos (transcript + swipe):', vids.length);
-    const best = vids.slice(0, 45);
-    const worst = vids.slice(-30);
+    const best = vids.slice(0, 32);
+    const worst = vids.slice(-22);
 
     // ---- 1) 50 ranked tone / writing principles (contrastive) ----
     console.log('Deriving 50 ranked tone/writing principles...');
-    const fmt = v => `[swipe ${v.swipe}%] "${v.title}"\n   HOOK: ${v.opening}\n   MID: ${v.mid}`;
-    const sys1 = `You are a viral-video analyst. You are given this maker/experiment channel's BEST-retained videos (lowest swipe-away %) and WORST-retained videos, each with the opening (hook) and a mid-script sample. Find what the best ones DO with TONE and WRITING that the worst ones don't — for both hooks and scripts.`;
+    const fmt = v => `[swipe ${v.swipe}%] "${v.title}"\n   HOOK: ${v.opening}\n   25%: ${v.early}\n   50%: ${v.mid}\n   78%: ${v.late}\n   END: ${v.ending}`;
+    const sys1 = `You are a viral-video analyst. You are given this maker/experiment channel's BEST-retained videos (lowest swipe-away %) and WORST-retained videos, each sampled across its whole arc (hook, 25%, 50%, 78%, ending). Find what the best ones DO with TONE and WRITING — across the WHOLE video, not just the hook — that the worst ones don't.`;
     const user1 = `BEST-RETAINED (these keep viewers):\n${best.map(fmt).join('\n\n')}\n\nWORST-RETAINED (these get swiped):\n${worst.map(fmt).join('\n\n')}\n\nDerive 50 OPERATIONALIZED tone/writing principles that make this channel's hooks and scripts go viral — concrete and actionable (a writer could follow each), drawn from what separates best from worst. Rank by importance (how strongly it separates best from worst). Output ONLY JSON:\n{"principles":[{"rank":1,"name":"short name","how":"the operational rule a writer follows","why":"why it cuts swipe / holds retention","applies":"hook | script | both"}]}\nExactly 50, ranked 1 (most important) to 50.`;
     let tone = null;
     try { tone = await kimi([{ role: 'system', content: sys1 }, { role: 'user', content: user1 }]); } catch (e) { console.error('tone call failed', e.message); }
