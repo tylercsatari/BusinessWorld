@@ -895,7 +895,7 @@ const WorkshopUI = (() => {
         const tasks = showTypes.task ? filteredComponents().filter(c => c.source === 'task') : [];
         const orders = showTypes.order ? filteredOrders() : [];
         const inv = showTypes.inventory ? filteredInventory() : [];
-        const total = vids.length + allComps.length + orders.length + inv.length;
+        const total = vids.length + comps.length + tasks.length + orders.length + inv.length;
 
         const breakdown = [
             showTypes.video ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">${icon('video', 'wsp-cc-ic')} ${vids.length}</span>` : '',
