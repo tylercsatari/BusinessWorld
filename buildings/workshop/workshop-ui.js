@@ -2052,8 +2052,21 @@ const WorkshopUI = (() => {
                 ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
                 <span class="wsp-comp-stage">${escHtml(c.status || 'design')}</span>
             </div>
+            ${c.status !== 'done' ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done — push this component to its next stage">✓ Done</button>` : ''}
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
         </div>`;
+    }
+
+    // Advance a component to the next status in its track (build/order/task).
+    async function advanceComponent(componentId, rerenderFn) {
+        const c = SVC().components.getById(componentId);
+        if (!c || c.status === 'done') return;
+        const track = statusesForSource(c.source);
+        const idx = track.indexOf(c.status);
+        const next = (idx >= 0 && idx < track.length - 1) ? track[idx + 1] : 'done';
+        await SVC().components.update(componentId, { status: next });
+        toast(next === 'done' ? '✓ Component done' : `✓ Component → “${next}”`);
+        if (rerenderFn) rerenderFn();
     }
 
     // Delete a component from anywhere. The remove must always take effect on
@@ -2101,6 +2114,10 @@ const WorkshopUI = (() => {
         scope.querySelectorAll('[data-comp-del]').forEach(btn => btn.addEventListener('click', (e) => {
             e.stopPropagation();
             deleteComponentById(btn.dataset.compDel, rerenderFn);
+        }));
+        scope.querySelectorAll('[data-comp-done]').forEach(btn => btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            advanceComponent(btn.dataset.compDone, rerenderFn || (() => renderTab()));
         }));
     }
 
@@ -2234,6 +2251,7 @@ const WorkshopUI = (() => {
                     </div>
 
                     <div class="wsp-cd-footer">
+                        <button class="wsp-mini-btn done" id="cd-done">✓ Done — push to next stage</button>
                         <button class="wsp-mini-btn danger" id="cd-delete">🗑 Delete component</button>
                     </div>
                 </div>
@@ -2317,6 +2335,21 @@ const WorkshopUI = (() => {
         q('#cd-delete').addEventListener('click', async () => {
             const gone = await deleteComponentById(componentId, null);
             if (gone) { overlay.remove(); rerenderEditor(selectedVideo ? selectedVideo.id : (video ? video.id : null)); }
+        });
+        // DONE — push the component to its next status (build: design→cad→…→done;
+        // order: needed→ordered→done; task: todo→doing→done). 'done' takes it off
+        // the board.
+        q('#cd-done').addEventListener('click', async () => {
+            const c2 = cur();
+            const track = statusesForSource(c2.source);
+            const idx = track.indexOf(c2.status);
+            if (c2.status === 'done') { alert('This component is already done.'); return; }
+            const next = (idx >= 0 && idx < track.length - 1) ? track[idx + 1] : 'done';
+            dirty = true;
+            await saveComp({ status: next });
+            renderStatusCycle();
+            toast(next === 'done' ? '✓ Component done' : `✓ Moved to “${next}”`);
+            if (next === 'done') close();
         });
 
         // Name (debounced)
