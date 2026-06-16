@@ -397,8 +397,19 @@ const WorkshopUI = (() => {
 
     // --- Filters (apply to the whole board: dots, counts, stage panel) ---
 
+    // A profile granted only some pipeline stages should see ONLY the videos
+    // currently sitting at one of those stages — their responsibility, nothing
+    // else. The owner (all stages visible) sees everything. When a video's
+    // deliverable is met it leaves that stage's frontier and disappears here.
+    function isStageScoped() {
+        return PS().STAGES.some(s => !stageVisible(s.id));
+    }
     function filteredVideos() {
         let list = pipelineVideos();
+        if (isStageScoped()) {
+            const ctx = ctxNow();
+            list = list.filter(v => PS().frontier(v, ctx).some(id => stageVisible(id)));
+        }
         if (fSearch) {
             const q = fSearch.toLowerCase();
             list = list.filter(v => (v.name || '').toLowerCase().includes(q) || (v.hook || '').toLowerCase().includes(q));
@@ -659,26 +670,61 @@ const WorkshopUI = (() => {
 
     // Video row — works inside a stage panel (stage given: Done/Decide actions)
     // or in the all-items list (stage null: frontier chips instead of actions)
+    // Exactly what each stage's worker must DELIVER to push the video forward.
+    // The deliverable is shown plainly on every video so it's unambiguous.
+    const STAGE_DELIVERABLE = {
+        ideate: 'Queued from the Library', hook: 'At least one hook — a LINE + a TYPE (animation/practical)',
+        script: 'A written script (100+ characters)', animation: 'The animation hook video uploaded',
+        decomp: 'Decide each branch + add ≥1 component (or mark “No decomposition needed”)',
+        design: 'Design research — upload your notes / reference files', propdesign: 'A prop & set plan — upload it',
+        cad: 'A CAD file for every component that needs one', pcb: 'A PCB file for every component that needs one',
+        order: 'Every order received', precision: '3D-printed / machined parts — upload a photo',
+        software: 'Code / firmware done — upload the build or a screenshot', assembly: 'The build assembled — upload a photo',
+        artistic: 'Painted / finished — upload a result photo', hookfilm: 'The practical hook filmed & uploaded',
+        film: 'Main footage shot — upload it or a proof clip', voiceover: 'A voiceover file linked',
+        edit: 'All THREE final video versions uploaded', splittest: 'Thumbnail / title variants — upload them',
+        post: 'Publish the video'
+    };
+    // How a stage gets completed: 'decomp' (validation gate), 'post' (publish),
+    // 'result' (upload a result file → auto-advance), or 'auto' (a structured
+    // artifact handled by the editor's own upload UI → auto-advance). NONE of
+    // them is a bare "Done" — completion always requires the deliverable.
+    function deliverableKind(stageId) {
+        if (stageId === 'decomp') return 'decomp';
+        if (stageId === 'post') return 'post';
+        if (PS().isResultStage(stageId)) return 'result';
+        return 'auto';
+    }
+    function stageResultsFor(v, stageId) {
+        return (v.stageResults && Array.isArray(v.stageResults[stageId])) ? v.stageResults[stageId] : [];
+    }
+
     function stageVideoRowHtml(v, stage) {
         const dl = deadlineInfo(v);
         const expanded = expandedStageVideoId === v.id;
         const openOrders = SVC().ordersForVideo(v.id).filter(o => o.status !== 'received').length;
         const sp = sponsorName(v.sponsorId);
-        // Decomposition can't be completed without the branch decisions —
-        // that's the validation gate that keeps irrelevant videos away from
-        // CAD/design/build people.
-        const needsDecisions = stage && stage.id === 'decomp' && !PS().branchesDecided(v);
-        const actions = !stage ? ''
-            : needsDecisions
-                ? `<button class="wsp-mini-btn done" data-decide="${v.id}" title="Decide which branches this video needs before completing Decomposition">🧩 Decide</button>`
-                : `<button class="wsp-mini-btn done" data-done="${v.id}" title="Mark ${escAttr(stage.label)} done for this video">✓ Done</button>`;
+        let actions = '';
+        if (stage) {
+            const kind = deliverableKind(stage.id);
+            if (kind === 'decomp') {
+                if (!PS().branchesDecided(v)) actions = `<button class="wsp-mini-btn done" data-decide="${v.id}" title="Decide which branches this video needs">🧩 Decide branches</button>`;
+                else if (!(componentsForVideo(v.id).length || v.noDecomp)) actions = `<span class="wsp-deliv-chip pending" title="Break the video into at least one component, or mark “No decomposition needed”">＋ add a component ↓</span>`;
+                else actions = `<button class="wsp-mini-btn done" data-done="${v.id}" title="Complete Decomposition — sends the video to its build branches">✓ Complete</button>`;
+            } else if (kind === 'post') {
+                actions = `<button class="wsp-mini-btn done" data-publish="${v.id}" title="Publish — the deliverable for Posting">🚀 Publish</button>`;
+            } else {
+                // auto + result stages: completion is the deliverable upload itself
+                actions = `<span class="wsp-deliv-chip pending" title="${escAttr(STAGE_DELIVERABLE[stage.id] || '')}">📋 deliverable ↓</span>`;
+            }
+        }
         return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}" data-id="${v.id}">
             <div class="wsp-stage-video-head" data-expand="${v.id}">
                 <span class="wsp-caret">${expanded ? '▾' : '▸'}</span>
                 <div class="wsp-stage-video-main">
                     <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}</div>
                     <div class="wsp-stage-video-meta">
-                        ${!stage ? frontierChips(v, 3) : ''}
+                        ${!stage ? frontierChips(v, 3) : `<span class="wsp-deliv-need" title="What you need to deliver to move this forward">📋 ${escHtml(STAGE_DELIVERABLE[stage.id] || stage.label)}</span>`}
                         ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
                         ${stage && stage.id === 'order' && openOrders ? `<span class="wsp-deadline soon">📦 ${openOrders} order${openOrders === 1 ? '' : 's'} open</span>` : ''}
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
@@ -686,21 +732,52 @@ const WorkshopUI = (() => {
                 </div>
                 <div class="wsp-stage-video-actions">${actions}</div>
             </div>
-            ${expanded ? stageVideoBodyHtml(v) : ''}
+            ${expanded ? stageVideoBodyHtml(v, stage) : ''}
         </div>`;
     }
 
-    // The drop-down IS the full editor — same fields as the detail page,
-    // in pipeline order, plus the action buttons.
-    function stageVideoBodyHtml(v) {
+    // The drop-down IS the full editor — same fields as the detail page, in
+    // pipeline order. A clear DELIVERABLE banner sits on top; result-upload
+    // stages get their uploader right there. No Post/Return — the only way
+    // forward is the deliverable, which auto-advances the video off the queue.
+    function stageVideoBodyHtml(v, stage) {
+        const delivBlock = stage ? deliverableBlockHtml(v, stage) : '';
         return `<div class="wsp-stage-video-body">
+            ${delivBlock}
             <div class="workshop-detail-fields wsp-inline-editor">${detailFieldsHtml(v)}</div>
             <div class="wsp-svb-actions">
-                <button class="workshop-action-btn post-btn" data-inline-post="${v.id}">Post Video</button>
-                <button class="workshop-action-btn" data-inline-library="${v.id}">Return to Library</button>
                 <button class="workshop-action-btn danger-btn" data-inline-delete="${v.id}">Delete</button>
             </div>
         </div>`;
+    }
+
+    // The deliverable banner shown at the top of an expanded stage row.
+    function deliverableBlockHtml(v, stage) {
+        const kind = deliverableKind(stage.id);
+        const label = STAGE_DELIVERABLE[stage.id] || stage.label;
+        if (kind === 'result') {
+            const results = stageResultsFor(v, stage.id);
+            const canUpload = !!v.project;
+            return `<div class="wsp-deliv-banner" data-deliv-stage="${stage.id}">
+                <div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+                <div class="wsp-deliv-sub">Upload your result and the video moves on automatically.</div>
+                <div id="wsp-deliv-list">${results.map((r, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('film', 'wsp-row-ic')} ${escHtml(r.name || (r.path || '').split('/').pop())}</span><button class="wsp-mini-btn danger" data-deliv-del="${i}">✕</button></div>`).join('')}</div>
+                ${canUpload
+                    ? `<div class="wsp-add-row"><input type="file" id="wsp-deliv-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-deliv-up">⬆ Upload result</button></div>`
+                    : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project (below) first — results go to that project's Dropbox folder.</div></div>`}
+            </div>`;
+        }
+        if (kind === 'post') {
+            return `<div class="wsp-deliv-banner"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+                <div class="wsp-deliv-sub">Hit Publish when it's live; the video hatches into the Pen.</div></div>`;
+        }
+        if (kind === 'decomp') {
+            return `<div class="wsp-deliv-banner"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+                <div class="wsp-deliv-sub">Decide the branches and add components in the Decomposition section below.</div></div>`;
+        }
+        // auto stages — the structured upload lives in a section below
+        return `<div class="wsp-deliv-banner"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+            <div class="wsp-deliv-sub">Complete it in the section below — the video advances automatically, no “done” needed.</div></div>`;
     }
 
     // Shared row bindings for the stage panel and the all-items list
@@ -715,6 +792,8 @@ const WorkshopUI = (() => {
         }));
         panel.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.open)));
         panel.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => openBranchDialog(b.dataset.decide, true)));
+        panel.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => completeDecomp(b.dataset.done)));
+        panel.querySelectorAll('[data-publish]').forEach(b => b.addEventListener('click', () => postVideoAction(VideoService.getById(b.dataset.publish))));
         bindCompStatusRows(panel, () => renderTab());
         bindOrderRows(panel);
 
@@ -725,11 +804,63 @@ const WorkshopUI = (() => {
                 bindDetailFields(ev);
                 initMediaSection(ev, 'vo');
                 initEditSlots(ev);   // Editing — three final-video upload slots (was detail-page only)
-                panel.querySelectorAll('[data-inline-post]').forEach(b => b.addEventListener('click', () => postVideoAction(VideoService.getById(expandedStageVideoId))));
-                panel.querySelectorAll('[data-inline-library]').forEach(b => b.addEventListener('click', () => backToLibraryAction(VideoService.getById(expandedStageVideoId))));
+                if (selectedStageId && PS().isResultStage(selectedStageId)) initStageResultUploader(ev, selectedStageId, panel);
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
             }
         }
+    }
+
+    // Complete Decomposition — gated on the deliverable (decisions + ≥1 component
+    // or the "No decomposition" skip). This is the one manual completion left,
+    // and it still can't be clicked without the deliverable being satisfied.
+    async function completeDecomp(videoId) {
+        const v = VideoService.getById(videoId);
+        if (!v) return;
+        if (!PS().branchesDecided(v)) { openBranchDialog(videoId, true); return; }
+        if (!(componentsForVideo(videoId).length || v.noDecomp)) { alert('Add at least one component, or use “No decomposition needed”, before completing Decomposition.'); return; }
+        const ss = { ...(v.stageState || {}), decomp: 'done' };
+        await VideoService.update(videoId, { stageState: ss, status: normalizedStatus(v) });
+        toast('Decomposition complete — moving forward');
+        renderTab();
+    }
+
+    // Result-deliverable uploader for "do the work, upload your result" stages.
+    // Uploading ≥1 file completes the stage (auto-check) → the video advances and
+    // drops off this queue on the next render.
+    async function initStageResultUploader(v, stageId, scope) {
+        const banner = scope.querySelector('[data-deliv-stage]');
+        if (!banner) return;
+        const fileInput = banner.querySelector('#wsp-deliv-file');
+        const upBtn = banner.querySelector('#wsp-deliv-up');
+        banner.querySelectorAll('[data-deliv-del]').forEach(b => b.addEventListener('click', async () => {
+            const fresh = VideoService.getById(v.id) || v;
+            const arr = stageResultsFor(fresh, stageId).filter((_, i) => i !== Number(b.dataset.delivDel));
+            const sr = { ...(fresh.stageResults || {}), [stageId]: arr };
+            await VideoService.update(v.id, { stageResults: sr, status: normalizedStatus(fresh) });
+            renderTab();
+        }));
+        if (!upBtn || !fileInput) return;
+        upBtn.addEventListener('click', async () => {
+            const files = fileInput.files ? [...fileInput.files] : [];
+            if (!files.length) { alert('Choose a file first.'); return; }
+            const fresh = VideoService.getById(v.id) || v;
+            if (!fresh.project) { alert('Select a Channel Project first.'); return; }
+            const root = await dropboxRootPath();
+            const folder = `${root}/${fresh.project}/${stageId}`;
+            const host = upBtn.parentElement;
+            const bar = uploadProgressBar(host, files[0].name);
+            try {
+                const added = [];
+                for (const file of files) { const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress); added.push({ path: meta.path_display || meta.path_lower, name: meta.name || file.name }); }
+                const cur = stageResultsFor(VideoService.getById(v.id) || fresh, stageId);
+                const sr = { ...((VideoService.getById(v.id) || fresh).stageResults || {}), [stageId]: [...cur, ...added] };
+                await VideoService.update(v.id, { stageResults: sr, status: normalizedStatus(fresh) });
+                bar.stage('Done ✓ — moving forward');
+                toast('Deliverable uploaded — video advanced');
+                expandedStageVideoId = null;   // it's leaving this stage's queue
+                renderTab();
+            } catch (e) { alert('Upload failed: ' + e.message); }
+        });
     }
 
     // No stage selected → show EVERYTHING currently in flight (filter-driven)
@@ -832,11 +963,9 @@ const WorkshopUI = (() => {
         document.getElementById('wsp-stage-owner').addEventListener('change', (ev) => {
             SVC().setStageOwner(selectedStageId, ev.target.value).catch(err => console.warn('stage owner save failed', err));
         });
-        panel.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', async () => {
-            b.disabled = true;
-            await setStageState(b.dataset.done, selectedStageId, 'done');
-            renderTab();
-        }));
+        // [data-done] (Complete Decomposition) + [data-publish] are bound in
+        // bindPanelRows. No generic bare-"Done" any more — completion is the
+        // deliverable.
         bindPanelRows(panel);
         // Read-only stage: you can view/expand everything but not change it. Disable
         // the write controls (owner, done, status pills, moves) and keep navigation.
@@ -1563,10 +1692,6 @@ const WorkshopUI = (() => {
             <div class="wsp-progress-head">
                 <label>Pipeline Progress</label>
                 <div class="wsp-progress-head-actions">
-                    <select id="wsp-move-stage" class="wsp-inline-select" title="Veto: jump this video to any stage — everything before it gets marked done (hook/script/voiceover/hook video must exist if the move passes them)">
-                        <option value="">Move to stage…</option>
-                        ${PS().STAGES.map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`).join('')}
-                    </select>
                     <button class="wsp-mini-btn" id="wsp-edit-branches">${icon('decomp', 'wsp-sub-ic')} ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
                 </div>
             </div>
@@ -1690,16 +1815,6 @@ const WorkshopUI = (() => {
         // Hook instances (add/type/label/delete/footage)
         bindHookInstances(v, root, rerender);
 
-        // Veto: jump straight to any stage
-        get('wsp-move-stage').addEventListener('change', async (e) => {
-            const target = e.target.value;
-            e.target.value = '';
-            if (!target) return;
-            await saveFieldsFor(VideoService.getById(v.id) || v, true); // capture edits before validating
-            const moved = await moveVideoToStage(VideoService.getById(v.id) || v, target);
-            if (moved) rerender();
-        });
-
         // Stage checklist
         root.querySelectorAll('.wsp-check').forEach(row => {
             const stageId = row.dataset.stage;
@@ -1784,8 +1899,6 @@ const WorkshopUI = (() => {
                     Back
                 </button>
                 <div class="workshop-detail-actions">
-                    <button class="workshop-action-btn post-btn" id="workshop-post">Post Video</button>
-                    <button class="workshop-action-btn" id="workshop-to-library">Return to Library</button>
                     <button class="workshop-action-btn danger-btn" id="workshop-delete">Delete</button>
                 </div>
             </div>
@@ -1799,8 +1912,6 @@ const WorkshopUI = (() => {
         `;
 
         document.getElementById('workshop-back-btn').addEventListener('click', () => saveAndBack());
-        document.getElementById('workshop-post').addEventListener('click', () => postVideoAction(selectedVideo));
-        document.getElementById('workshop-to-library').addEventListener('click', () => backToLibraryAction(selectedVideo));
         document.getElementById('workshop-delete').addEventListener('click', () => deleteVideoAction(selectedVideo));
 
         bindDetailFields(v);

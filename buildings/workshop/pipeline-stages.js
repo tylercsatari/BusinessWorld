@@ -173,6 +173,20 @@ const PipelineStages = (() => {
         }
     };
 
+    // "Do the work, then upload your result" stages — the deliverable is at least
+    // one result file uploaded to the stage's folder (video.stageResults[stageId]).
+    // The moment a result lands, the stage auto-completes and the video advances
+    // off the worker's queue. (Stages that already have a structured artifact —
+    // hook/cad/pcb/order/voiceover/edit/animation/hookfilm — keep their own check.)
+    const RESULT_DELIVERABLE_STAGES = ['design', 'propdesign', 'precision', 'software', 'assembly', 'artistic', 'film', 'splittest'];
+    RESULT_DELIVERABLE_STAGES.forEach(id => {
+        if (AUTO_CHECKS[id]) return;
+        AUTO_CHECKS[id] = {
+            desc: 'auto: done once at least one result file is uploaded for this stage',
+            test: (v) => { const r = v && v.stageResults && v.stageResults[id]; return Array.isArray(r) && r.length > 0; }
+        };
+    });
+
     // Hook instances: split-test variants of the hook, each typed
     // (animation/practical) with its own footage file. Legacy single-hook
     // fields (hookType/hookVideoPath) read as one instance.
@@ -335,6 +349,9 @@ const PipelineStages = (() => {
         ancestorsOf, descendantsOf,
         layerOf: id => layerOf[id] ?? 0,
         autoDesc: id => (AUTO_CHECKS[id] ? AUTO_CHECKS[id].desc : ''),
+        hasAutoCheck: id => !!AUTO_CHECKS[id],
+        isResultStage: id => RESULT_DELIVERABLE_STAGES.indexOf(id) >= 0,
+        RESULT_DELIVERABLE_STAGES,
         stateOf, effectiveState, isDone, isReady, frontier, isComplete, progress,
         branchesDecided, blockers, isInPipeline, hooksOf
     };

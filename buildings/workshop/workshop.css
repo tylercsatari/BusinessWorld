@@ -940,6 +940,16 @@
 .wsp-comp-tag.build { background: #e6f7f1; color: #0a7a63; }
 .wsp-comp-tag.order { background: #fff3e0; color: #b06000; }
 .wsp-comp-tag.task { background: #fdeede; color: #b3601a; }
+/* Per-stage deliverable — the worker's single clear requirement */
+.wsp-deliv-need { font-size: 11px; color: #7a6f57; background: #faf6ec; border: 1px solid #ece2cd;
+    border-radius: 6px; padding: 1px 7px; max-width: 100%; }
+.wsp-deliv-chip { font-size: 11px; font-weight: 700; color: #9a6a14; background: #fff6e6;
+    border: 1px solid #f0d9a8; border-radius: 7px; padding: 3px 9px; white-space: nowrap; }
+.wsp-deliv-banner { background: #eef6ff; border: 1px solid #cfe2f7;
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.wsp-deliv-title { font-size: 13px; color: #1c4e80; font-weight: 700; }
+.wsp-deliv-sub { font-size: 11.5px; color: #5b748f; margin-top: 2px; }
+.wsp-deliv-banner #wsp-deliv-list:not(:empty) { margin-top: 8px; }
 /* AI hook suggestion cards — line + visual + rationale + predicted swipe-through */
 .wsp-hooksug { display: flex; align-items: flex-start; gap: 10px; padding: 10px 4px; border-bottom: 1px solid #efe9dc; }
 .wsp-hooksug-main { flex: 1 1 auto; min-width: 0; }
