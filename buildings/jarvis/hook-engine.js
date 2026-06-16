@@ -14,6 +14,33 @@
  */
 const intel = require('./hook-intel');
 const visuals = require('./hook-visuals');
+const fs = require('fs');
+const path = require('path');
+
+// Data-derived knowledge (from _analyze_tone.js over every posted video).
+let _tone = null, _vd = null, _kbAt = 0;
+function loadKb() {
+    if (_kbAt && Date.now() - _kbAt < 10 * 60 * 1000) return;
+    try { _tone = JSON.parse(fs.readFileSync(path.join(__dirname, 'hook-tone-principles.json'), 'utf8')); } catch (e) { _tone = null; }
+    try { _vd = JSON.parse(fs.readFileSync(path.join(__dirname, 'visual-dialogue-insights.json'), 'utf8')); } catch (e) { _vd = null; }
+    _kbAt = Date.now();
+}
+// The top tone/writing rules, derived by contrasting best- vs worst-retained
+// videos. These are the channel's actual voice — they take precedence over
+// generic advice. (hook/both rules first, capped to keep context bounded.)
+function toneBlock() {
+    loadKb();
+    const ps = (_tone && _tone.principles) || [];
+    if (!ps.length) return '';
+    const pick = ps.filter(p => p.applies !== 'script').slice(0, 22);
+    return `=== THIS CHANNEL'S TONE / WRITING RULES (ranked, derived from every posted video's retention — write in THIS voice) ===\n${pick.map(p => `${p.rank}. ${p.name}: ${p.how}`).join('\n')}\n=== END TONE RULES ===`;
+}
+function vdBlock() {
+    loadKb();
+    const ins = (_vd && _vd.insights) || [];
+    if (!ins.length) return '';
+    return `=== HOW LINE + VISUAL PAIR at high-retention moments (do this) ===\n${ins.map(i => `• ${i.name}: ${i.rule}`).join('\n')}\n=== END LINE+VISUAL PAIRING ===`;
+}
 
 // The principles that explain WHY a hook keeps viewers past the swipe point —
 // each grounded in this channel's own retention experiments (the numbers come
@@ -74,11 +101,15 @@ Below are this channel's best-RETAINED similar openings — sorted by lowest swi
 ${fmtOpenings(examples)}
 === END OPENINGS ===
 
-What a hook IS: the LINE is ONLY the GRAB — the first 1–2 sentences (8–25 words), the opener that stops the swipe, NOT a summary of the video. e.g. "This is an indestructible chest plate. But can it save my life?" — that's the whole hook; the rest is the video.
+What a hook IS: the LINE is ONLY the GRAB — the first 1–2 sentences (8–25 words), the opener that stops the swipe, NOT a summary of the video. The rules below are derived from THIS channel's own retention data and define its actual viral voice — follow them over any generic instinct.
 
-A hook = LINE + VISUAL, and THE VISUAL IS HALF THE HOOK. The opening shot must be designed from the visual mechanics below and must embody the SAME principle as the line (an open loop → a frozen about-to-happen moment; novelty → a wrong-material / impossible object; stakes → visible danger on a human).
+${toneBlock()}
+
+A hook = LINE + VISUAL, and THE VISUAL IS HALF THE HOOK. The opening shot must be designed from the visual mechanics below and must embody the SAME principle as the line.
 
 ${visuals.block()}
+
+${vdBlock()}
 
 ${findings}${wins}`;
 

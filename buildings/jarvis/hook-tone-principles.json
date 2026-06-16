@@ -1,0 +1,356 @@
+{
+ "generated": "2026-06-16",
+ "nVideos": 211,
+ "principles": [
+  {
+   "rank": 1,
+   "name": "Open with your body or emotion, never the object",
+   "how": "The first line of the hook must contain I, my, or a feeling. If the first word is This, These, It, or a material/price, rewrite.",
+   "why": "Object-first openings train viewers to expect a product review; body-first openings promise a human story they cannot look away from.",
+   "applies": "hook"
+  },
+  {
+   "rank": 2,
+   "name": "Replace specs with stakes in the first 10 seconds",
+   "how": "Delete all mentions of price, material, brand, or model from the first two sentences. Replace with the personal consequence if the test fails or succeeds.",
+   "why": "Specs create emotional distance; stakes create parasocial investment and a reason to care.",
+   "applies": "hook"
+  },
+  {
+   "rank": 3,
+   "name": "Frame the video as a survival challenge, not a build log",
+   "how": "Reframe every build or test as a question about your body or life: Can I survive... / Will I break... instead of Will this work...",
+   "why": "Viewers retain human jeopardy; they swipe away from engineering iterations and process documentation.",
+   "applies": "both"
+  },
+  {
+   "rank": 4,
+   "name": "Use I wanted to see... instead of I designed... or I made...",
+   "how": "Change every I built/designed/printed to I decided to, I wanted to see if, or I set out to. Let the object be the method, never the subject.",
+   "why": "Agency and curiosity are universally relatable; craftsmanship is only interesting after the human hook is set.",
+   "applies": "both"
+  },
+  {
+   "rank": 5,
+   "name": "Insert a physical or emotional obstacle before explaining mechanics",
+   "how": "Before describing how anything works, state one thing that hurts, scares, exhausts, or limits you personally.",
+   "why": "Obstacles create narrative gravity; mechanics create cognitive load that triggers swipes.",
+   "applies": "hook"
+  },
+  {
+   "rank": 6,
+   "name": "Describe internal sensations, not external adjustments",
+   "how": "In mid-script, write what your muscles, heart, lungs, or mind are doing. Delete sentences about redesigning, reprinting, or recalibrating unless framed as your frustration.",
+   "why": "Sensation is immersive; adjustment is boring because it removes the human witness from the action.",
+   "applies": "script"
+  },
+  {
+   "rank": 7,
+   "name": "Write hooks in breathless clauses under 25 words each",
+   "how": "Break every long sentence into two or three short fragments. Use periods instead of commas where possible.",
+   "why": "Fast pacing mirrors excitement and prevents the viewer from mentally checking out during complex explanations.",
+   "applies": "hook"
+  },
+  {
+   "rank": 8,
+   "name": "Promise a human payoff, not a mechanical result",
+   "how": "End the hook by teasing a transformation in your body, relationships, or emotional state, not by showing the object functioning correctly.",
+   "why": "People share and finish videos for feelings, not functionality; mechanical payoffs feel like advertisements.",
+   "applies": "hook"
+  },
+  {
+   "rank": 9,
+   "name": "Make failure hurt you, not just break the object",
+   "how": "When something fails, describe the physical pain, embarrassment, or lost opportunity you feel, not the broken part or design flaw.",
+   "why": "Personal cost makes failure a plot twist; broken parts make it a repair manual that viewers do not need.",
+   "applies": "script"
+  },
+  {
+   "rank": 10,
+   "name": "Include a paradox or counterintuitive claim in the title and hook",
+   "how": "Lead with something that sounds impossible, like gain weight in a minute. Avoid literal, descriptive titles that state exactly what the object is.",
+   "why": "Cognitive dissonance forces the brain to stay for resolution; literal descriptions let the brain assume it already knows the outcome.",
+   "applies": "hook"
+  },
+  {
+   "rank": 11,
+   "name": "Use vulnerability as the primary driver",
+   "how": "State something you are bad at, scared of, or embarrassed by within the first 15 seconds. Lead with weakness, not competence.",
+   "why": "Perfection is unrelatable and intimidating; vulnerability creates parasocial bonds that make viewers root for you.",
+   "applies": "hook"
+  },
+  {
+   "rank": 12,
+   "name": "Add a finite time limit or countdown to create urgency",
+   "how": "Put a hard deadline in the hook: in one minute, before the plane lands, within 24 hours.",
+   "why": "Open-ended tests feel like meandering vlogs; countdowns feel like events with inevitable consequences.",
+   "applies": "both"
+  },
+  {
+   "rank": 13,
+   "name": "Replace to test this with to see what would happen to me",
+   "how": "Search for the phrase to test and replace it with to find out if I could or to see how I would feel.",
+   "why": "Test is clinical and detached; see what happens is voyeuristic, personal, and irresistible.",
+   "applies": "both"
+  },
+  {
+   "rank": 14,
+   "name": "Ask a rhetorical question that puts the viewer in your shoes",
+   "how": "Use Have you ever wondered... or If you have ever... to bridge your experience to the viewer's imagination.",
+   "why": "Direct address converts passive scrolling into active imagination, which physically holds the thumb from swiping.",
+   "applies": "hook"
+  },
+  {
+   "rank": 15,
+   "name": "Avoid inventory lists or step-by-step sequencing in hooks",
+   "how": "Delete Starting with X... or Step one... from the opening. Move procedural details to the mid-script and bury them inside action.",
+   "why": "Lists signal tutorial; narrative signals entertainment. Tutorials get saved and swiped; stories get watched.",
+   "applies": "hook"
+  },
+  {
+   "rank": 16,
+   "name": "Use but or however to introduce emotional whiplash, not design pivots",
+   "how": "Every pivot word should change your emotional or physical state, not the engineering approach or materials.",
+   "why": "Emotional turns keep viewers locked in; technical pivots feel like delays that reward a swipe.",
+   "applies": "both"
+  },
+  {
+   "rank": 17,
+   "name": "Show messy bodily reality over polished prototypes",
+   "how": "Include blisters, vomit, sweat, tears, asthma attacks, or heartbreak in the hook or early script. Hide clean B-roll of the object.",
+   "why": "Messy reality is proof and spectacle; polish feels like a sponsored product review that viewers instinctively distrust.",
+   "applies": "both"
+  },
+  {
+   "rank": 18,
+   "name": "Make the object serve a personal story arc",
+   "how": "Ask what does this do TO me, not what does this do. Let every build step be motivated by a human need like winning a date or beating a fear.",
+   "why": "Tools are inherently boring; quests are inherently compelling. The object must be the obstacle or the weapon, not the protagonist.",
+   "applies": "both"
+  },
+  {
+   "rank": 19,
+   "name": "Use present-tense narration for immediacy",
+   "how": "Write as if it is happening now: My heart is pounding instead of My heart was pounding.",
+   "why": "Present tense collapses time and feels like live experience; past tense feels like a recap that can be skipped.",
+   "applies": "script"
+  },
+  {
+   "rank": 20,
+   "name": "Include social stakes involving other humans",
+   "how": "Mention another person who will judge, reward, humiliate, or date you based on the outcome.",
+   "why": "Social stakes multiply tension beyond personal willpower; solo tests feel like lonely hobbies.",
+   "applies": "hook"
+  },
+  {
+   "rank": 21,
+   "name": "End every mid-script beat on a cliffhanger about your condition",
+   "how": "Finish each 30-second segment with But then I realized... or And that is when everything changed... referring to your body or emotions.",
+   "why": "Script cliffhangers reset attention spans at the exact moment they decay; object cliffhangers do not.",
+   "applies": "script"
+  },
+  {
+   "rank": 22,
+   "name": "Use single-sentence paragraphs for pacing",
+   "how": "Hit return after every sentence in the hook and mid-script. Never stack two long sentences without a visual or emotional break.",
+   "why": "Visual white space forces the mouth to speed up and the viewer to lean in, creating physical engagement.",
+   "applies": "both"
+  },
+  {
+   "rank": 23,
+   "name": "Prioritize what happened to me over how it works",
+   "how": "For every technical explanation, demand two sentences of personal consequence. If you cannot, cut the explanation entirely.",
+   "why": "Mechanism is the reward for retention, not the bait; viewers swipe when they feel lectured.",
+   "applies": "script"
+  },
+  {
+   "rank": 24,
+   "name": "Use absurd personal motivation rather than practical utility",
+   "how": "Motivate the build by a childish dream like being a superhero or going viral rather than efficiency, cost savings, or utility.",
+   "why": "Practicality is forgettable; absurdity is shareable because it signals entertainment value, not education.",
+   "applies": "hook"
+  },
+  {
+   "rank": 25,
+   "name": "Eliminate cost, brand, and material mentions from hooks",
+   "how": "Move price and material names to the mid-script or omit them. Never let $20,000 or carbon fiber be the first descriptor.",
+   "why": "Cost framing makes the video about wealth and privilege; experience framing makes it about universal humanity.",
+   "applies": "hook"
+  },
+  {
+   "rank": 26,
+   "name": "Use sensory details instead of functional descriptions",
+   "how": "Replace it generated 200 PSI with it felt like my legs were being crushed. Replace it burned through with it smelled like burning hair.",
+   "why": "Sensory data activates mirror neurons; specs and functional descriptions activate none.",
+   "applies": "both"
+  },
+  {
+   "rank": 27,
+   "name": "Create contrast between expectation and reality",
+   "how": "Explicitly state what you expected, then show the opposite. I thought it would be easy. I was horribly wrong.",
+   "why": "Violated expectations are the core of narrative satisfaction; meeting expectations is the core of boredom.",
+   "applies": "both"
+  },
+  {
+   "rank": 28,
+   "name": "Make the viewer root for your body, not the machine",
+   "how": "Write so that if the machine breaks, the viewer worries about YOU. If the machine works, the viewer celebrates YOU.",
+   "why": "Anthropomorphizing the creator beats anthropomorphizing the creation; people do not cry for broken plastic.",
+   "applies": "both"
+  },
+  {
+   "rank": 29,
+   "name": "Use I noticed or I realized to share discoveries intimately",
+   "how": "Frame discoveries as accidental personal observations rather than calculated engineering outcomes or planned tests.",
+   "why": "Noticing feels like friendship and authenticity; calculating feels like school or a sales pitch.",
+   "applies": "script"
+  },
+  {
+   "rank": 30,
+   "name": "Keep hooks under 60 words before the first twist or payoff",
+   "how": "Count the words in your hook. If you have not hit a problem, surprise, or visual payoff by word 60, cut everything before that point.",
+   "why": "The brain decides to swipe in under three seconds; density of events beats density of information.",
+   "applies": "hook"
+  },
+  {
+   "rank": 31,
+   "name": "Introduce a new human problem in mid-script, not just a new engineering problem",
+   "how": "At the 30% and 60% marks, introduce a new physical limit or emotional low, not a new broken part or redesign.",
+   "why": "New engineering problems feel repetitive; new human limits feel escalating and prove the challenge is real.",
+   "applies": "script"
+  },
+  {
+   "rank": 32,
+   "name": "Use specific, body-centric numbers over abstract engineering figures",
+   "how": "Prefer 144 lbs, 200 beats per minute, or 33,000 steps to 200 PSI, 10,000 RPM, or 400 lb capacity.",
+   "why": "Body numbers are instantly relatable; engineering numbers are alienating and signal a dry tech video.",
+   "applies": "both"
+  },
+  {
+   "rank": 33,
+   "name": "Replace passive voice with I plus active verb plus feeling",
+   "how": "Change the plastic broke to I felt the plastic snap and thought I was going to fall.",
+   "why": "Passive voice removes the human witness; active voice demands empathy and creates a protagonist.",
+   "applies": "both"
+  },
+  {
+   "rank": 34,
+   "name": "Include a before/after of your emotional or physical state early",
+   "how": "In the first 20 seconds, show or describe what you looked or felt like before, and promise what you will look or feel like after.",
+   "why": "Transformation narratives are the oldest retention hack; they create a gap that demands closure.",
+   "applies": "hook"
+  },
+  {
+   "rank": 35,
+   "name": "Escalate personal stakes rather than fixing the object",
+   "how": "When the first plan fails or succeeds, use I decided to take it to the next level to raise the human cost, not the technical complexity.",
+   "why": "Escalation signals that the video is still rising in intensity; fixes signal that the video is stuck in a loop.",
+   "applies": "script"
+  },
+  {
+   "rank": 36,
+   "name": "Avoid step one, step two language; use narrative time markers",
+   "how": "Replace First... Next... Then... with At first... But then... By the end... tied to your condition.",
+   "why": "Sequential language is instructional; temporal language tied to suffering is experiential.",
+   "applies": "script"
+  },
+  {
+   "rank": 37,
+   "name": "Make the goal personally impossible, not just technically difficult",
+   "how": "Frame the challenge as something your body or skill set is unfit for, like I have never played chess or I have asthma.",
+   "why": "Underdog positioning creates suspense; expert positioning creates expectation that you will succeed, removing tension.",
+   "applies": "hook"
+  },
+  {
+   "rank": 38,
+   "name": "Use audio/visual sensory hooks in the title",
+   "how": "Include words like Sounds INSANE, THIS happened, or shocked-face emoji that promise a sensory or emotional reaction.",
+   "why": "Titles are billboards; they must sell a feeling, not a topic. Feelings stop thumbs.",
+   "applies": "hook"
+  },
+  {
+   "rank": 39,
+   "name": "Close mid-script loops on your emotional state, not the object's state",
+   "how": "When resolving a scene, answer How did I feel? before Did it work?",
+   "why": "Emotional closure satisfies the viewer; functional closure only informs them, and information is not entertainment.",
+   "applies": "script"
+  },
+  {
+   "rank": 40,
+   "name": "Use a dare or bet energy",
+   "how": "Write with the voice of someone walking into a bar bet or a childhood dare, not a lab report or instruction manual.",
+   "why": "Bet energy is contagious and low-stakes fun; clinical energy is repellent because it asks the viewer to work.",
+   "applies": "hook"
+  },
+  {
+   "rank": 41,
+   "name": "Make failure a story of your limits, not the object's limits",
+   "how": "When you fail, say I was not strong enough or I panicked, not the motor was not strong enough.",
+   "why": "Owning failure makes you the protagonist; blaming the object makes you a reviewer and the object the star.",
+   "applies": "script"
+  },
+  {
+   "rank": 42,
+   "name": "Reference death, injury, or heartbreak literally",
+   "how": "Use concrete words like die, break, bleed, pass out, or heartbreak rather than vague danger or risk.",
+   "why": "Literal stakes are neurologically arousing; abstract risk is filtered out as background noise.",
+   "applies": "hook"
+  },
+  {
+   "rank": 43,
+   "name": "Alternate action beats with reflection beats",
+   "how": "After every physical action sentence, write one sentence about what you thought or felt in that moment.",
+   "why": "Reflection gives the viewer a breath and deepens character; nonstop action becomes monotonous noise.",
+   "applies": "script"
+  },
+  {
+   "rank": 44,
+   "name": "Name a specific fear or insecurity and confront it directly",
+   "how": "State my biggest fear is... or my weakest moment was... and make the challenge directly address that named vulnerability.",
+   "why": "Named fears are specific and memorable; unnamed challenges are generic and replaceable with any other video.",
+   "applies": "hook"
+  },
+  {
+   "rank": 45,
+   "name": "Replace it worked with it made me feel",
+   "how": "When the object functions, describe your surprise, relief, terror, or pain rather than confirming the technical success.",
+   "why": "Feelings are the payoff; confirmation is anticlimactic because it ends curiosity without providing emotion.",
+   "applies": "script"
+  },
+  {
+   "rank": 46,
+   "name": "Answer So what? with a human cost in every mid-script beat",
+   "how": "After writing each mid-script section, ask So what? If the answer is about the object, rewrite it to be about your body, time, or relationships.",
+   "why": "So what is the viewer's internal swipe trigger; human cost is the defense that justifies watching.",
+   "applies": "script"
+  },
+  {
+   "rank": 47,
+   "name": "Use the second person to bridge experience",
+   "how": "Insert one if you have ever... or you probably think... per hook to directly activate the viewer's memory.",
+   "why": "Second person creates a conversational conspiracy between creator and viewer that feels like shared experience.",
+   "applies": "hook"
+  },
+  {
+   "rank": 48,
+   "name": "Make the title a personal transformation, not an object capability",
+   "how": "Rewrite titles so they could be memoir chapters, not product pages. I Became... and What Happened to Me... beat Making... and Testing...",
+   "why": "Transformation titles promise identity change; capability titles promise instruction, and instruction is not binge-worthy.",
+   "applies": "hook"
+  },
+  {
+   "rank": 49,
+   "name": "Hide the build process inside the struggle",
+   "how": "If you must mention printing, welding, or coding, embed it inside a sentence about your frustration, exhaustion, or deadline pressure.",
+   "why": "Process is tolerated only when it is the obstacle causing your pain; process as content is a retention killer.",
+   "applies": "script"
+  },
+  {
+   "rank": 50,
+   "name": "End the hook with a mystery about your condition, not the object's performance",
+   "how": "The final line of the hook should be And I had no idea what was about to happen to me, never And then the machine turned on.",
+   "why": "Mysteries about people are cliffhangers; mysteries about machines are instruction manuals that viewers swipe away from.",
+   "applies": "hook"
+  }
+ ]
+}
