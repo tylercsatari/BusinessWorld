@@ -1512,6 +1512,14 @@ const WorkshopUI = (() => {
                             ? '<div class="wsp-hint">Checking the vo/ folder…</div>'
                             : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — the voiceover lives in that project's Dropbox folder, so no project means nowhere to put it.</div></div>`}
                 </div>
+            </div>
+
+            <div class="wsp-subsection" data-vfield="editing" style="--accent:#27ae60">
+                ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
+                ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — the final videos live in that project's Dropbox folder.</div></div>`}
+                <div id="wsp-edit-full" class="wsp-edit-slot"></div>
+                <div id="wsp-edit-nosubs" class="wsp-edit-slot"></div>
+                <div id="wsp-edit-nomusic" class="wsp-edit-slot"></div>
             </div>`;
     }
 
@@ -1680,6 +1688,7 @@ const WorkshopUI = (() => {
         // Voiceover section (async — talks to Dropbox; hook instances are
         // wired inside bindDetailFields)
         initMediaSection(v, 'vo');
+        initEditSlots(v);   // Editing — three final-video upload slots
 
         // 3D egg preview
         if (v.project && window.EggRenderer) {
@@ -2628,6 +2637,63 @@ const WorkshopUI = (() => {
                 console.warn(`${cfg.noun} upload failed`, e);
                 alert(`${cfg.noun} upload failed: ` + e.message);
                 rerenderEditor(v.id); // restores the pick/upload controls
+            }
+        });
+    }
+
+    // ===== EDITING — three final-video deliverables → <project>/final videos/ =====
+    const EDIT_SLOTS = [
+        { key: 'full', label: 'Full video — subtitles + graphics' },
+        { key: 'nosubs', label: 'Version without subtitles & graphics' },
+        { key: 'nomusic', label: 'Version without music' }
+    ];
+    async function initEditSlots(v) {
+        if (!document.getElementById('wsp-edit-full') || !v.project) return;
+        const root = await dropboxRootPath();
+        const folder = `${root}/${v.project}/final videos`;
+        const setSlot = async (key, val) => {
+            const fresh = VideoService.getById(v.id) || v;
+            const finalVideos = { ...(fresh.finalVideos || {}) };
+            if (val) finalVideos[key] = val; else delete finalVideos[key];
+            await VideoService.update(v.id, { finalVideos, status: normalizedStatus(fresh) });
+        };
+        EDIT_SLOTS.forEach(slot => {
+            const el = document.getElementById('wsp-edit-' + slot.key);
+            if (!el || !el.isConnected) return;
+            const cur = (v.finalVideos || {})[slot.key];
+            if (cur && cur.path) {
+                el.innerHTML = `<div class="wsp-row" style="border-left:3px solid #27ae60">
+                    <span class="wsp-row-name"><b>${escHtml(slot.label)}</b> · ${escHtml(cur.name || cur.path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
+                    <button class="wsp-mini-btn" data-edit-open="${slot.key}">▶ Open</button>
+                    <button class="wsp-mini-btn danger" data-edit-unlink="${slot.key}">✕</button></div>`;
+                el.querySelector('[data-edit-open]').addEventListener('click', async () => {
+                    const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: cur.path }) });
+                    const data = await r.json();
+                    if (data.link) window.open(data.link, '_blank'); else alert('Could not open: ' + (data.error_summary || 'no link'));
+                });
+                el.querySelector('[data-edit-unlink]').addEventListener('click', async () => {
+                    if (!confirm('Unlink this version? (The file stays in Dropbox.)')) return;
+                    await setSlot(slot.key, null); rerenderEditor(v.id);
+                });
+            } else {
+                el.innerHTML = `<div class="wsp-edit-slot-label">${escHtml(slot.label)}</div>
+                    <div class="wsp-add-row">
+                        <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" style="font-size:11.5px;flex:1 1 160px;">
+                        <button class="wsp-mini-btn done" data-edit-up="${slot.key}">⬆ Upload</button></div>`;
+                el.querySelector('[data-edit-up]').addEventListener('click', async () => {
+                    const input = document.getElementById('wsp-edit-file-' + slot.key);
+                    const file = input.files && input.files[0];
+                    if (!file) { alert('Choose a video file first.'); return; }
+                    const bar = uploadProgressBar(el, file.name);
+                    try {
+                        const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                        bar.stage('Linking to this video…');
+                        await setSlot(slot.key, { path: meta.path_display || meta.path_lower, name: meta.name || file.name });
+                        bar.stage('Done ✓');
+                        toast(`🎬 ${slot.label} → ${v.project}/final videos`);
+                        rerenderEditor(v.id);
+                    } catch (e) { alert('Upload failed: ' + e.message); rerenderEditor(v.id); }
+                });
             }
         });
     }

@@ -136,6 +136,13 @@ const PipelineStages = (() => {
             desc: 'auto: done the moment a voiceover file is linked to this video',
             test: (v) => !!(v.voPath)
         },
+        edit: {
+            desc: 'auto: done once ALL three final videos are uploaded (full w/ subs+graphics, no-subs/graphics, no-music) — then it moves to Split Test',
+            test: (v) => {
+                const f = v.finalVideos || {};
+                return ['full', 'nosubs', 'nomusic'].every(k => f[k] && f[k].path);
+            }
+        },
         animation: {
             desc: 'auto: done once every ANIMATION hook instance has its video linked',
             test: (v) => {

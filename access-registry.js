@@ -93,7 +93,8 @@
         ['sourceidea', 'Source idea'], ['waiting', 'Waiting on'], ['name', 'Video name'],
         ['deadline', 'Deadline'], ['sponsor', 'Sponsor'], ['project', 'Channel project'],
         ['progress', 'Pipeline progress'], ['context', 'Context'], ['hook', 'Hook'],
-        ['script', 'Script'], ['decomp', 'Decomposition'], ['voiceover', 'Voiceover']
+        ['script', 'Script'], ['decomp', 'Decomposition'], ['voiceover', 'Voiceover'],
+        ['editing', 'Editing (final videos)']
     ];
     window.COMPONENT_FIELDS = [
         ['status', 'Stage'], ['needs', 'Needs & source'], ['media', 'Media'],
