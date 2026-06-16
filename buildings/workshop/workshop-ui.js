@@ -22,6 +22,10 @@ const WorkshopUI = (() => {
     // Owner = full access. Only the owner gets the "move it anyways" override that
     // skips mandatory-field gates.
     const isOwnerUser = () => !!(window.__access && window.__access.all === true);
+    // Delete is a per-profile capability (owner always). Backstop the action even
+    // though the buttons are hidden by CSS when not allowed.
+    const canDeleteNow = () => (typeof window.canDelete !== 'function') || window.canDelete();
+    const blockDelete = () => { alert('Your profile doesn\'t have delete access. Ask the owner to enable it.'); return false; };
     let activeTab = 'pipeline';
     let selectedVideo = null;
     let selectedStageId = null;
@@ -265,8 +269,9 @@ const WorkshopUI = (() => {
     // ============ ROOT RENDER ============
 
     function render() {
+        const noDelete = (typeof window.canDelete === 'function') && !window.canDelete();
         container.innerHTML = `
-            <div class="workshop-panel show-list">
+            <div class="workshop-panel show-list${noDelete ? ' wsp-no-delete' : ''}">
                 <div class="workshop-page workshop-list-page">
                     <div class="workshop-header">
                         <h2>Workshop</h2>
@@ -1124,6 +1129,7 @@ const WorkshopUI = (() => {
             descTimer = setTimeout(() => SVC().projects.update(p.id, { description: e.target.value }).catch(() => {}), 800);
         });
         document.getElementById('wsp-proj-delete').addEventListener('click', async () => {
+            if (!canDeleteNow()) return blockDelete();
             if (!confirm(`Delete project "${p.name}"? (Videos and inventory are kept — only the project record and its components are removed.)`)) return;
             await Promise.all(comps.map(c => SVC().components.remove(c.id).catch(() => {})));
             await SVC().projects.remove(p.id);
@@ -1855,6 +1861,7 @@ const WorkshopUI = (() => {
     // skip the re-render (that was the "can't delete" bug: a throw after the
     // remove left the row on screen).
     async function deleteComponentById(id, rerenderFn) {
+        if (!canDeleteNow()) return blockDelete();
         const c = SVC().components.getById(id);
         if (!c) return false;
         if (!confirm(`Delete component "${c.name || 'this component'}"? This can't be undone.`)) return false;
@@ -1970,14 +1977,17 @@ const WorkshopUI = (() => {
                         </div>
                     </div>
 
+                    <div class="wsp-cd-section" data-cfield="source">
+                        <div class="wsp-cd-label">Type <span class="wsp-hint">— how it gets done (drives where it flows)</span></div>
+                        <div class="wsp-needs-btns">
+                            ${COMPONENT_SOURCES.map(s => `<button class="wsp-need-btn ${source === s.key ? 'on' : ''}" data-source="${s.key}" title="${escAttr(s.hint)}">${icon(s.icon, 'wsp-need-ic')} ${s.label}</button>`).join('')}
+                        </div>
+                    </div>
+
                     <div class="wsp-cd-section" data-cfield="needs">
                         <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step this component requires</span></div>
                         <div class="wsp-needs-btns">
                             ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needs.includes(n.flag) ? 'on' : ''}" data-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
-                        </div>
-                        <div class="wsp-cd-label" style="margin-top:10px;">Type <span class="wsp-hint">— how it gets done (drives where it flows)</span></div>
-                        <div class="wsp-needs-btns">
-                            ${COMPONENT_SOURCES.map(s => `<button class="wsp-need-btn ${source === s.key ? 'on' : ''}" data-source="${s.key}" title="${escAttr(s.hint)}">${icon(s.icon, 'wsp-need-ic')} ${s.label}</button>`).join('')}
                         </div>
                     </div>
 
@@ -3107,6 +3117,7 @@ const WorkshopUI = (() => {
 
     async function deleteVideoAction(v) {
         if (!v) return;
+        if (!canDeleteNow()) return blockDelete();
         if (!confirm(`Delete "${v.name}"? The source idea (if any) stays in the Library.`)) return;
         await VideoService.remove(v.id);
         closeEditorContext();

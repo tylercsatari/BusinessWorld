@@ -456,23 +456,38 @@
                         g.items.map(s => `<div class="authgate-stagerow"><span>${escA(s.label)}</span>${sel(s.id)}</div>`).join('')).join('')}
                 </div>`;
             };
-            // Which sections inside videos / components a profile sees (declutter).
+            // Which sections inside videos / components a profile can see/edit —
+            // None / Read / Read-write per field, plus the delete capability.
             const fieldRows = () => {
                 const granted = b.has('Workshop');
                 const vf = window.VIDEO_FIELDS || [], cf = window.COMPONENT_FIELDS || [];
                 if (!vf.length && !cf.length) return '';
                 const grp = (title, fields, kind) => {
                     const keys = Object.keys(feats).filter(k => k.indexOf('Workshop:' + kind + ':') === 0);
-                    const noRestriction = keys.length === 0;
-                    return `<div class="authgate-staggrp">${title}</div><div class="authgate-subgrid">` +
-                        fields.map(([id, lbl]) => {
-                            const checked = noRestriction ? true : !!feats['Workshop:' + kind + ':' + id];
-                            return `<label class="authgate-subcheck"><input type="checkbox" data-pvf="${escA(p.id)}" data-vkind="${kind}" value="${escA(id)}" ${checked ? 'checked' : ''} ${granted ? '' : 'disabled'}> ${escA(lbl)}</label>`;
-                        }).join('') + `</div>`;
+                    const noRestriction = keys.length === 0;   // no keys = full write everywhere
+                    const sel = (id) => {
+                        let v = feats['Workshop:' + kind + ':' + id];
+                        if (v === true) v = 'write';
+                        if (!v) v = noRestriction ? 'write' : 'none';
+                        return `<select class="authgate-stagesel" data-pvf="${escA(p.id)}" data-vkind="${kind}" data-vfid="${escA(id)}" ${granted ? '' : 'disabled'}>
+                            <option value="none" ${v === 'none' ? 'selected' : ''}>None</option>
+                            <option value="read" ${v === 'read' ? 'selected' : ''}>Read</option>
+                            <option value="write" ${v === 'write' ? 'selected' : ''}>Read-write</option>
+                        </select>`;
+                    };
+                    return `<div class="authgate-staggrp">${title}</div>` +
+                        fields.map(([id, lbl]) => `<div class="authgate-stagerow"><span>${escA(lbl)}</span>${sel(id)}</div>`).join('');
                 };
+                const delOn = !!feats['Workshop:cap:delete'];
+                const capRow = `<div class="authgate-staggrp">Capabilities</div>
+                    <div class="authgate-stagerow"><span>Delete things (videos, components, projects…)</span>
+                        <select class="authgate-stagesel" data-pcap="${escA(p.id)}" data-capid="delete" ${granted ? '' : 'disabled'}>
+                            <option value="off" ${delOn ? '' : 'selected'}>Off</option>
+                            <option value="on" ${delOn ? 'selected' : ''}>Allowed</option>
+                        </select></div>`;
                 return `<div class="authgate-stagewrap">
-                    <div class="authgate-stagehint">Sections inside videos / components (all = show everything)</div>
-                    ${grp('Video sections', vf, 'vfield')}${grp('Component sections', cf, 'cfield')}
+                    <div class="authgate-stagehint">Sections inside videos / components — None hides it, Read shows it locked, Read-write lets them edit. (Leave all at Read-write = full access.)</div>
+                    ${grp('Video sections', vf, 'vfield')}${grp('Component sections', cf, 'cfield')}${capRow}
                 </div>`;
             };
             const summary = b.size ? (b.size + ' building' + (b.size === 1 ? '' : 's')) : 'no access';
@@ -517,6 +532,7 @@
                 if (name === 'Workshop') {
                     body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
                     body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
+                    body.querySelectorAll(`[data-pcap="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
                 }
             });
             body.querySelectorAll('[data-psave]').forEach(btn => btn.onclick = async () => {
@@ -526,7 +542,11 @@
                 const features = {}; body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"]:checked`).forEach(c => { if (buildings.includes(c.dataset.pfbuild)) features[c.value] = true; });
                 if (buildings.includes('Workshop')) {
                     body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { if (s.value !== 'none') features['Workshop:stage:' + s.dataset.stageid] = s.value; });
-                    body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]:checked`).forEach(c => { features['Workshop:' + c.dataset.vkind + ':' + c.value] = true; });
+                    // Field access: store read/write; omit 'write' default ONLY when ALL are write (then no keys = full).
+                    const fieldSels = [...body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]`)];
+                    const anyRestricted = fieldSels.some(s => s.value !== 'write');
+                    if (anyRestricted) fieldSels.forEach(s => { features['Workshop:' + s.dataset.vkind + ':' + s.dataset.vfid] = s.value; });
+                    body.querySelectorAll(`[data-pcap="${CSS.escape(pid)}"]`).forEach(s => { if (s.value === 'on') features['Workshop:cap:' + s.dataset.capid] = true; });
                 }
                 btn.disabled = true; btn.textContent = 'Saving…';
                 const r = await fetch('/api/profiles/' + pid, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, buildings, features }) });

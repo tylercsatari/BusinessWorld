@@ -97,29 +97,55 @@
         ['editing', 'Editing (final videos)']
     ];
     window.COMPONENT_FIELDS = [
-        ['status', 'Stage'], ['needs', 'Needs & source'], ['media', 'Media'],
-        ['cad', 'CAD file'], ['pcb', 'PCB file'],
+        ['status', 'Stage'], ['needs', 'What it needs'], ['source', 'Type (build / order / task)'],
+        ['media', 'Media'], ['cad', 'CAD file'], ['pcb', 'PCB file'],
         ['sketches', 'Sketches'], ['links', 'Assets & links'], ['notes', 'Notes']
     ];
-    const fieldVisible = (kind, id) => {
+    // Field access is none | read | write (like stages). No keys for a kind =
+    // write everything (back-compat). Legacy stored `true` means write.
+    const fieldAccess = (kind, id) => {
         const a = window.__access;
-        if (!a || a.all) return true;
-        if (!(a.buildings || []).includes('Workshop')) return true; // not a Workshop concern
+        if (!a || a.all) return 'write';
+        if (!(a.buildings || []).includes('Workshop')) return 'write'; // not a Workshop concern
         const feats = a.features || {}, prefix = 'Workshop:' + kind + ':';
         const keys = Object.keys(feats).filter(k => k.indexOf(prefix) === 0);
-        if (!keys.length) return true;
-        return !!feats[prefix + id];
+        if (!keys.length) return 'write';
+        const v = feats[prefix + id];
+        if (v === true || v === 'write') return 'write';
+        if (v === 'read') return 'read';
+        return 'none';
     };
-    window.videoFieldVisible = (id) => fieldVisible('vfield', id);
-    window.componentFieldVisible = (id) => fieldVisible('cfield', id);
-    // Hide ungranted sections after the editor renders.
-    function gateFields(root, attr, check) {
+    window.videoFieldAccess = (id) => fieldAccess('vfield', id);
+    window.componentFieldAccess = (id) => fieldAccess('cfield', id);
+    window.videoFieldVisible = (id) => fieldAccess('vfield', id) !== 'none';
+    window.componentFieldVisible = (id) => fieldAccess('cfield', id) !== 'none';
+    // Open/view buttons stay clickable even in a read-only section.
+    const KEEP_CLICKABLE = '[data-link-open],[data-media-open],[data-cf-open],[data-hooki-open],[data-open-comp],[data-open-video],[data-expand]';
+    // Hide ungranted sections; lock read-only ones (inputs disabled, only view buttons live).
+    function gateFields(root, attr, access) {
         const a = window.__access;
         if (!a || a.all || !root) return;
-        root.querySelectorAll('[' + attr + ']').forEach(el => { el.style.display = check(el.getAttribute(attr)) ? '' : 'none'; });
+        root.querySelectorAll('[' + attr + ']').forEach(el => {
+            const acc = access(el.getAttribute(attr));
+            if (acc === 'none') { el.style.display = 'none'; return; }
+            el.style.display = '';
+            el.classList.toggle('ag-readonly', acc === 'read');
+            if (acc === 'read') {
+                el.querySelectorAll('input, textarea, select').forEach(c => { c.disabled = true; });
+                el.querySelectorAll('button').forEach(c => { if (!c.matches(KEEP_CLICKABLE)) c.disabled = true; });
+            }
+        });
     }
-    window.applyVideoFieldGating = (root) => gateFields(root, 'data-vfield', window.videoFieldVisible);
-    window.applyComponentFieldGating = (root) => gateFields(root, 'data-cfield', window.componentFieldVisible);
+    window.applyVideoFieldGating = (root) => gateFields(root, 'data-vfield', window.videoFieldAccess);
+    window.applyComponentFieldGating = (root) => gateFields(root, 'data-cfield', window.componentFieldAccess);
+
+    // Capability flags (e.g. delete). Owner always; otherwise only if granted.
+    window.hasCapability = function (cap) {
+        const a = window.__access;
+        if (!a || a.all) return true;
+        return !!(a.features && a.features['Workshop:cap:' + cap]);
+    };
+    window.canDelete = () => window.hasCapability('delete');
 
     // Is a whole building visible to the current user?
     window.hasBuilding = function (b) {
