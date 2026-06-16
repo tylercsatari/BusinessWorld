@@ -12,6 +12,7 @@ const PenUI = (() => {
     let currentPage = 'list';
     let showImportRow = false;
     let analysisData = null;   // cached analysis for current detail view
+    let analysisUnavailable = false;   // true when there's genuinely no analysis stored
     let activeTab = 'general';
     let pollTimer = null;
     let listPollTimer = null;
@@ -789,7 +790,18 @@ const PenUI = (() => {
         }
     }
 
+    // Kick off analysis for a video that has none stored, then poll.
+    async function reanalyze(ytId) {
+        try {
+            const result = await VideoService.startVideoAnalysis(`https://youtube.com/watch?v=${ytId}`);
+            if (result && result.error) { alert(result.error); return; }
+            if (selectedVideo) { selectedVideo.analysisStatus = 'analyzing'; }
+            startPolling(ytId);
+        } catch (e) { alert('Could not start analysis: ' + (e.message || e)); }
+    }
+
     async function loadAnalysis(ytId) {
+        analysisUnavailable = false;
         try {
             analysisData = await VideoService.getVideoAnalysis(ytId);
             if (!analysisData) {
@@ -800,9 +812,15 @@ const PenUI = (() => {
                         selectedVideo.analysisStatus = 'analyzing';
                         startPolling(ytId);
                     }
+                    return;
                 }
+                // Genuinely not available (not in storage / not analyzed) — show a
+                // clear terminal state instead of an endless "Loading analysis…".
+                analysisUnavailable = true;
+                renderTabContent();
                 return;
             }
+            analysisUnavailable = false;
             // Update postedDate from actual YouTube upload date if still set to import date
             if (selectedVideo && analysisData.metadata?.uploadDate) {
                 const uploadDate = analysisData.metadata.uploadDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
@@ -1505,8 +1523,18 @@ const PenUI = (() => {
         }
         if (!analysisData) {
             const isAnalyzing = selectedVideo && selectedVideo.analysisStatus === 'analyzing';
-            if (!isAnalyzing) {
-                el.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Loading analysis...</div>';
+            if (isAnalyzing) return; // polling renders progress
+            if (analysisUnavailable) {
+                const yt = selectedVideo && selectedVideo.youtubeVideoId;
+                el.innerHTML = `<div style="text-align:center;padding:40px;color:#888;">
+                    No analysis stored for this video.<br>
+                    <span style="font-size:12px;">Its transcript/frames aren't in cloud storage yet${yt ? '' : ' (no YouTube video linked)'}.</span>
+                    ${yt ? '<br><button class="pen-reanalyze-btn" id="pen-run-analysis" style="margin-top:12px;">Run analysis now</button>' : ''}
+                </div>`;
+                const runBtn = document.getElementById('pen-run-analysis');
+                if (runBtn) runBtn.addEventListener('click', () => { analysisUnavailable = false; reanalyze(yt); });
+            } else {
+                el.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Loading analysis…</div>';
             }
             return;
         }

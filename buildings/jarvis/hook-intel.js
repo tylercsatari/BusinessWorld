@@ -35,47 +35,35 @@ function tokens(s) {
     return (String(s || '').toLowerCase().match(/[a-z0-9']+/g) || []).filter(w => w.length > 2 && !STOP.has(w));
 }
 
-// Build the exemplar corpus once: every posted video's REAL opening hook.
+// The exemplar corpus is now REAL, complete transcript openings (hook-corpus.json,
+// precomputed from each posted video's analysis.json) — NOT arbitrary fragments.
+// Each entry: { ytId, title, views, opening } where `opening` is the actual first
+// ~600 chars the creator spoke, so the model sees the whole hook in context.
 function corpus() {
     if (_corpus && Date.now() - _corpusAt < CACHE_MS) return _corpus;
-    const lib = readJson('retention-event-library.json') || {};
-    const vids = Object.values(lib.videos || {});
-    const out = [];
-    for (const v of vids) {
-        if (!v || !Array.isArray(v.events) || !v.events.length || !v.name) continue;
-        const opening = [...v.events].sort((a, b) => (a.position_pct || 0) - (b.position_pct || 0))[0];
-        const line = (opening.words_spoken || []).filter(w => !/^\[/.test(w)).join(' ').trim();
-        if (!line || line.length < 6) continue;
-        out.push({
-            name: v.name, views: v.views || 0,
-            line: clip(line, 180),
-            visual: clip(opening.frame_description || '', 200),
-            retention: typeof v.above_baseline_mean === 'number' ? +v.above_baseline_mean.toFixed(3) : null,
-            _tok: tokens(v.name + ' ' + line)
-        });
-    }
-    out.sort((a, b) => (b.views || 0) - (a.views || 0));
-    _corpus = out; _corpusAt = Date.now();
-    return out;
+    const arr = readJson('hook-corpus.json') || [];
+    _corpus = arr.map(e => ({ ...e, _tok: tokens((e.title || '') + ' ' + (e.opening || '')) }));
+    _corpus.sort((a, b) => (b.views || 0) - (a.views || 0));
+    _corpusAt = Date.now();
+    return _corpus;
 }
 
-// Retrieval: the past openings most relevant to `query` (the new video's topic),
+// Retrieval: the real openings most relevant to `query` (the new video's topic),
 // blended with raw performance so the examples are both on-topic and proven.
 function examples(query, limit) {
     const c = corpus();
-    const n = Math.max(1, Math.min(limit || 12, 24));
-    const strip = e => ({ name: e.name, views: e.views, line: e.line, visual: e.visual, retention: e.retention });
+    const n = Math.max(1, Math.min(limit || 10, 16));
+    const strip = e => ({ title: e.title, views: e.views, opening: e.opening });
     const q = tokens(query);
     if (!q.length) return c.slice(0, n).map(strip);
     const qset = new Set(q);
     const scored = c.map(e => {
         let overlap = 0;
         for (const t of e._tok) if (qset.has(t)) overlap++;
-        const viewBoost = Math.log10((e.views || 0) + 10) / 10;   // small tiebreak toward proven hits
+        const viewBoost = Math.log10((e.views || 0) + 10) / 10;   // tiebreak toward proven hits
         return { e, score: overlap + viewBoost };
     });
     scored.sort((a, b) => b.score - a.score);
-    // Keep mostly-relevant, but if nothing matched the topic fall back to top hits.
     const top = scored.filter(s => s.score >= 1).slice(0, n).map(s => strip(s.e));
     return top.length ? top : c.slice(0, n).map(strip);
 }
@@ -120,7 +108,7 @@ function build() {
         visualPeakCauses, retentionDropCauses,
         wordsThatRetain, wordsThatKill, principles,
         // Top REAL opening hooks by views (line + visual) — concrete proof.
-        topExemplars: c.slice(0, 8).map(e => ({ line: e.line, visual: e.visual, views: e.views }))
+        topExemplars: c.slice(0, 8).map(e => ({ title: e.title, opening: e.opening, views: e.views }))
     };
     _packAt = Date.now();
     return _packCache;

@@ -2630,16 +2630,15 @@ const WorkshopUI = (() => {
     function showHookSuggestions(videoId, hooks, noData) {
         const overlay = document.createElement('div');
         overlay.className = 'wsp-picker-overlay'; overlay.style.display = 'flex';
-        const predOf = (h) => h.predictedSwipeThrough || h.pred || '';
         overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal">
-            <div class="wsp-picker-header"><span>✨ Hook engine <span class="wsp-hint">— reasoned from the channel's real hooks &amp; retention data, each graded by the scorer. LINE + VISUAL.</span></span><button class="wsp-picker-close" data-close>✕</button></div>
+            <div class="wsp-picker-header"><span>✨ Hook engine <span class="wsp-hint">— Kimi studied how your most similar past videos actually opened (real transcripts) and reasoned these. LINE + VISUAL.</span></span><button class="wsp-picker-close" data-close>✕</button></div>
             <div class="wsp-suggest-list">
                 ${hooks.map((h, i) => `<div class="wsp-hooksug" data-sug="${i}">
                     <div class="wsp-hooksug-main">
-                        <div class="wsp-hooksug-line">${icon('hook', 'wsp-row-ic')} <b>${escHtml(h.line)}</b>${typeof h.score === 'number' ? `<span class="wsp-hooksug-score" title="hook-craft score from the deterministic retention scorer">${h.score}/100</span>` : ''}${predOf(h) ? `<span class="wsp-hooksug-pred" title="predicted swipe-through">${escHtml(predOf(h))}</span>` : ''}</div>
+                        <div class="wsp-hooksug-line">${icon('hook', 'wsp-row-ic')} <b>${escHtml(h.line)}</b></div>
                         ${h.visual ? `<div class="wsp-hooksug-visual">${icon('film', 'wsp-cc-ic')} <span>${escHtml(h.visual)}</span></div>` : ''}
                         ${h.why ? `<div class="wsp-hooksug-why">${escHtml(h.why)}</div>` : ''}
-                        ${h.modeledOn && h.modeledOn.line ? `<div class="wsp-hooksug-model">↳ modeled on a real hook: "${escHtml(h.modeledOn.line)}"${h.modeledOn.views ? ` (${(h.modeledOn.views).toLocaleString()} views)` : ''}</div>` : ''}
+                        ${h.modeledOn && h.modeledOn.title ? `<div class="wsp-hooksug-model">↳ modeled on your real video: "${escHtml(h.modeledOn.title)}"${h.modeledOn.views ? ` (${(h.modeledOn.views).toLocaleString()} views)` : ''}</div>` : ''}
                     </div>
                     <button class="wsp-mini-btn done" data-use="${i}">＋ Use</button>
                 </div>`).join('')}
