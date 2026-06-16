@@ -19,6 +19,9 @@ const WorkshopUI = (() => {
     // full access when absent (owner / local dev) so nothing breaks.
     const stageVisible = (id) => (typeof window.canSeeStage !== 'function') || window.canSeeStage(id);
     const stageWritable = (id) => (typeof window.canWriteStage !== 'function') || window.canWriteStage(id);
+    // Owner = full access. Only the owner gets the "move it anyways" override that
+    // skips mandatory-field gates.
+    const isOwnerUser = () => !!(window.__access && window.__access.all === true);
     let activeTab = 'pipeline';
     let selectedVideo = null;
     let selectedStageId = null;
@@ -348,7 +351,14 @@ const WorkshopUI = (() => {
     const NODE_W = 178, NODE_H = 66, GAP_X = 56, GAP_Y = 22, PAD = 26;
 
     // One color per entity type — same colors everywhere (dots, legend, panel)
-    const DOT_COLORS = { video: '#00b894', component: '#1565c0', order: '#e8a020', inventory: '#8e44ad' };
+    // video = green, component = blue, task = orange (uniform across the board)
+    const DOT_COLORS = { video: '#00b894', component: '#1565c0', task: '#e67e22', order: '#e8a020', inventory: '#8e44ad' };
+    // Split a component bucket into real components vs task-type errands so each
+    // gets its own colored count (blue / orange).
+    const splitComps = (comps) => ({
+        comps: (comps || []).filter(c => c.source !== 'task'),
+        tasks: (comps || []).filter(c => c.source === 'task')
+    });
     const GROUP_COLORS = { Concept: '#4a9eff', Planning: '#e8a020', Procurement: '#e67e22', Build: '#14b8a6', Production: '#e74c3c', Post: '#27ae60' };
     // Where a component's build status lives on the video pipeline
     const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', software: 'software', manufacturing: 'precision', assembly: 'assembly' };
@@ -564,12 +574,22 @@ const WorkshopUI = (() => {
         const nodesHtml = PS().STAGES.filter(s => stageVisible(s.id)).map(s => {
             const p = pos[s.id];
             const e = entities[s.id];
+            const { comps: compsHere, tasks: tasksHere } = splitComps(e.components);
             const total = e.videos.length + e.components.length + e.orders.length;
             const blockedHere = e.videos.filter(v => videoBlockers(v).length > 0).length;
-            // Compact numeric breakdown by type (only nonzero) — colored dot + number, no emoji
+            // Separate colored count per type so it's readable at a glance:
+            // green = videos, blue = components, orange = tasks, gold = orders.
+            const cornerCounts = [
+                e.videos.length ? `<span class="wsp-node-count vid" title="${e.videos.length} video${e.videos.length === 1 ? '' : 's'}">${e.videos.length}</span>` : '',
+                compsHere.length ? `<span class="wsp-node-count comp" title="${compsHere.length} component${compsHere.length === 1 ? '' : 's'}">${compsHere.length}</span>` : '',
+                tasksHere.length ? `<span class="wsp-node-count task" title="${tasksHere.length} task${tasksHere.length === 1 ? '' : 's'}">${tasksHere.length}</span>` : '',
+                e.orders.length ? `<span class="wsp-node-count ord" title="${e.orders.length} order${e.orders.length === 1 ? '' : 's'}">${e.orders.length}</span>` : ''
+            ].join('');
+            // Same breakdown, dot form, shown inline in the node subtitle
             const counts = [
                 e.videos.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.video}"></i>${e.videos.length}</span>` : '',
-                e.components.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.component}"></i>${e.components.length}</span>` : '',
+                compsHere.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.component}"></i>${compsHere.length}</span>` : '',
+                tasksHere.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.task}"></i>${tasksHere.length}</span>` : '',
                 e.orders.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.order}"></i>${e.orders.length}</span>` : ''
             ].join('');
             const gc = GROUP_COLORS[s.group] || '#9a8f78';
@@ -582,7 +602,7 @@ const WorkshopUI = (() => {
                         ? `<span class="wsp-node-counts">${counts}</span>`
                         : `<span class="wsp-node-group">${s.bottleneck ? 'bottleneck' : escHtml(s.group)}</span>`}</div>
                 </div>
-                ${total ? `<span class="wsp-node-count">${total}</span>` : ''}
+                ${total ? `<div class="wsp-node-counts-corner">${cornerCounts}</div>` : ''}
                 ${blockedHere ? `<span class="wsp-node-blocked" title="${blockedHere} blocked here">🔒</span>` : ''}
             </div>`;
         }).join('');
@@ -710,14 +730,16 @@ const WorkshopUI = (() => {
     // No stage selected → show EVERYTHING currently in flight (filter-driven)
     function renderAllPanel(panel) {
         const vids = showTypes.video ? filteredVideos() : [];
-        const comps = showTypes.component ? filteredComponents() : [];
+        const allComps = showTypes.component ? filteredComponents() : [];
+        const { comps, tasks } = splitComps(allComps);
         const orders = showTypes.order ? filteredOrders() : [];
         const inv = showTypes.inventory ? filteredInventory() : [];
-        const total = vids.length + comps.length + orders.length + inv.length;
+        const total = vids.length + allComps.length + orders.length + inv.length;
 
         const breakdown = [
             showTypes.video ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">${icon('video', 'wsp-cc-ic')} ${vids.length}</span>` : '',
             showTypes.component ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">${icon('component', 'wsp-cc-ic')} ${comps.length}</span>` : '',
+            showTypes.component && tasks.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.task}">${icon('propdesign', 'wsp-cc-ic')} ${tasks.length}</span>` : '',
             showTypes.order ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${orders.length}</span>` : '',
             showTypes.inventory ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.inventory}">${icon('inventory', 'wsp-cc-ic')} ${inv.length}</span>` : ''
         ].join('');
@@ -735,6 +757,7 @@ const WorkshopUI = (() => {
                 ${total === 0 ? '<div class="workshop-empty">Nothing matches the current filters. Queue an idea from the Library to feed the pipeline!</div>' : ''}
                 ${vids.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.video}">${icon('video', 'wsp-sec-ic')} Videos in the pipeline</div>${vids.map(v => stageVideoRowHtml(v, null)).join('')}` : ''}
                 ${comps.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being built</div>${comps.map(c => componentRowHtml(c)).join('')}` : ''}
+                ${tasks.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.task}">${icon('propdesign', 'wsp-sec-ic')} Tasks / errands</div>${tasks.map(c => componentRowHtml(c)).join('')}` : ''}
                 ${orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">${icon('order', 'wsp-sec-ic')} Open orders</div>${orders.map(orderRowHtml).join('')}` : ''}
                 ${inv.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.inventory}">${icon('inventory', 'wsp-sec-ic')} Storage room (Component Library)</div>${inv.map(i => `
                     <div class="wsp-row" style="border-left: 3px solid ${INV_STATUS_COLORS[i.status] || '#b0a8a0'}">
@@ -759,13 +782,16 @@ const WorkshopUI = (() => {
         const owner = SVC().stageOwners()[selectedStageId] || '';
         const names = rosterNames(owner ? [owner] : []);
 
+        const { comps: stageComps, tasks: stageTasks } = splitComps(e.components);
         const breakdown = [
             e.videos.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">${icon('video', 'wsp-cc-ic')} ${e.videos.length}</span>` : '',
-            e.components.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">${icon('component', 'wsp-cc-ic')} ${e.components.length}</span>` : '',
+            stageComps.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">${icon('component', 'wsp-cc-ic')} ${stageComps.length}</span>` : '',
+            stageTasks.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.task}">${icon('propdesign', 'wsp-cc-ic')} ${stageTasks.length}</span>` : '',
             e.orders.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${e.orders.length}</span>` : ''
         ].join('');
 
-        const compRows = e.components.map(c => componentRowHtml(c)).join('');
+        const compRows = stageComps.map(c => componentRowHtml(c)).join('');
+        const taskRows = stageTasks.map(c => componentRowHtml(c)).join('');
 
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
@@ -785,9 +811,10 @@ const WorkshopUI = (() => {
                 </div>
             </div>
             <div class="wsp-stage-panel-list">
-                ${e.videos.length === 0 && !compRows && e.orders.length === 0 ? '<div class="workshop-empty">Nothing at this stage (with current filters).</div>' : ''}
+                ${e.videos.length === 0 && !compRows && !taskRows && e.orders.length === 0 ? '<div class="workshop-empty">Nothing at this stage (with current filters).</div>' : ''}
                 ${e.videos.map(v => stageVideoRowHtml(v, stage)).join('')}
                 ${compRows ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.component}">${icon('component', 'wsp-sec-ic')} Components being worked here</div>${compRows}` : ''}
+                ${taskRows ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.task}">${icon('propdesign', 'wsp-sec-ic')} Tasks / errands</div>${taskRows}` : ''}
                 ${e.orders.length ? `<div class="wsp-panel-section-title" style="color:${DOT_COLORS.order}">${icon('order', 'wsp-sec-ic')} Open orders</div>${e.orders.map(orderRowHtml).join('')}` : ''}
             </div>
         `;
@@ -2946,11 +2973,16 @@ const WorkshopUI = (() => {
             missing.push('• Hook footage — every declared hook instance needs its video linked');
         }
         if (missing.length) {
-            alert(`Can't move to ${target.label} yet — the move would skip past mandatory fields that are still empty:\n\n${missing.join('\n')}`);
+            if (!isOwnerUser()) {
+                alert(`Can't move to ${target.label} yet — the move would skip past mandatory fields that are still empty:\n\n${missing.join('\n')}`);
+                return false;
+            }
+            // Owner override: skip the gates and move anyway, marking the skipped
+            // stages done even though their fields are empty.
+            if (!confirm(`⚠️ Override — move "${v.name}" to ${target.label} anyway?\n\nThese mandatory fields are still empty and will be skipped (their stages marked done):\n\n${missing.join('\n')}\n\nThis is an owner-only override. Move it anyways?`)) return false;
+        } else if (!confirm(`Move "${v.name}" to ${target.icon} ${target.label}?\nEverything before it will be marked done; ${target.label} and everything after reset to pending.`)) {
             return false;
         }
-
-        if (!confirm(`Move "${v.name}" to ${target.icon} ${target.label}?\nEverything before it will be marked done; ${target.label} and everything after reset to pending.`)) return false;
 
         const cur = { ...(v.stageState || {}) };
         const resetSet = new Set([targetId, ...PS().descendantsOf(targetId)]);
