@@ -636,6 +636,33 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Quant 2 (pure) — score a new hook from raw pixels/audio (DINOv2+VideoMAE+wav2vec2+DSP, no LLM)
+    if (pathname === '/api/quant2/predict' && req.method === 'POST') {
+        const chunks = []; let size = 0; const MAX = 200 * 1024 * 1024;
+        req.on('data', c => { size += c.length; if (size > MAX) req.destroy(); chunks.push(c); });
+        req.on('end', () => {
+            if (size === 0 || size > MAX) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'empty or too-large upload (max 200MB)' })); return; }
+            const os = require('os');
+            const tmp = path.join(os.tmpdir(), `q2_${Date.now()}_${Math.round(Math.random() * 1e6)}.mp4`);
+            try { fs.writeFileSync(tmp, Buffer.concat(chunks)); }
+            catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'write failed: ' + e.message })); return; }
+            const script = path.join(__dirname, 'buildings', 'jarvis', 'quant2', 'predict_pure.py');
+            const py = spawn('python3', [script, '--file', tmp], { env: { ...process.env } });
+            let out = '', err = '';
+            py.stdout.on('data', d => out += d); py.stderr.on('data', d => err += d);
+            const timer = setTimeout(() => { try { py.kill('SIGKILL'); } catch (e) {} }, 300000);
+            py.on('close', () => {
+                clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (e) {}
+                const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+                if (!line) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'prediction produced no result', stderr: err.slice(-600) })); return; }
+                res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(line);
+            });
+            py.on('error', e => { clearTimeout(timer); try { fs.unlinkSync(tmp); } catch (_) {} res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'spawn failed: ' + e.message })); });
+        });
+        req.on('error', () => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'upload stream error' })); });
+        return;
+    }
+
     // =========================================
     // API: Debug env vars (shows which keys are set, not their values)
     // =========================================
