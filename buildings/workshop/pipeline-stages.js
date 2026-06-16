@@ -242,6 +242,11 @@ const PipelineStages = (() => {
     function stateOf(video, stageId) {
         return (video && video.stageState && video.stageState[stageId]) || '';
     }
+    // Stages that complete themselves automatically (no worker action). Only
+    // Ideation — every other stage requires the worker to press DONE so a
+    // video never disappears out from under them mid-upload. The deliverable
+    // check (deliverableMet) still gates that DONE button.
+    const AUTO_COMPLETE = new Set(['ideate']);
     function effectiveState(video, stageId, ctx) {
         const manual = stateOf(video, stageId);
         if (manual) return manual; // 'done' | 'na' — manual always wins
@@ -250,8 +255,14 @@ const PipelineStages = (() => {
         // undecided branch never lands in anyone's queue.
         if (flag && !(video && video.branches && video.branches[flag] === true)) return 'na';
         const auto = AUTO_CHECKS[stageId];
-        if (auto && auto.test(video, ctx)) return 'auto';
+        if (AUTO_COMPLETE.has(stageId) && auto && auto.test(video, ctx)) return 'auto';
         return '';
+    }
+    // Is the stage's DELIVERABLE present? (the old auto-check) — drives the DONE
+    // button: met → the worker can push forward; not met → they're prompted.
+    function deliverableMet(video, stageId, ctx) {
+        const auto = AUTO_CHECKS[stageId];
+        return !!(auto && auto.test(video, ctx));
     }
     // Skipped ('na') stages are TRANSPARENT, not "done": they pass their
     // upstream's blocking straight through. Otherwise skipping Assembly/
@@ -352,7 +363,7 @@ const PipelineStages = (() => {
         hasAutoCheck: id => !!AUTO_CHECKS[id],
         isResultStage: id => RESULT_DELIVERABLE_STAGES.indexOf(id) >= 0,
         RESULT_DELIVERABLE_STAGES,
-        stateOf, effectiveState, isDone, isReady, frontier, isComplete, progress,
+        stateOf, effectiveState, deliverableMet, isDone, isReady, frontier, isComplete, progress,
         branchesDecided, blockers, isInPipeline, hooksOf
     };
 })();

@@ -788,11 +788,10 @@ const WorkshopUI = (() => {
     function nodeDeliverableStatus(v, stageId) {
         const label = STAGE_DELIVERABLE[stageId] || 'this stage';
         const st = PS().effectiveState(v, stageId, ctxNow());
-        if (st === 'na' || st === 'done' || st === 'auto') return { met: true, label };
-        const kind = deliverableKind(stageId);
-        if (kind === 'result') return { met: stageResultsFor(v, stageId).length > 0, label };
-        if (kind === 'decomp') return { met: PS().branchesDecided(v) && (componentsForVideo(v.id).length > 0 || v.noDecomp), label };
-        return { met: false, label };   // auto-artifact stages: not met until the artifact lands
+        if (st === 'na' || st === 'done') return { met: true, label };
+        if (stageId === 'decomp') return { met: PS().branchesDecided(v) && (componentsForVideo(v.id).length > 0 || v.noDecomp), label };
+        // every other stage: met when its deliverable (the artifact/result) is present
+        return { met: PS().deliverableMet(v, stageId, ctxNow()), label };
     }
 
     // The DONE button: advance the node if its deliverable is met, else prompt.
@@ -818,10 +817,10 @@ const WorkshopUI = (() => {
             const canUpload = !!v.project;
             return `<div class="wsp-deliv-banner" data-deliv-stage="${stage.id}">
                 <div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
-                <div class="wsp-deliv-sub">Upload your result and the video moves on automatically.</div>
+                <div class="wsp-deliv-sub">Upload as many files as you need — nothing moves until you press <b>Done</b> at the bottom.</div>
                 <div id="wsp-deliv-list">${results.map((r, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('film', 'wsp-row-ic')} ${escHtml(r.name || (r.path || '').split('/').pop())}</span><button class="wsp-mini-btn danger" data-deliv-del="${i}">✕</button></div>`).join('')}</div>
                 ${canUpload
-                    ? `<div class="wsp-add-row"><input type="file" id="wsp-deliv-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-deliv-up">⬆ Upload result</button></div>`
+                    ? `<div class="wsp-add-row"><input type="file" id="wsp-deliv-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-deliv-up">⬆ Upload files</button></div>`
                     : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project (below) first — results go to that project's Dropbox folder.</div></div>`}
             </div>`;
         }
@@ -835,7 +834,7 @@ const WorkshopUI = (() => {
         }
         // auto stages — the structured upload lives in a section below
         return `<div class="wsp-deliv-banner"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
-            <div class="wsp-deliv-sub">Complete it in the section below — the video advances automatically, no “done” needed.</div></div>`;
+            <div class="wsp-deliv-sub">Complete it in the section below, then press <b>Done</b> at the bottom to move it forward.</div></div>`;
     }
 
     // Shared row bindings for the stage panel and the all-items list
@@ -914,10 +913,9 @@ const WorkshopUI = (() => {
                 const cur = stageResultsFor(VideoService.getById(v.id) || fresh, stageId);
                 const sr = { ...((VideoService.getById(v.id) || fresh).stageResults || {}), [stageId]: [...cur, ...added] };
                 await VideoService.update(v.id, { stageResults: sr, status: normalizedStatus(fresh) });
-                bar.stage('Done ✓ — moving forward');
-                toast('Deliverable uploaded — video advanced');
-                expandedStageVideoId = null;   // it's leaving this stage's queue
-                renderTab();
+                bar.stage(`Added ${added.length} file${added.length === 1 ? '' : 's'} ✓`);
+                toast(`Uploaded ${added.length} file${added.length === 1 ? '' : 's'} — add more or press Done`);
+                renderTab();   // stays on the node; the worker presses Done to move on
             } catch (e) { alert('Upload failed: ' + e.message); }
         });
     }
