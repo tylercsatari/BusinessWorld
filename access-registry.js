@@ -156,10 +156,14 @@
             if (acc === 'read') gateReadSection(el);
         });
     }
-    // Turn a read-only section into a clean "delivered brief": the inputs become
-    // plain readable text (not greyed disabled fields), the controls the worker
-    // can't act on (dropdowns, checkboxes, add/delete buttons) are hidden, and
-    // the worker's own DELIVERABLE control stays fully live and highlighted.
+    // Elements that count as real, deliverable-relevant CONTENT (so a section
+    // with one of these is worth showing; otherwise it's hidden entirely).
+    const CONTENT_SEL = '.ag-readtext, [data-deliv-open], .wsp-row, .wsp-media-tile, .wsp-sketch-tile, [data-anim-asset-open], [data-hooki-open], audio, img';
+    // Turn a read-only section into a clean DELIVERED BRIEF — nothing more,
+    // nothing less. Provided inputs become plain readable text; everything the
+    // worker doesn't need (empty fields, editor instructions, dropdowns,
+    // checkboxes, add/delete buttons) is removed; an empty section is hidden
+    // entirely. The worker's own DELIVERABLE stays fully live.
     function gateReadSection(el) {
         // 1. mark the deliverable controls this worker IS allowed to write
         const open = [];
@@ -170,19 +174,22 @@
             }
         });
         const inOpen = (node) => open.some(d => d.contains(node));
-        // 2. transform the rest into a brief
-        el.querySelectorAll('input, textarea, select').forEach(c => {
+        // 2. text inputs → flowing text, but ONLY when provided; empty ones vanish.
+        //    Empty text fields are NOT marked done, so a re-gate (after async/sync
+        //    editors populate them) can still render them once they have a value.
+        el.querySelectorAll('input, textarea, select, [contenteditable]').forEach(c => {
             if (inOpen(c) || c.dataset.agDone) return;
-            c.dataset.agDone = '1';
-            if (c.type === 'checkbox' || c.type === 'radio') { const w = c.closest('label') || c; w.style.display = 'none'; return; }
-            if (c.tagName === 'SELECT') { c.style.display = 'none'; return; }  // dropdowns: the worker doesn't choose, don't show the control
-            // text / textarea / date → flowing text
-            const val = (c.value || '').trim();
-            const span = document.createElement('div');
-            span.className = 'ag-readtext' + (val ? '' : ' empty');
-            span.textContent = val || '(not provided)';
+            if (c.type === 'checkbox' || c.type === 'radio') { c.dataset.agDone = '1'; const w = c.closest('label') || c; w.style.display = 'none'; return; }
+            if (c.tagName === 'SELECT') { c.dataset.agDone = '1'; c.style.display = 'none'; return; }
+            const val = (c.value != null ? c.value : c.textContent || '').toString().trim();
             c.style.display = 'none';
-            if (c.parentNode) c.parentNode.insertBefore(span, c);
+            if (val) {
+                c.dataset.agDone = '1';
+                const span = document.createElement('div');
+                span.className = 'ag-readtext';
+                span.textContent = val;
+                if (c.parentNode) c.parentNode.insertBefore(span, c);
+            }
         });
         // 3. hide controls/buttons they can't use (add / delete / upload), keep view buttons + deliverable
         el.querySelectorAll('button').forEach(b => {
@@ -190,6 +197,21 @@
             b.dataset.agDone = '1';
             b.style.display = 'none';
         });
+        // 4. strip editor instructions (the muted hint text) — they aren't a brief.
+        el.querySelectorAll('.wsp-hint').forEach(h => { h.style.display = 'none'; });
+        // 4b. relabel the section so it reads as a brief — clearly separating the
+        //     HOOK they're delivering from the CONTEXT they have to work with.
+        const READ_LABEL = { hook: 'The hook to make', context: 'Context — what you have to work with', script: 'The script', decomp: 'Components', voiceover: 'Voiceover', editing: 'Final videos to upload' };
+        const fid = el.getAttribute('data-vfield') || el.getAttribute('data-cfield');
+        if (fid && READ_LABEL[fid]) { const nm = el.querySelector('.wsp-sub-name'); if (nm) nm.textContent = READ_LABEL[fid]; }
+        // 4c. hide nested labeled sub-blocks that have nothing in them (e.g. the
+        //     animation-assets block when no assets were provided).
+        el.querySelectorAll('.wsp-anim-assets').forEach(b => {
+            if (!inOpen(b) && !b.querySelector('[data-anim-asset-open]')) b.style.display = 'none';
+        });
+        // 5. hide the whole section if there's nothing real to show (and no
+        //    deliverable); re-show it if a later pass populated it.
+        el.style.display = (open.length || el.querySelector(CONTENT_SEL)) ? '' : 'none';
     }
     window.applyVideoFieldGating = (root) => gateFields(root, 'data-vfield', window.videoFieldAccess);
     window.applyComponentFieldGating = (root) => gateFields(root, 'data-cfield', window.componentFieldAccess);

@@ -1933,6 +1933,14 @@ const WorkshopUI = (() => {
                 save: async (text) => { await VideoService.update(v.id, { script: text }); }
             });
         }
+        // Re-apply read gating now that the (synchronously-populated) script editor
+        // and other fields have their values — so a read worker sees a provided
+        // script as a brief, and empty sections stay hidden. Also runs again after
+        // a tick to catch async-loaded media (vo / edit / footage).
+        if (window.applyVideoFieldGating) {
+            window.applyVideoFieldGating(root);
+            setTimeout(() => { try { window.applyVideoFieldGating(root); } catch (e) {} }, 500);
+        }
     }
 
     function renderDetail() {
