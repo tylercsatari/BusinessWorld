@@ -36,3 +36,5 @@ buildings/jarvis/tribe-analysis/cache/
 # Video Lab cached videos (local only)
 .videolab-cache/
 quant2/emb/
+buildings/jarvis/quant2/emb_audio/
+buildings/jarvis/quant2/emb_motion/
