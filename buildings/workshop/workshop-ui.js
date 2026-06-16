@@ -2602,72 +2602,26 @@ const WorkshopUI = (() => {
         const v = VideoService.getById(videoId);
         if (!v) return;
         const orig = btn.textContent;
-        btn.disabled = true; btn.textContent = '✨ Studying the data…';
+        btn.disabled = true; btn.textContent = '\u2728 Reasoning through the data\u2026';
         try {
-            // Pull the compact, data-grounded intelligence pack (real swipe /
-            // retention findings, design rules, word + visual guidance, principles,
-            // exemplar videos). A few KB — distilled server-side from the analytics.
-            const topicQuery = `${v.name || ''} ${v.context || ''} ${(v.script || '').slice(0, 400)}`;
-            let intel = null, examples = [];
-            try { intel = await (await fetch('/api/workshop/hook-intel')).json(); } catch (e) {}
-            // Retrieval: the REAL opening hooks of our most TOPICALLY SIMILAR past
-            // videos (actual line + actual opening visual + views). This is the
-            // core grounding — the model learns from proof, not made-up structure.
-            btn.textContent = '✨ Studying old videos…';
-            try {
-                examples = ((await (await fetch('/api/workshop/hook-examples', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: topicQuery, limit: 12 })
-                })).json()).examples) || [];
-            } catch (e) {}
-            const fmt = (arr, f) => (arr || []).map(f).join('\n');
-            const examplesText = examples.length
-                ? `REAL OPENING HOOKS from our most SIMILAR past videos — the actual spoken line + the actual opening shot + views. Study what these proven hooks do (the angle, the specificity, the visual) and write in this style for THIS video:\n${examples.map(e => `• "${e.line}"  [VISUAL: ${e.visual || 'n/a'}]  — ${(e.views || 0).toLocaleString()} views`).join('\n')}`
-                : '';
-            const intelText = intel && !intel.error ? [
-                `OBJECTIVE: ${intel.objective}`,
-                intel.nVideos ? `(grounded in ${intel.nVideos} of our own posted videos)` : '',
-                `\nSTRONGEST FINDINGS (signal — r — what it means):\n${fmt(intel.discoveries, d => `• ${d.signal} (r=${d.r}) — ${d.meaning}`)}`,
-                `\nRETENTION PATTERNS:\n${fmt(intel.patterns, p => `• ${p.pattern} — ${p.evidence}`)}`,
-                `\nDESIGN RULES:\n${(intel.designRules || []).map(r => `• ${r}`).join('\n')}`,
-                `\nTOP RETENTION PREDICTORS:\n${fmt(intel.predictors, p => `• ${p.signal} (r=${p.r}) — ${p.rule}`)}`,
-                intel.openingWords ? `\nOPENING WORDS — start with these: ${(intel.openingWords.bestFirst || []).join(', ')}. Avoid: ${(intel.openingWords.worstFirst || []).join(', ')}. ${intel.openingWords.rule}` : '',
-                `\nVISUAL — what makes viewers STAY (design the opening shot from this):\n${fmt(intel.visualPeakCauses, c => `• ${c.cause} — ${c.rule}`)}`,
-                `\nVISUAL/LANGUAGE — what makes viewers LEAVE (avoid):\n${fmt(intel.retentionDropCauses, c => `• ${c.cause} — ${c.rule}`)}`,
-                `\nWORDS THAT RETAIN: ${(intel.wordsThatRetain || []).join(', ')}`,
-                `WORDS THAT KILL RETENTION (avoid): ${(intel.wordsThatKill || []).join(', ')}`,
-                `\nCAUSAL PRINCIPLES (indicator → outcome, strength):\n${fmt(intel.principles, p => `• ${p.signal} → ${p.outcome}${p.strength != null ? ` (${p.strength})` : ''}`)}`
-            ].filter(Boolean).join('\n') : '';
-            const dataBlock = [examplesText, intelText].filter(Boolean).join('\n\n');
-
-            btn.textContent = '✨ Writing hooks…';
-            const sys = `You are the hook strategist for a maker/experiment YouTube channel, optimizing for ONE thing: swipe-through — keeping ≥85% of viewers past the first 3–5 seconds, then high retention at 20s (the strongest predictor of total views). Below are this channel's OWN real top-performing opening hooks (from similar videos) plus its processed analytics. GROUND every hook in these real examples and findings — do NOT invent generic hook structure.
-
-A hook is TWO things working together and BOTH matter equally:
-1) LINE — the spoken/on-screen opening words (start with action/challenge words from the data, concrete + visceral, an open loop, never self-reference or material/technical words).
-2) VISUAL — what is literally on screen in the first seconds (high-energy action frame / impact / reveal per the data; never a talking head or a static material shot).
-
-=== CHANNEL DATA ===
-${dataBlock}
-=== END DATA ===
-
-Output ONLY a JSON object, no prose, no markdown, do not think out loud. Schema:
-{"hooks":[{"line":"the spoken opening line","visual":"what's on screen in the first 1-3 seconds — concrete shot description","why":"one sentence tying this to a SPECIFIC real example or finding above","predictedSwipeThrough":"NN%"}]}
-Give 3–4 DISTINCT hooks taking different angles, modeled on the real examples. predictedSwipeThrough is your honest estimate (aim for 85%+ but be realistic).`;
-            const user = `Video title: ${v.name || '(untitled)'}\nWhat actually happens in the video (context): ${v.context || '(none)'}\nScript so far: ${(v.script || '(none)').slice(0, 2000)}\nExisting hooks (make these DIFFERENT): ${PS().hooksOf(v).map(h => h.text || h.label).filter(Boolean).join(' | ') || 'none'}`;
-            const parsed = await aiJson(
-                [{ role: 'system', content: sys }, { role: 'user', content: user }],
-                (content) => { const o = extractJsonObject(content, 'hooks'); return (o && Array.isArray(o.hooks) && o.hooks.length) ? o : null; }
-            );
-            const hooks = parsed.hooks
-                .map(h => (typeof h === 'string' ? { line: h } : h))
-                .filter(h => h && (h.line || h.text))
-                .map(h => ({ line: (h.line || h.text || '').trim(), visual: (h.visual || '').trim(), why: (h.why || '').trim(), pred: (h.predictedSwipeThrough || h.pred || '').toString().trim() }));
-            if (!hooks.length) { alert('AI did not return any hooks. Add more context/script and try again.'); return; }
-            showHookSuggestions(videoId, hooks, !dataBlock);
+            // The server-side Hook Reasoning Engine does the work: retrieve the most
+            // similar REAL past hooks, draft candidates, grade each with the
+            // deterministic retention scorer, refine the weak ones, and rank \u2014
+            // grounded in the channel's data + accumulated memory.
+            const res = await fetch('/api/workshop/hook-engine', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: v.name || '', context: v.context || '', script: (v.script || '').slice(0, 2000),
+                    existingHooks: PS().hooksOf(v).map(h => h.text || h.label).filter(Boolean)
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            const hooks = (data && data.hooks) || [];
+            if (!hooks.length) { alert('The hook engine returned nothing \u2014 add more context/script and try again.' + (data.error ? '\n(' + data.error + ')' : '')); return; }
+            showHookSuggestions(videoId, hooks, false);
         } catch (e) {
             console.warn('suggestHooks failed', e);
-            alert('AI hook suggestions failed: ' + e.message);
+            alert('Hook engine failed: ' + e.message);
         } finally {
             btn.disabled = false; btn.textContent = orig;
         }
@@ -2676,14 +2630,16 @@ Give 3–4 DISTINCT hooks taking different angles, modeled on the real examples.
     function showHookSuggestions(videoId, hooks, noData) {
         const overlay = document.createElement('div');
         overlay.className = 'wsp-picker-overlay'; overlay.style.display = 'flex';
+        const predOf = (h) => h.predictedSwipeThrough || h.pred || '';
         overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal">
-            <div class="wsp-picker-header"><span>✨ Data-backed hooks <span class="wsp-hint">— ${noData ? 'analytics offline, generic mode' : 'grounded in the channel\'s swipe/retention data'}. Each is a LINE + a VISUAL.</span></span><button class="wsp-picker-close" data-close>✕</button></div>
+            <div class="wsp-picker-header"><span>✨ Hook engine <span class="wsp-hint">— reasoned from the channel's real hooks &amp; retention data, each graded by the scorer. LINE + VISUAL.</span></span><button class="wsp-picker-close" data-close>✕</button></div>
             <div class="wsp-suggest-list">
                 ${hooks.map((h, i) => `<div class="wsp-hooksug" data-sug="${i}">
                     <div class="wsp-hooksug-main">
-                        <div class="wsp-hooksug-line">${icon('hook', 'wsp-row-ic')} <b>${escHtml(h.line)}</b>${h.pred ? `<span class="wsp-hooksug-pred" title="predicted swipe-through">${escHtml(h.pred)}</span>` : ''}</div>
+                        <div class="wsp-hooksug-line">${icon('hook', 'wsp-row-ic')} <b>${escHtml(h.line)}</b>${typeof h.score === 'number' ? `<span class="wsp-hooksug-score" title="hook-craft score from the deterministic retention scorer">${h.score}/100</span>` : ''}${predOf(h) ? `<span class="wsp-hooksug-pred" title="predicted swipe-through">${escHtml(predOf(h))}</span>` : ''}</div>
                         ${h.visual ? `<div class="wsp-hooksug-visual">${icon('film', 'wsp-cc-ic')} <span>${escHtml(h.visual)}</span></div>` : ''}
                         ${h.why ? `<div class="wsp-hooksug-why">${escHtml(h.why)}</div>` : ''}
+                        ${h.modeledOn && h.modeledOn.line ? `<div class="wsp-hooksug-model">↳ modeled on a real hook: "${escHtml(h.modeledOn.line)}"${h.modeledOn.views ? ` (${(h.modeledOn.views).toLocaleString()} views)` : ''}</div>` : ''}
                     </div>
                     <button class="wsp-mini-btn done" data-use="${i}">＋ Use</button>
                 </div>`).join('')}
@@ -2697,9 +2653,12 @@ Give 3–4 DISTINCT hooks taking different angles, modeled on the real examples.
             const hs = hooksWithEdits(videoId);
             hs.push({ id: 'h' + Math.random().toString(36).slice(2, 10), type: '', text: h.line, visual: h.visual || '', label: '', videoPath: '', videoName: '' });
             await saveHooks(videoId, hs);
+            // Feedback → engine memory: the user kept this one, so it learns to
+            // emulate its style next time.
+            fetch('/api/workshop/hook-feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line: h.line, visual: h.visual || '' }) }).catch(() => {});
             overlay.remove();
             rerenderEditor(videoId);
-            toast('Hook added — now pick its type');
+            toast('Hook added — the engine will remember it');
         }));
     }
 

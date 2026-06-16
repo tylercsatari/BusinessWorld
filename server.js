@@ -35,6 +35,61 @@ const PORT = process.env.PORT || 8002;
 const IS_RENDER = !!process.env.RENDER;  // Render sets this env var automatically
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// ── Hook reasoning engine support: server-side LLM JSON + memory persistence ──
+function _extractJsonObject(text) {
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (e) {}
+    const a = text.indexOf('"hooks"');
+    const from = a >= 0 ? text.lastIndexOf('{', a) : text.indexOf('{');
+    if (from < 0) return null;
+    let depth = 0, inStr = false, escCh = false;
+    for (let i = from; i < text.length; i++) {
+        const ch = text[i];
+        if (inStr) { if (escCh) escCh = false; else if (ch === '\\') escCh = true; else if (ch === '"') inStr = false; }
+        else if (ch === '"') inStr = true;
+        else if (ch === '{') depth++;
+        else if (ch === '}') { if (--depth === 0) { try { return JSON.parse(text.slice(from, i + 1)); } catch (e) { return null; } } }
+    }
+    return null;
+}
+// Kimi (Fireworks) first — it reasons before the JSON — then OpenAI strict JSON.
+async function hookLlmJson(messages) {
+    if (process.env.FIREWORKS_API_KEY) {
+        try {
+            const r = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+                method: 'POST', headers: { 'Authorization': `Bearer ${process.env.FIREWORKS_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6', messages, temperature: 0.4, max_tokens: 4000 })
+            });
+            if (r.ok) { const o = _extractJsonObject((await r.json()).choices?.[0]?.message?.content); if (o) return o; }
+        } catch (e) { /* fall through */ }
+    }
+    if (process.env.OPENAI_API_KEY) {
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST', headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o', messages, temperature: 0.5, max_tokens: 1500, response_format: { type: 'json_object' } })
+        });
+        if (r.ok) { const o = _extractJsonObject((await r.json()).choices?.[0]?.message?.content); if (o) return o; }
+    }
+    return null;
+}
+async function loadHookMemory() {
+    try {
+        const all = await dataStore.getAll('settings');
+        const rec = all.find(r => r.key === 'hookMemory');
+        return rec ? { principles: rec.principles || [], wins: rec.wins || [] } : { principles: [], wins: [] };
+    } catch (e) { return { principles: [], wins: [] }; }
+}
+async function recordHookWin(win) {
+    if (!win || !win.line) return;
+    const all = await dataStore.getAll('settings');
+    let rec = all.find(r => r.key === 'hookMemory');
+    const wins = (rec && rec.wins) || [];
+    if (!wins.some(w => w.line === win.line)) wins.unshift({ line: win.line, visual: win.visual || '', note: win.note || '' });
+    const trimmed = wins.slice(0, 40);
+    if (rec) await dataStore.update('settings', rec.id, { wins: trimmed });
+    else await dataStore.create('settings', { key: 'hookMemory', principles: [], wins: trimmed });
+}
+
 function makeLineItemRows(lineItems, currency, indent) {
     return lineItems.map(li => {
         const desc = li.description || "";
@@ -781,6 +836,37 @@ const server = http.createServer(async (req, res) => {
         } catch (e) { examples = []; }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ examples }));
+        return;
+    }
+
+    // The HOOK REASONING ENGINE — runs the draft→score→refine loop server-side,
+    // grounded in real exemplars + the deterministic scorer + accumulated memory.
+    if (pathname === '/api/workshop/hook-engine' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const memory = await loadHookMemory();
+            const result = await require('./buildings/jarvis/hook-engine').run(
+                { title: body.title, context: body.context, script: body.script, existingHooks: body.existingHooks || [] },
+                hookLlmJson, memory
+            );
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message, hooks: [] }));
+        }
+        return;
+    }
+
+    // Feedback → memory: the user kept this hook. Store it as a win the engine
+    // emulates next time (and distil a one-line principle from it).
+    if (pathname === '/api/workshop/hook-feedback' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            await recordHookWin({ line: body.line || '', visual: body.visual || '', note: body.note || '' });
+        } catch (e) { /* best-effort */ }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
         return;
     }
 
