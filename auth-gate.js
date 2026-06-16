@@ -91,8 +91,13 @@
     .authgate-tabbody { overflow-y:auto; flex:1; min-height:0; }
     .authgate-profiles { padding:12px 16px 16px; display:flex; flex-direction:column; gap:12px; }
     .authgate-profile-hint { font-size:12px; color:#998a72; line-height:1.4; }
-    .authgate-profile-card { border:1px solid #ece4d6; border-radius:12px; padding:12px 14px; background:#fffdf9; }
-    .authgate-profile-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .authgate-profile-card { border:1px solid #ece4d6; border-radius:12px; padding:12px 14px; background:#fffdf9; margin-bottom:8px; }
+    .authgate-profile-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:pointer; }
+    .authgate-profile-card.collapsed .authgate-profile-head { margin-bottom:0; }
+    .authgate-profile-card.collapsed .authgate-profile-body { display:none; }
+    .authgate-chev { color:#b09a78; font-size:11px; transition:transform .15s; flex-shrink:0; }
+    .authgate-profile-card:not(.collapsed) .authgate-chev { transform:rotate(90deg); }
+    .authgate-profile-summary { font-size:11px; font-weight:700; color:#b09a78; white-space:nowrap; flex-shrink:0; }
     .authgate-profile-name { flex:1; border:1px solid #e0dcd6; border-radius:9px; padding:7px 10px; font-size:14px; font-weight:800; color:#5a3e1b; font-family:inherit; }
     .authgate-profile-del { background:#fdf0ee; border:1px solid #f5c6bd; color:#c0392b; border-radius:8px; width:28px; height:28px; cursor:pointer; font-weight:800; flex-shrink:0; }
     .authgate-profile-label { font-size:10.5px; font-weight:800; color:#b09a78; text-transform:uppercase; letter-spacing:.5px; margin:8px 0 5px; }
@@ -381,6 +386,7 @@
         modal.querySelector('#ag-people-close').onclick = () => o.remove();
         const body = modal.querySelector('#ag-tabbody');
         let profiles = [];
+        let _expandId = null;   // which profile card is expanded (collapsed by default)
         const loadProfiles = async () => { try { const r = await (await fetch('/api/profiles')).json(); profiles = Array.isArray(r) ? r : []; } catch (e) { profiles = []; } };
 
         modal.querySelectorAll('.authgate-tab').forEach(t => t.onclick = () => {
@@ -469,28 +475,41 @@
                     ${grp('Video sections', vf, 'vfield')}${grp('Component sections', cf, 'cfield')}
                 </div>`;
             };
-            return `<div class="authgate-profile-card">
-                <div class="authgate-profile-head">
-                    <input class="authgate-profile-name" data-pname="${escA(p.id)}" value="${escA(p.name || '')}" placeholder="Profile name">
-                    <button class="authgate-profile-del" data-pdel="${escA(p.id)}">✕</button>
+            const summary = b.size ? (b.size + ' building' + (b.size === 1 ? '' : 's')) : 'no access';
+            const open = (p.id === _expandId);
+            return `<div class="authgate-profile-card${open ? '' : ' collapsed'}" data-pcard="${escA(p.id)}">
+                <div class="authgate-profile-head" data-ptoggle="${escA(p.id)}">
+                    <span class="authgate-chev">▸</span>
+                    <input class="authgate-profile-name" data-pname="${escA(p.id)}" value="${escA(p.name || '')}" placeholder="Profile name" onclick="event.stopPropagation()">
+                    <span class="authgate-profile-summary">${summary}</span>
+                    <button class="authgate-profile-del" data-pdel="${escA(p.id)}" onclick="event.stopPropagation()">✕</button>
                 </div>
-                <div class="authgate-profile-label">Buildings &amp; what they can see inside</div>
-                ${ALL_BUILDINGS.map(name => `<div class="authgate-bldrow">
-                    <label class="authgate-check authgate-bldcheck"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> <strong>${escA(name)}</strong>${name === 'Workshop' ? ' <span class="authgate-bldhint">— pick stage access below</span>' : (BUILDING_SECTIONS[name] ? ' <span class="authgate-bldhint">— pick tabs below</span>' : '')}</label>
-                    ${name === 'Workshop' ? (stageRows() + fieldRows()) : sectionRows(name)}
-                </div>`).join('')}
-                <div class="authgate-profile-foot"><button class="authgate-menu-item" style="margin:0;width:auto" data-psave="${escA(p.id)}">Save</button><span class="authgate-pnote" id="ag-pnote-${escA(p.id)}"></span></div>
+                <div class="authgate-profile-body">
+                    <div class="authgate-profile-label">Buildings &amp; what they can see inside</div>
+                    ${ALL_BUILDINGS.map(name => `<div class="authgate-bldrow">
+                        <label class="authgate-check authgate-bldcheck"><input type="checkbox" data-pbuild="${escA(p.id)}" value="${escA(name)}" ${b.has(name) ? 'checked' : ''}> <strong>${escA(name)}</strong>${name === 'Workshop' ? ' <span class="authgate-bldhint">— pick stage access below</span>' : (BUILDING_SECTIONS[name] ? ' <span class="authgate-bldhint">— pick tabs below</span>' : '')}</label>
+                        ${name === 'Workshop' ? (stageRows() + fieldRows()) : sectionRows(name)}
+                    </div>`).join('')}
+                    <div class="authgate-profile-foot"><button class="authgate-menu-item" style="margin:0;width:auto" data-psave="${escA(p.id)}">Save</button><span class="authgate-pnote" id="ag-pnote-${escA(p.id)}"></span></div>
+                </div>
             </div>`;
         }
-        async function renderProfiles() {
+        async function renderProfiles(expandId) {
+            _expandId = expandId || null;
             body.innerHTML = '<div style="padding:24px;text-align:center;color:#999">Loading…</div>';
             await loadProfiles();
             body.innerHTML = `<div class="authgate-profiles">
-                <div class="authgate-profile-hint">A profile is a reusable permission set. Pick which buildings and top-bar items it grants, then assign it to people on the People tab.</div>
+                <button class="authgate-menu-item" id="ag-new-profile" style="margin:0 0 8px">＋ New profile</button>
+                <div class="authgate-profile-hint">A profile is a reusable permission set. Click one to expand and edit which buildings + sections it grants, then assign it to people on the People tab.</div>
                 ${profiles.map(profileCardHtml).join('')}
-                <button class="authgate-menu-item" id="ag-new-profile" style="margin-top:4px">＋ New profile</button>
             </div>`;
-            body.querySelector('#ag-new-profile').onclick = async () => { await fetch('/api/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'New profile', buildings: [], features: {} }) }); renderProfiles(); };
+            body.querySelector('#ag-new-profile').onclick = async () => {
+                const r = await fetch('/api/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'New profile', buildings: [], features: {} }) });
+                const np = await r.json().catch(() => null);
+                renderProfiles(np && np.id);   // open the new one
+            };
+            // collapse/expand a profile card by clicking its header
+            body.querySelectorAll('[data-ptoggle]').forEach(h => h.onclick = () => h.closest('.authgate-profile-card').classList.toggle('collapsed'));
             // toggling a building enables/disables its section checkboxes
             body.querySelectorAll('[data-pbuild]').forEach(cb => cb.onchange = () => {
                 const pid = cb.dataset.pbuild, name = cb.value;
