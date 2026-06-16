@@ -73,8 +73,12 @@ def load():
             dt = None
         sg = sig.get(v['id'], {})
         tab = [float(sg.get(k)) if isinstance(sg.get(k), (int, float)) and np.isfinite(sg.get(k)) else np.nan for k in TAB_KEYS]
+        _root = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))   # project root
+        fdir_abs = os.path.join(_root, v['frame_dir'])
+        ff = sorted([f for f in os.listdir(fdir_abs) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]) if os.path.isdir(fdir_abs) else []
         rows.append({'id': v['id'], 'name': v.get('name', v['id'])[:48], 'emb': emb, 'S': S,
-                     'h': survival_to_hazard(S), 'dt': dt, 'tab': tab, 'frame_dir': v['frame_dir'], 'n_frames': v['n_frames']})
+                     'h': survival_to_hazard(S), 'dt': dt, 'tab': tab, 'frame_dir': v['frame_dir'],
+                     'n_frames': v['n_frames'], 'frame0': ff[len(ff) // 4] if ff else None})
     # impute tab medians
     T = np.array([r['tab'] for r in rows])
     for j in range(T.shape[1]):
@@ -182,9 +186,10 @@ def main():
         sc_c = proj[:, c]
         eff = float(spearmanr(sc_c, mh).correlation)
         order = np.argsort(sc_c)
+        ex = lambda i: {'id': rows[i]['id'], 'name': rows[i]['name'], 'frame0': rows[i]['frame0'], 'mean_hazard': round(float(mh[i]), 3)}
         latents.append({'id': c, 'effect_on_hazard_rho': eff,
-                        'low_hazard_examples': [{'id': rows[i]['id'], 'name': rows[i]['name'], 'frame_dir': rows[i]['frame_dir']} for i in order[-4:][::-1]],
-                        'high_hazard_examples': [{'id': rows[i]['id'], 'name': rows[i]['name'], 'frame_dir': rows[i]['frame_dir']} for i in order[:4]]})
+                        'low_hazard_examples': [ex(i) for i in order[-4:][::-1]],
+                        'high_hazard_examples': [ex(i) for i in order[:4]]})
 
     out = {
         'n': n, 'emb_dim': int(ne), 'emb_model': 'facebook/dinov2-small (frozen)',
@@ -198,9 +203,10 @@ def main():
         'manifold': {
             'k': bestk, 'silhouette': float(bestsil),
             'pca_var': [float(x) for x in pca.explained_variance_ratio_[:K_EMB]],
-            'videos': [{'id': rows[i]['id'], 'name': rows[i]['name'], 'x': float(p2[i, 0]), 'y': float(p2[i, 1]),
+            'videos': [{'id': rows[i]['id'], 'name': rows[i]['name'], 'frame0': rows[i]['frame0'],
+                        'x': float(p2[i, 0]), 'y': float(p2[i, 1]),
                         'cluster': int(km.labels_[i]), 'novelty': float(novelty[i]),
-                        'mean_hazard': float(mh[i]), 'views': None} for i in range(n)],
+                        'mean_hazard': float(mh[i])} for i in range(n)],
         },
         'latent_directions': latents,
         'honesty': ('DINOv2 features are frozen self-supervised (no labels). PCA fit on TRAIN fold only. '
