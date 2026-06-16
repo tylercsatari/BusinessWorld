@@ -13,6 +13,7 @@
  * Pure module: the LLM call and the memory store are injected by the caller.
  */
 const intel = require('./hook-intel');
+const visuals = require('./hook-visuals');
 
 // The principles that explain WHY a hook keeps viewers past the swipe point —
 // each grounded in this channel's own retention experiments (the numbers come
@@ -73,7 +74,11 @@ Below are this channel's best-RETAINED similar openings — sorted by lowest swi
 ${fmtOpenings(examples)}
 === END OPENINGS ===
 
-What a hook IS: the LINE is ONLY the GRAB — the first 1–2 sentences (8–25 words), the opener that stops the swipe, NOT a summary of the video. e.g. "This is an indestructible chest plate. But can it save my life?" — that's the whole hook; the rest is the video. A hook = LINE + VISUAL (the first 1–3 seconds on screen — action/impact/reveal that embodies the same principle, never a talking head).
+What a hook IS: the LINE is ONLY the GRAB — the first 1–2 sentences (8–25 words), the opener that stops the swipe, NOT a summary of the video. e.g. "This is an indestructible chest plate. But can it save my life?" — that's the whole hook; the rest is the video.
+
+A hook = LINE + VISUAL, and THE VISUAL IS HALF THE HOOK. The opening shot must be designed from the visual mechanics below and must embody the SAME principle as the line (an open loop → a frozen about-to-happen moment; novelty → a wrong-material / impossible object; stakes → visible danger on a human).
+
+${visuals.block()}
 
 ${findings}${wins}`;
 
@@ -83,8 +88,14 @@ What actually happens: ${context || '(none)'}
 Script so far: ${script || '(none)'}
 Existing hooks (make these different): ${(opts.existingHooks || []).join(' | ') || 'none'}
 
-First, think about which principles best fit THIS video to minimize swipe-away. Then write 4 distinct hooks, each deliberately built from 1–3 named principles (not copied from a video). Each LINE is SHORT (1–2 sentences, 8–25 words). The VISUAL must embody the same principle. Output ONLY JSON:
-{"hooks":[{"line":"the short grab","visual":"the opening shot that embodies the principle","principles":["the principle names you applied"],"why":"one sentence on WHY this minimizes swipe-away (cause, not 'it's like a popular video')","modeledOn":"title of the best-retained opening it relates to, or '' if newly constructed"}]}`;
+Write 4 hooks that are WILDLY DIFFERENT from each other — each must take a fundamentally different ANGLE (different principle mix), a different LINE structure (e.g. one bold claim, one question, one challenge/command, one impossible-reveal), AND a different VISUAL MECHANISM from the components list. No two hooks may share the same core idea or the same shot. Generic restatements of the same idea are failures.
+
+For EACH hook:
+- LINE: short (1–2 sentences, 8–25 words), built deliberately from 1–3 named principles to minimize swipe-away.
+- VISUAL: a concrete opening shot built from the visual mechanics — ONE contradiction, a human hand/body for scale, frozen at the instant before impact/launch/reveal, clean high-contrast background, NO text. Make the apparatus novel. The visual must carry the same principle as the line.
+
+Output ONLY JSON:
+{"hooks":[{"line":"the short grab","visual":"the concrete opening shot (contradiction + human + frozen moment, no text)","principles":["principle names applied to BOTH line and visual"],"why":"one sentence: the causal reason this minimizes swipe-away","modeledOn":"title of the best-retained opening it relates to, or '' if newly constructed"}]}`;
 
     // ONE deep reasoning pass — Kimi K2.6 internally reasons (chain-of-thought)
     // over the real openings before answering, so a second round-trip just
