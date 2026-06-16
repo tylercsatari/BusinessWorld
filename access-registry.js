@@ -153,21 +153,42 @@
             if (acc === 'none') { el.style.display = 'none'; return; }
             el.style.display = '';
             el.classList.toggle('ag-readonly', acc === 'read');
-            if (acc === 'read') {
-                el.querySelectorAll('input, textarea, select').forEach(c => { c.disabled = true; });
-                el.querySelectorAll('button').forEach(c => { if (!c.matches(KEEP_CLICKABLE)) c.disabled = true; });
-                // A deliverable control (data-deliv-stage) stays WRITABLE inside a
-                // read section if the worker can write that stage — so the animator
-                // can still upload their animation video even though the hook
-                // section is read-only. Marked data-deliv-open for the CSS too.
-                el.querySelectorAll('[data-deliv-stage]').forEach(d => {
-                    const st = d.getAttribute('data-deliv-stage');
-                    if (window.canWriteStage && window.canWriteStage(st)) {
-                        d.setAttribute('data-deliv-open', '1');
-                        d.querySelectorAll('input, textarea, select, button').forEach(c => { c.disabled = false; });
-                    }
-                });
+            if (acc === 'read') gateReadSection(el);
+        });
+    }
+    // Turn a read-only section into a clean "delivered brief": the inputs become
+    // plain readable text (not greyed disabled fields), the controls the worker
+    // can't act on (dropdowns, checkboxes, add/delete buttons) are hidden, and
+    // the worker's own DELIVERABLE control stays fully live and highlighted.
+    function gateReadSection(el) {
+        // 1. mark the deliverable controls this worker IS allowed to write
+        const open = [];
+        el.querySelectorAll('[data-deliv-stage]').forEach(d => {
+            if (window.canWriteStage && window.canWriteStage(d.getAttribute('data-deliv-stage'))) {
+                d.setAttribute('data-deliv-open', '1');
+                open.push(d);
             }
+        });
+        const inOpen = (node) => open.some(d => d.contains(node));
+        // 2. transform the rest into a brief
+        el.querySelectorAll('input, textarea, select').forEach(c => {
+            if (inOpen(c) || c.dataset.agDone) return;
+            c.dataset.agDone = '1';
+            if (c.type === 'checkbox' || c.type === 'radio') { const w = c.closest('label') || c; w.style.display = 'none'; return; }
+            if (c.tagName === 'SELECT') { c.style.display = 'none'; return; }  // dropdowns: the worker doesn't choose, don't show the control
+            // text / textarea / date → flowing text
+            const val = (c.value || '').trim();
+            const span = document.createElement('div');
+            span.className = 'ag-readtext' + (val ? '' : ' empty');
+            span.textContent = val || '(not provided)';
+            c.style.display = 'none';
+            if (c.parentNode) c.parentNode.insertBefore(span, c);
+        });
+        // 3. hide controls/buttons they can't use (add / delete / upload), keep view buttons + deliverable
+        el.querySelectorAll('button').forEach(b => {
+            if (inOpen(b) || b.matches(KEEP_CLICKABLE) || b.dataset.agDone) return;
+            b.dataset.agDone = '1';
+            b.style.display = 'none';
         });
     }
     window.applyVideoFieldGating = (root) => gateFields(root, 'data-vfield', window.videoFieldAccess);

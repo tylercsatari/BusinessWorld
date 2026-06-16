@@ -969,24 +969,30 @@
 .wsp-no-delete [data-hooki-del],
 .wsp-no-delete [data-link-del],
 .wsp-no-delete [data-inline-delete] { display: none !important; }
-/* Read-only field section — visible but not editable. pointer-events blocks
-   even controls injected asynchronously (e.g. upload slots); view/open buttons
-   are re-enabled so they can still look at files. */
-.ag-readonly { opacity: 0.94; }
-.ag-readonly input, .ag-readonly textarea, .ag-readonly select, .ag-readonly button { pointer-events: none; }
-.ag-readonly [data-link-open], .ag-readonly [data-media-open], .ag-readonly [data-cf-open],
-.ag-readonly [data-hooki-open], .ag-readonly [data-open-comp], .ag-readonly [data-open-video] { pointer-events: auto; }
-/* A deliverable control the worker IS allowed to write stays fully live inside a
-   read-locked section (covers upload buttons injected after gating runs). */
-.ag-readonly [data-deliv-open] { opacity: 1; }
-.ag-readonly [data-deliv-open], .ag-readonly [data-deliv-open] input,
-.ag-readonly [data-deliv-open] textarea, .ag-readonly [data-deliv-open] select,
-.ag-readonly [data-deliv-open] button { pointer-events: auto; }
-.ag-readonly [data-deliv-open] { outline: 2px dashed #2b6cb0; outline-offset: 4px; border-radius: 8px; }
-.ag-readonly input:disabled, .ag-readonly textarea:disabled, .ag-readonly select:disabled,
-.ag-readonly button:disabled { cursor: not-allowed; opacity: 0.7; }
-.ag-readonly .wsp-cd-label::after, .wsp-subsection.ag-readonly > .wsp-subsection-title::after {
-    content: ' · read-only'; color: #b0a890; font-weight: 600; font-size: 10px; letter-spacing: 0.3px;
+/* Read-only section, presented as a DELIVERED BRIEF — not a greyed-out form.
+   Inputs are replaced (in JS) by .ag-readtext flowing text that reads like
+   instructions; the worker's own deliverable stays live and highlighted. */
+.ag-readonly { opacity: 1; }
+.ag-readtext {
+    font-size: 13.5px; line-height: 1.5; color: #1c1c1c; white-space: pre-wrap;
+    padding: 2px 0 6px; font-weight: 500;
+}
+.ag-readtext.empty { color: #b3a890; font-style: italic; font-weight: 400; }
+/* the brief's section heading reads as a label, not an editable field */
+.wsp-subsection.ag-readonly > .wsp-subsection-title, .ag-readonly .wsp-cd-label {
+    color: #8a7d63; text-transform: uppercase; letter-spacing: 0.4px; font-size: 10.5px; font-weight: 800;
+}
+.ag-readonly > label { color: #8a7d63; text-transform: uppercase; letter-spacing: 0.4px; font-size: 10.5px; font-weight: 800; }
+/* The worker's deliverable — the one thing they DO — stands out as the action. */
+.ag-readonly [data-deliv-open] {
+    pointer-events: auto; opacity: 1; background: #eef6ff; border: 1px solid #cfe2f7;
+    border-radius: 10px; padding: 10px; margin-top: 6px;
+}
+.ag-readonly [data-deliv-open] input, .ag-readonly [data-deliv-open] textarea,
+.ag-readonly [data-deliv-open] select, .ag-readonly [data-deliv-open] button { pointer-events: auto; }
+.ag-readonly [data-deliv-open]::before {
+    content: '⬆ YOUR DELIVERABLE — upload here'; display: block; font-size: 10.5px; font-weight: 800;
+    color: #1c4e80; letter-spacing: 0.4px; margin-bottom: 6px;
 }
 .wsp-decomp-add .wsp-ai-btn { border-color: #8e5cd6; color: #6b3fb0; background: #f7f2fd; }
 .wsp-decomp-add .wsp-ai-btn:hover { background: #efe6fb; }
