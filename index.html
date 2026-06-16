@@ -2616,8 +2616,10 @@ function initCharacters() {
     scene.add(playerMesh); clickables.push(playerMesh);
     // Robin & Jordan removed — Employee Island is populated from approved accounts
     // (see window.syncEmployeeAccounts). Tennille & Zeus stay hard-coded.
-    // Tennille near The House (pink)
-    addEmployee('Tennille', 0xff69b4, -26, 24);
+    // Tennille near The House (pink) — owner-only, gated explicitly below.
+    const _tennille = addEmployee('Tennille', 0xff69b4, -26, 24);
+    _tennille.userData.ownerOnly = true;
+    window.__tennille = _tennille;
     // Zeus the cat (black and white)
     zeusMesh = createCat('Zeus', 0x222222, 0xeeeeee);
     zeusMesh.position.set(-28, 0, 26);
@@ -3071,6 +3073,12 @@ window.buildingAllowed = function (n) {
     const a = window.__access;
     if (!a || a.all) return true;
     return (a.buildings || []).includes(n);
+};
+// Tennille (and any owner-only hard-coded character) shows ONLY in the owner's
+// world. Explicit + reliable — doesn't depend on applyAccess running.
+window.gateOwnerOnlyCharacters = function (isOwner) {
+    if (window.__tennille) window.__tennille.visible = !!isOwner;
+    employees.forEach(e => { if (e.userData && e.userData.ownerOnly) e.visible = !!isOwner; });
 };
 // Recolor the player's own character (their chosen account color).
 window.setPlayerColor = function (hex) {

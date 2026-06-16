@@ -229,6 +229,14 @@
     // Apply the user's own character colour once the player exists, and (owner only)
     // populate Employee Island from the approved accounts (name + colour).
     function applyPersonalization() {
+        // Tennille is owner-only — gate her explicitly for whoever is viewing,
+        // retrying until the world has built her.
+        const isOwner = _account.role === 'owner';
+        let gt = 0;
+        const gtT = setInterval(() => {
+            if (window.gateOwnerOnlyCharacters && window.__tennille) { window.gateOwnerOnlyCharacters(isOwner); clearInterval(gtT); }
+            else if (++gt > 60) clearInterval(gtT);
+        }, 300);
         if (_account.color) {
             let n = 0;
             const t = setInterval(() => {
@@ -238,27 +246,34 @@
         }
         if (_account.role !== 'owner') return;
         window.__myAccountId = _account.id;   // so the island excludes ME (I'm the player)
-        const bust = '?_=' + Date.now();      // skip any HTTP caching of the GET
-        Promise.all([
-            fetch('/api/accounts' + bust).then(r => r.ok ? r.json() : []).catch(() => []),
-            fetch('/api/profiles' + bust).then(r => r.ok ? r.json() : []).catch(() => [])
-        ]).then(([list, profiles]) => {
+        window.refreshIslandRoster = async function () {
+            let list = [], profiles = [];
+            try {
+                const bust = '?_=' + Date.now();   // always fetch FRESH (no caching, current data)
+                [list, profiles] = await Promise.all([
+                    fetch('/api/accounts' + bust).then(r => r.ok ? r.json() : []).catch(() => []),
+                    fetch('/api/profiles' + bust).then(r => r.ok ? r.json() : []).catch(() => [])
+                ]);
+            } catch (e) {}
             list = Array.isArray(list) ? list : [];
             profiles = Array.isArray(profiles) ? profiles : [];
             window.__profiles = profiles;
-            // Re-apply on every pass: the 3D sprites AND the roster panel both reflect
-            // the real accounts, overriding any later hydrate() from the saved layout.
-            const place = () => {
-                if (window.EmployeeService && window.EmployeeService.setFromAccounts) window.EmployeeService.setFromAccounts(list, profiles);
-                if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) { window.syncEmployeeAccounts(list, profiles); return true; }
-                return false;
-            };
-            // Spawn the 3D sprites as soon as the island exists, then RE-place as the
-            // saved layout settles the island into its final spot (don't block on it).
-            let n = 0;
-            const t = setInterval(() => { const ok = place(); if (ok && window.__layoutReady) clearInterval(t); else if (++n > 80) clearInterval(t); }, 400);
-            [2500, 6000, 10000].forEach(ms => setTimeout(place, ms));
-        }).catch(() => {});
+            if (window.EmployeeService && window.EmployeeService.setFromAccounts) window.EmployeeService.setFromAccounts(list, profiles);
+            if (window.syncEmployeeAccounts && window.getBuildingByName && window.getBuildingByName('Employee Island')) {
+                window.syncEmployeeAccounts(list, profiles);
+                return list.length;   // number of accounts (incl. me)
+            }
+            return -1;                // island not built yet
+        };
+        // Retry loop: re-FETCHES each time, so an early 401 (token not ready) or an
+        // empty result self-heals once auth lands; stops once we have people + the
+        // saved layout has settled the island into place.
+        let tries = 0;
+        const t = setInterval(async () => {
+            const n = await window.refreshIslandRoster();
+            if (n > 1 && window.__layoutReady) clearInterval(t);   // got at least one OTHER account
+            else if (++tries > 20) clearInterval(t);               // ~40s ceiling
+        }, 2000);
     }
 
     // The 3D world builds asynchronously; hide buildings/HUD as soon as the
