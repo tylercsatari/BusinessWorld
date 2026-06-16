@@ -142,7 +142,7 @@ const EmployeeService = (() => {
             r.fromAccount = true;
             return r;
         });
-        roster = roster.filter(e => !e.fromAccount && !e.physical).concat(entries);
+        roster = entries;   // ONLY the accounts — no seeds, no manual employees
         notify();
     }
 

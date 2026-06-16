@@ -21,8 +21,7 @@ const EmployeeUI = (() => {
                         <span class="employee-count" id="employee-count"></span>
                     </div>
                     <div class="employee-toolbar">
-                        <input type="text" class="employee-search" id="employee-search" placeholder="Search employees...">
-                        <button class="employee-add-btn" id="employee-add-btn">+ New Employee</button>
+                        <input type="text" class="employee-search" id="employee-search" placeholder="Search accounts...">
                     </div>
                     <div class="employee-grid" id="employee-grid"></div>
                 </div>
@@ -35,7 +34,7 @@ const EmployeeUI = (() => {
             search = e.target.value.toLowerCase();
             renderGrid();
         });
-        document.getElementById('employee-add-btn').addEventListener('click', addNew);
+        // "+ New Employee" removed — the roster IS the real accounts (name · profile · colour).
     }
 
     function avatarHtml(emp, size) {
@@ -234,14 +233,19 @@ const EmployeeUI = (() => {
         }
     }
 
+    let _unsub = null;
     return {
         async open(bodyEl) {
             container = bodyEl;
             render();
             renderGrid();
+            // refresh live if the account roster updates while the panel is open
+            if (_unsub) _unsub();
+            _unsub = EmployeeService.subscribe(() => { if (container) renderGrid(); });
         },
         close() {
             if (selectedId) saveDetail();
+            if (_unsub) { _unsub(); _unsub = null; }
             container = null;
             selectedId = null;
             search = '';
