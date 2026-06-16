@@ -29,6 +29,7 @@ const JarvisQuant2 = (function () {
         { id: 'architecture', n: '①', label: 'Architecture' },
         { id: 'hazard', n: '②', label: 'Swipe Hazard' },
         { id: 'latent', n: '③', label: 'Latent Discovery' },
+        { id: 'manifold', n: '③ᵇ', label: 'Content Manifold' },
         { id: 'pyramid', n: '④', label: 'Data Pyramid' },
         { id: 'teacher', n: '⑤', label: 'Teacher · Student' },
         { id: 'encoders', n: '⑥', label: 'Encoder Stack' },
@@ -108,8 +109,12 @@ const JarvisQuant2 = (function () {
     async function loadData() {
         const base = './buildings/jarvis/qrd/';
         DATA = await fetch(base + 'quant2_model.json').then(r => r.json());
+        // the real embedding model (DINOv2 hazard + latent + manifold) — optional
+        EMB = await fetch('./buildings/jarvis/quant2/quant2_emb_model.json').then(r => r.json()).catch(() => null);
         return DATA;
     }
+    let EMB = null;
+    function frameUrl(id, f) { return f ? `/api/video/frame/${encodeURIComponent(id)}/${encodeURIComponent(f)}` : null; }
 
     // ══════════════════════ SECTIONS ══════════════════════
 
@@ -167,27 +172,88 @@ const JarvisQuant2 = (function () {
         h += card(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">What raises / lowers the hazard (linear read)</div>
             <div style="font-size:11px;color:${C.mute};margin-bottom:8px">Signed effect on logit-hazard. <b style="color:${C.red}">Red raises</b> leave-probability (bad), <b style="color:${C.green}">green lowers</b> it (good). Read as direction, not gospel — the rank signal is weak at this n.</div>
             ${vizBars(coef.map(c => ({ label: c.key, val: c.coef })), { signed: true, fmtV: v => fmt(v, 2) })}`);
+
+        // ── REAL DINOv2 embedding model: does it beat tabular out-of-fold? ──
+        if (EMB && EMB.hazard) {
+            const H = EMB.hazard;
+            const rowM = (lbl, m, col) => `<tr><td style="padding:6px 10px;color:${C.text}">${lbl}</td><td style="padding:6px 10px;text-align:right;color:${col}">${fmt(m.r2, 3)}</td><td style="padding:6px 10px;text-align:right;color:${C.cyan}">${fmt(m.rho, 2)}</td></tr>`;
+            h += card(`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${tag('FROZEN DINOv2 · REAL', C.green)}<b style="color:${C.text}">Do self-supervised sensory features beat the cheap tabular ones?</b></div>
+                <div style="font-size:11px;color:${C.mute};margin-bottom:8px">DINOv2-small CLS embeddings (mean⊕hook, ${EMB.emb_dim}-d) over each reel's frames, PCA-reduced <b>on the train fold only</b>, same grouped time-split CV. Identical protocol → the comparison is fair.</div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:${C.mute};font-size:10px;text-transform:uppercase">
+                    <th style="text-align:left;padding:4px 10px">Model</th><th style="text-align:right;padding:4px 10px">OOF R²</th><th style="text-align:right;padding:4px 10px">rank ρ</th></tr></thead><tbody>
+                    ${rowM('Tabular features (26)', H.tabular, H.tabular.r2 > 0 ? C.green : C.orange)}
+                    ${rowM('DINOv2 embeddings', H.dinov2, H.dinov2.r2 > 0 ? C.green : C.orange)}
+                    ${rowM('DINOv2 + tabular', H.dinov2_plus_tab, H.dinov2_plus_tab.r2 > 0 ? C.green : C.orange)}
+                    ${rowM('DINOv2 (nonlinear GBT)', H.dinov2_gbt, H.dinov2_gbt.r2 > 0 ? C.green : C.orange)}
+                </tbody></table>
+                <div style="font-size:12px;color:${H.lift_rho >= 0 ? C.green : C.orange};font-weight:700;margin-top:8px">Embedding lift over tabular (rank ρ): ${H.lift_rho >= 0 ? '+' : ''}${fmt(H.lift_rho, 3)}</div>`);
+            h += note(`<b>The honest finding:</b> at n=${EMB.n} true labels, the frozen DINOv2 features <b>${H.lift_rho >= 0.02 ? 'add' : 'do NOT add'}</b> predictive lift over the tabular features — and that's expected, exactly per the brief: <i>"300 videos is not the amount of data needed."</i> The embeddings' payoff is the <b>content manifold</b> (representation over the 2,362-video corpus) and the <b>teacher→student</b> loop, not point-prediction at this n. This is the non-overfit truth: real encoder, real CV, reported straight.`, C.orange);
+        }
         return h;
     }
 
+    function thumbRow(examples, col) {
+        return `<div style="display:flex;gap:6px;flex-wrap:wrap">${examples.map(e => {
+            const u = frameUrl(e.id, e.frame0);
+            return `<div style="width:64px;text-align:center">
+                ${u ? `<img src="${u}" loading="lazy" style="width:64px;height:96px;object-fit:cover;border-radius:5px;border:1.5px solid ${col}88" onerror="this.style.display='none'"/>` : `<div style="width:64px;height:96px;border-radius:5px;border:1px dashed ${C.border2};display:flex;align-items:center;justify-content:center;color:${C.faint};font-size:9px">no frame</div>`}
+                <div style="font-size:8.5px;color:${C.mute};line-height:1.2;margin-top:2px;height:22px;overflow:hidden">${esc((e.name || e.id).slice(0, 24))}</div>
+                <div style="font-size:8px;color:${col}">h=${fmt(e.mean_hazard, 2)}</div>
+            </div>`;
+        }).join('')}</div>`;
+    }
+
     function renderLatent() {
-        const d = DATA;
-        let h = h2('Latent-direction discovery — name AFTER, not before ' + LIVE(),
-            'PLS between standardised content features and each reel\'s hazard vector finds the directions that most change leave-probability. You inspect the extremes, THEN give a direction a human name. "Stakes" would be a discovered latent, not an input.');
-        (d.latent_directions || []).forEach((L, i) => {
-            const col = [C.cyan, C.purple, C.green, C.yellow][i % 4];
+        const useEmb = EMB && EMB.latent_directions;
+        let h = h2('Latent-direction discovery — name AFTER, not before ' + (useEmb ? LIVE() : ''),
+            useEmb
+                ? 'PLS between the frozen DINOv2 sensory embeddings and each reel\'s hazard vector finds the directions that most change leave-probability. You inspect the actual frames at each extreme, THEN give the direction a human name. "Stakes" is a discovered latent here, never an input.'
+                : 'PLS between content features and each reel\'s hazard vector. (Run train_quant2.py for the DINOv2 version with frame examples.)');
+        const dirs = useEmb ? EMB.latent_directions : (DATA.latent_directions || []);
+        dirs.forEach((L, i) => {
+            const col = [C.cyan, C.purple, C.green, C.yellow, C.pink, C.orange][i % 6];
+            const strong = Math.abs(L.effect_on_hazard_rho) > 0.2;
+            const lowEx = useEmb ? L.low_hazard_examples : null;
+            const highEx = useEmb ? L.high_hazard_examples : null;
             h += card(`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
                     <div style="font-weight:800;color:${col};font-size:14px">Latent z${L.id}</div>
-                    ${tag('effect on hazard ρ = ' + fmt(L.effect_on_hazard_rho, 2), Math.abs(L.effect_on_hazard_rho) > 0.2 ? C.green : C.mute)}
-                    <div style="font-size:11px;color:${C.mute}">${Math.abs(L.effect_on_hazard_rho) > 0.2 ? 'a real direction that moves leave-probability — worth naming' : 'weak — leave unnamed for now'}</div>
+                    ${tag('effect on hazard ρ = ' + fmt(L.effect_on_hazard_rho, 2), strong ? C.green : C.mute)}
+                    <div style="font-size:11px;color:${C.mute}">${strong ? 'a real direction that moves leave-probability — inspect & name it' : 'weak at this n — leave unnamed'}</div>
                 </div>
-                <div style="font-size:11px;color:${C.dim};margin-bottom:6px"><b>Defined by:</b> ${L.top_features.map(t => `${esc(t.key)} <span style="color:${C.mute};font-family:monospace">${fmt(t.load, 2)}</span>`).join(' · ')}</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:11px">
-                    <div><div style="color:${C.green};font-weight:700;margin-bottom:3px">Low-hazard end (keeps viewers)</div>${L.high_examples.map(e => `<div style="color:${C.dim}">• ${esc(e)}</div>`).join('')}</div>
-                    <div><div style="color:${C.red};font-weight:700;margin-bottom:3px">High-hazard end (loses viewers)</div>${L.low_examples.map(e => `<div style="color:${C.dim}">• ${esc(e)}</div>`).join('')}</div>
-                </div>`);
+                ${useEmb ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                    <div><div style="color:${C.green};font-weight:700;margin-bottom:5px;font-size:11px">Low-hazard end (keeps viewers)</div>${thumbRow(lowEx, C.green)}</div>
+                    <div><div style="color:${C.red};font-weight:700;margin-bottom:5px;font-size:11px">High-hazard end (loses viewers)</div>${thumbRow(highEx, C.red)}</div>
+                </div>` : `<div style="font-size:11px;color:${C.dim}"><b>Defined by:</b> ${(L.top_features || []).map(t => `${esc(t.key)} ${fmt(t.load, 2)}`).join(' · ')}</div>`}`);
         });
-        h += note(`A mechanism score is <b>not</b> "8/10 on stakes". It is "this reel is in the 92nd percentile on latent z${(d.latent_directions[0] || {}).id}, a direction that behaves like consequence/tension and lowers swipe hazard when clarity is also high" — a position in a learned distribution, with uncertainty, a nonlinear effect curve, and interaction terms. With the encoder features (Roadmap) these directions become far richer than the ${d.latent_directions ? d.latent_directions[0].top_features.length : 6}-feature linear ones shown here.`, C.purple);
+        h += note(`A mechanism score is <b>not</b> "8/10 on stakes". It is "this reel sits at the ${useEmb ? 'low-hazard' : 'high'} end of latent z${(dirs[0] || {}).id}, a direction discovered from the pixels (not named in advance) that lowers swipe hazard" — a position in a learned distribution, with uncertainty and a nonlinear effect curve. ${useEmb ? `These directions come from the <b>frozen DINOv2 frames above</b> — look at the thumbnails: the low-hazard and high-hazard ends look genuinely different. That difference, not a human word, is the mechanism.` : ''} With the full corpus manifold the directions get far richer.`, C.purple);
+        return h;
+    }
+
+    function renderManifold() {
+        if (!EMB || !EMB.manifold) return h2('Content Manifold', 'Run train_quant2.py / embed_corpus.py to build the manifold.') + note('The manifold needs the DINOv2 embeddings. Once <code>quant2_emb_model.json</code> exists it renders here.', C.orange);
+        const M = EMB.manifold;
+        const cols = [C.cyan, C.green, C.purple, C.yellow, C.pink, C.orange];
+        let h = h2('Content manifold — the structure of short-form, from pixels ' + LIVE(),
+            `Each reel is a point in DINOv2 space (PCA→2D). k-means finds ${M.k} archetypes; novelty = distance from nearest neighbours. This is World 1: the shape of content space, learned with no labels. The corpus (2,362 videos) lands in the same space as it finishes embedding from R2.`);
+        // scatter
+        const xs = M.videos.map(v => v.x), ys = M.videos.map(v => v.y);
+        const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+        const w = 560, ht = 380, pad = 20;
+        const X = v => pad + ((v - minX) / (maxX - minX || 1)) * (w - pad * 2);
+        const Y = v => ht - pad - ((v - minY) / (maxY - minY || 1)) * (ht - pad * 2);
+        let svg = '';
+        M.videos.forEach(v => { svg += `<circle cx="${X(v.x)}" cy="${Y(v.y)}" r="${4 + v.mean_hazard * 10}" fill="${cols[v.cluster % cols.length]}" opacity="0.6"><title>${esc(v.name)} · cluster ${v.cluster} · hazard ${fmt(v.mean_hazard, 2)} · novelty ${fmt(v.novelty, 2)}</title></circle>`; });
+        h += card(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">Archetype map (${M.videos.length} reels · ${M.k} clusters · silhouette ${fmt(M.silhouette, 2)})</div>
+            <div style="font-size:11px;color:${C.mute};margin-bottom:8px">Colour = archetype · dot size = mean swipe hazard. Hover a dot for the title. Weak separation (silhouette ${fmt(M.silhouette, 2)}) is honest — short-form hooks overlap; the corpus will sharpen the clusters.</div>
+            <svg viewBox="0 0 ${w} ${ht}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${svg}</svg>`);
+        // most novel + least novel reels (by frame)
+        const byNov = M.videos.slice().sort((a, b) => b.novelty - a.novelty);
+        const mk = arr => `<div style="display:flex;gap:6px;flex-wrap:wrap">${arr.map(v => { const u = frameUrl(v.id, v.frame0); return `<div style="width:58px;text-align:center">${u ? `<img src="${u}" loading="lazy" style="width:58px;height:86px;object-fit:cover;border-radius:5px;border:1px solid ${C.border2}" onerror="this.style.display='none'"/>` : ''}<div style="font-size:8px;color:${C.mute};height:20px;overflow:hidden">${esc((v.name || '').slice(0, 20))}</div></div>`; }).join('')}</div>`;
+        h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            ${card(`<div style="font-weight:700;color:${C.orange};margin-bottom:6px">Most novel (far from neighbours)</div>${mk(byNov.slice(0, 6))}`)}
+            ${card(`<div style="font-weight:700;color:${C.cyan};margin-bottom:6px">Most typical (crowded region)</div>${mk(byNov.slice(-6).reverse())}`)}
+        </div>`;
+        h += note(`Novelty here is <b>market-relative distance in embedding space</b>, not a human guess — the best novelty is "far enough to be interesting, close enough to be understandable". Once the 2,362-video corpus is embedded, novelty becomes distance from the broader niche, and saturation = cluster density over time (which formats are crowded/decaying).`, C.green);
         return h;
     }
 
@@ -291,6 +357,7 @@ const JarvisQuant2 = (function () {
             case 'architecture': return renderArchitecture();
             case 'hazard': return renderHazard();
             case 'latent': return renderLatent();
+            case 'manifold': return renderManifold();
             case 'pyramid': return renderPyramid();
             case 'teacher': return renderTeacher();
             case 'encoders': return renderEncoders();
