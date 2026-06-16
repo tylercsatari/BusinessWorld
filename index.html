@@ -3173,7 +3173,7 @@ function applyPathVisibility() {
 }
 window.applyAccess = function (perms) {
     window.__access = perms || { all: true };
-    const full = !perms || perms.all;
+    const full = (!perms || perms.all === true);   // MUST be a strict boolean — Three.js only hides on visible===false (undefined renders!)
     const allowed = new Set((perms && perms.buildings) || []);
     BUILDING_NAMES.forEach(name => { const b = getBuildingByName(name); if (b) b.visible = full || allowed.has(name); });
     employees.forEach(e => { e.visible = full; });   // other characters (incl. Tennille): owner only
