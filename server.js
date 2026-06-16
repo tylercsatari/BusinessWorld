@@ -2094,6 +2094,75 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
 
+    // ── Chunked, concurrent upload sessions ──────────────────────────────────
+    // The single-shot /upload above caps at 150 MB and buffers the whole file in
+    // RAM. For anything large the client drives a concurrent upload session:
+    //   start → append_v2 (many, in parallel) → finish
+    // The server buffers only ONE chunk at a time and refreshes the token on 401.
+    const readRawBody = (req, maxBytes) => new Promise((resolve, reject) => {
+        const chunks = []; let size = 0;
+        req.on('data', c => {
+            size += c.length;
+            if (maxBytes && size > maxBytes) { reject(new Error('chunk exceeds limit')); try { req.destroy(); } catch (e) {} return; }
+            chunks.push(c);
+        });
+        req.on('end', () => resolve(Buffer.concat(chunks)));
+        req.on('error', reject);
+    });
+    // Call a Dropbox content endpoint, refreshing the token once on 401.
+    const dropboxContent = async (endpoint, apiArg, body) => {
+        const doCall = async (token) => fetch('https://content.dropboxapi.com/2/files/' + endpoint, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Dropbox-API-Arg': JSON.stringify(apiArg), 'Content-Type': 'application/octet-stream' },
+            body
+        });
+        let token = await cloud.getDropboxToken();
+        let r = await doCall(token);
+        if (r.status === 401) { process.env._DROPBOX_TOKEN_EXPIRED = '1'; token = await cloud.getDropboxToken(); r = await doCall(token); }
+        return r;
+    };
+
+    if (pathname === '/api/dropbox/session/start' && req.method === 'POST') {
+        try {
+            const r = await dropboxContent('upload_session/start', { close: false, session_type: { '.tag': 'concurrent' } }, Buffer.alloc(0));
+            const text = await r.text();
+            res.writeHead(r.status, { 'Content-Type': 'application/json' }); res.end(text);
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+
+    if (pathname === '/api/dropbox/session/append' && req.method === 'POST') {
+        const sessionId = url.searchParams.get('session_id');
+        const offset = Number(url.searchParams.get('offset'));
+        if (!sessionId || !Number.isFinite(offset)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'missing session_id/offset' })); return; }
+        try {
+            const buf = await readRawBody(req, 64 * 1024 * 1024);
+            const r = await dropboxContent('upload_session/append_v2', { cursor: { session_id: sessionId, offset }, close: false }, buf);
+            if (r.ok) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); return; }
+            const text = await r.text();
+            // A retried chunk whose first try already landed → Dropbox reports the
+            // correct offset. That means the bytes are already there: treat as OK.
+            if (/incorrect_offset/.test(text)) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true,"already":true}'); return; }
+            res.writeHead(r.status, { 'Content-Type': 'application/json' }); res.end(text);
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+
+    if (pathname === '/api/dropbox/session/finish' && req.method === 'POST') {
+        const sessionId = url.searchParams.get('session_id');
+        const offset = Number(url.searchParams.get('offset'));   // = total file size
+        const filePath = url.searchParams.get('path');
+        if (!sessionId || !filePath || !Number.isFinite(offset)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'missing session_id/offset/path' })); return; }
+        try {
+            const r = await dropboxContent('upload_session/finish',
+                { cursor: { session_id: sessionId, offset }, commit: { path: filePath, mode: 'add', autorename: true, mute: true } },
+                Buffer.alloc(0));
+            const text = await r.text();
+            res.writeHead(r.status, { 'Content-Type': r.headers.get('content-type') || 'application/json' }); res.end(text);
+        } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+        return;
+    }
+
     if (pathname === '/api/dropbox/get_thumbnail' && req.method === 'GET') {
         const filePath = url.searchParams.get('path');
         if (!filePath) { res.writeHead(400); res.end('Missing path'); return; }

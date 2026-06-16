@@ -2788,7 +2788,23 @@ Give 3–4 DISTINCT hooks taking different angles. predictedSwipeThrough is your
     // XHR (fetch can't report upload progress). onProgress(loaded, total)
     // covers browser→server; the server then forwards to Dropbox before
     // responding, so 100% switches to a "processing" stage until resolve.
+    // ===== Dropbox upload: single-shot for small files, chunked CONCURRENT
+    // upload sessions for large ones. Chunks upload in parallel, each retries on
+    // failure, and progress is aggregated across all of them — no 150 MB cap, no
+    // whole-file server buffering, no stall at "100%". =====
+    const DBX_CHUNK = 16 * 1024 * 1024;       // 16 MB — must be a multiple of 4 MB for concurrent sessions
+    const DBX_SIMPLE_MAX = 8 * 1024 * 1024;   // ≤ 8 MB → one request (session overhead not worth it)
+    const DBX_CONCURRENCY = 4;                // parallel chunks in flight
+
     function uploadToDropbox(destPath, file, onProgress) {
+        return (file.size > DBX_SIMPLE_MAX)
+            ? uploadChunked(destPath, file, onProgress)
+            : uploadSimple(destPath, file, onProgress);
+    }
+
+    // One XHR with up to 2 retries (exponential-ish backoff).
+    function uploadSimple(destPath, file, onProgress, attempt) {
+        attempt = attempt || 0;
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('POST', `/api/dropbox/upload?path=${encodeURIComponent(destPath)}`);
@@ -2802,7 +2818,64 @@ Give 3–4 DISTINCT hooks taking different angles. predictedSwipeThrough is your
             };
             xhr.onerror = () => reject(new Error('network error during upload'));
             xhr.send(file);
+        }).catch(err => {
+            if (attempt < 2) return new Promise(r => setTimeout(r, 700 * (attempt + 1))).then(() => uploadSimple(destPath, file, onProgress, attempt + 1));
+            throw err;
         });
+    }
+
+    // POST one chunk to the append endpoint, retrying up to 3× on failure.
+    function putChunk(sessionId, offset, blob, onChunkProgress) {
+        return new Promise((resolve, reject) => {
+            const tryOnce = (n) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `/api/dropbox/session/append?session_id=${encodeURIComponent(sessionId)}&offset=${offset}`);
+                xhr.upload.onprogress = (e) => { if (e.lengthComputable && onChunkProgress) onChunkProgress(e.loaded); };
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) { if (onChunkProgress) onChunkProgress(blob.size); resolve(); }
+                    else if (n < 3) setTimeout(() => tryOnce(n + 1), 600 * n);
+                    else reject(new Error(`chunk @${offset} failed (${xhr.status})`));
+                };
+                xhr.onerror = () => { if (n < 3) setTimeout(() => tryOnce(n + 1), 600 * n); else reject(new Error(`chunk @${offset} network error`)); };
+                xhr.send(blob);
+            };
+            tryOnce(1);
+        });
+    }
+
+    async function uploadChunked(destPath, file, onProgress) {
+        const startRes = await fetch('/api/dropbox/session/start', { method: 'POST' });
+        if (!startRes.ok) throw new Error('could not start upload session');
+        const sessionId = (await startRes.json()).session_id;
+        if (!sessionId) throw new Error('upload session id missing');
+
+        // Slice into chunks; all but the final are exactly DBX_CHUNK (a 4 MB
+        // multiple, required for concurrent sessions); the final chunk is the
+        // remainder (any size).
+        const chunks = [];
+        for (let off = 0; off < file.size; off += DBX_CHUNK) chunks.push({ offset: off, blob: file.slice(off, Math.min(off + DBX_CHUNK, file.size)) });
+
+        const loaded = new Array(chunks.length).fill(0);
+        const report = () => { if (onProgress) onProgress(loaded.reduce((a, b) => a + b, 0), file.size); };
+
+        // Bounded-concurrency worker pool over the chunk list.
+        let next = 0, failed = null;
+        const worker = async () => {
+            while (next < chunks.length && !failed) {
+                const i = next++;
+                try { await putChunk(sessionId, chunks[i].offset, chunks[i].blob, (n) => { loaded[i] = n; report(); }); }
+                catch (e) { failed = e; }
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(DBX_CONCURRENCY, chunks.length) }, worker));
+        if (failed) throw failed;
+
+        const finRes = await fetch(`/api/dropbox/session/finish?session_id=${encodeURIComponent(sessionId)}&offset=${file.size}&path=${encodeURIComponent(destPath)}`, { method: 'POST' });
+        let meta;
+        try { meta = await finRes.json(); } catch (e) { throw new Error(`finish failed (${finRes.status})`); }
+        if (!finRes.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `finish failed (${finRes.status})`);
+        if (onProgress) onProgress(file.size, file.size);
+        return meta;
     }
 
     // Swap an element's content for a live progress bar; returns updaters.
@@ -2814,11 +2887,19 @@ Give 3–4 DISTINCT hooks taking different angles. predictedSwipeThrough is your
         const fill = hostEl.querySelector('.wsp-upload-fill');
         const label = hostEl.querySelector('.wsp-upload-label');
         const fmt = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+        let lastT = Date.now(), lastLoaded = 0, ema = 0;
         return {
             progress(loaded, total) {
                 const pct = Math.min(100, Math.round(loaded / total * 100));
                 fill.style.width = pct + '%';
-                label.textContent = pct >= 100 ? 'Sending to Dropbox…' : `Uploading ${pct}% — ${fmt(loaded)} of ${fmt(total)}`;
+                const now = Date.now(), dt = (now - lastT) / 1000;
+                if (dt > 0.25) { const inst = Math.max(0, (loaded - lastLoaded)) / dt; ema = ema ? ema * 0.7 + inst * 0.3 : inst; lastT = now; lastLoaded = loaded; }
+                const spd = ema > 0 ? (ema / 1048576).toFixed(1) + ' MB/s' : '';
+                const etaSec = ema > 0 ? Math.round((total - loaded) / ema) : null;
+                const eta = etaSec == null ? '' : etaSec >= 60 ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s` : `${etaSec}s`;
+                label.textContent = pct >= 100
+                    ? 'Finalizing…'
+                    : `${pct}% · ${fmt(loaded)}/${fmt(total)}${spd ? ' · ' + spd : ''}${eta ? ' · ' + eta + ' left' : ''}`;
             },
             stage(text) { fill.style.width = '100%'; label.textContent = text; }
         };
