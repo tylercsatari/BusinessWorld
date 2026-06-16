@@ -1742,7 +1742,17 @@ const WorkshopUI = (() => {
                     <button class="wsp-mini-btn wsp-ai-btn" id="wsp-ai-hooks" title="Let AI suggest hooks from the context + script, grounded in the channel's principles">✨ AI hooks</button>
                     ${PS().hooksOf(v).length === 0 ? '<span class="wsp-hint">none yet — write your first hook and pick its type</span>' : ''}
                 </div>
-                ${PS().hooksOf(v).some(h => h.type === 'animation') ? `<label class="wsp-anim-noassets"><input type="checkbox" id="wsp-anim-nomodels" ${v.animNoModels ? 'checked' : ''}> No 3D models / assets needed for the animation — the animator works from the hook + context alone</label>` : ''}
+                ${PS().hooksOf(v).some(h => h.type === 'animation') ? `
+                <div class="wsp-anim-assets">
+                    <div class="wsp-cd-label" style="margin-top:10px;">🎞️ Animation assets <span class="wsp-hint">— the 3D models / reference files the animator needs to build the animation</span></div>
+                    <label class="wsp-anim-noassets"><input type="checkbox" id="wsp-anim-nomodels" ${v.animNoModels ? 'checked' : ''}> No 3D models / assets needed — the animator works from the hook + context alone</label>
+                    <div id="wsp-anim-assets-body" style="${v.animNoModels ? 'display:none;' : ''}">
+                        <div id="wsp-anim-asset-list">${(v.animAssets || []).map((a, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('cad', 'wsp-row-ic')} ${escHtml(a.name || (a.path || '').split('/').pop())}</span><button class="wsp-mini-btn" data-anim-asset-open="${i}">▶ Open</button><button class="wsp-mini-btn danger" data-anim-asset-del="${i}">✕</button></div>`).join('')}</div>
+                        ${v.project
+                            ? `<div class="wsp-add-row"><input type="file" id="wsp-anim-asset-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-anim-asset-up">⬆ Upload assets</button></div>`
+                            : `<div class="wsp-hint">Select a Channel Project first — assets go to that project's animation/assets folder in Dropbox.</div>`}
+                    </div>
+                </div>` : ''}
             </div>
 
             <div class="wsp-subsection" data-vfield="script" style="--accent:#27ae72">
@@ -1829,7 +1839,7 @@ const WorkshopUI = (() => {
             el.addEventListener('input', scheduleSave);
             el.addEventListener('blur', () => { if (saveTimer) doSave(false); });
         });
-        get('wsp-anim-nomodels')?.addEventListener('change', async (e) => { await VideoService.update(v.id, { animNoModels: e.target.checked }); });
+        initAnimAssets(v);
         get('workshop-deadline')?.addEventListener('change', () => doSave(false));
         get('workshop-sponsor')?.addEventListener('change', () => doSave(false));
         get('workshop-project')?.addEventListener('change', () => doSave(true));
@@ -2798,6 +2808,57 @@ Give 3–4 DISTINCT hooks taking different angles, modeled on the real examples.
             hook: (hooks.find(h => (h.text || '').trim()) || {}).text || '',   // keep v.hook in sync (first phrasing) for back-compat
             hookType: '', hookVideoPath: '', hookVideoName: '',
             status: normalizedStatus(fresh || { status: 'pipeline' })
+        });
+    }
+
+    // Animation assets — the 3D models / reference files the animator needs.
+    // Either tick "no assets needed" or upload them to <project>/animation/assets/.
+    function initAnimAssets(v) {
+        const get = (id) => document.getElementById(id);
+        const cb = get('wsp-anim-nomodels');
+        const body = get('wsp-anim-assets-body');
+        if (cb) cb.addEventListener('change', async (e) => {
+            if (body) body.style.display = e.target.checked ? 'none' : '';
+            await VideoService.update(v.id, { animNoModels: e.target.checked }).catch(() => {});
+        });
+        const animAssets = () => (VideoService.getById(v.id) || v).animAssets || [];
+        const list = get('wsp-anim-asset-list');
+        const rerenderList = () => {
+            if (!list) return;
+            list.innerHTML = animAssets().map((a, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('cad', 'wsp-row-ic')} ${escHtml(a.name || (a.path || '').split('/').pop())}</span><button class="wsp-mini-btn" data-anim-asset-open="${i}">▶ Open</button><button class="wsp-mini-btn danger" data-anim-asset-del="${i}">✕</button></div>`).join('');
+            bindRows();
+        };
+        const bindRows = () => {
+            list && list.querySelectorAll('[data-anim-asset-open]').forEach(b => b.addEventListener('click', async () => {
+                const a = animAssets()[Number(b.dataset.animAssetOpen)];
+                if (!a || !a.path) return;
+                const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: a.path }) });
+                const d = await r.json(); if (d.link) window.open(d.link, '_blank'); else alert('Could not open: ' + (d.error_summary || 'no link'));
+            }));
+            list && list.querySelectorAll('[data-anim-asset-del]').forEach(b => b.addEventListener('click', async () => {
+                const next = animAssets().filter((_, i) => i !== Number(b.dataset.animAssetDel));
+                await VideoService.update(v.id, { animAssets: next }).catch(() => {});
+                rerenderList();
+            }));
+        };
+        bindRows();
+        const upBtn = get('wsp-anim-asset-up');
+        if (upBtn) upBtn.addEventListener('click', async () => {
+            const input = get('wsp-anim-asset-file');
+            const files = input && input.files ? [...input.files] : [];
+            if (!files.length) { alert('Choose one or more asset files first.'); return; }
+            const fresh = VideoService.getById(v.id) || v;
+            if (!fresh.project) { alert('Select a Channel Project first.'); return; }
+            const root = await dropboxRootPath();
+            const folder = `${root}/${fresh.project}/animation/assets`;
+            const bar = uploadProgressBar(upBtn.parentElement, files[0].name);
+            try {
+                const added = [];
+                for (const file of files) { const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress); added.push({ path: meta.path_display || meta.path_lower, name: meta.name || file.name }); }
+                await VideoService.update(v.id, { animAssets: [...animAssets(), ...added] }).catch(() => {});
+                bar.stage('Done ✓'); toast(`🎞️ ${added.length} asset${added.length === 1 ? '' : 's'} → animation/assets`);
+                rerenderList();
+            } catch (e) { alert('Upload failed: ' + e.message); }
         });
     }
 
