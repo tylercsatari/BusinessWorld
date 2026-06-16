@@ -403,9 +403,9 @@ const MovieTheatreUI = (() => {
     // --- Public ---
     return {
         async open(bodyEl) {
-            await loadConfig();
+            try { await loadConfig(); } catch (e) { console.warn('Movie Theatre config load failed:', e); }
             render(bodyEl);
-            await navigateTo(rootPath);
+            try { await navigateTo(rootPath); } catch (e) { console.warn('Movie Theatre navigate failed:', e); }
         },
         close() {
             stopActiveVideo();

@@ -887,13 +887,15 @@ const FinanceUI = (() => {
             container = bodyEl;
             container.innerHTML = render();
             bindEvents();
-            await fetchStatus();
-            if (connectionStatus.connected) {
-                await Promise.all([fetchAccounts(), fetchAllTransactions(), fetchProjects()]);
-            } else {
-                refresh();
-            }
-            loadPlaidLink(function() {});
+            try {
+                await fetchStatus();
+                if (connectionStatus.connected) {
+                    await Promise.all([fetchAccounts().catch(() => {}), fetchAllTransactions().catch(() => {}), fetchProjects().catch(() => {})]);
+                } else {
+                    refresh();
+                }
+            } catch (e) { console.warn('Finance load failed (continuing):', e); refresh(); }
+            try { loadPlaidLink(function () {}); } catch (e) {}
         },
         close: function() {
             var dd = document.querySelector('.fin-dropdown');

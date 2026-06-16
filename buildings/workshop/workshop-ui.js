@@ -2939,14 +2939,17 @@ const WorkshopUI = (() => {
             activeTab = (opts && opts.tab) || 'pipeline';
             render();
             container.querySelectorAll('.wsp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+            // Every load is independently caught so ONE failed fetch (e.g. a
+            // restricted account that can't reach a cross-building route) can't
+            // leave the pipeline stuck on "Loading…". renderTab always runs.
             const [p] = await Promise.all([
-                VideoService.getProjects(),
-                VideoService.sync(),
+                VideoService.getProjects().catch(() => []),
+                VideoService.sync().catch(() => {}),
                 NotesService.sync().catch(() => {}),
                 SVC().syncAll().catch(() => {})
             ]);
-            dropboxProjects = p;
-            renderTab();
+            dropboxProjects = p || [];
+            try { renderTab(); } catch (e) { console.error('Workshop renderTab failed:', e); }
             if (opts && opts.videoId) openDetail(opts.videoId);
         },
         close() {
