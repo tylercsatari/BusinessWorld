@@ -839,7 +839,15 @@ const WorkshopUI = (() => {
             branches.animation = hooks.some(h => h.type === 'animation');
             branches.hookfilm = hooks.some(h => h.type === 'practical');
             const changes = { branches, status: normalizedStatus(fresh) };
-            if (alsoDone) changes.stageState = { ...(fresh.stageState || {}), decomp: 'done' };
+            if (alsoDone) {
+                // Decomposition's deliverable is the breakdown — at least one component queued.
+                if (componentsForVideo(videoId).length === 0) {
+                    alert('Break the video down into at least one component before completing Decomposition. (Add components in the Decomposition section.)');
+                    await VideoService.update(videoId, { branches, status: normalizedStatus(fresh) }); // save branch decisions, don't complete
+                    return;
+                }
+                changes.stageState = { ...(fresh.stageState || {}), decomp: 'done' };
+            }
             await VideoService.update(videoId, changes);
             close();
             if (currentPage === 'detail' && selectedVideo && selectedVideo.id === videoId) renderDetail();
@@ -1486,6 +1494,7 @@ const WorkshopUI = (() => {
                     <button class="wsp-mini-btn done" id="wsp-add-hooki">＋ Add hook</button>
                     ${PS().hooksOf(v).length === 0 ? '<span class="wsp-hint">none yet — write your first hook and pick its type</span>' : ''}
                 </div>
+                ${PS().hooksOf(v).some(h => h.type === 'animation') ? `<label class="wsp-anim-noassets"><input type="checkbox" id="wsp-anim-nomodels" ${v.animNoModels ? 'checked' : ''}> No 3D models / assets needed for the animation — the animator works from the hook + context alone</label>` : ''}
             </div>
 
             <div class="wsp-subsection" data-vfield="script" style="--accent:#27ae72">
@@ -1563,6 +1572,7 @@ const WorkshopUI = (() => {
             el.addEventListener('input', scheduleSave);
             el.addEventListener('blur', () => { if (saveTimer) doSave(false); });
         });
+        get('wsp-anim-nomodels')?.addEventListener('change', async (e) => { await VideoService.update(v.id, { animNoModels: e.target.checked }); });
         get('workshop-deadline')?.addEventListener('change', () => doSave(false));
         get('workshop-sponsor')?.addEventListener('change', () => doSave(false));
         get('workshop-project')?.addEventListener('change', () => doSave(true));
@@ -1598,10 +1608,10 @@ const WorkshopUI = (() => {
                         await postVideoAction(VideoService.getById(v.id) || fresh);
                         return;
                     }
-                    // Completing Decomposition requires the branch decisions
-                    if (stageId === 'decomp' && next === 'done' && !PS().branchesDecided(fresh)) {
-                        openBranchDialog(v.id, true);
-                        return;
+                    // Completing Decomposition requires the branch decisions AND >=1 component
+                    if (stageId === 'decomp' && next === 'done') {
+                        if (!PS().branchesDecided(fresh)) { openBranchDialog(v.id, true); return; }
+                        if (componentsForVideo(v.id).length === 0) { alert('Break the video down into at least one component before completing Decomposition.'); return; }
                     }
                     await setStageState(v.id, stageId, next);
                     rerender();
