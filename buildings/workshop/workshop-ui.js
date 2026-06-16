@@ -667,6 +667,7 @@ const WorkshopUI = (() => {
             if (ev && panel.querySelector(`.wsp-stage-video[data-id="${expandedStageVideoId}"] #workshop-name`)) {
                 bindDetailFields(ev);
                 initMediaSection(ev, 'vo');
+                initEditSlots(ev);   // Editing — three final-video upload slots (was detail-page only)
                 panel.querySelectorAll('[data-inline-post]').forEach(b => b.addEventListener('click', () => postVideoAction(VideoService.getById(expandedStageVideoId))));
                 panel.querySelectorAll('[data-inline-library]').forEach(b => b.addEventListener('click', () => backToLibraryAction(VideoService.getById(expandedStageVideoId))));
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
