@@ -38,7 +38,7 @@ const WorkshopUI = (() => {
     // Which entity types are visible on the board (legend toggles)
     // The Workshop board tracks two entities: videos and the components they
     // spawn. Orders/Storage live in their own tabs, not on the pipeline board.
-    let showTypes = { video: true, component: true, order: false, inventory: false };
+    let showTypes = { video: true, component: true, task: true, order: false, inventory: false };
     // Inventory tab filters
     let invType = '', invStatus = '';
 
@@ -461,12 +461,13 @@ const WorkshopUI = (() => {
         if (showTypes.video) {
             filteredVideos().forEach(v => PS().frontier(v, ctx).forEach(id => byStage[id].videos.push(v)));
         }
-        if (showTypes.component) {
-            filteredComponents().forEach(c => {
-                const sid = componentStageId(c);
-                if (sid && byStage[sid]) byStage[sid].components.push(c);
-            });
-        }
+        // Tasks are source==='task' components but toggle/filter separately.
+        filteredComponents().forEach(c => {
+            const isTask = c.source === 'task';
+            if (isTask ? !showTypes.task : !showTypes.component) return;
+            const sid = componentStageId(c);
+            if (sid && byStage[sid]) byStage[sid].components.push(c);
+        });
         if (showTypes.order) {
             filteredOrders().forEach(o => byStage['order'].orders.push(o));
         }
@@ -518,14 +519,16 @@ const WorkshopUI = (() => {
         const all = pipelineVideos();
         const projects = SVC().projects.getAll().filter(p => p.status !== 'archived');
         const sponsors = [...new Set(all.map(v => v.sponsorId).filter(Boolean))].map(id => SVC().sponsors.getById(id)).filter(Boolean);
+        const allC = filteredComponents();
         const legendCounts = {
             video: filteredVideos().length,
-            component: filteredComponents().length,
+            component: allC.filter(c => c.source !== 'task').length,
+            task: allC.filter(c => c.source === 'task').length,
             order: filteredOrders().length,
             inventory: filteredInventory().length
         };
         const legend = [
-            ['video', 'video', 'Videos'], ['component', 'component', 'Components']
+            ['video', 'video', 'Videos'], ['component', 'component', 'Components'], ['task', 'propdesign', 'Tasks']
         ];
         return `<div class="wsp-filterbar wsp-pipeline-filters">
             <div class="wsp-legend">
@@ -866,8 +869,8 @@ const WorkshopUI = (() => {
     // No stage selected → show EVERYTHING currently in flight (filter-driven)
     function renderAllPanel(panel) {
         const vids = showTypes.video ? filteredVideos() : [];
-        const allComps = showTypes.component ? filteredComponents() : [];
-        const { comps, tasks } = splitComps(allComps);
+        const comps = showTypes.component ? filteredComponents().filter(c => c.source !== 'task') : [];
+        const tasks = showTypes.task ? filteredComponents().filter(c => c.source === 'task') : [];
         const orders = showTypes.order ? filteredOrders() : [];
         const inv = showTypes.inventory ? filteredInventory() : [];
         const total = vids.length + allComps.length + orders.length + inv.length;
@@ -875,7 +878,7 @@ const WorkshopUI = (() => {
         const breakdown = [
             showTypes.video ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">${icon('video', 'wsp-cc-ic')} ${vids.length}</span>` : '',
             showTypes.component ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">${icon('component', 'wsp-cc-ic')} ${comps.length}</span>` : '',
-            showTypes.component && tasks.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.task}">${icon('propdesign', 'wsp-cc-ic')} ${tasks.length}</span>` : '',
+            showTypes.task ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.task}">${icon('propdesign', 'wsp-cc-ic')} ${tasks.length}</span>` : '',
             showTypes.order ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${orders.length}</span>` : '',
             showTypes.inventory ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.inventory}">${icon('inventory', 'wsp-cc-ic')} ${inv.length}</span>` : ''
         ].join('');
@@ -3417,7 +3420,7 @@ Give 3–4 DISTINCT hooks taking different angles. predictedSwipeThrough is your
             currentPage = 'list';
             activeTab = 'pipeline';
             fSearch = fType = fProject = fSponsor = fAssignee = fFlag = '';
-            showTypes = { video: true, component: true, order: true, inventory: true };
+            showTypes = { video: true, component: true, task: true, order: true, inventory: true };
         }
     };
 })();
