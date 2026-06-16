@@ -555,9 +555,13 @@ const WorkshopUI = (() => {
             </div>`;
         }).join('');
 
-        // Component Library (Storage Room) node — only on the board when toggled on
+        // Component Library (Storage Room) node — only on the board when toggled
+        // on AND it has a slot, which exists only when the Ordering stage is
+        // visible (it's anchored under Ordering). Profiles that can't see
+        // Ordering have no _inventory position — guard or this throws and the
+        // whole pipeline gets stuck on "Loading…".
         let invNode = '';
-        if (showTypes.inventory) {
+        if (showTypes.inventory && pos['_inventory']) {
             const invItems = filteredInventory();
             const readyInv = invItems.filter(i => i.status === 'ready').length;
             const invCol = DOT_COLORS.inventory;
@@ -3036,18 +3040,31 @@ const WorkshopUI = (() => {
             activeTab = (opts && opts.tab) || 'pipeline';
             render();
             container.querySelectorAll('.wsp-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
-            // Every load is independently caught so ONE failed fetch (e.g. a
-            // restricted account that can't reach a cross-building route) can't
-            // leave the pipeline stuck on "Loading…". renderTab always runs.
-            const [p] = await Promise.all([
-                VideoService.getProjects().catch(() => []),
-                VideoService.sync().catch(() => {}),
-                NotesService.sync().catch(() => {}),
-                SVC().syncAll().catch(() => {})
-            ]);
-            dropboxProjects = p || [];
-            try { renderTab(); } catch (e) { console.error('Workshop renderTab failed:', e); }
-            if (opts && opts.videoId) openDetail(opts.videoId);
+            // A render that throws must NOT leave the pipeline stuck on
+            // "Loading…" — surface the error in the tab body so it's visible
+            // (and recoverable) instead of an infinite spinner.
+            const safeRender = () => {
+                try { renderTab(); }
+                catch (e) {
+                    console.error('Workshop renderTab failed:', e);
+                    const el = document.getElementById('wsp-tab-body');
+                    if (el) el.innerHTML = `<div class="workshop-empty">Couldn't render the pipeline.<br><span class="wsp-hint">${escHtml(e && e.message || String(e))}</span><br><button class="wsp-mini-btn" id="wsp-render-retry">Retry</button></div>`;
+                    const r = document.getElementById('wsp-render-retry');
+                    if (r) r.addEventListener('click', safeRender);
+                }
+            };
+            // Render immediately with whatever is cached so the board ALWAYS
+            // appears — it is never blocked behind a slow or hung fetch. Each
+            // load below is independently caught and refreshes the board as it
+            // lands, so one failed/restricted route can't stall the others.
+            safeRender();
+            VideoService.getProjects().then(p => { dropboxProjects = p || []; safeRender(); }).catch(() => {});
+            VideoService.sync().then(safeRender).catch(() => {});
+            NotesService.sync().then(safeRender).catch(() => {});
+            SVC().syncAll().then(safeRender).catch(() => {});
+            if (opts && opts.videoId) {
+                VideoService.sync().then(() => openDetail(opts.videoId)).catch(() => {});
+            }
         },
         close() {
             if (currentPage === 'detail' && selectedVideo) {
