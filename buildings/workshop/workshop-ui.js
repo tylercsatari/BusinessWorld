@@ -1477,15 +1477,14 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection" data-vfield="hook" style="--accent:#3d8bf0">
-                ${subTitle('hook', 'Hook', '— write the hook, then add hook instances to produce &amp; split-test (animation / practical). Each instance needs its footage before its stage clears.')}
-                <textarea id="workshop-hook" placeholder="What's the hook?">${escHtml(v.hook || '')}</textarea>
+                ${subTitle('hook', 'Hook', '— write the hook and pick its type (animation / practical). Each is its own instance you can split-test; at least one (with a type) is needed before the video moves on. The Animation / Practical branches flip on automatically from the types.')}
                 ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — hook footage lives in that project's hook/ folder in Dropbox.</div></div>`}
                 <div id="wsp-hook-instances">
                     ${PS().hooksOf(v).map((h, i) => hookInstanceRowHtml(v, h, i)).join('')}
                 </div>
                 <div class="wsp-add-row">
-                    <button class="wsp-mini-btn done" id="wsp-add-hooki">＋ Add hook instance</button>
-                    ${PS().hooksOf(v).length === 0 ? '<span class="wsp-hint">none yet — add one and pick its type; the Animation / Practical branches flip automatically</span>' : ''}
+                    <button class="wsp-mini-btn done" id="wsp-add-hooki">＋ Add hook</button>
+                    ${PS().hooksOf(v).length === 0 ? '<span class="wsp-hint">none yet — write your first hook and pick its type</span>' : ''}
                 </div>
             </div>
 
@@ -2302,28 +2301,30 @@ const WorkshopUI = (() => {
     const HOOK_TYPE_META = { animation: { icon: '🎞️', label: 'Animation' }, practical: { icon: '🎯', label: 'Practical' } };
 
     function hookInstanceRowHtml(v, h, i) {
-        const meta = HOOK_TYPE_META[h.type];
         const linked = !!h.videoPath;
+        const typed = !!h.type;
         return `<div class="wsp-hooki" data-hooki="${escAttr(h.id)}">
-            <div class="wsp-add-row">
-                <span class="wsp-hint" style="font-style:normal;font-weight:800;">#${i + 1}</span>
+            <div class="wsp-hooki-head">
+                <span class="wsp-hint" style="font-style:normal;font-weight:800;">Hook #${i + 1}</span>
                 <select data-hooki-type="${escAttr(h.id)}" class="wsp-inline-select">
-                    <option value="" ${!h.type ? 'selected' : ''}>type…</option>
-                    <option value="animation" ${h.type === 'animation' ? 'selected' : ''}>Animation</option>
-                    <option value="practical" ${h.type === 'practical' ? 'selected' : ''}>Practical</option>
+                    <option value="" ${!h.type ? 'selected' : ''}>pick type…</option>
+                    <option value="animation" ${h.type === 'animation' ? 'selected' : ''}>🎞️ Animation</option>
+                    <option value="practical" ${h.type === 'practical' ? 'selected' : ''}>🎯 Practical</option>
                 </select>
-                <input type="text" data-hooki-label="${escAttr(h.id)}" placeholder="label (optional, e.g. 'POV version')" value="${escAttr(h.label || '')}">
                 <button class="wsp-mini-btn danger" data-hooki-del="${escAttr(h.id)}">✕</button>
             </div>
+            <textarea data-hooki-text="${escAttr(h.id)}" class="wsp-hooki-text" placeholder="Write the hook…">${escHtml(h.text || h.label || '')}</textarea>
             ${linked
                 ? `<div class="wsp-row" style="border-left: 3px solid ${h.type === 'animation' ? '#4a9eff' : '#e8a020'}">
                     <span class="wsp-row-name">${icon(h.type === 'animation' ? 'animation' : 'hookfilm', 'wsp-row-ic')} ${escHtml(h.videoName || h.videoPath.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
                     <button class="wsp-mini-btn" data-hooki-open="${escAttr(h.id)}">▶ Open</button>
                     <button class="wsp-mini-btn danger" data-hooki-unlink="${escAttr(h.id)}">✕ Unlink</button>
                 </div>`
-                : `<div class="wsp-add-row wsp-hooki-media" data-hooki-media="${escAttr(h.id)}" data-empty="1">
-                    <span class="wsp-hint">${v.project ? 'loading footage controls…' : 'select a Channel Project to attach footage'}</span>
-                </div>`}
+                : (typed
+                    ? `<div class="wsp-add-row wsp-hooki-media" data-hooki-media="${escAttr(h.id)}" data-empty="1">
+                        <span class="wsp-hint">${v.project ? 'loading footage controls…' : 'select a Channel Project to attach footage'}</span>
+                    </div>`
+                    : '')}
         </div>`;
     }
 
@@ -2341,6 +2342,7 @@ const WorkshopUI = (() => {
         branches.hookfilm = hooks.some(h => h.type === 'practical');
         await VideoService.update(videoId, {
             hooks, branches,
+            hook: (hooks.find(h => (h.text || '').trim()) || {}).text || '',   // keep v.hook in sync (first phrasing) for back-compat
             hookType: '', hookVideoPath: '', hookVideoName: '',
             status: normalizedStatus(fresh || { status: 'pipeline' })
         });
@@ -2349,7 +2351,7 @@ const WorkshopUI = (() => {
     function bindHookInstances(v, root, rerender) {
         root.querySelector('#wsp-add-hooki')?.addEventListener('click', async () => {
             const hooks = hooksWithEdits(v.id);
-            hooks.push({ id: 'h' + Math.random().toString(36).slice(2, 10), type: '', label: '', videoPath: '', videoName: '' });
+            hooks.push({ id: 'h' + Math.random().toString(36).slice(2, 10), type: '', text: '', label: '', videoPath: '', videoName: '' });
             await saveHooks(v.id, hooks);
             rerender();
         });
@@ -2361,18 +2363,17 @@ const WorkshopUI = (() => {
             await saveHooks(v.id, hooks);
             rerender();
         }));
-        root.querySelectorAll('[data-hooki-label]').forEach(inp => {
+        root.querySelectorAll('[data-hooki-text]').forEach(inp => {
             let t = null;
-            inp.addEventListener('input', () => {
-                clearTimeout(t);
-                t = setTimeout(async () => {
-                    const hooks = hooksWithEdits(v.id);
-                    const h = hooks.find(x => x.id === inp.dataset.hookiLabel);
-                    if (!h) return;
-                    h.label = inp.value;
-                    await saveHooks(v.id, hooks);
-                }, 1000);
-            });
+            const save = async () => {
+                const hooks = hooksWithEdits(v.id);
+                const h = hooks.find(x => x.id === inp.dataset.hookiText);
+                if (!h) return;
+                h.text = inp.value;
+                await saveHooks(v.id, hooks);
+            };
+            inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(save, 800); });
+            inp.addEventListener('blur', () => { clearTimeout(t); save(); });
         });
         root.querySelectorAll('[data-hooki-del]').forEach(b => b.addEventListener('click', async () => {
             if (!confirm('Remove this hook instance? (Any linked file stays in Dropbox.)')) return;

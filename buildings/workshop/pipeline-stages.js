@@ -115,8 +115,11 @@ const PipelineStages = (() => {
             test: () => true
         },
         hook: {
-            desc: 'auto: done once the Hook field has 10+ characters',
-            test: (v) => ((v.hook || '').trim().length >= 10)
+            desc: 'auto: done once there is at least one hook instance with phrasing + a type (animation/practical) chosen',
+            test: (v) => {
+                const hs = hooksOf(v).filter(h => (h.text || h.label || '').trim() && h.type);
+                return hs.length > 0;
+            }
         },
         script: {
             desc: 'auto: done once the Script field has 100+ characters',
