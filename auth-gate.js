@@ -541,7 +541,12 @@
                 const buildings = [...body.querySelectorAll(`[data-pbuild="${CSS.escape(pid)}"]:checked`)].map(c => c.value);
                 const features = {}; body.querySelectorAll(`[data-pfeat="${CSS.escape(pid)}"]:checked`).forEach(c => { if (buildings.includes(c.dataset.pfbuild)) features[c.value] = true; });
                 if (buildings.includes('Workshop')) {
-                    body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { if (s.value !== 'none') features['Workshop:stage:' + s.dataset.stageid] = s.value; });
+                    // Write EVERY stage's access explicitly (incl. 'none'). Omitting
+                    // the 'none' ones used to leave zero stage keys, which the gate
+                    // reads as "full pipeline" — so a profile scoped to a couple of
+                    // nodes (rest None) silently granted everything. Writing them all
+                    // makes None actually mean none.
+                    body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { features['Workshop:stage:' + s.dataset.stageid] = s.value; });
                     // Field access: store read/write; omit 'write' default ONLY when ALL are write (then no keys = full).
                     const fieldSels = [...body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]`)];
                     const anyRestricted = fieldSels.some(s => s.value !== 'write');

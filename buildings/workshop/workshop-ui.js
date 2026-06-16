@@ -335,11 +335,13 @@ const WorkshopUI = (() => {
     }
 
     function updateCount() {
+        // Restricted accounts: count only the videos they can actually see.
+        const myVideos = filteredVideos().length;
         const el = document.getElementById('wsp-count');
-        if (el) el.textContent = `${pipelineVideos().length} in pipeline`;
+        if (el) el.textContent = `${myVideos} in pipeline`;
         // Live counts on every tab so the numbers are visible without clicking in
         const counts = {
-            pipeline: pipelineVideos().length,
+            pipeline: myVideos,
             projects: SVC().projects.getAll().filter(p => p.status !== 'archived').length,
             orders: SVC().orders.getAll().filter(o => o.status !== 'received').length,
             inventory: SVC().inventory.getAll().length
@@ -431,6 +433,9 @@ const WorkshopUI = (() => {
 
     function filteredComponents() {
         let list = SVC().components.getAll().filter(c => c.status !== 'done');
+        // Restricted accounts only see components/tasks sitting at a stage (node)
+        // they have access to — same scoping as videos.
+        if (isStageScoped()) list = list.filter(c => { const sid = componentStageId(c); return sid && stageVisible(sid); });
         if (fProject) list = list.filter(c => c.projectId === fProject);
         if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(c => (c.name || '').toLowerCase().includes(q)); }
         return list;
