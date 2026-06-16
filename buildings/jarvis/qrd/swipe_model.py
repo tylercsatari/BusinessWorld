@@ -17,7 +17,7 @@ Output: qrd_swipe.json — everything the Business World tab needs to show the
 trustworthiness verdict, the ROC curve, the predicted-vs-actual scatter, the
 selected levers, and the live §12 validation panel.
 """
-import os, json, warnings
+import os, json, warnings, datetime
 warnings.filterwarnings('ignore')
 import numpy as np
 np.random.seed(7)
@@ -30,6 +30,7 @@ from scipy.stats import spearmanr
 HERE = os.path.dirname(os.path.abspath(__file__))
 JARVIS = os.path.dirname(HERE)
 OUT = os.path.join(HERE, 'qrd_swipe.json')
+DATES = os.path.join(HERE, 'qrd_dates.json')   # real publish dates (from Pen)
 
 LLM = ['z_score', 'vz_score', 'novelty', 'cognitive_load', 'net_novelty',
        'action', 'scale', 'contrast', 'expression', 'v_novelty']
@@ -38,7 +39,7 @@ EXTRACTED = ['a_loud_first3_ratio', 'a_loud_slope', 'a_onset_mean', 'a_centroid_
              'v_speaking_rate', 'v_time_first_word', 'v_hook_question', 'vi_cut_rate',
              'vi_motion_first3_ratio', 'vi_motion_mean', 'vi_bright_slope', 'vi_sat_mean',
              'vi_warmth_first3_ratio', 'vi_face_frac', 'vi_face_size', 'vi_face_centered', 'vi_text_at0']
-CONF = ['duration_s', 'sub_view_frac']
+CONF = ['duration_s', 'sub_view_frac', 'c_recency', 'c_month_sin', 'c_month_cos', 'c_dow']
 POOL = LLM + EXTRACTED + CONF
 LABELS = {'v_speaking_rate': 'Speaking rate', 'v_time_first_word': 'Time to first word',
           'v_hook_question': 'Question hook', 'vi_cut_rate': 'Cut rate', 'vi_sat_mean': 'Saturation',
@@ -49,7 +50,8 @@ LABELS = {'v_speaking_rate': 'Speaking rate', 'v_time_first_word': 'Time to firs
           'a_pitch_slope': 'Pitch lift', 'a_zcr_mean': 'Zero-crossing', 'a_mfcc1_mean': 'MFCC-1', 'a_voiced_ratio': 'Voiced ratio',
           'z_score': 'Zeigarnik (text)', 'vz_score': 'Visual Zeigarnik', 'novelty': 'Novelty', 'cognitive_load': 'Cognitive load',
           'net_novelty': 'Net novelty', 'action': 'Visual action', 'scale': 'Visual scale', 'contrast': 'Visual contrast',
-          'expression': 'Visual expression', 'v_novelty': 'Visual novelty', 'duration_s': 'Duration', 'sub_view_frac': 'Account size'}
+          'expression': 'Visual expression', 'v_novelty': 'Visual novelty', 'duration_s': 'Duration', 'sub_view_frac': 'Account size',
+          'c_recency': 'Recency (era)', 'c_month_sin': 'Month (seasonal)', 'c_month_cos': 'Month (seasonal)', 'c_dow': 'Day of week'}
 
 
 def load():
@@ -73,6 +75,25 @@ def load():
                 rec[k] = val
         rec['swipe'] = tgt[yid]['swipe']
         merged.append(rec)
+    # ── real publish dates → post-time confounds + chronological order (true split-by-time) ──
+    dates = json.load(open(DATES)) if os.path.exists(DATES) else {}
+    for rec in merged:
+        d = (dates.get(rec.get('ytId')) or {}).get('date')
+        try:
+            dt = datetime.date.fromisoformat(d) if d else None
+        except Exception:
+            dt = None
+        rec['_dt'] = dt
+    valid = [r['_dt'] for r in merged if r.get('_dt')]
+    base = min(valid) if valid else None
+    for rec in merged:
+        dt = rec.get('_dt')
+        if dt and base:
+            rec['c_recency'] = (dt - base).days / 365.0
+            rec['c_dow'] = float(dt.weekday())
+            ang = 2 * np.pi * (dt.month - 1) / 12.0
+            rec['c_month_sin'] = float(np.sin(ang)); rec['c_month_cos'] = float(np.cos(ang))
+    merged.sort(key=lambda r: (r.get('_dt') is None, r.get('_dt') or datetime.date(1900, 1, 1)))
     for k in POOL:
         vals = [m[k] for m in merged if isinstance(m.get(k), (int, float)) and np.isfinite(m.get(k))]
         med = float(np.median(vals)) if vals else 0.0
@@ -85,6 +106,7 @@ def load():
 def main():
     merged = load()
     n = len(merged)
+    n_dated = sum(1 for m in merged if m.get('_dt'))   # reels with a real publish date
     X = np.array([[m[k] for k in POOL] for m in merged], dtype=float)
     sw = np.array([m['swipe'] for m in merged])
     y = np.log1p(np.maximum(0, sw))
@@ -170,11 +192,11 @@ def main():
 
     # §12 leakage & causality checklist — programmatic
     checklist = [
-        ['confounds_at_post', 'Confounds (account size, duration) recorded at post time, not today', True],
+        ['confounds_at_post', 'Post-date confounds (recency, month, day-of-week) are at post time; account-size is a current proxy', n_dated == n],
         ['mediator_out', 'Early engagement (first-hour likes/comments) excluded — it is a mediator', True],
         ['target_transformed', 'Target on log1p / class / rank, never raw counts under squared loss', True],
         ['fit_on_train_only', 'Standardisation AND feature selection fit on the training fold only', True],
-        ['split_by_time', 'Train/validation split by time (earlier→later), not at random', True],
+        ['split_by_time', 'Train/validation split by REAL publish date (%d/%d reels dated), earlier→later' % (n_dated, n), n_dated == n],
         ['features_beat_baseline', 'Hook levers beat the trivial base-rate baseline (AUC %.2f > 0.50)' % auc, auc > 0.5],
         ['hypothesis_until_ab', 'Every driver treated as a hypothesis until an A/B test confirms it', True],
         ['confidence_ranges', 'Scores carry bootstrap confidence ranges; tiny gaps are noise', True],

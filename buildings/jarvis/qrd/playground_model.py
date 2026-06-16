@@ -13,7 +13,7 @@ accuracy for honest display.
 
 Output: qrd_playground_model.json
 """
-import os, json, warnings
+import os, json, warnings, datetime
 warnings.filterwarnings('ignore')
 import numpy as np
 np.random.seed(7)
@@ -26,15 +26,16 @@ from scipy.stats import spearmanr
 HERE = os.path.dirname(os.path.abspath(__file__))
 JARVIS = os.path.dirname(HERE)
 OUT = os.path.join(HERE, 'qrd_playground_model.json')
+DATES = os.path.join(HERE, 'qrd_dates.json')   # real publish dates (from Pen)
 
-# PRUNED to the features that genuinely influence swipe (|univariate corr| > 0.10),
-# all time-windowed to the first 10s / expressed as rates. Duration is EXCLUDED:
-# it is the strongest correlate (+0.46) but a format confound, not a hook lever,
-# and dropping it both matches intent and raises out-of-fold AUC (0.84 -> 0.88).
-# All reproducible from an upload (audio + visual + whisper transcript). No LLM.
+# Content hook levers (first-10s, reproducible from an upload: audio + visual +
+# whisper, NO LLM) PLUS duration as a control. duration is kept, not dropped:
+# it's a reproducible feature, and removing it earlier was outcome-peeking (it was
+# cut because doing so lifted AUC). The framework's rule is to PUT confounds in the
+# model and read the content levers underneath them — so it stays in.
 FEATURES = ['v_hook_question', 'v_speaking_rate', 'v_time_first_word',
             'a_mfcc1_mean', 'a_onset_mean', 'a_pitch_slope', 'a_zcr_mean', 'a_centroid_mean',
-            'vi_sat_mean', 'vi_face_size']
+            'vi_sat_mean', 'vi_face_size', 'duration_s']
 # which features need which modality (so the server can flag degraded inputs)
 AUDIO_FEATS = [f for f in FEATURES if f.startswith('a_')]
 VISUAL_FEATS = [f for f in FEATURES if f.startswith('vi_')]
@@ -46,6 +47,19 @@ LABELS = {'a_loud_first3_ratio': 'Loudness swell', 'a_loud_slope': 'Loudness ram
           'vi_motion_first3_ratio': 'Early motion', 'vi_motion_mean': 'Motion energy', 'vi_bright_slope': 'Brightness ramp',
           'vi_sat_mean': 'Saturation', 'vi_warmth_first3_ratio': 'Warm open', 'vi_face_frac': 'Face presence',
           'vi_face_size': 'Face size', 'vi_face_centered': 'Face centred', 'vi_text_at0': 'Hook caption', 'duration_s': 'Duration'}
+
+
+def _sort_by_date(rows):
+    """Sort rows in place by real publish date (from qrd_dates.json) so a
+    TimeSeriesSplit becomes a genuine earlier→later split. Undated rows go last."""
+    dates = json.load(open(DATES)) if os.path.exists(DATES) else {}
+    def key(r):
+        d = (dates.get(r.get('ytId')) or {}).get('date')
+        try:
+            return (d is None, datetime.date.fromisoformat(d) if d else datetime.date(1900, 1, 1))
+        except Exception:
+            return (True, datetime.date(1900, 1, 1))
+    rows.sort(key=key)
 
 
 def load():
@@ -63,6 +77,7 @@ def load():
                 rec[k] = f[k]
         rec['swipe'] = tgt[y]['swipe']
         rows.append(rec)
+    _sort_by_date(rows)   # chronological → TimeSeriesSplit is a real split-by-time
     med = {}
     for k in FEATURES:
         vals = [r[k] for r in rows if isinstance(r.get(k), (int, float)) and np.isfinite(r.get(k))]
@@ -126,7 +141,9 @@ def export_retention(rows_by_id):
                 rec[k] = wvf[y][k]
         if not isinstance(rec['retention'], (int, float)):
             continue
+        rec['ytId'] = y
         rows.append(rec)
+    _sort_by_date(rows)   # chronological → real split-by-time
     med = {}
     for k in WV_FEATURES:
         vals = [r[k] for r in rows if isinstance(r.get(k), (int, float)) and np.isfinite(r.get(k))]
