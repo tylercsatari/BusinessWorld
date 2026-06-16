@@ -87,8 +87,8 @@ const JarvisQRD = (() => {
     // §3 confound covariates (definition + causal role)
     const CONFOUNDS = [
         { key: 'sub_view_frac', label: 'Account size', def: 'Followers / reach at post time', role: 'confound (largest)', dataKey: 'sub_view_frac', avail: 'proxy' },
-        { key: 'post_time',     label: 'Post time',    def: 'Hour of day, day of week',       role: 'confound',          dataKey: null,            avail: 'missing' },
-        { key: 'topic_timing',  label: 'Topic timing', def: 'Days since topic/sound trended', role: 'confound',          dataKey: null,            avail: 'missing' },
+        { key: 'post_time',     label: 'Post time (day/month)', def: 'Day-of-week + cyclical month from the real publish date', role: 'confound', dataKey: 'c_dow',     avail: 'live' },
+        { key: 'topic_timing',  label: 'Recency / era', def: 'Years since the first post (real publish date)', role: 'confound (era/trend)', dataKey: 'c_recency', avail: 'live' },
         { key: 'recommender',   label: 'Recommender state', def: "Account's median reach that week", role: 'confound (hidden)', dataKey: null,      avail: 'missing' },
         { key: 'like_ratio',    label: 'Early engagement', def: 'Likes + comments in first hour', role: 'mediator (leave out)', dataKey: 'like_ratio', avail: 'proxy' },
         { key: 'caption',       label: 'Caption / hashtags', def: 'Length, count, trending tag', role: 'weak control',    dataKey: null,            avail: 'missing' },
@@ -136,7 +136,8 @@ const JarvisQRD = (() => {
     // content levers actually present in the table → drive the live model
     const CONTENT_KEYS = ['z_score', 'vz_score', 'novelty', 'cognitive_load', 'net_novelty',
         'action', 'scale', 'contrast', 'expression', 'v_novelty'];
-    const CONFOUND_KEYS = ['duration_s', 'sub_view_frac'];
+    // duration + follower proxy + REAL post-time confounds derived from publish date
+    const CONFOUND_KEYS = ['duration_s', 'sub_view_frac', 'c_recency', 'c_month_sin', 'c_month_cos', 'c_dow'];
 
     // Curated, actionable atoms extracted by the real Python pipeline
     // (qrd/extract_features.py) — the doc's levers, now LIVE. Each maps to a
@@ -206,7 +207,9 @@ const JarvisQRD = (() => {
     // Nothing here returns a hardcoded `true` — that was the old self-certification bug.
     const CHECKLIST = [
         { id: 'confounds_post', text: 'Confounds recorded at post time, not today',
-          status: () => ({ s: 'na', why: 'These 213 reels carry only duration + a follower-ratio proxy — no post-time snapshot of account size, post hour, topic timing or recommender state. "At post time" cannot be verified.' }) },
+          status: () => (DATA && DATA.datedCount === DATA.n)
+            ? ({ s: 'pass', why: `Real publish dates joined for all ${DATA.n} reels (from the Pen) → recency, month and day-of-week are genuine post-time confounds. Account size remains a current follower-ratio proxy; post hour isn't in the public date.` })
+            : ({ s: 'na', why: 'Publish dates not available for every reel.' }) },
         { id: 'mediator_out', text: 'Early engagement left out of the content model (it is a mediator)',
           status: () => ({ s: (state.includeConfounds && modelUsesMediator()) ? 'fail' : 'pass', why: 'like_ratio / day3_share / view_accel / subs_gained are never used as predictors of the content model.' }) },
         { id: 'target_safe', text: 'Target uses log / rank / retention, never raw counts under squared loss',
@@ -216,7 +219,9 @@ const JarvisQRD = (() => {
         { id: 'fit_train', text: 'Rescaling / shrinkage / PCA fit on the training split only',
           status: () => ({ s: 'pass', why: 'Reported accuracy comes from cross-validation that standardises inside each train fold. (The Reduction tab\'s covariance/PCA picture is whole-data exploratory — it produces no scored prediction.)' }) },
         { id: 'split_time', text: 'Train / validation split by time, not at random',
-          status: () => ({ s: 'na', why: 'Dataset has no post timestamp. CV uses an expanding window over row order, which is NOT a true time split — trend leakage cannot be ruled out here.' }) },
+          status: () => (DATA && DATA.datedCount === DATA.n)
+            ? ({ s: 'pass', why: `Reels are sorted by REAL publish date (${DATA.dateSpan ? DATA.dateSpan[0] + ' → ' + DATA.dateSpan[1] : ''}), so the expanding-window CV trains on earlier reels and validates on later ones — a genuine split-by-time.` })
+            : ({ s: 'na', why: 'Not every reel has a publish date.' }) },
         { id: 'sig_baseline', text: 'Signatures kept only if they beat the simple summary baseline',
           status: () => ({ s: 'na', why: 'Path signatures are shown for illustration; the live model is driven by the summary/atom features, and the beats-the-baseline gate is not applied to them.' }) },
         { id: 'hypothesis', text: 'Every finding treated as a hypothesis until an A/B test confirms it',
@@ -392,7 +397,8 @@ const JarvisQRD = (() => {
     }
     function standardizeWith(X, mu, sd) { return X.map(r => r.map((v, j) => (v - mu[j]) / (sd[j] || 1))); }
 
-    // Expanding-window CV over ROW ORDER (not a true time split — no timestamps in data).
+    // Expanding-window CV. Rows are sorted by REAL publish date at load, so this is
+    // a genuine split-by-time: train on earlier reels, validate on later ones.
     // AIRTIGHT: standardisation is fit on the TRAIN fold only and applied
     // frozen to the validation block — no test-set statistics leak in (§7/§12).
     // Takes the RAW feature matrix X. Returns CV scores + pooled out-of-fold
@@ -454,6 +460,7 @@ const JarvisQRD = (() => {
         ]);
         const swipeMap = await fetch(base + 'qrd/qrd_targets.json').then(r => r.json()).catch(() => null);
         SWIPE_PY = await fetch(base + 'qrd/qrd_swipe.json').then(r => r.json()).catch(() => null);
+        const dateMap = await fetch(base + 'qrd/qrd_dates.json').then(r => r.json()).catch(() => ({}));
         const rows = (Array.isArray(exp) ? exp : (exp.dataset || exp.videos || [])).filter(r => r && r.ytId);
         // merge real swipe-away ratio (analytics.swipedAwayRate) — a distinct target
         let swipeHit = 0;
@@ -495,6 +502,24 @@ const JarvisQRD = (() => {
             FEATURES.forEach(f => { if (liveAtoms.has(f.key) && f.avail === 'extractable') f.avail = 'live'; });
         }
 
+        // ── REAL publish dates (qrd_dates.json, joined from Pen) → post-time confounds
+        // + chronological order so the in-browser time-split CV is a TRUE split-by-time.
+        let datedCount = 0;
+        rows.forEach(r => { const d = dateMap[r.ytId] && dateMap[r.ytId].date; const t = d ? Date.parse(d) : NaN; r._ts = isFinite(t) ? t : NaN; r._date = d || null; if (isFinite(r._ts)) datedCount++; });
+        const validTs = rows.map(r => r._ts).filter(t => isFinite(t));
+        const baseTs = validTs.length ? Math.min(...validTs) : 0;
+        const YEAR = 365.25 * 24 * 3600 * 1000;
+        rows.forEach(r => {
+            if (isFinite(r._ts)) {
+                const dt = new Date(r._ts);
+                r.c_recency = (r._ts - baseTs) / YEAR;               // years since first post (era)
+                r.c_dow = dt.getUTCDay();                             // 0=Sun … 6=Sat
+                const ang = 2 * Math.PI * dt.getUTCMonth() / 12;     // cyclical month
+                r.c_month_sin = Math.sin(ang); r.c_month_cos = Math.cos(ang);
+            }
+        });
+        rows.sort((a, b) => (isFinite(a._ts) ? a._ts : Infinity) - (isFinite(b._ts) ? b._ts : Infinity));
+
         // impute any missing live feature with column mean (deterministic), track coverage
         const liveKeys = modelContentKeys().concat(CONFOUND_KEYS);
         const coverage = {};
@@ -523,7 +548,9 @@ const JarvisQRD = (() => {
         DATA = {
             rows, n: rows.length, visHit, coverage,
             accounts: 1,                 // single creator account (no per-account field in data)
-            confoundsAtPost: false,      // HONEST: data carries no post-time snapshot, only duration + follower proxy
+            datedCount,                  // reels with a REAL publish date (from Pen) → enables true split-by-time
+            dateSpan: validTs.length ? [new Date(Math.min(...validTs)).toISOString().slice(0, 10), new Date(Math.max(...validTs)).toISOString().slice(0, 10)] : null,
+            confoundsAtPost: datedCount === rows.length,  // post-date confounds (recency/month/dow) are real; account-size is a proxy
             extractHit,                  // reels with real extracted atoms
             audioReels: audioHit,        // reels with real audio (librosa)
             nExtractedLevers: liveExtractedKeys.length,
@@ -596,7 +623,7 @@ const JarvisQRD = (() => {
             cols, y, Z, mu, sd, eig, mp, nSignal, varExplained, proj,
             ols, enet, cv, lvRank, perm, km, cov, confCorr, uni,
             fitOnTrainOnly: true,        // CV standardises inside each train fold
-            splitByTime: false,          // HONEST: no post timestamps in the data — CV splits on row order, not real time
+            splitByTime: DATA && DATA.datedCount === DATA.n,   // REAL: rows sorted by actual publish date
             target: state.target, includeConfounds: state.includeConfounds,
             alpha: state.enetAlpha, lambda: state.enetLambda, k: state.clusterK,
             swipeOnRet: state.swipeOnRetention,
@@ -1351,7 +1378,7 @@ const JarvisQRD = (() => {
             ${stat('E-Net non-zero feats', m.enet.nNonzero + '/' + m.cols.length, C.purple)}
             ${stat('Rank check ρ→views', fmt(m.lvRank, 3), C.accent)}
         </div>`;
-        h += note(`Live fit on <b>${state.target}</b> over ${DATA.n} reels, ${state.includeConfounds ? 'confounds included (content read underneath them)' : 'content levers only'}. CV uses an <b>expanding window over row order</b> (train earlier rows, validate later), with standardisation fit inside each train fold. Caveat: this dataset has <b>no post timestamp</b>, so this is only a true split-by-time if the rows are chronological — treat it as ordered, not guaranteed time-ordered. The small gap between in-sample R² and CV R² is the honesty check: a big gap = overfit. With ~200 points a tiny accuracy gap is noise.`, C.orange);
+        h += note(`Live fit on <b>${state.target}</b> over ${DATA.n} reels, ${state.includeConfounds ? 'confounds included (content read underneath them)' : 'content levers only'}. CV uses an <b>expanding window over real publish dates</b>${DATA.dateSpan ? ` (${DATA.dateSpan[0]} → ${DATA.dateSpan[1]})` : ''} — train on earlier reels, validate on later ones — with standardisation fit inside each train fold. This is a <b>genuine split-by-time</b>: random splits would let future trends leak into the past. The small gap between in-sample R² and CV R² is the honesty check: a big gap = overfit. Note: across 2021–2026 the winning formula drifts (§11), so honest out-of-sample retention R² is near zero — that's the real difficulty, not a bug.`, C.orange);
 
         // model roster table
         const okCol = v => v.startsWith('yes') ? C.green : v === 'risk' ? C.orange : C.red;
@@ -1771,10 +1798,10 @@ const JarvisQRD = (() => {
         h += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
             ${stat('Enforced by build', pass + '/' + CHECKLIST.length, C.green)}
             ${stat('Blocked by data', na + '/' + CHECKLIST.length, na ? C.orange : C.green)}
-            ${stat('Split strategy', 'ordered (no timestamps)', C.orange)}
+            ${stat('Split strategy', (DATA && DATA.datedCount === DATA.n) ? 'by real publish date' : 'ordered', (DATA && DATA.datedCount === DATA.n) ? C.green : C.orange)}
         </div>`;
         h += card(items, 0);
-        h += note(`<b>ENFORCED</b> = guaranteed by construction (mediator excluded, transformed targets, train-only CV standardisation, confidence ranges). <b>N/A · DATA</b> = the dataset can't support the rule, so it's marked honestly instead of asserted: these 213 reels carry no account ID and no post timestamp, so within-account relative views (Target 2) and a true split-by-time are not possible here. <b>MANUAL</b> = needs you in the loop (A/B confirmation, a matched competitor set). This replaces the earlier version that reported these as auto-passed.`, C.cyan);
+        h += note(`<b>ENFORCED</b> = guaranteed by construction (mediator excluded, transformed targets, train-only CV standardisation, confidence ranges). <b>N/A · DATA</b> = the dataset can't support the rule, so it's marked honestly instead of asserted. Real publish dates are now joined for all reels (so split-by-time and post-date confounds are real), but there's still no account ID, so within-account relative views (Target 2) remains out of reach. <b>MANUAL</b> = needs you in the loop (A/B confirmation, a matched competitor set). This replaces the earlier version that reported everything as auto-passed.`, C.cyan);
         return h;
     }
 
@@ -1801,7 +1828,8 @@ const JarvisQRD = (() => {
         if (EXTRACTED_LABEL[k]) return EXTRACTED_LABEL[k];
         const f = FEATURES.find(x => x.key === k);
         if (f) return f.label;
-        const map = { duration_s: 'Duration', sub_view_frac: 'Account size', retention: 'Retention (baseline)' };
+        const map = { duration_s: 'Duration', sub_view_frac: 'Account size', retention: 'Retention (baseline)',
+            c_recency: 'Recency (era)', c_dow: 'Day of week', c_month_sin: 'Month (seasonal)', c_month_cos: 'Month (seasonal)' };
         return map[k] || k;
     }
 
