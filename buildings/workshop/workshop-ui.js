@@ -767,13 +767,46 @@ const WorkshopUI = (() => {
     // forward is the deliverable, which auto-advances the video off the queue.
     function stageVideoBodyHtml(v, stage) {
         const delivBlock = stage ? deliverableBlockHtml(v, stage) : '';
+        // Every node gets a DONE button to manually push the video forward. It's
+        // deliverable-gated: if the node's deliverable isn't met it prompts the
+        // worker to finish it instead of advancing.
+        const doneBtn = (stage && stage.id !== 'post')
+            ? `<button class="workshop-action-btn post-btn" data-node-done="${v.id}" data-node-stage="${stage.id}">✓ Done — push forward</button>`
+            : (stage && stage.id === 'post' ? `<button class="workshop-action-btn post-btn" data-publish="${v.id}">🚀 Publish</button>` : '');
         return `<div class="wsp-stage-video-body">
             ${delivBlock}
             <div class="workshop-detail-fields wsp-inline-editor">${detailFieldsHtml(v)}</div>
             <div class="wsp-svb-actions">
+                ${doneBtn}
                 <button class="workshop-action-btn danger-btn" data-inline-delete="${v.id}">Delete</button>
             </div>
         </div>`;
+    }
+
+    // Is the node's deliverable satisfied? → { met, label }. Branch-skipped nodes
+    // pass automatically. Used by the per-node DONE button.
+    function nodeDeliverableStatus(v, stageId) {
+        const label = STAGE_DELIVERABLE[stageId] || 'this stage';
+        const st = PS().effectiveState(v, stageId, ctxNow());
+        if (st === 'na' || st === 'done' || st === 'auto') return { met: true, label };
+        const kind = deliverableKind(stageId);
+        if (kind === 'result') return { met: stageResultsFor(v, stageId).length > 0, label };
+        if (kind === 'decomp') return { met: PS().branchesDecided(v) && (componentsForVideo(v.id).length > 0 || v.noDecomp), label };
+        return { met: false, label };   // auto-artifact stages: not met until the artifact lands
+    }
+
+    // The DONE button: advance the node if its deliverable is met, else prompt.
+    async function pushNodeForward(videoId, stageId) {
+        const v = VideoService.getById(videoId);
+        if (!v) return;
+        if (stageId === 'decomp') { completeDecomp(videoId); return; }
+        const { met, label } = nodeDeliverableStatus(v, stageId);
+        if (!met) { alert(`Before this can move forward, finish the deliverable:\n\n• ${label}`); return; }
+        const ss = { ...(v.stageState || {}), [stageId]: 'done' };
+        await VideoService.update(videoId, { stageState: ss, status: normalizedStatus(v) });
+        if (expandedStageVideoId === videoId) expandedStageVideoId = null;
+        toast('✓ Done — moved forward');
+        renderTab();
     }
 
     // The deliverable banner shown at the top of an expanded stage row.
@@ -831,6 +864,7 @@ const WorkshopUI = (() => {
                 initEditSlots(ev);   // Editing — three final-video upload slots (was detail-page only)
                 if (selectedStageId && PS().isResultStage(selectedStageId)) initStageResultUploader(ev, selectedStageId, panel);
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
+                panel.querySelectorAll('[data-node-done]').forEach(b => b.addEventListener('click', () => pushNodeForward(b.dataset.nodeDone, b.dataset.nodeStage)));
             }
         }
     }
@@ -2163,7 +2197,7 @@ const WorkshopUI = (() => {
                         <div class="wsp-cd-label">Media <span class="wsp-hint">— photos, videos, drawings, spec sheets</span></div>
                         <div id="cd-media" class="wsp-cd-media-grid">${media.map((m, i) => mediaTileHtml(m, i)).join('')}</div>
                         <div class="wsp-add-row">
-                            <input type="file" id="cd-media-file" accept="image/*,video/*,application/pdf" multiple style="font-size:11.5px;flex:1 1 160px;">
+                            <input type="file" id="cd-media-file" multiple style="font-size:11.5px;flex:1 1 160px;">
                             <button class="wsp-mini-btn done" id="cd-media-up">⬆ Upload</button>
                         </div>
                         ${video && video.project ? '' : '<div class="wsp-hint">Tip: link this component\'s video to a Channel Project to enable uploads (sketches below work regardless).</div>'}
