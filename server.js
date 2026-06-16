@@ -759,6 +759,18 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Compact, data-grounded "hook intelligence pack" distilled from the Jarvis
+    // analytics (swipe/retention findings, design rules, word & visual guidance,
+    // principles, exemplar videos). A few KB — safe to put in a prompt.
+    if (pathname === '/api/workshop/hook-intel' && req.method === 'GET') {
+        let pack = {};
+        try { pack = require('./buildings/jarvis/hook-intel').build(); }
+        catch (e) { pack = { error: 'hook-intel unavailable' }; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(pack));
+        return;
+    }
+
     // API: Kimi K2.6 Chat (Fireworks, OpenAI-compatible)  /api/kimi/chat
     // Same shape as /api/openai/chat. Needs FIREWORKS_API_KEY.
     // =========================================
