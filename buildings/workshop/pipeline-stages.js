@@ -125,6 +125,20 @@ const PipelineStages = (() => {
             desc: 'auto: done once the Script field has 100+ characters',
             test: (v) => ((v.script || '').trim().length >= 100)
         },
+        cad: {
+            desc: 'auto: done once every component that needs CAD has a CAD file uploaded',
+            test: (v, ctx) => {
+                const comps = ((ctx && ctx.components) || []).filter(c => c.videoId === v.id && Array.isArray(c.needs) && c.needs.includes('cad'));
+                return comps.length > 0 && comps.every(c => !!c.cadPath);
+            }
+        },
+        pcb: {
+            desc: 'auto: done once every component that needs a PCB has a PCB file uploaded',
+            test: (v, ctx) => {
+                const comps = ((ctx && ctx.components) || []).filter(c => c.videoId === v.id && Array.isArray(c.needs) && c.needs.includes('pcb'));
+                return comps.length > 0 && comps.every(c => !!c.pcbPath);
+            }
+        },
         order: {
             desc: 'auto: done once every order linked to this video is received (no orders → mark done manually to validate "nothing to buy")',
             test: (v, ctx) => {

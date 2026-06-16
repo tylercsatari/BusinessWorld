@@ -98,6 +98,7 @@
     ];
     window.COMPONENT_FIELDS = [
         ['status', 'Stage'], ['needs', 'Needs & source'], ['media', 'Media'],
+        ['cad', 'CAD file'], ['pcb', 'PCB file'],
         ['sketches', 'Sketches'], ['links', 'Assets & links'], ['notes', 'Notes']
     ];
     const fieldVisible = (kind, id) => {

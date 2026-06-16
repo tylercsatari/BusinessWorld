@@ -161,7 +161,7 @@ const WorkshopUI = (() => {
     // Context for deterministic auto-checks (e.g. Ordering completes when all
     // of a video's orders are received)
     function ctxNow() {
-        return { orders: SVC().orders.getAll() };
+        return { orders: SVC().orders.getAll(), components: SVC().components.getAll() };
     }
 
     function blockedBadge(video) {
@@ -1874,6 +1874,15 @@ const WorkshopUI = (() => {
                         ${video && video.project ? '' : '<div class="wsp-hint">Tip: link this component\'s video to a Channel Project to enable uploads (sketches below work regardless).</div>'}
                     </div>
 
+                    ${needs.includes('cad') ? `<div class="wsp-cd-section" data-cfield="cad">
+                        <div class="wsp-cd-label">CAD file <span class="wsp-hint">— the CAD deliverable (SolidWorks / STL / STEP). Goes to &lt;project&gt;/cad/.</span></div>
+                        <div id="cd-cad-slot"></div>
+                    </div>` : ''}
+                    ${needs.includes('pcb') ? `<div class="wsp-cd-section" data-cfield="pcb">
+                        <div class="wsp-cd-label">PCB file <span class="wsp-hint">— the PCB deliverable. Goes to &lt;project&gt;/pcb/.</span></div>
+                        <div id="cd-pcb-slot"></div>
+                    </div>` : ''}
+
                     <div class="wsp-cd-section" data-cfield="sketches">
                         <div class="wsp-cd-label">Sketches <span class="wsp-hint">— draw your own design ideas, edit them anytime</span></div>
                         <div id="cd-sketches" class="wsp-cd-sketch-grid">${sketches.map((s, i) => sketchTileHtml(s, i)).join('')}</div>
@@ -1927,6 +1936,55 @@ const WorkshopUI = (() => {
         const needsSet = new Set(Array.isArray(c.needs) ? c.needs : []);
         let dirty = false;
         const close = () => { overlay.remove(); if (dirty) rerenderEditor(selectedVideo ? selectedVideo.id : (video ? video.id : null)); };
+
+        // CAD / PCB file deliverables (the slots only exist when the component needs them).
+        (async () => {
+            const slots = [
+                { kind: 'cad', el: 'cd-cad-slot', pathF: 'cadPath', nameF: 'cadName', accept: '.sldprt,.sldasm,.step,.stp,.stl,.iges,.igs,.x_t,.3mf,.f3d', noun: 'CAD file' },
+                { kind: 'pcb', el: 'cd-pcb-slot', pathF: 'pcbPath', nameF: 'pcbName', accept: '', noun: 'PCB file' }
+            ];
+            if (!q('#cd-cad-slot') && !q('#cd-pcb-slot')) return;
+            const rootP = await dropboxRootPath();
+            const renderSlot = (s) => {
+                const el = q('#' + s.el);
+                if (!el) return;
+                const c2 = cur();
+                const path = c2[s.pathF];
+                if (path) {
+                    el.innerHTML = `<div class="wsp-row" style="border-left:3px solid #14b8a6">
+                        <span class="wsp-row-name">${escHtml(c2[s.nameF] || path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
+                        <button class="wsp-mini-btn" data-cf-open>▶ Open</button>
+                        <button class="wsp-mini-btn danger" data-cf-unlink>✕</button></div>`;
+                    el.querySelector('[data-cf-open]').addEventListener('click', async () => {
+                        const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+                        const d = await r.json(); if (d.link) window.open(d.link, '_blank'); else alert('Could not open: ' + (d.error_summary || 'no link'));
+                    });
+                    el.querySelector('[data-cf-unlink]').addEventListener('click', async () => {
+                        if (!confirm(`Unlink this ${s.noun}? (The file stays in Dropbox.)`)) return;
+                        await saveComp({ [s.pathF]: '', [s.nameF]: '' }); dirty = true; renderSlot(s);
+                    });
+                } else if (video && video.project) {
+                    el.innerHTML = `<div class="wsp-add-row">
+                        <input type="file" id="cd-${s.kind}-file" accept="${s.accept}" style="font-size:11.5px;flex:1 1 160px;">
+                        <button class="wsp-mini-btn done" data-cf-up>⬆ Upload</button></div>`;
+                    el.querySelector('[data-cf-up]').addEventListener('click', async () => {
+                        const input = q('#cd-' + s.kind + '-file');
+                        const file = input.files && input.files[0];
+                        if (!file) { alert('Choose a file first.'); return; }
+                        const bar = uploadProgressBar(el, file.name);
+                        try {
+                            const meta = await uploadToDropbox(`${rootP}/${video.project}/${s.kind}/${file.name}`, file, bar.progress);
+                            bar.stage('Saving to component…');
+                            await saveComp({ [s.pathF]: meta.path_display || meta.path_lower, [s.nameF]: meta.name || file.name });
+                            dirty = true; bar.stage('Done ✓'); toast(`📐 ${s.noun} → ${video.project}/${s.kind}`); renderSlot(s);
+                        } catch (e) { alert('Upload failed: ' + e.message); renderSlot(s); }
+                    });
+                } else {
+                    el.innerHTML = `<div class="wsp-hint">Link this component's video to a Channel Project to upload the ${s.noun}.</div>`;
+                }
+            };
+            slots.forEach(renderSlot);
+        })();
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
         q('[data-close]').addEventListener('click', close);
         q('#cd-delete').addEventListener('click', async () => {
@@ -2419,22 +2477,26 @@ const WorkshopUI = (() => {
         const pending = [...root.querySelectorAll('[data-hooki-media][data-empty="1"]')];
         if (!pending.length) return;
         const rootPath = await dropboxRootPath();
-        const folder = `${rootPath}/${v.project}/hook`;
-        let files = [];
-        try {
-            const r = await fetch('/api/dropbox/list_folder', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: folder })
-            });
-            const data = await r.json();
-            if (Array.isArray(data.entries)) files = data.entries.filter(e => e['.tag'] === 'file');
-        } catch (e) { /* folder doesn't exist yet — created on first upload */ }
+        // Animation-type footage lives in <project>/animation/, practical in <project>/hook/.
+        const subFor = (h) => (h && h.type === 'animation') ? 'animation' : 'hook';
+        const listFolder = async (sub) => {
+            try {
+                const r = await fetch('/api/dropbox/list_folder', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: `${rootPath}/${v.project}/${sub}` })
+                });
+                const data = await r.json();
+                return Array.isArray(data.entries) ? data.entries.filter(e => e['.tag'] === 'file') : [];
+            } catch (e) { return []; }
+        };
+        const [hookFiles, animFiles] = await Promise.all([listFolder('hook'), listFolder('animation')]);
+        const files = [...hookFiles, ...animFiles];
         if (!root.isConnected) return; // user navigated away
 
         pending.forEach(el => {
             const hid = el.dataset.hookiMedia;
             el.innerHTML = `
-                ${files.length ? `<select data-hooki-pick="${escAttr(hid)}" class="wsp-inline-select"><option value="">Link existing from ${escHtml(v.project)}/hook…</option>${files.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}</select>` : ''}
+                ${files.length ? `<select data-hooki-pick="${escAttr(hid)}" class="wsp-inline-select"><option value="">Link existing footage…</option>${files.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}</select>` : ''}
                 <input type="file" data-hooki-file="${escAttr(hid)}" accept="video/*" style="font-size:11px;flex:1 1 140px;">
                 <button class="wsp-mini-btn done" data-hooki-up="${escAttr(hid)}">⬆ Upload</button>`;
         });
@@ -2456,12 +2518,14 @@ const WorkshopUI = (() => {
             const input = root.querySelector(`[data-hooki-file="${hid}"]`);
             const file = input && input.files && input.files[0];
             if (!file) { alert('Choose a video file first.'); return; }
+            const h = hooksWithEdits(v.id).find(x => x.id === hid);
+            const sub = subFor(h);   // animation → animation/, practical → hook/
             const rowEl = root.querySelector(`[data-hooki-media="${hid}"]`);
             const bar = uploadProgressBar(rowEl, file.name);
             try {
-                const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                const meta = await uploadToDropbox(`${rootPath}/${v.project}/${sub}/${file.name}`, file, bar.progress);
                 bar.stage('Linking to this hook…');
-                toast(`🪝 hook video uploaded to ${v.project}/hook`);
+                toast(`${sub === 'animation' ? '🎞️ animation' : '🪝 hook'} video → ${v.project}/${sub}`);
                 await setFootage(hid, meta.path_display || meta.path_lower, meta.name || file.name);
             } catch (e) {
                 console.warn('hook video upload failed', e);
