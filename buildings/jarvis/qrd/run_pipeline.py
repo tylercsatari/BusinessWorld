@@ -22,7 +22,7 @@ Targets: T1 retention (primary), T1 keep (hook), T3 log_views (ranking check).
 Output: qrd_model.json — everything the QRD tab needs to show real Python
 model results next to its in-browser engine.
 """
-import os, json, warnings, time
+import os, json, warnings, time, datetime
 warnings.filterwarnings('ignore')
 import numpy as np
 np.random.seed(7)
@@ -48,10 +48,13 @@ FEATURES = os.path.join(HERE, 'qrd_features.json')
 EXPANDED = os.path.join(JARVIS, 'signals-dataset-expanded.json')
 VISION = os.path.join(JARVIS, 'vision-scores-cache.json')
 OUT = os.path.join(HERE, 'qrd_model.json')
+DATES = os.path.join(HERE, 'qrd_dates.json')   # real ytId→publish-date map (from Pen video records)
 
 LLM_KEYS = ['z_score', 'vz_score', 'novelty', 'cognitive_load', 'net_novelty',
             'action', 'scale', 'contrast', 'expression', 'v_novelty']
-CONFOUND_KEYS = ['duration_s', 'sub_view_frac']
+# duration + follower proxy + REAL post-time confounds derived from the publish date:
+# recency (era/trend control), cyclical month (seasonality), day-of-week.
+CONFOUND_KEYS = ['duration_s', 'sub_view_frac', 'c_recency', 'c_month_sin', 'c_month_cos', 'c_dow']
 
 BLOCK_OF = lambda k: ('confound' if k in CONFOUND_KEYS else
                       'llm' if k in LLM_KEYS else
@@ -89,6 +92,36 @@ def load():
             rec['sig2_' + k[5:] if not k.startswith('sig2_') else k] = val
         rec['_has_extract'] = yid in feats
         merged.append(rec)
+
+    # ── REAL publish dates (joined from Pen video records) ──
+    # Turns the faked "split by time" into a genuine one, and adds real post-time
+    # confounds. Every confound here is measured, not assumed.
+    dates = json.load(open(DATES)) if os.path.exists(DATES) else {}
+    parsed = []
+    for rec in merged:
+        d = (dates.get(rec.get('ytId')) or {}).get('date')
+        try:
+            dt = datetime.date.fromisoformat(d) if d else None
+        except Exception:
+            dt = None
+        rec['_dt'] = dt
+        rec['_date'] = d
+        parsed.append(dt)
+    valid = [dt for dt in parsed if dt]
+    base = min(valid) if valid else None
+    for rec in merged:
+        dt = rec.get('_dt')
+        if dt and base:
+            rec['c_recency'] = (dt - base).days / 365.0          # years since the first post (era/recency)
+            rec['c_dow'] = float(dt.weekday())                    # 0=Mon … 6=Sun
+            ang = 2 * np.pi * (dt.month - 1) / 12.0               # cyclical month (seasonality)
+            rec['c_month_sin'] = float(np.sin(ang)); rec['c_month_cos'] = float(np.cos(ang))
+        else:
+            rec['c_recency'] = rec['c_dow'] = rec['c_month_sin'] = rec['c_month_cos'] = np.nan
+    # CHRONOLOGICAL order → TimeSeriesSplit is now a true split-by-time
+    merged.sort(key=lambda r: (r.get('_dt') is None, r.get('_dt') or datetime.date(1900, 1, 1)))
+    if valid:
+        print(f'real dates: {len(valid)}/{len(merged)} reels  ·  span {min(valid)} → {max(valid)}')
     return merged
 
 
@@ -191,9 +224,11 @@ def main():
         return [idx_of[k] for k in kept if pred(k)]
     regimes = {
         'llm-only': cols_for(lambda k: k in LLM_KEYS or k in CONFOUND_KEYS),
-        'llm+extracted': cols_for(lambda k: not k.startswith('sig2_')),
-        'all-raw (143)': list(range(p)),
-        'pca-clean': None,   # handled specially via `proj`
+        'llm+extracted': cols_for(lambda k: not k.startswith('sig2_')),   # no path signatures
+        'all-raw (143)': list(range(p)),                                  # adds path signatures
+        # 'pca-clean' regime removed: scoring on a PCA fit over ALL reels is the
+        # classic leak the doc warns about. PCA is kept only for the §7 display and
+        # the unsupervised archetypes (clustering), never for a scored prediction.
     }
     results['regimes'] = {}
 
@@ -212,8 +247,16 @@ def main():
             best_m, best_n = (en_m, 'Elastic-Net') if en_m >= rf_m else (rf_m, 'Random forest')
             tinfo['regimes'].append({'regime': rname, 'p': (len(cidx) if cidx else (proj.shape[1] if cidx is None else p)),
                                      'elasticnet_r2': en_m, 'rf_r2': rf_m, 'best': best_n, 'best_r2': best_m})
-        # full model zoo on the best-generalising regime (llm+extracted, denoised by the models themselves)
-        bestreg = max(tinfo['regimes'], key=lambda r: r['best_r2'])
+        # ── Signature gate (§6.3): keep path signatures only if 'all-raw' (with sig2)
+        # actually beats 'llm+extracted' (without) on validation. Otherwise they're noise.
+        reg_by = {r['regime']: r for r in tinfo['regimes']}
+        base_r2 = reg_by.get('llm+extracted', {}).get('best_r2')
+        sig_r2 = reg_by.get('all-raw (143)', {}).get('best_r2')
+        tinfo['signatures_help'] = bool(sig_r2 is not None and base_r2 is not None and sig_r2 > base_r2 + 0.01)
+        # full model zoo on the best regime — but if signatures DON'T beat the baseline,
+        # never let the signature regime win (honours the "drop them" rule).
+        cand = tinfo['regimes'] if tinfo['signatures_help'] else [r for r in tinfo['regimes'] if r['regime'] != 'all-raw (143)']
+        bestreg = max(cand, key=lambda r: r['best_r2'])
         tinfo['best_regime'] = bestreg['regime']
         cidx = regimes[bestreg['regime']]
         Xb = proj[good] if cidx is None else (Xt[:, cidx] if cidx else Xt)
@@ -273,8 +316,22 @@ def main():
                              'proj2d': {merged[i]['ytId']: [float(proj[i, 0]), float(proj[i, 1])] for i in range(n)}}
     print(f'§8  archetypes: k={best_k} silhouette={best_sil:.3f} sizes={results["archetypes"]["sizes"]}')
 
-    results['leakage'] = {'split_by_time': True, 'fit_on_train_only': True,
-                          'mediator_excluded': True, 'target_bounded_or_log': True}
+    n_dated = sum(1 for r in merged if r.get('_dt'))
+    sig_help = {t: results['targets'][t].get('signatures_help') for t in results['targets']}
+    results['leakage'] = {
+        'split_by_time': n_dated == n,                 # REAL now — sorted by Pen publish dates
+        'split_basis': f'real publish dates ({n_dated}/{n} reels)',
+        'date_span': [str(min(r['_dt'] for r in merged if r.get('_dt'))),
+                      str(max(r['_dt'] for r in merged if r.get('_dt')))] if n_dated else None,
+        'fit_on_train_only': True,                     # in-fold standardisation; no PCA-on-all-data in scoring
+        'pca_leak_removed': True,
+        'mediator_excluded': True,
+        'target_bounded_or_log': True,
+        'signatures_gated': True,
+        'signatures_help': sig_help,                   # per target: did they beat the baseline?
+    }
+    print(f'§12 leakage: split_by_time={n_dated == n} (real dates {n_dated}/{n})  ·  '
+          f'signatures kept where they help: {sig_help}')
     results['generated_s'] = round(time.time() - t0, 1)
     json.dump(results, open(OUT, 'w'))
     print(f'\nDONE → qrd_model.json  ({results["generated_s"]}s)')
