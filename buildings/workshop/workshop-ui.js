@@ -185,6 +185,32 @@ const WorkshopUI = (() => {
         return SVC().components.getAll().filter(c => c.videoId === videoId);
     }
 
+    // "No decomposition needed" — for videos built from footage/props you already
+    // have. Marks Decomposition done and skips the whole build chain it gates
+    // (planning → procurement → build) so the video jumps straight to Filming.
+    // Hook stages (hook/animation/hookfilm) are left alone — they're driven by
+    // the hook types, not by decomposition.
+    const DECOMP_SKIP_STAGES = ['design', 'propdesign', 'cad', 'pcb', 'order', 'precision', 'software', 'assembly', 'artistic'];
+    function isDecompSkipped(v) {
+        return !!(v && v.noDecomp);
+    }
+    async function setDecompSkip(videoId, skip) {
+        const v = VideoService.getById(videoId);
+        if (!v) return;
+        const stageState = { ...(v.stageState || {}) };
+        if (skip) {
+            stageState.decomp = 'done';
+            DECOMP_SKIP_STAGES.forEach(s => { stageState[s] = 'na'; });
+        } else {
+            // Restore: drop the overrides we added so auto/branch behavior returns
+            if (stageState.decomp === 'done') delete stageState.decomp;
+            DECOMP_SKIP_STAGES.forEach(s => { if (stageState[s] === 'na') delete stageState[s]; });
+        }
+        await VideoService.update(videoId, { stageState, noDecomp: !!skip });
+        toast(skip ? '⏭ Skipped the build chain — jumped to Filming' : 'Decomposition re-enabled');
+        rerenderEditor(videoId);
+    }
+
     // Context for deterministic auto-checks (e.g. Ordering completes when all
     // of a video's orders are received)
     function ctxNow() {
@@ -1535,14 +1561,23 @@ const WorkshopUI = (() => {
                 ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
             </div>
 
-            <div class="wsp-subsection wsp-decomp-section" data-vfield="decomp" style="--accent:#e8a020">
+            <div class="wsp-subsection wsp-decomp-section${isDecompSkipped(v) ? ' skipped' : ''}" data-vfield="decomp" style="--accent:#e8a020">
                 ${subTitle('decomp', 'Decomposition', '— break the build into components. Each becomes its own entity in the pipeline (its own stages &amp; needs) while staying linked to this video, which waits for it. Click a component to open it.')}
-                <div id="wsp-comp-list">${myComps.map(c => componentRowHtml(c)).join('')}</div>
-                <div class="wsp-add-row wsp-decomp-add">
-                    <input type="text" id="wsp-new-vcomp" placeholder="What do you need to build? (e.g. 'Doc Ock arm')">
-                    <button class="wsp-mini-btn done" id="wsp-add-vcomp">＋ Add component</button>
-                    <button class="wsp-mini-btn wsp-ai-btn" id="wsp-ai-suggest" title="Let AI read the hook, script &amp; context and suggest components">✨ AI suggest</button>
-                </div>
+                ${isDecompSkipped(v)
+                    ? `<div class="wsp-skip-banner">
+                            <div class="wsp-skip-banner-main">${icon('film', 'wsp-row-ic')} <b>No decomposition needed</b> — reusing existing footage / props. This video skipped the whole build chain (design → ordering → manufacturing → artistic) and jumped to <b>Filming</b>.</div>
+                            <button class="wsp-mini-btn" id="wsp-unskip-decomp">↩ Re-enable decomposition</button>
+                        </div>
+                        ${myComps.length ? `<div class="wsp-hint" style="margin-top:8px;">Components still linked (kept for reference):</div><div id="wsp-comp-list">${myComps.map(c => componentRowHtml(c)).join('')}</div>` : '<div id="wsp-comp-list"></div>'}`
+                    : `<div id="wsp-comp-list">${myComps.map(c => componentRowHtml(c)).join('')}</div>
+                        <div class="wsp-add-row wsp-decomp-add">
+                            <input type="text" id="wsp-new-vcomp" placeholder="What do you need to build? (e.g. 'Doc Ock arm')">
+                            <button class="wsp-mini-btn done" id="wsp-add-vcomp">＋ Add component</button>
+                            <button class="wsp-mini-btn wsp-ai-btn" id="wsp-ai-suggest" title="Let AI read the hook, script &amp; context and suggest components">✨ AI suggest</button>
+                        </div>
+                        <div class="wsp-add-row">
+                            <button class="wsp-mini-btn" id="wsp-skip-decomp" title="For videos you build from footage/props you already have — skip the entire build chain and jump straight to Filming">⏭ No decomposition needed — skip to Filming</button>
+                        </div>`}
             </div>
 
             <div class="wsp-subsection" data-vfield="voiceover" style="--accent:#8e44ad">
@@ -1668,8 +1703,14 @@ const WorkshopUI = (() => {
             await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
             rerender();
         };
-        get('wsp-add-vcomp').addEventListener('click', addVComp);
-        get('wsp-new-vcomp').addEventListener('keydown', (e) => { if (e.key === 'Enter') addVComp(); });
+        get('wsp-add-vcomp')?.addEventListener('click', addVComp);
+        get('wsp-new-vcomp')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') addVComp(); });
+        // "No decomposition needed" — skip the whole build chain, or undo it
+        get('wsp-skip-decomp')?.addEventListener('click', async () => {
+            if (!confirm('No decomposition needed?\n\nThis skips the entire build chain that Decomposition gates — design, props, CAD/PCB, ordering, manufacturing, assembly and artistic — and jumps the video straight to Filming. Use it for videos you make from footage / props you already have.\n\nYou can re-enable decomposition any time.')) return;
+            await setDecompSkip(v.id, true);
+        });
+        get('wsp-unskip-decomp')?.addEventListener('click', () => setDecompSkip(v.id, false));
         // (component rows' click-to-open AND delete are bound by bindCompStatusRows, which
         // runs for both the detail page and the drop-down editor)
 
