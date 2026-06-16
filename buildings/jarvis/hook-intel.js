@@ -48,20 +48,22 @@ function corpus() {
     return _corpus;
 }
 
-// Retrieval: the real openings most relevant to `query` (the new video's topic),
-// blended with raw performance so the examples are both on-topic and proven.
+// Retrieval: the openings most relevant to `query`, blended with the SWIPE
+// metric so the examples are both on-topic AND best-retained (lowest swipe-away),
+// not just high-view. swipe is the % who swiped away at the hook (lower = better).
 function examples(query, limit) {
     const c = corpus();
     const n = Math.max(1, Math.min(limit || 10, 16));
-    const strip = e => ({ title: e.title, views: e.views, opening: e.opening });
+    const strip = e => ({ title: e.title, views: e.views, swipe: (typeof e.swipe === 'number' ? e.swipe : null), opening: e.opening });
+    // retention bonus: a real low swipe-away is strong evidence the hook worked.
+    const retBonus = e => (typeof e.swipe === 'number' ? Math.max(0, 3 - e.swipe) / 3 : Math.log10((e.views || 0) + 10) / 12);
     const q = tokens(query);
     if (!q.length) return c.slice(0, n).map(strip);
     const qset = new Set(q);
     const scored = c.map(e => {
         let overlap = 0;
         for (const t of e._tok) if (qset.has(t)) overlap++;
-        const viewBoost = Math.log10((e.views || 0) + 10) / 10;   // tiebreak toward proven hits
-        return { e, score: overlap + viewBoost };
+        return { e, score: overlap + retBonus(e) };
     });
     scored.sort((a, b) => b.score - a.score);
     const top = scored.filter(s => s.score >= 1).slice(0, n).map(s => strip(s.e));
