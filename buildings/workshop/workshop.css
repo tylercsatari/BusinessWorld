@@ -933,6 +933,7 @@
 }
 .wsp-comp-tag.build { background: #e6f7f1; color: #0a7a63; }
 .wsp-comp-tag.order { background: #fff3e0; color: #b06000; }
+.wsp-comp-tag.task { background: #f3ecfb; color: #6b3fb0; }
 .wsp-decomp-add .wsp-ai-btn { border-color: #8e5cd6; color: #6b3fb0; background: #f7f2fd; }
 .wsp-decomp-add .wsp-ai-btn:hover { background: #efe6fb; }
 

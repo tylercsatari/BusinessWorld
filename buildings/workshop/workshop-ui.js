@@ -41,6 +41,33 @@ const WorkshopUI = (() => {
     const SVC = () => PipelineService;
 
     const COMPONENT_STATUSES = ['design', 'cad', 'software', 'manufacturing', 'assembly', 'done'];
+    // A component has a SOURCE/type that decides how it flows the pipeline:
+    //   build — made in-house: runs the build chain (design research → cad → … → assembly).
+    //   order — bought: skips Design Research, sits at Ordering until it arrives.
+    //   task  — an errand (neither built nor bought, just done): skips Design Research,
+    //           sits at Props / Set Design until handled.
+    // Each source has its own status track; 'done' (always last) drops it off the board.
+    const COMPONENT_SOURCE_STATUSES = {
+        build: ['design', 'cad', 'software', 'manufacturing', 'assembly', 'done'],
+        order: ['needed', 'ordered', 'done'],
+        task:  ['todo', 'doing', 'done']
+    };
+    const COMPONENT_SOURCES = [
+        { key: 'build', label: 'Build in-house', icon: 'assembly',   hint: 'runs the build chain from Design Research' },
+        { key: 'order', label: 'Order it',       icon: 'order',      hint: 'skips Design Research → straight to Ordering' },
+        { key: 'task',  label: 'Task / errand',  icon: 'propdesign', hint: 'not built or bought — just done → Props / Set Design' }
+    ];
+    const statusesForSource = (source) => COMPONENT_SOURCE_STATUSES[source] || COMPONENT_SOURCE_STATUSES.build;
+    // Default starting status for a freshly-typed component.
+    const defaultStatusForSource = (source) => statusesForSource(source)[0];
+    // Where a component sits on the pipeline board. Its SOURCE decides the lane:
+    // orders → Ordering, tasks → Props / Set Design, builds → by their build status.
+    function componentStageId(c) {
+        if (!c || c.status === 'done') return null;
+        if (c.source === 'order') return 'order';
+        if (c.source === 'task') return 'propdesign';
+        return COMPONENT_STAGE_MAP[c.status] || 'design';
+    }
     const ORDER_STATUSES = ['needed', 'ordered', 'received'];
     const INVENTORY_STATUSES = ['planned', 'building', 'ready'];
     const INVENTORY_TYPES = ['prop', 'footage', 'set', 'material', 'other'];
@@ -384,8 +411,8 @@ const WorkshopUI = (() => {
         }
         if (showTypes.component) {
             filteredComponents().forEach(c => {
-                const sid = COMPONENT_STAGE_MAP[c.status];
-                if (sid) byStage[sid].components.push(c);
+                const sid = componentStageId(c);
+                if (sid && byStage[sid]) byStage[sid].components.push(c);
             });
         }
         if (showTypes.order) {
@@ -962,7 +989,7 @@ const WorkshopUI = (() => {
             return `<div class="wsp-row wsp-comp-row${depth ? ' nested' : ''}" data-comp="${c.id}" style="margin-left:${depth * 24}px">
                 <span class="wsp-row-name">${depth ? '<span class="wsp-comp-branch">↳</span> ' : ''}${escHtml(c.name)}${sub.length ? ` <span class="wsp-hint">${subDone}/${sub.length} sub-components done</span>` : ''}</span>
                 <div class="wsp-status-cycle">
-                    ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
+                    ${statusesForSource(c.source).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
                 </div>
                 <button class="wsp-mini-btn" data-comp-sub="${c.id}" title="Break this down further — add a sub-component">＋ sub</button>
                 <button class="wsp-mini-btn danger" data-comp-del="${c.id}">✕</button>
@@ -1733,7 +1760,7 @@ const WorkshopUI = (() => {
         return `<div class="wsp-comp-row" data-comp="${c.id}">
             <button class="wsp-comp-name wsp-clickable" data-open-comp="${c.id}" title="Open this component">
                 ${icon('component', 'wsp-row-ic')} <span class="wsp-comp-name-text">${escHtml(c.name)}</span>
-                ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : c.source === 'build' ? '<span class="wsp-comp-tag build">build</span>' : ''}
+                ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : c.source === 'task' ? '<span class="wsp-comp-tag task">task</span>' : c.source === 'build' ? '<span class="wsp-comp-tag build">build</span>' : ''}
             </button>
             <div class="wsp-comp-meta">
                 ${needs.map(f => `<span class="wsp-need-chip">${escHtml(COMPONENT_NEED_LABEL[f] || f)}</span>`).join('')}
@@ -1859,8 +1886,8 @@ const WorkshopUI = (() => {
 
                     <div class="wsp-cd-section" data-cfield="status">
                         <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now</span></div>
-                        <div class="wsp-status-cycle" data-comp="${c.id}">
-                            ${COMPONENT_STATUSES.map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
+                        <div class="wsp-status-cycle" data-comp="${c.id}" id="cd-status-cycle">
+                            ${statusesForSource(source).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
                         </div>
                     </div>
 
@@ -1869,10 +1896,9 @@ const WorkshopUI = (() => {
                         <div class="wsp-needs-btns">
                             ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needs.includes(n.flag) ? 'on' : ''}" data-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
                         </div>
-                        <div class="wsp-cd-label" style="margin-top:10px;">Source</div>
+                        <div class="wsp-cd-label" style="margin-top:10px;">Type <span class="wsp-hint">— how it gets done (drives where it flows)</span></div>
                         <div class="wsp-needs-btns">
-                            <button class="wsp-need-btn ${source === 'build' ? 'on' : ''}" data-source="build">${icon('assembly', 'wsp-need-ic')} Build in-house</button>
-                            <button class="wsp-need-btn ${source === 'order' ? 'on' : ''}" data-source="order">${icon('order', 'wsp-need-ic')} Order it</button>
+                            ${COMPONENT_SOURCES.map(s => `<button class="wsp-need-btn ${source === s.key ? 'on' : ''}" data-source="${s.key}" title="${escAttr(s.hint)}">${icon(s.icon, 'wsp-need-ic')} ${s.label}</button>`).join('')}
                         </div>
                     </div>
 
@@ -2013,12 +2039,20 @@ const WorkshopUI = (() => {
         // Open the linked video
         const fv = q('[data-open-video]');
         if (fv) fv.addEventListener('click', () => { close(); openDetail(fv.dataset.openVideo); });
-        // Stage
-        q('.wsp-status-cycle').querySelectorAll('[data-cd-status]').forEach(btn => btn.addEventListener('click', async () => {
-            dirty = true;
-            await saveComp({ status: btn.dataset.cdStatus });
-            q('.wsp-status-cycle').querySelectorAll('[data-cd-status]').forEach(b => b.classList.toggle('active', b === btn));
-        }));
+        // Stage — the available statuses depend on the component's type, so this
+        // re-renders whenever the type changes below.
+        const renderStatusCycle = () => {
+            const cyc = q('#cd-status-cycle');
+            if (!cyc) return;
+            const c2 = cur();
+            cyc.innerHTML = statusesForSource(c2.source).map(s => `<button class="wsp-pill ${c2.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('');
+            cyc.querySelectorAll('[data-cd-status]').forEach(btn => btn.addEventListener('click', async () => {
+                dirty = true;
+                await saveComp({ status: btn.dataset.cdStatus });
+                cyc.querySelectorAll('[data-cd-status]').forEach(b => b.classList.toggle('active', b === btn));
+            }));
+        };
+        renderStatusCycle();
         // Needs (multi-select) — toggle the local set synchronously; debounce
         // so toggling several in a row coalesces into ONE save of the full set
         let needsT = null;
@@ -2031,12 +2065,19 @@ const WorkshopUI = (() => {
             clearTimeout(needsT);
             needsT = setTimeout(() => saveComp({ needs: [...needsSet] }), 400);
         }));
-        // Source (single-select)
+        // Type / source (single-select). Switching type re-routes the component
+        // (build → build chain, order → Ordering, task → Props/Set Design) and
+        // swaps its status track. If the current status isn't valid for the new
+        // type, snap it to that type's first stage so it lands in the right lane.
         overlay.querySelectorAll('[data-source]').forEach(btn => btn.addEventListener('click', async () => {
             dirty = true;
             const val = cur().source === btn.dataset.source ? '' : btn.dataset.source;
             overlay.querySelectorAll('[data-source]').forEach(b => b.classList.toggle('on', b === btn && !!val));
-            await saveComp({ source: val });
+            const changes = { source: val };
+            const valid = statusesForSource(val);
+            if (!valid.includes(cur().status)) changes.status = defaultStatusForSource(val);
+            await saveComp(changes);
+            renderStatusCycle();
         }));
         // Links
         const renderLinks = () => { q('#cd-links').innerHTML = (cur().links || []).map((l, i) => linkRowHtml(l, i)).join(''); bindLinks(); };
@@ -2304,7 +2345,7 @@ const WorkshopUI = (() => {
         btn.disabled = true; btn.textContent = '✨ Thinking…';
         try {
             const existing = componentsForVideo(videoId).map(c => c.name);
-            const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the physical COMPONENTS that must be built or bought to pull it off. Output ONLY a JSON object and nothing else — no prose, no markdown fences, do not explain, do not think out loud. Schema: {"components":[{"name":"short concrete name","source":"build"|"order","needs":[...]}]}. "source" is "build" if you'd make it in-house, "order" if you'd buy it. "needs" is an array containing ONLY values from this EXACT set of production steps: design, propdesign, cad, pcb, software, assembly, artistic. These are stages of work, NOT other components — never put a component name in "needs". Use [] when a component needs none of those steps (e.g. an off-the-shelf part you just order). 3-8 components.`;
+            const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the COMPONENTS that must be handled to pull it off. Output ONLY a JSON object and nothing else — no prose, no markdown fences, do not explain, do not think out loud. Schema: {"components":[{"name":"short concrete name","source":"build"|"order"|"task","needs":[...]}]}. "source" is "build" if you'd make it in-house, "order" if you'd buy it, "task" if it's just an errand that gets done — neither built nor bought (e.g. "book the studio", "get a permit", "borrow a ladder"). "needs" is an array containing ONLY values from this EXACT set of production steps: design, propdesign, cad, pcb, software, assembly, artistic — and only applies to "build" components; use [] for "order" and "task". These are stages of work, NOT other components — never put a component name in "needs". 3-8 components.`;
             const user = `Video title: ${v.name}\nHook: ${v.hook || '(none)'}\nScript: ${(v.script || '(none)').slice(0, 2000)}\nContext: ${v.context || '(none)'}\nAlready added (don't repeat): ${existing.join(', ') || 'none'}`;
             const parsed = await aiJson(
                 [{ role: 'system', content: sys }, { role: 'user', content: user }],
@@ -2388,7 +2429,7 @@ const WorkshopUI = (() => {
                         const needs = (c.needs || []).filter(f => ALLOWED.has(f));
                         return `<div class="wsp-suggest-row" data-sug="${i}">
                             <div class="wsp-suggest-main">
-                                <div class="wsp-suggest-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)} ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : '<span class="wsp-comp-tag build">build</span>'}</div>
+                                <div class="wsp-suggest-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)} ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : c.source === 'task' ? '<span class="wsp-comp-tag task">task</span>' : '<span class="wsp-comp-tag build">build</span>'}</div>
                                 <div class="wsp-comp-meta">${needs.map(f => `<span class="wsp-need-chip">${escHtml(COMPONENT_NEED_LABEL[f] || f)}</span>`).join('') || '<span class="wsp-hint">no special steps</span>'}</div>
                             </div>
                             <button class="wsp-mini-btn done" data-add-sug="${i}">＋ Add</button>
@@ -2412,11 +2453,12 @@ const WorkshopUI = (() => {
             c._added = true;
             if (rowBtn) { rowBtn.disabled = true; rowBtn.textContent = '✓ Added'; }
             const fresh = VideoService.getById(videoId);
+            const source = c.source === 'order' ? 'order' : c.source === 'task' ? 'task' : 'build';
             const comp = await SVC().components.create({
                 videoId, projectId: (fresh.projectIds || [])[0] || '', parentComponentId: '',
-                name: c.name, status: 'design', notes: '',
+                name: c.name, status: defaultStatusForSource(source), notes: '',
                 needs: (c.needs || []).filter(f => ALLOWED.has(f)),
-                source: c.source === 'order' ? 'order' : 'build', links: []
+                source, links: []
             });
             await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
         };
