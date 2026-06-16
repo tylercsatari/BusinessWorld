@@ -718,6 +718,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     // =========================================
+    // API: top data-backed principles for hook writing (from Jarvis bridge analysis)
+    if (pathname === '/api/workshop/hook-principles' && req.method === 'GET') {
+        let principles = [];
+        try {
+            const bp = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'buildings/jarvis/bridge_top_principles.json'), 'utf8'));
+            principles = (bp.top || []).slice(0, 15)
+                .filter(p => p && p.via_indicator)
+                .map(p => ({ signal: p.via_indicator, outcome: p.to_outcome, strength: typeof p.chain_strength === 'number' ? p.chain_strength : null }));
+        } catch (e) { /* sparse/missing — return empty */ }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ principles }));
+        return;
+    }
+
     // API: Kimi K2.6 Chat (Fireworks, OpenAI-compatible)  /api/kimi/chat
     // Same shape as /api/openai/chat. Needs FIREWORKS_API_KEY.
     // =========================================

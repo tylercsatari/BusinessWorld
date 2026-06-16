@@ -1492,6 +1492,7 @@ const WorkshopUI = (() => {
                 </div>
                 <div class="wsp-add-row">
                     <button class="wsp-mini-btn done" id="wsp-add-hooki">＋ Add hook</button>
+                    <button class="wsp-mini-btn wsp-ai-btn" id="wsp-ai-hooks" title="Let AI suggest hooks from the context + script, grounded in the channel's principles">✨ AI hooks</button>
                     ${PS().hooksOf(v).length === 0 ? '<span class="wsp-hint">none yet — write your first hook and pick its type</span>' : ''}
                 </div>
                 ${PS().hooksOf(v).some(h => h.type === 'animation') ? `<label class="wsp-anim-noassets"><input type="checkbox" id="wsp-anim-nomodels" ${v.animNoModels ? 'checked' : ''}> No 3D models / assets needed for the animation — the animator works from the hook + context alone</label>` : ''}
@@ -1642,6 +1643,7 @@ const WorkshopUI = (() => {
 
         // AI-suggest components from the hook / script / context
         get('wsp-ai-suggest')?.addEventListener('click', (e) => suggestComponents(v.id, e.currentTarget));
+        get('wsp-ai-hooks')?.addEventListener('click', (e) => suggestHooks(v.id, e.currentTarget));
 
         // Voice dictation into the Context field
         const micBtn = get('wsp-context-mic');
@@ -2317,6 +2319,59 @@ const WorkshopUI = (() => {
         } finally {
             btn.disabled = false; btn.textContent = orig;
         }
+    }
+
+    // ===== AI hook suggestions (Kimi, grounded in our channel's principles) =====
+    async function suggestHooks(videoId, btn) {
+        const v = VideoService.getById(videoId);
+        if (!v) return;
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = '✨ Thinking…';
+        try {
+            let principles = [];
+            try { principles = ((await (await fetch('/api/workshop/hook-principles')).json()).principles) || []; } catch (e) {}
+            const princText = principles.length
+                ? '\n\nData-backed signals from our own channel analytics (indicator → outcome, correlation r — use as guidance for what actually grips OUR viewers):\n' +
+                  principles.map(p => `- ${p.signal} → ${p.outcome}${typeof p.strength === 'number' ? ` (r=${p.strength.toFixed(2)})` : ''}`).join('\n')
+                : '';
+            const sys = `You are an elite short-form video hook writer. A great hook lands in the first 1-2 seconds: it opens a curiosity gap, raises the stakes, is specific and concrete (numbers, vivid nouns), creates an open loop the viewer must resolve, and uses a pattern interrupt. Avoid generic openers. Each hook is ONE punchy line.${princText}\n\nOutput ONLY a JSON object and nothing else — no prose, no markdown, do not think out loud. Schema: {"hooks":[{"text":"the hook line"}]} with 3-4 DISTINCT options taking different angles.`;
+            const user = `Video title: ${v.name || '(untitled)'}\nContext / what happens in the video: ${v.context || '(none)'}\nScript: ${(v.script || '(none)').slice(0, 2000)}\nExisting hooks (write different ones): ${PS().hooksOf(v).map(h => h.text || h.label).filter(Boolean).join(' | ') || 'none'}`;
+            const parsed = await aiJson(
+                [{ role: 'system', content: sys }, { role: 'user', content: user }],
+                (content) => { const o = extractJsonObject(content, 'hooks'); return (o && Array.isArray(o.hooks) && o.hooks.length) ? o : null; }
+            );
+            const hooks = parsed.hooks.map(h => (typeof h === 'string' ? h : h.text)).filter(Boolean);
+            if (!hooks.length) { alert('AI did not return any hooks. Add more context/script and try again.'); return; }
+            showHookSuggestions(videoId, hooks);
+        } catch (e) {
+            console.warn('suggestHooks failed', e);
+            alert('AI hook suggestions failed: ' + e.message);
+        } finally {
+            btn.disabled = false; btn.textContent = orig;
+        }
+    }
+
+    function showHookSuggestions(videoId, hooks) {
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay'; overlay.style.display = 'flex';
+        overlay.innerHTML = `<div class="wsp-picker">
+            <div class="wsp-picker-header"><span>✨ AI hook suggestions <span class="wsp-hint">— add one, then pick its type &amp; tweak</span></span><button class="wsp-picker-close" data-close>✕</button></div>
+            <div class="wsp-picker-list">
+                ${hooks.map((h, i) => `<div class="wsp-row"><span class="wsp-row-name">${escHtml(h)}</span><button class="wsp-mini-btn done" data-use="${i}">＋ Use</button></div>`).join('')}
+            </div></div>`;
+        const panel = container.querySelector('.workshop-panel');
+        panel.appendChild(overlay);
+        overlay.querySelector('[data-close]').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        overlay.querySelectorAll('[data-use]').forEach(b => b.addEventListener('click', async () => {
+            const text = hooks[+b.dataset.use];
+            const hs = hooksWithEdits(videoId);
+            hs.push({ id: 'h' + Math.random().toString(36).slice(2, 10), type: '', text, label: '', videoPath: '', videoName: '' });
+            await saveHooks(videoId, hs);
+            overlay.remove();
+            rerenderEditor(videoId);
+            toast('Hook added — now pick its type');
+        }));
     }
 
     function showComponentSuggestions(videoId, list) {

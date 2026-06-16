@@ -97,7 +97,7 @@ function routeBuilding(pathname) {
     if (/^\/api\/airtable\//.test(pathname) || /^\/api\/pinecone\//.test(pathname) || /^\/api\/data\/storage(history|boxes|items)/.test(pathname)) return 'Storage';
     if (/^\/api\/data\/inventory/.test(pathname)) return 'Storage+Workshop';
     if (/^\/api\/data\/(videos|components|orders|projects)/.test(pathname)) return 'Workshop';
-    if (/^\/api\/dropbox\//.test(pathname)) return 'Workshop';
+    if (/^\/api\/dropbox\//.test(pathname) || /^\/api\/workshop\//.test(pathname)) return 'Workshop';
     if (/^\/api\/data\/(ideas|notes|todos|calendar|sponsors|sponsorvideos)/.test(pathname) || /^\/api\/ideas\//.test(pathname)) return 'Library';
     if (/^\/api\/(finance|plaid)\//.test(pathname)) return 'Finance';
     if (/^\/api\/data\/invoices/.test(pathname) || /^\/api\/invoices\//.test(pathname)) return 'Money Pit';
