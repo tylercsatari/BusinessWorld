@@ -67,6 +67,59 @@ const WorkshopUI = (() => {
     const statusesForSource = (source) => COMPONENT_SOURCE_STATUSES[source] || COMPONENT_SOURCE_STATUSES.build;
     // Default starting status for a freshly-typed component.
     const defaultStatusForSource = (source) => statusesForSource(source)[0];
+
+    // A build component only flows through the stages it actually NEEDS — pick
+    // them in "What it needs" and the rest are skipped (finish CAD and it jumps
+    // straight to Assembly if it needs no Software). Each build stage maps to
+    // its need-flag(s); a component with NONE of these selected falls back to
+    // the full chain (the historical default, so untyped components are
+    // unchanged). Editable at any time — toggling needs re-routes the flow live.
+    const BUILD_STAGE_CHAIN = [
+        { status: 'design',        needs: ['design'] },
+        { status: 'cad',           needs: ['cad', 'pcb'] },
+        { status: 'software',      needs: ['software'] },
+        { status: 'manufacturing', needs: ['precision'] },
+        { status: 'assembly',      needs: ['assembly'] }
+    ];
+    function buildTrackFor(needs) {
+        const have = new Set(Array.isArray(needs) ? needs : []);
+        const picked = BUILD_STAGE_CHAIN.filter(s => s.needs.some(n => have.has(n)));
+        const chosen = picked.length ? picked : BUILD_STAGE_CHAIN;  // none picked → full chain
+        return [...chosen.map(s => s.status), 'done'];
+    }
+    // The ordered statuses a component moves through. order/task keep their
+    // fixed tracks; build uses only the needed stages.
+    function componentTrack(c) {
+        if (!c) return COMPONENT_SOURCE_STATUSES.build;
+        if (c.source === 'order') return COMPONENT_SOURCE_STATUSES.order;
+        if (c.source === 'task') return COMPONENT_SOURCE_STATUSES.task;
+        return buildTrackFor(c.needs);
+    }
+    const defaultStatusFor = (c) => componentTrack(c)[0];
+    // Next status after the component's current one. For build it's computed
+    // against the full canonical order, so a removed mid-chain stage snaps
+    // forward to the next stage the component still needs.
+    function nextComponentStatus(c) {
+        const track = componentTrack(c);
+        if (!c || c.source !== 'build') {
+            const i = track.indexOf(c ? c.status : null);
+            return (i >= 0 && i < track.length - 1) ? track[i + 1] : 'done';
+        }
+        const canon = COMPONENT_SOURCE_STATUSES.build;
+        const curIdx = canon.indexOf(c.status);
+        return track.find(s => s !== 'done' && canon.indexOf(s) > curIdx) || 'done';
+    }
+    // Snap a build component onto a valid stage for its current needs: if its
+    // status got filtered out, move to the next stage it still needs (or done
+    // if it's already past everything that remains). Returns the new status.
+    function normalizedComponentStatus(c) {
+        if (!c || c.source !== 'build' || c.status === 'done') return c ? c.status : 'design';
+        const track = componentTrack(c);
+        if (track.includes(c.status)) return c.status;
+        const canon = COMPONENT_SOURCE_STATUSES.build;
+        const curIdx = canon.indexOf(c.status);
+        return track.find(s => s !== 'done' && canon.indexOf(s) > curIdx) || 'done';
+    }
     // Where a component sits on the pipeline board. Its SOURCE decides the lane:
     // orders → Ordering, tasks → Props / Set Design, builds → by their build status.
     function componentStageId(c) {
@@ -1248,7 +1301,7 @@ const WorkshopUI = (() => {
             return `<div class="wsp-row wsp-comp-row${depth ? ' nested' : ''}" data-comp="${c.id}" style="margin-left:${depth * 24}px">
                 <span class="wsp-row-name">${depth ? '<span class="wsp-comp-branch">↳</span> ' : ''}${escHtml(c.name)}${sub.length ? ` <span class="wsp-hint">${subDone}/${sub.length} sub-components done</span>` : ''}</span>
                 <div class="wsp-status-cycle">
-                    ${statusesForSource(c.source).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
+                    ${componentTrack(c).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
                 </div>
                 <button class="wsp-mini-btn" data-comp-sub="${c.id}" title="Break this down further — add a sub-component">＋ sub</button>
                 <button class="wsp-mini-btn danger" data-comp-del="${c.id}">✕</button>
@@ -2080,9 +2133,7 @@ const WorkshopUI = (() => {
         if (!c || c.status === 'done') return;
         const ds = componentDeliverableStatus(c);
         if (!ds.met) { alert(`This can’t move forward yet:\n\n• ${ds.missing}`); return; }
-        const track = statusesForSource(c.source);
-        const idx = track.indexOf(c.status);
-        const next = (idx >= 0 && idx < track.length - 1) ? track[idx + 1] : 'done';
+        const next = nextComponentStatus(c);
         await SVC().components.update(componentId, { status: next });
         toast(next === 'done' ? '✓ Component done' : `✓ Component → “${next}”`);
         if (rerenderFn) rerenderFn();
@@ -2207,9 +2258,9 @@ const WorkshopUI = (() => {
                         : '<div class="wsp-hint">Standalone component (not linked to a video)</div>'}
 
                     <div class="wsp-cd-section" data-cfield="status">
-                        <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now</span></div>
+                        <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now (only the stages it needs)</span></div>
                         <div class="wsp-status-cycle" data-comp="${c.id}" id="cd-status-cycle">
-                            ${statusesForSource(source).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
+                            ${componentTrack(c).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
                         </div>
                     </div>
 
@@ -2221,7 +2272,7 @@ const WorkshopUI = (() => {
                     </div>
 
                     <div class="wsp-cd-section" data-cfield="needs">
-                        <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step this component requires</span></div>
+                        <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step it requires; a build component only flows through these stages</span></div>
                         <div class="wsp-needs-btns">
                             ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needs.includes(n.flag) ? 'on' : ''}" data-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
                         </div>
@@ -2360,9 +2411,7 @@ const WorkshopUI = (() => {
             if (c2.status === 'done') { alert('This component is already done.'); return; }
             const ds = componentDeliverableStatus(c2);
             if (!ds.met) { alert(`This can’t move forward yet:\n\n• ${ds.missing}`); return; }
-            const track = statusesForSource(c2.source);
-            const idx = track.indexOf(c2.status);
-            const next = (idx >= 0 && idx < track.length - 1) ? track[idx + 1] : 'done';
+            const next = nextComponentStatus(c2);
             dirty = true;
             await saveComp({ status: next });
             renderStatusCycle();
@@ -2385,7 +2434,7 @@ const WorkshopUI = (() => {
             const cyc = q('#cd-status-cycle');
             if (!cyc) return;
             const c2 = cur();
-            cyc.innerHTML = statusesForSource(c2.source).map(s => `<button class="wsp-pill ${c2.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('');
+            cyc.innerHTML = componentTrack(c2).map(s => `<button class="wsp-pill ${c2.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('');
             cyc.querySelectorAll('[data-cd-status]').forEach(btn => btn.addEventListener('click', async () => {
                 dirty = true;
                 await saveComp({ status: btn.dataset.cdStatus });
@@ -2403,7 +2452,15 @@ const WorkshopUI = (() => {
             btn.classList.toggle('on');
             flashSaving();
             clearTimeout(needsT);
-            needsT = setTimeout(() => saveComp({ needs: [...needsSet] }), 400);
+            needsT = setTimeout(async () => {
+                const changes = { needs: [...needsSet] };
+                // Re-route the flow: drop the component onto a stage it still
+                // needs if its current one was just toggled off.
+                const snapped = normalizedComponentStatus({ ...cur(), needs: [...needsSet] });
+                if (snapped !== cur().status) changes.status = snapped;
+                await saveComp(changes);
+                renderStatusCycle();   // Stage pills now reflect only the needed stages
+            }, 400);
         }));
         // Type / source (single-select). Switching type re-routes the component
         // (build → build chain, order → Ordering, task → Props/Set Design) and
@@ -2414,8 +2471,8 @@ const WorkshopUI = (() => {
             const val = cur().source === btn.dataset.source ? '' : btn.dataset.source;
             overlay.querySelectorAll('[data-source]').forEach(b => b.classList.toggle('on', b === btn && !!val));
             const changes = { source: val };
-            const valid = statusesForSource(val);
-            if (!valid.includes(cur().status)) changes.status = defaultStatusForSource(val);
+            const valid = componentTrack({ ...cur(), source: val });
+            if (!valid.includes(cur().status)) changes.status = valid[0];
             await saveComp(changes);
             renderStatusCycle();
         }));
@@ -2843,8 +2900,9 @@ const WorkshopUI = (() => {
             const source = c.source === 'order' ? 'order' : c.source === 'task' ? 'task' : 'build';
             const comp = await SVC().components.create({
                 videoId, projectId: (fresh.projectIds || [])[0] || '', parentComponentId: '',
-                name: c.name, status: defaultStatusForSource(source), notes: '',
+                name: c.name, notes: '',
                 needs: (c.needs || []).filter(f => ALLOWED.has(f)),
+                status: defaultStatusFor({ source, needs: (c.needs || []).filter(f => ALLOWED.has(f)) }),
                 source, links: []
             });
             await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
