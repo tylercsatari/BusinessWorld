@@ -107,6 +107,7 @@ const JarvisUI = (() => {
     const TABS = [
         { id: 'qrd', label: '🔬 Quant Decoder' },
         { id: 'quant2', label: '🧬 Quant 2' },
+        { id: 'retention', label: '📉 Retention→Views' },
         { id: 'analytical', label: 'Analytical' },
         { id: 'tactical', label: 'Tactical' },
         { id: 'experiments', label: 'Experiments' },
@@ -206,6 +207,7 @@ const JarvisUI = (() => {
         switch (activeTab) {
             case 'qrd': return '<div id="qrd-root"></div>';
             case 'quant2': return '<div id="quant2-root"></div>';
+            case 'retention': return '<div id="retention-root"></div>';
             case 'analytical': return renderAnalytical();
             case 'tactical': return renderTactical();
             case 'experiments': return renderExperiments();
@@ -11146,6 +11148,10 @@ const JarvisUI = (() => {
         if (activeTab === 'quant2' && window.JarvisQuant2) {
             const q2Root = container.querySelector('#quant2-root');
             if (q2Root) window.JarvisQuant2.mount(q2Root);
+        }
+        if (activeTab === 'retention' && window.JarvisRetention) {
+            const rRoot = container.querySelector('#retention-root');
+            if (rRoot) window.JarvisRetention.mount(rRoot);
         }
     }
 
