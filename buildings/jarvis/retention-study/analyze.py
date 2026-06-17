@@ -149,9 +149,45 @@ def main():
     Q4['partial_retention_given_dur'] = round(float(spearmanr(resid(ret, ldur), resid(lv, ldur)).correlation), 3)
     Q4['duration_unique_r2'] = round(insr(np.column_stack([base, ldur.reshape(-1, 1)]), lv) - insr(base, lv), 3)
 
+    # ── keep × retention interaction (the synergy when BOTH are high) ──
+    from sklearn.linear_model import LinearRegression
+    kr_x_ret = (keep * ret).reshape(-1, 1)
+    add_r2 = cvr(np.column_stack([keep, ret]), lv)
+    int_r2 = cvr(np.column_stack([keep, ret, kr_x_ret]), lv)
+    # 2D grid of median views by keep × retention bins
+    kedg = [40, 68, 76, 90]; redg = [50, 80, 88, 110]
+    grid, gn = [], []
+    for klo, khi in zip(kedg[:-1], kedg[1:]):
+        rowm, rown = [], []
+        for rlo, rhi in zip(redg[:-1], redg[1:]):
+            m = (keep >= klo) & (keep < khi) & (ret >= rlo) & (ret < rhi)
+            rowm.append(float(np.median(vw[m])) if m.sum() else None); rown.append(int(m.sum()))
+        grid.append(rowm); gn.append(rown)
+    interaction = {'keep_edges': kedg, 'ret_edges': redg, 'grid_median_views': grid, 'grid_n': gn,
+                   'additive_cv_r2': round(add_r2, 3), 'with_interaction_cv_r2': round(int_r2, 3),
+                   'interaction_delta_r2': round(int_r2 - add_r2, 3)}
+
+    # ── predictor models (raw coefficients so the tab can compute directly) ──
+    def fit_raw(Xcols):
+        m = LinearRegression().fit(Xcols, lv)
+        resid = lv - m.predict(Xcols)
+        return {'features': None, 'coef': [round(float(c), 5) for c in m.coef_], 'intercept': round(float(m.intercept_), 4),
+                'resid_sd_log10': round(float(resid.std()), 4), 'cv_r2': None}
+    p2 = fit_raw(np.column_stack([keep, ret])); p2['features'] = ['keep', 'retention']; p2['cv_r2'] = round(cvr(np.column_stack([keep, ret]), lv), 3)
+    p3 = fit_raw(np.column_stack([keep, ret, ldur])); p3['features'] = ['keep', 'retention', 'log_duration']; p3['cv_r2'] = round(cvr(np.column_stack([keep, ret, ldur]), lv), 3)
+    predictor = {'v2_keep_ret': p2, 'v3_with_duration': p3,
+                 'ranges': {'keep': [float(keep.min()), float(keep.max())], 'retention': [float(ret.min()), float(ret.max())], 'duration': [float(dur.min()), float(dur.max())]},
+                 'medians': {'keep': float(np.median(keep)), 'retention': float(np.median(ret)), 'duration': float(np.median(dur))}}
+
+    # per-video scatter (which videos drive each finding) — id, title, the 3 metrics, views
+    scatter = [{'id': V[i]['id'], 'name': (V[i]['title'] or '')[:42], 'keep': round(float(keep[i]), 1),
+                'ret': round(float(ret[i]), 1), 'dur': round(float(dur[i]), 0), 'views': int(vw[i]),
+                'lv': round(float(lv[i]), 3), 'url': V[i].get('url')} for i in range(n)]
+
     out = {'meta': {'n': n, 'target': 'log10(views)', 'metric': 'keep_rate = stayedToWatch (verified accurate)',
                     'caveat': 'observational + winners-only (all 60K-285M views); associations not proven causal; account size/impressions not in data'},
            'Q1': Q1, 'Q2': Q2, 'Q3': Q3, 'Q4': Q4,
+           'interaction': interaction, 'predictor': predictor, 'scatter': scatter,
            'curve_mean': [round(x, 4) for x in cmu]}
     json.dump(out, open(OUT, 'w'))
 
