@@ -2453,14 +2453,21 @@ const WorkshopUI = (() => {
             const root = await dropboxRootPath();
             const folder = `${root}/${project}/components`;
             const btn = q('#cd-media-up'); btn.disabled = true; const orig = btn.textContent;
-            for (const file of files) {
-                btn.textContent = `Uploading ${file.name}…`;
-                try {
-                    const meta = await uploadToDropbox(`${folder}/${file.name}`, file, null);
+            const addRow = btn.parentElement;
+            const progHost = document.createElement('div'); progHost.style.marginTop = '6px';
+            addRow.parentNode.insertBefore(progHost, addRow.nextSibling);
+            const bar = uploadProgressBar(progHost, files[0].name);
+            try {
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    if (files.length > 1) bar.stage(`Uploading ${file.name} (${i + 1}/${files.length})…`);
+                    const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
                     dirty = true;
                     await saveComp({ media: [...(cur().media || []), { path: meta.path_display || meta.path_lower, name: meta.name || file.name }] });
-                } catch (e) { console.warn('media upload failed', e); alert('Upload failed for ' + file.name + ': ' + e.message); }
-            }
+                }
+                bar.stage(`Done ✓ — ${files.length} file${files.length === 1 ? '' : 's'}`);
+                setTimeout(() => progHost.remove(), 1200);
+            } catch (e) { console.warn('media upload failed', e); bar.stage('Upload failed: ' + e.message); }
             input.value = ''; btn.disabled = false; btn.textContent = orig;
             renderMedia();
         });
