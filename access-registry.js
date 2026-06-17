@@ -96,10 +96,13 @@
         ['script', 'Script'], ['decomp', 'Decomposition'], ['voiceover', 'Voiceover'],
         ['editing', 'Editing (final videos)']
     ];
+    // Pipeline order: setup → design → cad → pcb → software → manufacturing →
+    // assembly → reference. Matches the order sections appear in the editor.
     window.COMPONENT_FIELDS = [
-        ['status', 'Stage'], ['needs', 'What it needs'], ['source', 'Type (build / order / task)'],
-        ['media', 'Media'], ['cad', 'CAD file'], ['pcb', 'PCB file'],
-        ['sketches', 'Sketches'], ['links', 'Assets & links'], ['notes', 'Notes']
+        ['source', 'Type (build / order / task)'], ['status', 'Stage'], ['needs', 'What it needs'],
+        ['design', 'Design'], ['cad', 'CAD file'], ['pcb', 'PCB file'],
+        ['software', 'Software'], ['precision', 'Manufacturing'], ['assembly', 'Assembly'],
+        ['media', 'Media'], ['links', 'Assets & links'], ['notes', 'Notes']
     ];
     // Which pipeline STAGE "owns" each video field as its deliverable. A node-
     // scoped worker writes only the field its node owns and reads the rest.

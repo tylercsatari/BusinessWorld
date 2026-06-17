@@ -2239,6 +2239,18 @@ const WorkshopUI = (() => {
         const media = Array.isArray(c.media) ? c.media : [];
         const sketches = Array.isArray(c.sketches) ? c.sketches : [];
         const source = c.source || '';
+        // Color-coded section (matches the video editor): a coloured spine +
+        // faint wash + icon title, so the eye locks onto each pipeline step.
+        const cdSection = (cfield, accent, iconName, title, hint, inner) =>
+            `<div class="wsp-subsection" data-cfield="${cfield}" style="--accent:${accent}">
+                <div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span>${hint ? ` <span class="wsp-hint">${hint}</span>` : ''}</div>
+                ${inner}
+            </div>`;
+        // A file-deliverable stage section (CAD/PCB/Software/Mfg/Assembly): only
+        // appears when the component needs that stage. The slot itself is filled
+        // by the async renderer below.
+        const cdStageFile = (need, cfield, accent, iconName, title, hint, slotId) =>
+            needs.includes(need) ? cdSection(cfield, accent, iconName, title, hint, `<div id="${slotId}"></div>`) : '';
 
         const overlay = document.createElement('div');
         overlay.className = 'wsp-picker-overlay';
@@ -2257,68 +2269,60 @@ const WorkshopUI = (() => {
                         ? `<div class="wsp-comp-fromvideo" data-open-video="${video.id}">${icon('video', 'wsp-row-ic')} <span>From video <b>${escHtml(video.name)}</b></span> <span class="wsp-link">open ↗</span></div>`
                         : '<div class="wsp-hint">Standalone component (not linked to a video)</div>'}
 
-                    <div class="wsp-cd-section" data-cfield="status">
-                        <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now (only the stages it needs)</span></div>
-                        <div class="wsp-status-cycle" data-comp="${c.id}" id="cd-status-cycle">
-                            ${componentTrack(c).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
+                    <!-- SETUP — type, current stage, and which steps it needs (drives the stages below) -->
+                    <div class="wsp-subsection" style="--accent:#8a7a55">
+                        <div class="wsp-subsection-title">${icon('component', 'wsp-sub-ic')} <span class="wsp-sub-name">Setup</span></div>
+                        <div data-cfield="source">
+                            <div class="wsp-cd-label">Type <span class="wsp-hint">— how it gets done (drives where it flows)</span></div>
+                            <div class="wsp-needs-btns">
+                                ${COMPONENT_SOURCES.map(s => `<button class="wsp-need-btn ${source === s.key ? 'on' : ''}" data-source="${s.key}" title="${escAttr(s.hint)}">${icon(s.icon, 'wsp-need-ic')} ${s.label}</button>`).join('')}
+                            </div>
+                        </div>
+                        <div data-cfield="status" style="margin-top:10px;">
+                            <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now (only the stages it needs)</span></div>
+                            <div class="wsp-status-cycle" data-comp="${c.id}" id="cd-status-cycle">
+                                ${componentTrack(c).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
+                            </div>
+                        </div>
+                        <div data-cfield="needs" style="margin-top:10px;">
+                            <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step it requires; a build component only flows through these stages</span></div>
+                            <div class="wsp-needs-btns">
+                                ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needs.includes(n.flag) ? 'on' : ''}" data-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
+                            </div>
                         </div>
                     </div>
 
-                    <div class="wsp-cd-section" data-cfield="source">
-                        <div class="wsp-cd-label">Type <span class="wsp-hint">— how it gets done (drives where it flows)</span></div>
-                        <div class="wsp-needs-btns">
-                            ${COMPONENT_SOURCES.map(s => `<button class="wsp-need-btn ${source === s.key ? 'on' : ''}" data-source="${s.key}" title="${escAttr(s.hint)}">${icon(s.icon, 'wsp-need-ic')} ${s.label}</button>`).join('')}
-                        </div>
-                    </div>
+                    <!-- PIPELINE DELIVERABLES — in build order: design → cad → pcb → software → manufacturing → assembly.
+                         File stages only appear when the component needs them; each is its own deliverable slot. -->
+                    ${cdSection('design', '#a87d3c', 'design', 'Design', '— sketch the part out; draw and edit ideas anytime', `
+                        <div id="cd-sketches" class="wsp-cd-sketch-grid">${sketches.map((s, i) => sketchTileHtml(s, i)).join('')}</div>
+                        <div class="wsp-add-row"><button class="wsp-mini-btn done" id="cd-sketch-new">✏️ New sketch</button></div>`)}
 
-                    <div class="wsp-cd-section" data-cfield="needs">
-                        <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step it requires; a build component only flows through these stages</span></div>
-                        <div class="wsp-needs-btns">
-                            ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needs.includes(n.flag) ? 'on' : ''}" data-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
-                        </div>
-                    </div>
+                    ${cdStageFile('cad', 'cad', '#3d8bf0', 'cad', 'CAD file', '— the CAD deliverable (SolidWorks / STL / STEP). Goes to &lt;project&gt;/cad/.', 'cd-cad-slot')}
+                    ${cdStageFile('pcb', 'pcb', '#8e44ad', 'pcb', 'PCB file', '— the PCB deliverable. Goes to &lt;project&gt;/pcb/.', 'cd-pcb-slot')}
+                    ${cdStageFile('software', 'software', '#27ae72', 'software', 'Software', '— firmware / build / binary deliverable (a repo URL can go under Assets &amp; links). Goes to &lt;project&gt;/software/.', 'cd-software-slot')}
+                    ${cdStageFile('precision', 'precision', '#e8a020', 'precision', 'Manufacturing', '— machined / printed / fabricated deliverable (G-code, print files, specs). Goes to &lt;project&gt;/manufacturing/.', 'cd-manufacturing-slot')}
+                    ${cdStageFile('assembly', 'assembly', '#d2603a', 'assembly', 'Assembly', '— final assembled deliverable: a photo or sign-off file. Goes to &lt;project&gt;/assembly/.', 'cd-assembly-slot')}
 
-                    <div class="wsp-cd-section" data-cfield="media">
-                        <div class="wsp-cd-label">Media <span class="wsp-hint">— photos, videos, drawings, spec sheets</span></div>
+                    <!-- REFERENCE — cross-cutting attachments & notes, after the staged deliverables -->
+                    ${cdSection('media', '#6b7b8c', 'propdesign', 'Media', '— photos, videos, drawings, spec sheets', `
                         <div id="cd-media" class="wsp-cd-media-grid">${media.map((m, i) => mediaTileHtml(m, i)).join('')}</div>
                         <div class="wsp-add-row">
                             <input type="file" id="cd-media-file" multiple style="font-size:11.5px;flex:1 1 160px;">
                             <button class="wsp-mini-btn done" id="cd-media-up">⬆ Upload</button>
                         </div>
-                        ${video && video.project ? '' : '<div class="wsp-hint">Tip: link this component\'s video to a Channel Project to enable uploads (sketches below work regardless).</div>'}
-                    </div>
+                        ${video && video.project ? '' : '<div class="wsp-hint">Tip: link this component\'s video to a Channel Project to enable uploads.</div>'}`)}
 
-                    ${needs.includes('cad') ? `<div class="wsp-cd-section" data-cfield="cad">
-                        <div class="wsp-cd-label">CAD file <span class="wsp-hint">— the CAD deliverable (SolidWorks / STL / STEP). Goes to &lt;project&gt;/cad/.</span></div>
-                        <div id="cd-cad-slot"></div>
-                    </div>` : ''}
-                    ${needs.includes('pcb') ? `<div class="wsp-cd-section" data-cfield="pcb">
-                        <div class="wsp-cd-label">PCB file <span class="wsp-hint">— the PCB deliverable. Goes to &lt;project&gt;/pcb/.</span></div>
-                        <div id="cd-pcb-slot"></div>
-                    </div>` : ''}
-
-                    <div class="wsp-cd-section" data-cfield="sketches">
-                        <div class="wsp-cd-label">Sketches <span class="wsp-hint">— draw your own design ideas, edit them anytime</span></div>
-                        <div id="cd-sketches" class="wsp-cd-sketch-grid">${sketches.map((s, i) => sketchTileHtml(s, i)).join('')}</div>
-                        <div class="wsp-add-row">
-                            <button class="wsp-mini-btn done" id="cd-sketch-new">✏️ New sketch</button>
-                        </div>
-                    </div>
-
-                    <div class="wsp-cd-section" data-cfield="links">
-                        <div class="wsp-cd-label">Assets &amp; links <span class="wsp-hint">— 3D models, datasheets, references</span></div>
+                    ${cdSection('links', '#6b7b8c', 'link', 'Assets &amp; links', '— 3D models, datasheets, repo URLs, references', `
                         <div id="cd-links">${links.map((l, i) => linkRowHtml(l, i)).join('')}</div>
                         <div class="wsp-add-row">
                             <input type="text" id="cd-link-label" placeholder="label (e.g. 'STL model')">
                             <input type="text" id="cd-link-url" placeholder="https://…">
                             <button class="wsp-mini-btn done" id="cd-link-add">＋ Add</button>
-                        </div>
-                    </div>
+                        </div>`)}
 
-                    <div class="wsp-cd-section" data-cfield="notes">
-                        <div class="wsp-cd-label">Notes / info</div>
-                        <textarea id="cd-notes" placeholder="Anything else about this component…">${escHtml(c.notes || '')}</textarea>
-                    </div>
+                    ${cdSection('notes', '#6b7b8c', 'design', 'Notes / info', '', `
+                        <textarea id="cd-notes" placeholder="Anything else about this component…">${escHtml(c.notes || '')}</textarea>`)}
 
                     <div class="wsp-cd-footer">
                         <button class="wsp-mini-btn done" id="cd-done">✓ Done — push to next stage</button>
@@ -2352,13 +2356,17 @@ const WorkshopUI = (() => {
         let dirty = false;
         const close = () => { overlay.remove(); if (dirty) rerenderEditor(selectedVideo ? selectedVideo.id : (video ? video.id : null)); };
 
-        // CAD / PCB file deliverables (the slots only exist when the component needs them).
+        // Per-stage file deliverables (each slot only exists when the component
+        // needs that stage). All share one generic uploader keyed by pathF/nameF.
         (async () => {
             const slots = [
                 { kind: 'cad', el: 'cd-cad-slot', pathF: 'cadPath', nameF: 'cadName', accept: '.sldprt,.sldasm,.step,.stp,.stl,.iges,.igs,.x_t,.3mf,.f3d', noun: 'CAD file' },
-                { kind: 'pcb', el: 'cd-pcb-slot', pathF: 'pcbPath', nameF: 'pcbName', accept: '', noun: 'PCB file' }
+                { kind: 'pcb', el: 'cd-pcb-slot', pathF: 'pcbPath', nameF: 'pcbName', accept: '', noun: 'PCB file' },
+                { kind: 'software', el: 'cd-software-slot', pathF: 'softwarePath', nameF: 'softwareName', accept: '', noun: 'software file' },
+                { kind: 'manufacturing', el: 'cd-manufacturing-slot', pathF: 'mfgPath', nameF: 'mfgName', accept: '', noun: 'manufacturing file' },
+                { kind: 'assembly', el: 'cd-assembly-slot', pathF: 'asmPath', nameF: 'asmName', accept: '', noun: 'assembly file' }
             ];
-            if (!q('#cd-cad-slot') && !q('#cd-pcb-slot')) return;
+            if (!slots.some(s => q('#' + s.el))) return;
             const rootP = await dropboxRootPath();
             const renderSlot = (s) => {
                 const el = q('#' + s.el);

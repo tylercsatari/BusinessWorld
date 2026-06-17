@@ -605,7 +605,8 @@
 /* In the video editor: each section is COLOR-CODED (var --accent) so the eye
    locks straight onto Hook / Script / Decomposition / Voiceover instead of a
    wall of identical fields. Colored spine + faint wash + colored title. */
-.workshop-detail-fields .wsp-subsection {
+.workshop-detail-fields .wsp-subsection,
+.wsp-comp-detail-body .wsp-subsection {
     padding: 11px 12px 9px 13px; margin-top: 8px;
     border: none; border-left: 3px solid var(--accent, #d8d0be);
     border-radius: 9px;
@@ -617,8 +618,10 @@
 }
 .wsp-sub-ic { width: 14px; height: 14px; vertical-align: -0.15em; flex-shrink: 0; }
 .wsp-subsection-title .wsp-sub-name { color: #463c2c; }
-.workshop-detail-fields .wsp-subsection-title .wsp-sub-ic { color: var(--accent, #b08948); }
-.workshop-detail-fields .wsp-subsection-title .wsp-sub-name { color: var(--accent, #463c2c); filter: saturate(1.1) brightness(0.92); }
+.workshop-detail-fields .wsp-subsection-title .wsp-sub-ic,
+.wsp-comp-detail-body .wsp-subsection-title .wsp-sub-ic { color: var(--accent, #b08948); }
+.workshop-detail-fields .wsp-subsection-title .wsp-sub-name,
+.wsp-comp-detail-body .wsp-subsection-title .wsp-sub-name { color: var(--accent, #463c2c); filter: saturate(1.1) brightness(0.92); }
 .wsp-subsection-title .wsp-hint { font-weight: 500; }
 
 /* Decomposition component rows — each is a pipeline entity linked to the video */
