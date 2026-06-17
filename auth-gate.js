@@ -29,6 +29,9 @@
         } catch (e) { /* fall through to plain fetch */ }
         return _origFetch(input, init);
     };
+    // Raw XHR (used by file uploads for progress) bypasses the fetch wrapper, so
+    // expose the token for them to stamp the Authorization header themselves.
+    window.getAuthToken = () => _token;
 
     // ── tiny DOM helper ──
     const el = (tag, props = {}, html) => { const e = document.createElement(tag); Object.assign(e, props); if (html != null) e.innerHTML = html; return e; };

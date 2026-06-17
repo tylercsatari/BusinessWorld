@@ -3093,6 +3093,13 @@ const WorkshopUI = (() => {
     const DBX_SIMPLE_MAX = 8 * 1024 * 1024;   // ≤ 8 MB → one request (session overhead not worth it)
     const DBX_CONCURRENCY = 4;                // parallel chunks in flight
 
+    // Stamp the Supabase bearer token onto a raw XHR (the fetch wrapper that does
+    // this automatically doesn't cover XHR, which uploads use for progress).
+    function authHeader(xhr) {
+        const tok = (typeof window.getAuthToken === 'function') ? window.getAuthToken() : null;
+        if (tok) xhr.setRequestHeader('Authorization', 'Bearer ' + tok);
+    }
+
     function uploadToDropbox(destPath, file, onProgress) {
         return (file.size > DBX_SIMPLE_MAX)
             ? uploadChunked(destPath, file, onProgress)
@@ -3105,6 +3112,7 @@ const WorkshopUI = (() => {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('POST', `/api/dropbox/upload?path=${encodeURIComponent(destPath)}`);
+            authHeader(xhr);   // raw XHR bypasses the fetch wrapper — stamp the token
             xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total); };
             xhr.onload = () => {
                 try {
@@ -3127,6 +3135,7 @@ const WorkshopUI = (() => {
             const tryOnce = (n) => {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', `/api/dropbox/session/append?session_id=${encodeURIComponent(sessionId)}&offset=${offset}`);
+                authHeader(xhr);
                 xhr.upload.onprogress = (e) => { if (e.lengthComputable && onChunkProgress) onChunkProgress(e.loaded); };
                 xhr.onload = () => {
                     if (xhr.status >= 200 && xhr.status < 300) { if (onChunkProgress) onChunkProgress(blob.size); resolve(); }
