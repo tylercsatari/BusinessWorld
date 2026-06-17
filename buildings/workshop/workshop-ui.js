@@ -804,9 +804,9 @@ const WorkshopUI = (() => {
             if (kind === 'decomp') {
                 if (!PS().branchesDecided(v)) actions = `<button class="wsp-mini-btn done" data-decide="${v.id}" title="Decide which branches this video needs">🧩 Decide branches</button>`;
                 else if (!(componentsForVideo(v.id).length || v.noDecomp)) actions = `<span class="wsp-deliv-chip pending" title="Break the video into at least one component, or mark “No decomposition needed”">＋ add a component ↓</span>`;
-                else actions = `<button class="wsp-mini-btn done" data-done="${v.id}" title="Complete Decomposition — sends the video to its build branches">✓ Complete</button>`;
+                else actions = `<button class="wsp-mini-btn done" data-done="${v.id}" title="Complete Decomposition — sends the video to its build branches">✓ Done</button>`;
             } else if (kind === 'post') {
-                actions = `<button class="wsp-mini-btn done" data-publish="${v.id}" title="Publish — the deliverable for Posting">🚀 Publish</button>`;
+                actions = `<button class="wsp-mini-btn done" data-publish="${v.id}" title="Publish — the deliverable for Posting">✓ Done</button>`;
             } else {
                 // EVERY other node gets a manual DONE button right on the row — the
                 // worker uploads/does the deliverable, then presses Done. It's
@@ -843,8 +843,8 @@ const WorkshopUI = (() => {
         // deliverable-gated: if the node's deliverable isn't met it prompts the
         // worker to finish it instead of advancing.
         const doneBtn = (stage && stage.id !== 'post')
-            ? `<button class="workshop-action-btn post-btn" data-node-done="${v.id}" data-node-stage="${stage.id}">✓ Done — push forward</button>`
-            : (stage && stage.id === 'post' ? `<button class="workshop-action-btn post-btn" data-publish="${v.id}">🚀 Publish</button>` : '');
+            ? `<button class="workshop-action-btn post-btn" data-node-done="${v.id}" data-node-stage="${stage.id}">✓ Done</button>`
+            : (stage && stage.id === 'post' ? `<button class="workshop-action-btn post-btn" data-publish="${v.id}">✓ Done</button>` : '');
         return `<div class="wsp-stage-video-body">
             ${delivBlock}
             <div class="workshop-detail-fields wsp-inline-editor">${detailFieldsHtml(v)}</div>
@@ -2456,7 +2456,7 @@ const WorkshopUI = (() => {
                         <textarea id="cd-notes" placeholder="Anything else about this component…">${escHtml(c.notes || '')}</textarea>`)}
 
                     <div class="wsp-cd-footer">
-                        <button class="wsp-mini-btn done" id="cd-done">✓ Done — push to next stage</button>
+                        <button class="wsp-mini-btn done" id="cd-done">✓ Done</button>
                         <button class="wsp-mini-btn danger" id="cd-delete">🗑 Delete component</button>
                     </div>
                 </div>
