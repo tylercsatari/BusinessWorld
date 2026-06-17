@@ -29,6 +29,7 @@ const WorkshopUI = (() => {
     let activeTab = 'pipeline';
     let selectedVideo = null;
     let selectedStageId = null;
+    let _scopedStagePicked = false;  // one-time auto-focus for single-node workers
     let expandedStageVideoId = null;
     let selectedProjectId = null;
     let currentPage = 'list';
@@ -655,6 +656,16 @@ const WorkshopUI = (() => {
             </div>`;
             return;
         }
+        // A worker scoped to a single writable node lands straight on that node's
+        // panel (where the per-instance Done buttons live), not the all-items
+        // overview. One-time, so they can still click back to the board.
+        if (!_scopedStagePicked) {
+            _scopedStagePicked = true;
+            if (selectedStageId === null && !(window.__access && window.__access.all)) {
+                const writ = PS().STAGES.filter(s => stageWritable(s.id) && stageVisible(s.id));
+                if (writ.length === 1) selectedStageId = writ[0].id;
+            }
+        }
         const { pos, boardW, boardH } = boardPositions();
         const entities = boardEntities();
 
@@ -797,8 +808,11 @@ const WorkshopUI = (() => {
             } else if (kind === 'post') {
                 actions = `<button class="wsp-mini-btn done" data-publish="${v.id}" title="Publish — the deliverable for Posting">🚀 Publish</button>`;
             } else {
-                // auto + result stages: completion is the deliverable upload itself
-                actions = `<span class="wsp-deliv-chip pending" title="${escAttr(STAGE_DELIVERABLE[stage.id] || '')}">📋 deliverable ↓</span>`;
+                // EVERY other node gets a manual DONE button right on the row — the
+                // worker uploads/does the deliverable, then presses Done. It's
+                // deliverable-gated: if nothing's there yet it tells them what's
+                // missing instead of advancing (the bottleneck check).
+                actions = `<button class="wsp-mini-btn done" data-node-done="${v.id}" data-node-stage="${stage.id}" title="${escAttr('Done — ' + (STAGE_DELIVERABLE[stage.id] || 'mark this stage complete'))}">✓ Done</button>`;
             }
         }
         return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}" data-id="${v.id}">
@@ -909,6 +923,9 @@ const WorkshopUI = (() => {
         panel.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => openBranchDialog(b.dataset.decide, true)));
         panel.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => completeDecomp(b.dataset.done)));
         panel.querySelectorAll('[data-publish]').forEach(b => b.addEventListener('click', () => postVideoAction(VideoService.getById(b.dataset.publish))));
+        // The per-node DONE button lives on every stage row (and in the expanded
+        // editor) — bind them all here so a collapsed row's Done works too.
+        panel.querySelectorAll('[data-node-done]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); pushNodeForward(b.dataset.nodeDone, b.dataset.nodeStage); }));
         bindCompStatusRows(panel, () => renderTab());
         bindOrderRows(panel);
 
@@ -921,7 +938,8 @@ const WorkshopUI = (() => {
                 initEditSlots(ev);   // Editing — three final-video upload slots (was detail-page only)
                 if (selectedStageId && PS().isResultStage(selectedStageId)) initStageResultUploader(ev, selectedStageId, panel);
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
-                panel.querySelectorAll('[data-node-done]').forEach(b => b.addEventListener('click', () => pushNodeForward(b.dataset.nodeDone, b.dataset.nodeStage)));
+                // [data-node-done] is bound once for the whole panel above (covers
+                // both the collapsed row button and this expanded-editor one).
             }
         }
     }
