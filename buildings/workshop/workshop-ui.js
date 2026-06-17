@@ -41,6 +41,10 @@ const WorkshopUI = (() => {
     let showTypes = { video: true, component: true, task: true, order: false, inventory: false };
     // Inventory tab filters
     let invType = '', invStatus = '';
+    // Storage Room tab: 'storage' mirrors the real Storage room (read-only);
+    // 'components' lists completed build components from finished projects.
+    let invSubTab = 'storage';
+    let _storageSyncKicked = false;
 
     const escHtml = HtmlUtils.escHtml;
     const escAttr = HtmlUtils.escAttr;
@@ -1505,72 +1509,122 @@ const WorkshopUI = (() => {
         bindOrderRows(el);
     }
 
-    // ============ TAB 5: INVENTORY ============
+    // ============ TAB 5: STORAGE ROOM ============
+    // Two sub-views, no parallel inventory CRUD any more:
+    //   • Storage    — a READ-ONLY mirror of the real Storage Room (the same
+    //                  boxes/items database the Storage building manages). Orders
+    //                  flow into here automatically, so we never re-track them.
+    //   • Components — completed build components (their build is done, or their
+    //                  video is posted). Tasks/orders are excluded: a task is just
+    //                  a means to buy something, and orders already live in Storage.
+
+    const STORAGE_SVC = () => (typeof StorageService !== 'undefined' && StorageService) ? StorageService : null;
 
     function renderInventoryTab(el) {
-        let items = SVC().inventory.getAll();
-        if (invType) items = items.filter(i => i.type === invType);
-        if (invStatus) items = items.filter(i => i.status === invStatus);
-        items = [...items].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
+        const SS = STORAGE_SVC();
+        const storeCount = SS ? (SS.getItems() || []).length : 0;
+        const compCount = completedComponents().length;
         el.innerHTML = `
             <div class="wsp-section-head">
-                <span class="wsp-section-title">Storage Room (Component Library) — what physically exists & what's usable right now. Ordering checks here before buying.</span>
+                <button class="wsp-header-btn" id="wsp-inv-back">← Pipeline</button>
+                <span class="wsp-section-title">Storage Room</span>
             </div>
-            <div class="wsp-filterbar">
-                <select id="wsp-inv-type"><option value="">All types</option>${INVENTORY_TYPES.map(t => `<option ${invType === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
-                <select id="wsp-inv-status"><option value="">Any status</option>${INVENTORY_STATUSES.map(s => `<option ${invStatus === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+            <div class="wsp-tabs">
+                <button class="wsp-tab ${invSubTab === 'storage' ? 'active' : ''}" data-invsub="storage">📦 Storage <span class="wsp-tab-count">${storeCount}</span></button>
+                <button class="wsp-tab ${invSubTab === 'components' ? 'active' : ''}" data-invsub="components">🧩 Components <span class="wsp-tab-count">${compCount}</span></button>
             </div>
-            <div class="wsp-grid">
-                ${items.length === 0 ? '<div class="workshop-empty">Nothing in inventory. Props you build, footage you film, sets you make — they all live here so future videos can reuse them.</div>' : items.map(i => {
-                    const proj = i.projectId ? SVC().projects.getById(i.projectId) : null;
-                    const prod = i.producedByVideoId ? VideoService.getById(i.producedByVideoId) : null;
-                    return `<div class="wsp-tile inv-tile ${i.status}">
-                        <div class="wsp-tile-title">${INV_TYPE_ICONS[i.type] || '📦'} ${escHtml(i.name)}</div>
-                        <div class="wsp-status-cycle">
-                            ${INVENTORY_STATUSES.map(s => `<button class="wsp-pill ${i.status === s ? 'active' : ''}" data-inv="${i.id}" data-inv-status="${s}">${s}</button>`).join('')}
-                        </div>
-                        <div class="wsp-tile-meta">
-                            <span>${escHtml(i.type || 'other')}${i.source ? ` · ${escHtml(i.source)}` : ''}</span>
-                            ${proj ? `<span>🛠️ ${escHtml(proj.name)}</span>` : ''}
-                            ${prod ? `<span>from 🎬 ${escHtml(prod.name)}</span>` : ''}
-                        </div>
-                        <button class="wsp-mini-btn danger wsp-tile-del" data-inv-del="${i.id}">✕</button>
-                    </div>`;
-                }).join('')}
-            </div>
-            <div class="wsp-add-row wsp-subsection">
-                <input type="text" id="wsp-new-inv-name" placeholder="Add item (e.g. 'Iron Man helmet')">
-                <select id="wsp-new-inv-type">${INVENTORY_TYPES.map(t => `<option>${t}</option>`).join('')}</select>
-                <select id="wsp-new-inv-status">${INVENTORY_STATUSES.map(s => `<option ${s === 'ready' ? 'selected' : ''}>${s}</option>`).join('')}</select>
-                <button class="wsp-mini-btn done" id="wsp-add-inv">Add</button>
-            </div>
+            <div id="wsp-inv-sub"></div>
         `;
+        el.querySelector('#wsp-inv-back').addEventListener('click', () => switchTab('pipeline'));
+        el.querySelectorAll('[data-invsub]').forEach(b => b.addEventListener('click', () => { invSubTab = b.dataset.invsub; renderTab(); }));
+        const body = el.querySelector('#wsp-inv-sub');
+        if (invSubTab === 'components') renderCompletedComponents(body);
+        else renderStorageMirror(body);
+    }
 
-        document.getElementById('wsp-inv-type').addEventListener('change', e => { invType = e.target.value; renderTab(); });
-        document.getElementById('wsp-inv-status').addEventListener('change', e => { invStatus = e.target.value; renderTab(); });
-        const add = async () => {
-            const name = document.getElementById('wsp-new-inv-name').value.trim();
-            if (!name) return;
-            await SVC().inventory.create({
-                name,
-                type: document.getElementById('wsp-new-inv-type').value,
-                status: document.getElementById('wsp-new-inv-status').value,
-                source: 'owned', projectId: '', producedByVideoId: '', location: '', notes: ''
-            });
-            renderTab();
-        };
-        document.getElementById('wsp-add-inv').addEventListener('click', add);
-        document.getElementById('wsp-new-inv-name').addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
-        el.querySelectorAll('[data-inv-status]').forEach(btn => btn.addEventListener('click', async () => {
-            await SVC().inventory.update(btn.dataset.inv, { status: btn.dataset.invStatus });
-            renderTab();
-        }));
-        el.querySelectorAll('[data-inv-del]').forEach(btn => btn.addEventListener('click', async () => {
-            if (!confirm('Remove this inventory item?')) return;
-            await SVC().inventory.remove(btn.dataset.invDel);
-            renderTab();
-        }));
+    // READ-ONLY mirror of the real Storage Room (boxes + items), grouped by box.
+    function renderStorageMirror(body) {
+        const SS = STORAGE_SVC();
+        if (!SS) { body.innerHTML = '<div class="workshop-empty">The Storage Room isn\'t available right now.</div>'; return; }
+        const boxes = SS.getBoxes() || [];
+        const items = SS.getItems() || [];
+        if (!boxes.length && !items.length) {
+            body.innerHTML = '<div class="workshop-empty">Loading the Storage Room…</div>';
+            // Storage may not have synced yet (its building hasn't been opened) —
+            // pull once, then re-render if we're still on this view.
+            if (!_storageSyncKicked && SS.sync) {
+                _storageSyncKicked = true;
+                SS.sync().then(() => { if (activeTab === 'inventory' && invSubTab === 'storage') renderTab(); }).catch(() => {});
+            }
+            return;
+        }
+        const totalQty = items.reduce((s, i) => s + (i.quantity || 1), 0);
+        const boxedIds = new Set();
+        const boxHtml = boxes.map(b => {
+            const bi = SS.getItemsByBox(b.id) || [];
+            bi.forEach(i => boxedIds.add(i.id));
+            return `<div class="wsp-storage-box">
+                <div class="wsp-storage-box-title">📦 ${escHtml(b.name)} <span class="wsp-stage-panel-count">${bi.length}</span></div>
+                ${bi.length
+                    ? bi.map(i => `<div class="wsp-row"><span class="wsp-row-name">${escHtml(i.name)}</span>${(i.quantity || 1) > 1 ? `<span class="wsp-hint">×${i.quantity}</span>` : ''}</div>`).join('')
+                    : '<div class="wsp-hint">empty</div>'}
+            </div>`;
+        }).join('');
+        const loose = items.filter(i => !boxedIds.has(i.id));
+        const looseHtml = loose.length ? `<div class="wsp-storage-box">
+            <div class="wsp-storage-box-title">🗃️ Unboxed <span class="wsp-stage-panel-count">${loose.length}</span></div>
+            ${loose.map(i => `<div class="wsp-row"><span class="wsp-row-name">${escHtml(i.name)}</span>${(i.quantity || 1) > 1 ? `<span class="wsp-hint">×${i.quantity}</span>` : ''}</div>`).join('')}
+        </div>` : '';
+        body.innerHTML = `
+            <div class="wsp-section-head">
+                <span class="wsp-hint">Read-only mirror of the Storage Room — ${items.length} item${items.length === 1 ? '' : 's'} (${totalQty} total) across ${boxes.length} box${boxes.length === 1 ? '' : 'es'}. Add, move or remove items in the Storage Room itself.</span>
+            </div>
+            <div class="wsp-storage-boxes">${boxHtml}${looseHtml}</div>
+        `;
+    }
+
+    // Completed build components — finished parts we actually have. Done if the
+    // build reached 'done' OR the linked video has been posted (so every past,
+    // posted project's components count). Orders & tasks are excluded.
+    function isVideoPosted(v) {
+        return !!v && (v.status === 'posted' || v.status === 'pen' || (v.stageState && v.stageState.post === 'done'));
+    }
+    function completedComponents() {
+        return SVC().components.getAll().filter(c => {
+            if (c.source === 'order' || c.source === 'task') return false;   // not parts we track here
+            if (c.status === 'done') return true;
+            return isVideoPosted(c.videoId ? VideoService.getById(c.videoId) : null);
+        });
+    }
+    function renderCompletedComponents(body) {
+        const comps = completedComponents();
+        if (!comps.length) {
+            body.innerHTML = '<div class="workshop-empty">No completed components yet. A build component lands here once its build is done — or once the video it was built for is posted.</div>';
+            return;
+        }
+        // Group by project (fall back to the source video, then "Unassigned").
+        const groups = {};
+        comps.forEach(c => {
+            const proj = c.projectId ? SVC().projects.getById(c.projectId) : null;
+            const vid = c.videoId ? VideoService.getById(c.videoId) : null;
+            const key = proj ? `🛠️ ${proj.name}` : (vid ? `🎬 ${vid.name}` : '— Unassigned');
+            (groups[key] = groups[key] || []).push({ c, vid });
+        });
+        body.innerHTML = `
+            <div class="wsp-section-head">
+                <span class="wsp-hint">Finished build components from your projects — ${comps.length} part${comps.length === 1 ? '' : 's'}. Click one to open it.</span>
+            </div>
+            ${Object.keys(groups).sort().map(k => `
+                <div class="wsp-storage-box">
+                    <div class="wsp-storage-box-title">${escHtml(k)} <span class="wsp-stage-panel-count">${groups[k].length}</span></div>
+                    ${groups[k].map(({ c, vid }) => `<div class="wsp-row">
+                        <button class="wsp-row-name wsp-clickable" data-open-comp="${c.id}" title="Open this component">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)}</button>
+                        ${vid && !c.projectId ? '' : (vid ? `<span class="wsp-hint">🎬 ${escHtml(vid.name)}</span>` : '')}
+                        <span class="wsp-comp-tag build">done</span>
+                    </div>`).join('')}
+                </div>`).join('')}
+        `;
+        bindCompStatusRows(body, () => renderTab());
     }
 
     // ============ QUEUE IDEA / NEW VIDEO ============

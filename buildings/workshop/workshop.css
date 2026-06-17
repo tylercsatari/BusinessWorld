@@ -583,6 +583,23 @@
     display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 10px; padding: 8px 14px 14px;
 }
+/* Storage Room mirror — boxes of items, read-only; also reused for the
+   completed-components grouping. */
+.wsp-storage-boxes {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px; padding: 8px 14px 16px; align-items: start;
+}
+.wsp-storage-box {
+    background: #fff; border: 1px solid #ece8e0; border-radius: 12px;
+    padding: 10px 12px; display: flex; flex-direction: column; gap: 3px;
+}
+.wsp-storage-box-title {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 13px; font-weight: 800; color: #5a3e1b;
+    padding-bottom: 6px; margin-bottom: 3px; border-bottom: 1px solid #f0ece4;
+}
+.wsp-storage-box .wsp-row { margin: 0; padding: 4px 2px; border: none; background: none; }
+.wsp-storage-box .wsp-row + .wsp-row { border-top: 1px dashed #f1ede4; }
 .wsp-tile {
     position: relative;
     background: #fff; border: 1px solid #ece8e0; border-radius: 12px; padding: 12px 14px;
