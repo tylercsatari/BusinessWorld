@@ -818,7 +818,7 @@ const WorkshopUI = (() => {
             return `<div class="wsp-deliv-banner" data-deliv-stage="${stage.id}">
                 <div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
                 <div class="wsp-deliv-sub">Upload as many files as you need — nothing moves until you press <b>Done</b> at the bottom.</div>
-                <div id="wsp-deliv-list">${results.map((r, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('film', 'wsp-row-ic')} ${escHtml(r.name || (r.path || '').split('/').pop())}</span><button class="wsp-mini-btn danger" data-deliv-del="${i}">✕</button></div>`).join('')}</div>
+                <div id="wsp-deliv-list">${results.map((r, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('film', 'wsp-row-ic')} ${escHtml(r.name || (r.path || '').split('/').pop())}</span><button class="wsp-mini-btn" data-deliv-preview="${i}">▶ Preview</button><button class="wsp-mini-btn danger" data-deliv-del="${i}">✕</button></div>`).join('')}</div>
                 ${canUpload
                     ? `<div class="wsp-add-row"><input type="file" id="wsp-deliv-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-deliv-up">⬆ Upload files</button></div>`
                     : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project (below) first — results go to that project's Dropbox folder.</div></div>`}
@@ -890,6 +890,10 @@ const WorkshopUI = (() => {
         if (!banner) return;
         const fileInput = banner.querySelector('#wsp-deliv-file');
         const upBtn = banner.querySelector('#wsp-deliv-up');
+        banner.querySelectorAll('[data-deliv-preview]').forEach(b => b.addEventListener('click', () => {
+            const r = stageResultsFor(VideoService.getById(v.id) || v, stageId)[Number(b.dataset.delivPreview)];
+            if (r && r.path) openFilePreview(r.path, r.name);
+        }));
         banner.querySelectorAll('[data-deliv-del]').forEach(b => b.addEventListener('click', async () => {
             const fresh = VideoService.getById(v.id) || v;
             const arr = stageResultsFor(fresh, stageId).filter((_, i) => i !== Number(b.dataset.delivDel));
@@ -2057,10 +2061,25 @@ const WorkshopUI = (() => {
         </div>`;
     }
 
-    // Advance a component to the next status in its track (build/order/task).
+    // The deliverable required to LEAVE a component's current status. CAD/PCB
+    // stages need their actual design file (in the CAD/PCB file section) — not
+    // just any media. → { met, missing }.
+    function componentDeliverableStatus(c) {
+        const needs = Array.isArray(c.needs) ? c.needs : [];
+        if (c.status === 'cad') {
+            if (needs.includes('cad') && !c.cadPath) return { met: false, missing: 'Upload the CAD file in this component’s “CAD file” section (a generic media file doesn’t count).' };
+            if (needs.includes('pcb') && !c.pcbPath) return { met: false, missing: 'Upload the PCB file in this component’s “PCB file” section.' };
+        }
+        return { met: true };
+    }
+
+    // Advance a component to the next status in its track (build/order/task),
+    // but only if the current stage's deliverable is satisfied.
     async function advanceComponent(componentId, rerenderFn) {
         const c = SVC().components.getById(componentId);
         if (!c || c.status === 'done') return;
+        const ds = componentDeliverableStatus(c);
+        if (!ds.met) { alert(`This can’t move forward yet:\n\n• ${ds.missing}`); return; }
         const track = statusesForSource(c.source);
         const idx = track.indexOf(c.status);
         const next = (idx >= 0 && idx < track.length - 1) ? track[idx + 1] : 'done';
@@ -2300,10 +2319,7 @@ const WorkshopUI = (() => {
                         <span class="wsp-row-name">${escHtml(c2[s.nameF] || path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
                         <button class="wsp-mini-btn" data-cf-open>▶ Open</button>
                         <button class="wsp-mini-btn danger" data-cf-unlink>✕</button></div>`;
-                    el.querySelector('[data-cf-open]').addEventListener('click', async () => {
-                        const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
-                        const d = await r.json(); if (d.link) window.open(d.link, '_blank'); else alert('Could not open: ' + (d.error_summary || 'no link'));
-                    });
+                    el.querySelector('[data-cf-open]').addEventListener('click', () => openFilePreview(path, c2[s.nameF] || path.split('/').pop()));
                     el.querySelector('[data-cf-unlink]').addEventListener('click', async () => {
                         if (!confirm(`Unlink this ${s.noun}? (The file stays in Dropbox.)`)) return;
                         await saveComp({ [s.pathF]: '', [s.nameF]: '' }); dirty = true; renderSlot(s);
@@ -2341,9 +2357,11 @@ const WorkshopUI = (() => {
         // the board.
         q('#cd-done').addEventListener('click', async () => {
             const c2 = cur();
+            if (c2.status === 'done') { alert('This component is already done.'); return; }
+            const ds = componentDeliverableStatus(c2);
+            if (!ds.met) { alert(`This can’t move forward yet:\n\n• ${ds.missing}`); return; }
             const track = statusesForSource(c2.source);
             const idx = track.indexOf(c2.status);
-            if (c2.status === 'done') { alert('This component is already done.'); return; }
             const next = (idx >= 0 && idx < track.length - 1) ? track[idx + 1] : 'done';
             dirty = true;
             await saveComp({ status: next });
@@ -2428,14 +2446,9 @@ const WorkshopUI = (() => {
         // Media (uploaded files in the project's Dropbox folder)
         const renderMedia = () => { q('#cd-media').innerHTML = (cur().media || []).map((m, i) => mediaTileHtml(m, i)).join(''); bindMedia(); };
         const bindMedia = () => {
-            q('#cd-media').querySelectorAll('[data-media-open]').forEach(b => b.addEventListener('click', async () => {
+            q('#cd-media').querySelectorAll('[data-media-open]').forEach(b => b.addEventListener('click', () => {
                 const m = (cur().media || [])[Number(b.dataset.mediaOpen)];
-                if (!m || !m.path) return;
-                try {
-                    const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: m.path }) });
-                    const data = await r.json();
-                    if (data.link) window.open(data.link, '_blank'); else alert('Could not open: ' + (data.error_summary || 'no link'));
-                } catch (e) { alert('Could not open media: ' + e.message); }
+                if (m && m.path) openFilePreview(m.path, m.name);
             }));
             q('#cd-media').querySelectorAll('[data-media-del]').forEach(b => b.addEventListener('click', async () => {
                 dirty = true;
@@ -2915,11 +2928,9 @@ const WorkshopUI = (() => {
             bindRows();
         };
         const bindRows = () => {
-            list && list.querySelectorAll('[data-anim-asset-open]').forEach(b => b.addEventListener('click', async () => {
+            list && list.querySelectorAll('[data-anim-asset-open]').forEach(b => b.addEventListener('click', () => {
                 const a = animAssets()[Number(b.dataset.animAssetOpen)];
-                if (!a || !a.path) return;
-                const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: a.path }) });
-                const d = await r.json(); if (d.link) window.open(d.link, '_blank'); else alert('Could not open: ' + (d.error_summary || 'no link'));
+                if (a && a.path) openFilePreview(a.path, a.name);
             }));
             list && list.querySelectorAll('[data-anim-asset-del]').forEach(b => b.addEventListener('click', async () => {
                 const next = animAssets().filter((_, i) => i !== Number(b.dataset.animAssetDel));
@@ -2992,16 +3003,9 @@ const WorkshopUI = (() => {
             await saveHooks(v.id, hooksWithEdits(v.id).filter(x => x.id !== b.dataset.hookiDel));
             rerender();
         }));
-        root.querySelectorAll('[data-hooki-open]').forEach(b => b.addEventListener('click', async () => {
+        root.querySelectorAll('[data-hooki-open]').forEach(b => b.addEventListener('click', () => {
             const h = hooksWithEdits(v.id).find(x => x.id === b.dataset.hookiOpen);
-            if (!h || !h.videoPath) return;
-            const r = await fetch('/api/dropbox/get_temporary_link', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: h.videoPath })
-            });
-            const data = await r.json();
-            if (data.link) window.open(data.link, '_blank');
-            else alert('Could not load the hook video: ' + (data.error_summary || 'no link'));
+            if (h && h.videoPath) openFilePreview(h.videoPath, h.videoName);
         }));
         root.querySelectorAll('[data-hooki-unlink]').forEach(b => b.addEventListener('click', async () => {
             if (!confirm('Unlink this hook video? (The file stays in Dropbox.)')) return;
@@ -3218,6 +3222,92 @@ const WorkshopUI = (() => {
         } catch (e) { return ''; }
     }
 
+    // ============ UNIVERSAL FILE PREVIEW ============
+    // Opens almost any file inline — images, video, audio, PDF, text/code, and
+    // STL 3D models (via Three.js). Anything else gets a clean download card.
+    const PREVIEW_TYPES = {
+        image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'],
+        video: ['mp4', 'mov', 'webm', 'm4v', 'ogv'],
+        audio: ['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac'],
+        pdf: ['pdf'],
+        text: ['txt', 'md', 'markdown', 'json', 'js', 'ts', 'jsx', 'tsx', 'py', 'csv', 'tsv', 'log', 'xml', 'html', 'css', 'scss', 'yml', 'yaml', 'c', 'cpp', 'h', 'hpp', 'java', 'rb', 'go', 'rs', 'sh', 'sql', 'ino', 'gcode'],
+        model3d: ['stl']
+    };
+    function fileExt(name) { return (String(name || '').split('.').pop() || '').toLowerCase(); }
+    function previewKind(name) { const e = fileExt(name); for (const k in PREVIEW_TYPES) if (PREVIEW_TYPES[k].includes(e)) return k; return 'other'; }
+
+    async function openFilePreview(path, name) {
+        if (!path) { alert('No file to preview.'); return; }
+        name = name || (path.split('/').pop());
+        const kind = previewKind(name);
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay'; overlay.style.display = 'flex';
+        overlay.innerHTML = `<div class="wsp-picker wsp-preview-modal">
+            <div class="wsp-picker-header">
+                <span class="wsp-preview-name">${escHtml(name)} <span class="wsp-hint">.${escHtml(fileExt(name)) || 'file'}</span></span>
+                <span><button class="wsp-mini-btn" data-dl>↗ Open / Download</button> <button class="wsp-picker-close" data-close>✕</button></span>
+            </div>
+            <div class="wsp-preview-body" id="wsp-preview-body"><div class="wsp-preview-loading"><span class="wsp-spin"></span> Loading…</div></div>
+        </div>`;
+        let alive = true;
+        const close = () => { alive = false; overlay.remove(); };
+        (container.querySelector('.workshop-panel') || container).appendChild(overlay);
+        overlay.querySelector('[data-close]').addEventListener('click', close);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        const body = overlay.querySelector('#wsp-preview-body');
+
+        let link = null;
+        try { const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) }); link = (await r.json()).link; } catch (e) {}
+        if (!alive) return;
+        if (!link) { body.innerHTML = '<div class="wsp-preview-loading" style="color:#c0392b">Could not load this file.</div>'; return; }
+        const dl = () => window.open(link, '_blank');
+        overlay.querySelector('[data-dl]').addEventListener('click', dl);
+
+        if (kind === 'image') body.innerHTML = `<img class="wsp-preview-img" src="${escAttr(link)}" alt="${escAttr(name)}">`;
+        else if (kind === 'video') body.innerHTML = `<video class="wsp-preview-media" src="${escAttr(link)}" controls autoplay playsinline></video>`;
+        else if (kind === 'audio') body.innerHTML = `<div style="padding:30px;width:100%;"><audio style="width:100%;" src="${escAttr(link)}" controls autoplay></audio></div>`;
+        else if (kind === 'pdf') body.innerHTML = `<iframe class="wsp-preview-frame" src="${escAttr(link)}"></iframe>`;
+        else if (kind === 'text') {
+            try { const t = await (await fetch(link)).text(); if (alive) body.innerHTML = `<pre class="wsp-preview-text">${escHtml(t.slice(0, 300000))}</pre>`; }
+            catch (e) { if (alive) body.innerHTML = '<div class="wsp-preview-loading">Could not load text.</div>'; }
+        } else if (kind === 'model3d') { renderStlPreview(body, link, () => alive); }
+        else body.innerHTML = `<div class="wsp-preview-other"><div class="wsp-preview-other-ic">📄</div><div>No inline preview for <b>.${escHtml(fileExt(name))}</b> files.</div><button class="wsp-mini-btn done" data-dl2>↗ Open / Download</button></div>`;
+        body.querySelector('[data-dl2]')?.addEventListener('click', dl);
+    }
+
+    // STL 3D viewer — Three.js loaded on demand via the page's import map.
+    async function renderStlPreview(host, link, isAlive) {
+        host.innerHTML = '<div class="wsp-preview-loading"><span class="wsp-spin"></span> Loading 3D model…</div>';
+        try {
+            const THREE = await import('three');
+            const { STLLoader } = await import('three/addons/loaders/STLLoader.js');
+            const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+            const buf = await (await fetch(link)).arrayBuffer();
+            if (!isAlive()) return;
+            const geo = new STLLoader().parse(buf);
+            geo.computeVertexNormals(); geo.center(); geo.computeBoundingSphere();
+            const rad = (geo.boundingSphere && geo.boundingSphere.radius) || 50;
+            host.innerHTML = '';
+            const w = host.clientWidth || 640, h = Math.max(380, host.clientHeight || 420);
+            const scene = new THREE.Scene(); scene.background = new THREE.Color(0xf3efe6);
+            const cam = new THREE.PerspectiveCamera(50, w / h, rad / 100, rad * 100);
+            cam.position.set(rad * 2, rad * 1.6, rad * 2);
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(w, h); renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+            host.appendChild(renderer.domElement);
+            const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a8c2a, metalness: 0.15, roughness: 0.55 }));
+            scene.add(mesh);
+            scene.add(new THREE.HemisphereLight(0xffffff, 0x555555, 1.15));
+            const dlight = new THREE.DirectionalLight(0xffffff, 0.85); dlight.position.set(1, 1.4, 1); scene.add(dlight);
+            const controls = new OrbitControls(cam, renderer.domElement); controls.enableDamping = true; controls.update();
+            (function loop() { if (!isAlive() || !document.body.contains(host)) { renderer.dispose(); return; } requestAnimationFrame(loop); controls.update(); renderer.render(scene, cam); })();
+        } catch (e) {
+            console.warn('STL preview failed', e);
+            host.innerHTML = `<div class="wsp-preview-other"><div class="wsp-preview-other-ic">🧊</div><div>Couldn't render this 3D model.</div><button class="wsp-mini-btn done" data-dl2>↗ Open / Download</button></div>`;
+            host.querySelector('[data-dl2]')?.addEventListener('click', () => window.open(link, '_blank'));
+        }
+    }
+
     const MEDIA_SECTIONS = {
         vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*,video/*', icon: '🎙️', iconName: 'voiceover', noun: 'voiceover', color: '#8e44ad' }
     };
@@ -3243,6 +3333,7 @@ const WorkshopUI = (() => {
                 </div>`;
             const playBtn = document.getElementById(`${cfg.elId}-play`);
             playBtn.addEventListener('click', async () => {
+                if (!isAudio) { openFilePreview(linkedPath, name); return; }
                 playBtn.disabled = true;
                 try {
                     const r = await fetch('/api/dropbox/get_temporary_link', {
@@ -3251,14 +3342,12 @@ const WorkshopUI = (() => {
                     });
                     const data = await r.json();
                     if (!data.link) throw new Error(data.error_summary || 'no link');
-                    if (isAudio) {
+                    {
                         const audio = document.getElementById(`${cfg.elId}-audio`);
                         if (!audio.src) audio.src = data.link;
                         if (audio.paused) { audio.play(); playBtn.textContent = '⏸ Pause'; }
                         else { audio.pause(); playBtn.textContent = '▶ Play'; }
                         audio.onended = () => { playBtn.textContent = '▶ Play'; };
-                    } else {
-                        window.open(data.link, '_blank');
                     }
                 } catch (e) {
                     alert(`Could not load the ${cfg.noun} from Dropbox: ` + e.message);
@@ -3365,11 +3454,7 @@ const WorkshopUI = (() => {
                     <span class="wsp-row-name"><b>${escHtml(slot.label)}</b> · ${escHtml(cur.name || cur.path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
                     <button class="wsp-mini-btn" data-edit-open="${slot.key}">▶ Open</button>
                     <button class="wsp-mini-btn danger" data-edit-unlink="${slot.key}">✕</button></div>`;
-                el.querySelector('[data-edit-open]').addEventListener('click', async () => {
-                    const r = await fetch('/api/dropbox/get_temporary_link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: cur.path }) });
-                    const data = await r.json();
-                    if (data.link) window.open(data.link, '_blank'); else alert('Could not open: ' + (data.error_summary || 'no link'));
-                });
+                el.querySelector('[data-edit-open]').addEventListener('click', () => openFilePreview(cur.path, cur.name || cur.path.split('/').pop()));
                 el.querySelector('[data-edit-unlink]').addEventListener('click', async () => {
                     if (!confirm('Unlink this version? (The file stays in Dropbox.)')) return;
                     await setSlot(slot.key, null); rerenderEditor(v.id);
