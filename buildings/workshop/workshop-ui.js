@@ -44,6 +44,7 @@ const WorkshopUI = (() => {
     // Storage Room tab: 'storage' mirrors the real Storage room (read-only);
     // 'components' lists completed build components from finished projects.
     let invSubTab = 'storage';
+    let invSearch = '';
     let _storageSyncKicked = false;
 
     const escHtml = HtmlUtils.escHtml;
@@ -1542,7 +1543,17 @@ const WorkshopUI = (() => {
         else renderStorageMirror(body);
     }
 
-    // READ-ONLY mirror of the real Storage Room (boxes + items), grouped by box.
+    // Normalise for searching — lower-case, and singularise if the Storage
+    // canonicaliser is around (so "helmets" finds "helmet").
+    function normStorage(s) {
+        s = (s || '').toLowerCase().trim();
+        try { if (typeof StorageCanonicalize !== 'undefined' && StorageCanonicalize.normalizeToSingular) return StorageCanonicalize.normalizeToSingular(s) || s; } catch (e) {}
+        return s;
+    }
+
+    // READ-ONLY mirror of the real Storage Room (boxes + items), with a quick
+    // search up top: type what you need → see instantly if it's already in
+    // storage (so you don't re-order it); if it's not, order it right here.
     function renderStorageMirror(body) {
         const SS = STORAGE_SVC();
         if (!SS) { body.innerHTML = '<div class="workshop-empty">The Storage Room isn\'t available right now.</div>'; return; }
@@ -1559,28 +1570,76 @@ const WorkshopUI = (() => {
             return;
         }
         const totalQty = items.reduce((s, i) => s + (i.quantity || 1), 0);
-        const boxedIds = new Set();
-        const boxHtml = boxes.map(b => {
-            const bi = SS.getItemsByBox(b.id) || [];
-            bi.forEach(i => boxedIds.add(i.id));
-            return `<div class="wsp-storage-box">
-                <div class="wsp-storage-box-title">📦 ${escHtml(b.name)} <span class="wsp-stage-panel-count">${bi.length}</span></div>
-                ${bi.length
-                    ? bi.map(i => `<div class="wsp-row"><span class="wsp-row-name">${escHtml(i.name)}</span>${(i.quantity || 1) > 1 ? `<span class="wsp-hint">×${i.quantity}</span>` : ''}</div>`).join('')
-                    : '<div class="wsp-hint">empty</div>'}
-            </div>`;
-        }).join('');
-        const loose = items.filter(i => !boxedIds.has(i.id));
-        const looseHtml = loose.length ? `<div class="wsp-storage-box">
-            <div class="wsp-storage-box-title">🗃️ Unboxed <span class="wsp-stage-panel-count">${loose.length}</span></div>
-            ${loose.map(i => `<div class="wsp-row"><span class="wsp-row-name">${escHtml(i.name)}</span>${(i.quantity || 1) > 1 ? `<span class="wsp-hint">×${i.quantity}</span>` : ''}</div>`).join('')}
-        </div>` : '';
+        const boxNameById = {}; boxes.forEach(b => { boxNameById[b.id] = b.name; });
+        const itemBox = (i) => (i.boxIds || []).map(id => boxNameById[id]).filter(Boolean)[0] || 'Unboxed';
+        const itemLine = (i, withBox) => `<div class="wsp-row">
+            <span class="wsp-row-name">${escHtml(i.name)}</span>
+            ${withBox ? `<span class="wsp-hint">📦 ${escHtml(itemBox(i))}</span>` : ''}
+            ${(i.quantity || 1) > 1 ? `<span class="wsp-hint">×${i.quantity}</span>` : ''}
+        </div>`;
+
         body.innerHTML = `
             <div class="wsp-section-head">
                 <span class="wsp-hint">Read-only mirror of the Storage Room — ${items.length} item${items.length === 1 ? '' : 's'} (${totalQty} total) across ${boxes.length} box${boxes.length === 1 ? '' : 'es'}. Add, move or remove items in the Storage Room itself.</span>
             </div>
-            <div class="wsp-storage-boxes">${boxHtml}${looseHtml}</div>
+            <div class="wsp-filterbar">
+                <input type="search" id="wsp-storage-search" class="wsp-search" placeholder="🔍 Search storage — do we already have it?" value="${escAttr(invSearch)}" autocomplete="off" style="flex:1 1 auto;max-width:none;">
+            </div>
+            <div id="wsp-storage-results"></div>
         `;
+        const results = body.querySelector('#wsp-storage-results');
+
+        const paintBrowse = () => {
+            const boxedIds = new Set();
+            const boxHtml = boxes.map(b => {
+                const bi = SS.getItemsByBox(b.id) || [];
+                bi.forEach(i => boxedIds.add(i.id));
+                return `<div class="wsp-storage-box">
+                    <div class="wsp-storage-box-title">📦 ${escHtml(b.name)} <span class="wsp-stage-panel-count">${bi.length}</span></div>
+                    ${bi.length ? bi.map(i => itemLine(i, false)).join('') : '<div class="wsp-hint">empty</div>'}
+                </div>`;
+            }).join('');
+            const loose = items.filter(i => !boxedIds.has(i.id));
+            const looseHtml = loose.length ? `<div class="wsp-storage-box">
+                <div class="wsp-storage-box-title">🗃️ Unboxed <span class="wsp-stage-panel-count">${loose.length}</span></div>
+                ${loose.map(i => itemLine(i, false)).join('')}
+            </div>` : '';
+            results.innerHTML = `<div class="wsp-storage-boxes">${boxHtml}${looseHtml}</div>`;
+        };
+
+        const paintSearch = (q) => {
+            const nq = normStorage(q), lq = q.toLowerCase();
+            const hits = items.filter(i => {
+                const name = (i.name || '').toLowerCase();
+                return name.includes(lq) || normStorage(i.name).includes(nq);
+            }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            const orderBtn = `<button class="wsp-mini-btn done" id="wsp-storage-order">＋ Order "${escHtml(q.trim())}"</button>`;
+            if (!hits.length) {
+                results.innerHTML = `<div class="wsp-storage-noresult">
+                    <div class="workshop-empty" style="padding:18px 8px 12px;">No “${escHtml(q.trim())}” in storage — you'll need to order it.</div>
+                    <div class="wsp-add-row" style="justify-content:center;">${orderBtn}</div>
+                </div>`;
+            } else {
+                results.innerHTML = `<div class="wsp-section-head"><span class="wsp-hint">✓ ${hits.length} match${hits.length === 1 ? '' : 'es'} already in storage — no need to order.</span></div>
+                    <div class="wsp-storage-box" style="margin:0 14px;">${hits.map(i => itemLine(i, true)).join('')}</div>
+                    <div class="wsp-add-row" style="justify-content:center;">${orderBtn}</div>`;
+            }
+            const ob = results.querySelector('#wsp-storage-order');
+            if (ob) ob.addEventListener('click', async () => {
+                const name = q.trim(); if (!name) return;
+                ob.disabled = true; ob.textContent = 'Ordering…';
+                try {
+                    await SVC().orders.create({ name, link: '', cost: 0, qty: 1, status: 'needed', videoId: '', projectId: '', componentId: '', notes: 'From storage search' });
+                    ob.textContent = '✓ Added to Ordering';
+                    toast(`🛒 Ordered “${name}” → Ordering (Needed)`);
+                } catch (e) { ob.disabled = false; ob.textContent = '＋ Order'; alert('Could not create the order: ' + e.message); }
+            });
+        };
+
+        const repaint = () => { const q = invSearch.trim(); if (q) paintSearch(invSearch); else paintBrowse(); };
+        repaint();
+        const search = body.querySelector('#wsp-storage-search');
+        search.addEventListener('input', (e) => { invSearch = e.target.value; repaint(); });
     }
 
     // Completed build components — finished parts we actually have. Done if the
