@@ -53,8 +53,14 @@ def main():
         meta = a.get('metadata') or {}
         dv = an.get('dailyViews') or []
         pub = dv[0]['date'] if dv and dv[0].get('date') else None
-        swipe = an.get('swipedAwayRate')
-        viewed = an.get('viewedRate')
+        # REAL "Viewed vs Swiped Away" — scraped from YouTube Studio (swipe-scraper.js),
+        # stored at analytics.swipeRatio.stayedToWatch/.swipedAway. NOT swipedAwayRate
+        # (that's the engagedViews proxy = engagement rate, which is wrong).
+        sr = an.get('swipeRatio') or {}
+        if not (sr.get('scrapedAt') and isinstance(sr.get('stayedToWatch'), (int, float))):
+            continue                                              # only videos with the REAL keep rate
+        keep_rate = sr['stayedToWatch']                           # % who stayed to watch (the metric we want)
+        swiped = sr.get('swipedAway') if isinstance(sr.get('swipedAway'), (int, float)) else round(100 - keep_rate, 1)
         avg_ret = an.get('avgPercentViewed') if isinstance(an.get('avgPercentViewed'), (int, float)) else an.get('avgRetention')
         dur = meta.get('duration')
         if not dur and isinstance(an.get('avgViewDuration'), (int, float)) and avg_ret:
@@ -67,24 +73,24 @@ def main():
             'id': d, 'url': a.get('url') or f'https://www.youtube.com/watch?v={d}',
             'title': meta.get('title', d),
             'published': pub,
-            'swipe': round(float(swipe), 3) if isinstance(swipe, (int, float)) else None,
-            'stayed': round(float(viewed), 3) if isinstance(viewed, (int, float)) else None,
+            'keep_rate': round(float(keep_rate), 1),              # % STAYED to watch (Viewed vs Swiped Away)
+            'swiped': round(float(swiped), 1),                    # % swiped away = 100 - keep_rate
+            'sub_keep': sr.get('subscriberStayed'), 'nonsub_keep': sr.get('nonSubscriberStayed'),
             'avg_retention': round(float(avg_ret), 2) if isinstance(avg_ret, (int, float)) else None,
             'views': int(views),
-            'engaged_views': int(an['engagedViews']) if isinstance(an.get('engagedViews'), (int, float)) else None,
             'duration_s': round(float(dur), 1) if dur else None,
             'likes': an.get('likes'), 'comments': an.get('comments'), 'shares': an.get('shares'),
-            'swipe_tracked': bool(isinstance(swipe, (int, float)) and swipe > 0.05),   # real swipe vs pre-2023 zero
+            'scraped_at': sr.get('scrapedAt'),
             'curve': curve,
         })
     rows.sort(key=lambda r: -(r['views'] or 0))
-    out = {'meta': {'n': len(rows), 'generated_from': 'video_data/<id>/analysis.json analytics',
-                    'columns': 'title, published, swipe (swipedAwayRate %), stayed (viewedRate %), avg_retention (avgPercentViewed %), views (totalViews), engaged_views, duration',
-                    'note': 'swipe ~0 for pre-2023 videos = metric not tracked then (swipe_tracked=false), not zero swipes. Verify any row in YouTube Studio via its link.'},
+    out = {'meta': {'n': len(rows), 'metric': 'keep_rate = stayedToWatch (Viewed vs Swiped Away), scraped from YouTube Studio',
+                    'columns': 'title, published, keep_rate (% stayed), swiped (%), avg_retention (% viewed), views, duration',
+                    'note': 'keep_rate is the REAL scraped Viewed-vs-Swiped-Away (0<x<100). Verify any row in YouTube Studio via its link.'},
            'videos': rows}
     json.dump(out, open(OUT, 'w'))
-    tracked = sum(1 for r in rows if r['swipe_tracked'])
-    print(f"{len(rows)} videos → retention_table.json · swipe actually tracked on {tracked} (rest are pre-2023 zeros)")
+    kr = [r['keep_rate'] for r in rows]
+    print(f"{len(rows)} videos with REAL keep rate → retention_table.json · keep_rate {min(kr):.0f}-{max(kr):.0f}% (median {sorted(kr)[len(kr)//2]:.0f}%)")
 
 
 if __name__ == '__main__':

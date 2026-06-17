@@ -17,13 +17,13 @@ const JarvisRetention = (function () {
     const fv = x => x == null ? '—' : x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : x >= 1e3 ? (x / 1e3).toFixed(0) + 'K' : '' + Math.round(x);
 
     const COLS = [
-        { k: 'title', l: 'Video', w: '30%', align: 'left' },
-        { k: 'published', l: 'Posted', w: '10%' },
-        { k: 'swipe', l: 'Swipe %', w: '9%' },
-        { k: 'stayed', l: 'Stayed %', w: '9%' },
-        { k: 'avg_retention', l: 'Retention %', w: '11%' },
-        { k: 'views', l: 'Views', w: '11%' },
-        { k: 'duration_s', l: 'Dur s', w: '7%' },
+        { k: 'title', l: 'Video', w: '32%', align: 'left' },
+        { k: 'published', l: 'Posted', w: '11%' },
+        { k: 'keep_rate', l: 'Keep %', w: '10%' },
+        { k: 'swiped', l: 'Swiped %', w: '10%' },
+        { k: 'avg_retention', l: 'Retention %', w: '12%' },
+        { k: 'views', l: 'Views', w: '12%' },
+        { k: 'duration_s', l: 'Dur s', w: '8%' },
     ];
 
     function curveSvg(curve) {
@@ -40,7 +40,6 @@ const JarvisRetention = (function () {
 
     function rows() {
         let v = DATA.videos.slice();
-        if (st.trackedOnly) v = v.filter(r => r.swipe_tracked);
         if (st.q) { const q = st.q.toLowerCase(); v = v.filter(r => (r.title || '').toLowerCase().includes(q) || r.id.toLowerCase().includes(q)); }
         v.sort((a, b) => { const x = a[st.sort], y = b[st.sort]; if (x == null) return 1; if (y == null) return -1; return (x > y ? 1 : x < y ? -1 : 0) * st.dir; });
         return v;
@@ -53,10 +52,10 @@ const JarvisRetention = (function () {
         const body = v.map(r => {
             const open = st.open === r.id;
             const tr = `<tr data-row="${r.id}" style="border-bottom:1px solid ${C.border};cursor:pointer;background:${open ? C.card2 : 'transparent'}">
-                <td style="padding:7px 8px;color:${C.text};font-size:12px">${esc((r.title || r.id).slice(0, 52))}${!r.swipe_tracked ? ` <span style="color:${C.faint};font-size:9px">(pre-2023, swipe untracked)</span>` : ''}</td>
+                <td style="padding:7px 8px;color:${C.text};font-size:12px">${esc((r.title || r.id).slice(0, 54))}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.dim};font-size:11px">${r.published || '—'}</td>
-                <td style="text-align:right;padding:7px 8px;color:${r.swipe_tracked ? C.orange : C.faint};font-size:12px">${r.swipe == null ? '—' : fmt(r.swipe, 1)}</td>
-                <td style="text-align:right;padding:7px 8px;color:${C.cyan};font-size:12px">${r.stayed == null ? '—' : fmt(r.stayed, 1)}</td>
+                <td style="text-align:right;padding:7px 8px;color:${C.cyan};font-size:12px;font-weight:700">${r.keep_rate == null ? '—' : fmt(r.keep_rate, 1)}</td>
+                <td style="text-align:right;padding:7px 8px;color:${C.orange};font-size:12px">${r.swiped == null ? '—' : fmt(r.swiped, 1)}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.green};font-size:12px">${fmt(r.avg_retention, 1)}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.text};font-size:12px;font-weight:700">${fv(r.views)}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.dim};font-size:11px">${fmt(r.duration_s, 0)}</td></tr>`;
@@ -64,19 +63,20 @@ const JarvisRetention = (function () {
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:${C.dim}">
                     <a href="${esc(r.url)}" target="_blank" style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-weight:700;text-decoration:none">▶ Open on YouTube ↗</a>
                     <span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px">id: ${esc(r.id)}</span>
-                    <span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px">engaged: ${fv(r.engaged_views)} / ${fv(r.views)}</span>
+                    <span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px;color:${C.cyan}">kept ${fmt(r.keep_rate, 1)}% · swiped ${fmt(r.swiped, 1)}%</span>
+                    ${r.nonsub_keep != null ? `<span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px">non-sub keep ${fmt(r.nonsub_keep, 1)}%</span>` : ''}
                     <span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px">👍 ${fv(r.likes)} · 💬 ${fv(r.comments)} · ↗ ${fv(r.shares)}</span>
                 </div>${r.curve ? curveSvg(r.curve) : ''}
-                <div style="font-size:10px;color:${C.mute};margin-top:6px">Verify in YouTube Studio: swipe = "swiped away", stayed = "viewed", retention = "average percentage viewed". Swipe + stayed should equal 100.</div></td></tr>` : '';
+                <div style="font-size:10px;color:${C.mute};margin-top:6px">Verify in YouTube Studio: Keep % = "Viewed" in Viewed-vs-Swiped-Away, retention = "average percentage viewed". Keep + Swiped = 100. ${r.scraped_at ? 'Scraped ' + esc((r.scraped_at || '').slice(0, 10)) : ''}</div></td></tr>` : '';
             return tr + exp;
         }).join('');
-        const tracked = DATA.videos.filter(r => r.swipe_tracked).length;
+        const kr = DATA.videos.map(r => r.keep_rate).filter(x => x != null).sort((a, b) => a - b);
+        const krMed = kr.length ? kr[kr.length >> 1] : 0;
         root.innerHTML = `<div style="background:${C.bg};border-radius:12px;padding:16px;color:${C.text};font-family:'Nunito',sans-serif">
             <div style="font-size:21px;font-weight:900;color:${C.accent};margin-bottom:4px">Retention → Views · data audit</div>
-            <div style="font-size:12px;color:${C.dim};margin-bottom:12px">${DATA.meta.n} videos with a real retention curve + views, straight from your analytics. <b style="color:${C.orange}">Swipe is only tracked on ${tracked}</b> — pre-2023 videos show ~0 because YouTube didn't report Shorts swipe-away then. Click any row to see its curve and open it on YouTube to confirm in Studio.</div>
+            <div style="font-size:12px;color:${C.dim};margin-bottom:12px">${DATA.meta.n} videos with the <b style="color:${C.cyan}">real Keep rate</b> (Viewed-vs-Swiped-Away, scraped from YouTube Studio) + retention curve + views. Keep rate spans ${kr.length ? kr[0] : '—'}–${kr.length ? kr[kr.length - 1] : '—'}% (median ${krMed}%). Click any row to see its curve and open it on YouTube to confirm in Studio.</div>
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
                 <input data-q value="${esc(st.q)}" placeholder="search title…" style="background:${C.card2};border:1px solid ${C.border};color:${C.text};border-radius:8px;padding:7px 11px;font-size:13px;width:220px;font-family:inherit"/>
-                <label style="font-size:12px;color:${C.dim};display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-tracked ${st.trackedOnly ? 'checked' : ''}/> swipe-tracked only (${tracked})</label>
                 <span style="font-size:11px;color:${C.mute};margin-left:auto">${v.length} shown · click a header to sort</span>
             </div>
             <div style="overflow-x:auto;border:1px solid ${C.border};border-radius:10px">
