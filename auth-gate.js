@@ -228,6 +228,9 @@
         // 3D world loads show a BLACK screen (worse on a cold start). init() hides
         // it again when the world is ready.
         const _ld = document.getElementById('loading-overlay'); if (_ld) _ld.style.display = '';
+        // Hand the world my colour BEFORE it builds, so the player character is
+        // created in my colour from the first frame (no blue→colour flash).
+        if (/^#[0-9a-fA-F]{6}$/.test(_account.color || '')) window.__myColor = _account.color;
         if (typeof window.__bootApp === 'function') window.__bootApp();
         mountMenuItems();
         applyAccessWhenReady(perms);

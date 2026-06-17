@@ -2621,7 +2621,9 @@ function createCat(name = 'Zeus', mainColor = 0x222222, patchColor = 0xeeeeee) {
 }
 
 function initCharacters() {
-    playerMesh = createCharacter(0x3498db, 'You');
+    // Use my account colour from the first frame if auth already resolved it,
+    // so the avatar never flashes the default blue before recolouring.
+    playerMesh = createCharacter(window.__myColor || 0x3498db, 'You');
     scene.add(playerMesh); clickables.push(playerMesh);
     // Robin & Jordan removed — Employee Island is populated from approved accounts
     // (see window.syncEmployeeAccounts). Tennille & Zeus stay hard-coded.
@@ -3117,10 +3119,12 @@ window.syncEmployeeAccounts = function (accounts, profiles) {
     const base = employeeIsland.position;
     const profById = {};
     (profiles || window.__profiles || []).forEach(p => { profById[p.id] = p.name; });
-    const roleLabel = (a) => a.role === 'owner' ? 'Owner' : (!a.role || a.role === 'pending') ? 'Pending' : (profById[a.role] || 'Member');
-    // Every OTHER account (exclude me — I'm the player walking around), each with
-    // their own colour. Stand them ON the island surface within its radius.
-    const list = (accounts || []).filter(a => a && a.email && a.id !== window.__myAccountId);
+    const roleLabel = (a) => a.role === 'owner' ? 'Owner' : (profById[a.role] || 'Member');
+    // Every OTHER account that has been given a role (exclude me — I'm the player
+    // walking around — and exclude pending/role-less accounts: no role → no
+    // character on the island). Each stands ON the island in their own colour.
+    const hasRole = (a) => a.role && a.role !== 'pending';
+    const list = (accounts || []).filter(a => a && a.email && a.id !== window.__myAccountId && hasRole(a));
     const surfaceY = (base.y || 0) + 0.2;
     const r = Math.min(4, 1.8 + list.length * 0.3);
     list.forEach((a, i) => {
