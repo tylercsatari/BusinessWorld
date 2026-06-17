@@ -394,6 +394,7 @@ const MIME_TYPES = {
     '.jpg': 'image/jpeg',
     '.svg': 'image/svg+xml',
     '.json': 'application/json',
+    '.webmanifest': 'application/manifest+json',
     '.glb': 'model/gltf-binary',
     '.gltf': 'model/gltf+json',
     '.md': 'text/markdown; charset=utf-8',
