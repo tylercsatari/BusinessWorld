@@ -113,11 +113,27 @@ def main():
     # ── Q2: curve shape beyond average ──
     cmu = curves.mean(0); pca = PCA(n_components=6).fit(curves - cmu); modes = pca.transform(curves - cmu)
     mlvl = [float(spearmanr(modes[:, k], ret).correlation) for k in range(6)]
-    shape = modes[:, [k for k in range(6) if abs(mlvl[k]) < 0.5]]
+    shape_idx = [k for k in range(6) if abs(mlvl[k]) < 0.5]
+    shape = modes[:, shape_idx]
     Q2 = {'cv_r2_avg': round(cvr(ret.reshape(-1, 1), lv), 3),
           'cv_r2_avg_plus_shape': round(cvr(np.column_stack([ret.reshape(-1, 1), shape]), lv, a=3.0), 3),
           'mode_level_corr': [round(x, 2) for x in mlvl]}
     Q2['shape_delta'] = round(Q2['cv_r2_avg_plus_shape'] - Q2['cv_r2_avg'], 3)
+    # shape viz: mode-1 (orthogonal to level) as ± deformations of the mean curve, views by shape,
+    # and the most extreme real curves so you can SEE what "shape" means.
+    pc1i = shape_idx[0] if shape_idx else 0
+    pc2i = shape_idx[1] if len(shape_idx) > 1 else pc1i
+    pc1 = modes[:, pc1i]; pc2 = modes[:, pc2i]; comp1 = pca.components_[pc1i]; ssc = 2.0 * float(pc1.std())
+    sedg = np.percentile(pc1, [0, 20, 40, 60, 80, 100]).astype(float); sedg[-1] += 1e-6
+    Q2['mean_curve'] = [round(float(x), 4) for x in cmu]
+    Q2['mode1_plus'] = [round(float(x), 4) for x in (cmu + ssc * comp1)]
+    Q2['mode1_minus'] = [round(float(x), 4) for x in (cmu - ssc * comp1)]
+    Q2['mode1_view_corr'] = round(float(spearmanr(pc1, vw).correlation), 3)
+    Q2['views_by_shape'] = binmed(pc1, vw, [round(float(e), 3) for e in sedg])
+    _ord = np.argsort(pc1)
+    Q2['shape_examples'] = [{'id': V[i]['id'], 'name': (V[i]['title'] or '')[:40], 'pc1': round(float(pc1[i]), 3),
+                             'views': int(vw[i]), 'curve': [round(float(x), 3) for x in curves[i]],
+                             'kind': k} for i, k in [(int(_ord[0]), 'front-loaded (early cliff)'), (int(_ord[-1]), 'flat / back-loaded')]]
 
     # ── Q3: keep from retention + redundancy ──
     def at(t):
@@ -167,28 +183,114 @@ def main():
                    'additive_cv_r2': round(add_r2, 3), 'with_interaction_cv_r2': round(int_r2, 3),
                    'interaction_delta_r2': round(int_r2 - add_r2, 3)}
 
+    # ── INDICATOR SWEEP: more candidate drivers, each scored on its own + independence ──
+    def atsec(t):
+        return np.array([np.interp(min(1.0, t / dur[i]), GRID, curves[i]) for i in range(n)])
+    hook = atsec(3); tail = curves[:, -10:].mean(1); replay = curves[:, 0]; decay = hook - tail
+    nonsub = np.array([v.get('nonsub_keep') for v in V], dtype=float)
+    subk = np.array([v.get('sub_keep') for v in V], dtype=float)
+    for arr in (nonsub, subk):
+        mm = np.isfinite(arr); arr[~mm] = (np.nanmedian(arr[mm]) if mm.any() else 0.0)
+    subgap = subk - nonsub
+    likes = np.array([(v.get('likes') or 0) for v in V], float); comments = np.array([(v.get('comments') or 0) for v in V], float); shares = np.array([(v.get('shares') or 0) for v in V], float)
+    vsafe = np.maximum(vw, 1.0)
+    like_rate = likes / vsafe * 1000; comment_rate = comments / vsafe * 1000; share_rate = shares / vsafe * 1000
+    # candidate content / audience-quality signals (legit predictors). interpretable→exposed as a slider.
+    RAW = [
+        ('keep', keep, 'Keep rate', '%', True), ('retention', ret, 'Retention', '%', True),
+        ('log_dur', ldur, 'Duration', 's', True), ('hook', hook, 'Hook (3s held)', '%', True),
+        ('tail', tail, 'Ending retention', '%', True), ('nonsub_keep', nonsub, 'Non-sub keep', '%', True),
+        ('replay', replay, 'Replay (start)', '', False), ('decay', decay, 'Decay 3s→end', '', False),
+        ('sub_gap', subgap, 'Sub loyalty gap', '', False), ('shape_pc1', pc1, 'Shape mode 1', '', False),
+        ('shape_pc2', pc2, 'Shape mode 2', '', False), ('age', rec, 'Age (exposure)', 'yr', False)]
+    def covered(a):                                            # drop all-missing signals (e.g. sub/non-sub keep, not stored)
+        f = np.isfinite(a); return bool(f.mean() > 0.5 and np.nanstd(a[f]) > 1e-9)
+    USABLE = [t for t in RAW if covered(t[1])]
+    FLAG = [('share_rate', share_rate, 'Shares /1k views'), ('like_rate', like_rate, 'Likes /1k views'), ('comment_rate', comment_rate, 'Comments /1k views')]
+    LAB = dict((k, l) for k, _, l, _, _ in USABLE); UNIT = dict((k, u) for k, _, _, u, _ in USABLE)
+    SLD = dict((k, s) for k, _, _, _, s in USABLE); feats = {k: a for k, a, *_ in USABLE}
+    KR = np.column_stack([keep, ret])
+    def partial_kr(x):
+        return round(float(spearmanr(resid(x, KR), resid(lv, KR)).correlation), 3)
+    indicators = []
+    for key, arr, label, unit, slid in USABLE:
+        indicators.append({'key': key, 'label': label, 'unit': unit, 'usable': True,
+                           'spearman': round(float(spearmanr(arr, vw).correlation), 3),
+                           'partial_kr': None if key in ('keep', 'retention') else partial_kr(arr)})
+    for key, arr, label in FLAG:
+        indicators.append({'key': key, 'label': label, 'unit': '', 'usable': False,
+                           'spearman': round(float(spearmanr(arr, vw).correlation), 3), 'partial_kr': partial_kr(arr),
+                           'note': 'outcome-side: measured after, partly a consequence of views — not a clean predictor'})
+    # correlation matrix among usable indicators (redundancy / which combos are independent)
+    uk = [k for k, *_ in USABLE]; ulab = [LAB[k] for k in uk]
+    umat = np.column_stack([feats[k] for k in uk])
+    rho = [[round(float(spearmanr(umat[:, a], umat[:, b]).correlation), 2) for b in range(len(uk))] for a in range(len(uk))]
+    corr_matrix = {'keys': uk, 'labels': ulab, 'rho': rho}
+    # greedy forward selection: add the indicator that most lifts CV-R² until it stops paying
+    def greedy(pool):
+        sel, rem, pth, cur = [], list(pool), [], 0.0
+        while rem and len(sel) < 7:
+            best = None
+            for k in rem:
+                r2 = cvr(np.column_stack([feats[s] for s in sel + [k]]), lv)
+                if best is None or r2 > best[1]:
+                    best = (k, r2)
+            if sel and best[1] - cur < 0.004:
+                break
+            sel.append(best[0]); rem.remove(best[0])
+            cols = np.column_stack([feats[s] for s in sel]); mu2, sd2 = cols.mean(0), cols.std(0) + 1e-9
+            rsd_k = float((lv - Ridge(1).fit((cols - mu2) / sd2, lv).predict((cols - mu2) / sd2)).std())
+            pth.append({'add': best[0], 'label': LAB[best[0]], 'cv_r2': round(best[1], 3),
+                        'resid_sd': round(rsd_k, 3), 'range_mult': round(10 ** (1.2816 * rsd_k), 2)})
+            cur = best[1]
+        return sel, pth
+    full_sel, full_path = greedy(uk)
+    interp_sel, interp_path = greedy([k for k in uk if SLD[k]])   # drives the calculator (slider-able only)
+    base_cols = np.column_stack([keep, ret]); bmu, bsd = base_cols.mean(0), base_cols.std(0) + 1e-9
+    base_rsd = float((lv - Ridge(1).fit((base_cols - bmu) / bsd, lv).predict((base_cols - bmu) / bsd)).std())
+    selection = {'baseline_cv_r2': round(cvr(base_cols, lv), 3), 'baseline_range_mult': round(10 ** (1.2816 * base_rsd), 2),
+                 'full': {'path': full_path, 'features': full_sel, 'cv_r2': full_path[-1]['cv_r2'] if full_path else None, 'range_mult': full_path[-1]['range_mult'] if full_path else None},
+                 'interp': {'path': interp_path, 'features': interp_sel, 'cv_r2': interp_path[-1]['cv_r2'] if interp_path else None, 'range_mult': interp_path[-1]['range_mult'] if interp_path else None}}
+    selected = interp_sel
+
     # ── predictor models (raw coefficients so the tab can compute directly) ──
     def fit_raw(Xcols):
         m = LinearRegression().fit(Xcols, lv)
-        resid = lv - m.predict(Xcols)
+        resid_ = lv - m.predict(Xcols)
         return {'features': None, 'coef': [round(float(c), 5) for c in m.coef_], 'intercept': round(float(m.intercept_), 4),
-                'resid_sd_log10': round(float(resid.std()), 4), 'cv_r2': None}
+                'resid_sd_log10': round(float(resid_.std()), 4), 'cv_r2': None}
     p2 = fit_raw(np.column_stack([keep, ret])); p2['features'] = ['keep', 'retention']; p2['cv_r2'] = round(cvr(np.column_stack([keep, ret]), lv), 3)
     p3 = fit_raw(np.column_stack([keep, ret, ldur])); p3['features'] = ['keep', 'retention', 'log_duration']; p3['cv_r2'] = round(cvr(np.column_stack([keep, ret, ldur]), lv), 3)
-    predictor = {'v2_keep_ret': p2, 'v3_with_duration': p3,
+    # BEST interpretable model from the combination search — the tightest-range driveable predictor
+    Xb = np.column_stack([feats[s] for s in selected]); mb = LinearRegression().fit(Xb, lv); rb = lv - mb.predict(Xb)
+    natural = {'log_dur': dur}   # log_dur slider is in raw seconds (feature value = ln(seconds))
+    sliders = []
+    for s in selected:
+        nat = natural.get(s, feats[s])
+        sliders.append({'key': s, 'label': LAB[s], 'unit': UNIT[s], 'transform': 'ln' if s == 'log_dur' else 'none',
+                        'min': round(float(np.percentile(nat, 2)), 1), 'max': round(float(np.percentile(nat, 98)), 1),
+                        'default': round(float(np.median(nat)), 1)})
+    v_best = {'features': selected, 'labels': [LAB[s] for s in selected],
+              'coef': [round(float(c), 6) for c in mb.coef_], 'intercept': round(float(mb.intercept_), 4),
+              'resid_sd_log10': round(float(rb.std()), 4), 'cv_r2': round(cvr(Xb, lv), 3),
+              'feat_median': {s: round(float(np.median(feats[s])), 4) for s in selected}, 'sliders': sliders}
+    predictor = {'v2_keep_ret': p2, 'v3_with_duration': p3, 'v_best': v_best,
                  'ranges': {'keep': [float(keep.min()), float(keep.max())], 'retention': [float(ret.min()), float(ret.max())], 'duration': [float(dur.min()), float(dur.max())]},
                  'medians': {'keep': float(np.median(keep)), 'retention': float(np.median(ret)), 'duration': float(np.median(dur))}}
 
-    # per-video scatter (which videos drive each finding) — id, title, the 3 metrics, views
+    # per-video scatter (which videos drive each finding) — id, title, metrics + extra indicators
     scatter = [{'id': V[i]['id'], 'name': (V[i]['title'] or '')[:42], 'keep': round(float(keep[i]), 1),
                 'ret': round(float(ret[i]), 1), 'dur': round(float(dur[i]), 0), 'views': int(vw[i]),
-                'lv': round(float(lv[i]), 3), 'url': V[i].get('url')} for i in range(n)]
+                'lv': round(float(lv[i]), 3), 'url': V[i].get('url'),
+                'hook': round(float(hook[i]), 1), 'tail': round(float(tail[i]), 1),
+                'nonsub_keep': round(float(nonsub[i]), 1), 'pc1': round(float(pc1[i]), 3),
+                'share_rate': round(float(share_rate[i]), 2)} for i in range(n)]
 
     out = {'meta': {'n': n, 'target': 'log10(views)', 'metric': 'keep_rate = stayedToWatch (verified accurate)',
                     'caveat': 'observational + winners-only (all 60K-285M views); associations not proven causal; account size/impressions not in data'},
            'Q1': Q1, 'Q2': Q2, 'Q3': Q3, 'Q4': Q4,
-           'interaction': interaction, 'predictor': predictor, 'scatter': scatter,
-           'curve_mean': [round(x, 4) for x in cmu]}
+           'interaction': interaction, 'indicators': indicators, 'corr_matrix': corr_matrix, 'selection': selection,
+           'predictor': predictor, 'scatter': scatter, 'curve_mean': [round(x, 4) for x in cmu]}
     json.dump(out, open(OUT, 'w'))
 
     print(f"n={n} · target log10(views)\n")
@@ -201,6 +303,19 @@ def main():
     print(f"\nQ4 — DURATION: lens spearman {Q4['duration_lens']['spearman']:+.2f}")
     print(f"  content only {Q4['cv_r2_content_only']:+.3f} → +duration {Q4['cv_r2_plus_duration']:+.3f} → +interactions {Q4['cv_r2_plus_duration_interactions']:+.3f}")
     print(f"  duration-unique R² {Q4['duration_unique_r2']:+.3f} · partial(keep|dur) {Q4['partial_keep_given_dur']:+.2f} · partial(ret|dur) {Q4['partial_retention_given_dur']:+.2f}")
+    print("\nINDICATORS (spearman w/ views · partial | keep+ret):")
+    for ind in indicators:
+        pk = '—' if ind['partial_kr'] is None else f"{ind['partial_kr']:+.2f}"
+        print(f"  {ind['label']:<20} {ind['spearman']:+.2f}  | {pk}{'' if ind['usable'] else '  (outcome-side)'}")
+    print(f"\nCOMBINATION SEARCH (baseline keep+ret CV-R² {selection['baseline_cv_r2']:+.3f}, range ×/÷ {selection['baseline_range_mult']}):")
+    print("  FULL (any signal):")
+    for p in selection['full']['path']:
+        print(f"    + {p['label']:<20} → CV-R² {p['cv_r2']:+.3f}  range ×/÷ {p['range_mult']}")
+    print(f"    → {' + '.join(selection['full']['features'])}  (CV-R² {selection['full']['cv_r2']:+.3f}, range ×/÷ {selection['full']['range_mult']})")
+    print("  INTERPRETABLE (drives the predictor):")
+    for p in selection['interp']['path']:
+        print(f"    + {p['label']:<20} → CV-R² {p['cv_r2']:+.3f}  range ×/÷ {p['range_mult']}")
+    print(f"    → {' + '.join(selection['interp']['features'])}  (CV-R² {selection['interp']['cv_r2']:+.3f}, range ×/÷ {selection['interp']['range_mult']})")
     print("→ retention_study.json")
 
 
