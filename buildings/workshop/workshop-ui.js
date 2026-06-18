@@ -3017,8 +3017,16 @@ const WorkshopUI = (() => {
         btn.disabled = true; btn.textContent = '✨ Thinking…';
         try {
             const existing = componentsForVideo(videoId).map(c => c.name);
-            const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the COMPONENTS that must be handled to pull it off. Output ONLY a JSON object and nothing else — no prose, no markdown fences, do not explain, do not think out loud. Schema: {"components":[{"name":"short concrete name","source":"build"|"order"|"task","needs":[...]}]}. "source" is "build" if you'd make it in-house, "order" if you'd buy it, "task" if it's just an errand that gets done — neither built nor bought (e.g. "book the studio", "get a permit", "borrow a ladder"). "needs" is an array containing ONLY values from this EXACT set of production steps: design, propdesign, cad, pcb, software, assembly, artistic — and only applies to "build" components; use [] for "order" and "task". These are stages of work, NOT other components — never put a component name in "needs". 3-8 components.`;
-            const user = `Video title: ${v.name}\nHook: ${v.hook || '(none)'}\nScript: ${(v.script || '(none)').slice(0, 2000)}\nContext: ${v.context || '(none)'}\nAlready added (don't repeat): ${existing.join(', ') || 'none'}`;
+            // Pull the hook(s) from the instances (v.hook is just a legacy mirror),
+            // including the opening visual for each — it informs what gets built.
+            const hookText = (PS().hooksOf(v) || [])
+                .map(h => `${(h.text || h.label || '').trim()}${h.visual ? ` [visual: ${h.visual.trim()}]` : ''}`)
+                .filter(s => s.trim()).join(' | ') || v.hook || '(none)';
+            // Parts already built across past projects — so we reuse instead of
+            // re-building the same thing twice.
+            const built = [...new Set(completedComponents().map(c => c.name).filter(Boolean))];
+            const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the COMPONENTS that must be handled to pull it off. Output ONLY a JSON object and nothing else — no prose, no markdown fences, do not explain, do not think out loud. Schema: {"components":[{"name":"short concrete name","source":"build"|"order"|"task","needs":[...]}]}. "source" is "build" if you'd make it in-house, "order" if you'd buy it, "task" if it's just an errand that gets done — neither built nor bought (e.g. "book the studio", "get a permit", "borrow a ladder"). "needs" is an array containing ONLY values from this EXACT set of production steps: design, propdesign, cad, pcb, software, assembly, artistic — and only applies to "build" components; use [] for "order" and "task". These are stages of work, NOT other components — never put a component name in "needs". Consider the HOOK and SCRIPT (not just the context) to discern every component the build/shoot needs. Do NOT suggest anything in the "already built" list — we'll reuse those; only suggest genuinely new things. 3-8 components.`;
+            const user = `Video title: ${v.name}\nHook(s): ${hookText}\nScript: ${(v.script || '(none)').slice(0, 4000)}\nContext: ${v.context || '(none)'}\nAlready on this video (don't repeat): ${existing.join(', ') || 'none'}\nAlready built — reuse, don't re-suggest: ${built.slice(0, 80).join(', ') || 'none'}`;
             const parsed = await aiJson(
                 [{ role: 'system', content: sys }, { role: 'user', content: user }],
                 (content) => { const o = extractJsonObject(content, 'components'); return (o && Array.isArray(o.components) && o.components.length) ? o : null; }
