@@ -3406,7 +3406,9 @@ const WorkshopUI = (() => {
     // failure, and progress is aggregated across all of them — no 150 MB cap, no
     // whole-file server buffering, no stall at "100%". =====
     const DBX_CHUNK = 16 * 1024 * 1024;       // 16 MB — must be a multiple of 4 MB for concurrent sessions
-    const DBX_SIMPLE_MAX = 8 * 1024 * 1024;   // ≤ 8 MB → one request (session overhead not worth it)
+    const DBX_FOURMB = 4 * 1024 * 1024;       // concurrent-session append alignment
+    const DBX_SIMPLE_MAX = 100 * 1024 * 1024; // ≤ 100 MB → one fast request (Dropbox single-shot caps at 150 MB).
+                                              // Covers normal clips; only large final videos use the chunked path.
     const DBX_CONCURRENCY = 4;                // parallel chunks in flight
 
     // Stamp the Supabase bearer token onto a raw XHR (the fetch wrapper that does
@@ -3471,16 +3473,20 @@ const WorkshopUI = (() => {
         const sessionId = (await startRes.json()).session_id;
         if (!sessionId) throw new Error('upload session id missing');
 
-        // Slice into chunks; all but the final are exactly DBX_CHUNK (a 4 MB
-        // multiple, required for concurrent sessions); the final chunk is the
-        // remainder (any size).
+        // CONCURRENT sessions require every APPEND to be a multiple of 4 MB; the
+        // final (non-aligned) tail goes in the finish call instead. So append the
+        // largest 4 MB-aligned prefix in 16 MB chunks, and keep a (0, 4 MB] tail.
+        let appendBytes = Math.floor(file.size / DBX_FOURMB) * DBX_FOURMB;
+        if (appendBytes >= file.size) appendBytes = Math.max(0, file.size - DBX_FOURMB);  // always leave a non-empty tail
+        const tail = file.slice(appendBytes, file.size);
+
         const chunks = [];
-        for (let off = 0; off < file.size; off += DBX_CHUNK) chunks.push({ offset: off, blob: file.slice(off, Math.min(off + DBX_CHUNK, file.size)) });
+        for (let off = 0; off < appendBytes; off += DBX_CHUNK) chunks.push({ offset: off, blob: file.slice(off, Math.min(off + DBX_CHUNK, appendBytes)) });
 
         const loaded = new Array(chunks.length).fill(0);
         const report = () => { if (onProgress) onProgress(loaded.reduce((a, b) => a + b, 0), file.size); };
 
-        // Bounded-concurrency worker pool over the chunk list.
+        // Bounded-concurrency worker pool over the (4 MB-aligned) chunk list.
         let next = 0, failed = null;
         const worker = async () => {
             while (next < chunks.length && !failed) {
@@ -3489,10 +3495,11 @@ const WorkshopUI = (() => {
                 catch (e) { failed = e; }
             }
         };
-        await Promise.all(Array.from({ length: Math.min(DBX_CONCURRENCY, chunks.length) }, worker));
+        if (chunks.length) await Promise.all(Array.from({ length: Math.min(DBX_CONCURRENCY, chunks.length) }, worker));
         if (failed) throw failed;
 
-        const finRes = await fetch(`/api/dropbox/session/finish?session_id=${encodeURIComponent(sessionId)}&offset=${file.size}&path=${encodeURIComponent(destPath)}`, { method: 'POST' });
+        // Finish carries the tail bytes at offset = appendBytes (closes + commits).
+        const finRes = await fetch(`/api/dropbox/session/finish?session_id=${encodeURIComponent(sessionId)}&offset=${appendBytes}&path=${encodeURIComponent(destPath)}`, { method: 'POST', body: tail });
         let meta;
         try { meta = await finRes.json(); } catch (e) { throw new Error(`finish failed (${finRes.status})`); }
         if (!finRes.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `finish failed (${finRes.status})`);

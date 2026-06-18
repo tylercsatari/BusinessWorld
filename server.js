@@ -2331,13 +2331,16 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
 
     if (pathname === '/api/dropbox/session/finish' && req.method === 'POST') {
         const sessionId = url.searchParams.get('session_id');
-        const offset = Number(url.searchParams.get('offset'));   // = total file size
+        const offset = Number(url.searchParams.get('offset'));   // bytes appended so far (the tail starts here)
         const filePath = url.searchParams.get('path');
         if (!sessionId || !filePath || !Number.isFinite(offset)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'missing session_id/offset/path' })); return; }
         try {
+            // For a CONCURRENT session every append must be a 4 MB multiple, so the
+            // final (non-aligned) tail is sent here in the finish body.
+            const tail = await readRawBody(req, 64 * 1024 * 1024);
             const r = await dropboxContent('upload_session/finish',
                 { cursor: { session_id: sessionId, offset }, commit: { path: filePath, mode: 'add', autorename: true, mute: true } },
-                Buffer.alloc(0));
+                tail);
             const text = await r.text();
             res.writeHead(r.status, { 'Content-Type': r.headers.get('content-type') || 'application/json' }); res.end(text);
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
