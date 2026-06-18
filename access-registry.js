@@ -139,6 +139,9 @@
             if (!owner) return 'read';                  // meta fields (name/deadline/…) read for scoped workers
             return (window.canWriteStage && window.canWriteStage(owner)) ? 'write' : 'read';
         }
+        // A node-scoped profile gets NO blanket component access — components are
+        // only editable by the nodes explicitly granted those component fields.
+        if (kind === 'cfield' && isStageScopedProfile(a)) return 'none';
         return 'write';                                  // unconfigured + unscoped → full
     };
     window.videoFieldAccess = (id) => fieldAccess('vfield', id);
