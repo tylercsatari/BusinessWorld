@@ -250,13 +250,31 @@ const PipelineStages = (() => {
     // video never disappears out from under them mid-upload. The deliverable
     // check (deliverableMet) still gates that DONE button.
     const AUTO_COMPLETE = new Set(['ideate']);
+    // A video's build branches are DERIVED from its components' needs — no separate
+    // "decide branches" step. Each branch flag maps to the component need(s) that
+    // turn it on (precision rides the cad flag). animation/hookfilm come from hook
+    // types. An explicit video.branches[flag]===true is still honored (back-compat
+    // / owner override).
+    const FLAG_FROM_NEEDS = {
+        design: ['design'], propdesign: ['propdesign'], cad: ['cad', 'precision'],
+        pcb: ['pcb'], software: ['software'], assembly: ['assembly'], artistic: ['artistic']
+    };
+    function branchActive(video, flag, ctx) {
+        if (video && video.branches && video.branches[flag] === true) return true;   // explicit override
+        if (flag === 'animation') return hooksOf(video).some(h => h.type === 'animation');
+        if (flag === 'hookfilm') return hooksOf(video).some(h => h.type === 'practical');
+        const needs = FLAG_FROM_NEEDS[flag];
+        if (!needs) return false;
+        const comps = ((ctx && ctx.components) || []).filter(c => c && c.videoId === (video && video.id));
+        return comps.some(c => Array.isArray(c.needs) && needs.some(n => c.needs.includes(n)));
+    }
     function effectiveState(video, stageId, ctx) {
         const manual = stateOf(video, stageId);
         if (manual) return manual; // 'done' | 'na' — manual always wins
         const flag = BRANCH_FLAG_FOR_STAGE[stageId];
-        // Branch-gated stages run ONLY when explicitly switched on — an
-        // undecided branch never lands in anyone's queue.
-        if (flag && !(video && video.branches && video.branches[flag] === true)) return 'na';
+        // Branch-gated stages run only when a component needs them (or a hook type
+        // implies them) — an unneeded branch never lands in anyone's queue.
+        if (flag && !branchActive(video, flag, ctx)) return 'na';
         const auto = AUTO_CHECKS[stageId];
         if (AUTO_COMPLETE.has(stageId) && auto && auto.test(video, ctx)) return 'auto';
         return '';

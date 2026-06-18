@@ -901,9 +901,11 @@ const WorkshopUI = (() => {
         if (stage) {
             const kind = deliverableKind(stage.id);
             if (kind === 'decomp') {
-                if (!PS().branchesDecided(v)) actions = `<button class="wsp-mini-btn done" data-decide="${v.id}" title="Decide which branches this video needs">🧩 Decide branches</button>`;
-                else if (!(componentsForVideo(v.id).length || v.noDecomp)) actions = `<span class="wsp-deliv-chip pending" title="Break the video into at least one component, or mark “No decomposition needed”">＋ add a component ↓</span>`;
-                else actions = `<button class="wsp-mini-btn done" data-done="${v.id}" title="Complete Decomposition — sends the video to its build branches">✓ Done</button>`;
+                // The video's build branches are derived from its components' needs
+                // (no separate "decide branches" step). Just need ≥1 component, or
+                // "no decomposition needed".
+                if (!(componentsForVideo(v.id).length || v.noDecomp)) actions = `<span class="wsp-deliv-chip pending" title="Break the video into at least one component, or mark “No decomposition needed”">＋ add a component ↓</span>`;
+                else actions = `<button class="wsp-mini-btn done" data-done="${v.id}" title="Complete Decomposition — sends the video forward; its components flow on their own">✓ Done</button>`;
             } else if (kind === 'post') {
                 actions = `<button class="wsp-mini-btn done" data-publish="${v.id}" title="Publish — the deliverable for Posting">✓ Done</button>`;
             } else {
@@ -960,7 +962,7 @@ const WorkshopUI = (() => {
         const label = STAGE_DELIVERABLE[stageId] || 'this stage';
         const st = PS().effectiveState(v, stageId, ctxNow());
         if (st === 'na' || st === 'done') return { met: true, label };
-        if (stageId === 'decomp') return { met: PS().branchesDecided(v) && (componentsForVideo(v.id).length > 0 || v.noDecomp), label };
+        if (stageId === 'decomp') return { met: (componentsForVideo(v.id).length > 0 || v.noDecomp), label };
         // every other stage: met when its deliverable (the artifact/result) is present
         return { met: PS().deliverableMet(v, stageId, ctxNow()), label };
     }
@@ -1045,7 +1047,6 @@ const WorkshopUI = (() => {
             renderStagePanel();
         }));
         panel.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openDetail(b.dataset.open)));
-        panel.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => openBranchDialog(b.dataset.decide, true)));
         panel.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => completeDecomp(b.dataset.done)));
         panel.querySelectorAll('[data-publish]').forEach(b => b.addEventListener('click', () => postVideoAction(VideoService.getById(b.dataset.publish))));
         // The per-node DONE button lives on every stage row (and in the expanded
@@ -1069,13 +1070,12 @@ const WorkshopUI = (() => {
         }
     }
 
-    // Complete Decomposition — gated on the deliverable (decisions + ≥1 component
-    // or the "No decomposition" skip). This is the one manual completion left,
-    // and it still can't be clicked without the deliverable being satisfied.
+    // Complete Decomposition — gated on the deliverable: ≥1 component (whose own
+    // needs drive which build branches the video flows through) or the "No
+    // decomposition" skip. No separate branch decision any more.
     async function completeDecomp(videoId) {
         const v = VideoService.getById(videoId);
         if (!v) return;
-        if (!PS().branchesDecided(v)) { openBranchDialog(videoId, true); return; }
         if (!(componentsForVideo(videoId).length || v.noDecomp)) { alert('Add at least one component, or use “No decomposition needed”, before completing Decomposition.'); return; }
         const ss = { ...(v.stageState || {}), decomp: 'done' };
         await VideoService.update(videoId, { stageState: ss, status: normalizedStatus(v) });
@@ -2063,7 +2063,6 @@ const WorkshopUI = (() => {
                         <option value="">⇄ Move to stage…</option>
                         ${PS().STAGES.map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`).join('')}
                     </select>` : ''}
-                    <button class="wsp-mini-btn" id="wsp-edit-branches">${icon('decomp', 'wsp-sub-ic')} ${PS().branchesDecided(v) ? 'Edit branch decisions' : 'Decide branches'}</button>
                 </div>
             </div>
             ${stageChecklistHtml(v)}
@@ -2190,8 +2189,8 @@ const WorkshopUI = (() => {
         get('workshop-sponsor')?.addEventListener('change', () => doSave(false));
         get('workshop-project')?.addEventListener('change', () => doSave(true));
 
-        // Branch decisions (the decomposition validation gate)
-        get('wsp-edit-branches').addEventListener('click', () => openBranchDialog(v.id, false));
+        // Branch decisions removed — a video's build branches are derived from its
+        // components' needs (see effectiveState/branchActive).
 
         // Owner-only: force-move the video to any stage (for organization)
         get('wsp-move-stage')?.addEventListener('change', async (e) => {
@@ -2221,10 +2220,10 @@ const WorkshopUI = (() => {
                         await postVideoAction(VideoService.getById(v.id) || fresh);
                         return;
                     }
-                    // Completing Decomposition requires the branch decisions AND >=1 component
+                    // Completing Decomposition just requires >=1 component (or the
+                    // "No decomposition" skip) — branches derive from component needs.
                     if (stageId === 'decomp' && next === 'done') {
-                        if (!PS().branchesDecided(fresh)) { openBranchDialog(v.id, true); return; }
-                        if (componentsForVideo(v.id).length === 0) { alert('Break the video down into at least one component before completing Decomposition.'); return; }
+                        if (componentsForVideo(v.id).length === 0 && !fresh.noDecomp) { alert('Break the video down into at least one component before completing Decomposition.'); return; }
                     }
                     await setStageState(v.id, stageId, next);
                     rerender();
