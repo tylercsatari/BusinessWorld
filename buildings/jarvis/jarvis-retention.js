@@ -282,31 +282,68 @@ const JarvisRetention = (function () {
     }
     function updatePredict() { const o = root.querySelector('#predict-out'); if (o) o.innerHTML = predictOut();
         const g = root.querySelector('#predict-graph'); if (g) g.innerHTML = leverGraph();
+        const pg = root.querySelector('#predict-pairs'); if (pg) pg.innerHTML = pairSurfaces();
         S.predictor.v_best.sliders.forEach(s => { const el = root.querySelector('#pf-' + s.key + '-val'); if (el) el.textContent = pval(s.key) + s.unit; }); }
+    const metricVal = r => (st.predScale === 'log' ? r.log : r.mid);
+    const metricLabel = v => (st.predScale === 'log' ? fmtv(v, 2) : fv(v));
+    const valsFor = (sl, n) => Array.from({ length: n }, (_, i) => sl.min + (sl.max - sl.min) * i / (n - 1 || 1));
+    function corrFor(a, b) {
+        const key = k => k === 'retention' ? 'ret' : k === 'log_dur' ? 'dur' : k;
+        const pts = (S.scatter || []).filter(p => p[key(a)] != null && p[key(b)] != null), n = pts.length;
+        if (n < 3) return null;
+        const xs = pts.map(p => p[key(a)]), ys = pts.map(p => p[key(b)]);
+        const mx = xs.reduce((s, x) => s + x, 0) / n, my = ys.reduce((s, y) => s + y, 0) / n;
+        const num = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0);
+        const den = Math.sqrt(xs.reduce((s, x) => s + (x - mx) ** 2, 0) * ys.reduce((s, y) => s + (y - my) ** 2, 0));
+        return den ? num / den : null;
+    }
     function leverGraph() {
         const vb = S.predictor.v_best, scale = st.predScale || 'actual', w = 520, h = 230, pl = 46, pr = 16, pt = 14, pb = 34;
         const series = vb.sliders.map(sl => {
-            const vals = Array.from({ length: 25 }, (_, i) => sl.min + (sl.max - sl.min) * i / 24);
+            const vals = valsFor(sl, 25);
             return { sl, pts: vals.map(v => ({ x: v, r: predictBest({ [sl.key]: v }) })) };
         });
-        const logs = series.flatMap(s => s.pts.map(p => p.r.log)), lo = Math.min(...logs), hi = Math.max(...logs);
+        const ms = series.flatMap(s => s.pts.map(p => metricVal(p.r))), lo = Math.min(...ms), hi = Math.max(...ms);
         const X = (v, sl) => pl + (v - sl.min) / ((sl.max - sl.min) || 1) * (w - pl - pr);
-        const Y = logv => h - pb - (logv - lo) / ((hi - lo) || 1) * (h - pt - pb);
-        const label = scale === 'log' ? v => fmtv(v, 2) : v => fv(Math.pow(10, v));
+        const Y = v => h - pb - (v - lo) / ((hi - lo) || 1) * (h - pt - pb);
         let s = `<line x1="${pl}" y1="${h - pb}" x2="${w - pr}" y2="${h - pb}" stroke="${C.border2}"/><line x1="${pl}" y1="${pt}" x2="${pl}" y2="${h - pb}" stroke="${C.border2}"/>`;
-        for (let i = 0; i <= 4; i++) { const lv = lo + (hi - lo) * i / 4, y = Y(lv);
-            s += `<line x1="${pl}" y1="${y}" x2="${w - pr}" y2="${y}" stroke="${C.border}" stroke-dasharray="3 3"/><text x="${pl - 5}" y="${y + 3}" text-anchor="end" fill="${C.mute}" font-size="8">${label(lv)}</text>`; }
+        for (let i = 0; i <= 4; i++) { const mv = lo + (hi - lo) * i / 4, y = Y(mv);
+            s += `<line x1="${pl}" y1="${y}" x2="${w - pr}" y2="${y}" stroke="${C.border}" stroke-dasharray="3 3"/><text x="${pl - 5}" y="${y + 3}" text-anchor="end" fill="${C.mute}" font-size="8">${metricLabel(mv)}</text>`; }
         series.forEach((se, i) => {
             const color = SLCOL[se.sl.key] || [C.cyan, C.green, C.yellow, C.purple][i % 4];
-            let p = ''; se.pts.forEach((ptd, j) => p += (j ? 'L' : 'M') + X(ptd.x, se.sl) + ' ' + Y(ptd.r.log) + ' ');
+            let p = ''; se.pts.forEach((ptd, j) => p += (j ? 'L' : 'M') + X(ptd.x, se.sl) + ' ' + Y(metricVal(ptd.r)) + ' ');
             s += `<path d="${p}" fill="none" stroke="${color}" stroke-width="2.5" opacity="0.9"/>`;
             const cur = pval(se.sl.key), r = predictBest({ [se.sl.key]: cur });
-            s += `<circle cx="${X(cur, se.sl)}" cy="${Y(r.log)}" r="4" fill="${color}" stroke="${C.bg}" stroke-width="1.5"><title>${esc(se.sl.label)} ${fmt(cur, 0)}${se.sl.unit} → ${fv(r.mid)} views</title></circle>`;
+            s += `<circle cx="${X(cur, se.sl)}" cy="${Y(metricVal(r))}" r="4" fill="${color}" stroke="${C.bg}" stroke-width="1.5"><title>${esc(se.sl.label)} ${fmt(cur, 0)}${se.sl.unit} → ${fv(r.mid)} views</title></circle>`;
             s += `<text x="${pl + i * 112}" y="11" fill="${color}" font-size="9" font-weight="800">${esc(se.sl.label)}</text>`;
         });
         s += `<text x="${(pl + w - pr) / 2}" y="${h - 6}" text-anchor="middle" fill="${C.dim}" font-size="10">each lever swept min→max, other levers held at current slider values</text>`;
-        s += `<text x="11" y="${(pt + h - pb) / 2}" fill="${C.dim}" font-size="10" transform="rotate(-90 11 ${(pt + h - pb) / 2})">${scale === 'log' ? 'log10 views' : 'views, log-scaled axis'}</text>`;
+        s += `<text x="11" y="${(pt + h - pb) / 2}" fill="${C.dim}" font-size="10" transform="rotate(-90 11 ${(pt + h - pb) / 2})">${scale === 'log' ? 'log10 views' : 'actual views (linear axis)'}</text>`;
         return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}</svg>`;
+    }
+    function pairSurface(a, b) {
+        const av = valsFor(a, 6), bv = valsFor(b, 6), cells = [];
+        av.forEach(x => bv.forEach(y => { const r = predictBest({ [a.key]: x, [b.key]: y }); cells.push({ x, y, r, m: metricVal(r) }); }));
+        const lo = Math.min(...cells.map(c => c.m)), hi = Math.max(...cells.map(c => c.m));
+        const col = v => { const t = Math.max(0, Math.min(1, (v - lo) / ((hi - lo) || 1))); return `rgb(${Math.round(16 + t * 22)},${Math.round(32 + t * 160)},${Math.round(55 + t * 82)})`; };
+        const rel = corrFor(a.key, b.key);
+        let grid = `<div></div>` + bv.map(v => `<div style="font-size:9px;color:${SLCOL[b.key] || C.dim};text-align:center">${fmt(v, 0)}${b.unit}</div>`).join('');
+        for (let i = av.length - 1; i >= 0; i--) {
+            grid += `<div style="font-size:9px;color:${SLCOL[a.key] || C.dim};text-align:right;padding-right:4px;font-weight:800">${fmt(av[i], 0)}${a.unit}</div>`;
+            bv.forEach(v => {
+                const c = cells.find(z => z.x === av[i] && z.y === v), near = Math.abs(av[i] - pval(a.key)) < (a.max - a.min) / 10 && Math.abs(v - pval(b.key)) < (b.max - b.min) / 10;
+                grid += `<div title="${esc(a.label)} ${fmt(av[i], 1)}${a.unit}, ${esc(b.label)} ${fmt(v, 1)}${b.unit} → ${fv(c.r.mid)} views" style="background:${col(c.m)};border:${near ? '2px solid ' + C.yellow : '1px solid rgba(255,255,255,.05)'};border-radius:5px;padding:8px 3px;text-align:center;font-size:10px;color:#fff;font-weight:800">${metricLabel(c.m)}</div>`;
+            });
+        }
+        return `<div style="background:${C.card2};border:1px solid ${C.border};border-radius:10px;padding:10px">
+            <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px"><div style="font-size:12px;font-weight:800;color:${C.text}">${esc(a.label)} × ${esc(b.label)}</div><div style="font-size:10px;color:${C.mute}">real-data r ${rel == null ? '—' : sgn(rel)}</div></div>
+            <div style="display:grid;grid-template-columns:42px repeat(6,1fr);gap:4px">${grid}</div>
+            <div style="font-size:9px;color:${C.mute};margin-top:5px">${esc(a.label)} ↑ · ${esc(b.label)} → · third lever held at current slider</div></div>`;
+    }
+    function pairSurfaces() {
+        const sl = S.predictor.v_best.sliders, pairs = [];
+        for (let i = 0; i < sl.length; i++) for (let j = i + 1; j < sl.length; j++) pairs.push(pairSurface(sl[i], sl[j]));
+        return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px">${pairs.join('')}</div>`;
     }
     function renderPredict() {
         const P = S.predictor, vb = P.v_best, sel = S.selection;
@@ -318,11 +355,14 @@ const JarvisRetention = (function () {
             ${vb.sliders.map(sld).join('')}
             <div id="predict-out" style="margin-top:6px;padding-top:12px;border-top:1px solid ${C.border}">${predictOut()}</div>`);
         h += cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                <div><div style="font-weight:700;color:${C.text}">Lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Shows every possible value for each kept predictor. Axis is intentionally non-linear because views are power-law distributed.</div></div>
+                <div><div style="font-weight:700;color:${C.text}">Independent lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Each line sweeps one predictor while the others stay fixed. Actual views uses a true linear y-axis; log10 compresses the same model so the lower range is readable.</div></div>
                 <div style="display:flex;gap:6px">
                     <button data-pred-scale="actual" style="background:${st.predScale === 'actual' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'actual' ? C.accent : C.border};color:${st.predScale === 'actual' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">actual views</button>
                     <button data-pred-scale="log" style="background:${st.predScale === 'log' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'log' ? C.accent : C.border};color:${st.predScale === 'log' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">log10</button>
                 </div></div><div id="predict-graph">${leverGraph()}</div>`);
+        h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">Combined lever surfaces</div>
+            <div style="font-size:11px;color:${C.mute};margin-bottom:9px">Every cell is a model instance: two levers swept together while the third stays at your current slider value. This is where the compounding becomes obvious on actual-view scale.</div>
+            <div id="predict-pairs">${pairSurfaces()}</div>`);
         h += note(`Adding <b>duration</b> tightened the band from ×/÷ ${fmtv(baseMult, 1)} (keep+retention only) to <b>×/÷ ${fmtv(bestMult, 1)}</b>. It's still a <b>range, not a number</b>: these levers pin down ~${Math.round(vb.cv_r2 * 100)}% of views — the other ~${Math.round((1 - vb.cv_r2) * 100)}% is the algorithm's impression push, topic, and timing, which no on-video metric can see. Center bar = best single guess; the 80% band = where it would realistically land.`, C.accent);
         return h;
     }
