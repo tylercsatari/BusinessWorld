@@ -14,6 +14,7 @@
             tabSel: '.library-tab',
             sections: [
                 { id: 'notes', label: 'Ideas' },
+                { id: 'aivideoideas', label: 'AI video ideas' },
                 { id: 'freenotes', label: 'Notes' },
                 { id: 'todo', label: 'To-Do' },
                 { id: 'calendar', label: 'Calendar' },
@@ -109,6 +110,64 @@
     const FIELD_OWNER_STAGE = {
         context: 'ideate', hook: 'hook', script: 'script', decomp: 'decomp',
         voiceover: 'voiceover', editing: 'edit'
+    };
+    // Curated per-node brief/deliverable field sets. The profile editor can
+    // compose a multi-node profile by unioning these presets for selected stages.
+    window.WORKSHOP_NODE_ACCESS_PRESETS = {
+        ideate: { v: { name: 'read', sourceidea: 'read', project: 'read', context: 'write' } },
+        hook: { v: { name: 'read', project: 'read', context: 'read', hook: 'write' } },
+        script: { v: { name: 'read', project: 'read', context: 'read', hook: 'read', script: 'write' } },
+        animation: { v: { name: 'read', project: 'read', context: 'read', hook: 'read', script: 'read' } },
+        decomp: {
+            v: { name: 'read', project: 'read', context: 'read', hook: 'read', script: 'read', decomp: 'write' },
+            c: {
+                source: 'write', needs: 'write', media: 'write', links: 'write', notes: 'write',
+                status: 'read', design: 'read', cad: 'read', pcb: 'read', software: 'read',
+                precision: 'read', assembly: 'read'
+            }
+        },
+        design: {
+            v: { name: 'read', project: 'read', context: 'read', script: 'read', decomp: 'read' },
+            c: { needs: 'read', design: 'write', media: 'write', links: 'write', notes: 'write' }
+        },
+        propdesign: {
+            v: { name: 'read', project: 'read', context: 'read', script: 'read', decomp: 'read' },
+            c: { needs: 'read', design: 'write', media: 'write', links: 'write', notes: 'write' }
+        },
+        cad: {
+            v: { name: 'read', project: 'read', context: 'read', decomp: 'read' },
+            c: { needs: 'read', design: 'read', cad: 'write', media: 'write', links: 'write', notes: 'write' }
+        },
+        pcb: {
+            v: { name: 'read', project: 'read', context: 'read', decomp: 'read' },
+            c: { needs: 'read', design: 'read', pcb: 'write', media: 'write', links: 'write', notes: 'write' }
+        },
+        order: { v: { name: 'read', project: 'read', context: 'read', decomp: 'read' } },
+        precision: {
+            v: { name: 'read', project: 'read', context: 'read' },
+            c: { needs: 'read', cad: 'read', precision: 'write', media: 'write', links: 'write', notes: 'write' }
+        },
+        software: {
+            v: { name: 'read', project: 'read', context: 'read', script: 'read', decomp: 'read' },
+            c: { needs: 'read', software: 'write', links: 'write', notes: 'write' }
+        },
+        assembly: {
+            v: { name: 'read', project: 'read', context: 'read', decomp: 'read' },
+            c: {
+                needs: 'read', cad: 'read', pcb: 'read', precision: 'read', software: 'read',
+                assembly: 'write', media: 'write', links: 'write', notes: 'write'
+            }
+        },
+        artistic: {
+            v: { name: 'read', project: 'read', context: 'read' },
+            c: { needs: 'read', assembly: 'read', media: 'write', links: 'write', notes: 'write' }
+        },
+        hookfilm: { v: { name: 'read', project: 'read', context: 'read', hook: 'read', script: 'read' } },
+        film: { v: { name: 'read', project: 'read', context: 'read', hook: 'read', script: 'read' } },
+        voiceover: { v: { name: 'read', project: 'read', context: 'read', script: 'read', voiceover: 'write' } },
+        edit: { v: { name: 'read', project: 'read', context: 'read', hook: 'read', script: 'read', voiceover: 'read', editing: 'write' } },
+        splittest: { v: { name: 'read', project: 'read', context: 'read', editing: 'read' } },
+        post: { v: { name: 'read', project: 'read', editing: 'read' } }
     };
     const isStageScopedProfile = (a) => {
         if (!a || a.all) return false;

@@ -42,6 +42,14 @@ const LibraryUI = (() => {
     let freeNoteSaveTimer = null;
     let freeNoteDirty = false;
 
+    // --- AI Video Ideas state ---
+    let aiVideoIdeas = [];
+    let aiVideoIdeasLoaded = false;
+    let aiVideoIdeasBusy = false;
+    let aiVideoIdeasStatus = '';
+    let aiVideoIdeasRuns = parseInt(localStorage.getItem('library-aiideas-runs') || '1', 10) || 1;
+    let aiVideoIdeasPerRun = parseInt(localStorage.getItem('library-aiideas-per-run') || '3', 10) || 3;
+
     let ideaEditorTab = 'overview'; // 'overview' | 'logistics'
 
     // --- AI Chat state ---
@@ -125,6 +133,7 @@ const LibraryUI = (() => {
                     <div class="library-tabs">
                         <button class="library-tab" data-tab="freenotes">Notes</button>
                         <button class="library-tab active" data-tab="notes">Ideas</button>
+                        <button class="library-tab" data-tab="aivideoideas">AI video ideas</button>
                         <button class="library-tab" data-tab="todo">To-Do</button>
                         <button class="library-tab" data-tab="calendar">Calendar</button>
                         <button class="library-tab" data-tab="projects">Projects</button>
@@ -140,6 +149,7 @@ const LibraryUI = (() => {
                     <div class="library-freenotes-list" id="library-freenotes-list" style="display:none;"></div>
                     <div class="library-notes-filter-wrap" id="library-notes-filter-bar"></div>
                     <div class="library-notes-list" id="library-notes-list">${Array(4).fill('<div class="library-skeleton-item"><div class="library-skeleton-icon"></div><div class="library-skeleton-text"><div class="library-skeleton-line"></div><div class="library-skeleton-line short"></div></div></div>').join('')}</div>
+                    <div class="library-aiideas-container" id="library-aiideas-container" style="display:none;"></div>
                     <div class="library-todo-container" id="library-todo-container" style="display:none;"></div>
                     <div class="library-calendar-container" id="library-calendar-container" style="display:none;"></div>
                     <div class="library-projects-container" id="library-projects-container" style="display:none;"></div>
@@ -214,6 +224,7 @@ const LibraryUI = (() => {
         const heading = document.getElementById('library-list-heading');
         const freeNotesList = document.getElementById('library-freenotes-list');
         const notesList = document.getElementById('library-notes-list');
+        const aiVideoIdeasContainer = document.getElementById('library-aiideas-container');
         const todoContainer = document.getElementById('library-todo-container');
         const calendarContainer = document.getElementById('library-calendar-container');
         const projectsContainer = document.getElementById('library-projects-container');
@@ -225,6 +236,7 @@ const LibraryUI = (() => {
 
         if (freeNotesList) freeNotesList.style.display = 'none';
         if (notesList) notesList.style.display = 'none';
+        if (aiVideoIdeasContainer) aiVideoIdeasContainer.style.display = 'none';
         if (notesFilterBar) notesFilterBar.style.display = 'none';
         if (todoContainer) todoContainer.style.display = 'none';
         if (calendarContainer) calendarContainer.style.display = 'none';
@@ -249,6 +261,11 @@ const LibraryUI = (() => {
             if (newBtn) newBtn.style.display = '';
             if (fillLogisticsBtn) fillLogisticsBtn.style.display = '';
             renderNotesList().catch(() => {});
+        } else if (tab === 'aivideoideas') {
+            if (heading) heading.textContent = 'AI video ideas';
+            if (aiVideoIdeasContainer) aiVideoIdeasContainer.style.display = '';
+            if (newBtn) newBtn.style.display = 'none';
+            renderAiVideoIdeas();
         } else if (tab === 'todo') {
             if (heading) heading.textContent = 'To-Do';
             if (todoContainer) todoContainer.style.display = '';
@@ -296,6 +313,207 @@ const LibraryUI = (() => {
         if (tab !== 'ideamap' && tab !== 'dagflow') {
             const header = document.getElementById('library-list-header');
             if (header) header.style.display = '';
+        }
+    }
+
+    // =====================
+    // --- AI VIDEO IDEAS ---
+    // =====================
+    async function fetchAiVideoIdeas() {
+        const res = await fetch('/api/ai-video-ideas');
+        if (!res.ok) throw new Error(`AI video ideas fetch failed: ${res.status}`);
+        const data = await res.json();
+        return data.ideas || [];
+    }
+
+    function clampAiIdeasNumber(value, fallback, min, max) {
+        const n = parseInt(value, 10);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+    }
+
+    function aiIdeaScoreHtml(label, value) {
+        const n = Number(value);
+        const score = Number.isFinite(n) ? Math.max(0, Math.min(10, n)) : 0;
+        return `<span class="library-aiidea-score"><b>${escHtml(label)}</b>${score.toFixed(1)}</span>`;
+    }
+
+    function aiIdeaFieldHtml(label, value) {
+        if (!value) return '';
+        return `<div class="library-aiidea-field"><span>${escHtml(label)}</span><p>${escHtml(value)}</p></div>`;
+    }
+
+    function aiIdeaMechanismNotesHtml(notes) {
+        if (!notes || typeof notes !== 'object') return '';
+        const rows = Object.entries(notes).filter(([, v]) => v).slice(0, 5);
+        if (!rows.length) return '';
+        return `<div class="library-aiidea-notes">${rows.map(([k, v]) => `<div><b>${escHtml(k.replace(/_/g, ' '))}</b>${escHtml(String(v))}</div>`).join('')}</div>`;
+    }
+
+    function renderAiVideoIdeas() {
+        const el = document.getElementById('library-aiideas-container');
+        if (!el) return;
+        if (!aiVideoIdeasLoaded) {
+            el.innerHTML = '<div class="library-empty">Loading AI video ideas...</div>';
+            fetchAiVideoIdeas().then(items => {
+                aiVideoIdeas = items;
+                aiVideoIdeasLoaded = true;
+                renderAiVideoIdeas();
+            }).catch(e => {
+                console.warn('AI video ideas load failed', e);
+                el.innerHTML = '<div class="library-empty">Could not load AI video ideas.</div>';
+            });
+            return;
+        }
+
+        aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
+        aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
+        const total = aiVideoIdeasRuns * aiVideoIdeasPerRun;
+        const statusHtml = aiVideoIdeasStatus ? `<div class="library-aiideas-status">${escHtml(aiVideoIdeasStatus)}</div>` : '';
+        const cardsHtml = aiVideoIdeas.length ? aiVideoIdeas.map(idea => {
+            const scores = idea.scores || {};
+            const overall = Number(scores.overall);
+            const similarity = idea.similarity || {};
+            const simText = Number.isFinite(Number(similarity.maxScore))
+                ? `Nearest existing idea: ${(Number(similarity.maxScore) * 100).toFixed(1)}%${similarity.matchTitle ? ` - ${similarity.matchTitle}` : ''}`
+                : 'Nearest existing idea: none stored yet';
+            const riskHtml = Array.isArray(idea.risks) && idea.risks.length
+                ? `<div class="library-aiidea-risk">${idea.risks.slice(0, 3).map(r => `<span>${escHtml(r)}</span>`).join('')}</div>`
+                : '';
+            return `
+                <div class="library-aiidea-card" data-aiidea-id="${escAttr(idea.id)}">
+                    <div class="library-aiidea-head">
+                        <div class="library-aiidea-title-wrap">
+                            <h3>${escHtml(idea.title || idea.name || 'AI video idea')}</h3>
+                            <p>${escHtml(idea.hook || idea.promise || '')}</p>
+                        </div>
+                        <div class="library-aiidea-overall">${Number.isFinite(overall) ? overall.toFixed(1) : '-'}<span>/10</span></div>
+                    </div>
+                    <div class="library-aiidea-scores">
+                        ${aiIdeaScoreHtml('Novelty', scores.novelty)}
+                        ${aiIdeaScoreHtml('Cred', scores.credibility)}
+                        ${aiIdeaScoreHtml('Appeal', scores.broadAppeal ?? scores.broad_appeal)}
+                        ${aiIdeaScoreHtml('Motive', scores.motivation)}
+                        ${aiIdeaScoreHtml('RTG', scores.referenceToGratification ?? scores.reference_to_gratification)}
+                    </div>
+                    <div class="library-aiidea-grid">
+                        ${aiIdeaFieldHtml('P', idea.promise)}
+                        ${aiIdeaFieldHtml('V', idea.earlyVisual)}
+                        ${aiIdeaFieldHtml('O', idea.payoff)}
+                        ${aiIdeaFieldHtml('A', idea.actionProcess)}
+                        ${aiIdeaFieldHtml('G', idea.creatorGoal)}
+                    </div>
+                    ${idea.why100m ? `<div class="library-aiidea-why">${escHtml(idea.why100m)}</div>` : ''}
+                    ${idea.context ? `<div class="library-aiidea-context">${escHtml(idea.context)}</div>` : ''}
+                    ${aiIdeaMechanismNotesHtml(idea.mechanismNotes)}
+                    ${riskHtml}
+                    <div class="library-aiidea-meta">${escHtml(simText)}</div>
+                    <div class="library-aiidea-actions">
+                        <button class="library-aiidea-promote" data-aiidea-promote="${escAttr(idea.id)}">Move to Ideas</button>
+                        <button class="library-aiidea-delete" data-aiidea-delete="${escAttr(idea.id)}" title="Delete">&times;</button>
+                    </div>
+                </div>
+            `;
+        }).join('') : '<div class="library-empty">No AI video ideas yet. Generate a small batch to start.</div>';
+
+        el.innerHTML = `
+            <div class="library-aiideas-controls">
+                <div class="library-aiideas-control-row">
+                    <label>Runs <input type="number" id="library-aiideas-runs" min="1" max="20" value="${escAttr(aiVideoIdeasRuns)}"></label>
+                    <label>Ideas/run <input type="number" id="library-aiideas-per-run" min="1" max="5" value="${escAttr(aiVideoIdeasPerRun)}"></label>
+                    <button id="library-aiideas-generate" ${aiVideoIdeasBusy ? 'disabled' : ''}>${aiVideoIdeasBusy ? 'Generating...' : `Generate ${total}`}</button>
+                </div>
+                <div class="library-aiideas-hint">Default is 3 per run. Kimi validates fewer ideas more deeply, then server-side embeddings delete near-duplicates at a high similarity threshold.</div>
+                ${statusHtml}
+            </div>
+            <div class="library-aiideas-list">${cardsHtml}</div>
+        `;
+
+        const runsInput = el.querySelector('#library-aiideas-runs');
+        const perRunInput = el.querySelector('#library-aiideas-per-run');
+        if (runsInput) runsInput.addEventListener('change', () => {
+            aiVideoIdeasRuns = clampAiIdeasNumber(runsInput.value, 1, 1, 20);
+            localStorage.setItem('library-aiideas-runs', String(aiVideoIdeasRuns));
+            renderAiVideoIdeas();
+        });
+        if (perRunInput) perRunInput.addEventListener('change', () => {
+            aiVideoIdeasPerRun = clampAiIdeasNumber(perRunInput.value, 3, 1, 5);
+            localStorage.setItem('library-aiideas-per-run', String(aiVideoIdeasPerRun));
+            renderAiVideoIdeas();
+        });
+        const generateBtn = el.querySelector('#library-aiideas-generate');
+        if (generateBtn) generateBtn.addEventListener('click', () => generateAiVideoIdeas());
+        el.querySelectorAll('[data-aiidea-promote]').forEach(btn => {
+            btn.addEventListener('click', () => promoteAiVideoIdea(btn.dataset.aiideaPromote));
+        });
+        el.querySelectorAll('[data-aiidea-delete]').forEach(btn => {
+            btn.addEventListener('click', () => deleteAiVideoIdea(btn.dataset.aiideaDelete));
+        });
+    }
+
+    async function reloadAiVideoIdeas() {
+        aiVideoIdeas = await fetchAiVideoIdeas();
+        aiVideoIdeasLoaded = true;
+        renderAiVideoIdeas();
+    }
+
+    async function generateAiVideoIdeas() {
+        if (aiVideoIdeasBusy) return;
+        aiVideoIdeasBusy = true;
+        aiVideoIdeasStatus = `Running Kimi K2.6 for ${aiVideoIdeasRuns} run${aiVideoIdeasRuns === 1 ? '' : 's'} x ${aiVideoIdeasPerRun} idea${aiVideoIdeasPerRun === 1 ? '' : 's'}...`;
+        renderAiVideoIdeas();
+        try {
+            const res = await fetch('/api/ai-video-ideas/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Generate failed: ${res.status}`);
+            const created = (data.created || []).length;
+            const rejected = (data.rejected || []).length;
+            aiVideoIdeasStatus = `Created ${created} candidate${created === 1 ? '' : 's'}; pruned ${rejected} near-duplicate${rejected === 1 ? '' : 's'}.`;
+            await reloadAiVideoIdeas();
+        } catch (e) {
+            aiVideoIdeasStatus = e.message || 'Generation failed.';
+            renderAiVideoIdeas();
+        } finally {
+            aiVideoIdeasBusy = false;
+            renderAiVideoIdeas();
+        }
+    }
+
+    async function promoteAiVideoIdea(id) {
+        if (!id) return;
+        try {
+            const res = await fetch(`/api/ai-video-ideas/${encodeURIComponent(id)}/promote`, { method: 'POST' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Move failed: ${res.status}`);
+            aiVideoIdeas = aiVideoIdeas.filter(idea => idea.id !== id);
+            await NotesService.sync(true).catch(() => {});
+            aiVideoIdeasStatus = 'Moved to regular Ideas. Queue it from the Ideas tab when ready.';
+            showToast('Moved to Ideas');
+            renderAiVideoIdeas();
+        } catch (e) {
+            aiVideoIdeasStatus = e.message || 'Move failed.';
+            renderAiVideoIdeas();
+        }
+    }
+
+    async function deleteAiVideoIdea(id) {
+        if (!id) return;
+        const item = aiVideoIdeas.find(idea => idea.id === id);
+        if (item && !confirm(`Delete "${item.title || item.name || 'AI video idea'}"?`)) return;
+        try {
+            const res = await fetch(`/api/ai-video-ideas/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Delete failed: ${res.status}`);
+            aiVideoIdeas = aiVideoIdeas.filter(idea => idea.id !== id);
+            aiVideoIdeasStatus = 'AI video idea deleted.';
+            renderAiVideoIdeas();
+        } catch (e) {
+            aiVideoIdeasStatus = e.message || 'Delete failed.';
+            renderAiVideoIdeas();
         }
     }
 
@@ -5678,6 +5896,7 @@ const LibraryUI = (() => {
             sponsorsLoaded = false;
             editingSponsor = null; editingSponsorVideo = null; sponsorsSubTab = 'companies';
             projectsLoaded = false; selectedProject = null;
+            aiVideoIdeas = []; aiVideoIdeasLoaded = false; aiVideoIdeasBusy = false; aiVideoIdeasStatus = '';
             ideaMapState.loaded = false;
             ideaMapState.projects = null;
             ideaMapState.filterCategory = 'all';

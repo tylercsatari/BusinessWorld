@@ -17,6 +17,7 @@ if (fs.existsSync(envPath)) {
 const videoAnalyzer = require('./video-analyzer');
 const geminiWatch = require('./gemini-watch');
 const videolabCoordinator = require('./videolab-coordinator');
+const codexRunner = require('./codex-runner');
 const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
@@ -509,6 +510,541 @@ async function proxyFetch(res, url, opts) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
     }
+}
+
+const AI_VIDEO_IDEA_DEFAULT_BATCH = 3;
+const AI_VIDEO_IDEA_MAX_BATCH = 5;
+const AI_VIDEO_IDEA_MAX_RUNS = 20;
+const AI_VIDEO_IDEA_MAX_TOTAL = 60;
+const AI_VIDEO_IDEA_DEDUPE_LIMIT = parseInt(process.env.AI_VIDEO_IDEA_DEDUPE_LIMIT || '2500', 10);
+const AI_VIDEO_IDEA_SIMILARITY_THRESHOLD = Number(process.env.AI_VIDEO_IDEA_SIMILARITY_THRESHOLD || 0.88);
+
+const AI_VIDEO_IDEA_FORMULA = `
+Shared representation:
+P = promise vector; V = early visual evidence vector; C = conceptual/text vector;
+O = expected outcome/gratification vector; A = action/process vector;
+G = creator goal/motivation vector; D = reference distribution of other videos;
+U = audience-interest distribution.
+
+Score every idea as graph relationships, not as loose vibes:
+- novelty = f(P, D)
+- credibility = f(P, V, C, O)
+- broad appeal = f(P, O, U)
+- motivation = f(G, A, O, creator context)
+- reference_to_gratification = f(P, O, V, unresolvedness)
+
+Novelty is valuable only when it is unfamiliar but still understandable:
+- novelty_global: distance from broad video/reference space.
+- novelty_niche: distance from Business World/Tyler/project niche.
+- novelty_recent: difference from recently saturated ideas.
+- novelty_combo: rarity of the concept combination.
+- novelty_coherence: novelty * fast understandability * relevance to known interest clusters.
+
+Credibility is perceived likelihood that the promised outcome will resolve:
+- promise_evidence_alignment: early frame/first 3 seconds supports the promise.
+- predicate_grounding: object, action, property, reference, outcome are grounded.
+- causal_path_likelihood: path from current state to payoff makes sense.
+- proof_immediacy: proof appears fast enough.
+- creator_prior: fits this creator's history and capability.
+- implausibility_gap and mismatch_penalty reduce the score.
+
+Broad appeal is expected interest across audience segments:
+- recognition probability, cross-segment reach, reward universality, cultural centrality.
+- Prefer broad familiar anchors plus unusual transformations.
+- Strong universal rewards include danger, speed, beauty, money, status, transformation,
+  destruction, fantasy, proof, forbidden tests, scale, and impossible-looking reality.
+
+Motivation is goal-action-payoff coherence:
+- goal clarity, action-goal alignment, creator fit, payoff justification,
+  constraint pressure, template-object fit, and scale_reward_slope.
+- Penalize trend arbitrage that feels copied with no real reason.
+
+Reference to gratification:
+- The hook must point to a desirable unresolved payoff before it pays off.
+- Score payoff_identifiability, expected_payoff_value, unresolvedness,
+  evidence_payoff_is_coming, optimal_uncertainty, delay_tolerance, and sensory/conceptual reward.
+- Avoid 0 uncertainty (boring) and 100% uncertainty (confusing/unbelievable).
+
+Premise graph test:
+creator -> does action -> to object/concept -> under constraint -> causing expected outcome -> producing viewer reward.
+Ask: Is this graph rare, credible, broadly interesting, motivated, and pointed at a valuable unresolved payoff?
+`;
+
+function aiVideoClampInt(value, fallback, min, max) {
+    const n = parseInt(value, 10);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, n));
+}
+
+function aiVideoTrimText(value, max = 700) {
+    const text = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+    return text.length > max ? text.slice(0, max - 14).trim() + ' ...[trimmed]' : text;
+}
+
+function aiVideoDateValue(row) {
+    const raw = row && (row.lastEdited || row.updatedAt || row.createdAt || row.date || row.postedAt);
+    const ms = raw ? Date.parse(raw) : 0;
+    return Number.isFinite(ms) ? ms : 0;
+}
+
+function aiVideoMetricValue(row) {
+    const raw = row && (row.views ?? row.viewCount ?? row.totalViews ?? row.metrics?.views ?? row.analytics?.views ?? 0);
+    if (typeof raw === 'number') return raw;
+    const n = Number(String(raw || '').replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+}
+
+function aiVideoCompactRows(rows, fields, limit, sortMode = 'recent') {
+    const arr = Array.isArray(rows) ? rows.slice() : [];
+    if (sortMode === 'views') {
+        arr.sort((a, b) => aiVideoMetricValue(b) - aiVideoMetricValue(a));
+    } else {
+        arr.sort((a, b) => aiVideoDateValue(b) - aiVideoDateValue(a));
+    }
+    return arr.slice(0, limit).map(row => {
+        const out = {};
+        fields.forEach(field => {
+            if (row && row[field] != null && row[field] !== '') out[field] = aiVideoTrimText(row[field], 500);
+        });
+        if (row && row.id) out.id = row.id;
+        if (row && aiVideoMetricValue(row)) out.views = aiVideoMetricValue(row);
+        return out;
+    }).filter(row => Object.keys(row).length > 0);
+}
+
+function aiVideoReadJarvisJson(file, maxChars) {
+    try {
+        const full = path.join(__dirname, 'buildings', 'jarvis', file);
+        if (!fs.existsSync(full)) return null;
+        const parsed = JSON.parse(fs.readFileSync(full, 'utf8'));
+        return aiVideoTrimText(JSON.stringify(parsed, null, 2), maxChars);
+    } catch (e) {
+        return null;
+    }
+}
+
+function aiVideoReadJarvisIdeaSample(file, maxItems, maxChars) {
+    try {
+        const full = path.join(__dirname, 'buildings', 'jarvis', file);
+        if (!fs.existsSync(full)) return null;
+        const parsed = JSON.parse(fs.readFileSync(full, 'utf8'));
+        let list = [];
+        if (Array.isArray(parsed)) list = parsed;
+        else if (Array.isArray(parsed.ideas)) list = parsed.ideas;
+        else if (Array.isArray(parsed.candidates)) list = parsed.candidates;
+        else if (parsed && typeof parsed === 'object') list = Object.values(parsed).filter(v => v && typeof v === 'object').slice(0, maxItems);
+        const compact = list.slice(0, maxItems).map(item => {
+            if (!item || typeof item !== 'object') return aiVideoTrimText(item, 300);
+            return {
+                name: aiVideoTrimText(item.name || item.title || item.idea || item.hook || '', 220),
+                hook: aiVideoTrimText(item.hook || item.opening || '', 260),
+                score: item.score ?? item.total ?? item.predicted ?? item.views ?? '',
+                notes: aiVideoTrimText(item.notes || item.why || item.reason || item.context || '', 320)
+            };
+        });
+        return aiVideoTrimText(JSON.stringify(compact, null, 2), maxChars);
+    } catch (e) {
+        return null;
+    }
+}
+
+function aiVideoIdeaText(idea) {
+    return [
+        idea?.title || idea?.name,
+        idea?.hook,
+        idea?.context,
+        idea?.promise || idea?.P,
+        idea?.earlyVisual || idea?.early_visual || idea?.V,
+        idea?.conceptual || idea?.C,
+        idea?.payoff || idea?.expectedOutcome || idea?.expected_outcome || idea?.O,
+        idea?.actionProcess || idea?.action_process || idea?.A,
+        idea?.creatorGoal || idea?.creator_goal || idea?.G,
+        idea?.why100m || idea?.why_100m,
+        idea?.differentiation
+    ].filter(Boolean).map(v => String(v).trim()).join('\n').slice(0, 5000);
+}
+
+function aiVideoExtractJsonObject(text, key) {
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (e) {}
+    const needle = key ? `"${key}"` : '';
+    const anchor = needle ? text.indexOf(needle) : -1;
+    const from = anchor >= 0 ? text.lastIndexOf('{', anchor) : text.indexOf('{');
+    if (from < 0) return null;
+    let depth = 0, inStr = false, escCh = false;
+    for (let i = from; i < text.length; i++) {
+        const ch = text[i];
+        if (inStr) {
+            if (escCh) escCh = false;
+            else if (ch === '\\') escCh = true;
+            else if (ch === '"') inStr = false;
+        } else if (ch === '"') inStr = true;
+        else if (ch === '{') depth++;
+        else if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+                try { return JSON.parse(text.slice(from, i + 1)); } catch (e) { return null; }
+            }
+        }
+    }
+    return null;
+}
+
+async function aiVideoKimiJson(messages, maxTokens = 18000) {
+    if (!process.env.FIREWORKS_API_KEY) throw new Error('FIREWORKS_API_KEY not set');
+    const response = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.FIREWORKS_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6',
+            messages,
+            temperature: 0.35,
+            max_tokens: maxTokens
+        })
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`Kimi error ${response.status}: ${text.slice(0, 800)}`);
+    let payload;
+    try { payload = JSON.parse(text); } catch (e) { payload = null; }
+    const content = payload?.choices?.[0]?.message?.content || text;
+    const parsed = aiVideoExtractJsonObject(content, 'ideas');
+    if (!parsed || !Array.isArray(parsed.ideas)) throw new Error('Kimi did not return a valid {"ideas": [...]} object');
+    return parsed;
+}
+
+async function aiVideoEmbedTexts(texts) {
+    if (!texts.length) return [];
+    if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set; semantic dedupe requires embeddings');
+    const out = [];
+    const batchSize = 64;
+    for (let i = 0; i < texts.length; i += batchSize) {
+        const batch = texts.slice(i, i + batchSize).map(t => t && t.trim() ? t : 'empty idea');
+        const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+            body: JSON.stringify({
+                input: batch,
+                model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+                dimensions: parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS) || 512
+            })
+        });
+        if (!response.ok) throw new Error(`OpenAI embeddings error ${response.status}: ${await response.text()}`);
+        const data = await response.json();
+        out.push(...(data.data || []).map(d => d.embedding));
+    }
+    return out;
+}
+
+function aiVideoCosine(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return 0;
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) {
+        const av = Number(a[i]) || 0;
+        const bv = Number(b[i]) || 0;
+        dot += av * bv;
+        na += av * av;
+        nb += bv * bv;
+    }
+    if (!na || !nb) return 0;
+    return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+function aiVideoNearest(embedding, docs) {
+    let best = null;
+    for (const doc of docs) {
+        if (!doc.embedding) continue;
+        const score = aiVideoCosine(embedding, doc.embedding);
+        if (!best || score > best.score) {
+            best = { score, id: doc.id, type: doc.type, title: doc.title || doc.name || '' };
+        }
+    }
+    return best || { score: 0, id: null, type: null, title: '' };
+}
+
+async function aiVideoBuildReferenceDocs() {
+    const [ideas, videos, aiideas] = await Promise.all([
+        dataStore.getAll('ideas'),
+        dataStore.getAll('videos'),
+        dataStore.getAll('aiideas')
+    ]);
+    const docs = [];
+    (ideas || []).forEach(row => {
+        const text = aiVideoIdeaText(row);
+        if (text) docs.push({ id: row.id, type: 'idea', title: row.name || row.title || '', text });
+    });
+    (videos || []).forEach(row => {
+        const text = aiVideoIdeaText(row);
+        if (text) docs.push({ id: row.id, type: 'video', title: row.name || row.title || '', text });
+    });
+    (aiideas || []).forEach(row => {
+        if (row.status === 'promoted') return;
+        const text = aiVideoIdeaText(row);
+        if (text) docs.push({ id: row.id, type: 'aiidea', title: row.title || row.name || '', text, embedding: Array.isArray(row.embedding) ? row.embedding : null });
+    });
+    docs.sort((a, b) => (a.type === 'aiidea' ? -1 : 0) - (b.type === 'aiidea' ? -1 : 0));
+    const capped = docs.slice(0, AI_VIDEO_IDEA_DEDUPE_LIMIT);
+    const missing = capped.filter(d => !Array.isArray(d.embedding));
+    if (missing.length) {
+        const embeddings = await aiVideoEmbedTexts(missing.map(d => d.text));
+        missing.forEach((doc, idx) => { doc.embedding = embeddings[idx]; });
+    }
+    return capped.filter(d => Array.isArray(d.embedding));
+}
+
+async function aiVideoUpsertVector(namespace, record, vectorId) {
+    if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_HOST || !Array.isArray(record.embedding)) return;
+    try {
+        const response = await fetch(`${process.env.PINECONE_HOST}/vectors/upsert`, {
+            method: 'POST',
+            headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                namespace,
+                vectors: [{
+                    id: vectorId || record.id,
+                    values: record.embedding,
+                    metadata: {
+                        name: record.name || record.title || '',
+                        status: record.status || record.type || 'candidate',
+                        source: record.source || 'ai-video-ideas'
+                    }
+                }]
+            })
+        });
+        if (!response.ok) console.warn(`AI idea Pinecone upsert failed ${response.status}:`, await response.text());
+    } catch (e) {
+        console.warn('AI idea Pinecone upsert failed:', e.message);
+    }
+}
+
+async function aiVideoDeleteVector(namespace, id) {
+    if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_HOST || !id) return;
+    try {
+        const response = await fetch(`${process.env.PINECONE_HOST}/vectors/delete`, {
+            method: 'POST',
+            headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ namespace, ids: [id] })
+        });
+        if (!response.ok) console.warn(`AI idea Pinecone delete failed ${response.status}:`, await response.text());
+    } catch (e) {
+        console.warn('AI idea Pinecone delete failed:', e.message);
+    }
+}
+
+function aiVideoScore(value, fallback = 0) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(10, n));
+}
+
+function aiVideoNormalizeIdea(raw, runIndex, itemIndex) {
+    const pick = (...keys) => {
+        for (const key of keys) {
+            if (raw && raw[key] != null && raw[key] !== '') return raw[key];
+        }
+        return '';
+    };
+    const scoresIn = raw?.scores || {};
+    const scores = {
+        novelty: aiVideoScore(scoresIn.novelty ?? scoresIn.N),
+        credibility: aiVideoScore(scoresIn.credibility),
+        broadAppeal: aiVideoScore(scoresIn.broad_appeal ?? scoresIn.broadAppeal),
+        motivation: aiVideoScore(scoresIn.motivation),
+        referenceToGratification: aiVideoScore(scoresIn.reference_to_gratification ?? scoresIn.referenceToGratification ?? scoresIn.rtg)
+    };
+    const avg = (scores.novelty + scores.credibility + scores.broadAppeal + scores.motivation + scores.referenceToGratification) / 5;
+    scores.overall = aiVideoScore(scoresIn.overall ?? avg, avg);
+    const title = aiVideoTrimText(pick('title', 'name') || pick('promise', 'P') || `AI video idea ${runIndex + 1}.${itemIndex + 1}`, 160);
+    const risks = Array.isArray(raw?.risks) ? raw.risks.map(r => aiVideoTrimText(r, 260)).filter(Boolean) : [];
+    const researchQueries = Array.isArray(raw?.research_queries || raw?.researchQueries)
+        ? (raw.research_queries || raw.researchQueries).map(q => aiVideoTrimText(q, 180)).filter(Boolean)
+        : [];
+    return {
+        title,
+        name: title,
+        hook: aiVideoTrimText(pick('hook'), 420),
+        context: aiVideoTrimText(pick('context', 'plan', 'video_plan', 'videoPlan'), 1200),
+        promise: aiVideoTrimText(pick('promise', 'P'), 420),
+        earlyVisual: aiVideoTrimText(pick('early_visual', 'earlyVisual', 'V'), 420),
+        conceptual: aiVideoTrimText(pick('conceptual', 'C'), 420),
+        payoff: aiVideoTrimText(pick('payoff', 'expected_outcome', 'expectedOutcome', 'O'), 420),
+        actionProcess: aiVideoTrimText(pick('action_process', 'actionProcess', 'A'), 420),
+        creatorGoal: aiVideoTrimText(pick('creator_goal', 'creatorGoal', 'G'), 420),
+        why100m: aiVideoTrimText(pick('why_100m', 'why100m', 'why_it_could_hit_100m'), 900),
+        buildability: aiVideoTrimText(pick('buildability', 'feasibility'), 600),
+        differentiation: aiVideoTrimText(pick('differentiation', 'why_not_duplicate'), 600),
+        risks,
+        researchQueries,
+        scores,
+        mechanismNotes: raw?.mechanism_notes || raw?.mechanismNotes || {},
+        raw
+    };
+}
+
+function aiVideoPublicRecord(record) {
+    if (!record) return null;
+    const { embedding, raw, ...rest } = record;
+    return rest;
+}
+
+async function aiVideoFetchInternetContext() {
+    const context = {
+        fetchedAt: new Date().toISOString(),
+        note: 'Live web search provider is not configured; YouTube trend context is included when YOUTUBE_API_KEY is available.'
+    };
+    if (!process.env.YOUTUBE_API_KEY) return context;
+    try {
+        const params = new URLSearchParams({
+            part: 'snippet,statistics',
+            chart: 'mostPopular',
+            regionCode: process.env.AI_VIDEO_IDEA_TREND_REGION || 'US',
+            maxResults: String(parseInt(process.env.AI_VIDEO_IDEA_TREND_LIMIT || '25', 10)),
+            key: process.env.YOUTUBE_API_KEY
+        });
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`);
+        if (!response.ok) {
+            context.youtubeError = `YouTube API ${response.status}: ${(await response.text()).slice(0, 300)}`;
+            return context;
+        }
+        const data = await response.json();
+        context.youtubeMostPopular = (data.items || []).map(item => ({
+            title: aiVideoTrimText(item.snippet?.title || '', 180),
+            channel: aiVideoTrimText(item.snippet?.channelTitle || '', 100),
+            views: Number(item.statistics?.viewCount || 0),
+            likes: Number(item.statistics?.likeCount || 0),
+            publishedAt: item.snippet?.publishedAt || '',
+            tags: Array.isArray(item.snippet?.tags) ? item.snippet.tags.slice(0, 8).map(t => aiVideoTrimText(t, 40)) : []
+        }));
+    } catch (e) {
+        context.youtubeError = e.message;
+    }
+    return context;
+}
+
+async function aiVideoBuildGenerationContext() {
+    const [ideas, videos, projects, components, orders, inventory, notes, sponsors, sponsorvideos, aiideas] = await Promise.all([
+        dataStore.getAll('ideas'),
+        dataStore.getAll('videos'),
+        dataStore.getAll('projects'),
+        dataStore.getAll('components'),
+        dataStore.getAll('orders'),
+        dataStore.getAll('inventory'),
+        dataStore.getAll('notes'),
+        dataStore.getAll('sponsors'),
+        dataStore.getAll('sponsorvideos'),
+        dataStore.getAll('aiideas')
+    ]);
+    const jarvis = {
+        findings_summary: aiVideoReadJarvisJson('findings-summary.json', 12000),
+        retention_patterns: aiVideoReadJarvisJson('retention-patterns.json', 11000),
+        prediction_model: aiVideoReadJarvisJson('prediction-model.json', 6000),
+        bridge_top_principles: aiVideoReadJarvisJson('bridge_top_principles.json', 7000),
+        hook_tone_principles: aiVideoReadJarvisJson('hook-tone-principles.json', 6000),
+        candidate_proposals_sample: aiVideoReadJarvisIdeaSample('candidate_proposals.json', 35, 7000),
+        viral_ideas_sample: aiVideoReadJarvisIdeaSample('viral-ideas.json', 45, 9000)
+    };
+    Object.keys(jarvis).forEach(k => { if (!jarvis[k]) delete jarvis[k]; });
+    const internet = await aiVideoFetchInternetContext();
+    return {
+        generatedAt: new Date().toISOString(),
+        defaults: {
+            ideasPerRun: AI_VIDEO_IDEA_DEFAULT_BATCH,
+            maxIdeasPerRun: AI_VIDEO_IDEA_MAX_BATCH,
+            similarityThreshold: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD,
+            batchRationale: 'Default 3 per run because quality-critical generation should keep batches small; larger naive batches make the model validate many outputs at once and can reduce quality.'
+        },
+        collectionCounts: {
+            ideas: (ideas || []).length,
+            videos: (videos || []).length,
+            aiVideoIdeas: (aiideas || []).length,
+            projects: (projects || []).length,
+            components: (components || []).length,
+            orders: (orders || []).length,
+            inventory: (inventory || []).length,
+            notes: (notes || []).length
+        },
+        existingIdeas: aiVideoCompactRows(ideas, ['name', 'hook', 'context', 'project', 'type', 'status'], 220),
+        existingAiVideoIdeas: aiVideoCompactRows((aiideas || []).filter(i => i.status !== 'promoted'), ['title', 'hook', 'promise', 'payoff', 'why100m', 'status'], 160),
+        provenVideos: aiVideoCompactRows(videos, ['name', 'hook', 'context', 'script', 'project', 'status'], 120, 'views'),
+        activeProjects: aiVideoCompactRows(projects, ['name', 'notes', 'status'], 80),
+        components: aiVideoCompactRows(components, ['name', 'source', 'status', 'needs', 'notes', 'design'], 120),
+        ordersAndInventory: {
+            orders: aiVideoCompactRows(orders, ['name', 'item', 'status', 'notes'], 80),
+            inventory: aiVideoCompactRows(inventory, ['name', 'item', 'status', 'notes'], 80)
+        },
+        freeNotes: aiVideoCompactRows(notes, ['title', 'name', 'body', 'content', 'text'], 80),
+        sponsors: {
+            companies: aiVideoCompactRows(sponsors, ['name', 'notes', 'companyStatus'], 50),
+            deals: aiVideoCompactRows(sponsorvideos, ['title', 'deliverables', 'notes', 'status'], 50)
+        },
+        internet,
+        jarvis
+    };
+}
+
+function aiVideoPromptMessages(count, context, runIndex, totalRuns) {
+    const schema = {
+        ideas: [{
+            title: 'short specific title',
+            hook: 'spoken/viewer-facing hook line',
+            context: 'practical video plan grounded in Business World data',
+            promise: 'P: what the video seems to promise',
+            early_visual: 'V: first frame / first 3 seconds evidence',
+            conceptual: 'C: concept/text implied',
+            payoff: 'O: expected gratification / outcome',
+            action_process: 'A: action/process being done',
+            creator_goal: 'G: creator motivation that feels real',
+            why_100m: 'why this has 100M-view mechanics',
+            scores: {
+                novelty: 0,
+                credibility: 0,
+                broad_appeal: 0,
+                motivation: 0,
+                reference_to_gratification: 0,
+                overall: 0
+            },
+            mechanism_notes: {
+                novelty: 'sub-scores and nearest-reference avoidance',
+                credibility: 'promise-evidence support',
+                broad_appeal: 'audience clusters and familiar anchors',
+                motivation: 'goal-action-payoff coherence',
+                reference_to_gratification: 'unresolved payoff pointer'
+            },
+            buildability: 'how Tyler/Business World can actually make it',
+            risks: ['risk or weakness'],
+            differentiation: 'why it is not the same as existing ideas',
+            research_queries: ['live/current facts to verify before production']
+        }]
+    };
+    return [
+        {
+            role: 'system',
+            content: [
+                'You are Kimi K2.6 inside Business World, acting as an elite short-form video idea generator.',
+                'Generate only ideas that could plausibly become 100M-view videos if executed well.',
+                'Use Business World local context, Jarvis viral evidence, supplied internet trend context, and broad world knowledge.',
+                'You do not have general live web search beyond the supplied context; include research_queries for current facts to check instead of pretending verification happened.',
+                'Return ONLY valid JSON. No markdown, no commentary outside JSON.'
+            ].join('\n')
+        },
+        {
+            role: 'user',
+            content: [
+                `Generate exactly ${count} AI video idea candidate objects for run ${runIndex + 1} of ${totalRuns}.`,
+                'Important: keep the batch small and critically validate every idea. If an idea is not strong enough, replace it with a stronger one before returning JSON.',
+                'Do not duplicate or closely paraphrase any existing idea, AI candidate, or completed video in the context.',
+                'Favor ideas with broad familiar anchors, unusual but coherent combinations, immediate visual proof, real creator motivation, and a clear unresolved payoff.',
+                '',
+                'Quantified formula to apply:',
+                AI_VIDEO_IDEA_FORMULA,
+                '',
+                'Business World and Jarvis context:',
+                JSON.stringify(context, null, 2),
+                '',
+                'Output schema:',
+                JSON.stringify(schema, null, 2)
+            ].join('\n')
+        }
+    ];
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1276,6 +1812,222 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
     }
 
     // =========================================
+    // API: AI Video Ideas — Kimi generation + semantic duplicate pruning
+    // =========================================
+    if (pathname === '/api/ai-video-ideas' && req.method === 'GET') {
+        try {
+            const ideas = await dataStore.getAll('aiideas');
+            const rows = (ideas || [])
+                .filter(i => i.status !== 'promoted')
+                .sort((a, b) => aiVideoDateValue(b) - aiVideoDateValue(a))
+                .map(aiVideoPublicRecord);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ideas: rows }));
+        } catch (e) {
+            console.error('ai-video-ideas list error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    if (pathname === '/api/ai-video-ideas/generate' && req.method === 'POST') {
+        try {
+            if (!process.env.FIREWORKS_API_KEY) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'FIREWORKS_API_KEY not set; Kimi K2.6 generation is unavailable.' }));
+                return;
+            }
+            if (!process.env.OPENAI_API_KEY) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'OPENAI_API_KEY not set; semantic embedding dedupe is unavailable.' }));
+                return;
+            }
+            const body = await readBody(req);
+            const runs = aiVideoClampInt(body.runs, 1, 1, AI_VIDEO_IDEA_MAX_RUNS);
+            const ideasPerRun = aiVideoClampInt(body.ideasPerRun, AI_VIDEO_IDEA_DEFAULT_BATCH, 1, AI_VIDEO_IDEA_MAX_BATCH);
+            if (runs * ideasPerRun > AI_VIDEO_IDEA_MAX_TOTAL) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `Too many ideas for one request. Max is ${AI_VIDEO_IDEA_MAX_TOTAL}; try fewer runs or a smaller ideas-per-run value.` }));
+                return;
+            }
+
+            const context = await aiVideoBuildGenerationContext();
+            const referenceDocs = await aiVideoBuildReferenceDocs();
+            const created = [];
+            const rejected = [];
+            const runReports = [];
+
+            for (let runIndex = 0; runIndex < runs; runIndex++) {
+                const messages = aiVideoPromptMessages(ideasPerRun, context, runIndex, runs);
+                const response = await aiVideoKimiJson(messages);
+                const normalized = (response.ideas || [])
+                    .slice(0, ideasPerRun)
+                    .map((idea, idx) => aiVideoNormalizeIdea(idea, runIndex, idx));
+                const embeddings = await aiVideoEmbedTexts(normalized.map(aiVideoIdeaText));
+                let runCreated = 0;
+                let runRejected = 0;
+
+                for (let i = 0; i < normalized.length; i++) {
+                    const idea = normalized[i];
+                    const embedding = embeddings[i];
+                    const ideaText = aiVideoIdeaText(idea);
+                    if (!ideaText.trim() || !idea.title.trim()) {
+                        rejected.push({ title: idea.title || '(untitled)', reason: 'empty_idea', run: runIndex + 1 });
+                        runRejected++;
+                        continue;
+                    }
+                    const nearest = aiVideoNearest(embedding, referenceDocs);
+                    if (nearest.score >= AI_VIDEO_IDEA_SIMILARITY_THRESHOLD) {
+                        rejected.push({
+                            title: idea.title,
+                            reason: 'semantic_duplicate',
+                            run: runIndex + 1,
+                            similarity: {
+                                score: Number(nearest.score.toFixed(4)),
+                                matchId: nearest.id,
+                                matchType: nearest.type,
+                                matchTitle: nearest.title
+                            }
+                        });
+                        runRejected++;
+                        continue;
+                    }
+                    const record = await dataStore.create('aiideas', {
+                        ...idea,
+                        status: 'candidate',
+                        source: 'ai-video-ideas',
+                        model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6',
+                        generatorVersion: 'ai-video-ideas-2026-06-18',
+                        formulaName: 'P/V/C/O/A/G viral mechanism graph',
+                        embedding,
+                        similarity: {
+                            maxScore: Number(nearest.score.toFixed(4)),
+                            matchId: nearest.id,
+                            matchType: nearest.type,
+                            matchTitle: nearest.title,
+                            threshold: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD
+                        },
+                        run: {
+                            runIndex: runIndex + 1,
+                            totalRuns: runs,
+                            ideasPerRun
+                        },
+                        lastEdited: new Date().toISOString()
+                    });
+                    await aiVideoUpsertVector('aiideas', record);
+                    referenceDocs.push({
+                        id: record.id,
+                        type: 'aiidea',
+                        title: record.title || record.name || '',
+                        text: aiVideoIdeaText(record),
+                        embedding
+                    });
+                    created.push(aiVideoPublicRecord(record));
+                    runCreated++;
+                }
+                runReports.push({ run: runIndex + 1, created: runCreated, rejected: runRejected });
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                created,
+                rejected,
+                runs,
+                ideasPerRun,
+                runReports,
+                recommendedIdeasPerRun: AI_VIDEO_IDEA_DEFAULT_BATCH,
+                maxIdeasPerRun: AI_VIDEO_IDEA_MAX_BATCH,
+                similarityThreshold: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD,
+                batchRationale: 'Default 3 ideas per run. Small batches give Kimi more room to validate each candidate against the full formula; semantic dedupe then prunes near-duplicates deterministically.'
+            }));
+        } catch (e) {
+            console.error('ai-video-ideas generate error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    const aiVideoPromoteMatch = pathname.match(/^\/api\/ai-video-ideas\/([^/]+)\/promote$/);
+    if (aiVideoPromoteMatch && req.method === 'POST') {
+        try {
+            const id = decodeURIComponent(aiVideoPromoteMatch[1]);
+            const idea = await dataStore.getById('aiideas', id);
+            if (!idea) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'AI video idea not found' }));
+                return;
+            }
+            const contextParts = [
+                idea.context,
+                idea.why100m ? `Why it could hit 100M views: ${idea.why100m}` : '',
+                idea.promise ? `P / Promise: ${idea.promise}` : '',
+                idea.earlyVisual ? `V / Early visual evidence: ${idea.earlyVisual}` : '',
+                idea.conceptual ? `C / Conceptual frame: ${idea.conceptual}` : '',
+                idea.payoff ? `O / Payoff: ${idea.payoff}` : '',
+                idea.actionProcess ? `A / Action/process: ${idea.actionProcess}` : '',
+                idea.creatorGoal ? `G / Creator goal: ${idea.creatorGoal}` : '',
+                idea.buildability ? `Buildability: ${idea.buildability}` : '',
+                idea.differentiation ? `Differentiation: ${idea.differentiation}` : '',
+                idea.risks && idea.risks.length ? `Risks: ${idea.risks.join('; ')}` : '',
+                idea.researchQueries && idea.researchQueries.length ? `Research to verify: ${idea.researchQueries.join('; ')}` : ''
+            ].filter(Boolean).join('\n\n');
+            const promoted = await dataStore.create('ideas', {
+                name: idea.title || idea.name || 'AI video idea',
+                hook: idea.hook || idea.promise || '',
+                context: contextParts,
+                script: '',
+                project: '',
+                type: 'idea',
+                source: 'ai-video-ideas',
+                sourceAiIdeaId: idea.id,
+                aiVideoIdeaScores: idea.scores || {},
+                aiVideoIdeaMechanismNotes: idea.mechanismNotes || {},
+                lastEdited: new Date().toISOString()
+            });
+            if (Array.isArray(idea.embedding)) {
+                await aiVideoUpsertVector('ideas', {
+                    ...promoted,
+                    embedding: idea.embedding,
+                    status: promoted.status || promoted.type || 'idea',
+                    source: 'ai-video-ideas'
+                }, promoted.id);
+            }
+            await dataStore.remove('aiideas', id);
+            await aiVideoDeleteVector('aiideas', id);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ idea: promoted }));
+        } catch (e) {
+            console.error('ai-video-ideas promote error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    const aiVideoDeleteMatch = pathname.match(/^\/api\/ai-video-ideas\/([^/]+)$/);
+    if (aiVideoDeleteMatch && req.method === 'DELETE') {
+        try {
+            const id = decodeURIComponent(aiVideoDeleteMatch[1]);
+            const ok = await dataStore.remove('aiideas', id);
+            if (!ok) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'AI video idea not found' }));
+                return;
+            }
+            await aiVideoDeleteVector('aiideas', id);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+            console.error('ai-video-ideas delete error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Pipeline — semantic search across videos / projects / components
     // (Pinecone namespace 'pipeline'). Mirrors /api/ideas/* .
     // =========================================
@@ -1537,7 +2289,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
 
     // =========================================
-    // API: AI Chat — chat with Optimusk Prime via OpenClaw cron
+    // API: AI Chat — chat with Codex
     // =========================================
     const AI_CHAT_R2_KEY = 'data/ai-chat.json';
 
@@ -1565,41 +2317,65 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             history.push({ id: messageId, role: 'user', content: message.trim(), timestamp });
             await cloud.uploadToR2(AI_CHAT_R2_KEY, Buffer.from(JSON.stringify(history)), 'application/json');
 
-            // Schedule openclaw cron job to process message via isolated agent
-            const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
-            const cronMessage = `[BusinessWorld Chat] User message: ${message.trim()}\n\nAfter responding, POST to ${appUrl}/api/ai/reply with: {"text": "your reply", "secret": "bw-ai-secret-2026"}\n\nAlso respond normally on Telegram to Tyler (chat_id 7906038704) so he gets a Telegram notification too.`;
-            const { exec } = require('child_process');
-            const cronCmd = `openclaw cron add --name "BW Chat" --at "+5s" --session isolated --message ${JSON.stringify(cronMessage)} --timeout-seconds 120 --announce --channel telegram`;
+            const recent = history.slice(-12).map(m => `${m.role}: ${m.content}`).join('\n');
+            const prompt = [
+                'You are Codex responding inside the BusinessWorld app chat.',
+                'Answer Tyler directly and concisely. Do not edit files, run commands, or claim you changed the repo from this chat turn.',
+                'If the user asks for app/code changes, explain the concrete next step and that the coding workspace should handle the edit.',
+                '',
+                'Recent conversation:',
+                recent || '(none)',
+                '',
+                `Current user message: ${message.trim()}`,
+            ].join('\n');
 
-            try {
-                await new Promise((resolve, reject) => {
-                    exec(cronCmd, { timeout: 10000 }, (err, stdout, stderr) => {
-                        if (err) reject(err);
-                        else { console.log('OpenClaw cron scheduled:', stdout.trim()); resolve(stdout); }
-                    });
+            const appendAssistantReply = async (text, meta = {}) => {
+                let latest = [];
+                try {
+                    const buf = await cloud.downloadFromR2(AI_CHAT_R2_KEY);
+                    if (buf) latest = JSON.parse(buf.toString('utf8'));
+                } catch (e) { latest = history.slice(); }
+                latest.push({
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    content: text,
+                    replyTo: messageId,
+                    timestamp: new Date().toISOString(),
+                    ...meta,
                 });
-            } catch (cronErr) {
-                console.warn('OpenClaw cron failed, falling back to Telegram:', cronErr.message);
-                // Fallback: send via Telegram bot directly
+                await cloud.uploadToR2(AI_CHAT_R2_KEY, Buffer.from(JSON.stringify(latest)), 'application/json');
+            };
+
+            const notifyTelegram = async (text) => {
                 const botToken = process.env.TELEGRAM_BOT_TOKEN;
                 const chatId = process.env.TELEGRAM_TYLER_CHAT_ID;
-                const telegramText = `[Message from BusinessWorld app] ${message.trim()}\n\nNote: After responding on Telegram normally, also POST to ${appUrl}/api/ai/reply with body: {"text": "<your full reply>", "secret": "bw-ai-secret-2026"}`;
+                if (!botToken || !chatId) return;
                 try {
                     const tgResp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: chatId, text: telegramText })
+                        body: JSON.stringify({ chat_id: chatId, text: `[BusinessWorld Codex]\n${text}`.slice(0, 4000) })
                     });
                     const tgData = await tgResp.json();
-                    if (!tgData.ok) console.warn('Telegram sendMessage error:', tgData.description);
-                    else console.log('Telegram fallback message sent, message_id:', tgData.result.message_id);
+                    if (!tgData.ok) console.warn('Telegram Codex reply error:', tgData.description);
                 } catch (tgErr) {
-                    console.warn('Telegram fallback also failed:', tgErr.message);
+                    console.warn('Telegram Codex reply failed:', tgErr.message);
                 }
-            }
+            };
+
+            codexRunner.runCodex(prompt, { timeout: parseInt(process.env.CODEX_CHAT_TIMEOUT_MS || '180000', 10) })
+                .then(async result => {
+                    await appendAssistantReply(result.text, { source: 'codex' });
+                    await notifyTelegram(result.text);
+                })
+                .catch(async err => {
+                    const text = `Codex could not answer from the app: ${err.message}`;
+                    console.warn('Codex chat failed:', err.message);
+                    await appendAssistantReply(text, { source: 'codex', error: true });
+                });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, messageId, timestamp }));
+            res.end(JSON.stringify({ ok: true, messageId, timestamp, source: 'codex' }));
         } catch (e) {
             console.error('AI chat error:', e);
             res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1681,7 +2457,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     }
 
     // =========================================
-    // VIDEO LAB — Gemini watches a video; Optimusk Prime coordinates data-backed advice
+    // VIDEO LAB — Gemini watches a video; Codex coordinates data-backed advice
     // =========================================
     const VIDEOLAB_SECRET = 'bw-videolab-secret-2026';
 
@@ -1789,7 +2565,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
 
-    // POST /api/videolab/analyze — run the Optimusk Prime coordinator (server-side, fully logged).
+    // POST /api/videolab/analyze — run the Codex coordinator (server-side, fully logged).
     if (pathname === '/api/videolab/analyze' && req.method === 'POST') {
         try {
             const body = await readBody(req);
@@ -1799,7 +2575,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const jobId = crypto.randomUUID();
 
             // Seed the job so the UI can poll immediately, then run the coordinator in the
-            // background (Gemini observations → data → Optimusk Prime 2-pass → saved transcript).
+            // background (Gemini observations -> data -> Codex 2-pass -> saved transcript).
             await cloud.uploadToR2(`data/videolab/${jobId}.json`, Buffer.from(JSON.stringify({ jobId, ytId: ytId || null, videoTitle: videoTitle || null, videoUrl: videoUrl || null, status: 'running', startedAt: new Date().toISOString(), steps: [] })), 'application/json');
             videolabCoordinator.runCoordinator(jobId, { observations, ytId, videoTitle, videoUrl })
                 .then(r => console.log(`VideoLab coordinator ${jobId} → ${r.status}`))

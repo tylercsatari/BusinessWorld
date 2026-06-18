@@ -116,6 +116,11 @@
     .authgate-subcheck input:disabled + * , .authgate-subcheck:has(input:disabled) { opacity:.4; }
     .authgate-stagewrap { margin:4px 0 2px 22px; }
     .authgate-stagehint { font-size:10.5px; font-weight:700; color:#c3ad88; margin-bottom:3px; }
+    .authgate-compose { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0 7px; padding:7px 8px; background:#fff8ed; border:1px solid #eee0c8; border-radius:8px; }
+    .authgate-compose-btn { border:1px solid #d8c5a5; background:#fff; color:#5a3e1b; border-radius:7px; padding:5px 8px; font-size:11px; font-weight:800; cursor:pointer; font-family:inherit; }
+    .authgate-compose-btn:hover { background:#faf5eb; }
+    .authgate-compose-btn:disabled { opacity:.45; cursor:not-allowed; }
+    .authgate-compose-note { font-size:10.5px; font-weight:800; color:#8a7659; }
     .authgate-staggrp { font-size:9.5px; font-weight:800; color:#b09a78; text-transform:uppercase; letter-spacing:.4px; margin:6px 0 2px; }
     .authgate-stagerow { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11.5px; color:#6a5a44; font-weight:600; padding:1px 0; }
     .authgate-stagesel { font-size:11px; padding:1px 4px; border:1px solid #e0d6c5; border-radius:6px; background:#fff; color:#4a3a26; }
@@ -369,7 +374,7 @@
     const BUILDING_SECTIONS = (window.ACCESS_REGISTRY
         ? Object.fromEntries(Object.entries(window.ACCESS_REGISTRY).map(([b, r]) => [b, r.sections.map(s => [s.id, s.label])]))
         : {
-            Library: [['notes', 'Ideas'], ['freenotes', 'Notes'], ['todo', 'To-Do'], ['calendar', 'Calendar'], ['projects', 'Projects'], ['sponsors', 'Sponsors'], ['ideamap', 'Idea Map'], ['dagflow', 'DAG Flow']],
+            Library: [['notes', 'Ideas'], ['aivideoideas', 'AI video ideas'], ['freenotes', 'Notes'], ['todo', 'To-Do'], ['calendar', 'Calendar'], ['projects', 'Projects'], ['sponsors', 'Sponsors'], ['ideamap', 'Idea Map'], ['dagflow', 'DAG Flow']],
             Workshop: [['pipeline', 'Pipeline'], ['projects', 'Projects'], ['orders', 'Orders'], ['inventory', 'Storage Room']]
         });
     const escA = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -426,6 +431,37 @@
             });
         }
 
+        const accessRank = (v) => v === 'write' ? 2 : v === 'read' ? 1 : 0;
+        const mergeAccess = (target, id, value) => {
+            if (!id || value === 'none') return;
+            if (accessRank(value) > accessRank(target[id])) target[id] = value;
+        };
+        function applyNodeComposition(pid) {
+            const stages = [...body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`)].filter(s => s.value !== 'none');
+            if (!stages.length) { alert('Pick at least one Workshop stage first.'); return; }
+            const presets = window.WORKSHOP_NODE_ACCESS_PRESETS || {};
+            const composed = { v: {}, c: {} };
+            stages.forEach(sel => {
+                const preset = presets[sel.dataset.stageid] || {};
+                const cap = (value) => (sel.value === 'read' && value === 'write') ? 'read' : value;
+                Object.entries(preset.v || {}).forEach(([id, value]) => mergeAccess(composed.v, id, cap(value)));
+                Object.entries(preset.c || {}).forEach(([id, value]) => mergeAccess(composed.c, id, cap(value)));
+            });
+            let changed = 0, writeCount = 0, readCount = 0;
+            body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]`).forEach(sel => {
+                const bag = sel.dataset.vkind === 'cfield' ? composed.c : composed.v;
+                const next = bag[sel.dataset.vfid] || 'none';
+                if (sel.value !== next) { sel.value = next; changed++; }
+                if (next === 'write') writeCount++;
+                else if (next === 'read') readCount++;
+            });
+            const note = document.getElementById('ag-compose-note-' + pid);
+            if (note) {
+                note.textContent = `Fields composed: ${writeCount} write, ${readCount} read`;
+                setTimeout(() => { if (note.textContent) note.textContent = changed ? 'Review, then Save' : 'Already matched'; }, 1800);
+            }
+        }
+
         function profileCardHtml(p) {
             const b = new Set(p.buildings || []);
             const feats = p.features || {};
@@ -458,6 +494,10 @@
                 };
                 return `<div class="authgate-stagewrap">
                     <div class="authgate-stagehint">Pipeline stages (leave all None = full pipeline)</div>
+                    <div class="authgate-compose">
+                        <button type="button" class="authgate-compose-btn" data-pcompose="${escA(p.id)}" ${granted ? '' : 'disabled'}>Compose fields from selected nodes</button>
+                        <span class="authgate-compose-note" id="ag-compose-note-${escA(p.id)}"></span>
+                    </div>
                     ${groups.map(g => `<div class="authgate-staggrp">${escA(g.name)}</div>` +
                         g.items.map(s => `<div class="authgate-stagerow"><span>${escA(s.label)}</span>${sel(s.id)}</div>`).join('')).join('')}
                 </div>`;
@@ -539,7 +579,12 @@
                     body.querySelectorAll(`[data-pstage="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
                     body.querySelectorAll(`[data-pvf="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
                     body.querySelectorAll(`[data-pcap="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
+                    body.querySelectorAll(`[data-pcompose="${CSS.escape(pid)}"]`).forEach(s => { s.disabled = !cb.checked; });
                 }
+            });
+            body.querySelectorAll('[data-pcompose]').forEach(btn => btn.onclick = (e) => {
+                e.stopPropagation();
+                applyNodeComposition(btn.dataset.pcompose);
             });
             body.querySelectorAll('[data-psave]').forEach(btn => btn.onclick = async () => {
                 const pid = btn.dataset.psave;
