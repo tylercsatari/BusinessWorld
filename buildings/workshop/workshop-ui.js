@@ -879,6 +879,16 @@ const WorkshopUI = (() => {
         return nodeDeliverableStatus(v, st).met ? 'is-done' : 'is-todo';
     }
 
+    // The Channel Project gate for an upload area:
+    //   • a project is set → nothing (uploads show)
+    //   • "No project" deliberately chosen → a calm note (not an error)
+    //   • genuinely undecided → the nudge to pick one
+    function projectGate(v, nudge) {
+        if (v.project) return '';
+        if (v.noProject) return `<div class="wsp-noproj-note">🚫 No project — this video isn't tied to a channel folder, so there's nothing to upload here. Pick a Channel Project above if it needs one.</div>`;
+        return `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} ${nudge}</div></div>`;
+    }
+
     // The DONE button: advance the node if its deliverable is met, else prompt.
     async function pushNodeForward(videoId, stageId) {
         const v = VideoService.getById(videoId);
@@ -909,7 +919,7 @@ const WorkshopUI = (() => {
                 <div id="wsp-deliv-list">${results.map((r, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('film', 'wsp-row-ic')} ${escHtml(r.name || (r.path || '').split('/').pop())}</span><button class="wsp-mini-btn" data-deliv-preview="${i}">▶ Preview</button><button class="wsp-mini-btn danger" data-deliv-del="${i}">✕</button></div>`).join('')}</div>
                 ${canUpload
                     ? `<div class="wsp-add-row"><input type="file" id="wsp-deliv-file" multiple style="font-size:11.5px;flex:1 1 160px;"><button class="wsp-mini-btn done" id="wsp-deliv-up">⬆ Upload files</button></div>`
-                    : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project (below) first — results go to that project's Dropbox folder.</div></div>`}
+                    : projectGate(v, 'Select a Channel Project (below) first — results go to that project\'s Dropbox folder.')}
             </div>`;
         }
         if (kind === 'post') {
@@ -1932,7 +1942,8 @@ const WorkshopUI = (() => {
                 <div data-vfield="project">
                     <label>Channel Project (egg)</label>
                     <select id="workshop-project">
-                        <option value="">No project</option>
+                        <option value="" disabled ${!v.project && !v.noProject ? 'selected' : ''}>— Pick a project —</option>
+                        <option value="__none__" ${v.noProject ? 'selected' : ''}>🚫 No project (deliberate)</option>
                         ${dropboxProjects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
                     </select>
                 </div>
@@ -1962,7 +1973,7 @@ const WorkshopUI = (() => {
 
             <div class="wsp-subsection ${sectionStatusClass(v, 'hook')}" data-vfield="hook" style="--accent:#3d8bf0">
                 ${subTitle('hook', 'Hook', '— write the hook and pick its type (animation / practical). Each is its own instance you can split-test; at least one (with a type) is needed before the video moves on. The Animation / Practical branches flip on automatically from the types.')}
-                ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — hook footage lives in that project's hook/ folder in Dropbox.</div></div>`}
+                ${projectGate(v, 'Select a Channel Project first — hook footage lives in that project\'s hook/ folder in Dropbox.')}
                 <div id="wsp-hook-instances">
                     ${PS().hooksOf(v).map((h, i) => hookInstanceRowHtml(v, h, i)).join('')}
                 </div>
@@ -2015,13 +2026,13 @@ const WorkshopUI = (() => {
                         ? '' /* filled by initMediaSection */
                         : v.project
                             ? '<div class="wsp-hint">Checking the vo/ folder…</div>'
-                            : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — the voiceover lives in that project's Dropbox folder, so no project means nowhere to put it.</div></div>`}
+                            : projectGate(v, 'Select a Channel Project first — the voiceover lives in that project\'s Dropbox folder, so no project means nowhere to put it.')}
                 </div>
             </div>
 
             <div class="wsp-subsection ${sectionStatusClass(v, 'editing')}" data-vfield="editing" style="--accent:#27ae60">
                 ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
-                ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — the final videos live in that project's Dropbox folder.</div></div>`}
+                ${projectGate(v, 'Select a Channel Project first — the final videos live in that project\'s Dropbox folder.')}
                 <div id="wsp-edit-full" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nosubs" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nomusic" class="wsp-edit-slot"></div>
@@ -3766,14 +3777,19 @@ const WorkshopUI = (() => {
         const get = id => document.getElementById(id);
         if (!get('workshop-name')) return true; // no editor mounted — nothing to save
         const name = get('workshop-name').value.trim() || v.name;
-        const project = get('workshop-project')?.value || '';
+        // "🚫 No project" is a deliberate choice (sentinel __none__): project stays
+        // empty but noProject flags it as intentional, so we show a calm note
+        // instead of the "select a project" nudge.
+        const rawProject = get('workshop-project')?.value || '';
+        const noProject = rawProject === '__none__';
+        const project = noProject ? '' : rawProject;
         const hook = get('workshop-hook')?.value || '';
         const context = get('workshop-context')?.value || '';
         const deadline = get('workshop-deadline')?.value || '';
         const sponsorId = get('workshop-sponsor')?.value || '';
         try {
             await VideoService.saveWithIdeaSync(v.id, {
-                name, project, hook, context, deadline, sponsorId,
+                name, project, noProject, hook, context, deadline, sponsorId,
                 status: normalizedStatus(v)
             });
             return true;
