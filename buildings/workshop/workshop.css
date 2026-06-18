@@ -641,6 +641,40 @@
 .wsp-comp-detail-body .wsp-subsection-title .wsp-sub-name { color: var(--accent, #463c2c); filter: saturate(1.1) brightness(0.92); }
 .wsp-subsection-title .wsp-hint { font-weight: 500; }
 
+/* ── Completion colour scheme ──────────────────────────────────────────────
+   A section glows RED until its work is done, then goes calm GREEN and recedes,
+   so the eye jumps straight to what's left. Status beats the decorative accent. */
+.workshop-detail-fields .wsp-subsection.is-todo,
+.wsp-comp-detail-body .wsp-subsection.is-todo {
+    border-left-color: #e74c3c;
+    background: linear-gradient(95deg, rgba(231,76,60,0.14), rgba(231,76,60,0.03) 60%, transparent);
+}
+.workshop-detail-fields .wsp-subsection.is-done,
+.wsp-comp-detail-body .wsp-subsection.is-done {
+    border-left-color: #cfe6d4;
+    background: linear-gradient(95deg, rgba(39,174,96,0.06), transparent 50%);
+}
+.wsp-subsection.is-todo .wsp-subsection-title .wsp-sub-ic { color: #e74c3c; }
+.wsp-subsection.is-todo .wsp-subsection-title .wsp-sub-name { color: #c0392b; filter: none; }
+.wsp-subsection.is-done .wsp-subsection-title { opacity: 0.66; }   /* done recedes */
+/* the state pill on the right of a section title */
+.wsp-sec-state { margin-left: auto; flex-shrink: 0; }
+.wsp-subsection.is-todo .wsp-sec-state::after,
+.wsp-subsection.is-done .wsp-sec-state::after {
+    font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; letter-spacing: .3px;
+}
+.wsp-subsection.is-todo .wsp-sec-state::after { content: 'TO DO'; color: #fff; background: #e74c3c; }
+.wsp-subsection.is-done .wsp-sec-state::after { content: '✓ DONE'; color: #1e8c4f; background: rgba(39,174,96,0.16); }
+
+/* deliverable banner — same red/green language */
+.wsp-deliv-banner.is-todo { border-color: #e74c3c; background: linear-gradient(180deg, rgba(231,76,60,0.13), rgba(231,76,60,0.03)); }
+.wsp-deliv-banner.is-todo .wsp-deliv-title { color: #b23227; }
+.wsp-deliv-banner.is-done { border-color: #bfe3c8; background: linear-gradient(180deg, rgba(39,174,96,0.09), transparent); }
+.wsp-deliv-banner.is-done .wsp-deliv-title { color: #1e8c4f; }
+.wsp-deliv-flag::after { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: .3px; }
+.wsp-deliv-banner.is-todo .wsp-deliv-flag::after { content: 'NOT DONE'; color: #fff; background: #e74c3c; }
+.wsp-deliv-banner.is-done .wsp-deliv-flag::after { content: '✓ DONE'; color: #1e8c4f; background: rgba(39,174,96,0.16); }
+
 /* Decomposition component rows — each is a pipeline entity linked to the video */
 .wsp-comp-row {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

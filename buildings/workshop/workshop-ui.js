@@ -866,6 +866,19 @@ const WorkshopUI = (() => {
         return { met: PS().deliverableMet(v, stageId, ctxNow()), label };
     }
 
+    // Which pipeline stage "owns" each editor section, so a section can show its
+    // done/not-done colour (red until done, calm green once done).
+    const SECTION_STAGE = { context: 'ideate', hook: 'hook', script: 'script', decomp: 'decomp', voiceover: 'voiceover', editing: 'edit' };
+    // Status colour class for an editor section: 'is-todo' (red) until its
+    // deliverable is met, 'is-done' (green, recedes) once it is. Skipped/'na'
+    // or non-deliverable sections stay neutral.
+    function sectionStatusClass(v, vfield) {
+        const st = SECTION_STAGE[vfield];
+        if (!st) return '';
+        if (PS().effectiveState(v, st, ctxNow()) === 'na') return '';
+        return nodeDeliverableStatus(v, st).met ? 'is-done' : 'is-todo';
+    }
+
     // The DONE button: advance the node if its deliverable is met, else prompt.
     async function pushNodeForward(videoId, stageId) {
         const v = VideoService.getById(videoId);
@@ -884,11 +897,14 @@ const WorkshopUI = (() => {
     function deliverableBlockHtml(v, stage) {
         const kind = deliverableKind(stage.id);
         const label = STAGE_DELIVERABLE[stage.id] || stage.label;
+        // Red while the deliverable isn't met, calm green once it is.
+        const stateCls = nodeDeliverableStatus(v, stage.id).met ? 'is-done' : 'is-todo';
+        const flag = '<span class="wsp-deliv-flag"></span>';
         if (kind === 'result') {
             const results = stageResultsFor(v, stage.id);
             const canUpload = !!v.project;
-            return `<div class="wsp-deliv-banner" data-deliv-stage="${stage.id}">
-                <div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+            return `<div class="wsp-deliv-banner ${stateCls}" data-deliv-stage="${stage.id}">
+                <div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>
                 <div class="wsp-deliv-sub">Upload as many files as you need — nothing moves until you press <b>Done</b> at the bottom.</div>
                 <div id="wsp-deliv-list">${results.map((r, i) => `<div class="wsp-row"><span class="wsp-row-name">${icon('film', 'wsp-row-ic')} ${escHtml(r.name || (r.path || '').split('/').pop())}</span><button class="wsp-mini-btn" data-deliv-preview="${i}">▶ Preview</button><button class="wsp-mini-btn danger" data-deliv-del="${i}">✕</button></div>`).join('')}</div>
                 ${canUpload
@@ -897,15 +913,15 @@ const WorkshopUI = (() => {
             </div>`;
         }
         if (kind === 'post') {
-            return `<div class="wsp-deliv-banner"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+            return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>
                 <div class="wsp-deliv-sub">Hit Publish when it's live; the video hatches into the Pen.</div></div>`;
         }
         if (kind === 'decomp') {
-            return `<div class="wsp-deliv-banner"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+            return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>
                 <div class="wsp-deliv-sub">Decide the branches and add components in the Decomposition section below.</div></div>`;
         }
         // auto stages — the structured upload lives in a section below
-        return `<div class="wsp-deliv-banner"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b></div>
+        return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>
             <div class="wsp-deliv-sub">Complete it in the section below, then press <b>Done</b> at the bottom to move it forward.</div></div>`;
     }
 
@@ -1886,7 +1902,7 @@ const WorkshopUI = (() => {
         const DEP_ICON_NAME = { video: 'video', component: 'component', order: 'order' };
         // Clean section header: line-icon + title + optional muted hint
         const subTitle = (iconName, title, hint) =>
-            `<div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span>${hint ? ` <span class="wsp-hint">${hint}</span>` : ''}</div>`;
+            `<div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span>${hint ? ` <span class="wsp-hint">${hint}</span>` : ''}<span class="wsp-sec-state"></span></div>`;
 
         return `
             <div class="workshop-detail-summary" data-vfield="sourceidea">${sourceIdeaHtml}</div>
@@ -1936,7 +1952,7 @@ const WorkshopUI = (() => {
             ${stageChecklistHtml(v)}
             </div>
 
-            <div class="wsp-subsection" data-vfield="context" style="--accent:#a87d3c">
+            <div class="wsp-subsection ${sectionStatusClass(v, 'context')}" data-vfield="context" style="--accent:#a87d3c">
                 ${subTitle('ideate', 'Context', '— speak or type ideation notes, angles, details')}
                 <div class="wsp-field-with-mic">
                     <textarea id="workshop-context" placeholder="Describe what you want to build, the angles, the details…">${escHtml(v.context || '')}</textarea>
@@ -1944,7 +1960,7 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
-            <div class="wsp-subsection" data-vfield="hook" style="--accent:#3d8bf0">
+            <div class="wsp-subsection ${sectionStatusClass(v, 'hook')}" data-vfield="hook" style="--accent:#3d8bf0">
                 ${subTitle('hook', 'Hook', '— write the hook and pick its type (animation / practical). Each is its own instance you can split-test; at least one (with a type) is needed before the video moves on. The Animation / Practical branches flip on automatically from the types.')}
                 ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — hook footage lives in that project's hook/ folder in Dropbox.</div></div>`}
                 <div id="wsp-hook-instances">
@@ -1968,12 +1984,12 @@ const WorkshopUI = (() => {
                 </div>` : ''}
             </div>
 
-            <div class="wsp-subsection" data-vfield="script" style="--accent:#27ae72">
+            <div class="wsp-subsection ${sectionStatusClass(v, 'script')}" data-vfield="script" style="--accent:#27ae72">
                 ${subTitle('script', 'Script', '— fill it in and Script Writing completes itself')}
                 ${window.EggRenderer ? window.EggRenderer.inlineScriptEditorHtml('workshop-inline-script', 'Script') : '<textarea id="workshop-script"></textarea>'}
             </div>
 
-            <div class="wsp-subsection wsp-decomp-section${isDecompSkipped(v) ? ' skipped' : ''}" data-vfield="decomp" style="--accent:#e8a020">
+            <div class="wsp-subsection wsp-decomp-section ${sectionStatusClass(v, 'decomp')}${isDecompSkipped(v) ? ' skipped' : ''}" data-vfield="decomp" style="--accent:#e8a020">
                 ${subTitle('decomp', 'Decomposition', '— break the build into components. Each becomes its own entity in the pipeline (its own stages &amp; needs) while staying linked to this video, which waits for it. Click a component to open it.')}
                 ${isDecompSkipped(v)
                     ? `<div class="wsp-skip-banner">
@@ -1992,7 +2008,7 @@ const WorkshopUI = (() => {
                         </div>`}
             </div>
 
-            <div class="wsp-subsection" data-vfield="voiceover" style="--accent:#8e44ad">
+            <div class="wsp-subsection ${sectionStatusClass(v, 'voiceover')}" data-vfield="voiceover" style="--accent:#8e44ad">
                 ${subTitle('voiceover', 'Voiceover', '— one per video (audio or video file), stored in the project\'s vo/ folder in Dropbox. Sits just before Editing: the stage completes itself the moment one is linked.')}
                 <div id="wsp-vo-section">
                     ${v.voPath
@@ -2003,7 +2019,7 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
-            <div class="wsp-subsection" data-vfield="editing" style="--accent:#27ae60">
+            <div class="wsp-subsection ${sectionStatusClass(v, 'editing')}" data-vfield="editing" style="--accent:#27ae60">
                 ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
                 ${v.project ? '' : `<div class="wsp-blockers-box"><div class="wsp-blocker-line">${icon('lock', 'wsp-row-ic')} Select a Channel Project first — the final videos live in that project's Dropbox folder.</div></div>`}
                 <div id="wsp-edit-full" class="wsp-edit-slot"></div>
