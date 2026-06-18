@@ -11,7 +11,7 @@ const JarvisRetention = (function () {
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
     let root = null, DATA = null, S = null, err = null;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -255,13 +255,13 @@ const JarvisRetention = (function () {
     // expected views WITH a range — it can't be deterministic; the model sees only ~1/3 of what drives views.
     const SLCOL = { keep: C.cyan, retention: C.green, log_dur: C.yellow, hook: C.accent, tail: C.purple, nonsub_keep: C.cyan };
     function pval(key) { st.pvals = st.pvals || {}; const sl = S.predictor.v_best.sliders.find(s => s.key === key); return st.pvals[key] != null ? st.pvals[key] : (sl ? sl.default : 0); }
-    function predictBest() {
+    function predictBest(overrides) {
         const vb = S.predictor.v_best, P10 = e => Math.pow(10, e); let plog = vb.intercept;
         vb.features.forEach((f, i) => { const sl = vb.sliders.find(s => s.key === f);
-            let x = sl ? pval(f) : vb.feat_median[f]; if (sl && sl.transform === 'ln') x = Math.log(Math.max(x, 1));
+            let x = overrides && overrides[f] != null ? overrides[f] : (sl ? pval(f) : vb.feat_median[f]); if (sl && sl.transform === 'ln') x = Math.log(Math.max(x, 1));
             plog += vb.coef[i] * x; });
         const sd = vb.resid_sd_log10;
-        return { mid: P10(plog), lo50: P10(plog - 0.6745 * sd), hi50: P10(plog + 0.6745 * sd), lo80: P10(plog - 1.2816 * sd), hi80: P10(plog + 1.2816 * sd) };
+        return { log: plog, mid: P10(plog), lo50: P10(plog - 0.6745 * sd), hi50: P10(plog + 0.6745 * sd), lo80: P10(plog - 1.2816 * sd), hi80: P10(plog + 1.2816 * sd) };
     }
     function predictOut() {
         const r = predictBest(), vb = S.predictor.v_best;
@@ -281,7 +281,33 @@ const JarvisRetention = (function () {
                 ${statc('80% likely between', fv(r.lo80) + ' – ' + fv(r.hi80), C.orange)}</div>`;
     }
     function updatePredict() { const o = root.querySelector('#predict-out'); if (o) o.innerHTML = predictOut();
+        const g = root.querySelector('#predict-graph'); if (g) g.innerHTML = leverGraph();
         S.predictor.v_best.sliders.forEach(s => { const el = root.querySelector('#pf-' + s.key + '-val'); if (el) el.textContent = pval(s.key) + s.unit; }); }
+    function leverGraph() {
+        const vb = S.predictor.v_best, scale = st.predScale || 'actual', w = 520, h = 230, pl = 46, pr = 16, pt = 14, pb = 34;
+        const series = vb.sliders.map(sl => {
+            const vals = Array.from({ length: 25 }, (_, i) => sl.min + (sl.max - sl.min) * i / 24);
+            return { sl, pts: vals.map(v => ({ x: v, r: predictBest({ [sl.key]: v }) })) };
+        });
+        const logs = series.flatMap(s => s.pts.map(p => p.r.log)), lo = Math.min(...logs), hi = Math.max(...logs);
+        const X = (v, sl) => pl + (v - sl.min) / ((sl.max - sl.min) || 1) * (w - pl - pr);
+        const Y = logv => h - pb - (logv - lo) / ((hi - lo) || 1) * (h - pt - pb);
+        const label = scale === 'log' ? v => fmtv(v, 2) : v => fv(Math.pow(10, v));
+        let s = `<line x1="${pl}" y1="${h - pb}" x2="${w - pr}" y2="${h - pb}" stroke="${C.border2}"/><line x1="${pl}" y1="${pt}" x2="${pl}" y2="${h - pb}" stroke="${C.border2}"/>`;
+        for (let i = 0; i <= 4; i++) { const lv = lo + (hi - lo) * i / 4, y = Y(lv);
+            s += `<line x1="${pl}" y1="${y}" x2="${w - pr}" y2="${y}" stroke="${C.border}" stroke-dasharray="3 3"/><text x="${pl - 5}" y="${y + 3}" text-anchor="end" fill="${C.mute}" font-size="8">${label(lv)}</text>`; }
+        series.forEach((se, i) => {
+            const color = SLCOL[se.sl.key] || [C.cyan, C.green, C.yellow, C.purple][i % 4];
+            let p = ''; se.pts.forEach((ptd, j) => p += (j ? 'L' : 'M') + X(ptd.x, se.sl) + ' ' + Y(ptd.r.log) + ' ');
+            s += `<path d="${p}" fill="none" stroke="${color}" stroke-width="2.5" opacity="0.9"/>`;
+            const cur = pval(se.sl.key), r = predictBest({ [se.sl.key]: cur });
+            s += `<circle cx="${X(cur, se.sl)}" cy="${Y(r.log)}" r="4" fill="${color}" stroke="${C.bg}" stroke-width="1.5"><title>${esc(se.sl.label)} ${fmt(cur, 0)}${se.sl.unit} → ${fv(r.mid)} views</title></circle>`;
+            s += `<text x="${pl + i * 112}" y="11" fill="${color}" font-size="9" font-weight="800">${esc(se.sl.label)}</text>`;
+        });
+        s += `<text x="${(pl + w - pr) / 2}" y="${h - 6}" text-anchor="middle" fill="${C.dim}" font-size="10">each lever swept min→max, other levers held at current slider values</text>`;
+        s += `<text x="11" y="${(pt + h - pb) / 2}" fill="${C.dim}" font-size="10" transform="rotate(-90 11 ${(pt + h - pb) / 2})">${scale === 'log' ? 'log10 views' : 'views, log-scaled axis'}</text>`;
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}</svg>`;
+    }
     function renderPredict() {
         const P = S.predictor, vb = P.v_best, sel = S.selection;
         const base = P.v2_keep_ret, P10 = e => Math.pow(10, e), baseMult = P10(1.2816 * base.resid_sd_log10), bestMult = P10(1.2816 * vb.resid_sd_log10);
@@ -291,6 +317,12 @@ const JarvisRetention = (function () {
         h += cardc(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${statc('model R²', fmtv(vb.cv_r2, 2), C.accent)}${statc('range now', '×/÷ ' + fmtv(bestMult, 1), C.green)}${statc('vs keep+ret only', '×/÷ ' + fmtv(baseMult, 1), C.mute)}</div>
             ${vb.sliders.map(sld).join('')}
             <div id="predict-out" style="margin-top:6px;padding-top:12px;border-top:1px solid ${C.border}">${predictOut()}</div>`);
+        h += cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+                <div><div style="font-weight:700;color:${C.text}">Lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Shows every possible value for each kept predictor. Axis is intentionally non-linear because views are power-law distributed.</div></div>
+                <div style="display:flex;gap:6px">
+                    <button data-pred-scale="actual" style="background:${st.predScale === 'actual' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'actual' ? C.accent : C.border};color:${st.predScale === 'actual' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">actual views</button>
+                    <button data-pred-scale="log" style="background:${st.predScale === 'log' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'log' ? C.accent : C.border};color:${st.predScale === 'log' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">log10</button>
+                </div></div><div id="predict-graph">${leverGraph()}</div>`);
         h += note(`Adding <b>duration</b> tightened the band from ×/÷ ${fmtv(baseMult, 1)} (keep+retention only) to <b>×/÷ ${fmtv(bestMult, 1)}</b>. It's still a <b>range, not a number</b>: these levers pin down ~${Math.round(vb.cv_r2 * 100)}% of views — the other ~${Math.round((1 - vb.cv_r2) * 100)}% is the algorithm's impression push, topic, and timing, which no on-video metric can see. Center bar = best single guess; the 80% band = where it would realistically land.`, C.accent);
         return h;
     }
@@ -306,6 +338,7 @@ const JarvisRetention = (function () {
     }
 
     function onClick(e) {
+        const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
         const th = e.target.closest('[data-sort]');
         if (th) { const k = th.getAttribute('data-sort'); if (st.sort === k) st.dir *= -1; else { st.sort = k; st.dir = (k === 'title' || k === 'published') ? 1 : -1; } render(); return; }
