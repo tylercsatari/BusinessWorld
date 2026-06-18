@@ -1243,14 +1243,27 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 throw new Error(`Pinecone query error: ${pcRes.status} ${errText}`);
             }
             const pcData = await pcRes.json();
-
-            const results = (pcData.matches || []).map(m => ({
-                id: m.id,
-                name: m.metadata?.name || '',
-                score: m.score,
-                status: m.metadata?.status || '',
-                tags: m.metadata?.tags || ''
+            const vec = (pcData.matches || []).map(m => ({
+                id: m.id, name: m.metadata?.name || '', score: m.score,
+                status: m.metadata?.status || '', tags: m.metadata?.tags || ''
             }));
+
+            // HYBRID: literal substring matches from LIVE ideas first (always
+            // current, catches exact-name items the stale/semantic index misses),
+            // then vector matches, deduped.
+            const qWords = String(query).toLowerCase().trim().split(/\s+/).filter(Boolean).map(w => w.replace(/s$/, ''));
+            const litHit = (text) => { const h = (text || '').toLowerCase(); return qWords.length > 0 && qWords.every(w => h.includes(w)); };
+            const allIdeas = await dataStore.getAll('ideas');
+            const lit = (allIdeas || []).filter(r => {
+                if (statusFilter && statusFilter !== 'all' && (r.status || r.type) !== statusFilter) return false;
+                return litHit(`${r.name || ''} ${r.hook || ''} ${r.context || ''} ${r.tags || ''}`);
+            }).map(r => ({ id: r.id, name: r.name || '', score: 1, status: r.status || r.type || '', tags: r.tags || '',
+                nameHit: litHit(r.name) }))
+              .sort((a, b) => (b.nameHit - a.nameHit) || (a.name || '').localeCompare(b.name || ''));
+
+            const seen = new Set(lit.map(r => r.id));
+            const results = [...lit];
+            vec.forEach(r => { if (!seen.has(r.id)) { seen.add(r.id); results.push(r); } });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ results }));
@@ -1315,6 +1328,26 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
             const body = await readBody(req);
             const { query, topK = 15, typeFilter } = body;
             if (!query) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'query is required' })); return; }
+            // HYBRID: literal substring matches from LIVE data first (always
+            // current — catches exact-name items even if the vector index is stale
+            // or semantically misses them), then vector matches, deduped.
+            // word-level, plural-insensitive: every query word (minus trailing s)
+            // must appear, so "angry birds" matches "Angry Bird (part 1)" too.
+            const qWords = String(query).toLowerCase().trim().split(/\s+/).filter(Boolean).map(w => w.replace(/s$/, ''));
+            const litHit = (text) => { const h = (text || '').toLowerCase(); return qWords.length > 0 && qWords.every(w => h.includes(w)); };
+            const wantType = (t) => !typeFilter || typeFilter === 'all' || typeFilter === t;
+            const lit = [];
+            const pushLit = (rows, type) => (rows || []).forEach(r => {
+                if (litHit(`${r.name || ''} ${r.hook || ''} ${r.context || ''}`)) {
+                    lit.push({ id: r.id, type, name: r.name || '', status: r.status || '', score: 1, literal: true, nameHit: litHit(r.name) });
+                }
+            });
+            const [lv, lp, lc] = await Promise.all([
+                wantType('video') ? dataStore.getAll('videos') : [], wantType('project') ? dataStore.getAll('projects') : [], wantType('component') ? dataStore.getAll('components') : []
+            ]);
+            pushLit(lv, 'video'); pushLit(lp, 'project'); pushLit(lc, 'component');
+            lit.sort((a, b) => (b.nameHit - a.nameHit) || (a.name || '').localeCompare(b.name || ''));   // name hits first
+
             const data = await openaiEmbed([query]);
             const pcBody = { vector: data[0].embedding, topK, namespace: 'pipeline', includeMetadata: true };
             if (typeFilter && typeFilter !== 'all') pcBody.filter = { type: { '$eq': typeFilter } };
@@ -1324,11 +1357,14 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
             });
             if (!pcRes.ok) throw new Error(`Pinecone query ${pcRes.status}: ${await pcRes.text()}`);
             const pcData = await pcRes.json();
-            const results = (pcData.matches || []).map(m => ({
+            const vec = (pcData.matches || []).map(m => ({
                 id: (m.id || '').split(':').slice(1).join(':'),
                 type: m.metadata?.type || (m.id || '').split(':')[0],
                 name: m.metadata?.name || '', status: m.metadata?.status || '', score: m.score
             }));
+            const seen = new Set(lit.map(r => r.type + ':' + r.id));
+            const results = [...lit];
+            vec.forEach(r => { const k = r.type + ':' + r.id; if (!seen.has(k)) { seen.add(k); results.push(r); } });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ results }));
         } catch (e) {

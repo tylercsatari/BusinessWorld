@@ -2172,7 +2172,7 @@ const WorkshopUI = (() => {
             clearTimeout(saveTimer);
             saveTimer = setTimeout(() => doSave(false), 600);
         };
-        ['workshop-name', 'workshop-hook', 'workshop-context'].forEach(id => {
+        ['workshop-name', 'workshop-context'].forEach(id => {   // hook is its own instances now, not a field here
             const el = get(id);
             if (!el) return;
             el.addEventListener('input', scheduleSave);
@@ -3889,13 +3889,16 @@ const WorkshopUI = (() => {
         const rawProject = get('workshop-project')?.value || '';
         const noProject = rawProject === '__none__';
         const project = noProject ? '' : rawProject;
-        const hook = get('workshop-hook')?.value || '';
         const context = get('workshop-context')?.value || '';
         const deadline = get('workshop-deadline')?.value || '';
         const sponsorId = get('workshop-sponsor')?.value || '';
         try {
+            // NOTE: do NOT write `hook` here. The hook lives in hook INSTANCES
+            // (v.hooks, saved by saveHooks) — there is no #workshop-hook field, so
+            // reading it would always be '' and silently wipe the hook on the video
+            // AND (via saveWithIdeaSync) on the linked Library idea.
             await VideoService.saveWithIdeaSync(v.id, {
-                name, project, noProject, hook, context, deadline, sponsorId,
+                name, project, noProject, context, deadline, sponsorId,
                 status: normalizedStatus(v)
             });
             return true;
