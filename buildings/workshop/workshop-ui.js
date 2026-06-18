@@ -1923,7 +1923,16 @@ const WorkshopUI = (() => {
         const name = prompt('Video name:');
         if (!name || !name.trim()) return;
         try {
-            const video = await VideoService.create({ name: name.trim(), status: 'pipeline', stageState: {} });
+            // Create the backing Library idea FIRST, then the video linked to it,
+            // so the Library indexes every pipeline video (single source of truth).
+            // type 'converted' = an idea that's already in the pipeline (same as a
+            // queued idea), so it shows in the Library and stays in sync.
+            let sourceIdeaId = '';
+            try {
+                const idea = await NotesService.create({ name: name.trim(), type: 'converted', hook: '', context: '', script: '', project: '' });
+                sourceIdeaId = (idea && idea.id) || '';
+            } catch (e) { console.warn('Workshop: backing idea create failed (video still created)', e); }
+            const video = await VideoService.create({ name: name.trim(), status: 'pipeline', stageState: {}, sourceIdeaId });
             openDetail(video.id);
         } catch (e) {
             console.warn('Workshop: create video failed', e);
