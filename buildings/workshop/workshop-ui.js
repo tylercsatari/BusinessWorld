@@ -1437,9 +1437,7 @@ const WorkshopUI = (() => {
             const subDone = sub.filter(k => k.status === 'done').length;
             return `<div class="wsp-row wsp-comp-row${depth ? ' nested' : ''}" data-comp="${c.id}" style="margin-left:${depth * 24}px">
                 <span class="wsp-row-name">${depth ? '<span class="wsp-comp-branch">↳</span> ' : ''}${escHtml(c.name)}${sub.length ? ` <span class="wsp-hint">${subDone}/${sub.length} sub-components done</span>` : ''}</span>
-                <div class="wsp-status-cycle">
-                    ${componentTrack(c).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-comp-status="${s}">${s}</button>`).join('')}
-                </div>
+                ${componentStageGraphic(c)}
                 <button class="wsp-mini-btn" data-comp-sub="${c.id}" title="Break this down further — add a sub-component">＋ sub</button>
                 <button class="wsp-mini-btn danger" data-comp-del="${c.id}">✕</button>
             </div>` + componentTreeHtml(projectId, c.id, depth + 1);
@@ -2364,9 +2362,25 @@ const WorkshopUI = (() => {
                 ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
                 <span class="wsp-comp-stage">${escHtml(c.status || 'design')}</span>
             </div>
-            ${c.status !== 'done' ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done — push this component to its next stage">✓ Done</button>` : ''}
+            ${(c.status !== 'done' && stageWritable(componentStageId(c))) ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done — push this component to its next stage">✓ Done</button>` : ''}
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
         </div>`;
+    }
+
+    // Read-only graphic of where a component sits in its pipeline track. The stage
+    // is NOT editable here — a component flows on its own and is only advanced by
+    // the worker who owns its CURRENT stage (via their Done button).
+    function componentStageGraphic(c) {
+        const track = componentTrack(c);
+        const curIdx = track.indexOf(c.status);
+        return `<div class="wsp-stage-track" title="Where this component is right now (read-only) — it advances when the worker at its current stage marks it done">` +
+            track.map((s, i) => {
+                const state = (s === 'done')
+                    ? (c.status === 'done' ? 'done' : 'future')
+                    : (i < curIdx ? 'past' : i === curIdx ? 'current' : 'future');
+                return `<span class="wsp-stage-step ${state}">${escHtml(s)}</span>`;
+            }).join('<span class="wsp-stage-sep">›</span>') +
+        `</div>`;
     }
 
     // The deliverable required to LEAVE a component's current status. CAD/PCB
@@ -2386,6 +2400,9 @@ const WorkshopUI = (() => {
     async function advanceComponent(componentId, rerenderFn) {
         const c = SVC().components.getById(componentId);
         if (!c || c.status === 'done') return;
+        // Only the worker who owns the component's CURRENT stage can advance it —
+        // decomposition (and any other node) can't push it through the pipeline.
+        if (!stageWritable(componentStageId(c))) { alert('Only the worker at this component’s current stage can mark it done.'); return; }
         const ds = componentDeliverableStatus(c);
         if (!ds.met) { alert(`This can’t move forward yet:\n\n• ${ds.missing}`); return; }
         const next = nextComponentStatus(c);
@@ -2534,10 +2551,8 @@ const WorkshopUI = (() => {
                             </div>
                         </div>
                         <div data-cfield="status" style="margin-top:10px;">
-                            <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now (only the stages it needs)</span></div>
-                            <div class="wsp-status-cycle" data-comp="${c.id}" id="cd-status-cycle">
-                                ${componentTrack(c).map(s => `<button class="wsp-pill ${c.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('')}
-                            </div>
+                            <div class="wsp-cd-label">Stage <span class="wsp-hint">— where it is right now (read-only; it advances when the worker at its stage marks it done)</span></div>
+                            <div id="cd-status-cycle">${componentStageGraphic(c)}</div>
                         </div>
                         <div data-cfield="needs" style="margin-top:10px;">
                             <div class="wsp-cd-label">What it needs <span class="wsp-hint">— pick every step it requires; a build component only flows through these stages</span></div>
@@ -2580,7 +2595,7 @@ const WorkshopUI = (() => {
                         <textarea id="cd-notes" placeholder="Anything else about this component…">${escHtml(c.notes || '')}</textarea>`)}
 
                     <div class="wsp-cd-footer">
-                        <button class="wsp-mini-btn done" id="cd-done">✓ Done</button>
+                        ${(c.status !== 'done' && stageWritable(componentStageId(c))) ? '<button class="wsp-mini-btn done" id="cd-done">✓ Done</button>' : ''}
                         <button class="wsp-mini-btn danger" id="cd-delete">🗑 Delete component</button>
                     </div>
                 </div>
@@ -2669,9 +2684,10 @@ const WorkshopUI = (() => {
         // DONE — push the component to its next status (build: design→cad→…→done;
         // order: needed→ordered→done; task: todo→doing→done). 'done' takes it off
         // the board.
-        q('#cd-done').addEventListener('click', async () => {
+        q('#cd-done')?.addEventListener('click', async () => {   // absent when the viewer doesn't own this component's current stage
             const c2 = cur();
             if (c2.status === 'done') { alert('This component is already done.'); return; }
+            if (!stageWritable(componentStageId(c2))) { alert('Only the worker at this component’s current stage can mark it done.'); return; }
             const ds = componentDeliverableStatus(c2);
             if (!ds.met) { alert(`This can’t move forward yet:\n\n• ${ds.missing}`); return; }
             const next = nextComponentStatus(c2);
@@ -2691,18 +2707,13 @@ const WorkshopUI = (() => {
         // Open the linked video
         const fv = q('[data-open-video]');
         if (fv) fv.addEventListener('click', () => { close(); openDetail(fv.dataset.openVideo); });
-        // Stage — the available statuses depend on the component's type, so this
-        // re-renders whenever the type changes below.
+        // Stage — READ-ONLY graphic. The component advances on its own (the worker
+        // at its current stage presses Done); you can't jump it around from here.
+        // Re-renders when the type/needs change (the track can change shape).
         const renderStatusCycle = () => {
             const cyc = q('#cd-status-cycle');
             if (!cyc) return;
-            const c2 = cur();
-            cyc.innerHTML = componentTrack(c2).map(s => `<button class="wsp-pill ${c2.status === s ? 'active' : ''}" data-cd-status="${s}">${s}</button>`).join('');
-            cyc.querySelectorAll('[data-cd-status]').forEach(btn => btn.addEventListener('click', async () => {
-                dirty = true;
-                await saveComp({ status: btn.dataset.cdStatus });
-                cyc.querySelectorAll('[data-cd-status]').forEach(b => b.classList.toggle('active', b === btn));
-            }));
+            cyc.innerHTML = componentStageGraphic(cur());
         };
         renderStatusCycle();
         // Needs (multi-select) — toggle the local set synchronously; debounce
