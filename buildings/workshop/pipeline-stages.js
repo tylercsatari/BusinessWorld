@@ -192,8 +192,11 @@ const PipelineStages = (() => {
     // fields (hookType/hookVideoPath) read as one instance.
     function hooksOf(video) {
         if (video && Array.isArray(video.hooks) && video.hooks.length) return video.hooks;
-        if (video && video.hookType) {
-            return [{ id: 'legacy', type: video.hookType, label: '', videoPath: video.hookVideoPath || '', videoName: video.hookVideoName || '' }];
+        // Legacy single hook — a typed hook AND/OR a written hook line (e.g. the
+        // one carried over from a Library idea via video.hook). Surface it as one
+        // editable instance so it isn't lost when the idea enters the pipeline.
+        if (video && (video.hookType || (video.hook || '').trim())) {
+            return [{ id: 'legacy', type: video.hookType || '', text: video.hook || '', visual: '', label: '', videoPath: video.hookVideoPath || '', videoName: video.hookVideoName || '' }];
         }
         return [];
     }
