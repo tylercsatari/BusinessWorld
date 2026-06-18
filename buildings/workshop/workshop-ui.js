@@ -32,6 +32,8 @@ const WorkshopUI = (() => {
     let _scopedStagePicked = false;  // one-time auto-focus for single-node workers
     let expandedStageVideoId = null;
     let selectedProjectId = null;
+    let _pipelineIndexed = false;   // lazy semantic-search index (per session)
+    let searchType = 'all';
     let currentPage = 'list';
 
     // Pipeline board filters (apply to everything: dots, counts, stage panel)
@@ -335,6 +337,7 @@ const WorkshopUI = (() => {
                     <div class="workshop-header">
                         <h2>Workshop</h2>
                         <span class="workshop-count" id="wsp-count"></span>
+                        <button class="wsp-header-btn" id="wsp-find-btn" title="Semantic search — find any video, project or component by meaning">🔎 Find</button>
                         <button class="wsp-header-btn" id="wsp-queue-idea-btn" title="Queue an idea from the Library">📚 Queue Idea</button>
                         <button class="wsp-header-btn primary" id="wsp-new-video-btn">＋ New Video</button>
                     </div>
@@ -358,6 +361,25 @@ const WorkshopUI = (() => {
                         <div class="wsp-picker-list" id="wsp-picker-list"></div>
                     </div>
                 </div>
+                <div class="wsp-picker-overlay" id="wsp-search-overlay" style="display:none;">
+                    <div class="wsp-picker wsp-search-modal">
+                        <div class="wsp-picker-header">
+                            <span>🔎 Find anything in the pipeline</span>
+                            <button class="wsp-picker-close" id="wsp-search-close">✕</button>
+                        </div>
+                        <div class="wsp-search-bar">
+                            <input type="search" id="wsp-search-input" class="wsp-search" placeholder="Describe what you're looking for — by meaning, not exact words…" autocomplete="off" style="flex:1;max-width:none;">
+                        </div>
+                        <div class="wsp-search-types" id="wsp-search-types">
+                            <button class="wsp-pill active" data-stype="all">All</button>
+                            <button class="wsp-pill" data-stype="video">🎬 Videos</button>
+                            <button class="wsp-pill" data-stype="project">🛠️ Projects</button>
+                            <button class="wsp-pill" data-stype="component">🧩 Components</button>
+                        </div>
+                        <div class="wsp-search-results" id="wsp-search-results"><div class="wsp-hint" style="padding:14px;">Type to search…</div></div>
+                        <div class="wsp-search-foot"><button class="wsp-mini-btn" id="wsp-search-reindex">↻ Reindex</button> <span class="wsp-hint" id="wsp-search-status"></span></div>
+                    </div>
+                </div>
             </div>
         `;
 
@@ -375,6 +397,83 @@ const WorkshopUI = (() => {
         document.getElementById('wsp-picker-overlay').addEventListener('click', (e) => {
             if (e.target.id === 'wsp-picker-overlay') hidePicker();
         });
+        // Semantic search — owner only (it spans every video/project/component).
+        const findBtn = document.getElementById('wsp-find-btn');
+        if (findBtn && !isOwnerUser()) findBtn.style.display = 'none';
+        findBtn?.addEventListener('click', openSearch);
+        document.getElementById('wsp-search-close')?.addEventListener('click', closeSearch);
+        document.getElementById('wsp-search-overlay')?.addEventListener('click', (e) => { if (e.target.id === 'wsp-search-overlay') closeSearch(); });
+        let searchT = null;
+        document.getElementById('wsp-search-input')?.addEventListener('input', (e) => {
+            const q = e.target.value; clearTimeout(searchT); searchT = setTimeout(() => runPipelineSearch(q), 320);
+        });
+        document.getElementById('wsp-search-types')?.querySelectorAll('[data-stype]').forEach(b => b.addEventListener('click', () => {
+            searchType = b.dataset.stype;
+            document.querySelectorAll('#wsp-search-types [data-stype]').forEach(x => x.classList.toggle('active', x === b));
+            runPipelineSearch(document.getElementById('wsp-search-input').value);
+        }));
+        document.getElementById('wsp-search-reindex')?.addEventListener('click', async () => {
+            await ensurePipelineIndex(true);
+            runPipelineSearch(document.getElementById('wsp-search-input').value);
+        });
+    }
+
+    // ============ SEMANTIC SEARCH (videos / projects / components) ============
+    function closeSearch() { const ov = document.getElementById('wsp-search-overlay'); if (ov) ov.style.display = 'none'; }
+    function openSearch() {
+        const ov = document.getElementById('wsp-search-overlay');
+        if (!ov) return;
+        ov.style.display = 'flex';
+        const input = document.getElementById('wsp-search-input');
+        if (input) { input.value = ''; setTimeout(() => input.focus(), 50); }
+        const resEl = document.getElementById('wsp-search-results');
+        if (resEl) resEl.innerHTML = '<div class="wsp-hint" style="padding:14px;">Type to search…</div>';
+        ensurePipelineIndex(false);
+    }
+    // Build/refresh the Pinecone index once per session (or when forced).
+    async function ensurePipelineIndex(force) {
+        if (_pipelineIndexed && !force) return;
+        const status = document.getElementById('wsp-search-status');
+        if (status) status.textContent = force ? 'Reindexing…' : 'Preparing search…';
+        try {
+            const r = await fetch('/api/pipeline/index-embeddings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+            _pipelineIndexed = true;
+            if (status) status.textContent = (d.indexed != null) ? `Indexed ${d.indexed} items` : 'Ready';
+        } catch (e) { if (status) status.textContent = 'Index error: ' + e.message; }
+    }
+    async function runPipelineSearch(q) {
+        const resEl = document.getElementById('wsp-search-results');
+        if (!resEl) return;
+        if (!q || !q.trim()) { resEl.innerHTML = '<div class="wsp-hint" style="padding:14px;">Type to search…</div>'; return; }
+        resEl.innerHTML = '<div class="wsp-hint" style="padding:14px;">Searching…</div>';
+        try {
+            await ensurePipelineIndex(false);
+            const r = await fetch('/api/pipeline/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q, typeFilter: searchType }) });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+            const results = (d.results || []).filter(x => x.score == null || x.score > 0.18);
+            if (!results.length) { resEl.innerHTML = '<div class="workshop-empty" style="padding:18px;">No matches. Try different words, or ↻ Reindex if you just added it.</div>'; return; }
+            const TM = { video: { ic: '🎬', label: 'Video' }, project: { ic: '🛠️', label: 'Project' }, component: { ic: '🧩', label: 'Component' } };
+            resEl.innerHTML = results.map(x => {
+                const tm = TM[x.type] || { ic: '•', label: x.type };
+                return `<div class="wsp-search-row" data-sid="${escAttr(x.id)}" data-stype2="${escAttr(x.type)}">
+                    <span class="wsp-search-ic">${tm.ic}</span>
+                    <span class="wsp-search-name">${escHtml(x.name || '(unnamed)')}${x.status ? ` <span class="wsp-hint">${escHtml(x.status)}</span>` : ''}</span>
+                    <span class="wsp-search-type">${tm.label}</span>
+                </div>`;
+            }).join('');
+            resEl.querySelectorAll('.wsp-search-row').forEach(row => row.addEventListener('click', () => navigateToResult(row.dataset.stype2, row.dataset.sid)));
+        } catch (e) {
+            resEl.innerHTML = `<div class="workshop-empty" style="padding:18px;">Search failed: ${escHtml(e.message)}</div>`;
+        }
+    }
+    function navigateToResult(type, id) {
+        closeSearch();
+        if (type === 'video') openDetail(id);
+        else if (type === 'component') openComponentDetail(id);
+        else if (type === 'project') { selectedProjectId = id; switchTab('projects'); }
     }
 
     function switchTab(tab) {

@@ -1263,6 +1263,82 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
     }
 
     // =========================================
+    // API: Pipeline — semantic search across videos / projects / components
+    // (Pinecone namespace 'pipeline'). Mirrors /api/ideas/* .
+    // =========================================
+    async function openaiEmbed(inputs) {
+        const r = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+            body: JSON.stringify({ input: inputs, model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small', dimensions: parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS) || 512 })
+        });
+        if (!r.ok) throw new Error(`OpenAI embeddings ${r.status}: ${await r.text()}`);
+        return (await r.json()).data;
+    }
+    if (pathname === '/api/pipeline/index-embeddings' && req.method === 'POST') {
+        try {
+            const [videos, projects, components] = await Promise.all([
+                dataStore.getAll('videos'), dataStore.getAll('projects'), dataStore.getAll('components')
+            ]);
+            const docs = [];
+            (videos || []).forEach(v => docs.push({ id: 'v:' + v.id, type: 'video', name: v.name || '', status: v.status || '',
+                text: `${v.name || ''}. Hook: ${v.hook || ''}. ${v.context || ''}. Script: ${(v.script || '').slice(0, 600)}`.trim() }));
+            (projects || []).forEach(p => docs.push({ id: 'p:' + p.id, type: 'project', name: p.name || '', status: p.status || '',
+                text: `Project: ${p.name || ''}. ${p.notes || ''}`.trim() }));
+            (components || []).forEach(c => docs.push({ id: 'c:' + c.id, type: 'component', name: c.name || '', status: c.status || '',
+                text: `Component: ${c.name || ''}. ${c.notes || ''} ${(Array.isArray(c.needs) ? c.needs.join(' ') : '')}`.trim() }));
+            if (!docs.length) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ indexed: 0 })); return; }
+
+            const vectors = [];
+            for (let i = 0; i < docs.length; i += 50) {
+                const batch = docs.slice(i, i + 50);
+                const data = await openaiEmbed(batch.map(d => d.text || d.name || ' '));
+                batch.forEach((d, j) => vectors.push({ id: d.id, values: data[j].embedding, metadata: { type: d.type, name: d.name, status: d.status } }));
+            }
+            for (let i = 0; i < vectors.length; i += 100) {
+                const up = await fetch(`${process.env.PINECONE_HOST}/vectors/upsert`, {
+                    method: 'POST', headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ vectors: vectors.slice(i, i + 100), namespace: 'pipeline' })
+                });
+                if (!up.ok) throw new Error(`Pinecone upsert ${up.status}: ${await up.text()}`);
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ indexed: vectors.length }));
+        } catch (e) {
+            console.error('pipeline/index-embeddings error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+    if (pathname === '/api/pipeline/search' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const { query, topK = 15, typeFilter } = body;
+            if (!query) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'query is required' })); return; }
+            const data = await openaiEmbed([query]);
+            const pcBody = { vector: data[0].embedding, topK, namespace: 'pipeline', includeMetadata: true };
+            if (typeFilter && typeFilter !== 'all') pcBody.filter = { type: { '$eq': typeFilter } };
+            const pcRes = await fetch(`${process.env.PINECONE_HOST}/query`, {
+                method: 'POST', headers: { 'Api-Key': process.env.PINECONE_API_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify(pcBody)
+            });
+            if (!pcRes.ok) throw new Error(`Pinecone query ${pcRes.status}: ${await pcRes.text()}`);
+            const pcData = await pcRes.json();
+            const results = (pcData.matches || []).map(m => ({
+                id: (m.id || '').split(':').slice(1).join(':'),
+                type: m.metadata?.type || (m.id || '').split(':')[0],
+                name: m.metadata?.name || '', status: m.metadata?.status || '', score: m.score
+            }));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ results }));
+        } catch (e) {
+            console.error('pipeline/search error:', e);
+            res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // =========================================
     // API: Pinecone proxy  /api/pinecone/:action
     // =========================================
     const pineconeMatch = pathname.match(/^\/api\/pinecone\/(upsert|delete|query)$/);
