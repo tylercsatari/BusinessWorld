@@ -17,7 +17,13 @@ if (fs.existsSync(envPath)) {
 const videoAnalyzer = require('./video-analyzer');
 const geminiWatch = require('./gemini-watch');
 const videolabCoordinator = require('./videolab-coordinator');
-const codexRunner = require('./codex-runner');
+let codexRunner = null;
+try {
+    codexRunner = require('./codex-runner');
+} catch (e) {
+    if (e.code !== 'MODULE_NOT_FOUND') throw e;
+    console.warn('codex-runner unavailable; in-app Codex chat will be disabled.');
+}
 const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
@@ -2362,6 +2368,14 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                     console.warn('Telegram Codex reply failed:', tgErr.message);
                 }
             };
+
+            if (!codexRunner || typeof codexRunner.runCodex !== 'function') {
+                const text = 'Codex chat runner is not available on this server.';
+                await appendAssistantReply(text, { source: 'codex', error: true });
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: text, messageId, timestamp }));
+                return;
+            }
 
             codexRunner.runCodex(prompt, { timeout: parseInt(process.env.CODEX_CHAT_TIMEOUT_MS || '180000', 10) })
                 .then(async result => {
