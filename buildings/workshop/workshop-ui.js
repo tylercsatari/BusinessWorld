@@ -1052,8 +1052,6 @@ const WorkshopUI = (() => {
         const stage = PS().get(selectedStageId);
         const e = boardEntities()[selectedStageId] || { videos: [], components: [], orders: [] };
         const autoDesc = PS().autoDesc(selectedStageId);
-        const owner = SVC().stageOwners()[selectedStageId] || '';
-        const names = rosterNames(owner ? [owner] : []);
 
         const { comps: stageComps, tasks: stageTasks } = splitComps(e.components);
         const breakdown = [
@@ -1074,12 +1072,6 @@ const WorkshopUI = (() => {
                     ${autoDesc ? `<div class="wsp-auto-desc">⚡ ${escHtml(autoDesc)}</div>` : ''}
                 </div>
                 <div class="wsp-stage-panel-side">
-                    <label class="wsp-owner-label" title="Who owns this stage — everything here is automatically their queue">Owner
-                        <select id="wsp-stage-owner">
-                            <option value="">— nobody —</option>
-                            ${names.map(n => `<option value="${escAttr(n)}" ${owner === n ? 'selected' : ''}>${escHtml(n)}</option>`).join('')}
-                        </select>
-                    </label>
                     <button class="wsp-picker-close" id="wsp-stage-panel-close">✕</button>
                 </div>
             </div>
@@ -1097,18 +1089,15 @@ const WorkshopUI = (() => {
             expandedStageVideoId = null;
             renderTab();
         });
-        document.getElementById('wsp-stage-owner').addEventListener('change', (ev) => {
-            SVC().setStageOwner(selectedStageId, ev.target.value).catch(err => console.warn('stage owner save failed', err));
-        });
         // [data-done] (Complete Decomposition) + [data-publish] are bound in
         // bindPanelRows. No generic bare-"Done" any more — completion is the
         // deliverable.
         bindPanelRows(panel);
         // Read-only stage: you can view/expand everything but not change it. Disable
-        // the write controls (owner, done, status pills, moves) and keep navigation.
+        // the write controls (done, status pills, moves) and keep navigation.
         if (!stageWritable(selectedStageId)) {
             panel.classList.add('wsp-readonly');
-            panel.querySelectorAll('#wsp-stage-owner, [data-done], .wsp-pill, [data-comp-status], [data-order-status], [data-cd-status], [data-inv-status], [data-move], [data-advance]').forEach(el => {
+            panel.querySelectorAll('[data-done], [data-node-done], .wsp-pill, [data-comp-status], [data-order-status], [data-cd-status], [data-inv-status], [data-move], [data-advance]').forEach(el => {
                 el.disabled = true; el.style.pointerEvents = 'none'; el.style.opacity = '0.55';
             });
         }
