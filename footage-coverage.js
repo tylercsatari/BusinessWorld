@@ -85,12 +85,14 @@ Be conservative: only list a gap when the script clearly calls for footage that 
  */
 async function analyzeProject({ video, projectFolder, deps }) {
     const { listFolder, download, geminiAnalyze, kimiJson, cacheGet, cacheSet, onEvent } = deps;
-    const emit = (msg, extra) => { try { onEvent && onEvent({ msg, ...(extra || {}) }); } catch (e) {} };
+    const emit = (ev) => { try { onEvent && onEvent(ev); } catch (e) {} };
 
-    emit(`Listing footage in ${projectFolder} …`);
+    emit({ type: 'phase', phase: 'listing', msg: `Listing footage in ${projectFolder} …` });
     const entries = await listFolder(projectFolder);
     const clips = entries.filter(isRawClip);
-    emit(`Found ${clips.length} raw clip${clips.length === 1 ? '' : 's'} to check.`);
+    // Tell the caller the full work-list up front so the UI can show "n/total" and
+    // a per-clip checklist of exactly what's been analyzed vs not.
+    emit({ type: 'list', total: clips.length, clips: clips.map(c => ({ name: c.name, path: c.path_display || c.path_lower, size: c.size || 0 })), msg: `Found ${clips.length} raw clip${clips.length === 1 ? '' : 's'} to check.` });
 
     const analyzed = [];
     let fromCache = 0;
@@ -102,23 +104,24 @@ async function analyzeProject({ video, projectFolder, deps }) {
         if (cached && cached.analysis) {
             analysis = cached.analysis;
             fromCache++;
-            emit(`(${i + 1}/${clips.length}) ${e.name} — cached ✓`, { clip: { name: e.name, cached: true } });
+            emit({ type: 'clip', index: i, name: e.name, status: 'cached', msg: `(${i + 1}/${clips.length}) ${e.name} — cached ✓` });
         } else {
-            emit(`(${i + 1}/${clips.length}) Downloading & watching ${e.name} …`, { clip: { name: e.name, cached: false } });
+            emit({ type: 'clip', index: i, name: e.name, status: 'analyzing', msg: `(${i + 1}/${clips.length}) Downloading & watching ${e.name} …` });
             try {
                 const bytes = await download(e.path_display || e.path_lower);
                 const { result } = await geminiAnalyze(bytes, mimeOf(e.name), CLIP_PROMPT, { displayName: e.name });
                 analysis = (result && !result._parseError) ? result : { summary: '', shots: [], spoken: '', keywords: [], _err: result && result._parseError };
                 await cacheSet(hash, { contentHash: hash, path: e.path_display || e.path_lower, name: e.name, analysis });
+                emit({ type: 'clip', index: i, name: e.name, status: 'done', summary: analysis.summary || '', msg: `(${i + 1}/${clips.length}) ${e.name} — analyzed ✓` });
             } catch (err) {
-                emit(`   ⚠ ${e.name}: ${err.message}`);
                 analysis = { summary: '', shots: [], spoken: '', keywords: [], _err: err.message };
+                emit({ type: 'clip', index: i, name: e.name, status: 'error', error: err.message, msg: `   ⚠ ${e.name}: ${err.message}` });
             }
         }
         analyzed.push({ name: e.name, path: e.path_display || e.path_lower, analysis });
     }
 
-    emit(`Reasoning over the script vs ${analyzed.length} clip${analyzed.length === 1 ? '' : 's'} …`);
+    emit({ type: 'phase', phase: 'reasoning', msg: `Reasoning over the script vs ${analyzed.length} clip${analyzed.length === 1 ? '' : 's'} …` });
     const { sys, user } = buildCoveragePrompt(video.script || '', analyzed);
     const raw = await kimiJson([{ role: 'system', content: sys }, { role: 'user', content: user }], 8000);
     let parsed;
@@ -130,7 +133,7 @@ async function analyzeProject({ video, projectFolder, deps }) {
     }
     const gaps = Array.isArray(parsed.gaps) ? parsed.gaps : [];
     const covered = Array.isArray(parsed.covered) ? parsed.covered : [];
-    emit(`Done — ${covered.length} covered, ${gaps.length} possible gap${gaps.length === 1 ? '' : 's'}.`);
+    emit({ type: 'phase', phase: 'done', msg: `Done — ${covered.length} covered, ${gaps.length} possible gap${gaps.length === 1 ? '' : 's'}.` });
 
     return {
         clipsAnalyzed: analyzed.length,

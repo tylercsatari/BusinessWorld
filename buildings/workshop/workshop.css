@@ -1054,6 +1054,25 @@
 .wsp-footage-gap-beat { font-size: 12.5px; font-weight: 700; color: #8a5a00; }
 .wsp-footage-gap-quote { font-size: 11.5px; color: #6b5b3e; font-style: italic; margin-top: 2px; }
 .wsp-footage-gap-note { font-size: 11.5px; color: #5b748f; margin-top: 2px; }
+/* Footage-coverage live progress modal */
+.wsp-footage-modal { max-width: 540px; width: 92vw; }
+.wsp-footage-prog { margin-top: 6px; }
+.wsp-footage-bar { height: 8px; background: #e9eef3; border-radius: 5px; overflow: hidden; }
+.wsp-footage-bar-fill { height: 100%; width: 6%; background: linear-gradient(90deg, #4a9eff, #27ae60); border-radius: 5px; transition: width .35s ease; }
+.wsp-footage-count { font-size: 12px; color: #38516b; margin-top: 6px; font-weight: 600; }
+.wsp-footage-cliplist { margin-top: 8px; max-height: 320px; overflow-y: auto; border: 1px solid #e6ddcb; border-radius: 7px; }
+.wsp-footage-clip { display: flex; align-items: center; gap: 8px; padding: 5px 9px; font-size: 12px; border-bottom: 1px solid #f1ecdf; }
+.wsp-footage-clip:last-child { border-bottom: none; }
+.wsp-footage-clip-ic { width: 16px; text-align: center; flex: 0 0 auto; }
+.wsp-footage-clip-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #2c3e50; }
+.wsp-footage-clip-status { flex: 0 0 auto; font-size: 11px; color: #8aa0b5; }
+.wsp-footage-clip.is-pending { opacity: .55; }
+.wsp-footage-clip.is-analyzing { background: #eef6ff; }
+.wsp-footage-clip.is-analyzing .wsp-footage-clip-status { color: #2f80d8; font-weight: 600; }
+.wsp-footage-clip.is-done .wsp-footage-clip-ic { color: #27ae60; }
+.wsp-footage-clip.is-cached .wsp-footage-clip-ic { color: #b8860b; }
+.wsp-footage-clip.is-error { background: #fdecea; }
+.wsp-footage-clip.is-error .wsp-footage-clip-ic, .wsp-footage-clip.is-error .wsp-footage-clip-status { color: #e74c3c; }
 /* AI hook suggestion cards — line + visual + rationale + predicted swipe-through */
 .wsp-hooksug { display: flex; align-items: flex-start; gap: 10px; padding: 10px 4px; border-bottom: 1px solid #efe9dc; }
 .wsp-hooksug-main { flex: 1 1 auto; min-width: 0; }

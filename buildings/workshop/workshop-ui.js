@@ -3299,43 +3299,78 @@ const WorkshopUI = (() => {
         return { step, close: () => overlay.remove(), overlay };
     }
 
-    // Filming footage coverage: kick off the server-side scan, poll its progress
-    // (you can close the page — it keeps running and the result is saved on the
-    // video), then refresh so the persistent gap suggestions show.
+    // Filming footage coverage: kick off the server-side scan and show a live
+    // checklist — exactly which clips are queued, being watched, cached, analyzed,
+    // or failed, with an n/total bar. Runs server-side, so closing this (or the
+    // whole page) doesn't stop it; the result is saved on the video.
     async function runFootageCoverage(videoId, btn) {
         const v = VideoService.getById(videoId);
         if (!v) return;
         const orig = btn ? btn.textContent : '';
         if (btn) { btn.disabled = true; btn.textContent = '🔍 Scanning…'; }
-        const progress = openAiProgressModal('🔍 Footage coverage', 'watching every clip in Dropbox — this runs server-side, you can close the page');
-        progress.step('start', 'run', 'Starting footage scan', v.project || '');
+
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal wsp-footage-modal">
+            <div class="wsp-picker-header"><span>🔍 Footage coverage <span class="wsp-hint">— <span data-fcov-phase>starting…</span></span></span><button class="wsp-picker-close" data-close>✕</button></div>
+            <div class="wsp-footage-prog">
+                <div class="wsp-footage-bar"><div class="wsp-footage-bar-fill" data-fcov-fill></div></div>
+                <div class="wsp-footage-count" data-fcov-count>Preparing…</div>
+            </div>
+            <div class="wsp-footage-cliplist" data-fcov-list></div>
+            <div class="wsp-hint" style="margin-top:8px">Runs server-side — you can close this or leave the page; results are saved to the video.</div>
+        </div>`;
+        (container.querySelector('.workshop-panel') || container).appendChild(overlay);
+        overlay.querySelector('[data-close]').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+        const PHASE_LABEL = { starting: 'starting…', listing: 'listing footage…', analyzing: 'watching clips…', reasoning: 'reasoning over the script…', done: 'done ✓', error: 'error' };
+        const ICON = { pending: '○', analyzing: '<span class="wsp-spin"></span>', cached: '⚡', done: '✓', error: '⚠' };
+        const STATUS_LABEL = { pending: 'queued', analyzing: 'watching…', cached: 'cached', done: 'analyzed', error: 'failed' };
+        const renderProg = (pr) => {
+            if (!overlay.isConnected) return;
+            const clips = pr.clips || [];
+            const total = pr.total || clips.length || 0;
+            const processed = clips.filter(c => c.status === 'cached' || c.status === 'done' || c.status === 'error').length;
+            const fresh = clips.filter(c => c.status === 'done').length;
+            const cached = clips.filter(c => c.status === 'cached').length;
+            const errs = clips.filter(c => c.status === 'error').length;
+            const phaseEl = overlay.querySelector('[data-fcov-phase]'); if (phaseEl) phaseEl.textContent = PHASE_LABEL[pr.phase] || pr.phase || '';
+            const fill = overlay.querySelector('[data-fcov-fill]'); if (fill) fill.style.width = (total ? Math.round(processed / total * 100) : (pr.done ? 100 : 6)) + '%';
+            const count = overlay.querySelector('[data-fcov-count]');
+            if (count) count.textContent = total
+                ? `${processed} / ${total} clips · ${fresh} newly analyzed · ${cached} cached${errs ? ` · ${errs} failed` : ''}${pr.phase === 'reasoning' ? ' · reasoning…' : ''}`
+                : (pr.phase === 'listing' ? 'Listing footage…' : 'Preparing…');
+            const list = overlay.querySelector('[data-fcov-list]');
+            if (list) list.innerHTML = clips.map(c => `<div class="wsp-footage-clip is-${c.status}"><span class="wsp-footage-clip-ic">${ICON[c.status] || '○'}</span><span class="wsp-footage-clip-name">${escHtml(c.name)}</span><span class="wsp-footage-clip-status">${STATUS_LABEL[c.status] || c.status}</span></div>`).join('');
+        };
+
         try {
             const res = await fetch('/api/footage-coverage/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoId }) });
             const start = await res.json().catch(() => ({}));
             if (!res.ok || !start.jobId) throw new Error(start.error || `Failed: ${res.status}`);
-            progress.step('start', 'done', 'Scan started', 'pulling & watching clips…');
             const jobId = start.jobId;
-            let seen = 0;
             while (true) {
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, 1200));
                 let pr;
                 try { pr = await fetch('/api/footage-coverage/progress?job=' + encodeURIComponent(jobId)).then(r => r.json()); } catch (_) { continue; }
                 if (!pr) continue;
-                (pr.events || []).slice(seen).forEach((m, i) => progress.step('e' + (seen + i), 'done', m));
-                seen = (pr.events || []).length;
+                renderProg(pr);
                 if (pr.done) {
                     if (pr.error) throw new Error(pr.error);
-                    const rep = pr.result || {};
-                    progress.step('fin', 'done', 'Done', `${rep.gapsCount || 0} possible gap${rep.gapsCount === 1 ? '' : 's'}, ${rep.coveredCount || 0} covered`);
                     await VideoService.sync(true).catch(() => {});   // pull the saved gaps onto the video
                     renderTab();
-                    setTimeout(() => progress.close(), 1500);
                     break;
                 }
             }
         } catch (e) {
             console.warn('footage coverage failed', e);
-            progress.step('err', 'error', 'Footage scan failed', e.message);
+            if (overlay.isConnected) {
+                const count = overlay.querySelector('[data-fcov-count]');
+                if (count) { count.textContent = '⚠ ' + (e.message || 'Scan failed'); count.style.color = '#e74c3c'; }
+                const phaseEl = overlay.querySelector('[data-fcov-phase]'); if (phaseEl) phaseEl.textContent = 'error';
+            }
         } finally {
             if (btn) { btn.disabled = false; btn.textContent = orig; }
         }
