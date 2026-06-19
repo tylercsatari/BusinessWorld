@@ -1048,6 +1048,8 @@
 .wsp-deliv-banner #wsp-deliv-list:not(:empty) { margin-top: 8px; }
 /* Filming footage-coverage tool — scan button + persistent gap suggestions */
 .wsp-footage-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.wsp-mini-btn.is-scanning { border-color: #4a9eff; color: #1c6fd6; background: #eef6ff; animation: wsp-scan-pulse 1.4s ease-in-out infinite; }
+@keyframes wsp-scan-pulse { 0%,100% { opacity: 1; } 50% { opacity: .62; } }
 .wsp-footage-gaps { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .wsp-footage-gap { display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px; background: #fff7ed; border: 1px solid #f3d8a8; border-left: 3px solid #e8a020; border-radius: 7px; }
 .wsp-footage-gap-main { flex: 1 1 auto; min-width: 0; }

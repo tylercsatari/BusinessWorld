@@ -525,6 +525,8 @@ const AI_VIDEO_IDEA_MAX_RUNS = 20;
 const AI_VIDEO_IDEA_MAX_TOTAL = 60;
 const AI_VIDEO_IDEA_DEDUPE_LIMIT = parseInt(process.env.AI_VIDEO_IDEA_DEDUPE_LIMIT || '2500', 10);
 const AI_VIDEO_IDEA_SIMILARITY_THRESHOLD = Number(process.env.AI_VIDEO_IDEA_SIMILARITY_THRESHOLD || 0.88);
+const AI_VIDEO_IDEA_JOB_TIMEOUT_MS = parseInt(process.env.AI_VIDEO_IDEA_JOB_TIMEOUT_MS || String(10 * 60 * 1000), 10);
+const AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS = parseInt(process.env.AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS || String(90 * 1000), 10);
 // In-memory progress for AI-idea generation jobs (the client polls these; SSE is
 // buffered by Render's proxy so streaming a long response shows nothing).
 const aiVideoJobs = {};
@@ -552,6 +554,23 @@ function aiVideoJobHeartbeat(job, phase, label, extra) {
         const elapsed = Math.round((Date.now() - started) / 1000);
         aiVideoJobEvent(job, phase, `${label} (${elapsed}s)`, extra);
     }, 10000);
+}
+
+function aiVideoJobFail(job, msg, detail) {
+    if (!job || job.done) return;
+    job.cancelled = true;
+    job.error = msg || 'AI video idea job failed.';
+    job.done = true;
+    if (job.abortController) {
+        try { job.abortController.abort(); } catch (e) {}
+    }
+    aiVideoJobEvent(job, 'error', job.error, detail);
+    job.phase = 'error';
+    job.updatedAt = Date.now();
+}
+
+function aiVideoThrowIfStopped(job) {
+    if (job && job.cancelled) throw new Error(job.error || 'AI video idea job stopped.');
 }
 
 const AI_VIDEO_IDEA_FORMULA = `
@@ -725,7 +744,7 @@ function aiVideoExtractJsonObject(text, key) {
     return null;
 }
 
-async function aiVideoKimiJson(messages, maxTokens = 18000, onToken) {
+async function aiVideoKimiJson(messages, maxTokens = 18000, onToken, signal) {
     if (!process.env.FIREWORKS_API_KEY) throw new Error('FIREWORKS_API_KEY not set');
     const stream = typeof onToken === 'function';
     const response = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
@@ -737,7 +756,8 @@ async function aiVideoKimiJson(messages, maxTokens = 18000, onToken) {
             temperature: 0.35,
             max_tokens: maxTokens,
             stream
-        })
+        }),
+        signal
     });
     if (!response.ok) { const t = await response.text(); throw new Error(`Kimi error ${response.status}: ${t.slice(0, 800)}`); }
     let content = '';
@@ -1916,6 +1936,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
             // cards) is reliable and lets the user watch the whole flow.
             const jobId = require('crypto').randomUUID();
             const requestInput = { runs, ideasPerRun, requestedIdeas: runs * ideasPerRun };
+            const abortController = new AbortController();
             const job = {
                 id: jobId,
                 phase: 'queued',
@@ -1936,7 +1957,9 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                         similarity: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD,
                         dedupeLimit: AI_VIDEO_IDEA_DEDUPE_LIMIT,
                         maxIdeasPerRun: AI_VIDEO_IDEA_MAX_BATCH,
-                        maxTotalIdeas: AI_VIDEO_IDEA_MAX_TOTAL
+                        maxTotalIdeas: AI_VIDEO_IDEA_MAX_TOTAL,
+                        jobTimeoutSeconds: Math.round(AI_VIDEO_IDEA_JOB_TIMEOUT_MS / 1000),
+                        idleTimeoutSeconds: Math.round(AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS / 1000)
                     },
                     pipeline: [
                         'acknowledge job',
@@ -1954,6 +1977,8 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 outputs: { modelOutputChars: 0, candidateCount: 0, createdCount: 0, rejectedCount: 0 },
                 done: false,
                 error: null,
+                cancelled: false,
+                abortController,
                 startedAt: Date.now(),
                 updatedAt: Date.now()
             };
@@ -1964,8 +1989,28 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
             res.end(JSON.stringify({ jobId, acceptedAt: new Date(job.startedAt).toISOString(), inputs: job.inputs }));
 
             const runJob = async () => {
+                const watchdog = setInterval(() => {
+                    if (job.done) { clearInterval(watchdog); return; }
+                    const now = Date.now();
+                    const totalMs = now - job.startedAt;
+                    const idleMs = now - (job.updatedAt || job.startedAt);
+                    if (totalMs > AI_VIDEO_IDEA_JOB_TIMEOUT_MS) {
+                        aiVideoJobFail(job, `AI video idea generation timed out after ${Math.round(totalMs / 1000)}s.`, {
+                            timeoutMs: AI_VIDEO_IDEA_JOB_TIMEOUT_MS,
+                            phase: job.phase
+                        });
+                        clearInterval(watchdog);
+                    } else if (idleMs > AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS) {
+                        aiVideoJobFail(job, `AI video idea generation stalled: no server progress for ${Math.round(idleMs / 1000)}s.`, {
+                            idleTimeoutMs: AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS,
+                            phase: job.phase
+                        });
+                        clearInterval(watchdog);
+                    }
+                }, 5000);
                 const emit = (ev) => {
                     if (!ev) return;
+                    if (job.cancelled) return;
                     if (ev.stage === 'token' && ev.delta) {
                         job.output += ev.delta;
                         if (job.output.length > 90000) job.output = job.output.slice(-90000);
@@ -2003,6 +2048,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                     } finally {
                         clearInterval(heartbeat);
                     }
+                    aiVideoThrowIfStopped(job);
                     const internetSummary = context.internet?.youtubeMostPopular
                         ? { youtubeMostPopularCount: context.internet.youtubeMostPopular.length, topVideos: context.internet.youtubeMostPopular.slice(0, 5).map(v => ({ title: v.title, channel: v.channel, views: v.views })) }
                         : { note: context.internet?.note || 'No live trend provider configured.' };
@@ -2030,6 +2076,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                     } finally {
                         clearInterval(heartbeat);
                     }
+                    aiVideoThrowIfStopped(job);
                     const byType = referenceDocs.reduce((acc, doc) => { acc[doc.type || 'unknown'] = (acc[doc.type || 'unknown'] || 0) + 1; return acc; }, {});
                     emit({
                         phase: 'dedupe',
@@ -2042,6 +2089,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                     const rejected = [];
                     const runReports = [];
                     for (let runIndex = 0; runIndex < runs; runIndex++) {
+                        aiVideoThrowIfStopped(job);
                         const messages = aiVideoPromptMessages(ideasPerRun, context, runIndex, runs);
                         const promptChars = messages.reduce((sum, m) => sum + String(m.content || '').length, 0);
                         emit({
@@ -2073,10 +2121,11 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                                     emit({ phase: 'reasoning', msg: `Kimi stream started for run ${runIndex + 1}.`, detail: { run: runIndex + 1 } });
                                 }
                                 emit({ stage: 'token', delta });
-                            });
+                            }, abortController.signal);
                         } finally {
                             clearInterval(heartbeat);
                         }
+                        aiVideoThrowIfStopped(job);
                         const normalized = (response.ideas || []).slice(0, ideasPerRun).map((idea, idx) => aiVideoNormalizeIdea(idea, runIndex, idx));
                         normalized.forEach(idea => emit({ stage: 'candidate', phase: 'candidate', idea, msg: `Candidate object parsed: ${idea.title}`, detail: { scores: idea.scores, P: idea.promise, V: idea.earlyVisual, O: idea.payoff } }));
                         emit({
@@ -2092,8 +2141,10 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                         } finally {
                             clearInterval(heartbeat);
                         }
+                        aiVideoThrowIfStopped(job);
                         let runCreated = 0, runRejected = 0;
                         for (let i = 0; i < normalized.length; i++) {
+                            aiVideoThrowIfStopped(job);
                             const idea = normalized[i];
                             const embedding = embeddings[i];
                             const ideaText = aiVideoIdeaText(idea);
@@ -2124,11 +2175,9 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                     emit({ done: true, phase: 'done', msg: `Done: created ${created.length}, pruned ${rejected.length} near-duplicate${rejected.length === 1 ? '' : 's'}.`, created, rejected, output: { createdCount: created.length, rejectedCount: rejected.length, runReports } });
                 } catch (e) {
                     console.error('ai-video-ideas generate error:', e);
-                    job.error = e.message;
-                    job.done = true;
-                    job.phase = 'error';
-                    job.updatedAt = Date.now();
-                    aiVideoJobEvent(job, 'error', `Error: ${e.message}`);
+                    aiVideoJobFail(job, e.message || 'AI video idea generation failed.');
+                } finally {
+                    clearInterval(watchdog);
                 }
             };
             setImmediate(runJob);
@@ -2142,6 +2191,22 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
     if (pathname === '/api/ai-video-ideas/progress' && req.method === 'GET') {
         const job = aiVideoJobs[url.searchParams.get('job')];
         if (!job) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'job not found' })); return; }
+        if (!job.done) {
+            const now = Date.now();
+            const totalMs = now - job.startedAt;
+            const idleMs = now - (job.updatedAt || job.startedAt);
+            if (totalMs > AI_VIDEO_IDEA_JOB_TIMEOUT_MS) {
+                aiVideoJobFail(job, `AI video idea generation timed out after ${Math.round(totalMs / 1000)}s.`, {
+                    timeoutMs: AI_VIDEO_IDEA_JOB_TIMEOUT_MS,
+                    phase: job.phase
+                });
+            } else if (idleMs > AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS) {
+                aiVideoJobFail(job, `AI video idea generation stalled: no server progress for ${Math.round(idleMs / 1000)}s.`, {
+                    idleTimeoutMs: AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS,
+                    phase: job.phase
+                });
+            }
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             id: job.id,
@@ -2176,7 +2241,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
         if (!(video.script || '').trim()) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'This video has no script yet — nothing to check footage against.' })); return; }
 
         const jobId = require('crypto').randomUUID();
-        const job = { events: [], phase: 'starting', total: 0, clips: [], done: false, error: null, result: null, startedAt: Date.now() };
+        const job = { videoId: video.id, events: [], phase: 'starting', total: 0, clips: [], done: false, error: null, result: null, startedAt: Date.now() };
         footageJobs[jobId] = job;
         // NOTE: the actual RESULT is persisted to the video record on R2
         // (footageGaps + footageReport) and the per-clip analyses to the
@@ -2273,6 +2338,22 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
         if (!job) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'job not found' })); return; }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ phase: job.phase, total: job.total, clips: job.clips, events: job.events, done: job.done, error: job.error, result: job.result, elapsed: Date.now() - job.startedAt }));
+        return;
+    }
+
+    // Which footage scan (if any) is still RUNNING for a given video — lets the
+    // client reattach the live progress modal after closing it or reloading the
+    // page (the scan keeps running server-side regardless).
+    if (pathname === '/api/footage-coverage/active' && req.method === 'GET') {
+        const vid = url.searchParams.get('videoId');
+        let found = null;
+        for (const [jid, j] of Object.entries(footageJobs)) {
+            if (j.done) continue;
+            if (vid && j.videoId !== vid) continue;
+            if (!found || j.startedAt > found.startedAt) found = { jobId: jid, videoId: j.videoId, phase: j.phase, total: j.total, startedAt: j.startedAt };
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jobId: found ? found.jobId : null, videoId: found ? found.videoId : null, phase: found ? found.phase : null }));
         return;
     }
 
