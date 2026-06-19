@@ -22,6 +22,9 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.cluster import KMeans
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+RS = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(RS)))
+VD = os.path.join(ROOT, 'video_data')
 np.random.seed(7)
 
 STOP = set("the a an and or but to of in on for with at by from up about into over after is are was were be been being this that these those it its as it's i you he she they we my your his her their our me him them us so if then than too very can will just dont don't im it’s was had has have do does did not no yes get got make made go going went one two first my so out see saw look looking watch wanted want wants how what when why where who which actually really gonna let lets here there now today thing things something someone everyone people guy guys way back take took put thats that's youre you're were we're im i'm because just like more most much many also even still own new make making makes day life world's world".split())
@@ -55,6 +58,41 @@ def pct(v):                                            # 0..1 percentile rank (f
 
 def niches(X, k=8):
     return KMeans(min(k, len(X)), n_init=10, random_state=7).fit_predict(L2(np.asarray(X, np.float32))).tolist()
+
+
+def toks(t):
+    ws = [w for w in re.findall(r"[a-zA-Z']+", (t or '').lower()) if len(w) >= 3 and w not in STOP]
+    return list(dict.fromkeys(ws))
+
+
+def read_scenes(vid):                                  # the already-interpreted per-frame analysis (first 5 s)
+    try:
+        a = json.load(open(os.path.join(VD, vid, 'analysis.json')))
+    except Exception:
+        return []
+    out = []
+    for f in (a.get('frames') or []):
+        t = f.get('timestamp'); an = f.get('analysis') or {}
+        if not isinstance(t, (int, float)) or t >= 5 or not an.get('sceneDescription'):
+            continue
+        ki = an.get('keyInsights'); ki = ki if isinstance(ki, list) else ([ki] if ki else [])
+        out.append({'t': round(float(t), 1), 'desc': (an.get('sceneDescription') or '')[:380],
+                    'visual': (an.get('visualTechniques') or '')[:300], 'cinema': (an.get('cinematography') or '')[:300],
+                    'engage': (an.get('engagementAnalysis') or '')[:300], 'insights': [str(x)[:160] for x in ki][:3]})
+    out.sort(key=lambda x: x['t'])
+    return out[:5]
+
+
+COMP_STOP = STOP | set("scene shows person people room background foreground frame image visible appears wearing standing sitting holding looking shot camera angle color colors lighting light bright dark natural warm tone text overlay screen left right center top bottom front behind large small white black blue red green clear likely seen various several".split())
+
+
+def components(scenes):                                # mechanical object/component chips from the scene descriptions
+    fr = {}
+    for s in scenes:
+        for w in [w.strip("'") for w in re.findall(r"[a-zA-Z']+", (s['desc'] or '').lower())]:
+            if len(w) >= 4 and w not in COMP_STOP:
+                fr[w] = fr.get(w, 0) + 1
+    return [w for w, c in sorted(fr.items(), key=lambda x: (-x[1], x[0]))][:10]
 
 
 def main():
@@ -110,16 +148,13 @@ def main():
         tnov.append(round(float((1 - Wn[i] @ Wn[nb].T).mean()), 4) if len(nb) else None)
     out['temporal'] = {'nov': tnov, 'window_days': 45}
 
-    # D — combinatorial: concept co-occurrence graph from the hook script
-    def toks(t):
-        ws = [w for w in re.findall(r"[a-zA-Z']+", (t or '').lower()) if len(w) >= 3 and w not in STOP]
-        return list(dict.fromkeys(ws))                 # unique, order-preserving
+    # D — combinatorial: concept co-occurrence graph from the hook script (broad vocab → fewer blanks)
     hooks = [toks(m['hook_text']) for m in meta]
     freq = {}
     for hs in hooks:
         for w in hs:
             freq[w] = freq.get(w, 0) + 1
-    vocab = [w for w, c in sorted(freq.items(), key=lambda x: -x[1]) if c >= 3][:60]
+    vocab = [w for w, c in sorted(freq.items(), key=lambda x: (-x[1], x[0])) if c >= 2][:100]
     vi = {w: i for i, w in enumerate(vocab)}
     co = np.zeros((len(vocab), len(vocab)))
     for hs in hooks:
@@ -128,21 +163,27 @@ def main():
             for b in range(a + 1, len(present)):
                 co[present[a], present[b]] += 1; co[present[b], present[a]] += 1
     pos = project(co + np.eye(len(vocab)) * 1e-3, perp=8) if len(vocab) > 6 else [[0, 0]] * len(vocab)
-    edges = []
-    for a in range(len(vocab)):
-        for b in range(a + 1, len(vocab)):
-            if co[a, b] >= 2:
-                edges.append({'a': a, 'b': b, 'w': int(co[a, b])})
-    # per-hook combination rarity = mean (1/cooccurrence) over its concept pairs (rarer pair = more novel)
-    rar = []
+    edges = [{'a': a, 'b': b, 'w': int(co[a, b])} for a in range(len(vocab)) for b in range(a + 1, len(vocab)) if co[a, b] >= 2]
+    # per-hook: its concepts, its concept pairs (with co-occurrence), and combination rarity
+    rar, vconcepts, vpairs = [], [], []
     for hs in hooks:
-        pr = [vi[w] for w in hs if w in vi]; vals = []
+        pr = [w for w in hs if w in vi]; vconcepts.append(pr)
+        pairs, vals = [], []
         for a in range(len(pr)):
             for b in range(a + 1, len(pr)):
-                vals.append(1.0 / (co[pr[a], pr[b]] + 1.0))
+                c = int(co[vi[pr[a]], vi[pr[b]]]); pairs.append({'a': pr[a], 'b': pr[b], 'co': c}); vals.append(1.0 / (c + 1.0))
+        vpairs.append(sorted(pairs, key=lambda p: p['co'])[:6])
         rar.append(round(float(np.mean(vals)), 4) if vals else None)
     out['combo'] = {'nodes': [{'w': w, 'freq': freq[w], 'pos': pos[i]} for i, w in enumerate(vocab)],
                     'edges': edges, 'rarity': rar}
+
+    # per-hook interpreted breakdown: scene-by-scene analysis + extracted object/components
+    for i, m in enumerate(meta):
+        sc = read_scenes(m['id'])
+        out['videos'][i]['scenes'] = sc
+        out['videos'][i]['components'] = components(sc)
+        out['videos'][i]['concepts'] = vconcepts[i]
+        out['videos'][i]['pairs'] = vpairs[i]
 
     # E — coherent: novelty (whole kNN) vs visual↔text coherence
     out['coherent'] = {'novelty': [round(float(x), 4) for x in knn_nov(whole)],

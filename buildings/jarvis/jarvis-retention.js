@@ -432,27 +432,46 @@ const JarvisRetention = (function () {
     function rankPct(arr, i) { const v = arr[i]; if (v == null) return 0; const s = arr.filter(x => x != null).sort((a, b) => a - b); return s.indexOf(v) / (s.length - 1 || 1); }
     function renderHookDetail(i) {
         const v = N.videos[i], g = N.global, nz = N.niche, ch = N.coherent;
-        const frames = [1, 2, 3, 4, 5].map(k => `<img src="./video_data/${esc(v.id)}/frames/frame_${String(k).padStart(4, '0')}.jpg" loading="lazy" onerror="this.style.display='none'" title="second ${k}" style="width:62px;height:110px;object-fit:cover;border-radius:6px;border:1px solid ${C.border2}"/>`).join('');
         const bar = (label, val, pctv, color) => `<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span style="color:${C.dim}">${label}</span><span style="color:${C.text};font-weight:700">${val}</span></div><div style="height:5px;background:${C.card};border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round((pctv || 0) * 100)}%;background:${color || C.accent}"></div></div></div>`;
-        const chip = (lab, c) => `<span style="display:inline-block;background:${c}22;border:1px solid ${c};color:${c};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700">${lab}</span>`;
+        const chip = (lab, c) => `<span style="display:inline-block;background:${c}22;border:1px solid ${c};color:${c};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0">${esc(lab)}</span>`;
         const coord = m => N.proj[m] && N.proj[m][i] ? `(${N.proj[m][i][0].toFixed(2)}, ${N.proj[m][i][1].toFixed(2)})` : '—';
-        const col2 = (title, body) => `<div style="flex:1;min-width:210px"><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">${title}</div>${body}</div>`;
+        const col2 = (title, body) => `<div style="flex:1;min-width:208px"><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">${title}</div>${body}</div>`;
+        // scene-by-scene interpreted breakdown (the "components" of each scene)
+        const sceneRows = (v.scenes || []).map((s, k) => `<div style="display:flex;gap:8px;padding:8px 0;border-top:1px solid ${C.border}">
+                <img src="./video_data/${esc(v.id)}/frames/frame_${String(Math.round(s.t) + 1).padStart(4, '0')}.jpg" loading="lazy" onerror="this.style.display='none'" style="width:52px;height:92px;object-fit:cover;border-radius:5px;border:1px solid ${C.border2};flex-shrink:0"/>
+                <div style="flex:1;font-size:11px;line-height:1.5;min-width:0">
+                    <div style="color:${C.cyan};font-weight:700;margin-bottom:1px">▸ second ${Math.round(s.t)}</div>
+                    <div style="color:${C.dim}">${esc(s.desc)}</div>
+                    ${s.visual ? `<div style="color:${C.mute};margin-top:2px"><b style="color:${C.faint}">visual:</b> ${esc(s.visual)}</div>` : ''}
+                    ${s.cinema ? `<div style="color:${C.mute}"><b style="color:${C.faint}">shot:</b> ${esc(s.cinema)}</div>` : ''}
+                    ${s.engage ? `<div style="color:${C.mute}"><b style="color:${C.faint}">engagement:</b> ${esc(s.engage)}</div>` : ''}
+                    ${(s.insights && s.insights.length) ? `<div style="margin-top:3px">${s.insights.map(x => chip(x, C.green)).join('')}</div>` : ''}
+                </div></div>`).join('') || `<div style="font-size:11px;color:${C.mute};padding-top:6px">no per-frame analysis stored for this video</div>`;
+        const comps = (v.components || []).length ? (v.components || []).map(c => chip(c, C.orange)).join('') : `<span style="color:${C.mute};font-size:11px">—</span>`;
+        const concepts = (v.concepts || []).length ? (v.concepts || []).map(c => chip(c, C.purple)).join('') : `<span style="color:${C.mute};font-size:11px">none indexed in this hook</span>`;
+        const pairs = (v.pairs || []).length ? (v.pairs || []).map(p => `<div style="font-size:11px;color:${C.dim}">${esc(p.a)} <span style="color:${C.purple}">×</span> ${esc(p.b)} <span style="color:${C.mute}">· together ${p.co}×</span></div>`).join('') : `<div style="font-size:11px;color:${C.mute}">no concept pair (needs ≥2 indexed concepts)</div>`;
         return cardc(`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
                 <div><div style="font-size:15px;font-weight:800;color:${C.text}">${esc(v.name || v.id)}</div>
                     <div style="font-size:11px;color:${C.mute};margin-top:2px">${fv(v.views)} views · ${v.published || '—'} · ${v.age_days != null ? v.age_days + 'd old' : '—'} · id ${esc(v.id)}</div></div>
                 <div style="display:flex;gap:6px;flex-shrink:0"><a href="${esc(v.url)}" target="_blank" style="background:${C.red}22;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;text-decoration:none">▶ YouTube ↗</a>
                     <button data-novclose style="background:transparent;border:1px solid ${C.border2};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">✕ close</button></div></div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-                <div><div style="font-size:10px;color:${C.mute};margin-bottom:4px">HOOK FRAMES (first 5s, 1 fps)</div><div style="display:flex;gap:5px">${frames}</div></div>
-                <div style="flex:1;min-width:220px"><div style="font-size:10px;color:${C.mute};margin-bottom:4px">HOOK SCRIPT (first 5s)</div><div style="font-size:12px;color:${C.dim};line-height:1.5;background:${C.card2};border:1px solid ${C.border};border-radius:8px;padding:8px 10px;max-height:110px;overflow:auto">${esc(v.hook_text || '(no speech in first 5s)')}</div></div></div>
-            <div style="display:flex;gap:18px;flex-wrap:wrap;border-top:1px solid ${C.border};padding-top:12px">
+            <div style="font-size:10px;color:${C.mute};margin-bottom:4px">HOOK SCRIPT (first 5s)</div>
+            <div style="font-size:12px;color:${C.dim};line-height:1.5;background:${C.card2};border:1px solid ${C.border};border-radius:8px;padding:8px 10px;margin-bottom:12px">${esc(v.hook_text || '(no speech in first 5s)')}</div>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;border-top:1px solid ${C.border};padding-top:12px;margin-bottom:8px">
                 ${col2('A · Global novelty', ['whole', 'concept', 'visual'].map(m => bar(m, fmtv(g[m].nov[i], 3) + ' · ' + Math.round(g[m].pct[i] * 100) + 'th pct', g[m].pct[i], heatCol(g[m].pct[i]))).join(''))}
-                ${col2('B · Niche', ['whole', 'concept', 'visual'].map(m => `<div style="margin-bottom:7px;font-size:11px;color:${C.dim}">${m}: ${chip('cluster ' + nz[m].labels[i], NPAL[nz[m].labels[i] % NPAL.length])} <span style="color:${C.mute}">· dist to centre ${fmtv(nz[m].dist_to_centre[i], 3)}</span></div>`).join(''))}
-                ${col2('C · Temporal', bar('novelty vs ±45d', N.temporal.nov[i] == null ? '—' : fmtv(N.temporal.nov[i], 3), rankPct(N.temporal.nov, i), C.green) + `<div style="font-size:10px;color:${C.mute}">distance from hooks posted within 45 days</div>`)}
-                ${col2('D · Combinatorial', bar('combo rarity', N.combo.rarity[i] == null ? '—' : fmtv(N.combo.rarity[i], 3), rankPct(N.combo.rarity, i), C.purple) + `<div style="font-size:10px;color:${C.mute}">mean rarity of its concept pairings</div>`)}
-                ${col2('E · Coherent', bar('novelty', fmtv(ch.novelty[i], 3), ch.nov_pct[i], heatCol(ch.nov_pct[i])) + bar('coherence (vis↔words)', fmtv(ch.coherence[i], 3), ch.coh_pct[i], C.cyan) + `<div style="font-size:10px;color:${C.mute}">quadrant: ${ch.nov_pct[i] > .5 ? 'novel' : 'familiar'} + ${ch.coh_pct[i] > .5 ? 'coherent → ' + (ch.nov_pct[i] > .5 ? 'curiosity' : 'familiar') : 'incoherent → ' + (ch.nov_pct[i] > .5 ? 'confusion' : 'boring')}</div>`)}
-                ${col2('Scene + coords', bar('scene spread', fmtv(N.scene.spread[i], 3), rankPct(N.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · concept ${coord('concept')} · visual ${coord('visual')}</div>`)}
-            </div>`);
+                ${col2('B · Niche', ['whole', 'concept', 'visual'].map(m => `<div style="margin-bottom:7px;font-size:11px;color:${C.dim}">${m}: ${chip('cluster ' + nz[m].labels[i], NPAL[nz[m].labels[i] % NPAL.length])} <span style="color:${C.mute}">· dist ${fmtv(nz[m].dist_to_centre[i], 3)}</span></div>`).join(''))}
+                ${col2('C · Temporal', bar('novelty vs ±45d', N.temporal.nov[i] == null ? 'no neighbours' : fmtv(N.temporal.nov[i], 3), rankPct(N.temporal.nov, i), C.green) + `<div style="font-size:10px;color:${C.mute}">distance from hooks posted within 45 days</div>`)}
+                ${col2('E · Coherent', bar('novelty', fmtv(ch.novelty[i], 3), ch.nov_pct[i], heatCol(ch.nov_pct[i])) + bar('coherence (vis↔words)', fmtv(ch.coherence[i], 3), ch.coh_pct[i], C.cyan) + `<div style="font-size:10px;color:${C.mute}">quadrant: <b style="color:${ch.nov_pct[i] > .5 && ch.coh_pct[i] > .5 ? C.green : C.dim}">${(ch.nov_pct[i] > .5 ? 'novel' : 'familiar') + ' + ' + (ch.coh_pct[i] > .5 ? 'coherent' : 'incoherent')} → ${ch.nov_pct[i] > .5 ? (ch.coh_pct[i] > .5 ? 'curiosity' : 'confusion') : (ch.coh_pct[i] > .5 ? 'familiar' : 'boring')}</b></div>`)}
+                ${col2('Scene spread + map coords', bar('scene spread (visual cuts)', fmtv(N.scene.spread[i], 3), rankPct(N.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · concept ${coord('concept')} · visual ${coord('visual')}</div>`)}
+            </div>
+            <div style="border-top:1px solid ${C.border};padding-top:10px;margin-bottom:8px">
+                <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">D · Combinatorial breakdown ${N.combo.rarity[i] != null ? `<span style="color:${C.purple}">· rarity ${fmtv(N.combo.rarity[i], 3)} (${Math.round(rankPct(N.combo.rarity, i) * 100)}th pct)</span>` : `<span style="color:${C.mute}">· rarity n/a</span>`}</div>
+                <div style="font-size:10px;color:${C.mute};margin-bottom:3px">concepts in this hook's script</div><div style="margin-bottom:6px">${concepts}</div>
+                <div style="font-size:10px;color:${C.mute};margin-bottom:3px">concept pairings (rarer = more novel combination)</div>${pairs}</div>
+            <div style="border-top:1px solid ${C.border};padding-top:10px">
+                <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">Scene components — what's actually in each second</div>
+                <div style="font-size:10px;color:${C.mute};margin-bottom:3px">objects / elements detected across the hook</div><div style="margin-bottom:8px">${comps}</div>
+                ${sceneRows}</div>`);
     }
     function renderNovGlobal() {
         const g = N.global;
