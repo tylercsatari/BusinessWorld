@@ -1858,18 +1858,31 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 return;
             }
 
+            // Live progress: when the client asks for stream, send SSE events so it
+            // can show exactly what's happening (otherwise a plain JSON response).
+            const wantStream = body.stream === true;
+            let emit = () => {};
+            if (wantStream) {
+                res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+                emit = (ev) => { try { res.write('data: ' + JSON.stringify(ev) + '\n\n'); } catch (e) {} };
+            }
+            emit({ stage: 'context', msg: 'Reading Business World — your videos, ideas & trends…' });
             const context = await aiVideoBuildGenerationContext();
+            emit({ stage: 'reference', msg: 'Loading the reference set for duplicate detection…' });
             const referenceDocs = await aiVideoBuildReferenceDocs();
+            emit({ stage: 'reference', msg: `Comparing new ideas against ${referenceDocs.length} existing videos/ideas.` });
             const created = [];
             const rejected = [];
             const runReports = [];
 
             for (let runIndex = 0; runIndex < runs; runIndex++) {
+                emit({ stage: 'run', msg: `Run ${runIndex + 1}/${runs}: asking Kimi K2.6 for ${ideasPerRun} idea${ideasPerRun === 1 ? '' : 's'}, reasoning against the viral formula…` });
                 const messages = aiVideoPromptMessages(ideasPerRun, context, runIndex, runs);
                 const response = await aiVideoKimiJson(messages);
                 const normalized = (response.ideas || [])
                     .slice(0, ideasPerRun)
                     .map((idea, idx) => aiVideoNormalizeIdea(idea, runIndex, idx));
+                emit({ stage: 'run', msg: `Run ${runIndex + 1}: got ${normalized.length} idea${normalized.length === 1 ? '' : 's'} — embedding & checking for duplicates…` });
                 const embeddings = await aiVideoEmbedTexts(normalized.map(aiVideoIdeaText));
                 let runCreated = 0;
                 let runRejected = 0;
@@ -1881,10 +1894,12 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                     if (!ideaText.trim() || !idea.title.trim()) {
                         rejected.push({ title: idea.title || '(untitled)', reason: 'empty_idea', run: runIndex + 1 });
                         runRejected++;
+                        emit({ stage: 'idea', ok: false, msg: `✗ ${idea.title || '(untitled)'} — empty, skipped` });
                         continue;
                     }
                     const nearest = aiVideoNearest(embedding, referenceDocs);
                     if (nearest.score >= AI_VIDEO_IDEA_SIMILARITY_THRESHOLD) {
+                        emit({ stage: 'idea', ok: false, msg: `✗ ${idea.title} — too similar to "${nearest.title}" (${Math.round(nearest.score * 100)}%)` });
                         rejected.push({
                             title: idea.title,
                             reason: 'semantic_duplicate',
@@ -1931,12 +1946,13 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                     });
                     created.push(aiVideoPublicRecord(record));
                     runCreated++;
+                    emit({ stage: 'idea', ok: true, msg: `✓ ${idea.title}` });
                 }
                 runReports.push({ run: runIndex + 1, created: runCreated, rejected: runRejected });
+                emit({ stage: 'run', msg: `Run ${runIndex + 1} done — ${runCreated} kept, ${runRejected} pruned.` });
             }
 
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
+            const payload = {
                 created,
                 rejected,
                 runs,
@@ -1946,11 +1962,18 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 maxIdeasPerRun: AI_VIDEO_IDEA_MAX_BATCH,
                 similarityThreshold: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD,
                 batchRationale: 'Default 3 ideas per run. Small batches give Kimi more room to validate each candidate against the full formula; semantic dedupe then prunes near-duplicates deterministically.'
-            }));
+            };
+            if (wantStream) {
+                emit({ done: true, msg: `Done — created ${created.length}, pruned ${rejected.length} near-duplicate${rejected.length === 1 ? '' : 's'}.`, ...payload });
+                res.end();
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(payload));
+            }
         } catch (e) {
             console.error('ai-video-ideas generate error:', e);
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message }));
+            if (res.headersSent) { try { res.write('data: ' + JSON.stringify({ done: true, error: e.message }) + '\n\n'); } catch (_) {} res.end(); }
+            else { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         }
         return;
     }

@@ -511,20 +511,45 @@ const LibraryUI = (() => {
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
         try {
+            // Stream live progress (SSE) so the user sees exactly what's happening
+            // each step instead of a silent "Generating…".
             const res = await fetch('/api/ai-video-ideas/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun })
+                body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun, stream: true })
             });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || `Generate failed: ${res.status}`);
-            const created = (data.created || []).length;
-            const rejected = (data.rejected || []).length;
-            if (Array.isArray(data.created) && data.created.length) {
+            if (!res.ok || !res.body) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || `Generate failed: ${res.status}`);
+            }
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buf = '';
+            let finalEvent = null;
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+                let nl;
+                while ((nl = buf.indexOf('\n\n')) >= 0) {
+                    const block = buf.slice(0, nl); buf = buf.slice(nl + 2);
+                    const dline = block.split('\n').find(l => l.startsWith('data:'));
+                    if (!dline) continue;
+                    let ev; try { ev = JSON.parse(dline.slice(5).trim()); } catch (_) { continue; }
+                    if (ev.error) throw new Error(ev.error);
+                    if (ev.msg) { aiVideoIdeasStatus = ev.msg; renderAiVideoIdeas(); }
+                    if (ev.done) finalEvent = ev;
+                }
+            }
+            const data = finalEvent || {};
+            const createdArr = Array.isArray(data.created) ? data.created : [];
+            if (createdArr.length) {
                 const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
-                aiVideoIdeas = [...data.created.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
+                aiVideoIdeas = [...createdArr.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
                 aiVideoIdeasLoaded = true;
             }
+            const created = createdArr.length;
+            const rejected = (data.rejected || []).length;
             aiVideoIdeasStatus = `Created ${created} candidate${created === 1 ? '' : 's'}; pruned ${rejected} near-duplicate${rejected === 1 ? '' : 's'}.`;
         } catch (e) {
             aiVideoIdeasStatus = e.message || 'Generation failed.';
