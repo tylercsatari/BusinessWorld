@@ -660,15 +660,6 @@ const WorkshopUI = (() => {
     // concept stages (before) and production/post stages (Filming onward).
     const BUILD_STAGES = new Set(['design', 'propdesign', 'cad', 'pcb', 'order', 'precision', 'software', 'assembly', 'artistic']);
     const stageOrderIndex = (id) => { const i = PS().STAGES.findIndex(s => s.id === id); return i < 0 ? 9999 : i; };
-    // Where a video's single green count sits: the frontmost (closest-to-front)
-    // stage among its own non-build frontier stages and its components' stages.
-    function videoPositionStage(v, ctx) {
-        let best = null, bestIdx = Infinity;
-        const consider = (id) => { if (!id) return; const i = stageOrderIndex(id); if (i < bestIdx) { bestIdx = i; best = id; } };
-        PS().frontier(v, ctx).forEach(id => { if (!BUILD_STAGES.has(id)) consider(id); });
-        (ctx.components || []).filter(c => c && c.videoId === v.id && c.status !== 'done').forEach(c => consider(componentStageId(c)));
-        return best;
-    }
     function boardEntities() {
         const ctx = ctxNow();
         const byStage = {};
@@ -682,11 +673,13 @@ const WorkshopUI = (() => {
         });
         if (showTypes.video) {
             filteredVideos().forEach(v => {
-                // Rows: only the non-build frontier stages (concept + production/post).
-                PS().frontier(v, ctx).forEach(id => { if (!BUILD_STAGES.has(id) && byStage[id]) byStage[id].videos.push(v); });
-                // Green count: exactly once, at the video's frontmost position.
-                const pos = videoPositionStage(v, ctx);
-                if (pos && byStage[pos]) byStage[pos].videoCount++;
+                // Each node counts independently: a video is "in" every stage its
+                // frontier currently sits at (parallel branches → counted in each).
+                PS().frontier(v, ctx).forEach(id => {
+                    if (!byStage[id]) return;
+                    byStage[id].videoCount++;                                 // the green number
+                    if (!BUILD_STAGES.has(id)) byStage[id].videos.push(v);    // rows only in non-build stages
+                });
             });
         }
         if (showTypes.order) {
@@ -842,7 +835,7 @@ const WorkshopUI = (() => {
             // Separate colored count per type so it's readable at a glance:
             // green = videos, blue = components, orange = tasks, gold = orders.
             const cornerCounts = [
-                vidN ? `<span class="wsp-node-count vid" title="${vidN} video${vidN === 1 ? '' : 's'} positioned here">${vidN}</span>` : '',
+                vidN ? `<span class="wsp-node-count vid" title="${vidN} video${vidN === 1 ? '' : 's'} in this stage">${vidN}</span>` : '',
                 compsHere.length ? `<span class="wsp-node-count comp" title="${compsHere.length} component${compsHere.length === 1 ? '' : 's'}">${compsHere.length}</span>` : '',
                 tasksHere.length ? `<span class="wsp-node-count task" title="${tasksHere.length} task${tasksHere.length === 1 ? '' : 's'}">${tasksHere.length}</span>` : '',
                 e.orders.length ? `<span class="wsp-node-count ord" title="${e.orders.length} order${e.orders.length === 1 ? '' : 's'}">${e.orders.length}</span>` : ''
