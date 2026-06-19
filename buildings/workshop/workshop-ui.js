@@ -654,13 +654,25 @@ const WorkshopUI = (() => {
     }
 
     // Everything on the board, per stage, post-filter
+    // The build chain between Decomposition and Filming. Here the WORK is on the
+    // components, not the video — so videos don't appear as their own rows; their
+    // components do (wrapped by their video). Videos only show as rows in the
+    // concept stages (before) and production/post stages (Filming onward).
+    const BUILD_STAGES = new Set(['design', 'propdesign', 'cad', 'pcb', 'order', 'precision', 'software', 'assembly', 'artistic']);
+    const stageOrderIndex = (id) => { const i = PS().STAGES.findIndex(s => s.id === id); return i < 0 ? 9999 : i; };
+    // Where a video's single green count sits: the frontmost (closest-to-front)
+    // stage among its own non-build frontier stages and its components' stages.
+    function videoPositionStage(v, ctx) {
+        let best = null, bestIdx = Infinity;
+        const consider = (id) => { if (!id) return; const i = stageOrderIndex(id); if (i < bestIdx) { bestIdx = i; best = id; } };
+        PS().frontier(v, ctx).forEach(id => { if (!BUILD_STAGES.has(id)) consider(id); });
+        (ctx.components || []).filter(c => c && c.videoId === v.id && c.status !== 'done').forEach(c => consider(componentStageId(c)));
+        return best;
+    }
     function boardEntities() {
         const ctx = ctxNow();
         const byStage = {};
-        PS().STAGES.forEach(s => { byStage[s.id] = { videos: [], components: [], orders: [] }; });
-        if (showTypes.video) {
-            filteredVideos().forEach(v => PS().frontier(v, ctx).forEach(id => byStage[id].videos.push(v)));
-        }
+        PS().STAGES.forEach(s => { byStage[s.id] = { videos: [], components: [], orders: [], videoCount: 0 }; });
         // Tasks are source==='task' components but toggle/filter separately.
         filteredComponents().forEach(c => {
             const isTask = c.source === 'task';
@@ -668,6 +680,15 @@ const WorkshopUI = (() => {
             const sid = componentStageId(c);
             if (sid && byStage[sid]) byStage[sid].components.push(c);
         });
+        if (showTypes.video) {
+            filteredVideos().forEach(v => {
+                // Rows: only the non-build frontier stages (concept + production/post).
+                PS().frontier(v, ctx).forEach(id => { if (!BUILD_STAGES.has(id) && byStage[id]) byStage[id].videos.push(v); });
+                // Green count: exactly once, at the video's frontmost position.
+                const pos = videoPositionStage(v, ctx);
+                if (pos && byStage[pos]) byStage[pos].videoCount++;
+            });
+        }
         if (showTypes.order) {
             filteredOrders().forEach(o => byStage['order'].orders.push(o));
         }
@@ -813,19 +834,22 @@ const WorkshopUI = (() => {
             const p = pos[s.id];
             const e = entities[s.id];
             const { comps: compsHere, tasks: tasksHere } = splitComps(e.components);
-            const total = e.videos.length + e.components.length + e.orders.length;
+            // GREEN = videos positioned here (counted once at their frontmost stage,
+            // so green across all nodes sums to the total video count).
+            const vidN = e.videoCount || 0;
+            const total = vidN + e.components.length + e.orders.length;
             const blockedHere = e.videos.filter(v => videoBlockers(v).length > 0).length;
             // Separate colored count per type so it's readable at a glance:
             // green = videos, blue = components, orange = tasks, gold = orders.
             const cornerCounts = [
-                e.videos.length ? `<span class="wsp-node-count vid" title="${e.videos.length} video${e.videos.length === 1 ? '' : 's'}">${e.videos.length}</span>` : '',
+                vidN ? `<span class="wsp-node-count vid" title="${vidN} video${vidN === 1 ? '' : 's'} positioned here">${vidN}</span>` : '',
                 compsHere.length ? `<span class="wsp-node-count comp" title="${compsHere.length} component${compsHere.length === 1 ? '' : 's'}">${compsHere.length}</span>` : '',
                 tasksHere.length ? `<span class="wsp-node-count task" title="${tasksHere.length} task${tasksHere.length === 1 ? '' : 's'}">${tasksHere.length}</span>` : '',
                 e.orders.length ? `<span class="wsp-node-count ord" title="${e.orders.length} order${e.orders.length === 1 ? '' : 's'}">${e.orders.length}</span>` : ''
             ].join('');
             // Same breakdown, dot form, shown inline in the node subtitle
             const counts = [
-                e.videos.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.video}"></i>${e.videos.length}</span>` : '',
+                vidN ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.video}"></i>${vidN}</span>` : '',
                 compsHere.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.component}"></i>${compsHere.length}</span>` : '',
                 tasksHere.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.task}"></i>${tasksHere.length}</span>` : '',
                 e.orders.length ? `<span class="wsp-nc"><i style="background:${DOT_COLORS.order}"></i>${e.orders.length}</span>` : ''
@@ -1200,6 +1224,28 @@ const WorkshopUI = (() => {
         bindPanelRows(panel);
     }
 
+    // Render components grouped under their video — "this component is for this
+    // video". The component is the focus; the video header is just context.
+    function componentsByVideoHtml(comps) {
+        const groups = new Map();   // videoId -> [components], preserving first-seen order
+        comps.forEach(c => { const k = c.videoId || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); });
+        // Order wrappers by their video's name (stable, readable).
+        const entries = [...groups.entries()].sort((a, b) => {
+            const va = a[0] ? VideoService.getById(a[0]) : null, vb = b[0] ? VideoService.getById(b[0]) : null;
+            return (va ? va.name : 'zzz').localeCompare(vb ? vb.name : 'zzz');
+        });
+        return entries.map(([vid, list]) => {
+            const v = vid ? VideoService.getById(vid) : null;
+            const head = v
+                ? `<button class="wsp-clickable wsp-vidwrap-name" data-open="${v.id}" title="Open the video">${icon('video', 'wsp-row-ic')} ${escHtml(v.name)}</button>`
+                : `${icon('video', 'wsp-row-ic')} <span class="wsp-vidwrap-name">Unassigned</span>`;
+            return `<div class="wsp-vidwrap">
+                <div class="wsp-vidwrap-head">${head} <span class="wsp-hint">${list.length} here</span></div>
+                <div class="wsp-vidwrap-comps">${list.map(c => componentRowHtml(c, { advance: true })).join('')}</div>
+            </div>`;
+        }).join('');
+    }
+
     function renderStagePanel() {
         const panel = document.getElementById('wsp-stage-panel');
         if (!panel) return;
@@ -1212,6 +1258,7 @@ const WorkshopUI = (() => {
         const autoDesc = PS().autoDesc(selectedStageId);
 
         const { comps: stageComps, tasks: stageTasks } = splitComps(e.components);
+        const isBuildStage = BUILD_STAGES.has(selectedStageId);
         const breakdown = [
             e.videos.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.video}">${icon('video', 'wsp-cc-ic')} ${e.videos.length}</span>` : '',
             stageComps.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.component}">${icon('component', 'wsp-cc-ic')} ${stageComps.length}</span>` : '',
@@ -1219,8 +1266,12 @@ const WorkshopUI = (() => {
             e.orders.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${e.orders.length}</span>` : ''
         ].join('');
 
-        const compRows = stageComps.map(c => componentRowHtml(c, { advance: true })).join('');
-        const taskRows = stageTasks.map(c => componentRowHtml(c, { advance: true })).join('');
+        // In build stages, wrap components under their video (the emphasis is the
+        // component; the video is shown only as what it's a part of). Elsewhere a
+        // flat list is fine.
+        const renderCompList = (list) => isBuildStage ? componentsByVideoHtml(list) : list.map(c => componentRowHtml(c, { advance: true })).join('');
+        const compRows = stageComps.length ? renderCompList(stageComps) : '';
+        const taskRows = stageTasks.length ? renderCompList(stageTasks) : '';
 
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
