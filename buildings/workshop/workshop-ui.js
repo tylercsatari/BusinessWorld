@@ -897,6 +897,10 @@ const WorkshopUI = (() => {
         const expanded = expandedStageVideoId === v.id;
         const openOrders = SVC().ordersForVideo(v.id).filter(o => o.status !== 'received').length;
         const sp = sponsorName(v.sponsorId);
+        // "Ready to advance": the stage's deliverable/asset is already present but
+        // the worker hasn't pressed Done yet — highlight the whole row green so it
+        // stands out while scrolling a stage. (Done is still required to move it.)
+        const ready = !!(stage && nodeDeliverableStatus(v, stage.id).met);
         let actions = '';
         if (stage) {
             const kind = deliverableKind(stage.id);
@@ -916,11 +920,11 @@ const WorkshopUI = (() => {
                 actions = `<button class="wsp-mini-btn done" data-node-done="${v.id}" data-node-stage="${stage.id}" title="Done">✓ Done</button>`;
             }
         }
-        return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}" data-id="${v.id}">
+        return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}${ready ? ' wsp-ready' : ''}" data-id="${v.id}">
             <div class="wsp-stage-video-head" data-expand="${v.id}">
                 <span class="wsp-caret">${expanded ? '▾' : '▸'}</span>
                 <div class="wsp-stage-video-main">
-                    <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}</div>
+                    <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}${ready ? '<span class="wsp-ready-badge">✓ ready — press Done</span>' : ''}</div>
                     <div class="wsp-stage-video-meta">
                         ${!stage ? frontierChips(v, 3) : `<span class="wsp-deliv-need" title="What needs to be finished">📋 ${escHtml(STAGE_DELIVERABLE[stage.id] || stage.label)}</span>`}
                         ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}

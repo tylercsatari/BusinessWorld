@@ -458,6 +458,11 @@
     overflow: hidden;
 }
 .wsp-stage-video.expanded { border-color: #c9c2b4; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+/* Ready to advance: deliverable/asset is present but Done hasn't been pressed.
+   Whole row glows green so it's obvious while scrolling a stage. */
+.wsp-stage-video.wsp-ready { border-color: #27ae60; background: linear-gradient(180deg, rgba(39,174,96,0.12), rgba(39,174,96,0.04)); box-shadow: 0 0 0 1px rgba(39,174,96,0.35); }
+.wsp-stage-video.wsp-ready .wsp-stage-video-head:hover { background: rgba(39,174,96,0.08); }
+.wsp-ready-badge { margin-left: 8px; font-size: 10.5px; font-weight: 800; color: #1e8c4f; background: rgba(39,174,96,0.16); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .wsp-stage-video-head {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 12px; cursor: pointer;
