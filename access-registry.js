@@ -93,7 +93,6 @@
     window.VIDEO_FIELDS = [
         ['sourceidea', 'Source idea'], ['waiting', 'Waiting on'], ['name', 'Video name'],
         ['deadline', 'Deadline'], ['sponsor', 'Sponsor'], ['project', 'Channel project'],
-        ['prevvideo', 'Previous video (sequence)'],
         ['progress', 'Pipeline progress'], ['context', 'Context'], ['hook', 'Hook'],
         ['script', 'Script'], ['decomp', 'Decomposition'], ['voiceover', 'Voiceover'],
         ['editing', 'Editing (final videos)']

@@ -467,6 +467,7 @@
    done, calm grey once it is. */
 .wsp-after-chip { font-size: 11px; font-weight: 700; color: #9a6a1b; background: rgba(232,160,32,0.16); padding: 1px 8px; border-radius: 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wsp-after-chip.clear { color: #6b7b6b; background: #eef0ea; }
+.wsp-prevvideo-block { margin: 4px 0 10px; padding-bottom: 8px; border-bottom: 1px dashed #ece4d0; }
 .wsp-stage-video-head {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 12px; cursor: pointer;

@@ -48,6 +48,9 @@ const LibraryUI = (() => {
     let aiVideoIdeasLoading = false;
     let aiVideoIdeasBusy = false;
     let aiVideoIdeasStatus = '';
+    let aiVideoIdeasLog = [];        // live step trace shown while generating
+    let aiVideoIdeasT0 = 0;          // generation start time (for the elapsed timer)
+    let aiVideoIdeasTimer = null;    // interval ticking the elapsed timer
     let aiVideoIdeasRuns = parseInt(localStorage.getItem('library-aiideas-runs') || '1', 10) || 1;
     let aiVideoIdeasPerRun = parseInt(localStorage.getItem('library-aiideas-per-run') || '3', 10) || 3;
 
@@ -400,7 +403,12 @@ const LibraryUI = (() => {
         aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
         aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
         const total = aiVideoIdeasRuns * aiVideoIdeasPerRun;
-        const statusHtml = aiVideoIdeasStatus ? `<div class="library-aiideas-status">${escHtml(aiVideoIdeasStatus)}</div>` : '';
+        const statusHtml = aiVideoIdeasBusy
+            ? `<div class="library-aiideas-progress">
+                    <div class="library-aiideas-progress-head"><span class="library-aiideas-spin"></span> Generating ideas… <span class="library-aiideas-elapsed" id="library-aiideas-elapsed">${((Date.now() - (aiVideoIdeasT0 || Date.now())) / 1000).toFixed(1)}s</span></div>
+                    <div class="library-aiideas-trace">${(aiVideoIdeasLog.length ? aiVideoIdeasLog : ['Starting…']).map((m, i, a) => `<div class="library-aiideas-trace-line${i === a.length - 1 ? ' active' : ''}">${escHtml(m)}</div>`).join('')}</div>
+                </div>`
+            : (aiVideoIdeasStatus ? `<div class="library-aiideas-status">${escHtml(aiVideoIdeasStatus)}</div>` : '');
         let cardsHtml = '';
         if (!aiVideoIdeasLoaded) {
             cardsHtml = '<div class="library-empty">Loading saved AI video ideas...</div>';
@@ -507,7 +515,16 @@ const LibraryUI = (() => {
     async function generateAiVideoIdeas() {
         if (aiVideoIdeasBusy) return;
         aiVideoIdeasBusy = true;
-        aiVideoIdeasStatus = `Running Kimi K2.6 for ${aiVideoIdeasRuns} run${aiVideoIdeasRuns === 1 ? '' : 's'} x ${aiVideoIdeasPerRun} idea${aiVideoIdeasPerRun === 1 ? '' : 's'}...`;
+        aiVideoIdeasLog = [`Running Kimi K2.6 for ${aiVideoIdeasRuns} run${aiVideoIdeasRuns === 1 ? '' : 's'} × ${aiVideoIdeasPerRun} idea${aiVideoIdeasPerRun === 1 ? '' : 's'}…`];
+        aiVideoIdeasStatus = aiVideoIdeasLog[0];
+        aiVideoIdeasT0 = Date.now();
+        // Tick the elapsed timer independently of SSE, so it's visibly alive even
+        // during a long Kimi call (when the step message doesn't change).
+        clearInterval(aiVideoIdeasTimer);
+        aiVideoIdeasTimer = setInterval(() => {
+            const el = document.getElementById('library-aiideas-elapsed');
+            if (el) el.textContent = ((Date.now() - aiVideoIdeasT0) / 1000).toFixed(1) + 's';
+        }, 100);
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
         try {
@@ -537,7 +554,7 @@ const LibraryUI = (() => {
                     if (!dline) continue;
                     let ev; try { ev = JSON.parse(dline.slice(5).trim()); } catch (_) { continue; }
                     if (ev.error) throw new Error(ev.error);
-                    if (ev.msg) { aiVideoIdeasStatus = ev.msg; renderAiVideoIdeas(); }
+                    if (ev.msg) { aiVideoIdeasLog.push(ev.msg); aiVideoIdeasStatus = ev.msg; renderAiVideoIdeas(); }
                     if (ev.done) finalEvent = ev;
                 }
             }
@@ -556,6 +573,7 @@ const LibraryUI = (() => {
             renderAiVideoIdeas();
         } finally {
             aiVideoIdeasBusy = false;
+            clearInterval(aiVideoIdeasTimer); aiVideoIdeasTimer = null;
             updateAiVideoIdeasGenerateButtons();
             renderAiVideoIdeas();
         }

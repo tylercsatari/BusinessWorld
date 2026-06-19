@@ -2083,13 +2083,6 @@ const WorkshopUI = (() => {
                         ${dropboxProjects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
                     </select>
                 </div>
-                <div data-vfield="prevvideo">
-                    <label>Previous video <span class="wsp-hint">— optional; sequence this after another pipeline video</span></label>
-                    <select id="workshop-prevvideo">
-                        <option value="" ${!v.previousVideoId ? 'selected' : ''}>— No previous video —</option>
-                        ${pipelineVideos().filter(o => o.id !== v.id).map(o => `<option value="${escAttr(o.id)}" ${v.previousVideoId === o.id ? 'selected' : ''}>${escHtml(o.name)}</option>`).join('')}
-                    </select>
-                </div>
             </div>
 
             <div data-vfield="progress">
@@ -2144,6 +2137,13 @@ const WorkshopUI = (() => {
 
             <div class="wsp-subsection wsp-decomp-section ${sectionStatusClass(v, 'decomp')}${isDecompSkipped(v) ? ' skipped' : ''}" data-vfield="decomp" style="--accent:#e8a020">
                 ${subTitle('decomp', 'Decomposition', '— break the build into components. Each becomes its own entity in the pipeline (its own stages &amp; needs) while staying linked to this video, which waits for it. Click a component to open it.')}
+                <div class="wsp-prevvideo-block">
+                    <div class="wsp-cd-label">Previous video <span class="wsp-hint">— optional causality: sequence this video after another one in the pipeline (it'll surface in that order). Posted videos aren't listed.</span></div>
+                    <select id="workshop-prevvideo" class="wsp-inline-select" style="max-width:100%;">
+                        <option value="" ${!v.previousVideoId ? 'selected' : ''}>— No previous video —</option>
+                        ${pipelineVideos().filter(o => o.id !== v.id).map(o => `<option value="${escAttr(o.id)}" ${v.previousVideoId === o.id ? 'selected' : ''}>${escHtml(o.name)}</option>`).join('')}
+                    </select>
+                </div>
                 ${isDecompSkipped(v)
                     ? `<div class="wsp-skip-banner">
                             <div class="wsp-skip-banner-main">${icon('film', 'wsp-row-ic')} <b>No decomposition needed</b> — reusing existing footage / props. This video skipped the whole build chain (design → ordering → manufacturing → artistic) and jumped to <b>Filming</b>.</div>

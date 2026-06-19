@@ -696,6 +696,16 @@
     line-height: 1.4;
 }
 
+/* Live generation progress: spinner + ticking elapsed timer + accumulating step log */
+.library-aiideas-progress { margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: #eef7f4; border: 1px solid #cfe7df; }
+.library-aiideas-progress-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: #1f6f5b; }
+.library-aiideas-elapsed { margin-left: auto; font-variant-numeric: tabular-nums; color: #3a8c76; font-weight: 700; }
+.library-aiideas-spin { width: 14px; height: 14px; border: 2px solid #bfe3d8; border-top-color: #1f6f5b; border-radius: 50%; animation: aiideasSpin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes aiideasSpin { to { transform: rotate(360deg); } }
+.library-aiideas-trace { margin-top: 8px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.library-aiideas-trace-line { font-size: 12px; color: #6a8a80; padding: 2px 0; line-height: 1.35; }
+.library-aiideas-trace-line.active { color: #1f6f5b; font-weight: 700; }
+
 .library-aiideas-list {
     display: flex;
     flex-direction: column;
