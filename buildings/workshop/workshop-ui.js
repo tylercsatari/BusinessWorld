@@ -2863,18 +2863,26 @@ const WorkshopUI = (() => {
                     });
                 } else if (video && video.project) {
                     el.innerHTML = `<div class="wsp-add-row">
-                        <input type="file" id="cd-${s.kind}-file" accept="${s.accept}" style="font-size:11.5px;flex:1 1 160px;">
+                        <input type="file" id="cd-${s.kind}-file" accept="${s.accept}" multiple style="font-size:11.5px;flex:1 1 160px;">
                         <button class="wsp-mini-btn done" data-cf-up>⬆ Upload</button></div>`;
                     el.querySelector('[data-cf-up]').addEventListener('click', async () => {
                         const input = q('#cd-' + s.kind + '-file');
-                        const file = input.files && input.files[0];
-                        if (!file) { alert('Choose a file first.'); return; }
-                        const bar = uploadProgressBar(el, file.name);
+                        const files = input && input.files ? [...input.files] : [];
+                        if (!files.length) { alert('Choose one or more files first.'); return; }
+                        const bar = uploadProgressBar(el, files[0].name);
                         try {
-                            const meta = await uploadToDropbox(`${rootP}/${video.project}/${s.kind}/${file.name}`, file, bar.progress);
+                            let first = null;
+                            for (let i = 0; i < files.length; i++) {
+                                const file = files[i];
+                                if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+                                const meta = await uploadToDropbox(`${rootP}/${video.project}/${s.kind}/${file.name}`, file, bar.progress);
+                                if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
+                            }
                             bar.stage('Saving to component…');
-                            await saveComp({ [s.pathF]: meta.path_display || meta.path_lower, [s.nameF]: meta.name || file.name });
-                            dirty = true; bar.stage('Done ✓'); toast(`📐 ${s.noun} → ${video.project}/${s.kind}`); renderSlot(s);
+                            await saveComp({ [s.pathF]: first.path, [s.nameF]: first.name });
+                            dirty = true; bar.stage('Done ✓');
+                            toast(`📐 ${files.length} ${s.noun}${files.length === 1 ? '' : 's'} → ${video.project}/${s.kind}`);
+                            renderSlot(s);
                         } catch (e) { alert('Upload failed: ' + e.message); renderSlot(s); }
                     });
                 } else {
@@ -3648,7 +3656,7 @@ const WorkshopUI = (() => {
             const hid = el.dataset.hookiMedia;
             el.innerHTML = `
                 ${files.length ? `<select data-hooki-pick="${escAttr(hid)}" class="wsp-inline-select"><option value="">Link existing footage…</option>${files.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}</select>` : ''}
-                <input type="file" data-hooki-file="${escAttr(hid)}" accept="video/*" style="font-size:11px;flex:1 1 140px;">
+                <input type="file" data-hooki-file="${escAttr(hid)}" accept="video/*" multiple style="font-size:11px;flex:1 1 140px;">
                 <button class="wsp-mini-btn done" data-hooki-up="${escAttr(hid)}">⬆ Upload</button>`;
         });
 
@@ -3667,17 +3675,23 @@ const WorkshopUI = (() => {
         root.querySelectorAll('[data-hooki-up]').forEach(btn => btn.addEventListener('click', async () => {
             const hid = btn.dataset.hookiUp;
             const input = root.querySelector(`[data-hooki-file="${hid}"]`);
-            const file = input && input.files && input.files[0];
-            if (!file) { alert('Choose a video file first.'); return; }
+            const files = input && input.files ? [...input.files] : [];
+            if (!files.length) { alert('Choose one or more video files first.'); return; }
             const h = hooksWithEdits(v.id).find(x => x.id === hid);
             const sub = subFor(h);   // animation → animation/, practical → hook/
             const rowEl = root.querySelector(`[data-hooki-media="${hid}"]`);
-            const bar = uploadProgressBar(rowEl, file.name);
+            const bar = uploadProgressBar(rowEl, files[0].name);
             try {
-                const meta = await uploadToDropbox(`${rootPath}/${v.project}/${sub}/${file.name}`, file, bar.progress);
+                let first = null;
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+                    const meta = await uploadToDropbox(`${rootPath}/${v.project}/${sub}/${file.name}`, file, bar.progress);
+                    if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
+                }
                 bar.stage('Linking to this hook…');
                 toast(`${sub === 'animation' ? '🎞️ animation' : '🪝 hook'} video → ${v.project}/${sub}`);
-                await setFootage(hid, meta.path_display || meta.path_lower, meta.name || file.name);
+                await setFootage(hid, first.path, first.name);
             } catch (e) {
                 console.warn('hook video upload failed', e);
                 alert('Hook video upload failed: ' + e.message);
@@ -4002,7 +4016,7 @@ const WorkshopUI = (() => {
                 </select>
             </div>` : ''}
             <div class="wsp-add-row">
-                <input type="file" id="${cfg.elId}-file" accept="${cfg.accept}" style="font-size:11.5px;flex:1 1 180px;">
+                <input type="file" id="${cfg.elId}-file" accept="${cfg.accept}" multiple style="font-size:11.5px;flex:1 1 180px;">
                 <button class="wsp-mini-btn done" id="${cfg.elId}-upload">⬆ Upload & link</button>
             </div>
             <div class="wsp-hint">Uploads go straight to Dropbox: ${escHtml(folder)}/ (folder is created automatically).</div>`;
@@ -4016,19 +4030,25 @@ const WorkshopUI = (() => {
         });
         document.getElementById(`${cfg.elId}-upload`).addEventListener('click', async () => {
             const input = document.getElementById(`${cfg.elId}-file`);
-            const file = input.files && input.files[0];
-            if (!file) { alert(`Choose a file first.`); return; }
-            const bar = uploadProgressBar(el, file.name);
+            const files = input && input.files ? [...input.files] : [];
+            if (!files.length) { alert(`Choose one or more files first.`); return; }
+            const bar = uploadProgressBar(el, files[0].name);
             try {
-                const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                let first = null;
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+                    const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                    if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
+                }
                 bar.stage('Linking to this video…');
                 await VideoService.update(v.id, {
-                    [cfg.pathField]: meta.path_display || meta.path_lower,
-                    [cfg.nameField]: meta.name || file.name,
+                    [cfg.pathField]: first.path,
+                    [cfg.nameField]: first.name,
                     status: normalizedStatus(v)
                 });
                 bar.stage('Done ✓');
-                toast(`${cfg.icon} ${cfg.noun} uploaded to ${v.project}/${cfg.folder}`);
+                toast(`${cfg.icon} ${files.length} ${cfg.noun}${files.length === 1 ? '' : 's'} uploaded to ${v.project}/${cfg.folder}`);
                 rerenderEditor(v.id);
             } catch (e) {
                 console.warn(`${cfg.noun} upload failed`, e);
@@ -4071,19 +4091,25 @@ const WorkshopUI = (() => {
             } else {
                 el.innerHTML = `<div class="wsp-edit-slot-label">${escHtml(slot.label)}</div>
                     <div class="wsp-add-row">
-                        <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" style="font-size:11.5px;flex:1 1 160px;">
+                        <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
                         <button class="wsp-mini-btn done" data-edit-up="${slot.key}">⬆ Upload</button></div>`;
                 el.querySelector('[data-edit-up]').addEventListener('click', async () => {
                     const input = document.getElementById('wsp-edit-file-' + slot.key);
-                    const file = input.files && input.files[0];
-                    if (!file) { alert('Choose a video file first.'); return; }
-                    const bar = uploadProgressBar(el, file.name);
+                    const files = input && input.files ? [...input.files] : [];
+                    if (!files.length) { alert('Choose one or more video files first.'); return; }
+                    const bar = uploadProgressBar(el, files[0].name);
                     try {
-                        const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                        let first = null;
+                        for (let i = 0; i < files.length; i++) {
+                            const file = files[i];
+                            if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+                            const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
+                            if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
+                        }
                         bar.stage('Linking to this video…');
-                        await setSlot(slot.key, { path: meta.path_display || meta.path_lower, name: meta.name || file.name });
+                        await setSlot(slot.key, first);
                         bar.stage('Done ✓');
-                        toast(`🎬 ${slot.label} → ${v.project}/final videos`);
+                        toast(`🎬 ${files.length} file${files.length === 1 ? '' : 's'} → ${v.project}/final videos`);
                         rerenderEditor(v.id);
                     } catch (e) { alert('Upload failed: ' + e.message); rerenderEditor(v.id); }
                 });
