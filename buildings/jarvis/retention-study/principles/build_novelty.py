@@ -93,8 +93,10 @@ def centre_dist(X):
 
 LEDGER = [
     {'metric': 'Visual embedding', 'type': 'encoder', 'def': 'DINOv2-small CLS token of each frame (224², ImageNet-normalized). Deterministic; the "interpretation" is the pretrained net, identical for every video.'},
-    {'metric': 'Concept embedding', 'type': 'encoder', 'def': 'all-MiniLM-L6-v2 sentence embedding of the hook script (or per-second text). Deterministic.'},
-    {'metric': 'Whole-hook embedding', 'type': 'encoder', 'def': 'mean(normalized CLIP image, normalized CLIP text) in the shared CLIP space. Low-resolution by design (averages everything).'},
+    {'metric': 'On-screen text (OCR)', 'type': 'detection', 'def': 'Tesseract OCR of each frame, filtered (conf≥60, len≥3, dictionary word/number). The text layer OWLv2 misses (captions, titles). Reliable on clean captions, weaker on stylized fonts.'},
+    {'metric': 'Concept embedding', 'type': 'encoder', 'def': 'all-MiniLM-L6-v2 of the SPOKEN script + ON-SCREEN text combined. Text is semantic, so it joins concept novelty.'},
+    {'metric': 'Text modality', 'type': 'encoder', 'def': 'all-MiniLM-L6-v2 of the on-screen text ONLY — its own embedding, its own map. Lets you see novelty carried by the caption layer alone.'},
+    {'metric': 'Whole-hook embedding', 'type': 'encoder', 'def': 'mean(normalized CLIP image, normalized CLIP text of [spoken + on-screen]). Both speech and caption text feed the whole; visual does NOT include text.'},
     {'metric': 'Global novelty', 'type': 'geometry', 'def': 'mean cosine distance to the 8 nearest hooks in the embedding. Pure geometry over the vectors above.'},
     {'metric': 'Niche', 'type': 'geometry', 'def': 'k-means (k=8) clusters of the embeddings + cosine distance to the assigned cluster centre. k is a chosen parameter.'},
     {'metric': 'Temporal novelty', 'type': 'geometry', 'def': 'mean cosine distance to hooks published within ±45 days. Window (45d) is a chosen parameter.'},
@@ -113,26 +115,35 @@ def main():
     meta = M['meta']; n = len(meta)
     CON = json.load(open(os.path.join(HERE, 'concepts.json')))
     OBJ = json.load(open(os.path.join(HERE, 'objects.json'))) if os.path.exists(os.path.join(HERE, 'objects.json')) else {}
-    whole, concept, visual, coh = E['whole'], E['concept'], E['visual'], E['coherence']
     so, sf, sv = E['scene_owner'], E['scene_frame'], E['scene']
+    visual = E['visual']
+    TX = np.load(os.path.join(HERE, 'text_emb.npz'))
+    OCR = json.load(open(os.path.join(HERE, 'ocr.json'))) if os.path.exists(os.path.join(HERE, 'ocr.json')) else {}
+    clip_img = E['clip_img']
+    # fold on-screen TEXT into the semantic modalities (per spec): WHOLE & CONCEPT get text, VISUAL does not.
+    whole = (L2(clip_img) + L2(TX['h_clip'])) / 2.0          # CLIP image + CLIP text(spoken+on-screen)
+    concept = TX['h_mini']                                   # MiniLM(spoken+on-screen)
+    text = TX['h_text']                                      # MiniLM(on-screen only) — standalone TEXT modality
+    coh = (L2(clip_img) * L2(TX['h_clip'])).sum(1)           # coherence = image ↔ (spoken+on-screen) text
     ages = np.array([m['age_days'] if m['age_days'] is not None else np.nan for m in meta], float)
 
     out = {'meta': {'n': n, 'hook_seconds': M['hook_seconds'],
                     'models': {'visual': 'facebook/dinov2-small', 'whole': 'openai/clip-vit-base-patch16',
-                               'concept': 'all-MiniLM-L6-v2', 'detector': 'google/owlv2-base-patch16-ensemble'},
+                               'concept': 'all-MiniLM-L6-v2', 'detector': 'google/owlv2-base-patch16-ensemble', 'ocr': 'tesseract-5'},
                     'resolutions': ['hook', 'second']},
            'ledger': LEDGER, 'videos': []}
 
     for i, m in enumerate(meta):
-        vid = m['id']; ob = OBJ.get(vid, {})
+        vid = m['id']; ob = OBJ.get(vid, {}); oc = OCR.get(vid, {})
         out['videos'].append({'id': vid, 'name': m['name'], 'views': m['views'], 'lv': m['lv'], 'url': m['url'],
                               'published': m['published'], 'age_days': m['age_days'], 'hook_text': m.get('hook_text', ''),
+                              'onscreen_text': oc.get('hook', ''),
                               'concepts': CON['per_video'].get(vid, []), 'scenes': read_scenes(vid),
                               'objects_hook': ob.get('hook', []), 'objects_persec': ob.get('persec', [])})
 
-    # ── HOOK resolution ──
-    H = {'proj': {'whole': project(whole), 'concept': project(concept), 'visual': project(visual)}}
-    for k, X in (('whole', whole), ('concept', concept), ('visual', visual)):
+    # ── HOOK resolution (4 modalities: whole, concept, visual, text) ──
+    H = {'proj': {'whole': project(whole), 'concept': project(concept), 'visual': project(visual), 'text': project(text)}}
+    for k, X in (('whole', whole), ('concept', concept), ('visual', visual), ('text', text)):
         g = geom(X); H.setdefault('global', {})[k] = {'nov': g['nov'], 'pct': g['pct']}
         H.setdefault('niche', {})[k] = {'labels': g['niche'], 'k': len(set(g['niche'])), 'dist_to_centre': g['dist_to_centre']}
     Wn = L2(whole); tnov = []
@@ -154,13 +165,18 @@ def main():
     H['scene'] = {'pts': project(sv, perp=30), 'owner': so.tolist(), 'frame': sf.tolist(), 'spread': spread}
     out['hook'] = H
 
-    # ── SECOND resolution — every second analysed exactly like the whole hook ──
+    # ── SECOND resolution — every second analysed exactly like the whole hook (4 modalities) ──
     P = np.load(os.path.join(HERE, 'persec_emb.npz'))
-    po, ps, pimg, ptxt, pconc, pcoh = P['owner'], P['sec'], P['clip_img'], P['clip_txt'], P['concept'], P['coherence']
-    pwhole = (L2(pimg) + L2(ptxt)) / 2.0                    # per-second "whole" = CLIP image+text, like the hook whole
-    gW, gC, gV = geom(pwhole), geom(pconc), geom(sv)        # whole / concept / visual novelty + niche, per second
+    po, ps, pimg = P['owner'], P['sec'], P['clip_img']
+    # align text_emb second-rows to persec order by (owner, sec)
+    tix = {(int(TX['s_owner'][r]), int(TX['s_sec'][r])): r for r in range(len(TX['s_owner']))}
+    order = [tix.get((int(po[j]), int(ps[j])), 0) for j in range(len(po))]
+    s_clip, s_mini, s_text = TX['s_clip'][order], TX['s_mini'][order], TX['s_text'][order]
+    pwhole = (L2(pimg) + L2(s_clip)) / 2.0                  # per-second whole = CLIP image + CLIP text(spoken+on-screen)
+    pconc, ptext = s_mini, s_text                          # per-second concept (spoken+on-screen) + text-only modality
+    pcoh = (L2(pimg) * L2(s_clip)).sum(1)                  # per-second coherence
+    gW, gC, gV, gT = geom(pwhole), geom(pconc), geom(sv), geom(ptext)
     cohp = pct(pcoh)
-    # per-second temporal novelty: distance to other videos' seconds posted within ±45 days
     Wp = L2(pwhole); agesP = ages[po]; tsec = []
     for j in range(len(po)):
         if not np.isfinite(agesP[j]):
@@ -168,28 +184,29 @@ def main():
         nb = np.where(np.isfinite(agesP) & (np.abs(agesP - agesP[j]) < 45) & (po != po[j]))[0]
         tsec.append(round(float((1 - Wp[j] @ Wp[nb].T).mean()), 4) if len(nb) else None)
     S = {'owner': po.tolist(), 'sec': ps.tolist(),
-         'proj': {'whole': project(pwhole, perp=30), 'concept': project(pconc, perp=30), 'visual': project(sv, perp=30)},
+         'proj': {'whole': project(pwhole, perp=30), 'concept': project(pconc, perp=30), 'visual': project(sv, perp=30), 'text': project(ptext, perp=30)},
          'coherence': [round(float(x), 4) for x in pcoh], 'coh_pct': [round(float(x), 3) for x in cohp], 'temporal': tsec,
-         'global': {'whole': {'nov': gW['nov'], 'pct': gW['pct']}, 'concept': {'nov': gC['nov'], 'pct': gC['pct']}, 'visual': {'nov': gV['nov'], 'pct': gV['pct']}},
-         'niche': {'whole': {'labels': gW['niche'], 'k': len(set(gW['niche']))}, 'concept': {'labels': gC['niche'], 'k': len(set(gC['niche']))}, 'visual': {'labels': gV['niche'], 'k': len(set(gV['niche']))}}}
+         'global': {k: {'nov': g['nov'], 'pct': g['pct']} for k, g in (('whole', gW), ('concept', gC), ('visual', gV), ('text', gT))},
+         'niche': {k: {'labels': g['niche'], 'k': len(set(g['niche']))} for k, g in (('whole', gW), ('concept', gC), ('visual', gV), ('text', gT))}}
     out['second'] = S
 
-    # nested per-video second-by-second analysis (so the panel can show each second at full depth)
+    # nested per-video second-by-second analysis (full depth, incl. text novelty + on-screen text)
     by_owner = {}
     for j in range(len(po)):
         by_owner.setdefault(int(po[j]), []).append(j)
     for i, v in enumerate(out['videos']):
         objbyt = {p['t']: p['dets'] for p in v.get('objects_persec', [])}
         descbyt = {round(s['t']): s for s in v.get('scenes', [])}
+        ocrbyt = {p['t']: p.get('text', '') for p in OCR.get(v['id'], {}).get('persec', [])}
         ana = []
         for j in sorted(by_owner.get(i, []), key=lambda j: ps[j]):
             sc = int(ps[j]); s = descbyt.get(sc, {})
             ana.append({'sec': sc,
-                        'nov_pct': {'whole': round(float(gW['pct'][j]), 3), 'concept': round(float(gC['pct'][j]), 3), 'visual': round(float(gV['pct'][j]), 3)},
-                        'nov': {'whole': round(float(gW['nov'][j]), 4), 'concept': round(float(gC['nov'][j]), 4), 'visual': round(float(gV['nov'][j]), 4)},
-                        'niche': {'whole': int(gW['niche'][j]), 'concept': int(gC['niche'][j]), 'visual': int(gV['niche'][j])},
+                        'nov_pct': {'whole': round(float(gW['pct'][j]), 3), 'concept': round(float(gC['pct'][j]), 3), 'visual': round(float(gV['pct'][j]), 3), 'text': round(float(gT['pct'][j]), 3)},
+                        'nov': {'whole': round(float(gW['nov'][j]), 4), 'concept': round(float(gC['nov'][j]), 4), 'visual': round(float(gV['nov'][j]), 4), 'text': round(float(gT['nov'][j]), 4)},
+                        'niche': {'whole': int(gW['niche'][j]), 'concept': int(gC['niche'][j]), 'visual': int(gV['niche'][j]), 'text': int(gT['niche'][j])},
                         'temporal': tsec[j], 'coh': round(float(pcoh[j]), 4), 'coh_pct': round(float(cohp[j]), 3),
-                        'objects': objbyt.get(sc, []), 'desc': s.get('desc', '')})
+                        'objects': objbyt.get(sc, []), 'onscreen': ocrbyt.get(sc, ''), 'desc': s.get('desc', '')})
         v['persec'] = ana
 
     # ── combinatorial (concept-cluster level, from concepts.json) ──

@@ -29,6 +29,7 @@ def main():
     from sklearn.cluster import KMeans
     from sentence_transformers import SentenceTransformer
     M = json.load(open(os.path.join(HERE, 'hooks_meta.json')))['meta']
+    OCR = json.load(open(os.path.join(HERE, 'ocr.json'))) if os.path.exists(os.path.join(HERE, 'ocr.json')) else {}
     st = SentenceTransformer('all-MiniLM-L6-v2')
 
     def L2(x):
@@ -59,7 +60,8 @@ def main():
     per = {}
     all_phrases = []
     for m in M:
-        txt = (m.get('hook_text') or '').strip()
+        scr = (OCR.get(m['id'], {}).get('hook') or '').strip()          # on-screen text joins the concept layer
+        txt = ((m.get('hook_text') or '') + ' ' + scr).strip()
         cands = cand_phrases(txt)
         if not cands or len(txt) < 4:
             per[m['id']] = []
