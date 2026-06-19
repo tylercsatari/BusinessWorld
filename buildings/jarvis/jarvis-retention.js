@@ -11,7 +11,7 @@ const JarvisRetention = (function () {
         text: '#e2e8f0', dim: '#94a3b8', mute: '#64748b', faint: '#475569', cyan: '#22d3ee', green: '#34d399',
         orange: '#fb923c', red: '#f87171', purple: '#a78bfa', yellow: '#fbbf24', accent: '#38bdf8' };
     let root = null, DATA = null, S = null, N = null, err = null;
-    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', nov: 'global' };
+    const st = { sec: 'data', sort: 'views', dir: -1, q: '', open: null, predScale: 'actual', nov: 'global', novRes: 'hook' };
     const fmtv = (v, d = 2) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d);
     const sgn = (v, d = 2) => (v >= 0 ? '+' : '') + fmtv(v, d);
     const note = (h, c) => `<div style="background:${(c || C.cyan)}12;border-left:3px solid ${c || C.cyan};border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:12px;font-size:12px;color:${C.dim};line-height:1.55">${h}</div>`;
@@ -419,110 +419,128 @@ const JarvisRetention = (function () {
 
     // ───────────────────── PRINCIPLES → NOVELTY ─────────────────────
     function novTip(i, extra) { const v = N.videos[i]; return (v.name || v.id) + ' · ' + fv(v.views) + ' views' + (extra ? ' · ' + extra : '') + ' · click for data'; }
-    function novMaps(colorFor, legend, sceneColorFor) {
-        const mk = (mod, label, sub) => mapCard(label, sub, latentMap(N.proj[mod], { color: i => colorFor(mod, i), tip: i => novTip(i), sel: st.novSel }), legend);
-        let h = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            ${mk('whole', 'Whole hook', 'CLIP image+text — the whole hook as one point (low-res, mixes everything)')}
-            ${mk('concept', 'Concept / script', 'MiniLM on the first-5s transcript — meaning only')}
-            ${mk('visual', 'Visual', 'DINOv2 on the 5 frames, pooled — look only')}
-            ${mapCard('Scene components', 'every hook frame as its own point — within-hook spread', latentMap(N.scene.pts, { color: i => (sceneColorFor || (() => C.faint))(i), r: i => (st.novSel != null && N.scene.owner[i] === st.novSel) ? 4.5 : 2.4, op: () => 0.5, pick: i => N.scene.owner[i], sel: st.novSel, tip: i => novTip(N.scene.owner[i], 'frame ' + (N.scene.frame[i] + 1)) }), legend)}</div>`;
-        return h;
-    }
-    // Detail panel — ALL raw data for a hook + how each map graphs it. Click any point to open.
     function rankPct(arr, i) { const v = arr[i]; if (v == null) return 0; const s = arr.filter(x => x != null).sort((a, b) => a - b); return s.indexOf(v) / (s.length - 1 || 1); }
+    // resolution-aware maps. hook → one point per video; second → one point per video-second.
+    function resMaps(colorHook, colorSec, legend, hookExtra) {
+        if (st.novRes === 'second') {
+            const S = N.second, mods = [['visual', 'Visual / sec', 'DINOv2 of that second\'s frame'], ['clip', 'CLIP image / sec', 'frame in CLIP space'], ['concept', 'Concept / sec', 'MiniLM of that second\'s words']];
+            const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(S.proj[mod], { color: i => colorSec(mod, i), pick: i => S.owner[i], sel: st.novSel, r: i => (st.novSel != null && S.owner[i] === st.novSel) ? 5 : 2.3, op: () => 0.62, tip: i => novTip(S.owner[i], 'second ' + S.sec[i]) }), legend);
+            return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is <b>one second</b> of a hook (${S.owner.length} points). Five points share a video — selecting a hook highlights all five, so you can see whether its seconds stay together or scatter.</div></div>`;
+        }
+        const H = N.hook, mods = [['whole', 'Whole hook', 'CLIP image+text — one point (low-res, mixes everything)'], ['concept', 'Concept / script', 'MiniLM on the 5s transcript'], ['visual', 'Visual', 'DINOv2 of the 5 frames, pooled']];
+        const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(H.proj[mod], { color: i => colorHook(mod, i), sel: st.novSel, tip: i => novTip(i) }), legend);
+        return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}${hookExtra || `<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is a <b>whole hook</b>. Switch to <b>per-second</b> (top right) to see the same geometry at granular resolution.</div>`}</div>`;
+    }
+    // frame with the OWLv2 detection boxes drawn on it (the "pull up the image of what's in each thing")
+    function frameBoxes(vid, second, dets, w) {
+        const boxes = (dets || []).map((d, bi) => { const c = NPAL[bi % NPAL.length]; return `<div style="position:absolute;left:${(d.box[0] * 100).toFixed(1)}%;top:${(d.box[1] * 100).toFixed(1)}%;width:${(d.box[2] * 100).toFixed(1)}%;height:${(d.box[3] * 100).toFixed(1)}%;border:1.5px solid ${c};box-shadow:0 0 0 1px #000a;pointer-events:none"><span style="position:absolute;top:-1px;left:-1px;background:${c};color:#000;font-size:8px;font-weight:800;padding:0 2px;white-space:nowrap;border-radius:0 0 2px 0">${esc(d.label)} ${d.score}</span></div>`; }).join('');
+        return `<div style="position:relative;width:${w}px;flex-shrink:0"><img src="./video_data/${esc(vid)}/frames/frame_${String(second + 1).padStart(4, '0')}.jpg" loading="lazy" onerror="this.parentElement.style.opacity=0.15" style="width:${w}px;height:${Math.round(w * 16 / 9)}px;object-fit:fill;border-radius:5px;border:1px solid ${C.border2};display:block"/>${boxes}<div style="text-align:center;font-size:9px;color:${C.mute};margin-top:1px">sec ${second} · ${(dets || []).length} obj</div></div>`;
+    }
     function renderHookDetail(i) {
-        const v = N.videos[i], g = N.global, nz = N.niche, ch = N.coherent;
+        const v = N.videos[i], H = N.hook, g = H.global, nz = H.niche, ch = H.coherent;
         const bar = (label, val, pctv, color) => `<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span style="color:${C.dim}">${label}</span><span style="color:${C.text};font-weight:700">${val}</span></div><div style="height:5px;background:${C.card};border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round((pctv || 0) * 100)}%;background:${color || C.accent}"></div></div></div>`;
         const chip = (lab, c) => `<span style="display:inline-block;background:${c}22;border:1px solid ${c};color:${c};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0">${esc(lab)}</span>`;
-        const coord = m => N.proj[m] && N.proj[m][i] ? `(${N.proj[m][i][0].toFixed(2)}, ${N.proj[m][i][1].toFixed(2)})` : '—';
+        const coord = m => H.proj[m] && H.proj[m][i] ? `(${H.proj[m][i][0].toFixed(2)}, ${H.proj[m][i][1].toFixed(2)})` : '—';
         const col2 = (title, body) => `<div style="flex:1;min-width:208px"><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">${title}</div>${body}</div>`;
-        // scene-by-scene interpreted breakdown (the "components" of each scene)
-        const sceneRows = (v.scenes || []).map((s, k) => `<div style="display:flex;gap:8px;padding:8px 0;border-top:1px solid ${C.border}">
-                <img src="./video_data/${esc(v.id)}/frames/frame_${String(Math.round(s.t) + 1).padStart(4, '0')}.jpg" loading="lazy" onerror="this.style.display='none'" style="width:52px;height:92px;object-fit:cover;border-radius:5px;border:1px solid ${C.border2};flex-shrink:0"/>
-                <div style="flex:1;font-size:11px;line-height:1.5;min-width:0">
-                    <div style="color:${C.cyan};font-weight:700;margin-bottom:1px">▸ second ${Math.round(s.t)}</div>
-                    <div style="color:${C.dim}">${esc(s.desc)}</div>
-                    ${s.visual ? `<div style="color:${C.mute};margin-top:2px"><b style="color:${C.faint}">visual:</b> ${esc(s.visual)}</div>` : ''}
-                    ${s.cinema ? `<div style="color:${C.mute}"><b style="color:${C.faint}">shot:</b> ${esc(s.cinema)}</div>` : ''}
-                    ${s.engage ? `<div style="color:${C.mute}"><b style="color:${C.faint}">engagement:</b> ${esc(s.engage)}</div>` : ''}
-                    ${(s.insights && s.insights.length) ? `<div style="margin-top:3px">${s.insights.map(x => chip(x, C.green)).join('')}</div>` : ''}
-                </div></div>`).join('') || `<div style="font-size:11px;color:${C.mute};padding-top:6px">no per-frame analysis stored for this video</div>`;
-        const comps = (v.components || []).length ? (v.components || []).map(c => chip(c, C.orange)).join('') : `<span style="color:${C.mute};font-size:11px">—</span>`;
-        const concepts = (v.concepts || []).length ? (v.concepts || []).map(c => chip(c, C.purple)).join('') : `<span style="color:${C.mute};font-size:11px">none indexed in this hook</span>`;
-        const pairs = (v.pairs || []).length ? (v.pairs || []).map(p => `<div style="font-size:11px;color:${C.dim}">${esc(p.a)} <span style="color:${C.purple}">×</span> ${esc(p.b)} <span style="color:${C.mute}">· together ${p.co}×</span></div>`).join('') : `<div style="font-size:11px;color:${C.mute}">no concept pair (needs ≥2 indexed concepts)</div>`;
+        const clusLabel = c => { const cl = (N.combo.clusters || []).find(x => x.id === c); return cl ? cl.label : 'c' + c; };
+        // OBJECTS (OWLv2) — quantitative, with boxes drawn per second
+        const persec = v.objects_persec || [];
+        const objFrames = persec.length ? `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">${persec.map(ps => frameBoxes(v.id, ps.t, ps.dets, 86)).join('')}</div>` : `<div style="font-size:11px;color:${C.mute}">no detections stored</div>`;
+        const hookObjs = (v.objects_hook || []).length ? (v.objects_hook || []).map(o => `<span style="display:inline-block;background:${C.orange}1e;border:1px solid ${C.orange};color:${C.orange};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0">${esc(o.label)} <span style="opacity:.7">${o.score}·${o.seconds}s</span></span>`).join('') : `<span style="color:${C.mute};font-size:11px">none ≥ score 0.15</span>`;
+        // CONCEPTS (quantitative MMR keyphrases)
+        const concepts = (v.concepts || []).length ? (v.concepts || []).map(c => `<span style="display:inline-block;background:${C.purple}1e;border:1px solid ${C.purple};color:${C.purple};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0" title="cluster: ${esc(clusLabel(c.cluster))}">${esc(c.phrase)} <span style="opacity:.65">${c.score}</span></span>`).join('') : `<span style="color:${C.mute};font-size:11px">no concept extracted</span>`;
+        // scene-by-scene LLM context (flagged interpreted)
+        const sceneRows = (v.scenes || []).map(s => `<div style="display:flex;gap:8px;padding:7px 0;border-top:1px solid ${C.border}">
+                <img src="./video_data/${esc(v.id)}/frames/frame_${String(Math.round(s.t) + 1).padStart(4, '0')}.jpg" loading="lazy" onerror="this.style.display='none'" style="width:46px;height:82px;object-fit:cover;border-radius:5px;border:1px solid ${C.border2};flex-shrink:0"/>
+                <div style="flex:1;font-size:11px;line-height:1.5;min-width:0"><div style="color:${C.cyan};font-weight:700">▸ second ${Math.round(s.t)}</div><div style="color:${C.dim}">${esc(s.desc)}</div>
+                    ${s.visual ? `<div style="color:${C.mute}"><b style="color:${C.faint}">visual:</b> ${esc(s.visual)}</div>` : ''}${(s.insights && s.insights.length) ? `<div style="margin-top:2px">${s.insights.map(x => chip(x, C.green)).join('')}</div>` : ''}</div></div>`).join('') || `<div style="font-size:11px;color:${C.mute}">none</div>`;
         return cardc(`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
                 <div><div style="font-size:15px;font-weight:800;color:${C.text}">${esc(v.name || v.id)}</div>
                     <div style="font-size:11px;color:${C.mute};margin-top:2px">${fv(v.views)} views · ${v.published || '—'} · ${v.age_days != null ? v.age_days + 'd old' : '—'} · id ${esc(v.id)}</div></div>
                 <div style="display:flex;gap:6px;flex-shrink:0"><a href="${esc(v.url)}" target="_blank" style="background:${C.red}22;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;text-decoration:none">▶ YouTube ↗</a>
                     <button data-novclose style="background:transparent;border:1px solid ${C.border2};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">✕ close</button></div></div>
+            <div style="border-top:1px solid ${C.border};padding-top:10px;margin-bottom:10px">
+                <div style="font-size:11px;font-weight:800;color:${C.orange};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">⬚ Objects — OWLv2 detection (every second, with boxes)</div>
+                ${objFrames}
+                <div style="font-size:10px;color:${C.mute};margin:8px 0 3px">tracked across the hook (object · score · #seconds present)</div><div>${hookObjs}</div></div>
+            <div style="border-top:1px solid ${C.border};padding-top:10px;margin-bottom:10px">
+                <div style="font-size:11px;font-weight:800;color:${C.purple};margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px">D · Concepts — MMR keyphrases (centrality score)</div>
+                <div style="margin-bottom:6px">${concepts}</div>
+                <div style="font-size:11px;color:${C.dim}">combo rarity: ${N.combo.rarity[i] != null ? `<b style="color:${C.purple}">${fmtv(N.combo.rarity[i], 3)}</b> (${Math.round(rankPct(N.combo.rarity, i) * 100)}th pct, over concept-cluster pairs)` : '<span style="color:' + C.mute + '">n/a (needs ≥2 concept-clusters)</span>'}</div></div>
             <div style="font-size:10px;color:${C.mute};margin-bottom:4px">HOOK SCRIPT (first 5s)</div>
             <div style="font-size:12px;color:${C.dim};line-height:1.5;background:${C.card2};border:1px solid ${C.border};border-radius:8px;padding:8px 10px;margin-bottom:12px">${esc(v.hook_text || '(no speech in first 5s)')}</div>
             <div style="display:flex;gap:18px;flex-wrap:wrap;border-top:1px solid ${C.border};padding-top:12px;margin-bottom:8px">
                 ${col2('A · Global novelty', ['whole', 'concept', 'visual'].map(m => bar(m, fmtv(g[m].nov[i], 3) + ' · ' + Math.round(g[m].pct[i] * 100) + 'th pct', g[m].pct[i], heatCol(g[m].pct[i]))).join(''))}
                 ${col2('B · Niche', ['whole', 'concept', 'visual'].map(m => `<div style="margin-bottom:7px;font-size:11px;color:${C.dim}">${m}: ${chip('cluster ' + nz[m].labels[i], NPAL[nz[m].labels[i] % NPAL.length])} <span style="color:${C.mute}">· dist ${fmtv(nz[m].dist_to_centre[i], 3)}</span></div>`).join(''))}
-                ${col2('C · Temporal', bar('novelty vs ±45d', N.temporal.nov[i] == null ? 'no neighbours' : fmtv(N.temporal.nov[i], 3), rankPct(N.temporal.nov, i), C.green) + `<div style="font-size:10px;color:${C.mute}">distance from hooks posted within 45 days</div>`)}
+                ${col2('C · Temporal', bar('novelty vs ±45d', H.temporal.nov[i] == null ? 'no neighbours' : fmtv(H.temporal.nov[i], 3), rankPct(H.temporal.nov, i), C.green) + `<div style="font-size:10px;color:${C.mute}">distance from hooks posted within 45 days</div>`)}
                 ${col2('E · Coherent', bar('novelty', fmtv(ch.novelty[i], 3), ch.nov_pct[i], heatCol(ch.nov_pct[i])) + bar('coherence (vis↔words)', fmtv(ch.coherence[i], 3), ch.coh_pct[i], C.cyan) + `<div style="font-size:10px;color:${C.mute}">quadrant: <b style="color:${ch.nov_pct[i] > .5 && ch.coh_pct[i] > .5 ? C.green : C.dim}">${(ch.nov_pct[i] > .5 ? 'novel' : 'familiar') + ' + ' + (ch.coh_pct[i] > .5 ? 'coherent' : 'incoherent')} → ${ch.nov_pct[i] > .5 ? (ch.coh_pct[i] > .5 ? 'curiosity' : 'confusion') : (ch.coh_pct[i] > .5 ? 'familiar' : 'boring')}</b></div>`)}
-                ${col2('Scene spread + map coords', bar('scene spread (visual cuts)', fmtv(N.scene.spread[i], 3), rankPct(N.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · concept ${coord('concept')} · visual ${coord('visual')}</div>`)}
+                ${col2('Scene spread + coords', bar('scene spread (visual cuts)', fmtv(H.scene.spread[i], 3), rankPct(H.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · concept ${coord('concept')} · visual ${coord('visual')}</div>`)}
             </div>
-            <div style="border-top:1px solid ${C.border};padding-top:10px;margin-bottom:8px">
-                <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">D · Combinatorial breakdown ${N.combo.rarity[i] != null ? `<span style="color:${C.purple}">· rarity ${fmtv(N.combo.rarity[i], 3)} (${Math.round(rankPct(N.combo.rarity, i) * 100)}th pct)</span>` : `<span style="color:${C.mute}">· rarity n/a</span>`}</div>
-                <div style="font-size:10px;color:${C.mute};margin-bottom:3px">concepts in this hook's script</div><div style="margin-bottom:6px">${concepts}</div>
-                <div style="font-size:10px;color:${C.mute};margin-bottom:3px">concept pairings (rarer = more novel combination)</div>${pairs}</div>
             <div style="border-top:1px solid ${C.border};padding-top:10px">
-                <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">Scene components — what's actually in each second</div>
-                <div style="font-size:10px;color:${C.mute};margin-bottom:3px">objects / elements detected across the hook</div><div style="margin-bottom:8px">${comps}</div>
-                ${sceneRows}</div>`);
+                <div style="font-size:11px;font-weight:800;color:${C.faint};margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px">⚠ Scene description — LLM-written context (interpreted, never scored)</div>${sceneRows}</div>`);
     }
     function renderNovGlobal() {
-        const g = N.global;
-        let h = h2c('A · Global novelty — distance from the entire corpus', 'How far each hook sits from its nearest neighbours. Outliers (red) are unlike everything else; dense blue cores are the crowded, done-to-death space. Colour = kNN-distance percentile, per embedding.');
-        h += cardc(novMaps((mod, i) => heatCol(g[mod] ? g[mod].pct[i] : 0.5), legendBar('typical', 'novel / outlier'), i => heatCol(g.visual.pct[N.scene.owner[i]])));
-        h += note('No labels yet — this is pure geometry. The clusters you can see <i>are</i> the niches; the lonely points are the globally-novel hooks. Note the concept map and the visual map disagree: some hooks are visually ordinary but conceptually strange, and vice-versa — which is exactly why we embed them separately.', C.cyan);
+        const H = N.hook, S = N.second;
+        let h = h2c('A · Global novelty — distance from the entire corpus', 'Mean cosine distance to the 8 nearest hooks. Outliers (red) are unlike everything else; dense blue cores are the crowded space. Pure geometry over the embeddings.');
+        h += cardc(resMaps((mod, i) => heatCol(H.global[mod].pct[i]), (mod, i) => heatCol(S.global[mod].pct[i]), legendBar('typical', 'novel / outlier')));
+        h += note('The concept map and the visual map disagree on purpose — some hooks are visually ordinary but conceptually strange. That is why they are embedded separately rather than as one low-res "whole" point.', C.cyan);
         return h;
     }
     function renderNovNiche() {
-        const nz = N.niche;
-        let h = h2c('B · Niche novelty — emergent clusters + distance to your own cluster', 'k-means finds natural clusters (proto-niches) with no labels. Colour = cluster. A hook far from its own cluster centre is niche-novel even if globally common.');
-        h += cardc(novMaps((mod, i) => NPAL[(nz[mod] ? nz[mod].labels[i] : 0) % NPAL.length], '', i => NPAL[(nz.visual.labels[N.scene.owner[i]]) % NPAL.length]));
-        h += note(`${nz.whole ? nz.whole.k : 0} emergent clusters per embedding. These aren't named — they're just where hooks naturally group. Distance-to-centre (the niche-novelty score) is stored per hook for later; right now we only need to confirm the niches separate cleanly.`, NPAL[3]);
+        const H = N.hook, S = N.second;
+        let h = h2c('B · Niche novelty — emergent clusters', 'k-means (k=8) finds natural clusters with no labels. Colour = cluster. A hook far from its own cluster centre is niche-novel even if globally common.');
+        h += cardc(resMaps((mod, i) => NPAL[H.niche[mod].labels[i] % NPAL.length], (mod, i) => NPAL[S.niche[mod].labels[i] % NPAL.length], ''));
+        h += note('Clusters are unnamed — just where hooks naturally group. Per-second clustering (toggle) shows whether the seconds within one hook stay in the same niche or move through several.', NPAL[3]);
         return h;
     }
     function renderNovTemporal() {
         const ages = N.videos.map(v => v.age_days).filter(a => a != null), amin = Math.min(...ages), amax = Math.max(...ages);
         const col = i => { const a = N.videos[i].age_days; return a == null ? C.faint : heatCol(1 - (a - amin) / ((amax - amin) || 1)); };
-        let h = h2c('C · Temporal novelty — what people have seen recently', 'Same maps, coloured by recency (bright = newer, dark = older). Saturation shows up as a recent-heavy clump: a region that just filled in. A hook landing in empty space relative to recent posts is temporally novel.');
-        h += cardc(novMaps((mod, i) => col(i), legendBar('older', 'newer'), i => col(N.scene.owner[i])));
-        h += note('A hook can be historically fine but dead now because everyone copied it. The ±45-day temporal-novelty distance is computed per hook for the eventual score; here you can already see whether new hooks pile into old territory or break into open space.', C.green);
+        let h = h2c('C · Temporal novelty — what people have seen recently', 'Maps coloured by recency (bright = newer). Saturation shows up as a recent-heavy clump. The ±45-day temporal distance is per hook.');
+        h += cardc(resMaps((mod, i) => col(i), (mod, i) => col(N.second.owner[i]), legendBar('older', 'newer')));
+        h += note('A hook can be historically fine but dead now because everyone copied it. Watch whether bright (new) points pile into old territory or break into open space.', C.green);
         return h;
     }
     function renderNovCombo() {
         const G = N.combo;
-        let h = h2c('D · Combinatorial novelty — concept co-occurrence', 'Nodes = concepts pulled mechanically from the hook scripts (no labelling — just frequent content words). Edges = concepts that appear together in a hook; thickness = how often. Rare edges (Vantablack × car) are the interesting combinations.');
+        const nodes = (G.clusters || []).map(c => ({ w: c.label, freq: c.freq, pos: c.pos }));
+        let h = h2c('D · Combinatorial novelty — concept-cluster co-occurrence', 'A concept = an MMR keyphrase (multi-word, centrality-scored). Concepts are k-means-clustered corpus-wide into recurring ideas; nodes here are those clusters. Edges = clusters that co-occur in a hook. Rare pairings are the interesting combinations.');
         h += cardc(`<div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
-            <div>${comboGraph(G)}<div style="font-size:10px;color:${C.mute};margin-top:4px">node size = how many hooks use the concept · edge = co-occurrence</div></div>
-            <div>${mapCard('Concept map · per-hook combo rarity', 'rarer concept-pairings = brighter', latentMap(N.proj.concept, { color: i => heatCol(rarPct(i)), sel: st.novSel, tip: i => novTip(i, G.rarity[i] != null ? 'rarity ' + G.rarity[i] : '') }), legendBar('common combos', 'rare combos'))}</div></div>`);
-        h += note('A rare combination of two <i>familiar</i> concepts (a broadly-understood anchor + an extreme modifier) is the strongest novelty pattern — more legible than a single weird concept. The graph + per-hook rarity give us the raw co-occurrence; weighting by concept familiarity comes later.', C.accent);
+            <div>${comboGraph({ nodes, edges: G.edges })}<div style="font-size:10px;color:${C.mute};margin-top:4px">node = a concept-cluster (size = how many hooks use it) · edge = co-occurrence</div></div>
+            <div>${mapCard('Concept map · per-hook combo rarity', 'rarer concept-cluster pairings = brighter', latentMap(N.hook.proj.concept, { color: i => heatCol(rankPct(G.rarity, i)), sel: st.novSel, tip: i => novTip(i, G.rarity[i] != null ? 'rarity ' + G.rarity[i] : 'single concept') }), legendBar('common', 'rare'))}</div></div>`);
+        h += note('A rare combination of two <i>familiar</i> concept-clusters (a known anchor + an extreme modifier) is the strongest novelty pattern. Now defined quantitatively: concept = keyphrase, cluster = embedding k-means, rarity = inverse co-occurrence.', C.accent);
         return h;
     }
-    function rarPct(i) { const r = N.combo.rarity, vals = r.filter(x => x != null).sort((a, b) => a - b); if (r[i] == null || !vals.length) return 0.5; return vals.indexOf(r[i]) / (vals.length - 1 || 1); }
     function renderNovCoherent() {
-        const ch = N.coherent;
-        let h = h2c('E · Coherent novelty — novelty × coherence (the curiosity quadrant)', 'X = how novel (distance from corpus). Y = coherence (do the visuals match the words — CLIP image↔text alignment). High-novelty + high-coherence = curiosity; novel + incoherent = confusion. This is the position that actually predicts a good hook.');
+        const ch = N.hook.coherent;
+        let h = h2c('E · Coherent novelty — novelty × coherence (the curiosity quadrant)', 'X = novelty (distance from corpus). Y = coherence = cos(CLIP image, CLIP text) — do the visuals match the words. Novel + coherent = curiosity; novel + incoherent = confusion.');
         h += cardc(`<div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
-            <div>${quadPlot(ch.nov_pct, ch.coh_pct, { color: i => heatCol(N.videos[i].lv ? (N.videos[i].lv - 4.5) / 4 : 0.5), sel: st.novSel, tip: i => novTip(i, 'coh ' + ch.coherence[i]) })}<div style="font-size:10px;color:${C.mute};margin-top:4px">point colour = views (brighter = more) · click a point to open its data</div></div>
-            <div>${mapCard('Visual map · coloured by coherence', 'bright = visuals strongly match the spoken words', latentMap(N.proj.visual, { color: i => heatCol(ch.coh_pct[i]), sel: st.novSel, tip: i => novTip(i, 'coh ' + ch.coherence[i]) }), legendBar('mismatch', 'coherent'))}</div></div>`);
-        h += note('This is the one that matters most: <b>valuable novelty = distance × understandability</b>. Right now we only plot the two axes from raw geometry (kNN distance, CLIP alignment) — no scoring. Once we overlay views, the curiosity quadrant should be where the winners concentrate.', C.green);
+            <div>${quadPlot(ch.nov_pct, ch.coh_pct, { color: i => heatCol(N.videos[i].lv ? (N.videos[i].lv - 4.5) / 4 : 0.5), sel: st.novSel, tip: i => novTip(i, 'coh ' + ch.coherence[i]) })}<div style="font-size:10px;color:${C.mute};margin-top:4px">point colour = views (brighter = more) · click to open its data</div></div>
+            <div>${mapCard('Per-second coherence', 'each second coloured by visual↔word match', latentMap(N.second.proj.clip, { color: i => heatCol(N.second.coh_pct[i]), pick: i => N.second.owner[i], sel: st.novSel, r: () => 2.4, op: () => 0.62, tip: i => novTip(N.second.owner[i], 'sec ' + N.second.sec[i] + ' coh ' + N.second.coherence[i]) }), legendBar('mismatch', 'coherent'))}</div></div>`);
+        h += note('<b>Valuable novelty = distance × understandability.</b> Coherence is a defined CLIP cosine, not a human judgement. Once views are overlaid, the curiosity quadrant should be where winners concentrate.', C.green);
+        return h;
+    }
+    function renderNovLedger() {
+        const tcol = { geometry: C.cyan, encoder: C.accent, 'model-metric': C.green, defined: C.purple, detection: C.orange, interpreted: C.red };
+        let h = h2c('📋 Interpretation ledger — what is measured vs interpreted', 'Every data point in this tab, with its exact definition and how much human/LLM interpretation it carries. The goal: define absolutely everything.');
+        h += cardc((N.ledger || []).map(L => `<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid ${C.border}">
+            <div style="width:150px;flex-shrink:0"><div style="font-size:12px;font-weight:700;color:${C.text}">${esc(L.metric)}</div><span style="display:inline-block;margin-top:3px;background:${(tcol[L.type] || C.mute)}22;border:1px solid ${tcol[L.type] || C.mute};color:${tcol[L.type] || C.mute};border-radius:5px;padding:0 6px;font-size:9px;font-weight:800;text-transform:uppercase">${esc(L.type)}</span></div>
+            <div style="flex:1;font-size:11px;color:${C.dim};line-height:1.5">${esc(L.def)}</div></div>`).join(''));
+        h += note('<b>geometry</b> = pure distance/clustering on vectors · <b>encoder</b> = a fixed pretrained net, identical for all videos · <b>model-metric</b> = a defined scalar (e.g. CLIP cosine) · <b>defined</b> = an explicit formula (MMR keyphrase) · <b>detection</b> = OWLv2 box+score · <b style="color:' + C.red + '">interpreted</b> = LLM prose, shown as context only, never fed into a score.', C.dim);
         return h;
     }
     function renderPrinciples() {
-        let h = h2c('Principles — deliberately quantifying what makes a hook work', 'Hook = the first 5 seconds of every confirmed video. We extract it and embed it several independent ways, then look at the latent geometry. No interpretation or labels yet — just where things land.');
+        let h = h2c('Principles — deliberately quantifying what makes a hook work', 'Hook = the first 5 seconds of every confirmed video. Embedded several independent ways at two resolutions (whole hook + per second). Objects via detection, concepts via keyphrase math — see the 📋 Ledger for every definition.');
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span style="background:${C.purple}22;border:1px solid ${C.purple};color:${C.purple};border-radius:8px;padding:5px 12px;font-size:12px;font-weight:800">✦ Novelty</span><span style="border:1px dashed ${C.border2};color:${C.faint};border-radius:8px;padding:5px 12px;font-size:12px">coherence · soon</span><span style="border:1px dashed ${C.border2};color:${C.faint};border-radius:8px;padding:5px 12px;font-size:12px">tension · soon</span></div>`;
-        if (!N) { h += cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Embedding the hooks… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/embed_hooks.py</code> then <code>build_novelty.py</code> to generate <code>novelty.json</code>.</div></div>`); return h; }
-        const MS = [['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent']];
-        h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${MS.map(([id, l]) => `<button data-nov="${id}" style="background:${st.nov === id ? C.purple + '22' : 'transparent'};border:1px solid ${st.nov === id ? C.purple : C.border};color:${st.nov === id ? C.purple : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
-        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n} hooks · visual ${N.meta.models.visual} · whole ${N.meta.models.whole} · concept ${N.meta.models.concept}. Every dot is a hook — <b>click any point to see its raw data + how every map graphs it.</b></div>`;
+        if (!N) { h += cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Building novelty geometry… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run the <code>principles/</code> pipeline (embed → detect → concepts → build_novelty) to generate <code>novelty.json</code>.</div></div>`); return h; }
+        const MS = [['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent'], ['ledger', '📋 Ledger']];
+        const resBtn = (id, l) => `<button data-novres="${id}" style="background:${st.novRes === id ? C.accent + '22' : 'transparent'};border:1px solid ${st.novRes === id ? C.accent : C.border};color:${st.novRes === id ? C.accent : C.dim};border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">${l}</button>`;
+        h += `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">${MS.map(([id, l]) => `<button data-nov="${id}" style="background:${st.nov === id ? C.purple + '22' : 'transparent'};border:1px solid ${st.nov === id ? C.purple : C.border};color:${st.nov === id ? C.purple : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>
+            ${st.nov !== 'combo' && st.nov !== 'ledger' ? `<div style="margin-left:auto;display:flex;gap:6px;align-items:center"><span style="font-size:10px;color:${C.mute};text-transform:uppercase">resolution</span>${resBtn('hook', 'Whole hook')}${resBtn('second', 'Per second')}</div>` : ''}</div>`;
+        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n} hooks · ${N.second.owner.length} seconds · visual ${N.meta.models.visual} · detector ${N.meta.models.detector}. <b>Click any point for its full data — objects (with boxes), concepts, and every metric.</b></div>`;
         if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
-        h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent }[st.nov] || renderNovGlobal)();
+        h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent, ledger: renderNovLedger }[st.nov] || renderNovGlobal)();
         return h;
     }
 
@@ -539,6 +557,7 @@ const JarvisRetention = (function () {
     function onClick(e) {
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
+        const nr = e.target.closest('[data-novres]'); if (nr) { st.novRes = nr.getAttribute('data-novres'); render(); return; }
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
         const hk = e.target.closest('[data-hook]'); if (hk) { st.novSel = +hk.getAttribute('data-hook'); render(); return; }

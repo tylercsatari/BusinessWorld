@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-NOVELTY GEOMETRY — turn the cached hook embeddings into 2D latent maps + the five
-novelty geometries. Still NO labels/interpretation: only positions, distances, clusters.
+NOVELTY GEOMETRY v2 — multi-resolution, quantitative.
 
-Per modality (whole / concept / visual / scene) → a 2D map you can eyeball for clusters.
-Then the five measurements as pure geometry over those embeddings:
+Two consistent resolutions for every modality:
+  HOOK   = the whole 5 s pooled (one point per video)
+  SECOND = each second on its own (one point per video-second, ≈ n×5)
 
-  A global   : kNN distance to the whole corpus              (outliers = novel)
-  B niche    : unsupervised clusters (emergent niches) + distance to own cluster centre
-  C temporal : distance to hooks posted within ±45 days      (saturation)
-  D combo    : concept co-occurrence graph from the script + per-hook combination rarity
-  E coherent : novelty (x) vs visual-text coherence (y)      (the curiosity quadrant)
+Inputs (all already computed):
+  hooks_emb.npz   whole / concept / visual / coherence + per-frame DINOv2 (scene)
+  persec_emb.npz  per-second CLIP-image / CLIP-text / MiniLM / coherence
+  concepts.json   quantitative concepts (MMR keyphrases) + concept-clusters + combo rarity
+  objects.json    OWLv2 detections per second + per hook (boxes + scores)
 
-Output: novelty.json  (read by the Principles → Novelty tab).
+Everything here is geometry/counting — no new interpretation. A ledger records, for every
+metric, its exact definition and whether it is geometry / a model metric / detection / LLM-interpreted.
+
+Output: novelty.json
 """
 import os, json, re
 import numpy as np
@@ -26,8 +29,6 @@ RS = os.path.dirname(HERE)
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(RS)))
 VD = os.path.join(ROOT, 'video_data')
 np.random.seed(7)
-
-STOP = set("the a an and or but to of in on for with at by from up about into over after is are was were be been being this that these those it its as it's i you he she they we my your his her their our me him them us so if then than too very can will just dont don't im it’s was had has have do does did not no yes get got make made go going went one two first my so out see saw look looking watch wanted want wants how what when why where who which actually really gonna let lets here there now today thing things something someone everyone people guy guys way back take took put thats that's youre you're were we're im i'm because just like more most much many also even still own new make making makes day life world's world".split())
 
 
 def L2(X):
@@ -51,7 +52,7 @@ def knn_nov(X, k=8):
     return d[:, 1:].mean(1)
 
 
-def pct(v):                                            # 0..1 percentile rank (for colouring)
+def pct(v):
     r = np.argsort(np.argsort(v)).astype(float)
     return (r / (len(v) - 1 + 1e-9))
 
@@ -60,12 +61,7 @@ def niches(X, k=8):
     return KMeans(min(k, len(X)), n_init=10, random_state=7).fit_predict(L2(np.asarray(X, np.float32))).tolist()
 
 
-def toks(t):
-    ws = [w for w in re.findall(r"[a-zA-Z']+", (t or '').lower()) if len(w) >= 3 and w not in STOP]
-    return list(dict.fromkeys(ws))
-
-
-def read_scenes(vid):                                  # the already-interpreted per-frame analysis (first 5 s)
+def read_scenes(vid):                                  # LLM-interpreted per-frame analysis (flagged in the ledger)
     try:
         a = json.load(open(os.path.join(VD, vid, 'analysis.json')))
     except Exception:
@@ -83,116 +79,98 @@ def read_scenes(vid):                                  # the already-interpreted
     return out[:5]
 
 
-COMP_STOP = STOP | set("scene shows person people room background foreground frame image visible appears wearing standing sitting holding looking shot camera angle color colors lighting light bright dark natural warm tone text overlay screen left right center top bottom front behind large small white black blue red green clear likely seen various several".split())
+def geom(X):                                           # global novelty + emergent niches for a set of points
+    nv = knn_nov(X)
+    return {'nov': [round(float(x), 4) for x in nv], 'pct': [round(float(x), 3) for x in pct(nv)],
+            'niche': niches(X), 'dist_to_centre': centre_dist(X)}
 
 
-def components(scenes):                                # mechanical object/component chips from the scene descriptions
-    fr = {}
-    for s in scenes:
-        for w in [w.strip("'") for w in re.findall(r"[a-zA-Z']+", (s['desc'] or '').lower())]:
-            if len(w) >= 4 and w not in COMP_STOP:
-                fr[w] = fr.get(w, 0) + 1
-    return [w for w, c in sorted(fr.items(), key=lambda x: (-x[1], x[0]))][:10]
+def centre_dist(X):
+    Xn = L2(np.asarray(X, np.float32)); lab = np.array(niches(X))
+    cents = {c: Xn[lab == c].mean(0) for c in set(lab.tolist())}
+    return [round(float(1 - L2(Xn[i:i + 1])[0] @ L2(cents[lab[i]][None])[0]), 4) for i in range(len(Xn))]
+
+
+LEDGER = [
+    {'metric': 'Visual embedding', 'type': 'encoder', 'def': 'DINOv2-small CLS token of each frame (224², ImageNet-normalized). Deterministic; the "interpretation" is the pretrained net, identical for every video.'},
+    {'metric': 'Concept embedding', 'type': 'encoder', 'def': 'all-MiniLM-L6-v2 sentence embedding of the hook script (or per-second text). Deterministic.'},
+    {'metric': 'Whole-hook embedding', 'type': 'encoder', 'def': 'mean(normalized CLIP image, normalized CLIP text) in the shared CLIP space. Low-resolution by design (averages everything).'},
+    {'metric': 'Global novelty', 'type': 'geometry', 'def': 'mean cosine distance to the 8 nearest hooks in the embedding. Pure geometry over the vectors above.'},
+    {'metric': 'Niche', 'type': 'geometry', 'def': 'k-means (k=8) clusters of the embeddings + cosine distance to the assigned cluster centre. k is a chosen parameter.'},
+    {'metric': 'Temporal novelty', 'type': 'geometry', 'def': 'mean cosine distance to hooks published within ±45 days. Window (45d) is a chosen parameter.'},
+    {'metric': 'Coherence', 'type': 'model-metric', 'def': 'cosine(CLIP image, CLIP text) of the hook. A defined scalar — how aligned the visuals are with the words per CLIP. Model-dependent but reproducible.'},
+    {'metric': 'Concept (combinatorial)', 'type': 'defined', 'def': 'MMR keyphrase: 1-3 word n-gram of the script maximizing cos(phrase, hook) − redundancy. Multi-word, centrality-scored — filters throwaway words by construction.'},
+    {'metric': 'Concept-cluster / combo rarity', 'type': 'geometry', 'def': 'concepts k-means-clustered corpus-wide; combo rarity = mean 1/(co-occurrence+1) over the concept-cluster PAIRS in the hook. Pure counting.'},
+    {'metric': 'Component / object', 'type': 'detection', 'def': 'OWLv2 open-vocabulary detection: an object phrase is a component iff localized with score>0.15, returning a box. Non-objects ("setting","area") get no box and are excluded. Quantitative (score+box).'},
+    {'metric': 'Scene spread', 'type': 'geometry', 'def': 'mean pairwise cosine distance among the 5 per-frame DINOv2 vectors — how much the hook visually changes (cut intensity).'},
+    {'metric': 'Scene description / techniques / insights', 'type': 'interpreted', 'def': 'LLM-written per-frame prose (analysis.json). SUBJECTIVE — shown only as context, never fed into any score. Flagged orange in the panel.'},
+]
 
 
 def main():
     E = np.load(os.path.join(HERE, 'hooks_emb.npz'))
     M = json.load(open(os.path.join(HERE, 'hooks_meta.json')))
     meta = M['meta']; n = len(meta)
-    whole, concept, visual = E['whole'], E['concept'], E['visual']
-    coh = E['coherence']
+    CON = json.load(open(os.path.join(HERE, 'concepts.json')))
+    OBJ = json.load(open(os.path.join(HERE, 'objects.json'))) if os.path.exists(os.path.join(HERE, 'objects.json')) else {}
+    whole, concept, visual, coh = E['whole'], E['concept'], E['visual'], E['coherence']
+    so, sf, sv = E['scene_owner'], E['scene_frame'], E['scene']
     ages = np.array([m['age_days'] if m['age_days'] is not None else np.nan for m in meta], float)
 
-    out = {'meta': {'n': n, 'hook_seconds': M['hook_seconds'], 'models': M['models']},
-           'videos': [{'id': m['id'], 'name': m['name'], 'views': m['views'], 'lv': m['lv'],
-                       'url': m['url'], 'published': m['published'], 'age_days': m['age_days'],
-                       'hook_text': m.get('hook_text', '')} for m in meta]}
+    out = {'meta': {'n': n, 'hook_seconds': M['hook_seconds'],
+                    'models': {'visual': 'facebook/dinov2-small', 'whole': 'openai/clip-vit-base-patch16',
+                               'concept': 'all-MiniLM-L6-v2', 'detector': 'google/owlv2-base-patch16-ensemble'},
+                    'resolutions': ['hook', 'second']},
+           'ledger': LEDGER, 'videos': []}
 
-    # 2D maps per modality
-    out['proj'] = {'whole': project(whole), 'concept': project(concept), 'visual': project(visual)}
-    # scene components: every hook frame as its own point (≈ n×5), coloured by owner video
-    so, sf, sv = E['scene_owner'], E['scene_frame'], E['scene']
-    sp = project(sv, perp=30)
-    out['scene'] = {'pts': sp, 'owner': so.tolist(), 'frame': sf.tolist()}
-    # per-hook scene spread = mean pairwise cosine dist among its 5 frames (visual dynamism)
-    spread = []
-    for vi in range(n):
-        idx = np.where(so == vi)[0]
-        if len(idx) > 1:
-            F = L2(sv[idx]); D = 1 - F @ F.T
-            spread.append(round(float(D[np.triu_indices(len(idx), 1)].mean()), 4))
-        else:
-            spread.append(0.0)
-    out['scene']['spread'] = spread
+    for i, m in enumerate(meta):
+        vid = m['id']; ob = OBJ.get(vid, {})
+        out['videos'].append({'id': vid, 'name': m['name'], 'views': m['views'], 'lv': m['lv'], 'url': m['url'],
+                              'published': m['published'], 'age_days': m['age_days'], 'hook_text': m.get('hook_text', ''),
+                              'concepts': CON['per_video'].get(vid, []), 'scenes': read_scenes(vid),
+                              'objects_hook': ob.get('hook', []), 'objects_persec': ob.get('persec', [])})
 
-    # A — global novelty (kNN distance), per modality, as percentile for colour
-    out['global'] = {k: {'nov': [round(float(x), 4) for x in knn_nov(X)],
-                         'pct': [round(float(x), 3) for x in pct(knn_nov(X))]}
-                     for k, X in (('whole', whole), ('concept', concept), ('visual', visual))}
-
-    # B — niche: emergent clusters per modality + distance to own centroid
-    out['niche'] = {}
+    # ── HOOK resolution ──
+    H = {'proj': {'whole': project(whole), 'concept': project(concept), 'visual': project(visual)}}
     for k, X in (('whole', whole), ('concept', concept), ('visual', visual)):
-        lab = niches(X); Xn = L2(np.asarray(X, np.float32)); lab = np.array(lab)
-        cents = {c: Xn[lab == c].mean(0) for c in set(lab.tolist())}
-        dist = [round(float(1 - L2(Xn[i:i+1])[0] @ L2(cents[lab[i]][None])[0]), 4) for i in range(n)]
-        out['niche'][k] = {'labels': lab.tolist(), 'k': len(cents), 'dist_to_centre': dist}
-
-    # C — temporal novelty: distance to hooks within ±45 days (whole space)
+        g = geom(X); H.setdefault('global', {})[k] = {'nov': g['nov'], 'pct': g['pct']}
+        H.setdefault('niche', {})[k] = {'labels': g['niche'], 'k': len(set(g['niche'])), 'dist_to_centre': g['dist_to_centre']}
     Wn = L2(whole); tnov = []
     for i in range(n):
         if not np.isfinite(ages[i]):
             tnov.append(None); continue
-        nb = np.where(np.isfinite(ages) & (np.abs(ages - ages[i]) < 45))[0]
-        nb = nb[nb != i]
+        nb = np.where(np.isfinite(ages) & (np.abs(ages - ages[i]) < 45))[0]; nb = nb[nb != i]
         tnov.append(round(float((1 - Wn[i] @ Wn[nb].T).mean()), 4) if len(nb) else None)
-    out['temporal'] = {'nov': tnov, 'window_days': 45}
+    H['temporal'] = {'nov': tnov, 'window_days': 45}
+    H['coherent'] = {'novelty': [round(float(x), 4) for x in knn_nov(whole)], 'coherence': [round(float(x), 4) for x in coh],
+                     'nov_pct': [round(float(x), 3) for x in pct(knn_nov(whole))], 'coh_pct': [round(float(x), 3) for x in pct(coh)]}
+    spread = []
+    for vi in range(n):
+        idx = np.where(so == vi)[0]
+        if len(idx) > 1:
+            F = L2(sv[idx]); D = 1 - F @ F.T; spread.append(round(float(D[np.triu_indices(len(idx), 1)].mean()), 4))
+        else:
+            spread.append(0.0)
+    H['scene'] = {'pts': project(sv, perp=30), 'owner': so.tolist(), 'frame': sf.tolist(), 'spread': spread}
+    out['hook'] = H
 
-    # D — combinatorial: concept co-occurrence graph from the hook script (broad vocab → fewer blanks)
-    hooks = [toks(m['hook_text']) for m in meta]
-    freq = {}
-    for hs in hooks:
-        for w in hs:
-            freq[w] = freq.get(w, 0) + 1
-    vocab = [w for w, c in sorted(freq.items(), key=lambda x: (-x[1], x[0])) if c >= 2][:100]
-    vi = {w: i for i, w in enumerate(vocab)}
-    co = np.zeros((len(vocab), len(vocab)))
-    for hs in hooks:
-        present = [vi[w] for w in hs if w in vi]
-        for a in range(len(present)):
-            for b in range(a + 1, len(present)):
-                co[present[a], present[b]] += 1; co[present[b], present[a]] += 1
-    pos = project(co + np.eye(len(vocab)) * 1e-3, perp=8) if len(vocab) > 6 else [[0, 0]] * len(vocab)
-    edges = [{'a': a, 'b': b, 'w': int(co[a, b])} for a in range(len(vocab)) for b in range(a + 1, len(vocab)) if co[a, b] >= 2]
-    # per-hook: its concepts, its concept pairs (with co-occurrence), and combination rarity
-    rar, vconcepts, vpairs = [], [], []
-    for hs in hooks:
-        pr = [w for w in hs if w in vi]; vconcepts.append(pr)
-        pairs, vals = [], []
-        for a in range(len(pr)):
-            for b in range(a + 1, len(pr)):
-                c = int(co[vi[pr[a]], vi[pr[b]]]); pairs.append({'a': pr[a], 'b': pr[b], 'co': c}); vals.append(1.0 / (c + 1.0))
-        vpairs.append(sorted(pairs, key=lambda p: p['co'])[:6])
-        rar.append(round(float(np.mean(vals)), 4) if vals else None)
-    out['combo'] = {'nodes': [{'w': w, 'freq': freq[w], 'pos': pos[i]} for i, w in enumerate(vocab)],
-                    'edges': edges, 'rarity': rar}
+    # ── SECOND resolution ──
+    P = np.load(os.path.join(HERE, 'persec_emb.npz'))
+    po, ps, pimg, ptxt, pconc, pcoh = P['owner'], P['sec'], P['clip_img'], P['clip_txt'], P['concept'], P['coherence']
+    S = {'owner': po.tolist(), 'sec': ps.tolist(),
+         'proj': {'visual': project(sv, perp=30), 'clip': project(pimg, perp=30), 'concept': project(pconc, perp=30)},
+         'coherence': [round(float(x), 4) for x in pcoh], 'coh_pct': [round(float(x), 3) for x in pct(pcoh)]}
+    for k, X in (('visual', sv), ('clip', pimg), ('concept', pconc)):
+        g = geom(X); S.setdefault('global', {})[k] = {'nov': g['nov'], 'pct': g['pct']}
+        S.setdefault('niche', {})[k] = {'labels': g['niche'], 'k': len(set(g['niche']))}
+    out['second'] = S
 
-    # per-hook interpreted breakdown: scene-by-scene analysis + extracted object/components
-    for i, m in enumerate(meta):
-        sc = read_scenes(m['id'])
-        out['videos'][i]['scenes'] = sc
-        out['videos'][i]['components'] = components(sc)
-        out['videos'][i]['concepts'] = vconcepts[i]
-        out['videos'][i]['pairs'] = vpairs[i]
-
-    # E — coherent: novelty (whole kNN) vs visual↔text coherence
-    out['coherent'] = {'novelty': [round(float(x), 4) for x in knn_nov(whole)],
-                       'coherence': [round(float(x), 4) for x in coh],
-                       'nov_pct': [round(float(x), 3) for x in pct(knn_nov(whole))],
-                       'coh_pct': [round(float(x), 3) for x in pct(coh)]}
+    # ── combinatorial (concept-cluster level, from concepts.json) ──
+    out['combo'] = {'clusters': CON['clusters'], 'edges': CON['edges'], 'rarity': CON['rarity'], 'k_clusters': CON['k_clusters']}
 
     json.dump(out, open(os.path.join(HERE, 'novelty.json'), 'w'))
-    print(f"novelty.json · {n} hooks · {len(vocab)} concepts · {len(edges)} edges · {len(sp)} scene pts")
+    nobj = sum(len(v['objects_hook']) for v in out['videos'])
+    print(f"novelty.json · {n} hooks · {len(po)} seconds · {len(CON['clusters'])} concept-clusters · {nobj} hook-objects · ledger {len(LEDGER)}")
 
 
 if __name__ == '__main__':

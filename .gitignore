@@ -42,3 +42,6 @@ buildings/jarvis/quant2/emb_motion/
 # Principles hook embedding cache (regenerable from embed_hooks.py)
 buildings/jarvis/retention-study/principles/hooks_emb.npz
 buildings/jarvis/retention-study/principles/embed.log
+buildings/jarvis/retention-study/principles/persec_emb.npz
+buildings/jarvis/retention-study/principles/detect.log
+buildings/jarvis/retention-study/principles/persec.log
