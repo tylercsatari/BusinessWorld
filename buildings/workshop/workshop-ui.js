@@ -905,15 +905,15 @@ const WorkshopUI = (() => {
                 // (no separate "decide branches" step). Just need ≥1 component, or
                 // "no decomposition needed".
                 if (!(componentsForVideo(v.id).length || v.noDecomp)) actions = `<span class="wsp-deliv-chip pending" title="Break the video into at least one component, or mark “No decomposition needed”">＋ add a component ↓</span>`;
-                else actions = `<button class="wsp-mini-btn done" data-done="${v.id}" title="Complete Decomposition — sends the video forward; its components flow on their own">✓ Done</button>`;
+                else actions = `<button class="wsp-mini-btn done" data-done="${v.id}" title="Done">✓ Done</button>`;
             } else if (kind === 'post') {
-                actions = `<button class="wsp-mini-btn done" data-publish="${v.id}" title="Publish — the deliverable for Posting">✓ Done</button>`;
+                actions = `<button class="wsp-mini-btn done" data-publish="${v.id}" title="Done">✓ Done</button>`;
             } else {
                 // EVERY other node gets a manual DONE button right on the row — the
                 // worker uploads/does the deliverable, then presses Done. It's
                 // deliverable-gated: if nothing's there yet it tells them what's
                 // missing instead of advancing (the bottleneck check).
-                actions = `<button class="wsp-mini-btn done" data-node-done="${v.id}" data-node-stage="${stage.id}" title="${escAttr('Done — ' + (STAGE_DELIVERABLE[stage.id] || 'mark this stage complete'))}">✓ Done</button>`;
+                actions = `<button class="wsp-mini-btn done" data-node-done="${v.id}" data-node-stage="${stage.id}" title="Done">✓ Done</button>`;
             }
         }
         return `<div class="wsp-stage-video${expanded ? ' expanded' : ''}" data-id="${v.id}">
@@ -922,7 +922,7 @@ const WorkshopUI = (() => {
                 <div class="wsp-stage-video-main">
                     <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}</div>
                     <div class="wsp-stage-video-meta">
-                        ${!stage ? frontierChips(v, 3) : `<span class="wsp-deliv-need" title="What you need to deliver to move this forward">📋 ${escHtml(STAGE_DELIVERABLE[stage.id] || stage.label)}</span>`}
+                        ${!stage ? frontierChips(v, 3) : `<span class="wsp-deliv-need" title="What needs to be finished">📋 ${escHtml(STAGE_DELIVERABLE[stage.id] || stage.label)}</span>`}
                         ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
                         ${stage && stage.id === 'order' && openOrders ? `<span class="wsp-deadline soon">📦 ${openOrders} order${openOrders === 1 ? '' : 's'} open</span>` : ''}
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
@@ -936,11 +936,10 @@ const WorkshopUI = (() => {
 
     // The drop-down IS the full editor — same fields as the detail page, in
     // pipeline order. A clear DELIVERABLE banner sits on top; result-upload
-    // stages get their uploader right there. No Post/Return — the only way
-    // forward is the deliverable, which auto-advances the video off the queue.
+    // stages get their uploader right there.
     function stageVideoBodyHtml(v, stage) {
         const delivBlock = stage ? deliverableBlockHtml(v, stage) : '';
-        // Every node gets a DONE button to manually push the video forward. It's
+        // Every node gets a DONE button to manually mark the stage finished. It's
         // deliverable-gated: if the node's deliverable isn't met it prompts the
         // worker to finish it instead of advancing.
         const doneBtn = (stage && stage.id !== 'post')
@@ -1000,7 +999,7 @@ const WorkshopUI = (() => {
         const ss = { ...(v.stageState || {}), [stageId]: 'done' };
         await VideoService.update(videoId, { stageState: ss, status: normalizedStatus(v) });
         if (expandedStageVideoId === videoId) expandedStageVideoId = null;
-        toast('✓ Done — moved forward');
+        toast('✓ Done');
         renderTab();
     }
 
@@ -1294,12 +1293,9 @@ const WorkshopUI = (() => {
             const input = overlay.querySelector('#wsp-bd-comp-name');
             const name = input.value.trim();
             if (!name) return;
-            const fresh = VideoService.getById(videoId) || v;
-            const comp = await SVC().components.create({
-                videoId, projectId: (fresh.projectIds || [])[0] || '',
-                parentComponentId: '', name, status: 'design', notes: ''
-            });
-            await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
+            const setup = await confirmComponentSetup({ title: 'Add component', name });
+            if (!setup) return;
+            await createVideoComponent(videoId, setup);
             input.value = '';
             overlay.querySelector('#wsp-bd-comps').innerHTML = compListHtml();
             input.focus();
@@ -2236,15 +2232,10 @@ const WorkshopUI = (() => {
             const input = get('wsp-new-vcomp');
             const name = input.value.trim();
             if (!name) return;
-            const fresh = VideoService.getById(v.id) || v;
-            const comp = await SVC().components.create({
-                videoId: v.id,
-                projectId: (fresh.projectIds || [])[0] || '',
-                parentComponentId: '',
-                name, status: 'design', notes: ''
-            });
-            // deterministic: a component of this video automatically blocks it
-            await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
+            const setup = await confirmComponentSetup({ title: 'Add component', name });
+            if (!setup) return;
+            await createVideoComponent(v.id, setup);
+            input.value = '';
             rerender();
         };
         get('wsp-add-vcomp')?.addEventListener('click', addVComp);
@@ -2342,6 +2333,113 @@ const WorkshopUI = (() => {
         { flag: 'artistic',   label: 'Artistic',      icon: 'artistic' }
     ];
     const COMPONENT_NEED_LABEL = Object.fromEntries(COMPONENT_NEEDS.map(n => [n.flag, n.label]));
+    const COMPONENT_NEED_FLAGS = new Set(COMPONENT_NEEDS.map(n => n.flag));
+    const normalizeComponentSource = (source) => (source === 'order' || source === 'task' || source === 'build') ? source : '';
+    const normalizeComponentNeeds = (needs) => [...new Set(Array.isArray(needs) ? needs : [])].filter(f => COMPONENT_NEED_FLAGS.has(f));
+
+    function confirmComponentSetup(opts = {}) {
+        return new Promise(resolve => {
+            let source = normalizeComponentSource(opts.source || '');
+            const needsSet = new Set(source === 'build' ? normalizeComponentNeeds(opts.needs) : []);
+            const overlay = document.createElement('div');
+            overlay.className = 'wsp-picker-overlay';
+            overlay.style.display = 'flex';
+            overlay.innerHTML = `
+                <div class="wsp-picker wsp-suggest-modal wsp-component-setup-modal">
+                    <div class="wsp-picker-header"><span>🧩 ${escHtml(opts.title || 'Review component setup')}</span><button class="wsp-picker-close" data-cancel>✕</button></div>
+                    <div class="wsp-component-setup">
+                        <div class="wsp-hint">Confirm this before the component enters the pipeline. Type and build needs decide exactly where it goes.</div>
+                        <div class="wsp-cd-label">Component</div>
+                        <input type="text" id="wsp-setup-name" class="wsp-setup-name" value="${escAttr(opts.name || '')}" placeholder="Component name">
+
+                        <div class="wsp-cd-label">Type <span class="wsp-hint">— required</span></div>
+                        <div class="wsp-needs-btns">
+                            ${COMPONENT_SOURCES.map(s => `<button class="wsp-need-btn ${source === s.key ? 'on' : ''}" data-setup-source="${s.key}" title="${escAttr(s.hint)}">${icon(s.icon, 'wsp-need-ic')} ${s.label}</button>`).join('')}
+                        </div>
+
+                        <div class="wsp-cd-label">What it needs <span class="wsp-hint">— required for build components</span></div>
+                        <div class="wsp-needs-btns" id="wsp-setup-needs">
+                            ${COMPONENT_NEEDS.map(n => `<button class="wsp-need-btn ${needsSet.has(n.flag) ? 'on' : ''}" data-setup-need="${n.flag}">${icon(n.icon, 'wsp-need-ic')} ${n.label}</button>`).join('')}
+                        </div>
+                        <div class="wsp-setup-msg" id="wsp-setup-msg"></div>
+                    </div>
+                    <div class="wsp-branch-actions">
+                        <button class="wsp-mini-btn" data-cancel>Cancel</button>
+                        <button class="wsp-mini-btn done" id="wsp-setup-confirm">Create component</button>
+                    </div>
+                </div>`;
+            const panel = container.querySelector('.workshop-panel') || container;
+            panel.appendChild(overlay);
+            const q = (sel) => overlay.querySelector(sel);
+            const nameEl = q('#wsp-setup-name');
+            const msg = q('#wsp-setup-msg');
+            const confirmBtn = q('#wsp-setup-confirm');
+            const finish = (value) => { overlay.remove(); resolve(value); };
+            const render = () => {
+                overlay.querySelectorAll('[data-setup-source]').forEach(b => b.classList.toggle('on', b.dataset.setupSource === source));
+                const needsDisabled = source !== 'build';
+                overlay.querySelectorAll('[data-setup-need]').forEach(b => {
+                    b.disabled = needsDisabled;
+                    b.classList.toggle('on', !needsDisabled && needsSet.has(b.dataset.setupNeed));
+                });
+                const name = nameEl.value.trim();
+                let err = '';
+                if (!name) err = 'Name the component.';
+                else if (!source) err = 'Pick the type.';
+                else if (source === 'build' && needsSet.size === 0) err = 'Pick at least one build step it needs.';
+                else if (source === 'order') err = 'Order items go straight to Ordering.';
+                else if (source === 'task') err = 'Tasks go to Props / Set Design.';
+                confirmBtn.disabled = !name || !source || (source === 'build' && needsSet.size === 0);
+                msg.textContent = err;
+                msg.classList.toggle('ok', !!name && !!source && !(source === 'build' && needsSet.size === 0));
+            };
+            overlay.addEventListener('click', e => { if (e.target === overlay) finish(null); });
+            overlay.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => finish(null)));
+            overlay.querySelectorAll('[data-setup-source]').forEach(b => b.addEventListener('click', () => {
+                source = b.dataset.setupSource;
+                if (source !== 'build') needsSet.clear();
+                render();
+            }));
+            overlay.querySelectorAll('[data-setup-need]').forEach(b => b.addEventListener('click', () => {
+                if (source !== 'build') return;
+                const flag = b.dataset.setupNeed;
+                if (needsSet.has(flag)) needsSet.delete(flag); else needsSet.add(flag);
+                render();
+            }));
+            nameEl.addEventListener('input', render);
+            nameEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !confirmBtn.disabled) confirmBtn.click(); });
+            confirmBtn.addEventListener('click', () => {
+                if (confirmBtn.disabled) return;
+                finish({ name: nameEl.value.trim(), source, needs: source === 'build' ? [...needsSet] : [] });
+            });
+            render();
+            nameEl.focus();
+            nameEl.select();
+        });
+    }
+
+    async function createVideoComponent(videoId, setup) {
+        const fresh = VideoService.getById(videoId) || {};
+        const source = normalizeComponentSource(setup.source);
+        const needs = source === 'build' ? normalizeComponentNeeds(setup.needs) : [];
+        if (!setup.name || !source || (source === 'build' && !needs.length)) throw new Error('Component setup is missing Type or What it needs.');
+        const comp = await SVC().components.create({
+            videoId,
+            projectId: (fresh.projectIds || [])[0] || '',
+            parentComponentId: '',
+            name: setup.name,
+            notes: '',
+            needs,
+            status: defaultStatusFor({ source, needs }),
+            source,
+            links: []
+        });
+        const deps = videoDeps(fresh);
+        if (!deps.some(d => d && d.kind === 'component' && d.id === comp.id)) {
+            await saveDeps(fresh, [...deps, { kind: 'component', id: comp.id }]);
+        }
+        return comp;
+    }
 
     // A component is its own pipeline entity — created at Decomposition,
     // permanently linked to the video it came from (component.videoId), and it
@@ -2361,7 +2459,7 @@ const WorkshopUI = (() => {
                 ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
                 <span class="wsp-comp-stage">${escHtml(c.status || 'design')}</span>
             </div>
-            ${(c.status !== 'done' && stageWritable(componentStageId(c))) ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done — push this component to its next stage">✓ Done</button>` : ''}
+            ${(c.status !== 'done' && stageWritable(componentStageId(c))) ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done">✓ Done</button>` : ''}
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
         </div>`;
     }
@@ -3010,32 +3108,70 @@ const WorkshopUI = (() => {
         if (!v2) throw new Error('AI returned malformed output');
         return v2;
     }
+    function openAiProgressModal(title, hint) {
+        const overlay = document.createElement('div');
+        overlay.className = 'wsp-picker-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal wsp-engine-modal">
+            <div class="wsp-picker-header"><span>${escHtml(title)} ${hint ? `<span class="wsp-hint">— ${escHtml(hint)}</span>` : ''}</span><button class="wsp-picker-close" data-close>✕</button></div>
+            <div class="wsp-engine-trace"></div>
+        </div>`;
+        (container.querySelector('.workshop-panel') || container).appendChild(overlay);
+        overlay.querySelector('[data-close]').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        const traceEl = overlay.querySelector('.wsp-engine-trace');
+        const rows = {};
+        const step = (id, status, text, detail) => {
+            let row = rows[id];
+            if (!row) { row = document.createElement('div'); row.className = 'wsp-trace-step'; traceEl.appendChild(row); rows[id] = row; }
+            const running = status === 'run';
+            row.innerHTML = `<div class="wsp-trace-head ${status === 'error' ? 'err' : running ? 'run' : 'done'}">
+                <span class="wsp-trace-ic">${running ? '<span class="wsp-spin"></span>' : (status === 'error' ? '⚠' : '✓')}</span>
+                <span class="wsp-trace-title">${escHtml(text || id)}</span>
+                ${detail ? `<span class="wsp-trace-detail">${escHtml(detail)}</span>` : ''}</div>`;
+            traceEl.scrollTop = traceEl.scrollHeight;
+        };
+        return { step, close: () => overlay.remove(), overlay };
+    }
     async function suggestComponents(videoId, btn) {
         const v = VideoService.getById(videoId);
         if (!v) return;
         const orig = btn.textContent;
         btn.disabled = true; btn.textContent = '✨ Thinking…';
+        const progress = openAiProgressModal('✨ Component planner', 'watch it read the brief and prepare suggestions');
         try {
+            progress.step('brief', 'run', 'Reading video brief', 'hook + script + context');
             const existing = componentsForVideo(videoId).map(c => c.name);
             // Pull the hook(s) from the instances (v.hook is just a legacy mirror),
             // including the opening visual for each — it informs what gets built.
             const hookText = (PS().hooksOf(v) || [])
                 .map(h => `${(h.text || h.label || '').trim()}${h.visual ? ` [visual: ${h.visual.trim()}]` : ''}`)
                 .filter(s => s.trim()).join(' | ') || v.hook || '(none)';
+            progress.step('brief', 'done', 'Read video brief', `${existing.length} existing on this video`);
             // Parts already built across past projects — so we reuse instead of
             // re-building the same thing twice.
             const built = [...new Set(completedComponents().map(c => c.name).filter(Boolean))];
+            progress.step('reuse', 'done', 'Checked reusable parts', `${built.length} completed components`);
             const sys = `You are a production planner for maker / engineering YouTube videos. Given a video idea, list the COMPONENTS that must be handled to pull it off. Output ONLY a JSON object and nothing else — no prose, no markdown fences, do not explain, do not think out loud. Schema: {"components":[{"name":"short concrete name","source":"build"|"order"|"task","needs":[...]}]}. "source" is "build" if you'd make it in-house, "order" if you'd buy it, "task" if it's just an errand that gets done — neither built nor bought (e.g. "book the studio", "get a permit", "borrow a ladder"). "needs" is an array containing ONLY values from this EXACT set of production steps: design, propdesign, cad, pcb, software, assembly, artistic — and only applies to "build" components; use [] for "order" and "task". These are stages of work, NOT other components — never put a component name in "needs". Consider the HOOK and SCRIPT (not just the context) to discern every component the build/shoot needs. Do NOT suggest anything in the "already built" list — we'll reuse those; only suggest genuinely new things. 3-8 components.`;
             const user = `Video title: ${v.name}\nHook(s): ${hookText}\nScript: ${(v.script || '(none)').slice(0, 4000)}\nContext: ${v.context || '(none)'}\nAlready on this video (don't repeat): ${existing.join(', ') || 'none'}\nAlready built — reuse, don't re-suggest: ${built.slice(0, 80).join(', ') || 'none'}`;
+            progress.step('ai', 'run', 'Planning components with AI', 'waiting for JSON suggestions');
             const parsed = await aiJson(
                 [{ role: 'system', content: sys }, { role: 'user', content: user }],
                 (content) => { const o = extractJsonObject(content, 'components'); return (o && Array.isArray(o.components) && o.components.length) ? o : null; }
             );
             const list = parsed.components.filter(c => c && c.name);
-            if (!list.length) { alert('AI did not suggest any components. Add more context and try again.'); return; }
+            if (!list.length) {
+                progress.step('error', 'error', 'No components returned', 'add more context/script and retry');
+                alert('AI did not suggest any components. Add more context and try again.');
+                return;
+            }
+            progress.step('ai', 'done', 'AI returned suggestions', `${list.length} component${list.length === 1 ? '' : 's'}`);
+            progress.step('review', 'done', 'Ready for manual review', 'confirm Type + What it needs before adding');
+            progress.close();
             showComponentSuggestions(videoId, list);
         } catch (e) {
             console.warn('suggestComponents failed', e);
+            progress.step('error', 'error', 'AI suggest failed', e.message);
             alert('AI suggest failed: ' + e.message);
         } finally {
             btn.disabled = false; btn.textContent = orig;
@@ -3141,7 +3277,6 @@ const WorkshopUI = (() => {
     }
 
     function showComponentSuggestions(videoId, list) {
-        const ALLOWED = new Set(COMPONENT_NEEDS.map(n => n.flag));
         const overlay = document.createElement('div');
         overlay.className = 'wsp-picker-overlay';
         overlay.style.display = 'flex';
@@ -3149,21 +3284,22 @@ const WorkshopUI = (() => {
             <div class="wsp-picker wsp-suggest-modal">
                 <div class="wsp-picker-header"><span>✨ AI-suggested components</span><button class="wsp-picker-close" data-close>✕</button></div>
                 <div class="wsp-suggest-list">
-                    <div class="wsp-hint" style="padding:0 2px 4px;">Add the ones that fit — each becomes its own pipeline entity linked to this video.</div>
+                    <div class="wsp-hint" style="padding:0 2px 4px;">Review the ones that fit — Type and build needs must be confirmed before anything enters the pipeline.</div>
                     ${list.map((c, i) => {
-                        const needs = (c.needs || []).filter(f => ALLOWED.has(f));
+                        const source = normalizeComponentSource(c.source) || 'build';
+                        const needs = normalizeComponentNeeds(c.needs);
                         return `<div class="wsp-suggest-row" data-sug="${i}">
                             <div class="wsp-suggest-main">
-                                <div class="wsp-suggest-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)} ${c.source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : c.source === 'task' ? '<span class="wsp-comp-tag task">task</span>' : '<span class="wsp-comp-tag build">build</span>'}</div>
+                                <div class="wsp-suggest-name">${icon('component', 'wsp-row-ic')} ${escHtml(c.name)} ${source === 'order' ? '<span class="wsp-comp-tag order">order</span>' : source === 'task' ? '<span class="wsp-comp-tag task">task</span>' : '<span class="wsp-comp-tag build">build</span>'}</div>
                                 <div class="wsp-comp-meta">${needs.map(f => `<span class="wsp-need-chip">${escHtml(COMPONENT_NEED_LABEL[f] || f)}</span>`).join('') || '<span class="wsp-hint">no special steps</span>'}</div>
                             </div>
-                            <button class="wsp-mini-btn done" data-add-sug="${i}">＋ Add</button>
+                            <button class="wsp-mini-btn done" data-add-sug="${i}">Review + Add</button>
                         </div>`;
                     }).join('')}
                 </div>
                 <div class="wsp-branch-actions">
                     <button class="wsp-mini-btn" data-close>Close</button>
-                    <button class="wsp-mini-btn done" id="wsp-add-all-sug">Add all</button>
+                    <button class="wsp-mini-btn done" id="wsp-add-all-sug">Review all</button>
                 </div>
             </div>`;
         const panel = container.querySelector('.workshop-panel');
@@ -3174,25 +3310,41 @@ const WorkshopUI = (() => {
 
         const addOne = async (i, rowBtn) => {
             const c = list[i];
-            if (!c || c._added) return;
-            c._added = true;
-            if (rowBtn) { rowBtn.disabled = true; rowBtn.textContent = '✓ Added'; }
-            const fresh = VideoService.getById(videoId);
-            const source = c.source === 'order' ? 'order' : c.source === 'task' ? 'task' : 'build';
-            const comp = await SVC().components.create({
-                videoId, projectId: (fresh.projectIds || [])[0] || '', parentComponentId: '',
-                name: c.name, notes: '',
-                needs: (c.needs || []).filter(f => ALLOWED.has(f)),
-                status: defaultStatusFor({ source, needs: (c.needs || []).filter(f => ALLOWED.has(f)) }),
-                source, links: []
+            if (!c || c._added) return true;
+            const oldText = rowBtn ? rowBtn.textContent : '';
+            if (rowBtn) { rowBtn.disabled = true; rowBtn.textContent = 'Reviewing…'; }
+            const setup = await confirmComponentSetup({
+                title: 'Review AI suggestion',
+                name: c.name,
+                source: normalizeComponentSource(c.source) || 'build',
+                needs: normalizeComponentNeeds(c.needs)
             });
-            await saveDeps(fresh, [...videoDeps(fresh), { kind: 'component', id: comp.id }]);
+            if (!setup) {
+                if (rowBtn) { rowBtn.disabled = false; rowBtn.textContent = oldText || 'Review + Add'; }
+                return false;
+            }
+            try {
+                await createVideoComponent(videoId, setup);
+                c._added = true;
+                if (rowBtn) { rowBtn.disabled = true; rowBtn.textContent = '✓ Added'; }
+                return true;
+            } catch (e) {
+                console.warn('add suggested component failed', e);
+                alert('Could not add component: ' + e.message);
+                if (rowBtn) { rowBtn.disabled = false; rowBtn.textContent = oldText || 'Review + Add'; }
+                return false;
+            }
         };
         overlay.querySelectorAll('[data-add-sug]').forEach(b => b.addEventListener('click', () => addOne(Number(b.dataset.addSug), b)));
         overlay.querySelector('#wsp-add-all-sug').addEventListener('click', async (e) => {
-            e.target.disabled = true; e.target.textContent = 'Adding…';
-            for (let i = 0; i < list.length; i++) await addOne(i, overlay.querySelector(`[data-add-sug="${i}"]`));
-            close();
+            e.target.disabled = true; e.target.textContent = 'Reviewing…';
+            for (let i = 0; i < list.length; i++) {
+                const ok = await addOne(i, overlay.querySelector(`[data-add-sug="${i}"]`));
+                if (!ok) break;
+            }
+            const allAdded = list.every(c => c && c._added);
+            if (allAdded) close();
+            else { e.target.disabled = false; e.target.textContent = 'Review all'; }
         });
     }
 

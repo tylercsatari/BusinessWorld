@@ -280,7 +280,7 @@ const PipelineStages = (() => {
         return '';
     }
     // Is the stage's DELIVERABLE present? (the old auto-check) — drives the DONE
-    // button: met → the worker can push forward; not met → they're prompted.
+    // button: met → the worker can finish the stage; not met → they're prompted.
     function deliverableMet(video, stageId, ctx) {
         const auto = AUTO_CHECKS[stageId];
         return !!(auto && auto.test(video, ctx));
