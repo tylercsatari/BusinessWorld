@@ -45,6 +45,7 @@ const LibraryUI = (() => {
     // --- AI Video Ideas state ---
     let aiVideoIdeas = [];
     let aiVideoIdeasLoaded = false;
+    let aiVideoIdeasLoading = false;
     let aiVideoIdeasBusy = false;
     let aiVideoIdeasStatus = '';
     let aiVideoIdeasRuns = parseInt(localStorage.getItem('library-aiideas-runs') || '1', 10) || 1;
@@ -356,27 +357,32 @@ const LibraryUI = (() => {
     function renderAiVideoIdeas() {
         const el = document.getElementById('library-aiideas-container');
         if (!el) return;
-        if (!aiVideoIdeasLoaded) {
-            el.innerHTML = '<div class="library-empty">Loading AI video ideas...</div>';
+        if (!aiVideoIdeasLoaded && !aiVideoIdeasLoading) {
+            aiVideoIdeasLoading = true;
             fetchAiVideoIdeas().then(items => {
                 aiVideoIdeas = items;
                 aiVideoIdeasLoaded = true;
+                aiVideoIdeasLoading = false;
                 renderAiVideoIdeas();
             }).catch(e => {
                 console.warn('AI video ideas load failed', e);
                 aiVideoIdeas = [];
                 aiVideoIdeasLoaded = true;
+                aiVideoIdeasLoading = false;
                 aiVideoIdeasStatus = `Could not load existing AI video ideas: ${e.message}. You can still try generating a new batch.`;
                 renderAiVideoIdeas();
             });
-            return;
         }
 
         aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
         aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
         const total = aiVideoIdeasRuns * aiVideoIdeasPerRun;
         const statusHtml = aiVideoIdeasStatus ? `<div class="library-aiideas-status">${escHtml(aiVideoIdeasStatus)}</div>` : '';
-        const cardsHtml = aiVideoIdeas.length ? aiVideoIdeas.map(idea => {
+        let cardsHtml = '';
+        if (!aiVideoIdeasLoaded) {
+            cardsHtml = '<div class="library-empty">Loading saved AI video ideas...</div>';
+        } else if (aiVideoIdeas.length) {
+            cardsHtml = aiVideoIdeas.map(idea => {
             const scores = idea.scores || {};
             const overall = Number(scores.overall);
             const similarity = idea.similarity || {};
@@ -420,7 +426,10 @@ const LibraryUI = (() => {
                     </div>
                 </div>
             `;
-        }).join('') : '<div class="library-empty">No AI video ideas yet. Generate a small batch to start.</div>';
+            }).join('');
+        } else {
+            cardsHtml = '<div class="library-empty">No AI video ideas yet. Generate a small batch to start.</div>';
+        }
 
         el.innerHTML = `
             <div class="library-aiideas-controls">
@@ -458,9 +467,15 @@ const LibraryUI = (() => {
     }
 
     async function reloadAiVideoIdeas() {
-        aiVideoIdeas = await fetchAiVideoIdeas();
-        aiVideoIdeasLoaded = true;
+        aiVideoIdeasLoading = true;
         renderAiVideoIdeas();
+        try {
+            aiVideoIdeas = await fetchAiVideoIdeas();
+            aiVideoIdeasLoaded = true;
+        } finally {
+            aiVideoIdeasLoading = false;
+            renderAiVideoIdeas();
+        }
     }
 
     async function generateAiVideoIdeas() {
@@ -478,8 +493,12 @@ const LibraryUI = (() => {
             if (!res.ok) throw new Error(data.error || `Generate failed: ${res.status}`);
             const created = (data.created || []).length;
             const rejected = (data.rejected || []).length;
+            if (Array.isArray(data.created) && data.created.length) {
+                const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
+                aiVideoIdeas = [...data.created.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
+                aiVideoIdeasLoaded = true;
+            }
             aiVideoIdeasStatus = `Created ${created} candidate${created === 1 ? '' : 's'}; pruned ${rejected} near-duplicate${rejected === 1 ? '' : 's'}.`;
-            await reloadAiVideoIdeas();
         } catch (e) {
             aiVideoIdeasStatus = e.message || 'Generation failed.';
             renderAiVideoIdeas();
@@ -5902,7 +5921,7 @@ const LibraryUI = (() => {
             sponsorsLoaded = false;
             editingSponsor = null; editingSponsorVideo = null; sponsorsSubTab = 'companies';
             projectsLoaded = false; selectedProject = null;
-            aiVideoIdeas = []; aiVideoIdeasLoaded = false; aiVideoIdeasBusy = false; aiVideoIdeasStatus = '';
+            aiVideoIdeas = []; aiVideoIdeasLoaded = false; aiVideoIdeasLoading = false; aiVideoIdeasBusy = false; aiVideoIdeasStatus = '';
             ideaMapState.loaded = false;
             ideaMapState.projects = null;
             ideaMapState.filterCategory = 'all';
