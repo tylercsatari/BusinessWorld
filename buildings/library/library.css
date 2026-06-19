@@ -710,10 +710,20 @@
 .library-aiideas-modal-overlay { position: fixed; inset: 0; z-index: 200000; background: rgba(20,16,10,0.45); display: flex; align-items: center; justify-content: center; }
 .library-aiideas-modal { background: #fff; border-radius: 14px; width: 94%; max-width: 660px; max-height: 86vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.4); overflow: hidden; }
 .library-aiideas-modal-head { display: flex; align-items: center; gap: 9px; padding: 14px 16px; border-bottom: 1px solid #eee; font-size: 15px; color: #2d5016; flex-shrink: 0; }
+.library-aiideas-modal-phase { padding: 3px 8px; border-radius: 999px; background: #eef7f4; color: #1f6f5b; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
 .library-aiideas-modal-elapsed { margin-left: auto; font-variant-numeric: tabular-nums; color: #3a8c76; font-weight: 700; font-size: 13px; }
 .library-aiideas-modal-body { padding: 12px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.library-aiideas-modal-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.library-aiideas-modal-grid > div { min-width: 0; border: 1px solid #e6eee8; border-radius: 8px; padding: 8px 9px; background: #fbfdfc; }
+.library-aiideas-modal-grid span { display: block; color: #7d8a82; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; margin-bottom: 3px; }
+.library-aiideas-modal-grid b { display: block; min-width: 0; color: #263b2f; font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+.library-aiideas-modal-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.library-aiideas-modal-details details { min-width: 0; border: 1px solid #e6e1d4; border-radius: 8px; background: #fffdf8; overflow: hidden; }
+.library-aiideas-modal-details summary { padding: 7px 9px; cursor: pointer; color: #6b5f47; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
+.library-aiideas-modal-details pre { margin: 0; max-height: 130px; overflow: auto; padding: 8px 9px; border-top: 1px solid #efe9dc; background: #faf7f0; color: #514a3a; font: 10.5px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
 .library-aiideas-modal-trace { display: flex; flex-direction: column; gap: 3px; }
 .library-aiideas-modal-line { font-size: 13px; color: #6a7a70; line-height: 1.4; }
+.library-aiideas-modal-line span { display: inline-block; min-width: 46px; margin-right: 8px; color: #98a69d; font-size: 11px; font-variant-numeric: tabular-nums; }
 .library-aiideas-modal-line.active { color: #1f6f5b; font-weight: 800; }
 .library-aiideas-modal-think-wrap { border: 1px solid #e6e1d4; border-radius: 9px; overflow: hidden; }
 .library-aiideas-modal-think-label { font-size: 11px; font-weight: 800; color: #8a7d63; padding: 6px 10px; background: #faf7f0; border-bottom: 1px solid #efe9dc; }
@@ -722,9 +732,19 @@
 .library-aiideas-modal-cards { display: flex; flex-direction: column; gap: 8px; }
 .library-aiideas-modal-card { border: 1px solid #cfe7df; background: linear-gradient(180deg, rgba(39,174,96,0.08), transparent); border-radius: 9px; padding: 9px 12px; animation: aiIdeaPop 0.25s ease; }
 @keyframes aiIdeaPop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.library-aiideas-modal-card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .library-aiideas-modal-card-title { font-weight: 800; color: #2d5016; font-size: 14px; }
+.library-aiideas-modal-card-top span { margin-left: auto; border: 1px solid #b9d8cf; border-radius: 999px; padding: 2px 7px; color: #1f6f5b; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0; }
+.library-aiideas-modal-card-top b { color: #1f6f5b; font-size: 11px; white-space: nowrap; }
 .library-aiideas-modal-card-hook { font-size: 12.5px; color: #5b6f64; margin-top: 2px; line-height: 1.4; }
+.library-aiideas-modal-card-mini { margin-top: 5px; font-size: 11.5px; color: #66756d; line-height: 1.35; }
+.library-aiideas-modal-card-mini b { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 5px; background: #eef7f4; color: #1f6f5b; font-size: 10px; }
 .library-aiideas-modal-close { margin-left: 10px; background: #2d5016; color: #fff; border: none; border-radius: 8px; padding: 5px 12px; font-weight: 700; cursor: pointer; font-size: 12px; }
+
+@media (max-width: 760px) {
+    .library-aiideas-modal-grid,
+    .library-aiideas-modal-details { grid-template-columns: 1fr; }
+}
 
 .library-aiideas-list {
     display: flex;

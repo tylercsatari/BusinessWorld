@@ -346,6 +346,35 @@ const LibraryUI = (() => {
         return Math.max(min, Math.min(max, n));
     }
 
+    function aiVideoProgressEventText(ev) {
+        if (!ev) return '';
+        if (typeof ev === 'string') return ev;
+        const phase = ev.phase ? `[${String(ev.phase).replace(/_/g, ' ')}] ` : '';
+        return `${phase}${ev.msg || ev.message || ''}`.trim();
+    }
+
+    function aiVideoIdeasJson(value) {
+        try { return JSON.stringify(value || {}, null, 2); }
+        catch (e) { return String(value || ''); }
+    }
+
+    function aiVideoIdeasSmallCardHtml(idea, status) {
+        if (!idea) return '';
+        const scores = idea.scores || {};
+        const overall = Number(scores.overall);
+        const score = Number.isFinite(overall) ? `${overall.toFixed(1)}/10` : '';
+        return `<div class="library-aiideas-modal-card">
+            <div class="library-aiideas-modal-card-top">
+                <div class="library-aiideas-modal-card-title">${escHtml(idea.title || idea.name || 'Idea')}</div>
+                ${status ? `<span>${escHtml(status)}</span>` : ''}
+                ${score ? `<b>${escHtml(score)}</b>` : ''}
+            </div>
+            <div class="library-aiideas-modal-card-hook">${escHtml(idea.hook || idea.promise || '')}</div>
+            ${idea.promise ? `<div class="library-aiideas-modal-card-mini"><b>P</b>${escHtml(idea.promise)}</div>` : ''}
+            ${idea.payoff ? `<div class="library-aiideas-modal-card-mini"><b>O</b>${escHtml(idea.payoff)}</div>` : ''}
+        </div>`;
+    }
+
     function updateAiVideoIdeasGenerateButtons() {
         aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
         aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
@@ -524,11 +553,36 @@ const LibraryUI = (() => {
         ov.id = 'library-aiideas-progress-modal';
         ov.className = 'library-aiideas-modal-overlay';
         ov.innerHTML = `<div class="library-aiideas-modal">
-            <div class="library-aiideas-modal-head"><span class="library-aiideas-spin"></span> <b>Generating video ideas…</b> <span class="library-aiideas-modal-elapsed" id="library-aiideas-modal-elapsed">0.0s</span></div>
+            <div class="library-aiideas-modal-head">
+                <span class="library-aiideas-spin"></span>
+                <b>Generating video ideas…</b>
+                <span class="library-aiideas-modal-phase" id="library-aiideas-modal-phase">starting</span>
+                <span class="library-aiideas-modal-elapsed" id="library-aiideas-modal-elapsed">0.0s</span>
+            </div>
             <div class="library-aiideas-modal-body">
+                <div class="library-aiideas-modal-grid">
+                    <div><span>Request</span><b id="library-aiideas-modal-request">-</b></div>
+                    <div><span>Phase</span><b id="library-aiideas-modal-current">client</b></div>
+                    <div><span>Server</span><b id="library-aiideas-modal-server">waiting</b></div>
+                    <div><span>Output</span><b id="library-aiideas-modal-output">0 candidates</b></div>
+                </div>
+                <div class="library-aiideas-modal-details">
+                    <details open>
+                        <summary>Inputs</summary>
+                        <pre id="library-aiideas-modal-inputs">{}</pre>
+                    </details>
+                    <details>
+                        <summary>Prompt</summary>
+                        <pre id="library-aiideas-modal-prompt">{}</pre>
+                    </details>
+                    <details open>
+                        <summary>Outputs</summary>
+                        <pre id="library-aiideas-modal-outputs">{}</pre>
+                    </details>
+                </div>
                 <div class="library-aiideas-modal-trace" id="library-aiideas-modal-trace"></div>
                 <div class="library-aiideas-modal-think-wrap" id="library-aiideas-think-wrap" style="display:none;">
-                    <div class="library-aiideas-modal-think-label">🧠 Watching Kimi reason &amp; write…</div>
+                    <div class="library-aiideas-modal-think-label">Kimi model output</div>
                     <pre class="library-aiideas-modal-think" id="library-aiideas-think"></pre>
                 </div>
                 <div class="library-aiideas-modal-cards" id="library-aiideas-modal-cards"></div>
@@ -539,14 +593,35 @@ const LibraryUI = (() => {
         const thinkWrap = ov.querySelector('#library-aiideas-think-wrap');
         const thinkEl = ov.querySelector('#library-aiideas-think');
         const cardsEl = ov.querySelector('#library-aiideas-modal-cards');
+        const requestEl = ov.querySelector('#library-aiideas-modal-request');
+        const currentEl = ov.querySelector('#library-aiideas-modal-current');
+        const serverEl = ov.querySelector('#library-aiideas-modal-server');
+        const outputEl = ov.querySelector('#library-aiideas-modal-output');
+        const phaseEl = ov.querySelector('#library-aiideas-modal-phase');
+        const inputsEl = ov.querySelector('#library-aiideas-modal-inputs');
+        const promptEl = ov.querySelector('#library-aiideas-modal-prompt');
+        const outputsEl = ov.querySelector('#library-aiideas-modal-outputs');
+        const seenLines = new Set();
         return {
-            step(msg) {
+            step(msg, ev) {
+                const text = aiVideoProgressEventText(ev || msg);
+                if (!text || seenLines.has(text)) return;
+                seenLines.add(text);
                 const prev = traceEl.querySelector('.active'); if (prev) prev.classList.remove('active');
                 const line = document.createElement('div');
                 line.className = 'library-aiideas-modal-line active';
-                line.textContent = msg;
+                if (ev && typeof ev === 'object' && ev.elapsedMs != null) {
+                    const stamp = document.createElement('span');
+                    stamp.textContent = `${(Number(ev.elapsedMs) / 1000).toFixed(1)}s`;
+                    line.appendChild(stamp);
+                }
+                line.appendChild(document.createTextNode(text));
                 traceEl.appendChild(line);
                 traceEl.scrollTop = traceEl.scrollHeight;
+                if (ev && typeof ev === 'object' && ev.phase) {
+                    currentEl.textContent = ev.phase;
+                    phaseEl.textContent = ev.phase;
+                }
             },
             token(delta) {
                 thinkWrap.style.display = '';
@@ -561,12 +636,41 @@ const LibraryUI = (() => {
                 thinkEl.textContent = text;
                 if (atBottom) thinkEl.scrollTop = thinkEl.scrollHeight;
             },
-            card(idea) {
-                const c = document.createElement('div');
-                c.className = 'library-aiideas-modal-card';
-                c.innerHTML = `<div class="library-aiideas-modal-card-title">${escHtml(idea.title || idea.name || 'Idea')}</div>
-                    <div class="library-aiideas-modal-card-hook">${escHtml(idea.hook || idea.promise || '')}</div>`;
-                cardsEl.appendChild(c);
+            setSnapshot(snapshot) {
+                if (!snapshot) return;
+                const inputs = snapshot.inputs || {};
+                const outputs = snapshot.outputs || {};
+                const request = inputs.request || {};
+                requestEl.textContent = `${request.runs || '?'} x ${request.ideasPerRun || '?'} = ${request.requestedIdeas || '?'}`;
+                currentEl.textContent = snapshot.phase || 'polling';
+                phaseEl.textContent = snapshot.phase || 'polling';
+                serverEl.textContent = snapshot.updatedAgo == null ? 'polling' : `${(Number(snapshot.updatedAgo) / 1000).toFixed(1)}s ago`;
+                outputEl.textContent = `${outputs.candidateCount || 0} candidates, ${outputs.createdCount || 0} saved, ${outputs.rejectedCount || 0} pruned`;
+                const prompt = inputs.prompt || {};
+                inputsEl.textContent = aiVideoIdeasJson({
+                    request: inputs.request,
+                    models: inputs.models,
+                    thresholds: inputs.thresholds,
+                    contextSummary: inputs.contextSummary,
+                    referenceSet: inputs.referenceSet,
+                    pipeline: inputs.pipeline,
+                    formulaObjects: inputs.formulaObjects
+                });
+                promptEl.textContent = aiVideoIdeasJson(prompt);
+                outputsEl.textContent = aiVideoIdeasJson({
+                    phase: snapshot.phase,
+                    output: outputs,
+                    created: (snapshot.created || []).map(i => ({ title: i.title || i.name, score: i.scores?.overall, similarity: i.similarity })),
+                    rejected: snapshot.rejected || []
+                });
+            },
+            setCards(candidates, created) {
+                const createdIds = new Set((created || []).map(idea => idea && idea.id).filter(Boolean));
+                const candidateHtml = (candidates || [])
+                    .filter(idea => !idea?.id || !createdIds.has(idea.id))
+                    .map(idea => aiVideoIdeasSmallCardHtml(idea, 'candidate')).join('');
+                const createdHtml = (created || []).map(idea => aiVideoIdeasSmallCardHtml(idea, 'saved')).join('');
+                cardsEl.innerHTML = candidateHtml + createdHtml;
                 cardsEl.scrollTop = cardsEl.scrollHeight;
             },
             setElapsed(t) { const e = ov.querySelector('#library-aiideas-modal-elapsed'); if (e) e.textContent = t; },
@@ -574,7 +678,7 @@ const LibraryUI = (() => {
                 const head = ov.querySelector('.library-aiideas-modal-head');
                 if (head) head.innerHTML = `${ok === false ? '⚠️' : '✓'} <b>${escHtml(summary || 'Done')}</b> <button class="library-aiideas-modal-close" id="library-aiideas-modal-close">Close</button>`;
                 const prev = traceEl.querySelector('.active'); if (prev) prev.classList.remove('active');
-                if (thinkWrap) thinkWrap.querySelector('.library-aiideas-modal-think-label').textContent = '🧠 Model output';
+                if (thinkWrap) thinkWrap.querySelector('.library-aiideas-modal-think-label').textContent = 'Model output';
                 const btn = ov.querySelector('#library-aiideas-modal-close'); if (btn) btn.addEventListener('click', () => ov.remove());
             },
             close() { ov.remove(); }
@@ -595,6 +699,19 @@ const LibraryUI = (() => {
         aiVideoIdeasT0 = Date.now();
         const prog = showAiIdeasProgressModal();
         prog.step(aiVideoIdeasLog[0]);
+        prog.setSnapshot({
+            phase: 'client-start',
+            updatedAgo: 0,
+            inputs: {
+                request: {
+                    runs: aiVideoIdeasRuns,
+                    ideasPerRun: aiVideoIdeasPerRun,
+                    requestedIdeas: aiVideoIdeasRuns * aiVideoIdeasPerRun
+                },
+                pipeline: ['POST /api/ai-video-ideas/generate', 'wait for job id', 'poll /api/ai-video-ideas/progress']
+            },
+            outputs: {}
+        });
         // Tick the elapsed timer independently of SSE, so it's visibly alive even
         // during a long Kimi call (when the step message doesn't change).
         clearInterval(aiVideoIdeasTimer);
@@ -606,27 +723,95 @@ const LibraryUI = (() => {
         }, 200);
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
+        let ackTimer = null;
         try {
             // Start a background job, then POLL its progress (Render buffers SSE,
             // so polling is what reliably shows the live flow).
+            const startSentAt = Date.now();
+            let acked = false;
+            let lastAckNotice = 0;
+            ackTimer = setInterval(() => {
+                if (acked) return;
+                const waited = Math.floor((Date.now() - startSentAt) / 1000);
+                if (waited && waited !== lastAckNotice && (waited % 10 === 0 || waited === 3)) {
+                    lastAckNotice = waited;
+                    const msg = waited >= 30
+                        ? `Waiting ${waited}s for server acknowledgement. If this keeps climbing, the deployed server may still be running the old blocking generator.`
+                        : `Waiting ${waited}s for server acknowledgement from /api/ai-video-ideas/generate.`;
+                    aiVideoIdeasLog.push(msg);
+                    aiVideoIdeasStatus = msg;
+                    prog.step(msg);
+                    renderAiVideoIdeas();
+                }
+            }, 1000);
+            prog.step('POST /api/ai-video-ideas/generate sent. Waiting for job id.');
             const res = await fetch('/api/ai-video-ideas/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun })
             });
+            acked = true;
+            clearInterval(ackTimer);
             const start = await res.json().catch(() => ({}));
+            if (res.ok && Array.isArray(start.created)) {
+                const createdArr = start.created || [];
+                if (createdArr.length) {
+                    const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
+                    aiVideoIdeas = [...createdArr.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
+                    aiVideoIdeasLoaded = true;
+                }
+                aiVideoIdeasStatus = `Server returned a legacy blocking result: created ${createdArr.length}, pruned ${(start.rejected || []).length}.`;
+                prog.done(aiVideoIdeasStatus, true);
+                return;
+            }
             if (!res.ok || !start.jobId) throw new Error(start.error || `Generate failed: ${res.status}`);
             const jobId = start.jobId;
+            prog.step(`Server acknowledged job ${jobId.slice(0, 8)}. Polling live progress.`);
+            prog.setSnapshot({
+                phase: 'accepted',
+                updatedAgo: 0,
+                inputs: start.inputs || {},
+                outputs: {}
+            });
             let seenEvents = 0, seenCards = 0;
+            let lastServerEventAt = Date.now();
+            let lastQuietNotice = 0;
             while (true) {
                 await new Promise(r => setTimeout(r, 400));
                 let pr;
-                try { pr = await fetch('/api/ai-video-ideas/progress?job=' + encodeURIComponent(jobId)).then(r => r.json()); } catch (_) { continue; }
+                try {
+                    const progressRes = await fetch('/api/ai-video-ideas/progress?job=' + encodeURIComponent(jobId));
+                    pr = await progressRes.json();
+                    if (!progressRes.ok) throw new Error(pr.error || `Progress failed: ${progressRes.status}`);
+                } catch (pollError) {
+                    const msg = `Progress poll failed: ${pollError.message || pollError}`;
+                    aiVideoIdeasStatus = msg;
+                    prog.step(msg);
+                    continue;
+                }
                 if (!pr) continue;
-                (pr.events || []).slice(seenEvents).forEach(m => { aiVideoIdeasLog.push(m); aiVideoIdeasStatus = m; prog.step(m); });
+                const newEvents = (pr.events || []).slice(seenEvents);
+                if (newEvents.length) lastServerEventAt = Date.now();
+                newEvents.forEach(ev => {
+                    const msg = aiVideoProgressEventText(ev);
+                    if (!msg) return;
+                    aiVideoIdeasLog.push(msg);
+                    if (aiVideoIdeasLog.length > 120) aiVideoIdeasLog = aiVideoIdeasLog.slice(-120);
+                    aiVideoIdeasStatus = msg;
+                    prog.step(msg, ev);
+                });
                 seenEvents = (pr.events || []).length;
+                const quiet = Math.floor((Date.now() - lastServerEventAt) / 1000);
+                if (quiet >= 20 && quiet !== lastQuietNotice && quiet % 20 === 0) {
+                    lastQuietNotice = quiet;
+                    const msg = `No new server step for ${quiet}s. Still polling job ${jobId.slice(0, 8)}; current phase: ${pr.phase || 'unknown'}.`;
+                    aiVideoIdeasLog.push(msg);
+                    aiVideoIdeasStatus = msg;
+                    prog.step(msg);
+                }
+                prog.setSnapshot(pr);
                 prog.setOutput(pr.output);                                  // live model output
-                (pr.cards || []).slice(seenCards).forEach(idea => prog.card(idea));   // ideas as they're created
+                prog.setCards(pr.candidateCards || [], pr.cards || []);
                 seenCards = (pr.cards || []).length;
                 renderAiVideoIdeas();
                 if (pr.done) {
@@ -649,6 +834,7 @@ const LibraryUI = (() => {
             prog.done(aiVideoIdeasStatus, false);
             renderAiVideoIdeas();
         } finally {
+            if (ackTimer) clearInterval(ackTimer);
             aiVideoIdeasBusy = false;
             clearInterval(aiVideoIdeasTimer); aiVideoIdeasTimer = null;
             updateAiVideoIdeasGenerateButtons();
