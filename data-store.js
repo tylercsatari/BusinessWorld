@@ -99,7 +99,11 @@ async function flush(name) {
         console.warn(`Backup failed for ${name} (continuing with flush):`, e.message);
     }
     data.lastModified = new Date().toISOString();
-    await uploadToR2(r2Key(name), Buffer.from(JSON.stringify(data, null, 2)), 'application/json');
+    // Compact (no pretty-print): the aiideas collection stores a 1536-float
+    // embedding per record — indented JSON puts each float on its own line and
+    // ~2x's the serialized string, spiking memory on every save/backup. Still
+    // valid JSON; restores parse identically.
+    await uploadToR2(r2Key(name), Buffer.from(JSON.stringify(data)), 'application/json');
     cacheTime[name] = Date.now();
 }
 
