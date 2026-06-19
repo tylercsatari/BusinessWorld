@@ -790,6 +790,21 @@ async function aiVideoKimiJson(messages, maxTokens = 18000, onToken, signal) {
     return parsed;
 }
 
+// Generic, schema-agnostic Kimi call — returns the raw message text (the caller
+// parses whatever JSON it asked for). Used by footage-coverage's reasoning pass.
+async function aiKimiRaw(messages, maxTokens = 8000) {
+    if (!process.env.FIREWORKS_API_KEY) throw new Error('FIREWORKS_API_KEY not set');
+    const response = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.FIREWORKS_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6', messages, temperature: 0.3, max_tokens: maxTokens })
+    });
+    if (!response.ok) { const t = await response.text(); throw new Error(`Kimi error ${response.status}: ${t.slice(0, 800)}`); }
+    const text = await response.text();
+    let payload; try { payload = JSON.parse(text); } catch (e) { payload = null; }
+    return payload?.choices?.[0]?.message?.content || '';
+}
+
 async function aiVideoEmbedTexts(texts) {
     if (!texts.length) return [];
     if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set; semantic dedupe requires embeddings');
@@ -2302,7 +2317,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                     deps: {
                         listFolder, download,
                         geminiAnalyze: (bytes, mime, prompt, opts) => geminiWatch.analyzeBytes(bytes, mime, prompt, opts),
-                        kimiJson: (messages, maxTokens) => aiVideoKimiJson(messages, maxTokens),
+                        kimiJson: (messages, maxTokens) => aiKimiRaw(messages, maxTokens),
                         cacheGet, cacheSet,
                         onEvent: (ev) => {
                             if (!ev) return;

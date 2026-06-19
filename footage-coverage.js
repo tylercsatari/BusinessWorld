@@ -52,6 +52,28 @@ Schema:
 }
 Be concrete and specific. Output ONLY the JSON object.`;
 
+// Pull the first balanced {...} JSON object out of a model response, tolerating
+// markdown fences and any reasoning/prose the model wraps around it.
+function extractJsonObject(text) {
+    if (!text) return null;
+    const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    try { return JSON.parse(cleaned); } catch (e) {}
+    const from = cleaned.indexOf('{');
+    if (from < 0) return null;
+    let depth = 0, inStr = false, esc = false;
+    for (let i = from; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (inStr) {
+            if (esc) esc = false;
+            else if (ch === '\\') esc = true;
+            else if (ch === '"') inStr = false;
+        } else if (ch === '"') inStr = true;
+        else if (ch === '{') depth++;
+        else if (ch === '}') { depth--; if (depth === 0) { try { return JSON.parse(cleaned.slice(from, i + 1)); } catch (e) { return null; } } }
+    }
+    return null;
+}
+
 function buildCoveragePrompt(script, clips) {
     const catalogue = clips.map((c, i) => {
         const a = c.analysis || {};
@@ -124,13 +146,7 @@ async function analyzeProject({ video, projectFolder, deps }) {
     emit({ type: 'phase', phase: 'reasoning', msg: `Reasoning over the script vs ${analyzed.length} clip${analyzed.length === 1 ? '' : 's'} …` });
     const { sys, user } = buildCoveragePrompt(video.script || '', analyzed);
     const raw = await kimiJson([{ role: 'system', content: sys }, { role: 'user', content: user }], 8000);
-    let parsed;
-    try {
-        let t = (raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-        parsed = JSON.parse(t);
-    } catch (e) {
-        parsed = { covered: [], gaps: [], _parseError: e.message };
-    }
+    const parsed = extractJsonObject(raw) || { covered: [], gaps: [], _parseError: 'no JSON object in model output', _raw: (raw || '').slice(0, 500) };
     const gaps = Array.isArray(parsed.gaps) ? parsed.gaps : [];
     const covered = Array.isArray(parsed.covered) ? parsed.covered : [];
     emit({ type: 'phase', phase: 'done', msg: `Done — ${covered.length} covered, ${gaps.length} possible gap${gaps.length === 1 ? '' : 's'}.` });
