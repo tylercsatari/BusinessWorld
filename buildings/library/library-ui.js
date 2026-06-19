@@ -321,7 +321,10 @@ const LibraryUI = (() => {
     // =====================
     async function fetchAiVideoIdeas() {
         const res = await fetch('/api/ai-video-ideas');
-        if (!res.ok) throw new Error(`AI video ideas fetch failed: ${res.status}`);
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || `AI video ideas fetch failed: ${res.status}`);
+        }
         const data = await res.json();
         return data.ideas || [];
     }
@@ -361,7 +364,10 @@ const LibraryUI = (() => {
                 renderAiVideoIdeas();
             }).catch(e => {
                 console.warn('AI video ideas load failed', e);
-                el.innerHTML = '<div class="library-empty">Could not load AI video ideas.</div>';
+                aiVideoIdeas = [];
+                aiVideoIdeasLoaded = true;
+                aiVideoIdeasStatus = `Could not load existing AI video ideas: ${e.message}. You can still try generating a new batch.`;
+                renderAiVideoIdeas();
             });
             return;
         }
