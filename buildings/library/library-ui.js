@@ -525,10 +525,20 @@ const LibraryUI = (() => {
         ov.className = 'library-aiideas-modal-overlay';
         ov.innerHTML = `<div class="library-aiideas-modal">
             <div class="library-aiideas-modal-head"><span class="library-aiideas-spin"></span> <b>Generating video ideas…</b> <span class="library-aiideas-modal-elapsed" id="library-aiideas-modal-elapsed">0.0s</span></div>
-            <div class="library-aiideas-modal-trace" id="library-aiideas-modal-trace"></div>
+            <div class="library-aiideas-modal-body">
+                <div class="library-aiideas-modal-trace" id="library-aiideas-modal-trace"></div>
+                <div class="library-aiideas-modal-think-wrap" id="library-aiideas-think-wrap" style="display:none;">
+                    <div class="library-aiideas-modal-think-label">🧠 Watching Kimi reason &amp; write…</div>
+                    <pre class="library-aiideas-modal-think" id="library-aiideas-think"></pre>
+                </div>
+                <div class="library-aiideas-modal-cards" id="library-aiideas-modal-cards"></div>
+            </div>
         </div>`;
         document.body.appendChild(ov);
         const traceEl = ov.querySelector('#library-aiideas-modal-trace');
+        const thinkWrap = ov.querySelector('#library-aiideas-think-wrap');
+        const thinkEl = ov.querySelector('#library-aiideas-think');
+        const cardsEl = ov.querySelector('#library-aiideas-modal-cards');
         return {
             step(msg) {
                 const prev = traceEl.querySelector('.active'); if (prev) prev.classList.remove('active');
@@ -538,11 +548,26 @@ const LibraryUI = (() => {
                 traceEl.appendChild(line);
                 traceEl.scrollTop = traceEl.scrollHeight;
             },
+            token(delta) {
+                thinkWrap.style.display = '';
+                thinkEl.textContent += delta;
+                if (thinkEl.textContent.length > 16000) thinkEl.textContent = thinkEl.textContent.slice(-16000);
+                thinkEl.scrollTop = thinkEl.scrollHeight;
+            },
+            card(idea) {
+                const c = document.createElement('div');
+                c.className = 'library-aiideas-modal-card';
+                c.innerHTML = `<div class="library-aiideas-modal-card-title">${escHtml(idea.title || idea.name || 'Idea')}</div>
+                    <div class="library-aiideas-modal-card-hook">${escHtml(idea.hook || idea.promise || '')}</div>`;
+                cardsEl.appendChild(c);
+                cardsEl.scrollTop = cardsEl.scrollHeight;
+            },
             setElapsed(t) { const e = ov.querySelector('#library-aiideas-modal-elapsed'); if (e) e.textContent = t; },
             done(summary, ok) {
                 const head = ov.querySelector('.library-aiideas-modal-head');
                 if (head) head.innerHTML = `${ok === false ? '⚠️' : '✓'} <b>${escHtml(summary || 'Done')}</b> <button class="library-aiideas-modal-close" id="library-aiideas-modal-close">Close</button>`;
                 const prev = traceEl.querySelector('.active'); if (prev) prev.classList.remove('active');
+                if (thinkWrap) thinkWrap.querySelector('.library-aiideas-modal-think-label').textContent = '🧠 Model output';
                 const btn = ov.querySelector('#library-aiideas-modal-close'); if (btn) btn.addEventListener('click', () => ov.remove());
             },
             close() { ov.remove(); }
@@ -601,6 +626,8 @@ const LibraryUI = (() => {
                     if (!dline) continue;
                     let ev; try { ev = JSON.parse(dline.slice(5).trim()); } catch (_) { continue; }
                     if (ev.error) throw new Error(ev.error);
+                    if (ev.stage === 'token' && ev.delta) { prog.token(ev.delta); continue; }   // live model output — not a step
+                    if (ev.stage === 'created' && ev.idea) prog.card(ev.idea);                  // an idea materialised
                     if (ev.msg) { aiVideoIdeasLog.push(ev.msg); aiVideoIdeasStatus = ev.msg; prog.step(ev.msg); renderAiVideoIdeas(); }
                     if (ev.done) finalEvent = ev;
                 }

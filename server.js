@@ -696,8 +696,9 @@ function aiVideoExtractJsonObject(text, key) {
     return null;
 }
 
-async function aiVideoKimiJson(messages, maxTokens = 18000) {
+async function aiVideoKimiJson(messages, maxTokens = 18000, onToken) {
     if (!process.env.FIREWORKS_API_KEY) throw new Error('FIREWORKS_API_KEY not set');
+    const stream = typeof onToken === 'function';
     const response = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${process.env.FIREWORKS_API_KEY}`, 'Content-Type': 'application/json' },
@@ -705,14 +706,36 @@ async function aiVideoKimiJson(messages, maxTokens = 18000) {
             model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6',
             messages,
             temperature: 0.35,
-            max_tokens: maxTokens
+            max_tokens: maxTokens,
+            stream
         })
     });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`Kimi error ${response.status}: ${text.slice(0, 800)}`);
-    let payload;
-    try { payload = JSON.parse(text); } catch (e) { payload = null; }
-    const content = payload?.choices?.[0]?.message?.content || text;
+    if (!response.ok) { const t = await response.text(); throw new Error(`Kimi error ${response.status}: ${t.slice(0, 800)}`); }
+    let content = '';
+    if (stream) {
+        // Parse the Fireworks/OpenAI SSE stream, forwarding each token so the
+        // client can watch the model reason & write live.
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let nl;
+            while ((nl = buf.indexOf('\n')) >= 0) {
+                const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+                if (!line.startsWith('data:')) continue;
+                const data = line.slice(5).trim();
+                if (!data || data === '[DONE]') continue;
+                try { const delta = JSON.parse(data).choices?.[0]?.delta?.content || ''; if (delta) { content += delta; onToken(delta); } } catch (e) {}
+            }
+        }
+    } else {
+        const text = await response.text();
+        let payload; try { payload = JSON.parse(text); } catch (e) { payload = null; }
+        content = payload?.choices?.[0]?.message?.content || text;
+    }
     const parsed = aiVideoExtractJsonObject(content, 'ideas');
     if (!parsed || !Array.isArray(parsed.ideas)) throw new Error('Kimi did not return a valid {"ideas": [...]} object');
     return parsed;
@@ -1880,9 +1903,10 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
             const runReports = [];
 
             for (let runIndex = 0; runIndex < runs; runIndex++) {
-                emit({ stage: 'run', msg: `Run ${runIndex + 1}/${runs}: asking Kimi K2.6 for ${ideasPerRun} idea${ideasPerRun === 1 ? '' : 's'}, reasoning against the viral formula…` });
+                emit({ stage: 'run', msg: `Run ${runIndex + 1}/${runs}: Kimi K2.6 is reasoning against the viral formula & writing ${ideasPerRun} idea${ideasPerRun === 1 ? '' : 's'}…` });
                 const messages = aiVideoPromptMessages(ideasPerRun, context, runIndex, runs);
-                const response = await aiVideoKimiJson(messages);
+                // Stream the model's live output (reasoning + JSON) to the client.
+                const response = await aiVideoKimiJson(messages, 18000, wantStream ? (delta) => emit({ stage: 'token', delta }) : undefined);
                 const normalized = (response.ideas || [])
                     .slice(0, ideasPerRun)
                     .map((idea, idx) => aiVideoNormalizeIdea(idea, runIndex, idx));
@@ -1948,9 +1972,10 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                         text: aiVideoIdeaText(record),
                         embedding
                     });
-                    created.push(aiVideoPublicRecord(record));
+                    const pub = aiVideoPublicRecord(record);
+                    created.push(pub);
                     runCreated++;
-                    emit({ stage: 'idea', ok: true, msg: `✓ ${idea.title}` });
+                    emit({ stage: 'created', ok: true, msg: `✓ ${idea.title}`, idea: pub });
                 }
                 runReports.push({ run: runIndex + 1, created: runCreated, rejected: runRejected });
                 emit({ stage: 'run', msg: `Run ${runIndex + 1} done — ${runCreated} kept, ${runRejected} pruned.` });
