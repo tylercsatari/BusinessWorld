@@ -2632,6 +2632,9 @@ const WorkshopUI = (() => {
     // Each component STAGE must have its deliverable before it can be pushed
     // forward — you can't just press Done on an empty stage.
     function componentDeliverableStatus(c) {
+        // Orders and tasks have NO deliverable — they just get marked done. Only
+        // build components run the design→…→assembly deliverable gates.
+        if (!c || c.source === 'order' || c.source === 'task') return { met: true };
         const needs = Array.isArray(c.needs) ? c.needs : [];
         const hasMedia = Array.isArray(c.media) && c.media.length > 0;
         const hasNotes = !!(c.notes && c.notes.trim());
