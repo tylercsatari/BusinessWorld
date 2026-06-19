@@ -2178,9 +2178,18 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
         const jobId = require('crypto').randomUUID();
         const job = { events: [], phase: 'starting', total: 0, clips: [], done: false, error: null, result: null, startedAt: Date.now() };
         footageJobs[jobId] = job;
-        // Keep finished jobs around for a while (big scans can run long; on the paid
-        // plan the server never sleeps). Only prune well-aged ones.
-        for (const k of Object.keys(footageJobs)) { if (Date.now() - footageJobs[k].startedAt > 6 * 60 * 60 * 1000) delete footageJobs[k]; }
+        // NOTE: the actual RESULT is persisted to the video record on R2
+        // (footageGaps + footageReport) and the per-clip analyses to the
+        // footagecache collection — both kept INDEFINITELY, re-openable any time
+        // (postpone filming, come back months later). footageJobs only holds the
+        // LIVE progress for the poll loop; it's never the store of record. Bound it
+        // by COUNT (not age) so memory can't grow unbounded — this discards only
+        // stale progress objects, never a saved result.
+        const jobIds = Object.keys(footageJobs);
+        if (jobIds.length > 300) {
+            jobIds.sort((a, b) => footageJobs[a].startedAt - footageJobs[b].startedAt);
+            for (const k of jobIds.slice(0, jobIds.length - 300)) delete footageJobs[k];
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ jobId }));
 
