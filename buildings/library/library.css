@@ -93,7 +93,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     padding: 12px 20px 10px;
+}
+
+.library-list-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
 }
 
 .library-list-heading {
@@ -140,6 +148,29 @@
 .library-fill-logistics-btn:hover {
     background: #5a3e1b;
     color: #fff;
+}
+
+.library-aiideas-header-btn {
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: none;
+    background: #1769aa;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+    white-space: nowrap;
+}
+
+.library-aiideas-header-btn:hover {
+    background: #0f578f;
+}
+
+.library-aiideas-header-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
 }
 
 .library-list {

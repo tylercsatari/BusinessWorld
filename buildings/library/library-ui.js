@@ -144,8 +144,11 @@ const LibraryUI = (() => {
                     </div>
                     <div class="library-list-header" id="library-list-header">
                         <h2 class="library-list-heading" id="library-list-heading">Ideas</h2>
-                        <button class="library-fill-logistics-btn" id="library-fill-logistics-btn" title="Fill out logistics for ideas with context" style="display:none;">🤖 Fill Logistics</button>
-                        <button class="library-new-btn" id="library-new-btn" title="New">+</button>
+                        <div class="library-list-actions">
+                            <button class="library-fill-logistics-btn" id="library-fill-logistics-btn" title="Fill out logistics for ideas with context" style="display:none;">🤖 Fill Logistics</button>
+                            <button class="library-aiideas-header-btn" id="library-aiideas-header-btn" style="display:none;">Generate Ideas</button>
+                            <button class="library-new-btn" id="library-new-btn" title="New">+</button>
+                        </div>
                     </div>
                     <div class="library-freenotes-list" id="library-freenotes-list" style="display:none;"></div>
                     <div class="library-notes-filter-wrap" id="library-notes-filter-bar"></div>
@@ -189,6 +192,7 @@ const LibraryUI = (() => {
             }
         });
         document.getElementById('library-fill-logistics-btn').addEventListener('click', () => openFillLogisticsModal());
+        document.getElementById('library-aiideas-header-btn').addEventListener('click', () => generateAiVideoIdeas());
         if (activeTab === 'notes') {
             const flBtn = document.getElementById('library-fill-logistics-btn');
             if (flBtn) flBtn.style.display = '';
@@ -248,7 +252,9 @@ const LibraryUI = (() => {
 
         const newBtn = document.getElementById('library-new-btn');
         const fillLogisticsBtn = document.getElementById('library-fill-logistics-btn');
+        const aiIdeasHeaderBtn = document.getElementById('library-aiideas-header-btn');
         if (fillLogisticsBtn) fillLogisticsBtn.style.display = 'none';
+        if (aiIdeasHeaderBtn) aiIdeasHeaderBtn.style.display = 'none';
 
         if (tab === 'freenotes') {
             if (heading) heading.textContent = 'Notes';
@@ -266,6 +272,7 @@ const LibraryUI = (() => {
             if (heading) heading.textContent = 'AI video ideas';
             if (aiVideoIdeasContainer) aiVideoIdeasContainer.style.display = '';
             if (newBtn) newBtn.style.display = 'none';
+            if (aiIdeasHeaderBtn) aiIdeasHeaderBtn.style.display = '';
             renderAiVideoIdeas();
         } else if (tab === 'todo') {
             if (heading) heading.textContent = 'To-Do';
@@ -334,6 +341,22 @@ const LibraryUI = (() => {
         const n = parseInt(value, 10);
         if (!Number.isFinite(n)) return fallback;
         return Math.max(min, Math.min(max, n));
+    }
+
+    function updateAiVideoIdeasGenerateButtons() {
+        aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
+        aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
+        const total = aiVideoIdeasRuns * aiVideoIdeasPerRun;
+        const label = aiVideoIdeasBusy ? 'Generating...' : `Generate ${total}`;
+        const buttons = [
+            document.getElementById('library-aiideas-header-btn'),
+            document.getElementById('library-aiideas-generate')
+        ];
+        buttons.forEach(btn => {
+            if (!btn) return;
+            btn.textContent = label;
+            btn.disabled = aiVideoIdeasBusy;
+        });
     }
 
     function aiIdeaScoreHtml(label, value) {
@@ -443,6 +466,7 @@ const LibraryUI = (() => {
             </div>
             <div class="library-aiideas-list">${cardsHtml}</div>
         `;
+        updateAiVideoIdeasGenerateButtons();
 
         const runsInput = el.querySelector('#library-aiideas-runs');
         const perRunInput = el.querySelector('#library-aiideas-per-run');
@@ -450,11 +474,13 @@ const LibraryUI = (() => {
             aiVideoIdeasRuns = clampAiIdeasNumber(runsInput.value, 1, 1, 20);
             localStorage.setItem('library-aiideas-runs', String(aiVideoIdeasRuns));
             renderAiVideoIdeas();
+            updateAiVideoIdeasGenerateButtons();
         });
         if (perRunInput) perRunInput.addEventListener('change', () => {
             aiVideoIdeasPerRun = clampAiIdeasNumber(perRunInput.value, 3, 1, 5);
             localStorage.setItem('library-aiideas-per-run', String(aiVideoIdeasPerRun));
             renderAiVideoIdeas();
+            updateAiVideoIdeasGenerateButtons();
         });
         const generateBtn = el.querySelector('#library-aiideas-generate');
         if (generateBtn) generateBtn.addEventListener('click', () => generateAiVideoIdeas());
@@ -482,6 +508,7 @@ const LibraryUI = (() => {
         if (aiVideoIdeasBusy) return;
         aiVideoIdeasBusy = true;
         aiVideoIdeasStatus = `Running Kimi K2.6 for ${aiVideoIdeasRuns} run${aiVideoIdeasRuns === 1 ? '' : 's'} x ${aiVideoIdeasPerRun} idea${aiVideoIdeasPerRun === 1 ? '' : 's'}...`;
+        updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
         try {
             const res = await fetch('/api/ai-video-ideas/generate', {
@@ -504,6 +531,7 @@ const LibraryUI = (() => {
             renderAiVideoIdeas();
         } finally {
             aiVideoIdeasBusy = false;
+            updateAiVideoIdeasGenerateButtons();
             renderAiVideoIdeas();
         }
     }
