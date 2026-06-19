@@ -350,7 +350,10 @@ const LibraryUI = (() => {
         aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
         aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
         const total = aiVideoIdeasRuns * aiVideoIdeasPerRun;
-        const label = aiVideoIdeasBusy ? 'Generating...' : `Generate ${total}`;
+        // The header button is always visible, so when busy it shows the live
+        // elapsed time — a guaranteed progress indicator even if the panel is off.
+        const elapsed = (aiVideoIdeasBusy && aiVideoIdeasT0) ? Math.floor((Date.now() - aiVideoIdeasT0) / 1000) : 0;
+        const label = aiVideoIdeasBusy ? `⏳ Generating… ${elapsed}s` : `Generate ${total}`;
         const buttons = [
             document.getElementById('library-aiideas-header-btn'),
             document.getElementById('library-aiideas-generate')
@@ -515,6 +518,12 @@ const LibraryUI = (() => {
     async function generateAiVideoIdeas() {
         if (aiVideoIdeasBusy) return;
         aiVideoIdeasBusy = true;
+        // Make sure the panel area is actually visible (the header Generate button
+        // lives in the toolbar; the progress renders into the container, which must
+        // not be display:none) and loaded so render doesn't show "Loading…".
+        const _cont = document.getElementById('library-aiideas-container');
+        if (_cont) _cont.style.display = '';
+        aiVideoIdeasLoaded = true;
         aiVideoIdeasLog = [`Running Kimi K2.6 for ${aiVideoIdeasRuns} run${aiVideoIdeasRuns === 1 ? '' : 's'} × ${aiVideoIdeasPerRun} idea${aiVideoIdeasPerRun === 1 ? '' : 's'}…`];
         aiVideoIdeasStatus = aiVideoIdeasLog[0];
         aiVideoIdeasT0 = Date.now();
@@ -524,7 +533,8 @@ const LibraryUI = (() => {
         aiVideoIdeasTimer = setInterval(() => {
             const el = document.getElementById('library-aiideas-elapsed');
             if (el) el.textContent = ((Date.now() - aiVideoIdeasT0) / 1000).toFixed(1) + 's';
-        }, 100);
+            updateAiVideoIdeasGenerateButtons();   // keep the visible button's "…Ns" ticking too
+        }, 200);
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
         try {
