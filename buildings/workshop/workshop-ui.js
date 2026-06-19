@@ -3471,8 +3471,15 @@ const WorkshopUI = (() => {
 
     const HOOK_TYPE_META = { animation: { icon: '🎞️', label: 'Animation' }, practical: { icon: '🎯', label: 'Practical' } };
 
+    // A hook instance can carry MULTIPLE footage assets. Canonical store is
+    // h.videos = [{path,name}]; legacy single videoPath/videoName is migrated in.
+    function hookVideos(h) {
+        if (Array.isArray(h.videos) && h.videos.length) return h.videos;
+        if (h.videoPath) return [{ path: h.videoPath, name: h.videoName || h.videoPath.split('/').pop() }];
+        return [];
+    }
+
     function hookInstanceRowHtml(v, h, i) {
-        const linked = !!h.videoPath;
         const typed = !!h.type;
         return `<div class="wsp-hooki" data-hooki="${escAttr(h.id)}">
             <div class="wsp-hooki-head">
@@ -3487,15 +3494,14 @@ const WorkshopUI = (() => {
             <textarea data-hooki-text="${escAttr(h.id)}" class="wsp-hooki-text" placeholder="Hook LINE — the spoken/on-screen opening words…">${escHtml(h.text || h.label || '')}</textarea>
             <textarea data-hooki-visual="${escAttr(h.id)}" class="wsp-hooki-visual" placeholder="Opening VISUAL — what's literally on screen in the first 1–3s (action/impact/reveal)…">${escHtml(h.visual || '')}</textarea>
             ${typed ? `<div data-deliv-stage="${h.type === 'animation' ? 'animation' : 'hookfilm'}">
-            ${linked
-                ? `<div class="wsp-row" style="border-left: 3px solid ${h.type === 'animation' ? '#4a9eff' : '#e8a020'}">
-                    <span class="wsp-row-name">${icon(h.type === 'animation' ? 'animation' : 'hookfilm', 'wsp-row-ic')} ${escHtml(h.videoName || h.videoPath.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
-                    <button class="wsp-mini-btn" data-hooki-open="${escAttr(h.id)}">▶ Open</button>
-                    <button class="wsp-mini-btn danger" data-hooki-unlink="${escAttr(h.id)}">✕ Unlink</button>
-                </div>`
-                : `<div class="wsp-add-row wsp-hooki-media" data-hooki-media="${escAttr(h.id)}" data-empty="1">
-                        <span class="wsp-hint">${v.project ? 'loading footage controls…' : 'select a Channel Project to attach footage'}</span>
-                    </div>`}
+            ${hookVideos(h).map((vid, vi) => `<div class="wsp-row" style="border-left: 3px solid ${h.type === 'animation' ? '#4a9eff' : '#e8a020'}">
+                    <span class="wsp-row-name">${icon(h.type === 'animation' ? 'animation' : 'hookfilm', 'wsp-row-ic')} ${escHtml(vid.name || vid.path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
+                    <button class="wsp-mini-btn" data-hooki-open="${escAttr(h.id)}" data-vi="${vi}">▶ Open</button>
+                    <button class="wsp-mini-btn danger" data-hooki-unlink="${escAttr(h.id)}" data-vi="${vi}">✕ Unlink</button>
+                </div>`).join('')}
+            <div class="wsp-add-row wsp-hooki-media" data-hooki-media="${escAttr(h.id)}" data-empty="1">
+                <span class="wsp-hint">${v.project ? 'loading footage controls…' : 'select a Channel Project to attach footage'}</span>
+            </div>
             </div>` : ''}
         </div>`;
     }
@@ -3615,14 +3621,20 @@ const WorkshopUI = (() => {
         }));
         root.querySelectorAll('[data-hooki-open]').forEach(b => b.addEventListener('click', () => {
             const h = hooksWithEdits(v.id).find(x => x.id === b.dataset.hookiOpen);
-            if (h && h.videoPath) openFilePreview(h.videoPath, h.videoName);
+            if (!h) return;
+            const vid = hookVideos(h)[+b.dataset.vi || 0];
+            if (vid) openFilePreview(vid.path, vid.name);
         }));
         root.querySelectorAll('[data-hooki-unlink]').forEach(b => b.addEventListener('click', async () => {
             if (!confirm('Unlink this hook video? (The file stays in Dropbox.)')) return;
             const hooks = hooksWithEdits(v.id);
             const h = hooks.find(x => x.id === b.dataset.hookiUnlink);
             if (!h) return;
-            h.videoPath = ''; h.videoName = '';
+            const list = hookVideos(h).slice();
+            list.splice(+b.dataset.vi || 0, 1);
+            h.videos = list;
+            h.videoPath = list[0] ? list[0].path : '';   // keep legacy primary in sync
+            h.videoName = list[0] ? list[0].name : '';
             await saveHooks(v.id, hooks);
             rerender();
         }));
@@ -3664,7 +3676,11 @@ const WorkshopUI = (() => {
             const hooks = hooksWithEdits(v.id);
             const h = hooks.find(x => x.id === hid);
             if (!h) return;
-            h.videoPath = path; h.videoName = name;
+            const list = hookVideos(h).slice();
+            if (!list.some(x => x.path === path)) list.push({ path, name });   // append, allow many
+            h.videos = list;
+            h.videoPath = list[0] ? list[0].path : '';   // keep legacy primary in sync
+            h.videoName = list[0] ? list[0].name : '';
             await saveHooks(v.id, hooks);
             rerender();
         };
@@ -3682,16 +3698,26 @@ const WorkshopUI = (() => {
             const rowEl = root.querySelector(`[data-hooki-media="${hid}"]`);
             const bar = uploadProgressBar(rowEl, files[0].name);
             try {
-                let first = null;
+                const added = [];
                 for (let i = 0; i < files.length; i++) {
                     const file = files[i];
                     if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
                     const meta = await uploadToDropbox(`${rootPath}/${v.project}/${sub}/${file.name}`, file, bar.progress);
-                    if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
+                    added.push({ path: meta.path_display || meta.path_lower, name: meta.name || file.name });
                 }
                 bar.stage('Linking to this hook…');
-                toast(`${sub === 'animation' ? '🎞️ animation' : '🪝 hook'} video → ${v.project}/${sub}`);
-                await setFootage(hid, first.path, first.name);
+                const hooks = hooksWithEdits(v.id);
+                const h2 = hooks.find(x => x.id === hid);
+                if (h2) {
+                    const list = hookVideos(h2).slice();
+                    for (const it of added) if (!list.some(x => x.path === it.path)) list.push(it);   // append all
+                    h2.videos = list;
+                    h2.videoPath = list[0] ? list[0].path : '';   // keep legacy primary in sync
+                    h2.videoName = list[0] ? list[0].name : '';
+                    await saveHooks(v.id, hooks);
+                }
+                toast(`${sub === 'animation' ? '🎞️ animation' : '🪝 hook'} ${added.length} file${added.length === 1 ? '' : 's'} → ${v.project}/${sub}`);
+                rerender();
             } catch (e) {
                 console.warn('hook video upload failed', e);
                 alert('Hook video upload failed: ' + e.message);
