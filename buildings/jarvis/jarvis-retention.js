@@ -107,9 +107,15 @@ const JarvisRetention = (function () {
         const w = 520, h = 330, pad = 16, X = x => pad + (x + 1) / 2 * (w - 2 * pad), Y = y => pad + (1 - (y + 1) / 2) * (h - 2 * pad);
         let s = '', top = '';
         proj.forEach((p, i) => { if (!p) return; const pk = opt.pick ? opt.pick(i) : i, isSel = opt.sel != null && pk === opt.sel;
-            const c = opt.color(i), r = isSel ? 6 : (opt.r ? opt.r(i) : 3.2);
+            const c = opt.color(i), r = isSel && !opt.traj ? 6 : (opt.r ? opt.r(i) : 3.2);
             const circ = `<circle data-hook="${pk}" cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${r}" fill="${c}" opacity="${isSel ? 1 : (opt.op ? opt.op(i) : 0.72)}" stroke="${isSel ? '#fff' : '#0b1120'}" stroke-width="${isSel ? 1.6 : 0.4}" style="cursor:pointer"><title>${esc(opt.tip(i))}</title></circle>`;
             if (isSel) top += circ; else s += circ; });
+        // numbered trajectory: connect the selected hook's seconds 0→4 so you can read the order
+        if (opt.traj && opt.traj.length > 1) {
+            let path = ''; opt.traj.forEach((p, k) => { path += (k ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1) + ' '; });
+            top += `<path d="${path}" fill="none" stroke="#fff" stroke-width="1.6" opacity="0.65" stroke-dasharray="3 2"/>`;
+            opt.traj.forEach((p, k) => { const x = X(p[0]).toFixed(1), y = Y(p[1]).toFixed(1); top += `<circle cx="${x}" cy="${y}" r="8.5" fill="#0b1120" stroke="#fff" stroke-width="1.5"/><text x="${x}" y="${(+y + 3).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="10" font-weight="800">${k}</text>`; });
+        }
         return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}${top}</svg>`;
     }
     function legendBar(lo, hi, label) {
@@ -423,9 +429,10 @@ const JarvisRetention = (function () {
     // resolution-aware maps. hook → one point per video; second → one point per video-second.
     function resMaps(colorHook, colorSec, legend, hookExtra) {
         if (st.novRes === 'second') {
-            const S = N.second, mods = [['visual', 'Visual / sec', 'DINOv2 of that second\'s frame'], ['clip', 'CLIP image / sec', 'frame in CLIP space'], ['concept', 'Concept / sec', 'MiniLM of that second\'s words']];
-            const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(S.proj[mod], { color: i => colorSec(mod, i), pick: i => S.owner[i], sel: st.novSel, r: i => (st.novSel != null && S.owner[i] === st.novSel) ? 5 : 2.3, op: () => 0.62, tip: i => novTip(S.owner[i], 'second ' + S.sec[i]) }), legend);
-            return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is <b>one second</b> of a hook (${S.owner.length} points). Five points share a video — selecting a hook highlights all five, so you can see whether its seconds stay together or scatter.</div></div>`;
+            const S = N.second, mods = [['whole', 'Whole / sec', 'CLIP image+text of that second'], ['concept', 'Concept / sec', 'MiniLM of that second\'s words'], ['visual', 'Visual / sec', 'DINOv2 of that second\'s frame']];
+            const trajFor = mod => { if (st.novSel == null) return null; const rows = []; for (let i = 0; i < S.owner.length; i++) if (S.owner[i] === st.novSel) rows.push(i); rows.sort((a, b) => S.sec[a] - S.sec[b]); return rows.map(i => S.proj[mod][i]); };
+            const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(S.proj[mod], { color: i => colorSec(mod, i), pick: i => S.owner[i], sel: st.novSel, traj: trajFor(mod), r: i => (st.novSel != null && S.owner[i] === st.novSel) ? 5 : 2.3, op: () => 0.62, tip: i => novTip(S.owner[i], 'second ' + S.sec[i]) }), legend);
+            return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is <b>one second</b> (${S.owner.length} total). Select a hook → its 5 seconds are <b>connected 0→4</b> with numbers, so you can read the path its hook takes through latent space (does it stay put or travel?).</div></div>`;
         }
         const H = N.hook, mods = [['whole', 'Whole hook', 'CLIP image+text — one point (low-res, mixes everything)'], ['concept', 'Concept / script', 'MiniLM on the 5s transcript'], ['visual', 'Visual', 'DINOv2 of the 5 frames, pooled']];
         const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(H.proj[mod], { color: i => colorHook(mod, i), sel: st.novSel, tip: i => novTip(i) }), legend);
@@ -452,11 +459,19 @@ const JarvisRetention = (function () {
         const hookObjs = (v.objects_hook || []).length ? (v.objects_hook || []).map(o => `<span style="display:inline-block;background:${C.orange}1e;border:1px solid ${C.orange};color:${C.orange};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0">${esc(o.label)} <span style="opacity:.7">${o.score}·${o.seconds}s</span></span>`).join('') : `<span style="color:${C.mute};font-size:11px">none ≥ score 0.15</span>`;
         // CONCEPTS (quantitative MMR keyphrases)
         const concepts = (v.concepts || []).length ? (v.concepts || []).map(c => `<span style="display:inline-block;background:${C.purple}1e;border:1px solid ${C.purple};color:${C.purple};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0" title="cluster: ${esc(clusLabel(c.cluster))}">${esc(c.phrase)} <span style="opacity:.65">${c.score}</span></span>`).join('') : `<span style="color:${C.mute};font-size:11px">no concept extracted</span>`;
-        // scene-by-scene LLM context (flagged interpreted)
-        const sceneRows = (v.scenes || []).map(s => `<div style="display:flex;gap:8px;padding:7px 0;border-top:1px solid ${C.border}">
-                <img src="${hookFrame(v.id, Math.round(s.t))}" loading="lazy" onerror="this.style.display='none'" style="width:46px;height:82px;object-fit:cover;border-radius:5px;border:1px solid ${C.border2};flex-shrink:0"/>
-                <div style="flex:1;font-size:11px;line-height:1.5;min-width:0"><div style="color:${C.cyan};font-weight:700">▸ second ${Math.round(s.t)}</div><div style="color:${C.dim}">${esc(s.desc)}</div>
-                    ${s.visual ? `<div style="color:${C.mute}"><b style="color:${C.faint}">visual:</b> ${esc(s.visual)}</div>` : ''}${(s.insights && s.insights.length) ? `<div style="margin-top:2px">${s.insights.map(x => chip(x, C.green)).join('')}</div>` : ''}</div></div>`).join('') || `<div style="font-size:11px;color:${C.mute}">none</div>`;
+        // SECOND-BY-SECOND — every second analysed at the same depth as the whole hook
+        const miniBar = (lab, pctv, c) => `<div style="flex:1;min-width:64px"><div style="font-size:9px;color:${C.mute};display:flex;justify-content:space-between"><span>${lab}</span><span style="color:${C.dim};font-weight:700">${Math.round(pctv * 100)}</span></div><div style="height:4px;background:${C.card};border-radius:2px;overflow:hidden"><div style="height:100%;width:${Math.round(pctv * 100)}%;background:${c}"></div></div></div>`;
+        const nc4 = (k) => NPAL[k % NPAL.length];
+        const secRows = (v.persec || []).map(p => `<div style="display:flex;gap:8px;padding:9px 0;border-top:1px solid ${C.border}">
+                <img src="${hookFrame(v.id, p.sec)}" loading="lazy" onerror="this.style.display='none'" style="width:44px;height:78px;object-fit:cover;border-radius:5px;border:1px solid ${C.border2};flex-shrink:0"/>
+                <div style="flex:1;min-width:0">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px"><span style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:5px;padding:1px 8px;font-size:11px;font-weight:800;flex-shrink:0">sec ${p.sec}</span>
+                        <div style="display:flex;gap:10px;flex:1">${miniBar('whole', p.nov_pct.whole, heatCol(p.nov_pct.whole))}${miniBar('concept', p.nov_pct.concept, heatCol(p.nov_pct.concept))}${miniBar('visual', p.nov_pct.visual, heatCol(p.nov_pct.visual))}</div></div>
+                    <div style="font-size:10px;color:${C.mute};margin-bottom:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                        <span>niche</span><span title="whole" style="color:${nc4(p.niche.whole)};font-weight:700">●${p.niche.whole}</span><span title="concept" style="color:${nc4(p.niche.concept)};font-weight:700">●${p.niche.concept}</span><span title="visual" style="color:${nc4(p.niche.visual)};font-weight:700">●${p.niche.visual}</span>
+                        <span>· temporal ${p.temporal == null ? '—' : p.temporal}</span><span>· coherence ${p.coh} (${Math.round(p.coh_pct * 100)}th)</span><span>· ${(p.objects || []).length} obj</span></div>
+                    ${p.desc ? `<div style="font-size:11px;color:${C.dim};line-height:1.45"><span style="color:${C.faint}">⚠ </span>${esc(p.desc)}</div>` : ''}
+                </div></div>`).join('') || `<div style="font-size:11px;color:${C.mute}">no per-second analysis</div>`;
         return cardc(`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
                 <div><div style="font-size:15px;font-weight:800;color:${C.text}">${esc(v.name || v.id)}</div>
                     <div style="font-size:11px;color:${C.mute};margin-top:2px">${fv(v.views)} views · ${v.published || '—'} · ${v.age_days != null ? v.age_days + 'd old' : '—'} · id ${esc(v.id)}</div></div>
@@ -480,7 +495,8 @@ const JarvisRetention = (function () {
                 ${col2('Scene spread + coords', bar('scene spread (visual cuts)', fmtv(H.scene.spread[i], 3), rankPct(H.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · concept ${coord('concept')} · visual ${coord('visual')}</div>`)}
             </div>
             <div style="border-top:1px solid ${C.border};padding-top:10px">
-                <div style="font-size:11px;font-weight:800;color:${C.faint};margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px">⚠ Scene description — LLM-written context (interpreted, never scored)</div>${sceneRows}</div>`);
+                <div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:2px;text-transform:uppercase;letter-spacing:.3px">⧗ Second-by-second — each second analysed like the whole hook</div>
+                <div style="font-size:10px;color:${C.mute};margin-bottom:4px">novelty percentile (whole · concept · visual) · niche cluster per modality · temporal · coherence · #objects. The ⚠ line is the LLM description (interpreted, never scored).</div>${secRows}</div>`);
     }
     function renderNovGlobal() {
         const H = N.hook, S = N.second;
@@ -519,7 +535,7 @@ const JarvisRetention = (function () {
         let h = h2c('E · Coherent novelty — novelty × coherence (the curiosity quadrant)', 'X = novelty (distance from corpus). Y = coherence = cos(CLIP image, CLIP text) — do the visuals match the words. Novel + coherent = curiosity; novel + incoherent = confusion.');
         h += cardc(`<div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
             <div>${quadPlot(ch.nov_pct, ch.coh_pct, { color: i => heatCol(N.videos[i].lv ? (N.videos[i].lv - 4.5) / 4 : 0.5), sel: st.novSel, tip: i => novTip(i, 'coh ' + ch.coherence[i]) })}<div style="font-size:10px;color:${C.mute};margin-top:4px">point colour = views (brighter = more) · click to open its data</div></div>
-            <div>${mapCard('Per-second coherence', 'each second coloured by visual↔word match', latentMap(N.second.proj.clip, { color: i => heatCol(N.second.coh_pct[i]), pick: i => N.second.owner[i], sel: st.novSel, r: () => 2.4, op: () => 0.62, tip: i => novTip(N.second.owner[i], 'sec ' + N.second.sec[i] + ' coh ' + N.second.coherence[i]) }), legendBar('mismatch', 'coherent'))}</div></div>`);
+            <div>${mapCard('Per-second coherence', 'each second coloured by visual↔word match', latentMap(N.second.proj.whole, { color: i => heatCol(N.second.coh_pct[i]), pick: i => N.second.owner[i], sel: st.novSel, r: i => (st.novSel != null && N.second.owner[i] === st.novSel) ? 5 : 2.4, op: () => 0.62, tip: i => novTip(N.second.owner[i], 'sec ' + N.second.sec[i] + ' coh ' + N.second.coherence[i]) }), legendBar('mismatch', 'coherent'))}</div></div>`);
         h += note('<b>Valuable novelty = distance × understandability.</b> Coherence is a defined CLIP cosine, not a human judgement. Once views are overlaid, the curiosity quadrant should be where winners concentrate.', C.green);
         return h;
     }

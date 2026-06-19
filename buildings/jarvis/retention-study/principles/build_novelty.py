@@ -154,16 +154,43 @@ def main():
     H['scene'] = {'pts': project(sv, perp=30), 'owner': so.tolist(), 'frame': sf.tolist(), 'spread': spread}
     out['hook'] = H
 
-    # ── SECOND resolution ──
+    # ── SECOND resolution — every second analysed exactly like the whole hook ──
     P = np.load(os.path.join(HERE, 'persec_emb.npz'))
     po, ps, pimg, ptxt, pconc, pcoh = P['owner'], P['sec'], P['clip_img'], P['clip_txt'], P['concept'], P['coherence']
+    pwhole = (L2(pimg) + L2(ptxt)) / 2.0                    # per-second "whole" = CLIP image+text, like the hook whole
+    gW, gC, gV = geom(pwhole), geom(pconc), geom(sv)        # whole / concept / visual novelty + niche, per second
+    cohp = pct(pcoh)
+    # per-second temporal novelty: distance to other videos' seconds posted within ±45 days
+    Wp = L2(pwhole); agesP = ages[po]; tsec = []
+    for j in range(len(po)):
+        if not np.isfinite(agesP[j]):
+            tsec.append(None); continue
+        nb = np.where(np.isfinite(agesP) & (np.abs(agesP - agesP[j]) < 45) & (po != po[j]))[0]
+        tsec.append(round(float((1 - Wp[j] @ Wp[nb].T).mean()), 4) if len(nb) else None)
     S = {'owner': po.tolist(), 'sec': ps.tolist(),
-         'proj': {'visual': project(sv, perp=30), 'clip': project(pimg, perp=30), 'concept': project(pconc, perp=30)},
-         'coherence': [round(float(x), 4) for x in pcoh], 'coh_pct': [round(float(x), 3) for x in pct(pcoh)]}
-    for k, X in (('visual', sv), ('clip', pimg), ('concept', pconc)):
-        g = geom(X); S.setdefault('global', {})[k] = {'nov': g['nov'], 'pct': g['pct']}
-        S.setdefault('niche', {})[k] = {'labels': g['niche'], 'k': len(set(g['niche']))}
+         'proj': {'whole': project(pwhole, perp=30), 'concept': project(pconc, perp=30), 'visual': project(sv, perp=30)},
+         'coherence': [round(float(x), 4) for x in pcoh], 'coh_pct': [round(float(x), 3) for x in cohp], 'temporal': tsec,
+         'global': {'whole': {'nov': gW['nov'], 'pct': gW['pct']}, 'concept': {'nov': gC['nov'], 'pct': gC['pct']}, 'visual': {'nov': gV['nov'], 'pct': gV['pct']}},
+         'niche': {'whole': {'labels': gW['niche'], 'k': len(set(gW['niche']))}, 'concept': {'labels': gC['niche'], 'k': len(set(gC['niche']))}, 'visual': {'labels': gV['niche'], 'k': len(set(gV['niche']))}}}
     out['second'] = S
+
+    # nested per-video second-by-second analysis (so the panel can show each second at full depth)
+    by_owner = {}
+    for j in range(len(po)):
+        by_owner.setdefault(int(po[j]), []).append(j)
+    for i, v in enumerate(out['videos']):
+        objbyt = {p['t']: p['dets'] for p in v.get('objects_persec', [])}
+        descbyt = {round(s['t']): s for s in v.get('scenes', [])}
+        ana = []
+        for j in sorted(by_owner.get(i, []), key=lambda j: ps[j]):
+            sc = int(ps[j]); s = descbyt.get(sc, {})
+            ana.append({'sec': sc,
+                        'nov_pct': {'whole': round(float(gW['pct'][j]), 3), 'concept': round(float(gC['pct'][j]), 3), 'visual': round(float(gV['pct'][j]), 3)},
+                        'nov': {'whole': round(float(gW['nov'][j]), 4), 'concept': round(float(gC['nov'][j]), 4), 'visual': round(float(gV['nov'][j]), 4)},
+                        'niche': {'whole': int(gW['niche'][j]), 'concept': int(gC['niche'][j]), 'visual': int(gV['niche'][j])},
+                        'temporal': tsec[j], 'coh': round(float(pcoh[j]), 4), 'coh_pct': round(float(cohp[j]), 3),
+                        'objects': objbyt.get(sc, []), 'desc': s.get('desc', '')})
+        v['persec'] = ana
 
     # ── combinatorial (concept-cluster level, from concepts.json) ──
     out['combo'] = {'clusters': CON['clusters'], 'edges': CON['edges'], 'rarity': CON['rarity'], 'k_clusters': CON['k_clusters']}
