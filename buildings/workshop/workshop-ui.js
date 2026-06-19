@@ -1083,8 +1083,36 @@ const WorkshopUI = (() => {
                 <div class="wsp-deliv-sub">Decide the branches and add components in the Decomposition section below.</div></div>`;
         }
         if (kind === 'manual') {
+            const gaps = Array.isArray(v.footageGaps) ? v.footageGaps : [];
+            const rep = v.footageReport || null;
+            const canCheck = !!v.project;
+            const repLine = rep
+                ? (rep.status === 'error'
+                    ? `<div class="wsp-hint" style="color:#e74c3c">Last footage check failed: ${escHtml(rep.error || 'error')}</div>`
+                    : `<div class="wsp-hint">Checked ${escHtml(new Date(rep.generatedAt).toLocaleString())} · ${rep.clipsAnalyzed} clip${rep.clipsAnalyzed === 1 ? '' : 's'} (${rep.fromCache || 0} cached) · ${rep.coveredCount || 0} covered · ${rep.gapsCount || 0} gap${rep.gapsCount === 1 ? '' : 's'}</div>`)
+                : '';
+            const gapsHtml = gaps.length
+                ? `<div class="wsp-footage-gaps">${gaps.map(g => `
+                    <div class="wsp-footage-gap">
+                        <div class="wsp-footage-gap-main">
+                            <div class="wsp-footage-gap-beat">⚠️ ${escHtml(g.beat)}</div>
+                            ${g.scriptQuote ? `<div class="wsp-footage-gap-quote">“${escHtml(g.scriptQuote)}”</div>` : ''}
+                            ${g.note ? `<div class="wsp-footage-gap-note">${escHtml(g.note)}</div>` : ''}
+                        </div>
+                        <button class="wsp-mini-btn danger" data-footage-del="${escAttr(g.id)}" data-fv="${escAttr(v.id)}" title="Delete this suggestion">✕</button>
+                    </div>`).join('')}</div>`
+                : (rep && rep.status === 'done' ? `<div class="wsp-hint" style="color:#27ae60">✅ No footage gaps found — every script beat looks covered.</div>` : '');
             return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 ${escHtml(label)}${flag}</div>
-                <div class="wsp-deliv-sub">No upload needed here — your footage already lives in Dropbox. Just press <b>Done</b> once filming is complete.</div></div>`;
+                <div class="wsp-deliv-sub">No upload needed — your footage already lives in Dropbox. Just press <b>Done</b> once filming is complete.</div>
+                <div class="wsp-footage-tools">
+                    ${canCheck
+                        ? `<button class="wsp-mini-btn wsp-ai-btn" data-footage-check="${escAttr(v.id)}">🔍 ${(gaps.length || (rep && rep.status === 'done')) ? 'Re-check footage coverage' : 'Check footage coverage'}</button>`
+                        : `<span class="wsp-hint">Link a Channel Project to scan its footage.</span>`}
+                    <span class="wsp-hint">Optional — watches every clip in Dropbox &amp; flags script beats with no footage. Runs server-side; you can leave the page.</span>
+                </div>
+                ${repLine}
+                ${gapsHtml}
+            </div>`;
         }
         // auto stages — the structured upload lives in a section below
         return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>
@@ -1107,6 +1135,19 @@ const WorkshopUI = (() => {
         // The per-node DONE button lives on every stage row (and in the expanded
         // editor) — bind them all here so a collapsed row's Done works too.
         panel.querySelectorAll('[data-node-done]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); pushNodeForward(b.dataset.nodeDone, b.dataset.nodeStage); }));
+        // Filming footage-coverage tool — run a scan, or delete a gap suggestion.
+        panel.querySelectorAll('[data-footage-check]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); runFootageCoverage(b.dataset.footageCheck, b); }));
+        panel.querySelectorAll('[data-footage-del]').forEach(b => b.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const v = VideoService.getById(b.dataset.fv);
+            if (!v) return;
+            const removed = (v.footageGaps || []).find(g => g.id === b.dataset.footageDel);
+            const gaps = (v.footageGaps || []).filter(g => g.id !== b.dataset.footageDel);
+            const dismissed = Array.isArray(v.footageGapsDismissed) ? v.footageGapsDismissed.slice() : [];
+            if (removed && removed.beat && !dismissed.includes(removed.beat)) dismissed.push(removed.beat);   // stays gone on re-check
+            await VideoService.update(b.dataset.fv, { footageGaps: gaps, footageGapsDismissed: dismissed });
+            renderTab();
+        }));
         bindCompStatusRows(panel, () => renderTab());
         bindOrderRows(panel);
 
@@ -3257,6 +3298,49 @@ const WorkshopUI = (() => {
         };
         return { step, close: () => overlay.remove(), overlay };
     }
+
+    // Filming footage coverage: kick off the server-side scan, poll its progress
+    // (you can close the page — it keeps running and the result is saved on the
+    // video), then refresh so the persistent gap suggestions show.
+    async function runFootageCoverage(videoId, btn) {
+        const v = VideoService.getById(videoId);
+        if (!v) return;
+        const orig = btn ? btn.textContent : '';
+        if (btn) { btn.disabled = true; btn.textContent = '🔍 Scanning…'; }
+        const progress = openAiProgressModal('🔍 Footage coverage', 'watching every clip in Dropbox — this runs server-side, you can close the page');
+        progress.step('start', 'run', 'Starting footage scan', v.project || '');
+        try {
+            const res = await fetch('/api/footage-coverage/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoId }) });
+            const start = await res.json().catch(() => ({}));
+            if (!res.ok || !start.jobId) throw new Error(start.error || `Failed: ${res.status}`);
+            progress.step('start', 'done', 'Scan started', 'pulling & watching clips…');
+            const jobId = start.jobId;
+            let seen = 0;
+            while (true) {
+                await new Promise(r => setTimeout(r, 1500));
+                let pr;
+                try { pr = await fetch('/api/footage-coverage/progress?job=' + encodeURIComponent(jobId)).then(r => r.json()); } catch (_) { continue; }
+                if (!pr) continue;
+                (pr.events || []).slice(seen).forEach((m, i) => progress.step('e' + (seen + i), 'done', m));
+                seen = (pr.events || []).length;
+                if (pr.done) {
+                    if (pr.error) throw new Error(pr.error);
+                    const rep = pr.result || {};
+                    progress.step('fin', 'done', 'Done', `${rep.gapsCount || 0} possible gap${rep.gapsCount === 1 ? '' : 's'}, ${rep.coveredCount || 0} covered`);
+                    await VideoService.sync(true).catch(() => {});   // pull the saved gaps onto the video
+                    renderTab();
+                    setTimeout(() => progress.close(), 1500);
+                    break;
+                }
+            }
+        } catch (e) {
+            console.warn('footage coverage failed', e);
+            progress.step('err', 'error', 'Footage scan failed', e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = orig; }
+        }
+    }
+
     async function suggestComponents(videoId, btn) {
         const v = VideoService.getById(videoId);
         if (!v) return;

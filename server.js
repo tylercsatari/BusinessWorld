@@ -16,6 +16,7 @@ if (fs.existsSync(envPath)) {
 
 const videoAnalyzer = require('./video-analyzer');
 const geminiWatch = require('./gemini-watch');
+const footageCoverage = require('./footage-coverage');
 const videolabCoordinator = require('./videolab-coordinator');
 let codexRunner = null;
 try {
@@ -527,6 +528,7 @@ const AI_VIDEO_IDEA_SIMILARITY_THRESHOLD = Number(process.env.AI_VIDEO_IDEA_SIMI
 // In-memory progress for AI-idea generation jobs (the client polls these; SSE is
 // buffered by Render's proxy so streaming a long response shows nothing).
 const aiVideoJobs = {};
+const footageJobs = {};   // jobId -> live footage-coverage progress (polled by the client)
 
 const AI_VIDEO_IDEA_FORMULA = `
 Shared representation:
@@ -1965,6 +1967,103 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
         if (!job) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'job not found' })); return; }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ events: job.events, output: job.output, cards: job.cards, created: job.created, rejected: job.rejected, done: job.done, error: job.error, elapsed: Date.now() - job.startedAt }));
+        return;
+    }
+
+    // ===== FOOTAGE COVERAGE — does a project's Dropbox footage cover its script? =====
+    // Background job (the client polls /progress) so you can leave the page while it
+    // pulls + watches every clip. The result is persisted onto the video record, so
+    // it's permanent and re-runs only touch new clips (cached by Dropbox hash).
+    if (pathname === '/api/footage-coverage/start' && req.method === 'POST') {
+        const body = await readBody(req);
+        if (!process.env.GEMINI_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'GEMINI_API_KEY is not set in .env — needed to watch the footage.' })); return; }
+        if (!process.env.FIREWORKS_API_KEY) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'FIREWORKS_API_KEY is not set in .env — needed for the coverage reasoning.' })); return; }
+        const video = body && body.videoId ? await dataStore.getById('videos', body.videoId) : null;
+        if (!video) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'video not found' })); return; }
+        if (!video.project) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'This video has no Channel Project linked, so there is no Dropbox folder to scan.' })); return; }
+        if (!(video.script || '').trim()) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'This video has no script yet — nothing to check footage against.' })); return; }
+
+        const jobId = require('crypto').randomUUID();
+        const job = { events: [], done: false, error: null, result: null, startedAt: Date.now() };
+        footageJobs[jobId] = job;
+        for (const k of Object.keys(footageJobs)) { if (Date.now() - footageJobs[k].startedAt > 30 * 60 * 1000) delete footageJobs[k]; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jobId }));
+
+        (async () => {
+            const projectFolder = `${process.env.DROPBOX_ROOT_PATH || ''}/${video.project}`;
+            // Token-refreshing Dropbox helpers, scoped to this job.
+            const dbxJson = async (endpoint, payload) => {
+                const call = async (tok) => fetch('https://api.dropboxapi.com/2/files/' + endpoint, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                let tok = await cloud.getDropboxToken();
+                let r = await call(tok);
+                if (r.status === 401) { process.env._DROPBOX_TOKEN_EXPIRED = '1'; tok = await cloud.getDropboxToken(); r = await call(tok); }
+                if (!r.ok) throw new Error(`Dropbox ${endpoint} ${r.status}: ${(await r.text()).slice(0, 200)}`);
+                return r.json();
+            };
+            const listFolder = async (folder) => {
+                let out = [];
+                let data;
+                try { data = await dbxJson('list_folder', { path: folder, recursive: true, limit: 2000 }); }
+                catch (e) { if (/not_found/i.test(e.message)) return []; throw e; }
+                out = out.concat(data.entries || []);
+                while (data.has_more) { data = await dbxJson('list_folder/continue', { cursor: data.cursor }); out = out.concat(data.entries || []); }
+                return out;
+            };
+            const download = async (path) => {
+                const call = async (tok) => fetch('https://content.dropboxapi.com/2/files/download', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${tok}`, 'Dropbox-API-Arg': JSON.stringify({ path }) }
+                });
+                let tok = await cloud.getDropboxToken();
+                let r = await call(tok);
+                if (r.status === 401) { process.env._DROPBOX_TOKEN_EXPIRED = '1'; tok = await cloud.getDropboxToken(); r = await call(tok); }
+                if (!r.ok) throw new Error(`Dropbox download ${r.status}: ${(await r.text()).slice(0, 200)}`);
+                return Buffer.from(await r.arrayBuffer());
+            };
+            // Per-clip cache (by Dropbox content_hash), loaded once.
+            const cacheRecords = await dataStore.getAll('footagecache').catch(() => []);
+            const cacheMap = new Map(cacheRecords.map(r => [r.contentHash, r]));
+            const cacheGet = async (hash) => cacheMap.get(hash) || null;
+            const cacheSet = async (hash, rec) => { cacheMap.set(hash, rec); try { await dataStore.create('footagecache', rec); } catch (e) {} };
+
+            try {
+                const out = await footageCoverage.analyzeProject({
+                    video, projectFolder,
+                    deps: {
+                        listFolder, download,
+                        geminiAnalyze: (bytes, mime, prompt, opts) => geminiWatch.analyzeBytes(bytes, mime, prompt, opts),
+                        kimiJson: (messages, maxTokens) => aiVideoKimiJson(messages, maxTokens),
+                        cacheGet, cacheSet,
+                        onEvent: (ev) => { if (ev && ev.msg) job.events.push(ev.msg); },
+                    }
+                });
+                // Persist the gaps as a permanent, individually-deletable suggestion list.
+                const fresh = await dataStore.getById('videos', video.id) || video;
+                const dismissed = Array.isArray(fresh.footageGapsDismissed) ? fresh.footageGapsDismissed : [];
+                const gaps = out.gaps
+                    .filter(g => g && g.beat && !dismissed.includes(g.beat))
+                    .map(g => ({ id: require('crypto').randomUUID(), beat: g.beat, scriptQuote: g.scriptQuote || '', note: g.note || '', createdAt: new Date().toISOString() }));
+                const report = { generatedAt: new Date().toISOString(), clipsAnalyzed: out.clipsAnalyzed, fromCache: out.fromCache, coveredCount: out.covered.length, covered: out.covered, gapsCount: gaps.length, model: out.model, status: 'done' };
+                await dataStore.update('videos', video.id, { footageGaps: gaps, footageReport: report });
+                job.result = report;
+                job.done = true;
+            } catch (e) {
+                console.error('footage-coverage error:', e);
+                job.error = e.message;
+                job.done = true;
+                try { await dataStore.update('videos', video.id, { footageReport: { generatedAt: new Date().toISOString(), status: 'error', error: e.message } }); } catch (_) {}
+            }
+        })();
+        return;
+    }
+
+    if (pathname === '/api/footage-coverage/progress' && req.method === 'GET') {
+        const job = footageJobs[url.searchParams.get('job')];
+        if (!job) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'job not found' })); return; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ events: job.events, done: job.done, error: job.error, result: job.result, elapsed: Date.now() - job.startedAt }));
         return;
     }
 

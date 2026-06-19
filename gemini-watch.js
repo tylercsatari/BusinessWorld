@@ -96,7 +96,7 @@ async function waitActive(fileName, { timeoutMs = 120000, intervalMs = 2000 } = 
   throw new Error('Timed out waiting for Gemini to process the video');
 }
 
-async function generate(fileUri, mimeType, model) {
+async function generate(fileUri, mimeType, model, prompt) {
   const res = await fetch(authUrl(`/v1beta/models/${model}:generateContent`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -104,7 +104,7 @@ async function generate(fileUri, mimeType, model) {
       contents: [{
         parts: [
           { file_data: { mime_type: mimeType, file_uri: fileUri } },
-          { text: OBSERVATION_PROMPT },
+          { text: prompt || OBSERVATION_PROMPT },
         ],
       }],
       // Gemini 3.x: omit temperature (optimized for defaults); use high thinking + high media
@@ -149,4 +149,25 @@ async function watchVideo(filePath, mimeType = 'video/mp4', opts = {}) {
   return { model, observations };
 }
 
-module.exports = { watchVideo, GEMINI_MODEL, OBSERVATION_PROMPT };
+/**
+ * Same Files-API flow as watchVideo, but takes raw BYTES already in memory and a
+ * CUSTOM prompt — used by footage-coverage to catalogue each Dropbox clip without
+ * writing it to disk. Returns the parsed JSON the prompt asks for.
+ * @param {Buffer} bytes
+ * @param {string} mimeType
+ * @param {string} prompt   must instruct STRICT-JSON output
+ * @param {object} opts     { model, displayName, timeoutMs }
+ */
+async function analyzeBytes(bytes, mimeType, prompt, opts = {}) {
+  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set in .env.');
+  const model = opts.model || GEMINI_MODEL;
+  const displayName = opts.displayName || 'footage-clip';
+  const uploadUrl = await startResumable(bytes.length, mimeType, displayName);
+  const file = await uploadBytes(uploadUrl, bytes);
+  await waitActive(file.name, { timeoutMs: opts.timeoutMs || 300000 });
+  const result = await generate(file.uri, file.mimeType || mimeType, model, prompt);
+  try { await fetch(authUrl(`/v1beta/${file.name}`), { method: 'DELETE' }); } catch (e) {}
+  return { model, result };
+}
+
+module.exports = { watchVideo, analyzeBytes, GEMINI_MODEL, OBSERVATION_PROMPT };
