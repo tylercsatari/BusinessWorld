@@ -3309,68 +3309,86 @@ const WorkshopUI = (() => {
     }
 
     // Filming footage coverage. The scan runs SERVER-SIDE, so it keeps going when
-    // you close the modal or the whole page. The live per-clip progress modal is
-    // reopenable any time by clicking the button again — it reattaches to the
-    // running job (tracked on the server, found via /active) instead of starting a
-    // duplicate scan.
-    const footageScans = {};   // videoId -> jobId for scans known this session (drives the button label)
+    // you close the modal or the whole page. footageScans[videoId] is the single
+    // source of truth for the CURRENT job; the watcher and the modal both follow
+    // it, so if the server restarts mid-scan (e.g. a deploy wipes the in-memory
+    // job), it AUTO-RESUMES from where it left off — the per-clip work is cached
+    // in R2, so resuming only re-watches the clips that hadn't finished yet.
+    const footageScans = {};       // videoId -> current jobId (drives the button label)
+    const footageRestarts = {};    // videoId -> auto-resume count (safety cap)
+    const footageWatching = {};    // videoId -> a watcher loop is running
+    const footageResuming = {};    // videoId -> in-flight resume promise (idempotency lock)
+    const FOOTAGE_RESUME_CAP = 12;
+
+    function footageReportDone(v) { return !!(v && v.footageReport && v.footageReport.status === 'done'); }
+
+    async function footageStartJob(videoId) {
+        const res = await fetch('/api/footage-coverage/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoId }) });
+        const start = await res.json().catch(() => ({}));
+        if (!res.ok || !start.jobId) throw new Error(start.error || `Failed: ${res.status}`);
+        footageScans[videoId] = start.jobId;
+        ensureFootageWatcher(videoId);
+        return start.jobId;
+    }
+
+    // Idempotent resume: a job vanished. If the scan isn't actually finished, start
+    // a NEW job (cheap — cached clips are skipped) and update footageScans so the
+    // modal/watcher keep following. Locked so the watcher + modal can't double-fire.
+    function footageResume(videoId) {
+        if (footageResuming[videoId]) return footageResuming[videoId];
+        const p = (async () => {
+            await VideoService.sync(true).catch(() => {});
+            if (footageReportDone(VideoService.getById(videoId))) { delete footageScans[videoId]; renderTab(); return false; }
+            if ((footageRestarts[videoId] || 0) >= FOOTAGE_RESUME_CAP) { delete footageScans[videoId]; renderTab(); return false; }
+            footageRestarts[videoId] = (footageRestarts[videoId] || 0) + 1;
+            try { await footageStartJob(videoId); renderTab(); return true; }
+            catch (e) { console.warn('footage resume failed', e); delete footageScans[videoId]; renderTab(); return false; }
+        })();
+        footageResuming[videoId] = p;
+        p.finally(() => { if (footageResuming[videoId] === p) delete footageResuming[videoId]; });
+        return p;
+    }
+
+    // One background watcher per video: follows footageScans[videoId], auto-resumes
+    // a job that died unfinished, and refreshes the data + button when it completes.
+    function ensureFootageWatcher(videoId) {
+        if (footageWatching[videoId]) return;
+        footageWatching[videoId] = true;
+        (async () => {
+            try {
+                while (footageScans[videoId]) {
+                    const jobId = footageScans[videoId];
+                    await new Promise(r => setTimeout(r, 2500));
+                    if (footageScans[videoId] !== jobId) continue;   // resumed elsewhere → follow the new job
+                    let pr;
+                    try { pr = await fetch('/api/footage-coverage/progress?job=' + encodeURIComponent(jobId)).then(r => r.ok ? r.json() : null); } catch (_) { continue; }
+                    if (pr && pr.done) { delete footageScans[videoId]; footageRestarts[videoId] = 0; await VideoService.sync(true).catch(() => {}); renderTab(); break; }
+                    if (!pr) { const resumed = await footageResume(videoId); if (!resumed) break; }   // resumed → keep following
+                }
+            } finally { footageWatching[videoId] = false; }
+        })();
+    }
 
     async function footageCheckClick(videoId, btn) {
         if (!VideoService.getById(videoId)) return;
-        // Already tracking a scan for this video this session → just reopen it.
-        if (footageScans[videoId]) { openFootageProgress(videoId, footageScans[videoId]); return; }
-        // A scan may still be running server-side from before a reload — reattach.
+        // If a progress modal is already open for this video, just leave it up.
+        const host = container.querySelector('.workshop-panel') || container;
+        if (host.querySelector(`[data-fcov-overlay="${videoId}"]`)) { openFootageProgress(videoId); return; }
         if (btn) { const o = btn.textContent; btn.textContent = '🔍 Connecting…'; setTimeout(() => { if (btn.textContent === '🔍 Connecting…') btn.textContent = o; }, 4000); }
-        try {
-            const a = await fetch('/api/footage-coverage/active?videoId=' + encodeURIComponent(videoId)).then(r => r.json());
-            if (a && a.jobId) {
-                footageScans[videoId] = a.jobId;
-                watchFootageJob(videoId, a.jobId);
-                openFootageProgress(videoId, a.jobId);
-                renderTab();   // reflect "Scanning…" on the button
-                return;
-            }
-        } catch (_) { /* fall through to a fresh scan */ }
-        startFootageCoverage(videoId, btn);
+        // Is a job already running on the server (this session, or after a reload)?
+        let jobId = null;
+        try { const a = await fetch('/api/footage-coverage/active?videoId=' + encodeURIComponent(videoId)).then(r => r.json()); if (a && a.jobId) jobId = a.jobId; } catch (_) {}
+        if (jobId) { footageScans[videoId] = jobId; ensureFootageWatcher(videoId); openFootageProgress(videoId); renderTab(); return; }
+        // Nothing running → start. (This also RESUMES a scan that died: cached clips
+        // are skipped, so it picks up from where it stopped.)
+        footageRestarts[videoId] = 0;
+        try { await footageStartJob(videoId); openFootageProgress(videoId); renderTab(); }
+        catch (e) { console.warn('footage scan failed to start', e); if (btn) btn.textContent = '🔍 Check footage coverage'; alert('Could not start footage scan: ' + (e.message || 'error')); }
     }
 
-    async function startFootageCoverage(videoId, btn) {
-        try {
-            const res = await fetch('/api/footage-coverage/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoId }) });
-            const start = await res.json().catch(() => ({}));
-            if (!res.ok || !start.jobId) throw new Error(start.error || `Failed: ${res.status}`);
-            footageScans[videoId] = start.jobId;
-            if (btn) btn.textContent = '🔍 Scanning… · click to view';   // immediate feedback without a full re-render (which would close the modal)
-            watchFootageJob(videoId, start.jobId);     // background: refresh data + redraw when it finishes
-            openFootageProgress(videoId, start.jobId); // live modal (closable/reopenable)
-        } catch (e) {
-            console.warn('footage scan failed to start', e);
-            if (btn) btn.textContent = '🔍 Check footage coverage';
-            alert('Could not start footage scan: ' + (e.message || 'error'));
-        }
-    }
-
-    // Background completion watcher — independent of the modal, so the result lands
-    // (and the gap list redraws) even if you never reopen the progress modal.
-    async function watchFootageJob(videoId, jobId) {
-        while (footageScans[videoId] === jobId) {
-            await new Promise(r => setTimeout(r, 2500));
-            let pr;
-            try { pr = await fetch('/api/footage-coverage/progress?job=' + encodeURIComponent(jobId)).then(r => r.ok ? r.json() : null); } catch (_) { continue; }
-            if (!pr) { delete footageScans[videoId]; renderTab(); break; }   // job gone (server restart) — stop tracking
-            if (pr.done) {
-                delete footageScans[videoId];
-                await VideoService.sync(true).catch(() => {});
-                renderTab();   // shows the saved gaps + reverts the button label
-                break;
-            }
-        }
-    }
-
-    // The live, reopenable progress modal. Polls the job and renders the per-clip
-    // checklist; closing it stops only this view (the scan & watcher keep running).
-    // Completion/refresh is owned by watchFootageJob.
-    function openFootageProgress(videoId, jobId) {
+    // The live, reopenable progress modal. Follows footageScans[videoId] (so it
+    // rides through an auto-resume seamlessly); closing it stops only this view.
+    function openFootageProgress(videoId) {
         const host = container.querySelector('.workshop-panel') || container;
         if (host.querySelector(`[data-fcov-overlay="${videoId}"]`)) return;   // don't stack duplicate modals
         const overlay = document.createElement('div');
@@ -3411,20 +3429,32 @@ const WorkshopUI = (() => {
             if (list) list.innerHTML = clips.map(c => `<div class="wsp-footage-clip is-${c.status}"><span class="wsp-footage-clip-ic">${ICON[c.status] || '○'}</span><span class="wsp-footage-clip-name">${escHtml(c.name)}</span><span class="wsp-footage-clip-status">${STATUS_LABEL[c.status] || c.status}</span></div>`).join('');
         };
 
+        const setPhase = (t) => { const el = overlay.querySelector('[data-fcov-phase]'); if (el) el.textContent = t; };
+        const setCount = (t, color) => { const el = overlay.querySelector('[data-fcov-count]'); if (el) { el.textContent = t; if (color) el.style.color = color; } };
         (async () => {
             while (overlay.isConnected) {
+                const jobId = footageScans[videoId];   // follow the CURRENT job (rides through auto-resume)
+                if (!jobId) {   // scan ended — finished, or stopped after the resume cap
+                    await VideoService.sync(true).catch(() => {});
+                    const v = VideoService.getById(videoId);
+                    if (footageReportDone(v)) { setPhase('done ✓'); setCount(`Done — ${v.footageReport.gapsCount || 0} possible gap${v.footageReport.gapsCount === 1 ? '' : 's'}, ${v.footageReport.coveredCount || 0} covered.`); }
+                    else { setPhase('stopped'); setCount('Scan stopped before finishing — click “Re-check footage coverage” to resume (already-analyzed clips are skipped).'); }
+                    break;
+                }
                 let pr;
                 try { pr = await fetch('/api/footage-coverage/progress?job=' + encodeURIComponent(jobId)).then(r => r.ok ? r.json() : null); } catch (_) { await new Promise(r => setTimeout(r, 1200)); continue; }
-                if (!pr) {   // job no longer on the server (finished + pruned, or a restart)
-                    const count = overlay.querySelector('[data-fcov-count]'); if (count) count.textContent = 'This scan is no longer active — its results are saved on the video.';
-                    const phaseEl = overlay.querySelector('[data-fcov-phase]'); if (phaseEl) phaseEl.textContent = 'finished';
-                    break;
+                if (!pr) {   // this job vanished (server restart/deploy) but the scan isn't done → resume
+                    setPhase('reconnecting — resuming…');
+                    setCount('The server restarted mid-scan; resuming from where it left off (cached clips are skipped)…');
+                    footageResume(videoId);   // idempotent; updates footageScans, which this loop then follows
+                    await new Promise(r => setTimeout(r, 1500));
+                    continue;
                 }
                 renderProg(pr);
                 if (pr.done) {
-                    const phaseEl = overlay.querySelector('[data-fcov-phase]'); if (phaseEl) phaseEl.textContent = pr.error ? 'error' : 'done ✓';
-                    if (pr.error) { const count = overlay.querySelector('[data-fcov-count]'); if (count) { count.textContent = '⚠ ' + pr.error; count.style.color = '#e74c3c'; } }
-                    break;   // watchFootageJob refreshes the data + button
+                    setPhase(pr.error ? 'error' : 'done ✓');
+                    if (pr.error) setCount('⚠ ' + pr.error, '#e74c3c');
+                    break;   // watcher refreshes the data + button
                 }
                 await new Promise(r => setTimeout(r, 1200));
             }
