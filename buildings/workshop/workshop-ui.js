@@ -1157,6 +1157,7 @@ const WorkshopUI = (() => {
             if (ev && panel.querySelector(`.wsp-stage-video[data-id="${expandedStageVideoId}"] #workshop-name`)) {
                 bindDetailFields(ev);
                 initMediaSection(ev, 'vo');
+                initMediaSection(ev, 'music');   // optional music link/file — not tied to a stage
                 initEditSlots(ev);   // Editing — three final-video upload slots (was detail-page only)
                 if (selectedStageId && PS().isResultStage(selectedStageId)) initStageResultUploader(ev, selectedStageId, panel);
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
@@ -2262,6 +2263,13 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
+            <div class="wsp-subsection" style="--accent:#16a085">
+                ${subTitle('voiceover', 'Music', '— optional. Paste a song link, or upload an audio/video file (stored in the project\'s music/ folder). Not tied to any stage or task.')}
+                <div id="wsp-music-section">
+                    ${v.musicPath ? '' /* filled by initMediaSection */ : '<div class="wsp-hint">Loading…</div>'}
+                </div>
+            </div>
+
             <div class="wsp-subsection ${sectionStatusClass(v, 'editing')}" data-vfield="editing" style="--accent:#27ae60">
                 ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
                 ${projectGate(v, 'Select a Channel Project first — the final videos live in that project\'s Dropbox folder.')}
@@ -2444,6 +2452,7 @@ const WorkshopUI = (() => {
         // Voiceover section (async — talks to Dropbox; hook instances are
         // wired inside bindDetailFields)
         initMediaSection(v, 'vo');
+        initMediaSection(v, 'music');   // optional music link/file — not tied to a stage
         initEditSlots(v);   // Editing — three final-video upload slots
 
         // 3D egg preview
@@ -4128,7 +4137,10 @@ const WorkshopUI = (() => {
     }
 
     const MEDIA_SECTIONS = {
-        vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*,video/*', icon: '🎙️', iconName: 'voiceover', noun: 'voiceover', color: '#8e44ad' }
+        vo: { elId: 'wsp-vo-section', folder: 'vo', pathField: 'voPath', nameField: 'voName', accept: 'audio/*,video/*', icon: '🎙️', iconName: 'voiceover', noun: 'voiceover', color: '#8e44ad' },
+        // Music: optional, not tied to any stage. A pasted song LINK or an uploaded
+        // audio/video file — purely a place to stash the track for a video.
+        music: { elId: 'wsp-music-section', folder: 'music', pathField: 'musicPath', nameField: 'musicName', accept: 'audio/*,video/*', icon: '🎵', iconName: 'voiceover', noun: 'music', color: '#16a085', allowUrl: true, noStage: true }
     };
     const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'webm', 'avi', 'mkv'];
 
@@ -4141,17 +4153,20 @@ const WorkshopUI = (() => {
         // --- A file is linked: play/open it or unlink it ---
         if (linkedPath) {
             const name = v[cfg.nameField] || linkedPath.split('/').pop();
-            // VO can be audio OR video — inline-play audio, open video in a tab
-            const isAudio = !VIDEO_EXTS.includes((name.split('.').pop() || '').toLowerCase());
+            // A linked item can be an external URL (music links), or a Dropbox file
+            // that's audio (inline-play) or video (open in a tab).
+            const isUrl = /^https?:\/\//i.test(linkedPath);
+            const isAudio = !isUrl && !VIDEO_EXTS.includes((name.split('.').pop() || '').toLowerCase());
             el.innerHTML = `
                 <div class="wsp-row" style="border-left: 3px solid ${cfg.color}">
-                    <span class="wsp-row-name">${icon(cfg.iconName || 'inventory', 'wsp-row-ic')} ${escHtml(name)} <span class="wsp-hint">linked ✓</span></span>
-                    <button class="wsp-mini-btn" id="${cfg.elId}-play">${isAudio ? '▶ Play' : '▶ Open'}</button>
+                    <span class="wsp-row-name">${icon(cfg.iconName || 'inventory', 'wsp-row-ic')} ${escHtml(name)} <span class="wsp-hint">${isUrl ? 'linked song 🔗' : 'linked ✓'}</span></span>
+                    <button class="wsp-mini-btn" id="${cfg.elId}-play">${isUrl ? '🔗 Open link' : (isAudio ? '▶ Play' : '▶ Open')}</button>
                     <button class="wsp-mini-btn danger" id="${cfg.elId}-unlink">✕ Unlink</button>
                     ${isAudio ? `<audio id="${cfg.elId}-audio" style="display:none"></audio>` : ''}
                 </div>`;
             const playBtn = document.getElementById(`${cfg.elId}-play`);
             playBtn.addEventListener('click', async () => {
+                if (isUrl) { window.open(linkedPath, '_blank', 'noopener'); return; }
                 if (!isAudio) { openFilePreview(linkedPath, name); return; }
                 playBtn.disabled = true;
                 try {
@@ -4175,36 +4190,43 @@ const WorkshopUI = (() => {
                 }
             });
             document.getElementById(`${cfg.elId}-unlink`).addEventListener('click', async () => {
-                if (!confirm(`Unlink this ${cfg.noun}? (The file stays in Dropbox.)`)) return;
-                await VideoService.update(v.id, { [cfg.pathField]: '', [cfg.nameField]: '', status: normalizedStatus(v) });
+                if (!confirm(`Unlink this ${cfg.noun}? (Any uploaded file stays in Dropbox.)`)) return;
+                await VideoService.update(v.id, cfg.noStage ? { [cfg.pathField]: '', [cfg.nameField]: '' } : { [cfg.pathField]: '', [cfg.nameField]: '', status: normalizedStatus(v) });
                 rerenderEditor(v.id);
             });
             return;
         }
 
-        // --- No project selected: deterministic bottleneck, nothing to do ---
-        if (!v.project) return;
+        // --- No project + no URL option: deterministic bottleneck, nothing to do.
+        //     (Music allows a URL even with no project, so it doesn't bail here.) ---
+        if (!v.project && !cfg.allowUrl) return;
 
-        // --- No file yet: offer existing files from <project>/<folder>/ + upload ---
-        const root = await dropboxRootPath();
-        const folder = `${root}/${v.project}/${cfg.folder}`;
+        // --- No file yet: offer a URL link (if allowed) + existing files / upload ---
+        const root = v.project ? await dropboxRootPath() : '';
+        const folder = v.project ? `${root}/${v.project}/${cfg.folder}` : '';
         let files = [];
-        try {
-            const r = await fetch('/api/dropbox/list_folder', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: folder })
-            });
-            const data = await r.json();
-            if (Array.isArray(data.entries)) {
-                files = data.entries.filter(e => e['.tag'] === 'file');
-            }
-        } catch (e) { /* folder doesn't exist yet — created on first upload */ }
+        if (v.project) {
+            try {
+                const r = await fetch('/api/dropbox/list_folder', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: folder })
+                });
+                const data = await r.json();
+                if (Array.isArray(data.entries)) {
+                    files = data.entries.filter(e => e['.tag'] === 'file');
+                }
+            } catch (e) { /* folder doesn't exist yet — created on first upload */ }
+        }
 
         // The drop-down editor has no selectedVideo — what matters is whether
         // OUR element is still mounted (a re-render/navigation replaces it)
         if (!el.isConnected) return;
 
-        el.innerHTML = `
+        const urlRow = cfg.allowUrl ? `<div class="wsp-add-row">
+                <input type="url" id="${cfg.elId}-url" placeholder="Paste a song link (YouTube, Spotify, Drive, direct file URL…)" style="font-size:11.5px;flex:1 1 220px;">
+                <button class="wsp-mini-btn done" id="${cfg.elId}-urlsave">🔗 Link</button>
+            </div>` : '';
+        const fileRows = v.project ? `
             ${files.length ? `<div class="wsp-add-row">
                 <select id="${cfg.elId}-pick">
                     <option value="">Link an existing file from ${escHtml(v.project)}/${cfg.folder}…</option>
@@ -4215,16 +4237,31 @@ const WorkshopUI = (() => {
                 <input type="file" id="${cfg.elId}-file" accept="${cfg.accept}" multiple style="font-size:11.5px;flex:1 1 180px;">
                 <button class="wsp-mini-btn done" id="${cfg.elId}-upload">⬆ Upload & link</button>
             </div>
-            <div class="wsp-hint">Uploads go straight to Dropbox: ${escHtml(folder)}/ (folder is created automatically).</div>`;
+            <div class="wsp-hint">Uploads go straight to Dropbox: ${escHtml(folder)}/ (folder is created automatically).</div>`
+            : (cfg.allowUrl ? `<div class="wsp-hint">Link a Channel Project to also upload a file — or just paste a link above.</div>` : '');
+        el.innerHTML = urlRow + fileRows;
+
+        const urlSave = document.getElementById(`${cfg.elId}-urlsave`);
+        if (urlSave) urlSave.addEventListener('click', async () => {
+            const inp = document.getElementById(`${cfg.elId}-url`);
+            const u = (inp.value || '').trim();
+            if (!u) { alert('Paste a link first.'); return; }
+            if (!/^https?:\/\//i.test(u)) { alert('That doesn’t look like a link — it should start with http:// or https://'); return; }
+            let nm = 'Linked song';
+            try { const p = new URL(u); nm = decodeURIComponent(p.pathname.split('/').pop() || '') || p.hostname; } catch (e) {}
+            await VideoService.update(v.id, { [cfg.pathField]: u, [cfg.nameField]: nm });
+            rerenderEditor(v.id);
+        });
 
         const pick = document.getElementById(`${cfg.elId}-pick`);
         if (pick) pick.addEventListener('change', async () => {
             if (!pick.value) return;
             const name = pick.options[pick.selectedIndex].textContent;
-            await VideoService.update(v.id, { [cfg.pathField]: pick.value, [cfg.nameField]: name, status: normalizedStatus(v) });
+            await VideoService.update(v.id, cfg.noStage ? { [cfg.pathField]: pick.value, [cfg.nameField]: name } : { [cfg.pathField]: pick.value, [cfg.nameField]: name, status: normalizedStatus(v) });
             rerenderEditor(v.id);
         });
-        document.getElementById(`${cfg.elId}-upload`).addEventListener('click', async () => {
+        const upBtn = document.getElementById(`${cfg.elId}-upload`);
+        if (upBtn) upBtn.addEventListener('click', async () => {
             const input = document.getElementById(`${cfg.elId}-file`);
             const files = input && input.files ? [...input.files] : [];
             if (!files.length) { alert(`Choose one or more files first.`); return; }
