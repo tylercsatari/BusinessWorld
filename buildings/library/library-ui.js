@@ -554,6 +554,13 @@ const LibraryUI = (() => {
                 if (thinkEl.textContent.length > 16000) thinkEl.textContent = thinkEl.textContent.slice(-16000);
                 thinkEl.scrollTop = thinkEl.scrollHeight;
             },
+            setOutput(text) {   // polling returns the full accumulated output each time
+                if (!text) return;
+                thinkWrap.style.display = '';
+                const atBottom = thinkEl.scrollHeight - thinkEl.scrollTop - thinkEl.clientHeight < 40;
+                thinkEl.textContent = text;
+                if (atBottom) thinkEl.scrollTop = thinkEl.scrollHeight;
+            },
             card(idea) {
                 const c = document.createElement('div');
                 c.className = 'library-aiideas-modal-card';
@@ -600,49 +607,43 @@ const LibraryUI = (() => {
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
         try {
-            // Stream live progress (SSE) so the user sees exactly what's happening
-            // each step instead of a silent "Generating…".
+            // Start a background job, then POLL its progress (Render buffers SSE,
+            // so polling is what reliably shows the live flow).
             const res = await fetch('/api/ai-video-ideas/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun, stream: true })
+                body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun })
             });
-            if (!res.ok || !res.body) {
-                const data = await res.json().catch(() => ({}));
-                throw new Error(data.error || `Generate failed: ${res.status}`);
-            }
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let buf = '';
-            let finalEvent = null;
+            const start = await res.json().catch(() => ({}));
+            if (!res.ok || !start.jobId) throw new Error(start.error || `Generate failed: ${res.status}`);
+            const jobId = start.jobId;
+            let seenEvents = 0, seenCards = 0;
             while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                buf += decoder.decode(value, { stream: true });
-                let nl;
-                while ((nl = buf.indexOf('\n\n')) >= 0) {
-                    const block = buf.slice(0, nl); buf = buf.slice(nl + 2);
-                    const dline = block.split('\n').find(l => l.startsWith('data:'));
-                    if (!dline) continue;
-                    let ev; try { ev = JSON.parse(dline.slice(5).trim()); } catch (_) { continue; }
-                    if (ev.error) throw new Error(ev.error);
-                    if (ev.stage === 'token' && ev.delta) { prog.token(ev.delta); continue; }   // live model output — not a step
-                    if (ev.stage === 'created' && ev.idea) prog.card(ev.idea);                  // an idea materialised
-                    if (ev.msg) { aiVideoIdeasLog.push(ev.msg); aiVideoIdeasStatus = ev.msg; prog.step(ev.msg); renderAiVideoIdeas(); }
-                    if (ev.done) finalEvent = ev;
+                await new Promise(r => setTimeout(r, 400));
+                let pr;
+                try { pr = await fetch('/api/ai-video-ideas/progress?job=' + encodeURIComponent(jobId)).then(r => r.json()); } catch (_) { continue; }
+                if (!pr) continue;
+                (pr.events || []).slice(seenEvents).forEach(m => { aiVideoIdeasLog.push(m); aiVideoIdeasStatus = m; prog.step(m); });
+                seenEvents = (pr.events || []).length;
+                prog.setOutput(pr.output);                                  // live model output
+                (pr.cards || []).slice(seenCards).forEach(idea => prog.card(idea));   // ideas as they're created
+                seenCards = (pr.cards || []).length;
+                renderAiVideoIdeas();
+                if (pr.done) {
+                    if (pr.error) throw new Error(pr.error);
+                    const createdArr = Array.isArray(pr.created) ? pr.created : [];
+                    if (createdArr.length) {
+                        const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
+                        aiVideoIdeas = [...createdArr.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
+                        aiVideoIdeasLoaded = true;
+                    }
+                    const created = createdArr.length;
+                    const rejected = (pr.rejected || []).length;
+                    aiVideoIdeasStatus = `Created ${created} candidate${created === 1 ? '' : 's'}; pruned ${rejected} near-duplicate${rejected === 1 ? '' : 's'}.`;
+                    prog.done(aiVideoIdeasStatus, true);
+                    break;
                 }
             }
-            const data = finalEvent || {};
-            const createdArr = Array.isArray(data.created) ? data.created : [];
-            if (createdArr.length) {
-                const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
-                aiVideoIdeas = [...createdArr.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
-                aiVideoIdeasLoaded = true;
-            }
-            const created = createdArr.length;
-            const rejected = (data.rejected || []).length;
-            aiVideoIdeasStatus = `Created ${created} candidate${created === 1 ? '' : 's'}; pruned ${rejected} near-duplicate${rejected === 1 ? '' : 's'}.`;
-            prog.done(aiVideoIdeasStatus, true);
         } catch (e) {
             aiVideoIdeasStatus = e.message || 'Generation failed.';
             prog.done(aiVideoIdeasStatus, false);

@@ -524,6 +524,9 @@ const AI_VIDEO_IDEA_MAX_RUNS = 20;
 const AI_VIDEO_IDEA_MAX_TOTAL = 60;
 const AI_VIDEO_IDEA_DEDUPE_LIMIT = parseInt(process.env.AI_VIDEO_IDEA_DEDUPE_LIMIT || '2500', 10);
 const AI_VIDEO_IDEA_SIMILARITY_THRESHOLD = Number(process.env.AI_VIDEO_IDEA_SIMILARITY_THRESHOLD || 0.88);
+// In-memory progress for AI-idea generation jobs (the client polls these; SSE is
+// buffered by Render's proxy so streaming a long response shows nothing).
+const aiVideoJobs = {};
 
 const AI_VIDEO_IDEA_FORMULA = `
 Shared representation:
@@ -1881,129 +1884,87 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 return;
             }
 
-            // Live progress: when the client asks for stream, send SSE events so it
-            // can show exactly what's happening (otherwise a plain JSON response).
-            const wantStream = body.stream === true;
-            let emit = () => {};
-            if (wantStream) {
-                res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
-                if (res.flushHeaders) res.flushHeaders();
-                // 2 KB padding comment forces proxies (e.g. Render's) to start
-                // flushing immediately instead of buffering the whole response.
-                res.write(':' + ' '.repeat(2048) + '\n\n');
-                emit = (ev) => { try { res.write('data: ' + JSON.stringify(ev) + '\n\n'); } catch (e) {} };
-            }
-            emit({ stage: 'context', msg: 'Reading Business World — your videos, ideas & trends…' });
-            const context = await aiVideoBuildGenerationContext();
-            emit({ stage: 'reference', msg: 'Loading the reference set for duplicate detection…' });
-            const referenceDocs = await aiVideoBuildReferenceDocs();
-            emit({ stage: 'reference', msg: `Comparing new ideas against ${referenceDocs.length} existing videos/ideas.` });
-            const created = [];
-            const rejected = [];
-            const runReports = [];
+            // Run in the BACKGROUND and report progress via polling. Render's proxy
+            // buffers SSE, so a long streamed response shows nothing until it ends;
+            // polling a job's accumulating state (steps, live model output, idea
+            // cards) is reliable and lets the user watch the whole flow.
+            const jobId = require('crypto').randomUUID();
+            const job = { events: [], output: '', cards: [], created: [], rejected: [], done: false, error: null, startedAt: Date.now() };
+            aiVideoJobs[jobId] = job;
+            for (const k of Object.keys(aiVideoJobs)) { if (Date.now() - aiVideoJobs[k].startedAt > 15 * 60 * 1000) delete aiVideoJobs[k]; }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jobId }));
 
-            for (let runIndex = 0; runIndex < runs; runIndex++) {
-                emit({ stage: 'run', msg: `Run ${runIndex + 1}/${runs}: Kimi K2.6 is reasoning against the viral formula & writing ${ideasPerRun} idea${ideasPerRun === 1 ? '' : 's'}…` });
-                const messages = aiVideoPromptMessages(ideasPerRun, context, runIndex, runs);
-                // Stream the model's live output (reasoning + JSON) to the client.
-                const response = await aiVideoKimiJson(messages, 18000, wantStream ? (delta) => emit({ stage: 'token', delta }) : undefined);
-                const normalized = (response.ideas || [])
-                    .slice(0, ideasPerRun)
-                    .map((idea, idx) => aiVideoNormalizeIdea(idea, runIndex, idx));
-                emit({ stage: 'run', msg: `Run ${runIndex + 1}: got ${normalized.length} idea${normalized.length === 1 ? '' : 's'} — embedding & checking for duplicates…` });
-                const embeddings = await aiVideoEmbedTexts(normalized.map(aiVideoIdeaText));
-                let runCreated = 0;
-                let runRejected = 0;
-
-                for (let i = 0; i < normalized.length; i++) {
-                    const idea = normalized[i];
-                    const embedding = embeddings[i];
-                    const ideaText = aiVideoIdeaText(idea);
-                    if (!ideaText.trim() || !idea.title.trim()) {
-                        rejected.push({ title: idea.title || '(untitled)', reason: 'empty_idea', run: runIndex + 1 });
-                        runRejected++;
-                        emit({ stage: 'idea', ok: false, msg: `✗ ${idea.title || '(untitled)'} — empty, skipped` });
-                        continue;
-                    }
-                    const nearest = aiVideoNearest(embedding, referenceDocs);
-                    if (nearest.score >= AI_VIDEO_IDEA_SIMILARITY_THRESHOLD) {
-                        emit({ stage: 'idea', ok: false, msg: `✗ ${idea.title} — too similar to "${nearest.title}" (${Math.round(nearest.score * 100)}%)` });
-                        rejected.push({
-                            title: idea.title,
-                            reason: 'semantic_duplicate',
-                            run: runIndex + 1,
-                            similarity: {
-                                score: Number(nearest.score.toFixed(4)),
-                                matchId: nearest.id,
-                                matchType: nearest.type,
-                                matchTitle: nearest.title
+            (async () => {
+                const emit = (ev) => {
+                    if (!ev) return;
+                    if (ev.stage === 'token' && ev.delta) { job.output += ev.delta; if (job.output.length > 90000) job.output = job.output.slice(-90000); return; }
+                    if (ev.stage === 'created' && ev.idea) job.cards.push(ev.idea);
+                    if (ev.msg) job.events.push(ev.msg);
+                    if (ev.done) { job.done = true; if (ev.created) job.created = ev.created; if (ev.rejected) job.rejected = ev.rejected; }
+                };
+                try {
+                    emit({ msg: 'Reading Business World — your videos, ideas & trends…' });
+                    const context = await aiVideoBuildGenerationContext();
+                    emit({ msg: 'Loading the reference set for duplicate detection…' });
+                    const referenceDocs = await aiVideoBuildReferenceDocs();
+                    emit({ msg: `Comparing new ideas against ${referenceDocs.length} existing videos/ideas.` });
+                    const created = [];
+                    const rejected = [];
+                    const runReports = [];
+                    for (let runIndex = 0; runIndex < runs; runIndex++) {
+                        emit({ msg: `Run ${runIndex + 1}/${runs}: Kimi K2.6 is reasoning against the viral formula & writing ${ideasPerRun} idea${ideasPerRun === 1 ? '' : 's'}…` });
+                        const messages = aiVideoPromptMessages(ideasPerRun, context, runIndex, runs);
+                        const response = await aiVideoKimiJson(messages, 18000, (delta) => emit({ stage: 'token', delta }));
+                        const normalized = (response.ideas || []).slice(0, ideasPerRun).map((idea, idx) => aiVideoNormalizeIdea(idea, runIndex, idx));
+                        emit({ msg: `Run ${runIndex + 1}: got ${normalized.length} idea${normalized.length === 1 ? '' : 's'} — embedding & checking for duplicates…` });
+                        const embeddings = await aiVideoEmbedTexts(normalized.map(aiVideoIdeaText));
+                        let runCreated = 0, runRejected = 0;
+                        for (let i = 0; i < normalized.length; i++) {
+                            const idea = normalized[i];
+                            const embedding = embeddings[i];
+                            const ideaText = aiVideoIdeaText(idea);
+                            if (!ideaText.trim() || !idea.title.trim()) { rejected.push({ title: idea.title || '(untitled)', reason: 'empty_idea', run: runIndex + 1 }); runRejected++; emit({ msg: `✗ ${idea.title || '(untitled)'} — empty, skipped` }); continue; }
+                            const nearest = aiVideoNearest(embedding, referenceDocs);
+                            if (nearest.score >= AI_VIDEO_IDEA_SIMILARITY_THRESHOLD) {
+                                emit({ msg: `✗ ${idea.title} — too similar to "${nearest.title}" (${Math.round(nearest.score * 100)}%)` });
+                                rejected.push({ title: idea.title, reason: 'semantic_duplicate', run: runIndex + 1, similarity: { score: Number(nearest.score.toFixed(4)), matchId: nearest.id, matchType: nearest.type, matchTitle: nearest.title } });
+                                runRejected++; continue;
                             }
-                        });
-                        runRejected++;
-                        continue;
+                            const record = await dataStore.create('aiideas', {
+                                ...idea, status: 'candidate', source: 'ai-video-ideas',
+                                model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6',
+                                generatorVersion: 'ai-video-ideas-2026-06-18', formulaName: 'P/V/C/O/A/G viral mechanism graph', embedding,
+                                similarity: { maxScore: Number(nearest.score.toFixed(4)), matchId: nearest.id, matchType: nearest.type, matchTitle: nearest.title, threshold: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD },
+                                run: { runIndex: runIndex + 1, totalRuns: runs, ideasPerRun }, lastEdited: new Date().toISOString()
+                            });
+                            await aiVideoUpsertVector('aiideas', record);
+                            referenceDocs.push({ id: record.id, type: 'aiidea', title: record.title || record.name || '', text: aiVideoIdeaText(record), embedding });
+                            const pub = aiVideoPublicRecord(record);
+                            created.push(pub); runCreated++;
+                            emit({ stage: 'created', ok: true, idea: pub, msg: `✓ ${idea.title}` });
+                        }
+                        runReports.push({ run: runIndex + 1, created: runCreated, rejected: runRejected });
+                        emit({ msg: `Run ${runIndex + 1} done — ${runCreated} kept, ${runRejected} pruned.` });
                     }
-                    const record = await dataStore.create('aiideas', {
-                        ...idea,
-                        status: 'candidate',
-                        source: 'ai-video-ideas',
-                        model: process.env.KIMI_CHAT_MODEL || 'accounts/fireworks/models/kimi-k2p6',
-                        generatorVersion: 'ai-video-ideas-2026-06-18',
-                        formulaName: 'P/V/C/O/A/G viral mechanism graph',
-                        embedding,
-                        similarity: {
-                            maxScore: Number(nearest.score.toFixed(4)),
-                            matchId: nearest.id,
-                            matchType: nearest.type,
-                            matchTitle: nearest.title,
-                            threshold: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD
-                        },
-                        run: {
-                            runIndex: runIndex + 1,
-                            totalRuns: runs,
-                            ideasPerRun
-                        },
-                        lastEdited: new Date().toISOString()
-                    });
-                    await aiVideoUpsertVector('aiideas', record);
-                    referenceDocs.push({
-                        id: record.id,
-                        type: 'aiidea',
-                        title: record.title || record.name || '',
-                        text: aiVideoIdeaText(record),
-                        embedding
-                    });
-                    const pub = aiVideoPublicRecord(record);
-                    created.push(pub);
-                    runCreated++;
-                    emit({ stage: 'created', ok: true, msg: `✓ ${idea.title}`, idea: pub });
+                    emit({ done: true, msg: `Done — created ${created.length}, pruned ${rejected.length} near-duplicate${rejected.length === 1 ? '' : 's'}.`, created, rejected });
+                } catch (e) {
+                    console.error('ai-video-ideas generate error:', e);
+                    job.error = e.message; job.done = true; job.events.push('⚠️ ' + e.message);
                 }
-                runReports.push({ run: runIndex + 1, created: runCreated, rejected: runRejected });
-                emit({ stage: 'run', msg: `Run ${runIndex + 1} done — ${runCreated} kept, ${runRejected} pruned.` });
-            }
-
-            const payload = {
-                created,
-                rejected,
-                runs,
-                ideasPerRun,
-                runReports,
-                recommendedIdeasPerRun: AI_VIDEO_IDEA_DEFAULT_BATCH,
-                maxIdeasPerRun: AI_VIDEO_IDEA_MAX_BATCH,
-                similarityThreshold: AI_VIDEO_IDEA_SIMILARITY_THRESHOLD,
-                batchRationale: 'Default 3 ideas per run. Small batches give Kimi more room to validate each candidate against the full formula; semantic dedupe then prunes near-duplicates deterministically.'
-            };
-            if (wantStream) {
-                emit({ done: true, msg: `Done — created ${created.length}, pruned ${rejected.length} near-duplicate${rejected.length === 1 ? '' : 's'}.`, ...payload });
-                res.end();
-            } else {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(payload));
-            }
+            })();
         } catch (e) {
-            console.error('ai-video-ideas generate error:', e);
-            if (res.headersSent) { try { res.write('data: ' + JSON.stringify({ done: true, error: e.message }) + '\n\n'); } catch (_) {} res.end(); }
-            else { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+            console.error('ai-video-ideas generate setup error:', e);
+            if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
         }
+        return;
+    }
+
+    if (pathname === '/api/ai-video-ideas/progress' && req.method === 'GET') {
+        const job = aiVideoJobs[url.searchParams.get('job')];
+        if (!job) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'job not found' })); return; }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ events: job.events, output: job.output, cards: job.cards, created: job.created, rejected: job.rejected, done: job.done, error: job.error, elapsed: Date.now() - job.startedAt }));
         return;
     }
 
