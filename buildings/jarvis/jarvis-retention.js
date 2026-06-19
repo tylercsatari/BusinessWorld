@@ -583,6 +583,7 @@ const JarvisRetention = (function () {
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
         const nr = e.target.closest('[data-novres]'); if (nr) { st.novRes = nr.getAttribute('data-novres'); render(); return; }
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
+        if (e.target.closest('[data-reload]')) { err = null; DATA = null; mount(root); return; }
         if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
         const hk = e.target.closest('[data-hook]'); if (hk) { st.novSel = +hk.getAttribute('data-hook'); render(); return; }
@@ -603,11 +604,20 @@ const JarvisRetention = (function () {
         if (!root.__rb) { root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange); root.__rb = true; }
         if (!DATA && !err) {
             root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading…</div>`;
-            try {
-                DATA = await fetch('./buildings/jarvis/retention-study/retention_table.json').then(r => r.json());
-                S = await fetch('./buildings/jarvis/retention-study/retention_study.json').then(r => r.json()).catch(() => null);
-                N = await fetch('./buildings/jarvis/retention-study/principles/novelty.json').then(r => r.ok ? r.json() : null).catch(() => null);
-            } catch (e) { err = e; root.innerHTML = `<div style="padding:24px;color:${C.red}">Failed to load: ${esc(e.message)}</div>`; return; }
+            const base = './buildings/jarvis/retention-study/';
+            // robust JSON load: reject HTML (a mid-deploy holding page starts with '<') so we don't try to parse it
+            const loadJSON = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status); const t = await r.text(); if (/^\s*</.test(t)) throw new Error('got HTML (deploy in progress)'); return JSON.parse(t); };
+            for (let tries = 1; !DATA; tries++) {
+                try {
+                    DATA = await loadJSON(base + 'retention_table.json');
+                    S = await loadJSON(base + 'retention_study.json').catch(() => null);
+                    N = await loadJSON(base + 'principles/novelty.json').catch(() => null);
+                } catch (e) {
+                    if (tries >= 3) { root.innerHTML = `<div style="padding:24px;color:${C.dim}">Couldn't load data — the site may be mid-deploy. <button data-reload style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px">Retry</button></div>`; return; }
+                    root.innerHTML = `<div style="padding:40px;text-align:center;color:${C.dim}">Loading… <span style="color:${C.mute};font-size:11px">(retry ${tries})</span></div>`;
+                    await new Promise(res => setTimeout(res, 1500));
+                }
+            }
         }
         render();
     }
