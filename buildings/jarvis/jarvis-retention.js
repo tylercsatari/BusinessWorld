@@ -431,10 +431,10 @@ const JarvisRetention = (function () {
         const mk = ([mod, label, sub]) => mapCard(label, sub, latentMap(H.proj[mod], { color: i => colorHook(mod, i), sel: st.novSel, tip: i => novTip(i) }), legend);
         return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${mods.map(mk).join('')}${hookExtra || `<div style="font-size:11px;color:${C.mute};align-self:center;padding:10px">Each point is a <b>whole hook</b>. Switch to <b>per-second</b> (top right) to see the same geometry at granular resolution.</div>`}</div>`;
     }
-    // frame with the OWLv2 detection boxes drawn on it (the "pull up the image of what's in each thing")
-    function frameBoxes(vid, second, dets, w) {
-        const boxes = (dets || []).map((d, bi) => { const c = NPAL[bi % NPAL.length]; return `<div style="position:absolute;left:${(d.box[0] * 100).toFixed(1)}%;top:${(d.box[1] * 100).toFixed(1)}%;width:${(d.box[2] * 100).toFixed(1)}%;height:${(d.box[3] * 100).toFixed(1)}%;border:1.5px solid ${c};box-shadow:0 0 0 1px #000a;pointer-events:none"><span style="position:absolute;top:-1px;left:-1px;background:${c};color:#000;font-size:8px;font-weight:800;padding:0 2px;white-space:nowrap;border-radius:0 0 2px 0">${esc(d.label)} ${d.score}</span></div>`; }).join('');
-        return `<div style="position:relative;width:${w}px;flex-shrink:0"><img src="./video_data/${esc(vid)}/frames/frame_${String(second + 1).padStart(4, '0')}.jpg" loading="lazy" onerror="this.parentElement.style.opacity=0.15" style="width:${w}px;height:${Math.round(w * 16 / 9)}px;object-fit:fill;border-radius:5px;border:1px solid ${C.border2};display:block"/>${boxes}<div style="text-align:center;font-size:9px;color:${C.mute};margin-top:1px">sec ${second} · ${(dets || []).length} obj</div></div>`;
+    // frame with the OWLv2 detection boxes drawn on it (toggleable overlay so you can compare raw vs detected)
+    function frameBoxes(vid, second, dets, w, showBoxes) {
+        const boxes = showBoxes ? (dets || []).map((d, bi) => { const c = NPAL[bi % NPAL.length]; return `<div style="position:absolute;left:${(d.box[0] * 100).toFixed(1)}%;top:${(d.box[1] * 100).toFixed(1)}%;width:${(d.box[2] * 100).toFixed(1)}%;height:${(d.box[3] * 100).toFixed(1)}%;border:2px solid ${c};box-shadow:0 0 0 1px #000b;pointer-events:none"><span style="position:absolute;top:-1px;left:-1px;background:${c};color:#000;font-size:9px;font-weight:800;padding:0 3px;white-space:nowrap;border-radius:0 0 3px 0">${esc(d.label)} ${d.score}</span></div>`; }).join('') : '';
+        return `<div style="position:relative;width:${w}px;flex-shrink:0"><img src="./video_data/${esc(vid)}/frames/frame_${String(second + 1).padStart(4, '0')}.jpg" loading="lazy" onerror="this.parentElement.style.opacity=0.15" style="width:${w}px;height:${Math.round(w * 16 / 9)}px;object-fit:fill;border-radius:6px;border:1px solid ${C.border2};display:block"/>${boxes}<div style="text-align:center;font-size:10px;color:${C.mute};margin-top:2px">sec ${second} · <b style="color:${C.dim}">${(dets || []).length}</b> obj</div></div>`;
     }
     function renderHookDetail(i) {
         const v = N.videos[i], H = N.hook, g = H.global, nz = H.niche, ch = H.coherent;
@@ -443,9 +443,10 @@ const JarvisRetention = (function () {
         const coord = m => H.proj[m] && H.proj[m][i] ? `(${H.proj[m][i][0].toFixed(2)}, ${H.proj[m][i][1].toFixed(2)})` : '—';
         const col2 = (title, body) => `<div style="flex:1;min-width:208px"><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">${title}</div>${body}</div>`;
         const clusLabel = c => { const cl = (N.combo.clusters || []).find(x => x.id === c); return cl ? cl.label : 'c' + c; };
-        // OBJECTS (OWLv2) — quantitative, with boxes drawn per second
-        const persec = v.objects_persec || [];
-        const objFrames = persec.length ? `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">${persec.map(ps => frameBoxes(v.id, ps.t, ps.dets, 86)).join('')}</div>` : `<div style="font-size:11px;color:${C.mute}">no detections stored</div>`;
+        // OBJECTS (OWLv2) — quantitative, with toggleable boxes drawn per second
+        const persec = v.objects_persec || [], showBx = st.novBoxes !== false;
+        const objToggle = `<button data-novboxes style="background:${showBx ? C.orange + '22' : 'transparent'};border:1px solid ${showBx ? C.orange : C.border};color:${showBx ? C.orange : C.dim};border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer">▣ detection ${showBx ? 'ON' : 'OFF'}</button>`;
+        const objFrames = persec.length ? `<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px">${persec.map(ps => frameBoxes(v.id, ps.t, ps.dets, 132, showBx)).join('')}</div>` : `<div style="font-size:11px;color:${C.mute}">no detections stored</div>`;
         const hookObjs = (v.objects_hook || []).length ? (v.objects_hook || []).map(o => `<span style="display:inline-block;background:${C.orange}1e;border:1px solid ${C.orange};color:${C.orange};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0">${esc(o.label)} <span style="opacity:.7">${o.score}·${o.seconds}s</span></span>`).join('') : `<span style="color:${C.mute};font-size:11px">none ≥ score 0.15</span>`;
         // CONCEPTS (quantitative MMR keyphrases)
         const concepts = (v.concepts || []).length ? (v.concepts || []).map(c => `<span style="display:inline-block;background:${C.purple}1e;border:1px solid ${C.purple};color:${C.purple};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:0 3px 3px 0" title="cluster: ${esc(clusLabel(c.cluster))}">${esc(c.phrase)} <span style="opacity:.65">${c.score}</span></span>`).join('') : `<span style="color:${C.mute};font-size:11px">no concept extracted</span>`;
@@ -460,7 +461,7 @@ const JarvisRetention = (function () {
                 <div style="display:flex;gap:6px;flex-shrink:0"><a href="${esc(v.url)}" target="_blank" style="background:${C.red}22;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;text-decoration:none">▶ YouTube ↗</a>
                     <button data-novclose style="background:transparent;border:1px solid ${C.border2};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">✕ close</button></div></div>
             <div style="border-top:1px solid ${C.border};padding-top:10px;margin-bottom:10px">
-                <div style="font-size:11px;font-weight:800;color:${C.orange};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">⬚ Objects — OWLv2 detection (every second, with boxes)</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:11px;font-weight:800;color:${C.orange};text-transform:uppercase;letter-spacing:.3px">⬚ Objects — OWLv2 detection (every second)</div>${objToggle}</div>
                 ${objFrames}
                 <div style="font-size:10px;color:${C.mute};margin:8px 0 3px">tracked across the hook (object · score · #seconds present)</div><div>${hookObjs}</div></div>
             <div style="border-top:1px solid ${C.border};padding-top:10px;margin-bottom:10px">
@@ -559,6 +560,7 @@ const JarvisRetention = (function () {
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
         const nr = e.target.closest('[data-novres]'); if (nr) { st.novRes = nr.getAttribute('data-novres'); render(); return; }
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
+        if (e.target.closest('[data-novboxes]')) { st.novBoxes = !(st.novBoxes !== false); render(); return; }
         if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
         const hk = e.target.closest('[data-hook]'); if (hk) { st.novSel = +hk.getAttribute('data-hook'); render(); return; }
         const th = e.target.closest('[data-sort]');
