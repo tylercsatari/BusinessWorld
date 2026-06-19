@@ -569,6 +569,33 @@ const WorkshopUI = (() => {
     function hasNoVisibleStage() {
         try { return !PS().STAGES.some(s => stageVisible(s.id)); } catch (e) { return false; }
     }
+    // Walk a video's previous-video chain; true if it reaches targetId (loop guard).
+    function videoChainIncludes(startId, targetId) {
+        let cur = startId; const seen = new Set();
+        while (cur && !seen.has(cur)) {
+            if (cur === targetId) return true;
+            seen.add(cur);
+            const vv = VideoService.getById(cur);
+            cur = vv && vv.previousVideoId;
+        }
+        return false;
+    }
+    // Order a video list so each video comes AFTER its previousVideoId (priority
+    // sequence), otherwise preserving the incoming order. Cycle-safe.
+    function orderByChain(list) {
+        const byId = new Map(list.map(v => [v.id, v]));
+        const done = new Set(); const out = [];
+        const visit = (v, stack) => {
+            if (done.has(v.id) || stack.has(v.id)) return;
+            stack.add(v.id);
+            const prev = v.previousVideoId && byId.get(v.previousVideoId);
+            if (prev) visit(prev, stack);
+            stack.delete(v.id);
+            if (!done.has(v.id)) { done.add(v.id); out.push(v); }
+        };
+        list.forEach(v => visit(v, new Set()));
+        return out;
+    }
     function filteredVideos() {
         let list = pipelineVideos();
         try {
@@ -588,12 +615,14 @@ const WorkshopUI = (() => {
         else if (fAssignee) list = list.filter(v => getAssignedPeople(v).includes(fAssignee));
         if (fFlag === 'blocked') list = list.filter(v => videoBlockers(v).length > 0);
         if (fFlag === 'deadline') list = list.filter(v => { const d = deadlineInfo(v); return d && d.days <= 7; });
-        // Soonest deadline first
-        return [...list].sort((a, b) => {
+        // Soonest deadline first, then re-ordered so each video follows the one it's
+        // sequenced after (previousVideoId) — priority sequence.
+        const byDeadline = [...list].sort((a, b) => {
             const da = a.deadline || '9999', db = b.deadline || '9999';
             if (da !== db) return da < db ? -1 : 1;
             return (a.name || '').localeCompare(b.name || '');
         });
+        return orderByChain(byDeadline);
     }
 
     function filteredComponents() {
@@ -927,6 +956,7 @@ const WorkshopUI = (() => {
                     <div class="wsp-stage-video-name">${flagOrDot(v.project)} ${escHtml(v.name)} ${blockedBadge(v)}${ready ? '<span class="wsp-ready-badge">✓ ready — press Done</span>' : ''}</div>
                     <div class="wsp-stage-video-meta">
                         ${!stage ? frontierChips(v, 3) : `<span class="wsp-deliv-need" title="What needs to be finished">📋 ${escHtml(STAGE_DELIVERABLE[stage.id] || stage.label)}</span>`}
+                        ${(() => { if (!v.previousVideoId) return ''; const p = VideoService.getById(v.previousVideoId); if (!p) return ''; const posted = isVideoPosted(p); return `<span class="wsp-after-chip${posted ? ' clear' : ''}" title="Priority sequence — ${posted ? 'its previous video is done' : 'do its previous video first'}">▶ after ${escHtml(p.name)}${posted ? ' ✓' : ''}</span>`; })()}
                         ${dl ? `<span class="wsp-deadline ${dl.cls}">⏰ ${dl.label}</span>` : ''}
                         ${stage && stage.id === 'order' && openOrders ? `<span class="wsp-deadline soon">📦 ${openOrders} order${openOrders === 1 ? '' : 's'} open</span>` : ''}
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
@@ -2053,6 +2083,13 @@ const WorkshopUI = (() => {
                         ${dropboxProjects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
                     </select>
                 </div>
+                <div data-vfield="prevvideo">
+                    <label>Previous video <span class="wsp-hint">— optional; sequence this after another pipeline video</span></label>
+                    <select id="workshop-prevvideo">
+                        <option value="" ${!v.previousVideoId ? 'selected' : ''}>— No previous video —</option>
+                        ${pipelineVideos().filter(o => o.id !== v.id).map(o => `<option value="${escAttr(o.id)}" ${v.previousVideoId === o.id ? 'selected' : ''}>${escHtml(o.name)}</option>`).join('')}
+                    </select>
+                </div>
             </div>
 
             <div data-vfield="progress">
@@ -2188,6 +2225,7 @@ const WorkshopUI = (() => {
         get('workshop-deadline')?.addEventListener('change', () => doSave(false));
         get('workshop-sponsor')?.addEventListener('change', () => doSave(false));
         get('workshop-project')?.addEventListener('change', () => doSave(true));
+        get('workshop-prevvideo')?.addEventListener('change', () => doSave(true));   // re-render so the sequence/order updates
 
         // Branch decisions removed — a video's build branches are derived from its
         // components' needs (see effectiveState/branchActive).
@@ -4080,13 +4118,19 @@ const WorkshopUI = (() => {
         const context = get('workshop-context')?.value || '';
         const deadline = get('workshop-deadline')?.value || '';
         const sponsorId = get('workshop-sponsor')?.value || '';
+        // Previous-video link (priority sequence). Guard against loops.
+        let previousVideoId = get('workshop-prevvideo')?.value || '';
+        if (previousVideoId && (previousVideoId === v.id || videoChainIncludes(previousVideoId, v.id))) {
+            previousVideoId = '';
+            if (!silent) alert('That would create a loop in the sequence — pick a different previous video.');
+        }
         try {
             // NOTE: do NOT write `hook` here. The hook lives in hook INSTANCES
             // (v.hooks, saved by saveHooks) — there is no #workshop-hook field, so
             // reading it would always be '' and silently wipe the hook on the video
             // AND (via saveWithIdeaSync) on the linked Library idea.
             await VideoService.saveWithIdeaSync(v.id, {
-                name, project, noProject, context, deadline, sponsorId,
+                name, project, noProject, context, deadline, sponsorId, previousVideoId,
                 status: normalizedStatus(v)
             });
             return true;
