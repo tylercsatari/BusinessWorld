@@ -706,6 +706,16 @@
 .library-aiideas-trace-line { font-size: 12px; color: #6a8a80; padding: 2px 0; line-height: 1.35; }
 .library-aiideas-trace-line.active { color: #1f6f5b; font-weight: 700; }
 
+/* Generation progress modal (fixed overlay — always visible) */
+.library-aiideas-modal-overlay { position: fixed; inset: 0; z-index: 200000; background: rgba(20,16,10,0.45); display: flex; align-items: center; justify-content: center; }
+.library-aiideas-modal { background: #fff; border-radius: 14px; width: 92%; max-width: 520px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.4); overflow: hidden; }
+.library-aiideas-modal-head { display: flex; align-items: center; gap: 9px; padding: 14px 16px; border-bottom: 1px solid #eee; font-size: 15px; color: #2d5016; }
+.library-aiideas-modal-elapsed { margin-left: auto; font-variant-numeric: tabular-nums; color: #3a8c76; font-weight: 700; font-size: 13px; }
+.library-aiideas-modal-trace { padding: 12px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.library-aiideas-modal-line { font-size: 13px; color: #6a7a70; line-height: 1.4; }
+.library-aiideas-modal-line.active { color: #1f6f5b; font-weight: 800; }
+.library-aiideas-modal-close { margin-left: 10px; background: #2d5016; color: #fff; border: none; border-radius: 8px; padding: 5px 12px; font-weight: 700; cursor: pointer; font-size: 12px; }
+
 .library-aiideas-list {
     display: flex;
     flex-direction: column;

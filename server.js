@@ -1864,6 +1864,10 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
             let emit = () => {};
             if (wantStream) {
                 res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+                if (res.flushHeaders) res.flushHeaders();
+                // 2 KB padding comment forces proxies (e.g. Render's) to start
+                // flushing immediately instead of buffering the whole response.
+                res.write(':' + ' '.repeat(2048) + '\n\n');
                 emit = (ev) => { try { res.write('data: ' + JSON.stringify(ev) + '\n\n'); } catch (e) {} };
             }
             emit({ stage: 'context', msg: 'Reading Business World — your videos, ideas & trends…' });

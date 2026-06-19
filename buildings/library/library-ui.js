@@ -515,6 +515,40 @@ const LibraryUI = (() => {
         }
     }
 
+    // A fixed overlay modal for generation progress — appended to <body>, so it
+    // shows the live step trace no matter what the Library panel is doing.
+    function showAiIdeasProgressModal() {
+        const old = document.getElementById('library-aiideas-progress-modal');
+        if (old) old.remove();
+        const ov = document.createElement('div');
+        ov.id = 'library-aiideas-progress-modal';
+        ov.className = 'library-aiideas-modal-overlay';
+        ov.innerHTML = `<div class="library-aiideas-modal">
+            <div class="library-aiideas-modal-head"><span class="library-aiideas-spin"></span> <b>Generating video ideas…</b> <span class="library-aiideas-modal-elapsed" id="library-aiideas-modal-elapsed">0.0s</span></div>
+            <div class="library-aiideas-modal-trace" id="library-aiideas-modal-trace"></div>
+        </div>`;
+        document.body.appendChild(ov);
+        const traceEl = ov.querySelector('#library-aiideas-modal-trace');
+        return {
+            step(msg) {
+                const prev = traceEl.querySelector('.active'); if (prev) prev.classList.remove('active');
+                const line = document.createElement('div');
+                line.className = 'library-aiideas-modal-line active';
+                line.textContent = msg;
+                traceEl.appendChild(line);
+                traceEl.scrollTop = traceEl.scrollHeight;
+            },
+            setElapsed(t) { const e = ov.querySelector('#library-aiideas-modal-elapsed'); if (e) e.textContent = t; },
+            done(summary, ok) {
+                const head = ov.querySelector('.library-aiideas-modal-head');
+                if (head) head.innerHTML = `${ok === false ? '⚠️' : '✓'} <b>${escHtml(summary || 'Done')}</b> <button class="library-aiideas-modal-close" id="library-aiideas-modal-close">Close</button>`;
+                const prev = traceEl.querySelector('.active'); if (prev) prev.classList.remove('active');
+                const btn = ov.querySelector('#library-aiideas-modal-close'); if (btn) btn.addEventListener('click', () => ov.remove());
+            },
+            close() { ov.remove(); }
+        };
+    }
+
     async function generateAiVideoIdeas() {
         if (aiVideoIdeasBusy) return;
         aiVideoIdeasBusy = true;
@@ -527,12 +561,15 @@ const LibraryUI = (() => {
         aiVideoIdeasLog = [`Running Kimi K2.6 for ${aiVideoIdeasRuns} run${aiVideoIdeasRuns === 1 ? '' : 's'} × ${aiVideoIdeasPerRun} idea${aiVideoIdeasPerRun === 1 ? '' : 's'}…`];
         aiVideoIdeasStatus = aiVideoIdeasLog[0];
         aiVideoIdeasT0 = Date.now();
+        const prog = showAiIdeasProgressModal();
+        prog.step(aiVideoIdeasLog[0]);
         // Tick the elapsed timer independently of SSE, so it's visibly alive even
         // during a long Kimi call (when the step message doesn't change).
         clearInterval(aiVideoIdeasTimer);
         aiVideoIdeasTimer = setInterval(() => {
-            const el = document.getElementById('library-aiideas-elapsed');
-            if (el) el.textContent = ((Date.now() - aiVideoIdeasT0) / 1000).toFixed(1) + 's';
+            const t = ((Date.now() - aiVideoIdeasT0) / 1000).toFixed(1) + 's';
+            const el = document.getElementById('library-aiideas-elapsed'); if (el) el.textContent = t;
+            prog.setElapsed(t);
             updateAiVideoIdeasGenerateButtons();   // keep the visible button's "…Ns" ticking too
         }, 200);
         updateAiVideoIdeasGenerateButtons();
@@ -564,7 +601,7 @@ const LibraryUI = (() => {
                     if (!dline) continue;
                     let ev; try { ev = JSON.parse(dline.slice(5).trim()); } catch (_) { continue; }
                     if (ev.error) throw new Error(ev.error);
-                    if (ev.msg) { aiVideoIdeasLog.push(ev.msg); aiVideoIdeasStatus = ev.msg; renderAiVideoIdeas(); }
+                    if (ev.msg) { aiVideoIdeasLog.push(ev.msg); aiVideoIdeasStatus = ev.msg; prog.step(ev.msg); renderAiVideoIdeas(); }
                     if (ev.done) finalEvent = ev;
                 }
             }
@@ -578,8 +615,10 @@ const LibraryUI = (() => {
             const created = createdArr.length;
             const rejected = (data.rejected || []).length;
             aiVideoIdeasStatus = `Created ${created} candidate${created === 1 ? '' : 's'}; pruned ${rejected} near-duplicate${rejected === 1 ? '' : 's'}.`;
+            prog.done(aiVideoIdeasStatus, true);
         } catch (e) {
             aiVideoIdeasStatus = e.message || 'Generation failed.';
+            prog.done(aiVideoIdeasStatus, false);
             renderAiVideoIdeas();
         } finally {
             aiVideoIdeasBusy = false;
