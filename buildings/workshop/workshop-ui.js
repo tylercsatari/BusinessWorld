@@ -64,7 +64,7 @@ const WorkshopUI = (() => {
     // Each source has its own status track; 'done' (always last) drops it off the board.
     const COMPONENT_SOURCE_STATUSES = {
         build: ['design', 'cad', 'software', 'manufacturing', 'assembly', 'done'],
-        order: ['needed', 'ordered', 'done'],
+        order: ['ordered', 'done'],   // single step: it's an order → press Done once placed
         task:  ['todo', 'doing', 'done']
     };
     const COMPONENT_SOURCES = [
@@ -104,6 +104,14 @@ const WorkshopUI = (() => {
         return buildTrackFor(c.needs);
     }
     const defaultStatusFor = (c) => componentTrack(c)[0];
+    // A clean, human label for a component's current state — orders read as just
+    // "order" (or "ordered" when done), never needed/ordered/design sub-states.
+    function componentStatusLabel(c) {
+        if (!c) return '';
+        if (c.source === 'order') return c.status === 'done' ? 'ordered' : 'order';
+        if (c.source === 'task') return c.status === 'done' ? 'done' : (c.status || 'todo');
+        return c.status || 'design';
+    }
     // Next status after the component's current one. For build it's computed
     // against the full canonical order, so a removed mid-chain stage snaps
     // forward to the next stage the component still needs.
@@ -1364,7 +1372,7 @@ const WorkshopUI = (() => {
         const compListHtml = () => componentsForVideo(videoId).map(c =>
             `<div class="wsp-row" style="border-left: 3px solid ${DOT_COLORS.component}">
                 <span class="wsp-row-name">🧩 ${escHtml(c.name)}</span>
-                <span class="wsp-pill active">${c.status}</span>
+                <span class="wsp-pill active">${escHtml(componentStatusLabel(c))}</span>
             </div>`).join('');
         // The two hook branches are NOT decided here — they derive from the
         // hook instances in the Hook section (any animation instance →
@@ -2603,7 +2611,7 @@ const WorkshopUI = (() => {
             <div class="wsp-comp-meta">
                 ${needs.map(f => `<span class="wsp-need-chip">${escHtml(COMPONENT_NEED_LABEL[f] || f)}</span>`).join('')}
                 ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
-                <span class="wsp-comp-stage">${escHtml(c.status || 'design')}</span>
+                <span class="wsp-comp-stage">${escHtml(componentStatusLabel(c))}</span>
             </div>
             ${showDone ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done">✓ Done</button>` : ''}
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
@@ -2614,6 +2622,12 @@ const WorkshopUI = (() => {
     // is NOT editable here — a component flows on its own and is only advanced by
     // the worker who owns its CURRENT stage (via their Done button).
     function componentStageGraphic(c) {
+        // An order has no sub-states — it's just an order until it's marked done.
+        if (c && c.source === 'order') {
+            const done = c.status === 'done';
+            return `<div class="wsp-stage-track" title="An order — press Done once it's been placed.">` +
+                `<span class="wsp-stage-step ${done ? 'done' : 'current'}">${done ? 'ordered ✓' : 'order'}</span></div>`;
+        }
         const track = componentTrack(c);
         const curIdx = track.indexOf(c.status);
         return `<div class="wsp-stage-track" title="Where this component is right now (read-only) — it advances when the worker at its current stage marks it done">` +
