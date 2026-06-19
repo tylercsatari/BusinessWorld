@@ -103,7 +103,7 @@ LEDGER = [
     {'metric': 'Coherence', 'type': 'model-metric', 'def': 'cosine(CLIP image, CLIP text) of the hook. A defined scalar — how aligned the visuals are with the words per CLIP. Model-dependent but reproducible.'},
     {'metric': 'Concept (combinatorial)', 'type': 'defined', 'def': 'MMR keyphrase: 1-3 word n-gram of the script maximizing cos(phrase, hook) − redundancy. Multi-word, centrality-scored — filters throwaway words by construction.'},
     {'metric': 'Concept-cluster / combo rarity', 'type': 'geometry', 'def': 'concepts k-means-clustered corpus-wide; combo rarity = mean 1/(co-occurrence+1) over the concept-cluster PAIRS in the hook. Pure counting.'},
-    {'metric': 'Component / object', 'type': 'detection', 'def': 'OWLv2 open-vocabulary detection: an object phrase is a component iff localized with score>0.15, returning a box. Non-objects ("setting","area") get no box and are excluded. Quantitative (score+box).'},
+    {'metric': 'Component / object', 'type': 'detection', 'def': 'Grounding DINO open-vocabulary detection (more accurate than OWLv2): an object phrase is a component iff localized with score>0.30, returning a box. Non-objects ("setting","area") get no box and are excluded. Quantitative (score+box).'},
     {'metric': 'Scene spread', 'type': 'geometry', 'def': 'mean pairwise cosine distance among the 5 per-frame DINOv2 vectors — how much the hook visually changes (cut intensity).'},
     {'metric': 'Scene description / techniques / insights', 'type': 'interpreted', 'def': 'LLM-written per-frame prose (analysis.json). SUBJECTIVE — shown only as context, never fed into any score. Flagged orange in the panel.'},
 ]
@@ -129,7 +129,7 @@ def main():
 
     out = {'meta': {'n': n, 'hook_seconds': M['hook_seconds'],
                     'models': {'visual': 'facebook/dinov2-small', 'whole': 'openai/clip-vit-base-patch16',
-                               'concept': 'all-MiniLM-L6-v2', 'detector': 'google/owlv2-base-patch16-ensemble', 'ocr': 'tesseract-5'},
+                               'concept': 'all-MiniLM-L6-v2', 'detector': 'IDEA-Research/grounding-dino-tiny', 'ocr': 'tesseract-5'},
                     'resolutions': ['hook', 'second']},
            'ledger': LEDGER, 'videos': []}
 
