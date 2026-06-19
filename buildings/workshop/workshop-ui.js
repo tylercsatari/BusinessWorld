@@ -920,7 +920,7 @@ const WorkshopUI = (() => {
         order: 'Every order received', precision: '3D-printed / machined parts — upload a photo',
         software: 'Code / firmware done — upload the build or a screenshot', assembly: 'The build assembled — upload a photo',
         artistic: 'Painted / finished — upload a result photo', hookfilm: 'The practical hook filmed & uploaded',
-        film: 'Main footage shot — upload it or a proof clip', voiceover: 'A voiceover file linked',
+        film: 'Filming done (no upload — footage lives in Dropbox)', voiceover: 'A voiceover file linked',
         edit: 'All THREE final video versions uploaded', splittest: 'Thumbnail / title variants — upload them',
         post: 'Publish the video'
     };
@@ -931,6 +931,7 @@ const WorkshopUI = (() => {
     function deliverableKind(stageId) {
         if (stageId === 'decomp') return 'decomp';
         if (stageId === 'post') return 'post';
+        if (PS().hasNoDeliverable && PS().hasNoDeliverable(stageId)) return 'manual';
         if (PS().isResultStage(stageId)) return 'result';
         return 'auto';
     }
@@ -1080,6 +1081,10 @@ const WorkshopUI = (() => {
         if (kind === 'decomp') {
             return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>
                 <div class="wsp-deliv-sub">Decide the branches and add components in the Decomposition section below.</div></div>`;
+        }
+        if (kind === 'manual') {
+            return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 ${escHtml(label)}${flag}</div>
+                <div class="wsp-deliv-sub">No upload needed here — your footage already lives in Dropbox. Just press <b>Done</b> once filming is complete.</div></div>`;
         }
         // auto stages — the structured upload lives in a section below
         return `<div class="wsp-deliv-banner ${stateCls}"><div class="wsp-deliv-title">📋 Deliverable — <b>${escHtml(label)}</b>${flag}</div>

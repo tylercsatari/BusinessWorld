@@ -178,7 +178,11 @@ const PipelineStages = (() => {
     // The moment a result lands, the stage auto-completes and the video advances
     // off the worker's queue. (Stages that already have a structured artifact —
     // hook/cad/pcb/order/voiceover/edit/animation/hookfilm — keep their own check.)
-    const RESULT_DELIVERABLE_STAGES = ['design', 'propdesign', 'precision', 'software', 'assembly', 'artistic', 'film', 'splittest'];
+    const RESULT_DELIVERABLE_STAGES = ['design', 'propdesign', 'precision', 'software', 'assembly', 'artistic', 'splittest'];
+    // Stages with NO deliverable — a pure manual confirmation. Filming is shot and
+    // uploaded to Dropbox out-of-band, so the stage is just a "done filming" check;
+    // its DONE button is always allowed (deliverableMet → true).
+    const NO_DELIVERABLE_STAGES = new Set(['film']);
     RESULT_DELIVERABLE_STAGES.forEach(id => {
         if (AUTO_CHECKS[id]) return;
         AUTO_CHECKS[id] = {
@@ -282,6 +286,7 @@ const PipelineStages = (() => {
     // Is the stage's DELIVERABLE present? (the old auto-check) — drives the DONE
     // button: met → the worker can finish the stage; not met → they're prompted.
     function deliverableMet(video, stageId, ctx) {
+        if (NO_DELIVERABLE_STAGES.has(stageId)) return true;   // no deliverable — manual Done is always allowed
         const auto = AUTO_CHECKS[stageId];
         return !!(auto && auto.test(video, ctx));
     }
@@ -383,6 +388,7 @@ const PipelineStages = (() => {
         autoDesc: id => (AUTO_CHECKS[id] ? AUTO_CHECKS[id].desc : ''),
         hasAutoCheck: id => !!AUTO_CHECKS[id],
         isResultStage: id => RESULT_DELIVERABLE_STAGES.indexOf(id) >= 0,
+        hasNoDeliverable: id => NO_DELIVERABLE_STAGES.has(id),
         RESULT_DELIVERABLE_STAGES,
         stateOf, effectiveState, deliverableMet, isDone, isReady, frontier, isComplete, progress,
         branchesDecided, blockers, isInPipeline, hooksOf
