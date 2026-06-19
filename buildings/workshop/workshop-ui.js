@@ -1189,8 +1189,8 @@ const WorkshopUI = (() => {
             e.orders.length ? `<span class="wsp-count-chip" style="--dotcolor:${DOT_COLORS.order}">${icon('order', 'wsp-cc-ic')} ${e.orders.length}</span>` : ''
         ].join('');
 
-        const compRows = stageComps.map(c => componentRowHtml(c)).join('');
-        const taskRows = stageTasks.map(c => componentRowHtml(c)).join('');
+        const compRows = stageComps.map(c => componentRowHtml(c, { advance: true })).join('');
+        const taskRows = stageTasks.map(c => componentRowHtml(c, { advance: true })).join('');
 
         panel.innerHTML = `
             <div class="wsp-stage-panel-header">
@@ -2450,9 +2450,14 @@ const WorkshopUI = (() => {
     // flows the build stages on its own (status = where it is now). The video
     // automatically waits on every component it spawned. Click to open its full
     // detail (assets, links, contacts, needs, stage).
-    function componentRowHtml(c) {
+    // opts.advance — show the ✓ Done button. Only TRUE inside a component's own
+    // stage panel, where the worker at that stage advances it. Decomposition (and
+    // overview lists) pass nothing: decomposition only CREATES components, it
+    // never controls where they are in the pipeline.
+    function componentRowHtml(c, opts = {}) {
         const needs = Array.isArray(c.needs) ? c.needs : [];
         const linkCount = Array.isArray(c.links) ? c.links.length : 0;
+        const showDone = opts.advance && c.status !== 'done' && stageWritable(componentStageId(c));
         return `<div class="wsp-comp-row" data-comp="${c.id}">
             <button class="wsp-comp-name wsp-clickable" data-open-comp="${c.id}" title="Open this component">
                 ${icon('component', 'wsp-row-ic')} <span class="wsp-comp-name-text">${escHtml(c.name)}</span>
@@ -2463,7 +2468,7 @@ const WorkshopUI = (() => {
                 ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
                 <span class="wsp-comp-stage">${escHtml(c.status || 'design')}</span>
             </div>
-            ${(c.status !== 'done' && stageWritable(componentStageId(c))) ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done">✓ Done</button>` : ''}
+            ${showDone ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done">✓ Done</button>` : ''}
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
         </div>`;
     }
