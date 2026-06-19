@@ -2530,11 +2530,31 @@ const WorkshopUI = (() => {
     // The deliverable required to LEAVE a component's current status. CAD/PCB
     // stages need their actual design file (in the CAD/PCB file section) — not
     // just any media. → { met, missing }.
+    // Each component STAGE must have its deliverable before it can be pushed
+    // forward — you can't just press Done on an empty stage.
     function componentDeliverableStatus(c) {
         const needs = Array.isArray(c.needs) ? c.needs : [];
-        if (c.status === 'cad') {
-            if (needs.includes('cad') && !c.cadPath) return { met: false, missing: 'Upload the CAD file in this component’s “CAD file” section (a generic media file doesn’t count).' };
-            if (needs.includes('pcb') && !c.pcbPath) return { met: false, missing: 'Upload the PCB file in this component’s “PCB file” section.' };
+        const hasMedia = Array.isArray(c.media) && c.media.length > 0;
+        const hasNotes = !!(c.notes && c.notes.trim());
+        const hasLinks = Array.isArray(c.links) && c.links.length > 0;
+        switch (c.status) {
+            case 'design':
+                // At least one of Media or Notes (sketches & assets are optional).
+                if (!(hasMedia || hasNotes)) return { met: false, missing: 'Design Research needs a deliverable — fill in at least one of Media or Notes (sketches & assets are optional).' };
+                break;
+            case 'cad':
+                if (needs.includes('cad') && !c.cadPath) return { met: false, missing: 'Upload the CAD file in this component’s “CAD file” section (a generic media file doesn’t count).' };
+                if (needs.includes('pcb') && !c.pcbPath) return { met: false, missing: 'Upload the PCB file in this component’s “PCB file” section.' };
+                break;
+            case 'software':
+                if (!(c.softwarePath || hasLinks || hasNotes)) return { met: false, missing: 'Software needs a deliverable — upload the build/firmware file, add a repo link, or write notes.' };
+                break;
+            case 'manufacturing':
+                if (!(c.mfgPath || hasMedia || hasNotes)) return { met: false, missing: 'Manufacturing needs a deliverable — upload the file (G-code / print / spec), a photo, or notes.' };
+                break;
+            case 'assembly':
+                if (!(c.asmPath || hasMedia || hasNotes)) return { met: false, missing: 'Assembly needs a deliverable — upload the assembled file/photo, or write notes.' };
+                break;
         }
         return { met: true };
     }
