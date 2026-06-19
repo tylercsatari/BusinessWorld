@@ -101,15 +101,16 @@ const JarvisRetention = (function () {
     function heatCol(t) { t = Math.max(0, Math.min(1, t || 0));
         const st = [[37, 99, 235], [34, 211, 238], [250, 204, 21], [248, 113, 113]], x = t * 3, i = Math.min(2, Math.floor(x)), f = x - i, a = st[i], b = st[i + 1];
         return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)},${Math.round(a[1] + (b[1] - a[1]) * f)},${Math.round(a[2] + (b[2] - a[2]) * f)})`; }
-    // 2D latent map: each point a hook (clickable → YouTube). opt: color(i), url(i), tip(i), r(i), op(i)
+    // 2D latent map: each point a hook (click → open its data). opt: color(i), tip(i), r(i), op(i), pick(i)→videoIdx, sel
     function latentMap(proj, opt) {
         if (!proj || !proj.length) return '';
         const w = 520, h = 330, pad = 16, X = x => pad + (x + 1) / 2 * (w - 2 * pad), Y = y => pad + (1 - (y + 1) / 2) * (h - 2 * pad);
-        let s = '';
-        proj.forEach((p, i) => { if (!p) return; const c = opt.color(i), r = opt.r ? opt.r(i) : 3.2, u = opt.url ? opt.url(i) : null;
-            const circ = `<circle cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${r}" fill="${c}" opacity="${opt.op ? opt.op(i) : 0.72}" stroke="#0b1120" stroke-width="0.4"><title>${esc(opt.tip(i))}</title></circle>`;
-            s += u ? `<a href="${esc(u)}" target="_blank">${circ}</a>` : circ; });
-        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}</svg>`;
+        let s = '', top = '';
+        proj.forEach((p, i) => { if (!p) return; const pk = opt.pick ? opt.pick(i) : i, isSel = opt.sel != null && pk === opt.sel;
+            const c = opt.color(i), r = isSel ? 6 : (opt.r ? opt.r(i) : 3.2);
+            const circ = `<circle data-hook="${pk}" cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="${r}" fill="${c}" opacity="${isSel ? 1 : (opt.op ? opt.op(i) : 0.72)}" stroke="${isSel ? '#fff' : '#0b1120'}" stroke-width="${isSel ? 1.6 : 0.4}" style="cursor:pointer"><title>${esc(opt.tip(i))}</title></circle>`;
+            if (isSel) top += circ; else s += circ; });
+        return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}${top}</svg>`;
     }
     function legendBar(lo, hi, label) {
         const stops = [0, .25, .5, .75, 1].map(t => `${heatCol(t)} ${t * 100}%`).join(',');
@@ -136,9 +137,11 @@ const JarvisRetention = (function () {
         let s = `<line x1="${X(.5)}" y1="${pt}" x2="${X(.5)}" y2="${h - pb}" stroke="${C.border2}" stroke-dasharray="3 3"/><line x1="${pl}" y1="${Y(.5)}" x2="${w - pr}" y2="${Y(.5)}" stroke="${C.border2}" stroke-dasharray="3 3"/>`;
         const q = [['curiosity', .75, .75, C.green], ['confusion', .25, .75, C.orange], ['familiar', .75, .25, C.cyan], ['boring', .25, .25, C.mute]];
         q.forEach(([t, x, y, c]) => s += `<text x="${X(x)}" y="${Y(y)}" text-anchor="middle" fill="${c}" font-size="11" font-weight="700" opacity="0.5">${t}</text>`);
-        xv.forEach((x, i) => { if (x == null || yv[i] == null) return; const u = opt.url(i);
-            const circ = `<circle cx="${X(x).toFixed(1)}" cy="${Y(yv[i]).toFixed(1)}" r="3.4" fill="${opt.color(i)}" opacity="0.72" stroke="#0b1120" stroke-width="0.4"><title>${esc(opt.tip(i))}</title></circle>`;
-            s += u ? `<a href="${esc(u)}" target="_blank">${circ}</a>` : circ; });
+        let top = '';
+        xv.forEach((x, i) => { if (x == null || yv[i] == null) return; const isSel = opt.sel != null && i === opt.sel, r = isSel ? 6 : 3.4;
+            const circ = `<circle data-hook="${i}" cx="${X(x).toFixed(1)}" cy="${Y(yv[i]).toFixed(1)}" r="${r}" fill="${opt.color(i)}" opacity="${isSel ? 1 : 0.72}" stroke="${isSel ? '#fff' : '#0b1120'}" stroke-width="${isSel ? 1.6 : 0.4}" style="cursor:pointer"><title>${esc(opt.tip(i))}</title></circle>`;
+            if (isSel) top += circ; else s += circ; });
+        s += top;
         s += `<text x="${(pl + w - pr) / 2}" y="${h - 3}" text-anchor="middle" fill="${C.dim}" font-size="10">novelty (distance from corpus) →</text>`;
         s += `<text x="10" y="${(pt + h - pb) / 2}" fill="${C.dim}" font-size="10" transform="rotate(-90 10 ${(pt + h - pb) / 2})">coherence (visuals ↔ words) →</text>`;
         return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;background:${C.card2};border-radius:8px">${s}</svg>`;
@@ -415,16 +418,41 @@ const JarvisRetention = (function () {
     }
 
     // ───────────────────── PRINCIPLES → NOVELTY ─────────────────────
-    function novTip(i, extra) { const v = N.videos[i]; return (v.name || v.id) + ' · ' + fv(v.views) + ' views' + (extra ? ' · ' + extra : ''); }
-    const novUrl = i => N.videos[i].url;
+    function novTip(i, extra) { const v = N.videos[i]; return (v.name || v.id) + ' · ' + fv(v.views) + ' views' + (extra ? ' · ' + extra : '') + ' · click for data'; }
     function novMaps(colorFor, legend, sceneColorFor) {
-        const mk = (mod, label, sub) => mapCard(label, sub, latentMap(N.proj[mod], { color: i => colorFor(mod, i), url: novUrl, tip: i => novTip(i) }), legend);
+        const mk = (mod, label, sub) => mapCard(label, sub, latentMap(N.proj[mod], { color: i => colorFor(mod, i), tip: i => novTip(i), sel: st.novSel }), legend);
         let h = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             ${mk('whole', 'Whole hook', 'CLIP image+text — the whole hook as one point (low-res, mixes everything)')}
             ${mk('concept', 'Concept / script', 'MiniLM on the first-5s transcript — meaning only')}
             ${mk('visual', 'Visual', 'DINOv2 on the 5 frames, pooled — look only')}
-            ${mapCard('Scene components', 'every hook frame as its own point — within-hook spread', latentMap(N.scene.pts, { color: i => (sceneColorFor || (() => C.faint))(i), r: () => 2.4, op: () => 0.5, url: i => novUrl(N.scene.owner[i]), tip: i => novTip(N.scene.owner[i], 'frame ' + (N.scene.frame[i] + 1)) }), legend)}</div>`;
+            ${mapCard('Scene components', 'every hook frame as its own point — within-hook spread', latentMap(N.scene.pts, { color: i => (sceneColorFor || (() => C.faint))(i), r: i => (st.novSel != null && N.scene.owner[i] === st.novSel) ? 4.5 : 2.4, op: () => 0.5, pick: i => N.scene.owner[i], sel: st.novSel, tip: i => novTip(N.scene.owner[i], 'frame ' + (N.scene.frame[i] + 1)) }), legend)}</div>`;
         return h;
+    }
+    // Detail panel — ALL raw data for a hook + how each map graphs it. Click any point to open.
+    function rankPct(arr, i) { const v = arr[i]; if (v == null) return 0; const s = arr.filter(x => x != null).sort((a, b) => a - b); return s.indexOf(v) / (s.length - 1 || 1); }
+    function renderHookDetail(i) {
+        const v = N.videos[i], g = N.global, nz = N.niche, ch = N.coherent;
+        const frames = [1, 2, 3, 4, 5].map(k => `<img src="./video_data/${esc(v.id)}/frames/frame_${String(k).padStart(4, '0')}.jpg" loading="lazy" onerror="this.style.display='none'" title="second ${k}" style="width:62px;height:110px;object-fit:cover;border-radius:6px;border:1px solid ${C.border2}"/>`).join('');
+        const bar = (label, val, pctv, color) => `<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span style="color:${C.dim}">${label}</span><span style="color:${C.text};font-weight:700">${val}</span></div><div style="height:5px;background:${C.card};border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round((pctv || 0) * 100)}%;background:${color || C.accent}"></div></div></div>`;
+        const chip = (lab, c) => `<span style="display:inline-block;background:${c}22;border:1px solid ${c};color:${c};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700">${lab}</span>`;
+        const coord = m => N.proj[m] && N.proj[m][i] ? `(${N.proj[m][i][0].toFixed(2)}, ${N.proj[m][i][1].toFixed(2)})` : '—';
+        const col2 = (title, body) => `<div style="flex:1;min-width:210px"><div style="font-size:11px;font-weight:800;color:${C.text};margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">${title}</div>${body}</div>`;
+        return cardc(`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
+                <div><div style="font-size:15px;font-weight:800;color:${C.text}">${esc(v.name || v.id)}</div>
+                    <div style="font-size:11px;color:${C.mute};margin-top:2px">${fv(v.views)} views · ${v.published || '—'} · ${v.age_days != null ? v.age_days + 'd old' : '—'} · id ${esc(v.id)}</div></div>
+                <div style="display:flex;gap:6px;flex-shrink:0"><a href="${esc(v.url)}" target="_blank" style="background:${C.red}22;border:1px solid ${C.red};color:${C.red};border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;text-decoration:none">▶ YouTube ↗</a>
+                    <button data-novclose style="background:transparent;border:1px solid ${C.border2};color:${C.dim};border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer">✕ close</button></div></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <div><div style="font-size:10px;color:${C.mute};margin-bottom:4px">HOOK FRAMES (first 5s, 1 fps)</div><div style="display:flex;gap:5px">${frames}</div></div>
+                <div style="flex:1;min-width:220px"><div style="font-size:10px;color:${C.mute};margin-bottom:4px">HOOK SCRIPT (first 5s)</div><div style="font-size:12px;color:${C.dim};line-height:1.5;background:${C.card2};border:1px solid ${C.border};border-radius:8px;padding:8px 10px;max-height:110px;overflow:auto">${esc(v.hook_text || '(no speech in first 5s)')}</div></div></div>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;border-top:1px solid ${C.border};padding-top:12px">
+                ${col2('A · Global novelty', ['whole', 'concept', 'visual'].map(m => bar(m, fmtv(g[m].nov[i], 3) + ' · ' + Math.round(g[m].pct[i] * 100) + 'th pct', g[m].pct[i], heatCol(g[m].pct[i]))).join(''))}
+                ${col2('B · Niche', ['whole', 'concept', 'visual'].map(m => `<div style="margin-bottom:7px;font-size:11px;color:${C.dim}">${m}: ${chip('cluster ' + nz[m].labels[i], NPAL[nz[m].labels[i] % NPAL.length])} <span style="color:${C.mute}">· dist to centre ${fmtv(nz[m].dist_to_centre[i], 3)}</span></div>`).join(''))}
+                ${col2('C · Temporal', bar('novelty vs ±45d', N.temporal.nov[i] == null ? '—' : fmtv(N.temporal.nov[i], 3), rankPct(N.temporal.nov, i), C.green) + `<div style="font-size:10px;color:${C.mute}">distance from hooks posted within 45 days</div>`)}
+                ${col2('D · Combinatorial', bar('combo rarity', N.combo.rarity[i] == null ? '—' : fmtv(N.combo.rarity[i], 3), rankPct(N.combo.rarity, i), C.purple) + `<div style="font-size:10px;color:${C.mute}">mean rarity of its concept pairings</div>`)}
+                ${col2('E · Coherent', bar('novelty', fmtv(ch.novelty[i], 3), ch.nov_pct[i], heatCol(ch.nov_pct[i])) + bar('coherence (vis↔words)', fmtv(ch.coherence[i], 3), ch.coh_pct[i], C.cyan) + `<div style="font-size:10px;color:${C.mute}">quadrant: ${ch.nov_pct[i] > .5 ? 'novel' : 'familiar'} + ${ch.coh_pct[i] > .5 ? 'coherent → ' + (ch.nov_pct[i] > .5 ? 'curiosity' : 'familiar') : 'incoherent → ' + (ch.nov_pct[i] > .5 ? 'confusion' : 'boring')}</div>`)}
+                ${col2('Scene + coords', bar('scene spread', fmtv(N.scene.spread[i], 3), rankPct(N.scene.spread, i), C.orange) + `<div style="font-size:10px;color:${C.mute};line-height:1.7">2D position · whole ${coord('whole')} · concept ${coord('concept')} · visual ${coord('visual')}</div>`)}
+            </div>`);
     }
     function renderNovGlobal() {
         const g = N.global;
@@ -453,7 +481,7 @@ const JarvisRetention = (function () {
         let h = h2c('D · Combinatorial novelty — concept co-occurrence', 'Nodes = concepts pulled mechanically from the hook scripts (no labelling — just frequent content words). Edges = concepts that appear together in a hook; thickness = how often. Rare edges (Vantablack × car) are the interesting combinations.');
         h += cardc(`<div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
             <div>${comboGraph(G)}<div style="font-size:10px;color:${C.mute};margin-top:4px">node size = how many hooks use the concept · edge = co-occurrence</div></div>
-            <div>${mapCard('Concept map · per-hook combo rarity', 'rarer concept-pairings = brighter', latentMap(N.proj.concept, { color: i => heatCol(rarPct(i)), url: novUrl, tip: i => novTip(i, G.rarity[i] != null ? 'rarity ' + G.rarity[i] : '') }), legendBar('common combos', 'rare combos'))}</div></div>`);
+            <div>${mapCard('Concept map · per-hook combo rarity', 'rarer concept-pairings = brighter', latentMap(N.proj.concept, { color: i => heatCol(rarPct(i)), sel: st.novSel, tip: i => novTip(i, G.rarity[i] != null ? 'rarity ' + G.rarity[i] : '') }), legendBar('common combos', 'rare combos'))}</div></div>`);
         h += note('A rare combination of two <i>familiar</i> concepts (a broadly-understood anchor + an extreme modifier) is the strongest novelty pattern — more legible than a single weird concept. The graph + per-hook rarity give us the raw co-occurrence; weighting by concept familiarity comes later.', C.accent);
         return h;
     }
@@ -462,8 +490,8 @@ const JarvisRetention = (function () {
         const ch = N.coherent;
         let h = h2c('E · Coherent novelty — novelty × coherence (the curiosity quadrant)', 'X = how novel (distance from corpus). Y = coherence (do the visuals match the words — CLIP image↔text alignment). High-novelty + high-coherence = curiosity; novel + incoherent = confusion. This is the position that actually predicts a good hook.');
         h += cardc(`<div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
-            <div>${quadPlot(ch.nov_pct, ch.coh_pct, { color: i => heatCol(N.videos[i].lv ? (N.videos[i].lv - 4.5) / 4 : 0.5), url: novUrl, tip: i => novTip(i, 'coh ' + ch.coherence[i]) })}<div style="font-size:10px;color:${C.mute};margin-top:4px">point colour = views (brighter = more) · click a point to open the hook</div></div>
-            <div>${mapCard('Visual map · coloured by coherence', 'bright = visuals strongly match the spoken words', latentMap(N.proj.visual, { color: i => heatCol(ch.coh_pct[i]), url: novUrl, tip: i => novTip(i, 'coh ' + ch.coherence[i]) }), legendBar('mismatch', 'coherent'))}</div></div>`);
+            <div>${quadPlot(ch.nov_pct, ch.coh_pct, { color: i => heatCol(N.videos[i].lv ? (N.videos[i].lv - 4.5) / 4 : 0.5), sel: st.novSel, tip: i => novTip(i, 'coh ' + ch.coherence[i]) })}<div style="font-size:10px;color:${C.mute};margin-top:4px">point colour = views (brighter = more) · click a point to open its data</div></div>
+            <div>${mapCard('Visual map · coloured by coherence', 'bright = visuals strongly match the spoken words', latentMap(N.proj.visual, { color: i => heatCol(ch.coh_pct[i]), sel: st.novSel, tip: i => novTip(i, 'coh ' + ch.coherence[i]) }), legendBar('mismatch', 'coherent'))}</div></div>`);
         h += note('This is the one that matters most: <b>valuable novelty = distance × understandability</b>. Right now we only plot the two axes from raw geometry (kNN distance, CLIP alignment) — no scoring. Once we overlay views, the curiosity quadrant should be where the winners concentrate.', C.green);
         return h;
     }
@@ -473,7 +501,8 @@ const JarvisRetention = (function () {
         if (!N) { h += cardc(`<div style="padding:30px;text-align:center;color:${C.dim}">Embedding the hooks… <div style="font-size:11px;color:${C.mute};margin-top:6px">Run <code>principles/embed_hooks.py</code> then <code>build_novelty.py</code> to generate <code>novelty.json</code>.</div></div>`); return h; }
         const MS = [['global', 'A Global'], ['niche', 'B Niche'], ['temporal', 'C Temporal'], ['combo', 'D Combinatorial'], ['coherent', 'E Coherent']];
         h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${MS.map(([id, l]) => `<button data-nov="${id}" style="background:${st.nov === id ? C.purple + '22' : 'transparent'};border:1px solid ${st.nov === id ? C.purple : C.border};color:${st.nov === id ? C.purple : C.dim};border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}</div>`;
-        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n} hooks · visual ${N.meta.models.visual} · whole ${N.meta.models.whole} · concept ${N.meta.models.concept}. Every dot is a hook — click to open it on YouTube.</div>`;
+        h += `<div style="font-size:11px;color:${C.mute};margin-bottom:10px">${N.meta.n} hooks · visual ${N.meta.models.visual} · whole ${N.meta.models.whole} · concept ${N.meta.models.concept}. Every dot is a hook — <b>click any point to see its raw data + how every map graphs it.</b></div>`;
+        if (st.novSel != null && N.videos[st.novSel]) h += renderHookDetail(st.novSel);
         h += ({ global: renderNovGlobal, niche: renderNovNiche, temporal: renderNovTemporal, combo: renderNovCombo, coherent: renderNovCoherent }[st.nov] || renderNovGlobal)();
         return h;
     }
@@ -492,6 +521,8 @@ const JarvisRetention = (function () {
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
         const nv = e.target.closest('[data-nov]'); if (nv) { st.nov = nv.getAttribute('data-nov'); render(); return; }
+        if (e.target.closest('[data-novclose]')) { st.novSel = null; render(); return; }
+        const hk = e.target.closest('[data-hook]'); if (hk) { st.novSel = +hk.getAttribute('data-hook'); render(); return; }
         const th = e.target.closest('[data-sort]');
         if (th) { const k = th.getAttribute('data-sort'); if (st.sort === k) st.dir *= -1; else { st.sort = k; st.dir = (k === 'title' || k === 'published') ? 1 : -1; } render(); return; }
         if (e.target.closest('a')) return;

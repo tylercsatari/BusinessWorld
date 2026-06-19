@@ -67,7 +67,8 @@ def main():
 
     out = {'meta': {'n': n, 'hook_seconds': M['hook_seconds'], 'models': M['models']},
            'videos': [{'id': m['id'], 'name': m['name'], 'views': m['views'], 'lv': m['lv'],
-                       'url': m['url'], 'published': m['published'], 'age_days': m['age_days']} for m in meta]}
+                       'url': m['url'], 'published': m['published'], 'age_days': m['age_days'],
+                       'hook_text': m.get('hook_text', '')} for m in meta]}
 
     # 2D maps per modality
     out['proj'] = {'whole': project(whole), 'concept': project(concept), 'visual': project(visual)}
