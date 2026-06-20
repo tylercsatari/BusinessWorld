@@ -93,7 +93,11 @@ async function persistDropboxOAuthToken(tokenData) {
         scope: tokenData.scope || '',
         savedAt: new Date().toISOString()
     };
-    await cloud.uploadToR2(DROPBOX_OAUTH_R2_KEY, Buffer.from(JSON.stringify(payload, null, 2)), 'application/json');
+    try {
+        await cloud.uploadToR2(DROPBOX_OAUTH_R2_KEY, Buffer.from(JSON.stringify(payload, null, 2)), 'application/json');
+    } catch (e) {
+        console.warn('Dropbox: could not persist OAuth token to R2:', e.message);
+    }
 }
 
 async function loadStoredDropboxOAuthToken() {
@@ -110,6 +114,58 @@ async function loadStoredDropboxOAuthToken() {
         console.warn('Dropbox: could not load stored OAuth token:', e.message);
         return false;
     }
+}
+
+function requestOrigin(req) {
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`).split(',')[0].trim();
+    const proto = String(req.headers['x-forwarded-proto'] || (IS_RENDER ? 'https' : 'http')).split(',')[0].trim();
+    return `${proto}://${host}`;
+}
+
+function dropboxRedirectUri(req) {
+    return process.env.DROPBOX_REDIRECT_URI || `${requestOrigin(req)}/api/dropbox/callback`;
+}
+
+async function exchangeDropboxOAuthCode(code, redirectUri) {
+    if (!process.env.DROPBOX_APP_KEY || !process.env.DROPBOX_APP_SECRET) {
+        const err = new Error('DROPBOX_APP_KEY and DROPBOX_APP_SECRET must be configured');
+        err.status = 400;
+        throw err;
+    }
+    const params = new URLSearchParams({ code, grant_type: 'authorization_code' });
+    if (redirectUri) params.set('redirect_uri', redirectUri);
+    const tokenRes = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Basic ' + Buffer.from(`${process.env.DROPBOX_APP_KEY}:${process.env.DROPBOX_APP_SECRET}`).toString('base64'),
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+    });
+    const tokenText = await tokenRes.text();
+    let tokenData = {};
+    try { tokenData = tokenText ? JSON.parse(tokenText) : {}; } catch (e) { tokenData = { error: tokenText }; }
+    if (!tokenRes.ok || tokenData.error) {
+        const err = new Error(tokenData.error_description || tokenData.error || `Dropbox OAuth failed (${tokenRes.status})`);
+        err.status = tokenRes.status || 400;
+        throw err;
+    }
+    return tokenData;
+}
+
+function dropboxOAuthCallbackHtml(payload) {
+    const safePayload = JSON.stringify(payload || {}).replace(/</g, '\\u003c');
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Dropbox connected</title></head><body>
+<p>${payload && payload.ok ? 'Dropbox connected. Returning to BusinessWorld...' : 'Dropbox authorization failed.'}</p>
+<script>
+(function(){
+  var payload = ${safePayload};
+  try {
+    if (window.opener) window.opener.postMessage(payload, window.location.origin);
+  } catch (e) {}
+})();
+</script>
+</body></html>`;
 }
 
 // ── Hook reasoning engine support: server-side LLM JSON + memory persistence ──
@@ -3660,18 +3716,52 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.end(JSON.stringify({ error: 'DROPBOX_APP_KEY not configured' }));
             return;
         }
+        const redirectUri = dropboxRedirectUri(req);
         const authUrl = new URL('https://www.dropbox.com/oauth2/authorize');
         authUrl.searchParams.set('client_id', appKey);
         authUrl.searchParams.set('response_type', 'code');
         authUrl.searchParams.set('token_access_type', 'offline');
         authUrl.searchParams.set('scope', DROPBOX_PUBLIC_LINK_SCOPES);
         authUrl.searchParams.set('force_reapprove', 'true');
+        authUrl.searchParams.set('redirect_uri', redirectUri);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             url: authUrl.toString(),
+            redirect: redirectUri,
             scope: DROPBOX_PUBLIC_LINK_SCOPES,
             required_scope: 'sharing.write'
         }));
+        return;
+    }
+
+    if (pathname === '/api/dropbox/callback' && req.method === 'GET') {
+        const code = url.searchParams.get('code');
+        const oauthError = url.searchParams.get('error_description') || url.searchParams.get('error');
+        if (oauthError) {
+            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.end(dropboxOAuthCallbackHtml({ type: 'dropbox-oauth-complete', ok: false, error: oauthError }));
+            return;
+        }
+        if (!code) {
+            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.end(dropboxOAuthCallbackHtml({ type: 'dropbox-oauth-complete', ok: false, error: 'Dropbox did not return an authorization code.' }));
+            return;
+        }
+        try {
+            const tokenData = await exchangeDropboxOAuthCode(code, dropboxRedirectUri(req));
+            applyDropboxOAuthToken(tokenData, false);
+            await persistDropboxOAuthToken(tokenData);
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(dropboxOAuthCallbackHtml({
+                type: 'dropbox-oauth-complete',
+                ok: true,
+                hasRefresh: !!tokenData.refresh_token,
+                scope: tokenData.scope || ''
+            }));
+        } catch (e) {
+            res.writeHead(e.status || 500, { 'Content-Type': 'text/html' });
+            res.end(dropboxOAuthCallbackHtml({ type: 'dropbox-oauth-complete', ok: false, error: e.message }));
+        }
         return;
     }
 
@@ -3680,27 +3770,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const body = await readBody(req);
             const code = String(body.code || '').trim();
             if (!code) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing code' })); return; }
-            if (!process.env.DROPBOX_APP_KEY || !process.env.DROPBOX_APP_SECRET) {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'DROPBOX_APP_KEY and DROPBOX_APP_SECRET must be configured' }));
-                return;
-            }
-            const tokenRes = await fetch('https://api.dropboxapi.com/oauth2/token', {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Basic ' + Buffer.from(`${process.env.DROPBOX_APP_KEY}:${process.env.DROPBOX_APP_SECRET}`).toString('base64'),
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: new URLSearchParams({ code, grant_type: 'authorization_code' }).toString()
-            });
-            const tokenText = await tokenRes.text();
-            let tokenData = {};
-            try { tokenData = tokenText ? JSON.parse(tokenText) : {}; } catch (e) { tokenData = { error: tokenText }; }
-            if (!tokenRes.ok || tokenData.error) {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: tokenData.error_description || tokenData.error || `Dropbox OAuth failed (${tokenRes.status})` }));
-                return;
-            }
+            const tokenData = await exchangeDropboxOAuthCode(code, body.redirectUri || '');
             applyDropboxOAuthToken(tokenData, false);
             await persistDropboxOAuthToken(tokenData);
             res.writeHead(200, { 'Content-Type': 'application/json' });

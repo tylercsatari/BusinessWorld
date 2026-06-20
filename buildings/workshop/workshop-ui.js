@@ -4659,29 +4659,47 @@ const WorkshopUI = (() => {
         return data.link;
     }
 
+    function waitForDropboxOAuth(authWindow) {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            let closeTimer = null;
+            let timeout = null;
+            const cleanup = () => {
+                window.removeEventListener('message', onMessage);
+                if (closeTimer) clearInterval(closeTimer);
+                if (timeout) clearTimeout(timeout);
+            };
+            const finish = (err, payload) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                if (err) reject(err);
+                else resolve(payload);
+            };
+            const onMessage = (event) => {
+                if (event.origin !== window.location.origin) return;
+                const payload = event.data || {};
+                if (!payload || payload.type !== 'dropbox-oauth-complete') return;
+                if (payload.ok) finish(null, payload);
+                else finish(new Error(payload.error || 'Dropbox authorization failed.'));
+            };
+            window.addEventListener('message', onMessage);
+            closeTimer = setInterval(() => {
+                if (authWindow && authWindow.closed) finish(new Error('Dropbox authorization window closed before it completed.'));
+            }, 1000);
+            timeout = setTimeout(() => finish(new Error('Dropbox authorization timed out.')), 5 * 60 * 1000);
+        });
+    }
+
     async function reconnectDropboxForPublicLinks(path, pendingTab) {
         const authRes = await fetch('/api/dropbox/auth-url');
         const authData = await authRes.json().catch(() => ({}));
         if (!authRes.ok || !authData.url) throw new Error(authData.error || 'Could not start Dropbox authorization.');
 
-        if (pendingTab) pendingTab.location.href = authData.url;
-        else window.open(authData.url, '_blank', 'noopener');
-
-        const code = window.prompt(
-            'Dropbox needs one-time permission to create public folder links.\n\n' +
-            'If Dropbox refuses the authorization page, enable sharing.write in the Dropbox App Console first.\n\n' +
-            'After approving Dropbox, paste the authorization code here:'
-        );
-        if (!code || !code.trim()) throw new Error('Dropbox reconnect cancelled before an authorization code was entered.');
-
-        const tokenRes = await fetch('/api/dropbox/exchange-code', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code.trim() })
-        });
-        const tokenData = await tokenRes.json().catch(() => ({}));
-        if (!tokenRes.ok || !tokenData.ok) throw new Error(tokenData.error || `Dropbox authorization failed (${tokenRes.status})`);
-
+        const authWindow = pendingTab || window.open(authData.url, '_blank');
+        if (!authWindow) throw new Error('Could not open the Dropbox authorization window.');
+        authWindow.location.href = authData.url;
+        await waitForDropboxOAuth(authWindow);
         return createDropboxSharedLink(path);
     }
 
@@ -4733,7 +4751,6 @@ const WorkshopUI = (() => {
         const fresh = VideoService.getById(v.id) || v;
         if (!fresh.project) { alert('Select a Channel Project first.'); return; }
         const pendingTab = window.open('about:blank', '_blank');
-        if (pendingTab) pendingTab.opener = null;
         const oldText = btn ? btn.textContent : '';
         if (btn) { btn.disabled = true; btn.textContent = 'Creating public link…'; }
         let path = '';
