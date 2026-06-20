@@ -784,17 +784,24 @@ const LibraryUI = (() => {
         }, 200);
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
-        const stepMsg = (m) => { aiVideoIdeasStatus = m; aiVideoIdeasLog.push(m); prog.step(m); renderAiVideoIdeas(); };
+        // stepMsg sets the VISIBLE Phase too (via the modal's step phase), so the
+        // panel moves at every step instead of sitting on "client-start".
+        const stepMsg = (phase, m) => { aiVideoIdeasStatus = m; aiVideoIdeasLog.push(m); prog.step(m, { phase, msg: m }); renderAiVideoIdeas(); };
+        const fetchT = (url, opts, ms) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { ...(opts || {}), signal: c.signal }).finally(() => clearTimeout(t)); };
         try {
             const count = Math.max(1, aiVideoIdeasRuns * aiVideoIdeasPerRun);
 
-            // 1) LOOK THROUGH Business World (like the hooks do): existing ideas,
-            //    videos & AI ideas — so Kimi doesn't repeat anything.
-            stepMsg('Reading Business World — your ideas, videos & existing AI ideas (so nothing repeats)…');
-            const [ideasData, videosData] = await Promise.all([
-                fetch('/api/data/ideas').then(r => r.ok ? r.json() : []).catch(() => []),
-                fetch('/api/data/videos').then(r => r.ok ? r.json() : []).catch(() => [])
-            ]);
+            // 1) CONTEXT — existing titles so Kimi doesn't repeat. The already-loaded
+            //    AI ideas always count; the ideas/videos fetch is BEST-EFFORT with a
+            //    short timeout so a slow 1.5 MB load can never stall the run.
+            stepMsg('reading context', 'Reading Business World — your ideas & videos (so nothing repeats)…');
+            let ideasData = [], videosData = [];
+            try {
+                [ideasData, videosData] = await Promise.all([
+                    fetchT('/api/data/ideas', {}, 6000).then(r => r.ok ? r.json() : []).catch(() => []),
+                    fetchT('/api/data/videos', {}, 6000).then(r => r.ok ? r.json() : []).catch(() => [])
+                ]);
+            } catch (_) { /* best-effort — proceed with just the loaded AI ideas */ }
             const iN = Array.isArray(ideasData) ? ideasData.length : 0;
             const vN = Array.isArray(videosData) ? videosData.length : 0;
             const existingTitles = [
@@ -802,38 +809,39 @@ const LibraryUI = (() => {
                 ...(Array.isArray(ideasData) ? ideasData : []).map(x => x.name || x.title),
                 ...(Array.isArray(videosData) ? videosData : []).map(x => x.name || x.title)
             ].filter(Boolean);
-            stepMsg(`Context loaded: ${iN} ideas, ${vN} videos, ${aiVideoIdeas.length} AI ideas — won't repeat any of them.`);
-            prog.setSnapshot({ phase: 'context', updatedAgo: 0, inputs: { request: { runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun, requestedIdeas: count }, contextSummary: { ideas: iN, videos: vN, aiIdeas: aiVideoIdeas.length, avoidingTitles: existingTitles.length } }, outputs: {} });
+            stepMsg('context ready', `Context: ${iN} ideas, ${vN} videos, ${aiVideoIdeas.length} AI ideas — avoiding ${existingTitles.length} existing titles.`);
 
             // 2) ASSEMBLE the P/V/C/O/A/G prompt.
             const messages = aiVideoIdeaMessages(count, existingTitles);
             prog.setSnapshot({ phase: 'prompt', updatedAgo: 0, inputs: { request: { runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun, requestedIdeas: count }, prompt: { system: messages[0].content, user: messages[1].content } }, outputs: {} });
-            stepMsg(`Prompt assembled with the P/V/C/O/A/G formula. Asking Kimi K2.6 for ${count} idea${count === 1 ? '' : 's'}…`);
+            stepMsg('asking Kimi K2.6', `Prompt assembled (P/V/C/O/A/G). Asking Kimi K2.6 for ${count} idea${count === 1 ? '' : 's'}… (~5-15s)`);
 
-            // 3) GENERATE — the same simple, reliable endpoint the hooks use.
-            const r = await fetch('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 8000 }) });
+            // 3) GENERATE — the same simple, reliable endpoint the hooks use. 90s cap.
+            let r;
+            try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 8000 }) }, 90000); }
+            catch (err) { throw new Error(err && err.name === 'AbortError' ? 'Kimi took longer than 90s — try again.' : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
             if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (${r.status})`); }
             const data = await r.json();
             const content = data.choices?.[0]?.message?.content || '';
             if (content) prog.setOutput(content);
-            stepMsg('Kimi K2.6 replied — parsing ideas…');
+            stepMsg('parsing', 'Kimi K2.6 replied — parsing ideas…');
 
             // 4) PARSE.
             const parsed = aiVideoExtractJson(content);
             const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
-            if (!rawIdeas.length) throw new Error('Kimi did not return any parseable ideas — try again.');
+            if (!rawIdeas.length) throw new Error('Kimi replied but no ideas parsed. Reply started: ' + (content || '(empty)').slice(0, 160));
             const ideas = rawIdeas.slice(0, count).map(aiVideoNormalizeIdea).filter(i => i.title);
-            stepMsg(`Parsed ${ideas.length} idea${ideas.length === 1 ? '' : 's'}. Saving…`);
+            stepMsg('saving', `Parsed ${ideas.length} idea${ideas.length === 1 ? '' : 's'}. Saving…`);
 
             // 5) SAVE each (generic R2 collection — already works) + show cards live.
             const created = [];
             for (const idea of ideas) {
                 prog.setCards([], created.concat([idea]));
                 try {
-                    const saved = await fetch('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }).then(res => res.ok ? res.json() : null);
+                    const saved = await fetchT('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }, 20000).then(res => res.ok ? res.json() : null);
                     created.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
-                    stepMsg(`✓ ${idea.title}`);
                 } catch (e) { created.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
+                stepMsg('saving', `✓ ${idea.title}`);
             }
             const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
             aiVideoIdeas = [...created.filter(i => !existingIds.has(i.id)), ...aiVideoIdeas];
