@@ -900,8 +900,8 @@ const LibraryUI = (() => {
             ui.step('kimi', 'active');
             const messages = aiVideoIdeaMessages(count, existingTitles);
             let r;
-            try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 24000 }) }, 120000); }
-            catch (err) { throw new Error(err && err.name === 'AbortError' ? 'Kimi took longer than 90s — try again.' : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
+            try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 24000 }) }, 300000); }
+            catch (err) { throw new Error(err && err.name === 'AbortError' ? 'Kimi took longer than 5 minutes — try again.' : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
             if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
             const data = await r.json();
             const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
