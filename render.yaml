@@ -2,9 +2,11 @@ services:
   - type: web
     name: businessworld
     env: node
-    # standard = 2 GB RAM (the $25 plan). Was 'starter' (512 MB) — which, paired
-    # with Node's heap cap, caused the constant out-of-memory kills.
-    plan: standard
+    # NOTE: plan is intentionally NOT pinned here. Forcing a plan change in the
+    # Blueprint (starter->standard) requires manual approval in the Render
+    # dashboard and FREEZES auto-deploys until approved — which silently blocked
+    # every deploy. The plan is managed in the dashboard instead (keep it on the
+    # 2 GB / Standard plan there). Omitting it lets auto-deploys flow again.
     buildCommand: npm install && pip install -r requirements.txt
     startCommand: bash start.sh
     autoDeploy: true
