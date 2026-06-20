@@ -4284,12 +4284,12 @@ const WorkshopUI = (() => {
         }
         let next = 0;
         let done = 0;
-        let failed = null;
+        const failures = [];
         const report = () => {
             if (bar && bar.progress) bar.progress(loaded.reduce((sum, n) => sum + n, 0), totalBytes);
         };
         const worker = async () => {
-            while (!failed && next < list.length) {
+            while (next < list.length) {
                 const i = next++;
                 const file = list[i];
                 if (bar && bar.status && list.length > 1) bar.status(`${label} ${done + 1}/${list.length}: ${file.name}`);
@@ -4306,12 +4306,60 @@ const WorkshopUI = (() => {
                     report();
                     if (bar && bar.status && list.length > 1) bar.status(`${label} ${done}/${list.length} complete`);
                 } catch (e) {
-                    failed = e;
+                    failures.push({ index: i, file, error: e });
+                    loaded[i] = file.size || loaded[i];
+                    done++;
+                    report();
+                    if (bar && bar.status && list.length > 1) bar.status(`${label} ${done}/${list.length} complete`);
                 }
             }
         };
         await Promise.all(Array.from({ length: concurrency }, worker));
-        if (failed) throw failed;
+        if (failures.length) {
+            const err = new Error(`${failures.length} of ${list.length} upload${list.length === 1 ? '' : 's'} failed: ${failures.map(f => f.file.name).join(', ')}`);
+            err.failures = failures;
+            err.partialResults = results;
+            throw err;
+        }
+        return results;
+    }
+
+    async function uploadFilesToDropboxDetailed(files, destPathForFile, rowHost, opts = {}) {
+        const list = [...(files || [])];
+        if (!list.length) return [];
+        const concurrency = Math.max(1, Math.min(opts.concurrency || DBX_FILE_CONCURRENCY, list.length));
+        const label = opts.label || 'Uploading';
+        const rows = new Array(list.length);
+        const results = new Array(list.length);
+        let next = 0;
+        const rowFor = (file, i) => {
+            if (rows[i]) return rows[i];
+            const row = document.createElement('div');
+            row.className = 'wsp-upload-job';
+            row.style.marginTop = '6px';
+            rowHost.appendChild(row);
+            const bar = uploadProgressBar(row, file.name);
+            rows[i] = bar;
+            return bar;
+        };
+        const worker = async () => {
+            while (next < list.length) {
+                const i = next++;
+                const file = list[i];
+                const bar = rowFor(file, i);
+                try {
+                    const destPath = await destPathForFile(file, i);
+                    bar.status(`${label} ${i + 1}/${list.length}`);
+                    const meta = await uploadToDropbox(destPath, file, (n) => bar.progress(Math.min(n || 0, file.size || n || 0), file.size || 1), (mode) => bar.status(`${mode} · ${label} ${i + 1}/${list.length}`));
+                    bar.stage('Uploaded ✓');
+                    results[i] = { ok: true, file, meta };
+                } catch (error) {
+                    bar.stage('Failed: ' + error.message);
+                    results[i] = { ok: false, file, error };
+                }
+            }
+        };
+        await Promise.all(Array.from({ length: concurrency }, worker));
         return results;
     }
 
@@ -5066,7 +5114,8 @@ const WorkshopUI = (() => {
                 ${rows}
                 <div class="wsp-add-row">
                     <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
-                    <button class="wsp-mini-btn done" data-edit-up="${slot.key}">${items.length ? '⬆ Upload more' : '⬆ Upload'}</button></div>`;
+                    <button class="wsp-mini-btn done" data-edit-up="${slot.key}">${items.length ? '⬆ Upload more' : '⬆ Upload'}</button></div>
+                <div class="wsp-upload-jobs" data-edit-upload-jobs="${slot.key}"></div>`;
             el.querySelectorAll('[data-edit-open]').forEach(btn => btn.addEventListener('click', () => {
                 const item = finalVideoItems((VideoService.getById(v.id) || v).finalVideos || {}, slot.key)[Number(btn.dataset.editIdx)];
                 if (item && item.path) openFilePreview(item.path, item.name || item.path.split('/').pop());
@@ -5081,18 +5130,32 @@ const WorkshopUI = (() => {
                 const input = document.getElementById('wsp-edit-file-' + slot.key);
                 const files = input && input.files ? [...input.files] : [];
                 if (!files.length) { alert('Choose one or more video files first.'); return; }
-                const bar = uploadProgressBar(el, files[0].name);
+                const btn = el.querySelector('[data-edit-up]');
+                const jobs = el.querySelector('[data-edit-upload-jobs]');
+                if (jobs) jobs.innerHTML = '';
+                if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
+                let linkedAny = false;
                 try {
-                    const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading final videos' });
-                    const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
-                    const fresh = VideoService.getById(v.id) || v;
-                    const existing = finalVideoItems(fresh.finalVideos || {}, slot.key);
-                    bar.stage('Linking to this slot…');
-                    await setSlotItems(slot.key, [...existing, ...added]);
-                    bar.stage('Done ✓');
-                    toast(`🎬 ${files.length} ${slot.label.toLowerCase()} file${files.length === 1 ? '' : 's'} → ${v.project}/final videos`);
-                    rerenderEditor(v.id);
-                } catch (e) { alert('Upload failed: ' + e.message); rerenderEditor(v.id); }
+                    const results = await uploadFilesToDropboxDetailed(files, file => `${folder}/${file.name}`, jobs || el, { label: 'Final video' });
+                    const uploaded = results.filter(r => r && r.ok);
+                    const failed = results.filter(r => r && !r.ok);
+                    if (uploaded.length) {
+                        const added = uploaded.map(r => ({ path: r.meta.path_display || r.meta.path_lower, name: r.meta.name || r.file.name }));
+                        const fresh = VideoService.getById(v.id) || v;
+                        const existing = finalVideoItems(fresh.finalVideos || {}, slot.key);
+                        await setSlotItems(slot.key, [...existing, ...added]);
+                        linkedAny = true;
+                        toast(`🎬 ${uploaded.length} ${slot.label.toLowerCase()} file${uploaded.length === 1 ? '' : 's'} linked`);
+                    }
+                    if (input) input.value = '';
+                    if (failed.length) {
+                        alert(`${failed.length} upload${failed.length === 1 ? '' : 's'} failed. Successful files were kept. Failed files:\n\n${failed.map(r => '• ' + r.file.name + ': ' + r.error.message).join('\n')}`);
+                    }
+                } catch (e) {
+                    alert('Upload failed: ' + e.message);
+                } finally {
+                    if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = (items.length || linkedAny) ? '⬆ Upload more' : '⬆ Upload'; }
+                }
             });
         });
     }
