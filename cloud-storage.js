@@ -114,9 +114,11 @@ async function listR2Keys(prefix) {
 
 // ── Dropbox ────────────────────────────────────────────────
 
+let dropboxTokenRefreshedThisRun = false;
+
 async function getDropboxToken() {
     if (process.env.DROPBOX_REFRESH_TOKEN && process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET) {
-        if (!process.env.DROPBOX_ACCESS_TOKEN || process.env._DROPBOX_TOKEN_EXPIRED) {
+        if (!process.env.DROPBOX_ACCESS_TOKEN || process.env._DROPBOX_TOKEN_EXPIRED || !dropboxTokenRefreshedThisRun) {
             try {
                 const params = new URLSearchParams({
                     grant_type: 'refresh_token',
@@ -134,7 +136,11 @@ async function getDropboxToken() {
                     const tokenData = await tokenRes.json();
                     process.env.DROPBOX_ACCESS_TOKEN = tokenData.access_token;
                     delete process.env._DROPBOX_TOKEN_EXPIRED;
+                    dropboxTokenRefreshedThisRun = true;
                     console.log('Dropbox: token refreshed');
+                } else {
+                    const errText = await tokenRes.text().catch(() => '');
+                    console.warn('Dropbox: refresh failed', tokenRes.status, errText);
                 }
             } catch (e) { console.warn('Dropbox: refresh failed', e); }
         }

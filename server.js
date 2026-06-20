@@ -3542,16 +3542,17 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     async function dropboxFetch(res, url, opts) {
         const token = await cloud.getDropboxToken();
         opts.headers = { ...opts.headers, 'Authorization': `Bearer ${token}` };
-        const response = await fetch(url, opts);
-        // If 401, try refresh once
-        if (response.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
+        let response = await fetch(url, opts);
+        let body = await response.text();
+        // If Dropbox says the access token is invalid, force-refresh once.
+        if ((response.status === 401 || isDropboxInvalidAccessTokenText(body)) && process.env.DROPBOX_REFRESH_TOKEN) {
             process.env._DROPBOX_TOKEN_EXPIRED = '1';
             const newToken = await cloud.getDropboxToken();
             opts.headers['Authorization'] = `Bearer ${newToken}`;
-            return proxyFetch(res, url, opts);
+            response = await fetch(url, opts);
+            body = await response.text();
         }
         // Forward response
-        const body = await response.text();
         res.writeHead(response.status, { 'Content-Type': response.headers.get('content-type') || 'application/json' });
         res.end(body);
     }
@@ -3560,8 +3561,20 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         'Content-Type': 'application/json'
     };
 
+    function isDropboxInvalidAccessTokenText(text) {
+        return /invalid_access_token/i.test(String(text || ''));
+    }
+
     function dropboxRequiredScope(data) {
         return data && data.error && data.error.required_scope ? data.error.required_scope : '';
+    }
+
+    function dropboxErrorText(data) {
+        return [
+            data && data.error_summary,
+            data && data.error,
+            data && data.error && data.error['.tag']
+        ].filter(Boolean).join(' ');
     }
 
     async function dropboxApiJson(endpoint, body) {
@@ -3572,16 +3585,18 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         });
         let token = await cloud.getDropboxToken();
         let response = await call(token);
-        if (response.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
+        let text = await response.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { error: text }; }
+        if ((response.status === 401 || isDropboxInvalidAccessTokenText(text)) && process.env.DROPBOX_REFRESH_TOKEN) {
             process.env._DROPBOX_TOKEN_EXPIRED = '1';
             token = await cloud.getDropboxToken();
             response = await call(token);
+            text = await response.text();
+            try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { error: text }; }
         }
-        const text = await response.text();
-        let data = {};
-        try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { error: text }; }
         if (!response.ok) {
-            const err = new Error(data.error_summary || data.error || `Dropbox ${endpoint} ${response.status}`);
+            const err = new Error(dropboxErrorText(data) || `Dropbox ${endpoint} ${response.status}`);
             err.status = response.status;
             err.data = data;
             err.requiredScope = dropboxRequiredScope(data);
