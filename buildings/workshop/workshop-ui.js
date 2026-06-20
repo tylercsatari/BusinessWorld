@@ -4136,13 +4136,16 @@ const WorkshopUI = (() => {
     // upload sessions for large ones. Prefix chunks upload in parallel, then the
     // final chunk closes the session and finish commits with an empty body — this
     // is the sequence Dropbox accepts for concurrent sessions. =====
-    const DBX_CHUNK = 32 * 1024 * 1024;       // 32 MB — must be a multiple of 4 MB for concurrent sessions
+    const DBX_CHUNK = 8 * 1024 * 1024;        // 8 MB — smaller chunks keep more upload lanes busy
     const DBX_FOURMB = 4 * 1024 * 1024;       // concurrent-session append alignment
     const DBX_SIMPLE_MAX = 64 * 1024 * 1024;  // bigger clips use parallel chunks instead of one long request
-    const DBX_CONCURRENCY = 6;                // parallel chunks in flight for one large file
+    const DBX_CONCURRENCY = 12;               // parallel chunks in flight for one large file
+    const DBX_GLOBAL_CHUNK_CONCURRENCY = 12;  // total Dropbox chunk lanes across simultaneous files
     const DBX_FILE_CONCURRENCY = 3;           // parallel files in one multi-file upload action
     const DBX_DIRECT_TOKEN_TTL = 50 * 60 * 1000;
     let _dropboxDirectToken = { token: '', fetchedAt: 0 };
+    let _dbxChunkLanes = 0;
+    const _dbxChunkWaiters = [];
 
     // Stamp the Supabase bearer token onto a raw XHR (the fetch wrapper that does
     // this automatically doesn't cover XHR, which uploads use for progress).
@@ -4153,6 +4156,20 @@ const WorkshopUI = (() => {
 
     function dropboxHeaderJson(arg) {
         return JSON.stringify(arg).replace(/[^\x20-\x7e]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
+    }
+
+    async function withDropboxChunkLane(fn) {
+        if (_dbxChunkLanes >= DBX_GLOBAL_CHUNK_CONCURRENCY) {
+            await new Promise(resolve => _dbxChunkWaiters.push(resolve));
+        }
+        _dbxChunkLanes++;
+        try {
+            return await fn();
+        } finally {
+            _dbxChunkLanes = Math.max(0, _dbxChunkLanes - 1);
+            const next = _dbxChunkWaiters.shift();
+            if (next) next();
+        }
     }
 
     function dropboxDirectError(message, status, bodyText) {
@@ -4223,12 +4240,17 @@ const WorkshopUI = (() => {
         }
     }
 
-    async function uploadToDropbox(destPath, file, onProgress) {
+    async function uploadToDropbox(destPath, file, onProgress, onStatus) {
         try {
+            if (onStatus) onStatus(file.size > DBX_SIMPLE_MAX ? `Dropbox direct · ${DBX_CONCURRENCY} chunk lanes` : 'Dropbox direct');
             return await uploadDirectToDropbox(destPath, file, onProgress);
         } catch (e) {
             if (!e || !e.directUpload) throw e;
+            if (file.size > DBX_SIMPLE_MAX) {
+                throw new Error(`Fast Dropbox direct upload failed: ${e.message}. Slow Render relay is disabled for large videos so uploads do not crawl.`);
+            }
             console.warn('Direct Dropbox upload failed; retrying through server proxy:', e.message);
+            if (onStatus) onStatus('Render relay fallback');
             if (onProgress) onProgress(0, file.size || 1);
             return uploadViaProxyToDropbox(destPath, file, onProgress);
         }
@@ -4254,6 +4276,12 @@ const WorkshopUI = (() => {
         const results = new Array(list.length);
         const concurrency = Math.max(1, Math.min(opts.concurrency || DBX_FILE_CONCURRENCY, list.length));
         const label = opts.label || 'Uploading';
+        const hasLarge = list.some(file => file.size > DBX_SIMPLE_MAX);
+        if (bar && bar.status) {
+            bar.status(hasLarge
+                ? `Dropbox direct · ${DBX_GLOBAL_CHUNK_CONCURRENCY} total chunk lanes · ${concurrency} file${concurrency === 1 ? '' : 's'} active`
+                : `Dropbox direct · ${concurrency} file${concurrency === 1 ? '' : 's'} active`);
+        }
         let next = 0;
         let done = 0;
         let failed = null;
@@ -4264,17 +4292,19 @@ const WorkshopUI = (() => {
             while (!failed && next < list.length) {
                 const i = next++;
                 const file = list[i];
-                if (bar && bar.stage && list.length > 1) bar.stage(`${label} ${done + 1}/${list.length}: ${file.name}`);
+                if (bar && bar.status && list.length > 1) bar.status(`${label} ${done + 1}/${list.length}: ${file.name}`);
                 try {
                     const destPath = await destPathForFile(file, i);
                     results[i] = await uploadToDropbox(destPath, file, (n) => {
                         loaded[i] = Math.min(n || 0, file.size || n || 0);
                         report();
+                    }, (mode) => {
+                        if (bar && bar.status) bar.status(`${mode} · ${done}/${list.length} done`);
                     });
                     loaded[i] = file.size || loaded[i];
                     done++;
                     report();
-                    if (bar && bar.stage && list.length > 1) bar.stage(`${label} ${done}/${list.length} complete`);
+                    if (bar && bar.status && list.length > 1) bar.status(`${label} ${done}/${list.length} complete`);
                 } catch (e) {
                     failed = e;
                 }
@@ -4327,9 +4357,9 @@ const WorkshopUI = (() => {
     async function putDirectChunk(sessionId, offset, blob, onChunkProgress, closeSession) {
         for (let n = 1; n <= 4; n++) {
             try {
-                await dropboxDirectContent('upload_session/append_v2', { cursor: { session_id: sessionId, offset }, close: !!closeSession }, blob, (loaded) => {
+                await withDropboxChunkLane(() => dropboxDirectContent('upload_session/append_v2', { cursor: { session_id: sessionId, offset }, close: !!closeSession }, blob, (loaded) => {
                     if (onChunkProgress) onChunkProgress(loaded);
-                });
+                }));
                 if (onChunkProgress) onChunkProgress(blob.size);
                 return;
             } catch (e) {
@@ -4382,7 +4412,7 @@ const WorkshopUI = (() => {
 
     // POST one chunk to the proxy append endpoint, retrying up to 3× on failure.
     function putProxyChunk(sessionId, offset, blob, onChunkProgress, closeSession) {
-        return new Promise((resolve, reject) => {
+        return withDropboxChunkLane(() => new Promise((resolve, reject) => {
             const tryOnce = (n) => {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', `/api/dropbox/session/append?session_id=${encodeURIComponent(sessionId)}&offset=${offset}${closeSession ? '&close=1' : ''}`);
@@ -4397,7 +4427,7 @@ const WorkshopUI = (() => {
                 xhr.send(blob);
             };
             tryOnce(1);
-        });
+        }));
     }
 
     async function uploadChunkedViaProxy(destPath, file, onProgress) {
@@ -4452,8 +4482,13 @@ const WorkshopUI = (() => {
         const fill = hostEl.querySelector('.wsp-upload-fill');
         const label = hostEl.querySelector('.wsp-upload-label');
         const fmt = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+        let prefix = '';
         let lastT = Date.now(), lastLoaded = 0, ema = 0;
         return {
+            status(text) {
+                prefix = text || '';
+                if (label && lastLoaded <= 0) label.textContent = prefix ? `${prefix} · starting…` : 'Starting upload…';
+            },
             progress(loaded, total) {
                 const pct = Math.min(100, Math.round(loaded / total * 100));
                 fill.style.width = pct + '%';
@@ -4462,9 +4497,10 @@ const WorkshopUI = (() => {
                 const spd = ema > 0 ? (ema / 1048576).toFixed(1) + ' MB/s' : '';
                 const etaSec = ema > 0 ? Math.round((total - loaded) / ema) : null;
                 const eta = etaSec == null ? '' : etaSec >= 60 ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s` : `${etaSec}s`;
+                const lead = prefix ? prefix + ' · ' : '';
                 label.textContent = pct >= 100
-                    ? 'Finalizing…'
-                    : `${pct}% · ${fmt(loaded)}/${fmt(total)}${spd ? ' · ' + spd : ''}${eta ? ' · ' + eta + ' left' : ''}`;
+                    ? `${lead}Finalizing…`
+                    : `${lead}${pct}% · ${fmt(loaded)}/${fmt(total)}${spd ? ' · ' + spd : ''}${eta ? ' · ' + eta + ' left' : ''}`;
             },
             stage(text) { fill.style.width = '100%'; label.textContent = text; }
         };
