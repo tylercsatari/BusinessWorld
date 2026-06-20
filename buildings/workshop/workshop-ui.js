@@ -1402,8 +1402,8 @@ const WorkshopUI = (() => {
             const host = upBtn.parentElement;
             const bar = uploadProgressBar(host, files[0].name);
             try {
-                const added = [];
-                for (const file of files) { const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress); added.push({ path: meta.path_display || meta.path_lower, name: meta.name || file.name }); }
+                const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading' });
+                const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
                 const cur = stageResultsFor(VideoService.getById(v.id) || fresh, stageId);
                 const sr = { ...((VideoService.getById(v.id) || fresh).stageResults || {}), [stageId]: [...cur, ...added] };
                 await VideoService.update(v.id, { stageResults: sr, status: normalizedStatus(fresh) });
@@ -2466,6 +2466,7 @@ const WorkshopUI = (() => {
                 ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
                 ${projectGate(v, 'Select a Channel Project first — the final videos live in that project\'s Dropbox folder.')}
                 ${editingHandoffHtml(v)}
+                <div id="wsp-edit-bulk" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-full" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nosubs" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nomusic" class="wsp-edit-slot"></div>
@@ -3130,13 +3131,9 @@ const WorkshopUI = (() => {
                         if (!files.length) { alert('Choose one or more files first.'); return; }
                         const bar = uploadProgressBar(el, files[0].name);
                         try {
-                            let first = null;
-                            for (let i = 0; i < files.length; i++) {
-                                const file = files[i];
-                                if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
-                                const meta = await uploadToDropbox(`${rootP}/${video.project}/${s.kind}/${file.name}`, file, bar.progress);
-                                if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
-                            }
+                            const metas = await uploadFilesToDropbox(files, file => `${rootP}/${video.project}/${s.kind}/${file.name}`, bar, { label: 'Uploading' });
+                            const firstMeta = metas[0];
+                            const first = { path: firstMeta.path_display || firstMeta.path_lower, name: firstMeta.name || files[0].name };
                             bar.stage('Saving to component…');
                             await saveComp({ [s.pathF]: first.path, [s.nameF]: first.name });
                             dirty = true; bar.stage('Done ✓');
@@ -3277,13 +3274,9 @@ const WorkshopUI = (() => {
             addRow.parentNode.insertBefore(progHost, addRow.nextSibling);
             const bar = uploadProgressBar(progHost, files[0].name);
             try {
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    if (files.length > 1) bar.stage(`Uploading ${file.name} (${i + 1}/${files.length})…`);
-                    const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
-                    dirty = true;
-                    await saveComp({ media: [...(cur().media || []), { path: meta.path_display || meta.path_lower, name: meta.name || file.name }] });
-                }
+                const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading' });
+                dirty = true;
+                await saveComp({ media: [...(cur().media || []), ...metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }))] });
                 bar.stage(`Done ✓ — ${files.length} file${files.length === 1 ? '' : 's'}`);
                 setTimeout(() => progHost.remove(), 1200);
             } catch (e) { console.warn('media upload failed', e); bar.stage('Upload failed: ' + e.message); }
@@ -3979,8 +3972,8 @@ const WorkshopUI = (() => {
             const folder = `${root}/${fresh.project}/animation/assets`;
             const bar = uploadProgressBar(upBtn.parentElement, files[0].name);
             try {
-                const added = [];
-                for (const file of files) { const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress); added.push({ path: meta.path_display || meta.path_lower, name: meta.name || file.name }); }
+                const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading assets' });
+                const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
                 await VideoService.update(v.id, { animAssets: [...animAssets(), ...added] }).catch(() => {});
                 bar.stage('Done ✓'); toast(`🎞️ ${added.length} asset${added.length === 1 ? '' : 's'} → animation/assets`);
                 rerenderList();
@@ -4111,13 +4104,8 @@ const WorkshopUI = (() => {
             const rowEl = root.querySelector(`[data-hooki-media="${hid}"]`);
             const bar = uploadProgressBar(rowEl, files[0].name);
             try {
-                const added = [];
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
-                    const meta = await uploadToDropbox(`${rootPath}/${v.project}/${sub}/${file.name}`, file, bar.progress);
-                    added.push({ path: meta.path_display || meta.path_lower, name: meta.name || file.name });
-                }
+                const metas = await uploadFilesToDropbox(files, file => `${rootPath}/${v.project}/${sub}/${file.name}`, bar, { label: 'Uploading footage' });
+                const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
                 bar.stage('Linking to this hook…');
                 const hooks = hooksWithEdits(v.id);
                 const h2 = hooks.find(x => x.id === hid);
@@ -4148,11 +4136,11 @@ const WorkshopUI = (() => {
     // upload sessions for large ones. Chunks upload in parallel, each retries on
     // failure, and progress is aggregated across all of them — no 150 MB cap, no
     // whole-file server buffering, no stall at "100%". =====
-    const DBX_CHUNK = 16 * 1024 * 1024;       // 16 MB — must be a multiple of 4 MB for concurrent sessions
+    const DBX_CHUNK = 32 * 1024 * 1024;       // 32 MB — must be a multiple of 4 MB for concurrent sessions
     const DBX_FOURMB = 4 * 1024 * 1024;       // concurrent-session append alignment
-    const DBX_SIMPLE_MAX = 100 * 1024 * 1024; // ≤ 100 MB → one fast request (Dropbox single-shot caps at 150 MB).
-                                              // Covers normal clips; only large final videos use the chunked path.
-    const DBX_CONCURRENCY = 4;                // parallel chunks in flight
+    const DBX_SIMPLE_MAX = 64 * 1024 * 1024;  // bigger clips use parallel chunks instead of one long request
+    const DBX_CONCURRENCY = 6;                // parallel chunks in flight for one large file
+    const DBX_FILE_CONCURRENCY = 3;           // parallel files in one multi-file upload action
 
     // Stamp the Supabase bearer token onto a raw XHR (the fetch wrapper that does
     // this automatically doesn't cover XHR, which uploads use for progress).
@@ -4165,6 +4153,45 @@ const WorkshopUI = (() => {
         return (file.size > DBX_SIMPLE_MAX)
             ? uploadChunked(destPath, file, onProgress)
             : uploadSimple(destPath, file, onProgress);
+    }
+
+    async function uploadFilesToDropbox(files, destPathForFile, bar, opts = {}) {
+        const list = [...(files || [])];
+        if (!list.length) return [];
+        const totalBytes = list.reduce((sum, file) => sum + (file.size || 0), 0) || 1;
+        const loaded = new Array(list.length).fill(0);
+        const results = new Array(list.length);
+        const concurrency = Math.max(1, Math.min(opts.concurrency || DBX_FILE_CONCURRENCY, list.length));
+        const label = opts.label || 'Uploading';
+        let next = 0;
+        let done = 0;
+        let failed = null;
+        const report = () => {
+            if (bar && bar.progress) bar.progress(loaded.reduce((sum, n) => sum + n, 0), totalBytes);
+        };
+        const worker = async () => {
+            while (!failed && next < list.length) {
+                const i = next++;
+                const file = list[i];
+                if (bar && bar.stage && list.length > 1) bar.stage(`${label} ${done + 1}/${list.length}: ${file.name}`);
+                try {
+                    const destPath = await destPathForFile(file, i);
+                    results[i] = await uploadToDropbox(destPath, file, (n) => {
+                        loaded[i] = Math.min(n || 0, file.size || n || 0);
+                        report();
+                    });
+                    loaded[i] = file.size || loaded[i];
+                    done++;
+                    report();
+                    if (bar && bar.stage && list.length > 1) bar.stage(`${label} ${done}/${list.length} complete`);
+                } catch (e) {
+                    failed = e;
+                }
+            }
+        };
+        await Promise.all(Array.from({ length: concurrency }, worker));
+        if (failed) throw failed;
+        return results;
     }
 
     // One XHR with up to 2 retries (exponential-ish backoff).
@@ -4501,13 +4528,9 @@ const WorkshopUI = (() => {
             if (!files.length) { alert(`Choose one or more files first.`); return; }
             const bar = uploadProgressBar(el, files[0].name);
             try {
-                let first = null;
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
-                    const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
-                    if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
-                }
+                const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: `Uploading ${cfg.noun}` });
+                const firstMeta = metas[0];
+                const first = { path: firstMeta.path_display || firstMeta.path_lower, name: firstMeta.name || files[0].name };
                 bar.stage('Linking to this video…');
                 await VideoService.update(v.id, {
                     [cfg.pathField]: first.path,
@@ -4763,6 +4786,15 @@ const WorkshopUI = (() => {
         { key: 'nosubs', label: 'Version without subtitles & graphics' },
         { key: 'nomusic', label: 'Version without music' }
     ];
+    function guessEditSlotKey(file, used, finalVideos) {
+        const name = String(file && file.name || '').toLowerCase();
+        const available = (key) => !used.has(key) && !(finalVideos && finalVideos[key]);
+        if (available('nomusic') && /(no[\s_-]*music|without[\s_-]*music|musicless|silent|noaudio|no[\s_-]*audio)/i.test(name)) return 'nomusic';
+        if (available('nosubs') && /(no[\s_-]*subs?|without[\s_-]*subs?|no[\s_-]*graphics|without[\s_-]*graphics|clean)/i.test(name)) return 'nosubs';
+        if (available('full') && /(full|subtitles?|graphics?|final|main)/i.test(name)) return 'full';
+        const open = EDIT_SLOTS.find(s => available(s.key));
+        return open ? open.key : '';
+    }
     async function initEditSlots(v) {
         if (!document.getElementById('wsp-edit-full') || !v.project) return;
         const root = await dropboxRootPath();
@@ -4773,6 +4805,45 @@ const WorkshopUI = (() => {
             if (val) finalVideos[key] = val; else delete finalVideos[key];
             await VideoService.update(v.id, { finalVideos, status: normalizedStatus(fresh) });
         };
+        const bulkEl = document.getElementById('wsp-edit-bulk');
+        if (bulkEl && bulkEl.isConnected) {
+            const missing = EDIT_SLOTS.filter(slot => !((v.finalVideos || {})[slot.key]));
+            bulkEl.innerHTML = missing.length ? `
+                <div class="wsp-edit-slot-label">Upload final videos together</div>
+                <div class="wsp-add-row">
+                    <input type="file" id="wsp-edit-bulk-files" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
+                    <button class="wsp-mini-btn done" id="wsp-edit-bulk-up">⬆ Upload selected videos</button>
+                </div>` : '';
+            bulkEl.querySelector('#wsp-edit-bulk-up')?.addEventListener('click', async () => {
+                const input = document.getElementById('wsp-edit-bulk-files');
+                const files = input && input.files ? [...input.files] : [];
+                if (!files.length) { alert('Choose one or more final video files first.'); return; }
+                const fresh = VideoService.getById(v.id) || v;
+                const finalVideos = { ...(fresh.finalVideos || {}) };
+                const used = new Set();
+                const assignments = [];
+                for (const file of files) {
+                    const key = guessEditSlotKey(file, used, finalVideos);
+                    if (!key) continue;
+                    used.add(key);
+                    assignments.push({ key, file });
+                }
+                if (!assignments.length) { alert('All final video slots are already filled. Unlink one first if you want to replace it.'); return; }
+                const bar = uploadProgressBar(bulkEl, assignments[0].file.name);
+                try {
+                    const metas = await uploadFilesToDropbox(assignments.map(a => a.file), file => `${folder}/${file.name}`, bar, { label: 'Uploading final videos' });
+                    metas.forEach((meta, i) => {
+                        const file = assignments[i].file;
+                        finalVideos[assignments[i].key] = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
+                    });
+                    bar.stage('Linking final videos…');
+                    await VideoService.update(v.id, { finalVideos, status: normalizedStatus(fresh) });
+                    bar.stage('Done ✓');
+                    toast(`🎬 ${assignments.length} final video${assignments.length === 1 ? '' : 's'} uploaded in parallel`);
+                    rerenderEditor(v.id);
+                } catch (e) { alert('Final video upload failed: ' + e.message); rerenderEditor(v.id); }
+            });
+        }
         EDIT_SLOTS.forEach(slot => {
             const el = document.getElementById('wsp-edit-' + slot.key);
             if (!el || !el.isConnected) return;
@@ -4798,13 +4869,9 @@ const WorkshopUI = (() => {
                     if (!files.length) { alert('Choose one or more video files first.'); return; }
                     const bar = uploadProgressBar(el, files[0].name);
                     try {
-                        let first = null;
-                        for (let i = 0; i < files.length; i++) {
-                            const file = files[i];
-                            if (files.length > 1) bar.stage(`Uploading ${i + 1}/${files.length}: ${file.name}`);
-                            const meta = await uploadToDropbox(`${folder}/${file.name}`, file, bar.progress);
-                            if (!first) first = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
-                        }
+                        const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading final videos' });
+                        const firstMeta = metas[0];
+                        const first = { path: firstMeta.path_display || firstMeta.path_lower, name: firstMeta.name || files[0].name };
                         bar.stage('Linking to this video…');
                         await setSlot(slot.key, first);
                         bar.stage('Done ✓');

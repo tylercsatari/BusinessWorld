@@ -3736,36 +3736,33 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/dropbox/upload' && req.method === 'POST') {
         const filePath = url.searchParams.get('path');
         if (!filePath) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing path' })); return; }
-        const chunks = [];
-        req.on('data', c => chunks.push(c));
-        req.on('end', async () => {
-            try {
-                const buf = Buffer.concat(chunks);
-                if (!buf.length) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Empty body' })); return; }
-                const uploadOnce = async (token) => fetch('https://content.dropboxapi.com/2/files/upload', {
+        try {
+            const uploadOnce = async (token) => {
+                const headers = {
+                    'Authorization': `Bearer ${token}`,
+                    'Dropbox-API-Arg': JSON.stringify({ path: filePath, mode: 'add', autorename: true, mute: true }),
+                    'Content-Type': 'application/octet-stream'
+                };
+                if (req.headers['content-length']) headers['Content-Length'] = req.headers['content-length'];
+                return fetch('https://content.dropboxapi.com/2/files/upload', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Dropbox-API-Arg': JSON.stringify({ path: filePath, mode: 'add', autorename: true, mute: true }),
-                        'Content-Type': 'application/octet-stream'
-                    },
-                    body: buf
+                    headers,
+                    body: req,
+                    duplex: 'half'
                 });
-                let token = await dropboxTokenOrThrow(false);
-                let response = await uploadOnce(token);
-                let text = await response.text();
-                if ((response.status === 401 || isDropboxInvalidAccessTokenText(text)) && process.env.DROPBOX_REFRESH_TOKEN) {
-                    token = await dropboxTokenOrThrow(true);
-                    response = await uploadOnce(token);
-                    text = await response.text();
-                }
-                res.writeHead(response.status, { 'Content-Type': response.headers.get('content-type') || 'application/json' });
-                res.end(text);
-            } catch (e) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: e.message }));
+            };
+            const token = await dropboxTokenOrThrow(false);
+            const response = await uploadOnce(token);
+            const text = await response.text();
+            if ((response.status === 401 || isDropboxInvalidAccessTokenText(text)) && process.env.DROPBOX_REFRESH_TOKEN) {
+                await dropboxTokenOrThrow(true);
             }
-        });
+            res.writeHead(response.status, { 'Content-Type': response.headers.get('content-type') || 'application/json' });
+            res.end(text);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
         return;
     }
 
@@ -3774,28 +3771,24 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     // RAM. For anything large the client drives a concurrent upload session:
     //   start → append_v2 (many, in parallel) → finish
     // The server buffers only ONE chunk at a time and refreshes the token on 401.
-    const readRawBody = (req, maxBytes) => new Promise((resolve, reject) => {
-        const chunks = []; let size = 0;
-        req.on('data', c => {
-            size += c.length;
-            if (maxBytes && size > maxBytes) { reject(new Error('chunk exceeds limit')); try { req.destroy(); } catch (e) {} return; }
-            chunks.push(c);
-        });
-        req.on('end', () => resolve(Buffer.concat(chunks)));
-        req.on('error', reject);
-    });
     // Call a Dropbox content endpoint, refreshing the token once on 401.
-    const dropboxContent = async (endpoint, apiArg, body) => {
+    const dropboxContent = async (endpoint, apiArg, body, opts = {}) => {
         const doCall = async (token) => fetch('https://content.dropboxapi.com/2/files/' + endpoint, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Dropbox-API-Arg': JSON.stringify(apiArg), 'Content-Type': 'application/octet-stream' },
-            body
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Dropbox-API-Arg': JSON.stringify(apiArg),
+                'Content-Type': 'application/octet-stream',
+                ...(opts.contentLength ? { 'Content-Length': String(opts.contentLength) } : {})
+            },
+            body,
+            ...(opts.duplex ? { duplex: 'half' } : {})
         });
         let token = await dropboxTokenOrThrow(false);
         let r = await doCall(token);
         if (r.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
             token = await dropboxTokenOrThrow(true);
-            r = await doCall(token);
+            if (!opts.noRetry) r = await doCall(token);
         }
         return r;
     };
@@ -3814,8 +3807,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         const offset = Number(url.searchParams.get('offset'));
         if (!sessionId || !Number.isFinite(offset)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'missing session_id/offset' })); return; }
         try {
-            const buf = await readRawBody(req, 64 * 1024 * 1024);
-            const r = await dropboxContent('upload_session/append_v2', { cursor: { session_id: sessionId, offset }, close: false }, buf);
+            const r = await dropboxContent('upload_session/append_v2',
+                { cursor: { session_id: sessionId, offset }, close: false },
+                req,
+                { duplex: true, noRetry: true, contentLength: req.headers['content-length'] });
             if (r.ok) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); return; }
             const text = await r.text();
             // A retried chunk whose first try already landed → Dropbox reports the
@@ -3834,10 +3829,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         try {
             // For a CONCURRENT session every append must be a 4 MB multiple, so the
             // final (non-aligned) tail is sent here in the finish body.
-            const tail = await readRawBody(req, 64 * 1024 * 1024);
             const r = await dropboxContent('upload_session/finish',
                 { cursor: { session_id: sessionId, offset }, commit: { path: filePath, mode: 'add', autorename: true, mute: true } },
-                tail);
+                req,
+                { duplex: true, noRetry: true, contentLength: req.headers['content-length'] });
             const text = await r.text();
             res.writeHead(r.status, { 'Content-Type': r.headers.get('content-type') || 'application/json' }); res.end(text);
         } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
