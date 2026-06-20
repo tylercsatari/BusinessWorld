@@ -76,8 +76,10 @@ const LibraryUI = (() => {
     let notesSearchTimer = null;
     let notesFilterContent = JSON.parse(localStorage.getItem('notes-filter-content') || '[]'); // active content filters: 'context', 'script', 'logistics'
 
-    const escHtml = HtmlUtils.escHtml;
-    const escAttr = HtmlUtils.escAttr;
+    // Coerce to a string first — the shared escapers do (s||'').replace, which
+    // throws on a non-string field (e.g. an array/object that slipped into an idea).
+    const escHtml = (s) => HtmlUtils.escHtml(s == null ? '' : (typeof s === 'string' ? s : String(s)));
+    const escAttr = (s) => HtmlUtils.escAttr(s == null ? '' : (typeof s === 'string' ? s : String(s)));
 
     function showToast(msg, duration = 2000) {
         const t = document.createElement('div');
