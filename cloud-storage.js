@@ -115,10 +115,12 @@ async function listR2Keys(prefix) {
 // ── Dropbox ────────────────────────────────────────────────
 
 let dropboxTokenRefreshedThisRun = false;
+let dropboxLastRefresh = null;
 
-async function getDropboxToken() {
+async function getDropboxToken(force = false) {
     if (process.env.DROPBOX_REFRESH_TOKEN && process.env.DROPBOX_APP_KEY && process.env.DROPBOX_APP_SECRET) {
-        if (!process.env.DROPBOX_ACCESS_TOKEN || process.env._DROPBOX_TOKEN_EXPIRED || !dropboxTokenRefreshedThisRun) {
+        const forceRefresh = force || !!process.env._DROPBOX_TOKEN_EXPIRED;
+        if (!process.env.DROPBOX_ACCESS_TOKEN || forceRefresh || !dropboxTokenRefreshedThisRun) {
             try {
                 const params = new URLSearchParams({
                     grant_type: 'refresh_token',
@@ -137,58 +139,98 @@ async function getDropboxToken() {
                     process.env.DROPBOX_ACCESS_TOKEN = tokenData.access_token;
                     delete process.env._DROPBOX_TOKEN_EXPIRED;
                     dropboxTokenRefreshedThisRun = true;
+                    dropboxLastRefresh = { ok: true, status: tokenRes.status, at: new Date().toISOString(), error: '' };
                     console.log('Dropbox: token refreshed');
                 } else {
                     const errText = await tokenRes.text().catch(() => '');
+                    dropboxLastRefresh = { ok: false, status: tokenRes.status, at: new Date().toISOString(), error: errText.slice(0, 500) };
+                    if (forceRefresh) delete process.env.DROPBOX_ACCESS_TOKEN;
                     console.warn('Dropbox: refresh failed', tokenRes.status, errText);
                 }
-            } catch (e) { console.warn('Dropbox: refresh failed', e); }
+            } catch (e) {
+                dropboxLastRefresh = { ok: false, status: 0, at: new Date().toISOString(), error: e.message };
+                if (forceRefresh) delete process.env.DROPBOX_ACCESS_TOKEN;
+                console.warn('Dropbox: refresh failed', e);
+            }
         }
     }
     return process.env.DROPBOX_ACCESS_TOKEN;
 }
 
-// Upload buffer to Dropbox (files < 150 MB)
-async function uploadToDropbox(dropboxPath, buffer) {
-    const token = await getDropboxToken();
-    if (!token) throw new Error('No Dropbox token available');
+function dropboxTokenErrorMessage() {
+    const missing = [];
+    if (!process.env.DROPBOX_APP_KEY) missing.push('DROPBOX_APP_KEY');
+    if (!process.env.DROPBOX_APP_SECRET) missing.push('DROPBOX_APP_SECRET');
+    if (!process.env.DROPBOX_REFRESH_TOKEN) missing.push('DROPBOX_REFRESH_TOKEN');
+    if (missing.length) return `Dropbox is missing env var(s): ${missing.join(', ')}`;
+    if (dropboxLastRefresh && dropboxLastRefresh.ok === false) {
+        return `Dropbox token refresh failed: ${dropboxLastRefresh.error || `HTTP ${dropboxLastRefresh.status}`}`;
+    }
+    return 'No Dropbox token available';
+}
 
-    const res = await fetch('https://content.dropboxapi.com/2/files/upload', {
+async function requireDropboxToken(force = false) {
+    const token = await getDropboxToken(force);
+    if (!token) throw new Error(dropboxTokenErrorMessage());
+    return token;
+}
+
+function getDropboxAuthStatus() {
+    return {
+        hasAppKey: !!process.env.DROPBOX_APP_KEY,
+        hasAppSecret: !!process.env.DROPBOX_APP_SECRET,
+        hasRefreshToken: !!process.env.DROPBOX_REFRESH_TOKEN,
+        hasAccessToken: !!process.env.DROPBOX_ACCESS_TOKEN,
+        refreshedThisRun: dropboxTokenRefreshedThisRun,
+        lastRefresh: dropboxLastRefresh
+    };
+}
+
+async function dropboxContentFetch(endpoint, apiArg, body) {
+    const call = (token) => fetch(`https://content.dropboxapi.com/2/files/${endpoint}`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
-            'Dropbox-API-Arg': JSON.stringify({
-                path: dropboxPath,
-                mode: 'overwrite',
-                autorename: false,
-                mute: true
-            }),
+            'Dropbox-API-Arg': JSON.stringify(apiArg),
             'Content-Type': 'application/octet-stream'
         },
-        body: buffer
+        body
     });
-
+    let token = await requireDropboxToken(false);
+    let res = await call(token);
     if (res.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
-        // Token expired — refresh and retry once
-        process.env._DROPBOX_TOKEN_EXPIRED = '1';
-        const newToken = await getDropboxToken();
-        const retry = await fetch('https://content.dropboxapi.com/2/files/upload', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${newToken}`,
-                'Dropbox-API-Arg': JSON.stringify({
-                    path: dropboxPath,
-                    mode: 'overwrite',
-                    autorename: false,
-                    mute: true
-                }),
-                'Content-Type': 'application/octet-stream'
-            },
-            body: buffer
-        });
-        if (!retry.ok) throw new Error(`Dropbox upload failed: ${retry.status}`);
-        return retry.json();
+        token = await requireDropboxToken(true);
+        res = await call(token);
     }
+    return res;
+}
+
+async function dropboxApiFetch(endpoint, payload) {
+    const call = (token) => fetch(`https://api.dropboxapi.com/2/files/${endpoint}`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload || {})
+    });
+    let token = await requireDropboxToken(false);
+    let res = await call(token);
+    if (res.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
+        token = await requireDropboxToken(true);
+        res = await call(token);
+    }
+    return res;
+}
+
+// Upload buffer to Dropbox (files < 150 MB)
+async function uploadToDropbox(dropboxPath, buffer) {
+    const res = await dropboxContentFetch('upload', {
+        path: dropboxPath,
+        mode: 'overwrite',
+        autorename: false,
+        mute: true
+    }, buffer);
 
     if (!res.ok) throw new Error(`Dropbox upload failed: ${res.status}`);
     return res.json();
@@ -196,9 +238,6 @@ async function uploadToDropbox(dropboxPath, buffer) {
 
 // Upload large file via upload_session (for files > 150 MB)
 async function uploadLargeToDropbox(dropboxPath, filePath) {
-    const token = await getDropboxToken();
-    if (!token) throw new Error('No Dropbox token available');
-
     const CHUNK_SIZE = 100 * 1024 * 1024; // 100 MB chunks
     const stat = fs.statSync(filePath);
     const fileSize = stat.size;
@@ -210,15 +249,7 @@ async function uploadLargeToDropbox(dropboxPath, filePath) {
     }
 
     // Start session
-    const startRes = await fetch('https://content.dropboxapi.com/2/files/upload_session/start', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Dropbox-API-Arg': JSON.stringify({ close: false }),
-            'Content-Type': 'application/octet-stream'
-        },
-        body: Buffer.alloc(0)
-    });
+    const startRes = await dropboxContentFetch('upload_session/start', { close: false }, Buffer.alloc(0));
     if (!startRes.ok) throw new Error(`Dropbox session start failed: ${startRes.status}`);
     const { session_id } = await startRes.json();
 
@@ -236,34 +267,18 @@ async function uploadLargeToDropbox(dropboxPath, filePath) {
 
             if (isLast) {
                 // Finish
-                const finishRes = await fetch('https://content.dropboxapi.com/2/files/upload_session/finish', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Dropbox-API-Arg': JSON.stringify({
-                            cursor: { session_id, offset },
-                            commit: { path: dropboxPath, mode: 'overwrite', autorename: false, mute: true }
-                        }),
-                        'Content-Type': 'application/octet-stream'
-                    },
-                    body: chunk
-                });
+                const finishRes = await dropboxContentFetch('upload_session/finish', {
+                    cursor: { session_id, offset },
+                    commit: { path: dropboxPath, mode: 'overwrite', autorename: false, mute: true }
+                }, chunk);
                 if (!finishRes.ok) throw new Error(`Dropbox session finish failed: ${finishRes.status}`);
                 return finishRes.json();
             } else {
                 // Append
-                const appendRes = await fetch('https://content.dropboxapi.com/2/files/upload_session/append_v2', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Dropbox-API-Arg': JSON.stringify({
-                            cursor: { session_id, offset },
-                            close: false
-                        }),
-                        'Content-Type': 'application/octet-stream'
-                    },
-                    body: chunk
-                });
+                const appendRes = await dropboxContentFetch('upload_session/append_v2', {
+                    cursor: { session_id, offset },
+                    close: false
+                }, chunk);
                 if (!appendRes.ok) throw new Error(`Dropbox session append failed: ${appendRes.status}`);
             }
 
@@ -275,17 +290,7 @@ async function uploadLargeToDropbox(dropboxPath, filePath) {
 }
 
 async function createDropboxFolder(folderPath) {
-    const token = await getDropboxToken();
-    if (!token) throw new Error('No Dropbox token available');
-
-    const res = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ path: folderPath, autorename: false })
-    });
+    const res = await dropboxApiFetch('create_folder_v2', { path: folderPath, autorename: false });
 
     // 409 = folder already exists, that's fine
     if (res.status === 409) return;
@@ -396,7 +401,7 @@ module.exports = {
     initR2, isR2Ready, uploadToR2, downloadFromR2, getR2Stream, getR2SignedUrl,
     existsInR2, deleteFromR2, listR2Keys,
     // Dropbox
-    getDropboxToken, uploadToDropbox, uploadLargeToDropbox, createDropboxFolder,
+    getDropboxToken, getDropboxAuthStatus, uploadToDropbox, uploadLargeToDropbox, createDropboxFolder,
     // Job persistence
     saveJobState, loadJobState, loadAllActiveJobs, deleteJobState,
     // Analytics snapshots
