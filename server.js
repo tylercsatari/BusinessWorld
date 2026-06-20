@@ -2329,63 +2329,55 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 while (data.has_more) { data = await dbxJson('list_folder/continue', { cursor: data.cursor }); out = out.concat(data.entries || []); }
                 return out;
             };
-            // Analyze a clip with HARD memory bounds: stream-download it to a temp
-            // file on disk (Node pipeline = real backpressure, never buffers the
-            // clip in RAM), then stream-upload from that file to Gemini. Decoupling
-            // the two phases avoids any chance of the Dropbox→Gemini pipe buffering
-            // a multi-GB clip in memory. The temp file is always cleaned up.
-            const { pipeline: streamPipeline } = require('stream/promises');
-            const { Readable } = require('stream');
+            // ARCHITECTURE: keep Node OUT of the video-byte path entirely. ffmpeg
+            // streams the clip straight from a Dropbox temporary-link URL and writes
+            // a tiny 360p proxy to disk — the big bytes live only in ffmpeg's own
+            // process (which streams http with bounded memory). Node then uploads a
+            // few-MB proxy. If memory ever spikes, the OS kills ffmpeg (the big
+            // consumer), NOT the server — so a pathological clip fails gracefully
+            // instead of taking the whole service down. Scales to thousands of clips.
             const os = require('os');
-            // Transcode a clip to a small low-res proxy (360p, ~1.5fps, low bitrate,
-            // ≤20min). The upload is then a few MB regardless of the source size, so
-            // memory is hard-bounded. Resolves false if ffmpeg is missing/fails.
-            const transcodeToProxy = (srcPath, outPath) => new Promise((resolve) => {
+            const transcodeUrlToProxy = (url, outPath) => new Promise((resolve) => {
                 let ff;
                 try {
                     ff = require('child_process').spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
-                        '-threads', '1', '-i', srcPath, '-t', '1200', '-vf', 'scale=-2:360', '-r', '1.5',
+                        '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+                        '-threads', '1', '-i', url, '-t', '1200', '-vf', 'scale=-2:360', '-r', '1.5',
                         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '34', '-threads', '1',
                         '-c:a', 'aac', '-b:a', '48k', '-movflags', '+faststart', outPath], { stdio: 'ignore' });
                 } catch (e) { resolve(false); return; }
-                const killer = setTimeout(() => { try { ff.kill('SIGKILL'); } catch (e) {} resolve(false); }, 240000);
+                const killer = setTimeout(() => { try { ff.kill('SIGKILL'); } catch (e) {} resolve(false); }, 300000);
                 ff.on('error', () => { clearTimeout(killer); resolve(false); });
                 ff.on('exit', (code) => { clearTimeout(killer); resolve(code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 0); });
             });
-            const analyzeClip = async ({ path: clipPath, name, size, mimeType, prompt }) => {
-                const call = async (tok) => fetch('https://content.dropboxapi.com/2/files/download', {
-                    method: 'POST', headers: { 'Authorization': `Bearer ${tok}`, 'Dropbox-API-Arg': JSON.stringify({ path: clipPath }) }
-                });
-                let tok = await cloud.getDropboxToken();
-                let r = await call(tok);
-                if (r.status === 401) { process.env._DROPBOX_TOKEN_EXPIRED = '1'; tok = await cloud.getDropboxToken(); r = await call(tok); }
-                if (!r.ok) { const t = await r.text(); throw new Error(`Dropbox download ${r.status}: ${t.slice(0, 200)}`); }
-                const tmp = path.join(os.tmpdir(), `fc-${require('crypto').randomUUID()}`);
-                const proxy = tmp + '.proxy.mp4';
+            const analyzeClip = async ({ path: clipPath, name, prompt }) => {
+                // A direct download URL ffmpeg can stream (valid ~4h). Node never reads the clip.
+                const linkData = await dbxJson('get_temporary_link', { path: clipPath });
+                if (!linkData || !linkData.link) throw new Error('Dropbox did not return a temporary link');
+                const proxy = path.join(os.tmpdir(), `fc-${require('crypto').randomUUID()}.proxy.mp4`);
                 try {
-                    await streamPipeline(Readable.fromWeb(r.body), fs.createWriteStream(tmp));   // → disk, bounded memory
-                    if (!fs.statSync(tmp).size) throw new Error('downloaded clip is empty');
-                    // Preferred: tiny transcoded proxy → small in-memory upload (no OOM possible).
-                    if (await transcodeToProxy(tmp, proxy)) {
-                        const bytes = fs.readFileSync(proxy);   // small (a few MB)
-                        return await geminiWatch.analyzeBytes(bytes, 'video/mp4', prompt, {
-                            displayName: name, genConfig: geminiWatch.FOOTAGE_GEN_CONFIG, timeoutMs: 120000, generateTimeoutMs: 150000
-                        });
-                    }
-                    // Fallback (no ffmpeg): stream the original from disk.
-                    const sz = fs.statSync(tmp).size;
-                    const webStream = Readable.toWeb(fs.createReadStream(tmp));
-                    return await geminiWatch.analyzeStream({ readable: webStream, size: sz, mimeType, prompt, displayName: name });
+                    if (!(await transcodeUrlToProxy(linkData.link, proxy))) throw new Error('ffmpeg could not transcode this clip (unreadable, too long, or timed out)');
+                    const bytes = fs.readFileSync(proxy);   // a few MB regardless of source size
+                    return await geminiWatch.analyzeBytes(bytes, 'video/mp4', prompt, {
+                        displayName: name, genConfig: geminiWatch.FOOTAGE_GEN_CONFIG, timeoutMs: 120000, generateTimeoutMs: 150000
+                    });
                 } finally {
-                    fs.promises.unlink(tmp).catch(() => {});
                     fs.promises.unlink(proxy).catch(() => {});
                 }
             };
-            // Per-clip cache (by Dropbox content_hash), loaded once.
+            // Per-clip cache (by Dropbox content_hash), loaded once. Writes are
+            // BATCHED (one R2 flush per ~20 clips, no backups) so caching scales to
+            // thousands of clips instead of an O(n^2) flush storm.
             const cacheRecords = await dataStore.getAll('footagecache').catch(() => []);
             const cacheMap = new Map(cacheRecords.map(r => [r.contentHash, r]));
+            let pendingCache = [];
+            const flushCache = async () => {
+                if (!pendingCache.length) return;
+                const batch = pendingCache; pendingCache = [];
+                try { await dataStore.createMany('footagecache', batch); } catch (e) { console.warn('footagecache flush failed', e.message); }
+            };
             const cacheGet = async (hash) => cacheMap.get(hash) || null;
-            const cacheSet = async (hash, rec) => { cacheMap.set(hash, rec); try { await dataStore.create('footagecache', rec); } catch (e) {} };
+            const cacheSet = async (hash, rec) => { cacheMap.set(hash, rec); pendingCache.push(rec); if (pendingCache.length >= 20) await flushCache(); };
 
             try {
                 const out = await footageCoverage.analyzeProject({
@@ -2403,6 +2395,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                         },
                     }
                 });
+                await flushCache();   // persist any cache records still pending from the last partial batch
                 // Persist the gaps as a permanent, individually-deletable suggestion list.
                 const fresh = await dataStore.getById('videos', video.id) || video;
                 const dismissed = Array.isArray(fresh.footageGapsDismissed) ? fresh.footageGapsDismissed : [];
@@ -2415,6 +2408,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 job.done = true;
             } catch (e) {
                 console.error('footage-coverage error:', e);
+                await flushCache().catch(() => {});   // don't lose the clips we DID analyze
                 job.error = e.message;
                 job.done = true;
                 try { await dataStore.update('videos', video.id, { footageReport: { generatedAt: new Date().toISOString(), status: 'error', error: e.message } }); } catch (_) {}

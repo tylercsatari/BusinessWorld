@@ -90,13 +90,20 @@ async function load(name) {
     return cache[name];
 }
 
+// Collections that are regenerable caches — not worth backing up, and backing
+// them up on every write means downloading the whole (growing) collection each
+// time, which doesn't scale to thousands of records.
+const NO_BACKUP = new Set(['footagecache']);
+
 async function flush(name) {
     if (!isR2Ready()) throw new Error('R2 not ready — refusing to flush to prevent data loss');
     const data = cache[name];
     if (!data) return;
-    // Back up current R2 data before overwriting
-    try { await createBackup(name); } catch (e) {
-        console.warn(`Backup failed for ${name} (continuing with flush):`, e.message);
+    // Back up current R2 data before overwriting (skip for regenerable caches)
+    if (!NO_BACKUP.has(name)) {
+        try { await createBackup(name); } catch (e) {
+            console.warn(`Backup failed for ${name} (continuing with flush):`, e.message);
+        }
     }
     data.lastModified = new Date().toISOString();
     // Compact (no pretty-print): the aiideas collection stores a 1536-float
@@ -141,6 +148,25 @@ async function create(name, fields, options = {}) {
     }
 }
 
+// Append many records in ONE flush — for high-volume writes (e.g. the footage
+// cache) where flushing per-record is O(n^2) and doesn't scale.
+async function createMany(name, fieldsArray) {
+    if (!Array.isArray(fieldsArray) || !fieldsArray.length) return [];
+    const prev = createLocks[name] || Promise.resolve();
+    let release;
+    createLocks[name] = new Promise(r => { release = r; });
+    await prev.catch(() => {});
+    try {
+        const data = await load(name);
+        const recs = fieldsArray.map(f => ({ id: crypto.randomUUID(), ...f, createdAt: new Date().toISOString() }));
+        data.records.push(...recs);
+        await flush(name);
+        return recs;
+    } finally {
+        release();
+    }
+}
+
 async function update(name, id, fields) {
     const data = await load(name);
     const idx = data.records.findIndex(r => r.id === id);
@@ -159,4 +185,4 @@ async function remove(name, id) {
     return true;
 }
 
-module.exports = { COLLECTIONS, getAll, getById, create, update, remove, listBackups, restoreBackup };
+module.exports = { COLLECTIONS, getAll, getById, create, createMany, update, remove, listBackups, restoreBackup };
