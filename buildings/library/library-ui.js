@@ -723,12 +723,15 @@ const LibraryUI = (() => {
             '    "broadAppeal":{"recognition":0,"audienceCoverage":0,"rewardUniversality":0,"note":""},',
             '    "motivation":{"goalClarity":0,"actionGoalFit":0,"scaleRewardSlope":0,"payoffJustification":0,"note":""},',
             '    "referenceToGratification":{"payoffIdentifiability":0,"expectedPayoffValue":0,"unresolvedness":0,"optimalUncertainty":0,"note":""}},',
-            '  "overall":0,"differentiation":"why it is NOT the same as the existing ones"}]}'
+            '  "overall":0,"differentiation":"why it is NOT the same as the existing ones"}]}',
+            '',
+            'CRITICAL OUTPUT RULE: respond with ONLY the JSON object and nothing else. Do NOT think out loud, do NOT restate the task, do NOT write any text before or after the JSON. Your very first character MUST be { and your very last character MUST be }. Keep every "note" field to a short phrase so the JSON stays compact and complete.'
         ].join('\n');
         const user = [
             `Generate ${count} brand-new short-form video idea${count === 1 ? '' : 's'}, each a "monster hook".`,
             avoid ? `These already exist — treat them as the reference distribution D; do NOT repeat or lightly reskin them, and make each new idea sit FAR from them while staying coherent:\n${avoid}` : '',
-            'Fill every object and every mechanism sub-score honestly (don\'t inflate). overall is your 1-10 verdict.'
+            'Fill every object and every mechanism sub-score honestly (don\'t inflate). overall is your 1-10 verdict.',
+            'Output ONLY the JSON object — start with { immediately, no preamble.'
         ].filter(Boolean).join('\n\n');
         return [{ role: 'system', content: system }, { role: 'user', content: user }];
     }
@@ -911,23 +914,29 @@ const LibraryUI = (() => {
             for (let run = 1; run <= runs; run++) {
                 if (runs > 1) ui.setRun(run);
 
-                // ASK KIMI K2.6 for 3 — the same endpoint the hooks use. 5-min cap.
-                ui.step('kimi', 'active');
-                const messages = aiVideoIdeaMessages(PER_RUN, avoidTitles);
-                let r;
-                try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.6, max_tokens: 16000 }) }, 300000); }
-                catch (err) { throw new Error(err && err.name === 'AbortError' ? `Kimi took longer than 5 minutes on run ${run} — try again.` : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
-                if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
-                const data = await r.json();
-                const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-                ui.step('kimi', 'done', 'replied');
-
-                // PARSE.
-                ui.step('parse', 'active');
-                const parsed = aiVideoExtractJson(content);
-                const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
-                if (!rawIdeas.length) throw new Error(`Run ${run}: Kimi replied but no ideas could be parsed. It said: ` + (content || '(empty)').slice(0, 160));
-                const ideas = rawIdeas.slice(0, PER_RUN).map(aiVideoNormalizeIdea).filter(i => i.title);
+                // ASK KIMI for 3, then PARSE — with up to 2 attempts, because a
+                // reasoning model occasionally writes a long preamble and runs out
+                // of room before the JSON completes. A retry (lower temperature,
+                // JSON-only) reliably recovers it.
+                let ideas = null, lastSaid = '';
+                for (let attempt = 1; attempt <= 2 && !ideas; attempt++) {
+                    ui.step('kimi', 'active', attempt > 1 ? 'retrying…' : '');
+                    const messages = aiVideoIdeaMessages(PER_RUN, avoidTitles);
+                    if (attempt > 1) messages.push({ role: 'user', content: 'Your previous reply was not valid JSON. Reply again with ONLY the JSON object {"ideas":[...]} — no thinking, no preamble, first character {. Keep notes very short.' });
+                    let r;
+                    try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: attempt > 1 ? 0.3 : 0.6, max_tokens: 32000 }) }, 300000); }
+                    catch (err) { throw new Error(err && err.name === 'AbortError' ? `Kimi took longer than 5 minutes on run ${run} — try again.` : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
+                    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
+                    const data = await r.json();
+                    const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+                    lastSaid = content;
+                    ui.step('kimi', 'done', 'replied');
+                    ui.step('parse', 'active');
+                    const parsed = aiVideoExtractJson(content);
+                    const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
+                    if (rawIdeas.length) ideas = rawIdeas.slice(0, PER_RUN).map(aiVideoNormalizeIdea).filter(i => i.title);
+                }
+                if (!ideas || !ideas.length) throw new Error(`Run ${run}: Kimi replied but no ideas could be parsed (after a retry). It said: ` + (lastSaid || '(empty)').slice(0, 160));
                 ui.step('parse', 'done', `${ideas.length} idea${ideas.length === 1 ? '' : 's'}`);
 
                 // SAVE this batch BEFORE the next run — show each card as it lands.
