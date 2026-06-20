@@ -4733,25 +4733,73 @@ const WorkshopUI = (() => {
         }
     }
 
+    function shouldOpenExternalInSameTab() {
+        const ua = navigator.userAgent || '';
+        const narrowTouch = window.matchMedia && window.matchMedia('(max-width: 820px)').matches && navigator.maxTouchPoints > 0;
+        return narrowTouch || /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS|EdgiOS/i.test(ua);
+    }
+
+    function renderPendingDropboxTab(tab, link) {
+        if (!tab) return;
+        try {
+            tab.document.title = 'Opening Dropbox';
+            tab.document.body.style.cssText = 'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:24px;line-height:1.45;color:#1f2933;';
+            tab.document.body.innerHTML = link
+                ? `<p>Opening Dropbox...</p><p><a href="${escAttr(link)}">Open Dropbox folder</a></p>`
+                : '<p>Creating Dropbox link...</p>';
+        } catch (e) {}
+    }
+
+    function openExternalDropboxLink(link, pendingTab, sameTab) {
+        if (sameTab) {
+            window.location.assign(link);
+            return;
+        }
+        if (pendingTab && !pendingTab.closed) {
+            renderPendingDropboxTab(pendingTab, link);
+            pendingTab.location.replace(link);
+            return;
+        }
+        const opened = window.open(link, '_blank');
+        if (opened) opened.opener = null;
+        else window.location.assign(link);
+    }
+
     async function openVideoDropboxFolder(v, btn) {
         const fresh = VideoService.getById(v.id) || v;
         if (!fresh.project && !isDropboxSharedLink(fresh.dropboxLink)) { alert('Select a Channel Project first or paste a public Dropbox shared link.'); return; }
-        const pendingTab = window.open('about:blank', '_blank');
-        if (pendingTab) pendingTab.opener = null;
+        const sameTab = shouldOpenExternalInSameTab();
+        const savedLink = isDropboxSharedLink(fresh.dropboxLink) ? fresh.dropboxLink : '';
+        if (savedLink) {
+            openExternalDropboxLink(savedLink, null, sameTab);
+            if (!sameTab && fresh.project) {
+                videoDropboxPath(fresh).then(path => {
+                    if (path && fresh.dropboxPath !== path) return VideoService.update(fresh.id, { dropboxPath: path }).catch(e => console.warn('Could not save Dropbox folder path on video', e));
+                }).catch(e => console.warn('Could not resolve Dropbox folder path on video', e));
+            }
+            return;
+        }
+        let pendingTab = null;
+        if (!sameTab) {
+            pendingTab = window.open('', '_blank');
+            if (pendingTab) pendingTab.opener = null;
+            renderPendingDropboxTab(pendingTab);
+        }
         const oldText = btn ? btn.textContent : '';
         if (btn) { btn.disabled = true; btn.textContent = 'Creating public link…'; }
         let path = '';
         try {
             path = fresh.project ? await videoDropboxPath(fresh) : (fresh.dropboxPath || '');
-            let link = isDropboxSharedLink(fresh.dropboxLink) ? fresh.dropboxLink : '';
+            let link = savedLink;
             if (!link) {
                 link = await createDropboxSharedLink(path);
             }
-            if (pendingTab) pendingTab.location.href = link;
-            else window.open(link, '_blank', 'noopener');
             if (fresh.dropboxPath !== path || fresh.dropboxLink !== link) {
-                VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link }).then(() => rerenderEditor(fresh.id)).catch(e => console.warn('Could not save Dropbox folder link on video', e));
+                try { await VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link }); }
+                catch (e) { console.warn('Could not save Dropbox folder link on video', e); }
             }
+            openExternalDropboxLink(link, pendingTab, sameTab);
+            if (!sameTab) rerenderEditor(fresh.id);
         } catch (e) {
             if (pendingTab) pendingTab.close();
             alert('Could not open the Dropbox folder: ' + e.message);
