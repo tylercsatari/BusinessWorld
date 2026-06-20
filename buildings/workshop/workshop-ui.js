@@ -4639,6 +4639,52 @@ const WorkshopUI = (() => {
         return /^https?:\/\/(www\.)?dropbox\.com\//i.test(String(link || '')) && !/\/home(\/|$)/i.test(String(link || ''));
     }
 
+    function isDropboxSharingWriteError(err) {
+        const text = `${err && err.message || ''} ${err && err.requiredScope || ''}`;
+        return /sharing\.write|missing_scope/i.test(text);
+    }
+
+    async function createDropboxSharedLink(path) {
+        const r = await fetch('/api/dropbox/shared_link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !isDropboxSharedLink(data.link)) {
+            const err = new Error(data.error_summary || data.error || `Dropbox public link failed (${r.status})`);
+            err.requiredScope = data.required_scope || '';
+            throw err;
+        }
+        return data.link;
+    }
+
+    async function reconnectDropboxForPublicLinks(path, pendingTab) {
+        const authRes = await fetch('/api/dropbox/auth-url');
+        const authData = await authRes.json().catch(() => ({}));
+        if (!authRes.ok || !authData.url) throw new Error(authData.error || 'Could not start Dropbox authorization.');
+
+        if (pendingTab) pendingTab.location.href = authData.url;
+        else window.open(authData.url, '_blank', 'noopener');
+
+        const code = window.prompt(
+            'Dropbox needs one-time permission to create public folder links.\n\n' +
+            'If Dropbox refuses the authorization page, enable sharing.write in the Dropbox App Console first.\n\n' +
+            'After approving Dropbox, paste the authorization code here:'
+        );
+        if (!code || !code.trim()) throw new Error('Dropbox reconnect cancelled before an authorization code was entered.');
+
+        const tokenRes = await fetch('/api/dropbox/exchange-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code.trim() })
+        });
+        const tokenData = await tokenRes.json().catch(() => ({}));
+        if (!tokenRes.ok || !tokenData.ok) throw new Error(tokenData.error || `Dropbox authorization failed (${tokenRes.status})`);
+
+        return createDropboxSharedLink(path);
+    }
+
     async function getDropboxTemporaryLink(path) {
         const r = await fetch('/api/dropbox/get_temporary_link', {
             method: 'POST',
@@ -4690,18 +4736,12 @@ const WorkshopUI = (() => {
         if (pendingTab) pendingTab.opener = null;
         const oldText = btn ? btn.textContent : '';
         if (btn) { btn.disabled = true; btn.textContent = 'Creating public link…'; }
+        let path = '';
         try {
-            const path = await videoDropboxPath(fresh);
+            path = await videoDropboxPath(fresh);
             let link = fresh.dropboxPath === path && isDropboxSharedLink(fresh.dropboxLink) ? fresh.dropboxLink : '';
             if (!link) {
-                const r = await fetch('/api/dropbox/shared_link', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path })
-                });
-                const data = await r.json().catch(() => ({}));
-                if (!r.ok || !isDropboxSharedLink(data.link)) throw new Error(data.error_summary || data.error || `Dropbox public link failed (${r.status})`);
-                link = data.link;
+                link = await createDropboxSharedLink(path);
             }
             if (pendingTab) pendingTab.location.href = link;
             else window.open(link, '_blank', 'noopener');
@@ -4709,6 +4749,20 @@ const WorkshopUI = (() => {
                 VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link }).then(() => rerenderEditor(fresh.id)).catch(e => console.warn('Could not save Dropbox folder link on video', e));
             }
         } catch (e) {
+            if (path && isDropboxSharingWriteError(e)) {
+                try {
+                    if (btn) btn.textContent = 'Reconnect Dropbox…';
+                    const link = await reconnectDropboxForPublicLinks(path, pendingTab);
+                    if (pendingTab) pendingTab.location.href = link;
+                    else window.open(link, '_blank', 'noopener');
+                    VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link }).then(() => rerenderEditor(fresh.id)).catch(err => console.warn('Could not save Dropbox folder link on video', err));
+                    return;
+                } catch (authErr) {
+                    if (pendingTab) pendingTab.close();
+                    alert('Could not open the Dropbox folder: ' + authErr.message);
+                    return;
+                }
+            }
             if (pendingTab) pendingTab.close();
             alert('Could not open the Dropbox folder: ' + e.message);
         } finally {

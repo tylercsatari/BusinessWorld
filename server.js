@@ -49,6 +49,69 @@ const PORT = process.env.PORT || 8002;
 const IS_RENDER = !!process.env.RENDER;  // Render sets this env var automatically
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+const DROPBOX_OAUTH_R2_KEY = 'settings/dropbox-oauth.json';
+const DROPBOX_PUBLIC_LINK_SCOPES = [
+    'files.metadata.read',
+    'files.content.read',
+    'files.content.write',
+    'sharing.write'
+].join(' ');
+
+function updateLocalEnvValue(key, value) {
+    if (IS_RENDER || !key || value === undefined || value === null) return;
+    try {
+        let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+        const line = `${key}=${String(value)}`;
+        const re = new RegExp(`^${key}=.*$`, 'm');
+        if (re.test(envContent)) envContent = envContent.replace(re, line);
+        else envContent += `${envContent && !envContent.endsWith('\n') ? '\n' : ''}${line}\n`;
+        fs.writeFileSync(envPath, envContent, 'utf8');
+    } catch (e) {
+        console.warn(`Could not persist ${key} to .env:`, e.message);
+    }
+}
+
+function applyDropboxOAuthToken(tokenData, forceRefresh) {
+    if (!tokenData || typeof tokenData !== 'object') return false;
+    if (tokenData.refresh_token) process.env.DROPBOX_REFRESH_TOKEN = tokenData.refresh_token;
+    if (tokenData.access_token) {
+        process.env.DROPBOX_ACCESS_TOKEN = tokenData.access_token;
+        delete process.env._DROPBOX_TOKEN_EXPIRED;
+    } else if (forceRefresh && tokenData.refresh_token) {
+        delete process.env.DROPBOX_ACCESS_TOKEN;
+        process.env._DROPBOX_TOKEN_EXPIRED = '1';
+    }
+    return !!(tokenData.refresh_token || tokenData.access_token);
+}
+
+async function persistDropboxOAuthToken(tokenData) {
+    if (!tokenData || !tokenData.refresh_token) return;
+    updateLocalEnvValue('DROPBOX_REFRESH_TOKEN', tokenData.refresh_token);
+    if (!cloud.isR2Ready()) return;
+    const payload = {
+        refresh_token: tokenData.refresh_token,
+        scope: tokenData.scope || '',
+        savedAt: new Date().toISOString()
+    };
+    await cloud.uploadToR2(DROPBOX_OAUTH_R2_KEY, Buffer.from(JSON.stringify(payload, null, 2)), 'application/json');
+}
+
+async function loadStoredDropboxOAuthToken() {
+    if (!cloud.isR2Ready()) return false;
+    try {
+        const buf = await cloud.downloadFromR2(DROPBOX_OAUTH_R2_KEY);
+        if (!buf) return false;
+        const stored = JSON.parse(buf.toString('utf8'));
+        if (!stored || !stored.refresh_token) return false;
+        applyDropboxOAuthToken({ refresh_token: stored.refresh_token }, true);
+        console.log('Dropbox: loaded stored OAuth refresh token');
+        return true;
+    } catch (e) {
+        console.warn('Dropbox: could not load stored OAuth token:', e.message);
+        return false;
+    }
+}
+
 // ── Hook reasoning engine support: server-side LLM JSON + memory persistence ──
 function _extractJsonObject(text) {
     if (!text) return null;
@@ -3560,6 +3623,10 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         'Content-Type': 'application/json'
     };
 
+    function dropboxRequiredScope(data) {
+        return data && data.error && data.error.required_scope ? data.error.required_scope : '';
+    }
+
     async function dropboxApiJson(endpoint, body) {
         const call = async (token) => fetch(`https://api.dropboxapi.com/2/${endpoint}`, {
             method: 'POST',
@@ -3580,9 +3647,74 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             const err = new Error(data.error_summary || data.error || `Dropbox ${endpoint} ${response.status}`);
             err.status = response.status;
             err.data = data;
+            err.requiredScope = dropboxRequiredScope(data);
             throw err;
         }
         return data;
+    }
+
+    if (pathname === '/api/dropbox/auth-url' && req.method === 'GET') {
+        const appKey = process.env.DROPBOX_APP_KEY;
+        if (!appKey) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'DROPBOX_APP_KEY not configured' }));
+            return;
+        }
+        const authUrl = new URL('https://www.dropbox.com/oauth2/authorize');
+        authUrl.searchParams.set('client_id', appKey);
+        authUrl.searchParams.set('response_type', 'code');
+        authUrl.searchParams.set('token_access_type', 'offline');
+        authUrl.searchParams.set('scope', DROPBOX_PUBLIC_LINK_SCOPES);
+        authUrl.searchParams.set('force_reapprove', 'true');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            url: authUrl.toString(),
+            scope: DROPBOX_PUBLIC_LINK_SCOPES,
+            required_scope: 'sharing.write'
+        }));
+        return;
+    }
+
+    if (pathname === '/api/dropbox/exchange-code' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const code = String(body.code || '').trim();
+            if (!code) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing code' })); return; }
+            if (!process.env.DROPBOX_APP_KEY || !process.env.DROPBOX_APP_SECRET) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'DROPBOX_APP_KEY and DROPBOX_APP_SECRET must be configured' }));
+                return;
+            }
+            const tokenRes = await fetch('https://api.dropboxapi.com/oauth2/token', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Basic ' + Buffer.from(`${process.env.DROPBOX_APP_KEY}:${process.env.DROPBOX_APP_SECRET}`).toString('base64'),
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({ code, grant_type: 'authorization_code' }).toString()
+            });
+            const tokenText = await tokenRes.text();
+            let tokenData = {};
+            try { tokenData = tokenText ? JSON.parse(tokenText) : {}; } catch (e) { tokenData = { error: tokenText }; }
+            if (!tokenRes.ok || tokenData.error) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: tokenData.error_description || tokenData.error || `Dropbox OAuth failed (${tokenRes.status})` }));
+                return;
+            }
+            applyDropboxOAuthToken(tokenData, false);
+            await persistDropboxOAuthToken(tokenData);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                ok: true,
+                hasRefresh: !!tokenData.refresh_token,
+                scope: tokenData.scope || '',
+                required_scope: 'sharing.write'
+            }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
     }
 
     if (pathname === '/api/dropbox/list_folder' && req.method === 'POST') {
@@ -3635,7 +3767,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
                 return;
             }
             res.writeHead(e.status || 500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message, ...(data.error_summary ? { error_summary: data.error_summary } : {}) }));
+            res.end(JSON.stringify({
+                error: e.message,
+                ...(data.error_summary ? { error_summary: data.error_summary } : {}),
+                ...(e.requiredScope ? { required_scope: e.requiredScope } : {})
+            }));
         }
         return;
     }
@@ -8302,6 +8438,7 @@ function renderShareWorkshopPage(videos, assigneeFilter, projectFilter, ideasByI
 
 // Initialize R2 cloud storage before accepting requests
 cloud.initR2();
+loadStoredDropboxOAuthToken().catch(e => console.warn('Dropbox OAuth preload failed:', e.message));
 
 server.listen(PORT, () => {
     console.log(`Business World running at http://localhost:${PORT}`);
