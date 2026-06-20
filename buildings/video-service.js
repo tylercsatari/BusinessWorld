@@ -121,12 +121,19 @@ const VideoService = (() => {
                         projectIds: Array.isArray(videoData.projectIds) ? videoData.projectIds : [],
                         dependsOn: Array.isArray(videoData.dependsOn) ? videoData.dependsOn : [],
                         deps: Array.isArray(videoData.deps) ? videoData.deps : [],   // typed: [{kind:'video'|'component'|'order', id}]
+                        dropboxPath: videoData.dropboxPath || '',      // shared project folder path for editor handoff
+                        dropboxLink: videoData.dropboxLink || '',
                         voPath: videoData.voPath || '',                  // Dropbox path of the linked voiceover
                         voName: videoData.voName || '',
+                        musicPath: videoData.musicPath || '',
+                        musicName: videoData.musicName || '',
                         hookType: videoData.hookType || '',              // legacy single-hook fields (read as one instance)
                         hookVideoPath: videoData.hookVideoPath || '',
                         hookVideoName: videoData.hookVideoName || '',
                         hooks: Array.isArray(videoData.hooks) ? videoData.hooks : [],  // hook instances: [{id, type, label, videoPath, videoName}]
+                        animAssets: Array.isArray(videoData.animAssets) ? videoData.animAssets : [],
+                        animNoModels: !!videoData.animNoModels,
+                        finalVideos: videoData.finalVideos || {},
                         requiredInventoryIds: Array.isArray(videoData.requiredInventoryIds) ? videoData.requiredInventoryIds : [],
                         producesInventoryIds: Array.isArray(videoData.producesInventoryIds) ? videoData.producesInventoryIds : []
                     })
