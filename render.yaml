@@ -2,7 +2,9 @@ services:
   - type: web
     name: businessworld
     env: node
-    plan: starter
+    # standard = 2 GB RAM (the $25 plan). Was 'starter' (512 MB) — which, paired
+    # with Node's heap cap, caused the constant out-of-memory kills.
+    plan: standard
     buildCommand: npm install && pip install -r requirements.txt
     startCommand: bash start.sh
     autoDeploy: true

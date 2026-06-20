@@ -2344,8 +2344,8 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 let ff;
                 try {
                     ff = require('child_process').spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
-                        '-i', srcPath, '-t', '1200', '-vf', 'scale=-2:360', '-r', '1.5',
-                        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '34',
+                        '-threads', '1', '-i', srcPath, '-t', '1200', '-vf', 'scale=-2:360', '-r', '1.5',
+                        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '34', '-threads', '1',
                         '-c:a', 'aac', '-b:a', '48k', '-movflags', '+faststart', outPath], { stdio: 'ignore' });
                 } catch (e) { resolve(false); return; }
                 const killer = setTimeout(() => { try { ff.kill('SIGKILL'); } catch (e) {} resolve(false); }, 240000);
@@ -2396,7 +2396,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                         cacheGet, cacheSet,
                         onEvent: (ev) => {
                             if (!ev) return;
-                            if (ev.msg) job.events.push(ev.msg);
+                            if (ev.msg) { job.events.push(ev.msg); try { console.log(`[footage ${jobId.slice(0, 8)}] ${ev.msg}`); } catch (e) {} }
                             if (ev.type === 'phase') job.phase = ev.phase;
                             else if (ev.type === 'list') { job.total = ev.total; job.clips = (ev.clips || []).map(c => ({ name: c.name, status: 'pending' })); job.phase = 'analyzing'; }
                             else if (ev.type === 'clip') { if (job.clips[ev.index]) { job.clips[ev.index].status = ev.status; if (ev.summary) job.clips[ev.index].summary = ev.summary; } }
