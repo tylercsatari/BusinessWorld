@@ -42,6 +42,17 @@ const WorkshopUI = (() => {
     // that stage (so a person's avatar appears on every node their role covers).
     // Loaded from /api/accounts + /api/profiles (owner view).
     let nodeRoster = {};
+    // The signed-in user. Non-owners get a PERSONAL view: only their own assigned
+    // work, no assignee avatars/pickers — it looks like theirs is all there is.
+    let myName = null, meLoaded = false;
+    const personalView = () => !isOwnerUser();   // workers see only their assignments
+    async function loadMe() {
+        try {
+            const me = await fetch('/api/me').then(r => r.ok ? r.json() : null);
+            if (me) myName = me.displayName || me.email || null;
+        } catch (_) {}
+        meLoaded = true;
+    }
     // Which entity types are visible on the board (legend toggles)
     // The Workshop board tracks two entities: videos and the components they
     // spawn. Orders/Storage live in their own tabs, not on the pipeline board.
@@ -289,21 +300,40 @@ const WorkshopUI = (() => {
         } catch (e) {}
         return null;
     }
-    // An avatar image (preferred) or a colored-initials fallback. Hover shows the name.
-    function personAvatarHtml(person, cls) {
+    // An avatar image (preferred) or a colored-initials fallback. On nodes we use a
+    // custom instant tooltip (data-name) instead of the native title.
+    function personAvatarHtml(person, cls, useDataName) {
         const name = person.name || '';
+        const nameAttr = useDataName ? `data-name="${escAttr(name)}"` : `title="${escAttr(name)}"`;
         const url = avatarUrl(name, person.color);
-        if (url) return `<img class="${cls}" src="${url}" title="${escAttr(name)}" alt="${escAttr(name)}">`;
+        if (url) return `<img class="${cls}" src="${url}" ${nameAttr} alt="${escAttr(name)}">`;
         const c = person.color || getWorkerColor(name) || '#7a6f58';
         const initials = String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
-        return `<span class="${cls} fallback" title="${escAttr(name)}" style="background:${escAttr(c)}">${escHtml(initials)}</span>`;
+        return `<span class="${cls} fallback" ${nameAttr} style="background:${escAttr(c)}">${escHtml(initials)}</span>`;
     }
-    function nodeAvatarHtml(person) { return personAvatarHtml(person, 'wsp-node-avatar'); }
+    function nodeAvatarHtml(person) { return personAvatarHtml(person, 'wsp-node-avatar', true); }
+
+    // Instant hover tooltip for the small node avatars (native title is laggy/awkward
+    // on tiny overlapping images).
+    let _avTip = null;
+    function bindNodeAvatarTooltips(scope) {
+        if (!_avTip) { _avTip = document.createElement('div'); _avTip.className = 'wsp-av-tip'; document.body.appendChild(_avTip); }
+        scope.addEventListener('mouseover', (e) => {
+            const av = e.target.closest && e.target.closest('.wsp-node-avatar'); if (!av) return;
+            const nm = av.getAttribute('data-name') || ''; if (!nm) return;
+            _avTip.textContent = nm; _avTip.style.display = 'block';
+            const r = av.getBoundingClientRect();
+            _avTip.style.left = (r.left + r.width / 2) + 'px';
+            _avTip.style.top = (r.top - 6) + 'px';
+        });
+        scope.addEventListener('mouseout', (e) => { if (e.target.closest && e.target.closest('.wsp-node-avatar')) _avTip.style.display = 'none'; });
+    }
 
     // Compact "who's doing this item" control for a stage-panel row: the assigned
     // worker's small avatar + a picker to reassign/unassign. Candidates = the node's
     // roster (everyone whose role covers the stage).
     function workerControlHtml(kind, id, currentWorker, stageId) {
+        if (!isOwnerUser()) return '';   // workers don't see/manage assignment — it's just their work
         const pool = (nodeRoster[stageId] || []).map(p => p.name);
         const names = [...new Set([...(currentWorker ? [currentWorker] : []), ...pool])];
         const cur = nodeRoster[stageId] && nodeRoster[stageId].find(p => p.name === currentWorker);
@@ -319,6 +349,7 @@ const WorkshopUI = (() => {
     // all to them; multiple → 1,2,1,2…). Only fills MISSING/invalid workers, so
     // manual reassignments stick. Persists; called after the rosters load.
     async function autoAssignWorkers() {
+        if (!isOwnerUser()) return;   // only the owner distributes assignments
         if (!Object.values(nodeRoster).some(r => r && r.length)) return;   // nothing to assign to
         const byStage = boardEntities();
         const vUpd = [], cUpd = [];
@@ -724,6 +755,9 @@ const WorkshopUI = (() => {
     }
     function filteredVideos() {
         let list = pipelineVideos();
+        // PERSONAL VIEW: a non-owner sees ONLY videos assigned to them. Until their
+        // identity loads, show nothing (never flash others' work to them).
+        if (personalView()) { if (!meLoaded || !myName) return []; list = list.filter(v => v.worker === myName); }
         try {
             if (isStageScoped()) {
                 const ctx = ctxNow();
@@ -755,6 +789,8 @@ const WorkshopUI = (() => {
 
     function filteredComponents() {
         let list = SVC().components.getAll().filter(c => c.status !== 'done');
+        // PERSONAL VIEW: a non-owner sees ONLY components assigned to them.
+        if (personalView()) { if (!meLoaded || !myName) return []; list = list.filter(c => c.worker === myName); }
         // Restricted accounts only see components/tasks sitting at a stage (node)
         // they have access to — same scoping as videos.
         try { if (isStageScoped()) list = list.filter(c => { const sid = componentStageId(c); return sid && stageVisible(sid); }); }
@@ -967,9 +1003,9 @@ const WorkshopUI = (() => {
             e.videos.forEach(v => { try { if (nodeDeliverableStatus(v, s.id).met) readyN++; } catch (_) {} });
             e.components.forEach(c => { try { if (componentDeliverableStatus(c).met) readyN++; } catch (_) {} });
             // ASSIGNEES (top-center): everyone whose ROLE covers this node — their
-            // 3D account avatar, painted after render. A person appears on every node
-            // their role grants them.
-            const roster = nodeRoster[s.id] || [];
+            // 3D account avatar. Only the OWNER sees these (the personal worker view
+            // hides who's assigned to what).
+            const roster = isOwnerUser() ? (nodeRoster[s.id] || []) : [];
             const assigneesHtml = roster.length
                 ? `<div class="wsp-node-assignees">${roster.slice(0, 5).map(nodeAvatarHtml).join('')}${roster.length > 5 ? `<span class="wsp-node-assignee more">+${roster.length - 5}</span>` : ''}</div>`
                 : '';
@@ -1046,6 +1082,8 @@ const WorkshopUI = (() => {
         });
         const goInv = el.querySelector('.wsp-node[data-goto="inventory"]');
         if (goInv) goInv.addEventListener('click', () => switchTab('inventory'));
+
+        bindNodeAvatarTooltips(el);   // hover a node avatar → show that person's name
 
         renderStagePanel();
     }
@@ -4957,6 +4995,7 @@ const WorkshopUI = (() => {
             VideoService.sync().then(safeRender).catch(() => {});
             NotesService.sync().then(safeRender).catch(() => {});
             SVC().syncAll().then(safeRender).catch(() => {});
+            loadMe().then(safeRender).catch(() => {});   // personal view needs the current user
             loadNodeRosters().catch(() => {});   // who's on each node (role → stages → avatar)
             if (opts && opts.videoId) {
                 VideoService.sync().then(() => openDetail(opts.videoId)).catch(() => {});
