@@ -96,26 +96,35 @@ async function waitActive(fileName, { timeoutMs = 120000, intervalMs = 2000 } = 
   throw new Error('Timed out waiting for Gemini to process the video');
 }
 
-async function generate(fileUri, mimeType, model, prompt) {
-  const res = await fetch(authUrl(`/v1beta/models/${model}:generateContent`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { file_data: { mime_type: mimeType, file_uri: fileUri } },
-          { text: prompt || OBSERVATION_PROMPT },
-        ],
-      }],
-      // Gemini 3.x: omit temperature (optimized for defaults); use high thinking + high media
-      // resolution for a thorough, detailed watch. JSON output via responseMimeType.
-      generationConfig: {
-        responseMimeType: 'application/json',
-        thinkingConfig: { thinkingLevel: 'high' },
-        mediaResolution: 'MEDIA_RESOLUTION_HIGH',
-      },
-    }),
-  });
+async function generate(fileUri, mimeType, model, prompt, genConfig, timeoutMs) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeoutMs || 180000);   // never let a single clip hang forever
+  let res;
+  try {
+    res = await fetch(authUrl(`/v1beta/models/${model}:generateContent`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { file_data: { mime_type: mimeType, file_uri: fileUri } },
+            { text: prompt || OBSERVATION_PROMPT },
+          ],
+        }],
+        // Defaults are tuned for the Video Lab's thorough watch (high thinking +
+        // high media resolution). Callers (e.g. footage cataloguing) override with
+        // a cheaper/faster config via genConfig.
+        generationConfig: {
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingLevel: 'high' },
+          mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+          ...(genConfig || {}),
+        },
+      }),
+      signal: ctrl.signal,
+    });
+  } catch (e) { throw new Error(`Gemini generateContent ${e.name === 'AbortError' ? 'timed out' : 'failed'}: ${e.message}`); }
+  finally { clearTimeout(to); }
   if (!res.ok) throw new Error(`Gemini generateContent failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
@@ -193,15 +202,22 @@ async function analyzeStream({ readable, size, mimeType, prompt, displayName, mo
   let offset = 0;
   let fileResource = null;
   const uploadChunk = async (bytes, finalize) => {
-    const res = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Length': String(bytes.length),
-        'X-Goog-Upload-Offset': String(offset),
-        'X-Goog-Upload-Command': finalize ? 'upload, finalize' : 'upload',
-      },
-      body: bytes,
-    });
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 120000);   // a single ~8 MB chunk should upload in seconds
+    let res;
+    try {
+      res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Length': String(bytes.length),
+          'X-Goog-Upload-Offset': String(offset),
+          'X-Goog-Upload-Command': finalize ? 'upload, finalize' : 'upload',
+        },
+        body: bytes,
+        signal: ctrl.signal,
+      });
+    } catch (e) { throw new Error(`Gemini upload chunk ${e.name === 'AbortError' ? 'timed out' : 'failed'}: ${e.message}`); }
+    finally { clearTimeout(to); }
     if (!res.ok) throw new Error(`Gemini upload chunk failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
     offset += bytes.length;
     if (finalize) { const data = await res.json().catch(() => ({})); fileResource = data.file; }
@@ -224,8 +240,11 @@ async function analyzeStream({ readable, size, mimeType, prompt, displayName, mo
     try { reader.releaseLock(); } catch (e) {}
   }
   if (!fileResource || !fileResource.name) throw new Error('Gemini upload did not finalize');
-  await waitActive(fileResource.name, { timeoutMs: timeoutMs || 300000 });
-  const result = await generate(fileResource.uri, fileResource.mimeType || mimeType, model, prompt);
+  await waitActive(fileResource.name, { timeoutMs: timeoutMs || 120000 });
+  // Footage cataloguing only needs "what's in this clip" — use LOW media resolution
+  // and LOW thinking so each clip takes seconds, not minutes (and costs far less).
+  const result = await generate(fileResource.uri, fileResource.mimeType || mimeType, model, prompt,
+    { thinkingConfig: { thinkingLevel: 'low' }, mediaResolution: 'MEDIA_RESOLUTION_LOW' }, 150000);
   try { await fetch(authUrl(`/v1beta/${fileResource.name}`), { method: 'DELETE' }); } catch (e) {}
   return { model, result };
 }
