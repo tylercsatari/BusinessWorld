@@ -3671,6 +3671,22 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         return;
     }
 
+    // Mint a short-lived Dropbox access token for browser-direct uploads.
+    // Dropbox has no presigned upload URLs, so avoiding the Render relay requires
+    // the authenticated Workshop client to upload straight to the Dropbox content
+    // API with this token. The long-lived refresh token never leaves the server.
+    if (pathname === '/api/dropbox/direct_upload_token' && req.method === 'POST') {
+        try {
+            const token = await dropboxTokenOrThrow(url.searchParams.get('refresh') === '1');
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify({ accessToken: token, issuedAt: new Date().toISOString() }));
+        } catch (e) {
+            res.writeHead(e.status || 500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     if (pathname === '/api/dropbox/list_folder' && req.method === 'POST') {
         const body = await readBody(req);
         await dropboxFetch(res, 'https://api.dropboxapi.com/2/files/list_folder', {

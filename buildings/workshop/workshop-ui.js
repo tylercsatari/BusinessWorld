@@ -4128,9 +4128,10 @@ const WorkshopUI = (() => {
 
     // ============ DROPBOX MEDIA SECTIONS (voiceover <project>/vo/, hook video <project>/hook/) ============
 
-    // XHR (fetch can't report upload progress). onProgress(loaded, total)
-    // covers browser→server; the server then forwards to Dropbox before
-    // responding, so 100% switches to a "processing" stage until resolve.
+    // XHR (fetch can't report upload progress). Primary path is now
+    // browser→Dropbox direct; Render only mints the short-lived token. The old
+    // browser→Render→Dropbox relay stays as a recovery path if direct upload is
+    // blocked by the browser/network.
     // ===== Dropbox upload: single-shot for small files, chunked CONCURRENT
     // upload sessions for large ones. Prefix chunks upload in parallel, then the
     // final chunk closes the session and finish commits with an empty body — this
@@ -4140,6 +4141,8 @@ const WorkshopUI = (() => {
     const DBX_SIMPLE_MAX = 64 * 1024 * 1024;  // bigger clips use parallel chunks instead of one long request
     const DBX_CONCURRENCY = 6;                // parallel chunks in flight for one large file
     const DBX_FILE_CONCURRENCY = 3;           // parallel files in one multi-file upload action
+    const DBX_DIRECT_TOKEN_TTL = 50 * 60 * 1000;
+    let _dropboxDirectToken = { token: '', fetchedAt: 0 };
 
     // Stamp the Supabase bearer token onto a raw XHR (the fetch wrapper that does
     // this automatically doesn't cover XHR, which uploads use for progress).
@@ -4148,10 +4151,99 @@ const WorkshopUI = (() => {
         if (tok) xhr.setRequestHeader('Authorization', 'Bearer ' + tok);
     }
 
-    function uploadToDropbox(destPath, file, onProgress) {
+    function dropboxHeaderJson(arg) {
+        return JSON.stringify(arg).replace(/[^\x20-\x7e]/g, ch => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
+    }
+
+    function dropboxDirectError(message, status, bodyText) {
+        const e = new Error(message || 'direct Dropbox upload failed');
+        e.status = status || 0;
+        e.bodyText = bodyText || '';
+        e.directUpload = true;
+        return e;
+    }
+
+    function isDropboxAuthUploadError(e) {
+        return e && (e.status === 401 || /invalid_access_token/i.test(String(e.bodyText || e.message || '')));
+    }
+
+    function dropboxUploadErrorText(status, text) {
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { error: text }; }
+        return data.error_summary || data.error || data.message || `Dropbox upload failed (${status || 0})`;
+    }
+
+    async function dropboxDirectAccessToken(force) {
+        const now = Date.now();
+        if (!force && _dropboxDirectToken.token && now - _dropboxDirectToken.fetchedAt < DBX_DIRECT_TOKEN_TTL) return _dropboxDirectToken.token;
+        let r;
+        try {
+            r = await fetch(`/api/dropbox/direct_upload_token${force ? '?refresh=1' : ''}`, { method: 'POST' });
+        } catch (e) {
+            throw dropboxDirectError('Could not reach Dropbox upload token endpoint: ' + e.message, 0);
+        }
+        let data = {};
+        try { data = await r.json(); } catch (e) {}
+        if (!r.ok || !data.accessToken) throw dropboxDirectError(data.error || `Could not get Dropbox upload token (${r.status})`, r.status);
+        _dropboxDirectToken = { token: data.accessToken, fetchedAt: now };
+        return _dropboxDirectToken.token;
+    }
+
+    function dropboxDirectXhr(endpoint, apiArg, body, token, onProgress) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `https://content.dropboxapi.com/2/files/${endpoint}`);
+            xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+            xhr.setRequestHeader('Dropbox-API-Arg', dropboxHeaderJson(apiArg));
+            xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total); };
+            xhr.onload = () => {
+                const text = xhr.responseText || '';
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    if (!text) { resolve({}); return; }
+                    try { resolve(JSON.parse(text)); }
+                    catch (e) { reject(dropboxDirectError(`Dropbox returned invalid JSON (${xhr.status})`, xhr.status, text)); }
+                    return;
+                }
+                reject(dropboxDirectError(dropboxUploadErrorText(xhr.status, text), xhr.status, text));
+            };
+            xhr.onerror = () => reject(dropboxDirectError('network/CORS error during direct Dropbox upload', 0));
+            xhr.ontimeout = () => reject(dropboxDirectError('direct Dropbox upload timed out', 0));
+            xhr.send(body || new Blob([]));
+        });
+    }
+
+    async function dropboxDirectContent(endpoint, apiArg, body, onProgress) {
+        const call = async (force) => dropboxDirectXhr(endpoint, apiArg, body, await dropboxDirectAccessToken(force), onProgress);
+        try {
+            return await call(false);
+        } catch (e) {
+            if (isDropboxAuthUploadError(e)) return call(true);
+            throw e;
+        }
+    }
+
+    async function uploadToDropbox(destPath, file, onProgress) {
+        try {
+            return await uploadDirectToDropbox(destPath, file, onProgress);
+        } catch (e) {
+            if (!e || !e.directUpload) throw e;
+            console.warn('Direct Dropbox upload failed; retrying through server proxy:', e.message);
+            if (onProgress) onProgress(0, file.size || 1);
+            return uploadViaProxyToDropbox(destPath, file, onProgress);
+        }
+    }
+
+    function uploadDirectToDropbox(destPath, file, onProgress) {
         return (file.size > DBX_SIMPLE_MAX)
-            ? uploadChunked(destPath, file, onProgress)
-            : uploadSimple(destPath, file, onProgress);
+            ? uploadChunkedDirect(destPath, file, onProgress)
+            : uploadSimpleDirect(destPath, file, onProgress);
+    }
+
+    function uploadViaProxyToDropbox(destPath, file, onProgress) {
+        return (file.size > DBX_SIMPLE_MAX)
+            ? uploadChunkedViaProxy(destPath, file, onProgress)
+            : uploadSimpleViaProxy(destPath, file, onProgress);
     }
 
     async function uploadFilesToDropbox(files, destPathForFile, bar, opts = {}) {
@@ -4193,8 +4285,24 @@ const WorkshopUI = (() => {
         return results;
     }
 
-    // One XHR with up to 2 retries (exponential-ish backoff).
-    function uploadSimple(destPath, file, onProgress, attempt) {
+    // One direct XHR with up to 2 retries (exponential-ish backoff).
+    function uploadSimpleDirect(destPath, file, onProgress, attempt) {
+        attempt = attempt || 0;
+        return dropboxDirectContent('upload', { path: destPath, mode: 'add', autorename: true, mute: true }, file, onProgress)
+            .then(meta => {
+                if (meta.path_display || meta.path_lower) return meta;
+                throw dropboxDirectError('direct Dropbox upload returned no file path', 0);
+            })
+            .catch(err => {
+                if (attempt < 2 && (!err.status || err.status >= 500)) {
+                    return new Promise(r => setTimeout(r, 700 * (attempt + 1))).then(() => uploadSimpleDirect(destPath, file, onProgress, attempt + 1));
+                }
+                throw err;
+            });
+    }
+
+    // Existing server relay. Used only if direct browser→Dropbox upload fails.
+    function uploadSimpleViaProxy(destPath, file, onProgress, attempt) {
         attempt = attempt || 0;
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -4211,13 +4319,69 @@ const WorkshopUI = (() => {
             xhr.onerror = () => reject(new Error('network error during upload'));
             xhr.send(file);
         }).catch(err => {
-            if (attempt < 2) return new Promise(r => setTimeout(r, 700 * (attempt + 1))).then(() => uploadSimple(destPath, file, onProgress, attempt + 1));
+            if (attempt < 2) return new Promise(r => setTimeout(r, 700 * (attempt + 1))).then(() => uploadSimpleViaProxy(destPath, file, onProgress, attempt + 1));
             throw err;
         });
     }
 
-    // POST one chunk to the append endpoint, retrying up to 3× on failure.
-    function putChunk(sessionId, offset, blob, onChunkProgress, closeSession) {
+    async function putDirectChunk(sessionId, offset, blob, onChunkProgress, closeSession) {
+        for (let n = 1; n <= 4; n++) {
+            try {
+                await dropboxDirectContent('upload_session/append_v2', { cursor: { session_id: sessionId, offset }, close: !!closeSession }, blob, (loaded) => {
+                    if (onChunkProgress) onChunkProgress(loaded);
+                });
+                if (onChunkProgress) onChunkProgress(blob.size);
+                return;
+            } catch (e) {
+                if (/incorrect_offset/i.test(String(e.bodyText || e.message || ''))) {
+                    if (onChunkProgress) onChunkProgress(blob.size);
+                    return;
+                }
+                if (n >= 4) throw e;
+                await new Promise(r => setTimeout(r, 600 * n));
+            }
+        }
+    }
+
+    async function uploadChunkedDirect(destPath, file, onProgress) {
+        const start = await dropboxDirectContent('upload_session/start', { close: false, session_type: { '.tag': 'concurrent' } }, new Blob([]));
+        const sessionId = start.session_id;
+        if (!sessionId) throw dropboxDirectError('upload session id missing');
+
+        const remainder = file.size % DBX_FOURMB;
+        const finalChunkBytes = remainder || Math.min(DBX_CHUNK, file.size);
+        const prefixBytes = Math.max(0, file.size - finalChunkBytes);
+        const finalChunk = file.slice(prefixBytes, file.size);
+
+        const chunks = [];
+        for (let off = 0; off < prefixBytes; off += DBX_CHUNK) chunks.push({ offset: off, blob: file.slice(off, Math.min(off + DBX_CHUNK, prefixBytes)) });
+
+        const loaded = new Array(chunks.length + 1).fill(0);
+        const finalIndex = chunks.length;
+        const report = () => { if (onProgress) onProgress(loaded.reduce((a, b) => a + b, 0), file.size); };
+
+        let next = 0, failed = null;
+        const worker = async () => {
+            while (next < chunks.length && !failed) {
+                const i = next++;
+                try { await putDirectChunk(sessionId, chunks[i].offset, chunks[i].blob, (n) => { loaded[i] = n; report(); }); }
+                catch (e) { failed = e; }
+            }
+        };
+        if (chunks.length) await Promise.all(Array.from({ length: Math.min(DBX_CONCURRENCY, chunks.length) }, worker));
+        if (failed) throw failed;
+        await putDirectChunk(sessionId, prefixBytes, finalChunk, (n) => { loaded[finalIndex] = n; report(); }, true);
+
+        const meta = await dropboxDirectContent('upload_session/finish',
+            { cursor: { session_id: sessionId, offset: file.size }, commit: { path: destPath, mode: 'add', autorename: true, mute: true } },
+            new Blob([]));
+        if (!(meta.path_display || meta.path_lower)) throw dropboxDirectError('finish returned no Dropbox file path');
+        if (onProgress) onProgress(file.size, file.size);
+        return meta;
+    }
+
+    // POST one chunk to the proxy append endpoint, retrying up to 3× on failure.
+    function putProxyChunk(sessionId, offset, blob, onChunkProgress, closeSession) {
         return new Promise((resolve, reject) => {
             const tryOnce = (n) => {
                 const xhr = new XMLHttpRequest();
@@ -4236,7 +4400,7 @@ const WorkshopUI = (() => {
         });
     }
 
-    async function uploadChunked(destPath, file, onProgress) {
+    async function uploadChunkedViaProxy(destPath, file, onProgress) {
         const startRes = await fetch('/api/dropbox/session/start', { method: 'POST' });
         if (!startRes.ok) throw new Error('could not start upload session');
         const sessionId = (await startRes.json()).session_id;
@@ -4262,13 +4426,13 @@ const WorkshopUI = (() => {
         const worker = async () => {
             while (next < chunks.length && !failed) {
                 const i = next++;
-                try { await putChunk(sessionId, chunks[i].offset, chunks[i].blob, (n) => { loaded[i] = n; report(); }); }
+                try { await putProxyChunk(sessionId, chunks[i].offset, chunks[i].blob, (n) => { loaded[i] = n; report(); }); }
                 catch (e) { failed = e; }
             }
         };
         if (chunks.length) await Promise.all(Array.from({ length: Math.min(DBX_CONCURRENCY, chunks.length) }, worker));
         if (failed) throw failed;
-        await putChunk(sessionId, prefixBytes, finalChunk, (n) => { loaded[finalIndex] = n; report(); }, true);
+        await putProxyChunk(sessionId, prefixBytes, finalChunk, (n) => { loaded[finalIndex] = n; report(); }, true);
 
         // Concurrent-session finish commits only; Dropbox rejects data here.
         const finRes = await fetch(`/api/dropbox/session/finish?session_id=${encodeURIComponent(sessionId)}&offset=${file.size}&path=${encodeURIComponent(destPath)}`, { method: 'POST', body: new Blob([]) });
