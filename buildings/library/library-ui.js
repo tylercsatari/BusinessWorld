@@ -685,12 +685,69 @@ const LibraryUI = (() => {
         };
     }
 
+    // The P/V/C/O/A/G viral-formula prompt for Kimi K2.6, built CLIENT-SIDE and
+    // sent to /api/kimi/chat — the same simple, reliable endpoint the workshop
+    // hooks use — so generation works without the flaky background-job route.
+    function aiVideoIdeaMessages(count, existingTitles) {
+        const avoid = (existingTitles || []).slice(0, 120).join(' | ');
+        const system = [
+            'You are Kimi K2.6 inside Business World, an elite short-form video idea generator for a maker / engineering / Da Vinci-stack YouTube creator.',
+            'Generate only ideas that could plausibly become 100M-view videos if executed well. Be specific and buildable, never generic.',
+            'Use the P/V/C/O/A/G viral mechanism for every idea:',
+            '  P promise — what the video promises the viewer',
+            '  V early visual — the first frame / first 3 seconds of visual evidence',
+            '  C conceptual — the concept/text implied',
+            '  O outcome — the expected gratification / payoff',
+            '  A action — the action/process done on screen',
+            '  G goal — the creator motivation that feels real',
+            'Return ONLY valid JSON — no markdown, no commentary. Exact shape:',
+            '{"ideas":[{"title":"short specific title","hook":"spoken/on-screen opening line","context":"a concrete plan for how to actually make it","promise":"P","earlyVisual":"V","conceptual":"C","payoff":"O","actionProcess":"A","creatorGoal":"G","why100m":"why it has 100M-view mechanics","differentiation":"why it is NOT the same as the existing ones"}]}'
+        ].join('\n');
+        const user = [
+            `Generate ${count} brand-new short-form video idea${count === 1 ? '' : 's'}.`,
+            avoid ? `Do NOT repeat or lightly reskin any of these existing ideas/videos:\n${avoid}` : '',
+            'Make each idea genuinely distinct from those and from each other.'
+        ].filter(Boolean).join('\n\n');
+        return [{ role: 'system', content: system }, { role: 'user', content: user }];
+    }
+
+    // Pull the first balanced {...} object out of Kimi's reply (tolerates fences / prose).
+    function aiVideoExtractJson(text) {
+        if (!text) return null;
+        const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+        try { return JSON.parse(cleaned); } catch (e) {}
+        const from = cleaned.indexOf('{'); if (from < 0) return null;
+        let depth = 0, inStr = false, esc = false;
+        for (let i = from; i < cleaned.length; i++) {
+            const ch = cleaned[i];
+            if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; }
+            else if (ch === '"') inStr = true;
+            else if (ch === '{') depth++;
+            else if (ch === '}') { depth--; if (depth === 0) { try { return JSON.parse(cleaned.slice(from, i + 1)); } catch (e) { return null; } } }
+        }
+        return null;
+    }
+
+    function aiVideoNormalizeIdea(idea) {
+        idea = idea || {};
+        const pick = (...keys) => { for (const k of keys) { if (idea[k]) return String(idea[k]); } return ''; };
+        return {
+            title: (pick('title', 'name') || 'Untitled idea').slice(0, 200),
+            hook: pick('hook', 'opening').slice(0, 600),
+            context: pick('context', 'plan').slice(0, 2000),
+            promise: pick('promise', 'P'),
+            earlyVisual: pick('earlyVisual', 'early_visual', 'V'),
+            conceptual: pick('conceptual', 'C'),
+            payoff: pick('payoff', 'O', 'outcome'),
+            actionProcess: pick('actionProcess', 'action_process', 'A'),
+            creatorGoal: pick('creatorGoal', 'creator_goal', 'G'),
+            why100m: pick('why100m', 'why_100m'),
+            differentiation: pick('differentiation')
+        };
+    }
+
     async function generateAiVideoIdeas() {
         if (aiVideoIdeasBusy) return;
-        const ACK_TIMEOUT_MS = 45 * 1000;
-        const POLL_FAILURE_TIMEOUT_MS = 45 * 1000;
-        const SERVER_IDLE_FAIL_MS = 100 * 1000;
-        const CLIENT_TOTAL_FAIL_MS = 11 * 60 * 1000;
         aiVideoIdeasBusy = true;
         // Make sure the panel area is actually visible (the header Generate button
         // lives in the toolbar; the progress renders into the container, which must
@@ -712,7 +769,7 @@ const LibraryUI = (() => {
                     ideasPerRun: aiVideoIdeasPerRun,
                     requestedIdeas: aiVideoIdeasRuns * aiVideoIdeasPerRun
                 },
-                pipeline: ['POST /api/ai-video-ideas/generate', 'wait for job id', 'poll /api/ai-video-ideas/progress']
+                pipeline: ['read Business World context', 'assemble P/V/C/O/A/G prompt', 'Kimi K2.6 via /api/kimi/chat', 'parse + save ideas']
             },
             outputs: {}
         });
@@ -727,155 +784,69 @@ const LibraryUI = (() => {
         }, 200);
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
-        let ackTimer = null;
-        let ackTimeout = null;
+        const stepMsg = (m) => { aiVideoIdeasStatus = m; aiVideoIdeasLog.push(m); prog.step(m); renderAiVideoIdeas(); };
         try {
-            // Start a background job, then POLL its progress (Render buffers SSE,
-            // so polling is what reliably shows the live flow).
-            const startSentAt = Date.now();
-            let acked = false;
-            let lastAckNotice = 0;
-            const startController = new AbortController();
-            ackTimeout = setTimeout(() => {
-                if (!acked) startController.abort();
-            }, ACK_TIMEOUT_MS);
-            ackTimer = setInterval(() => {
-                if (acked) return;
-                const waited = Math.floor((Date.now() - startSentAt) / 1000);
-                if (waited && waited !== lastAckNotice && (waited % 10 === 0 || waited === 3)) {
-                    lastAckNotice = waited;
-                    const msg = waited >= 30
-                        ? `Waiting ${waited}s for server acknowledgement. If this keeps climbing, the deployed server may still be running the old blocking generator.`
-                        : `Waiting ${waited}s for server acknowledgement from /api/ai-video-ideas/generate.`;
-                    aiVideoIdeasLog.push(msg);
-                    aiVideoIdeasStatus = msg;
-                    prog.step(msg);
-                    renderAiVideoIdeas();
-                }
-            }, 1000);
-            prog.step('POST /api/ai-video-ideas/generate sent. Waiting for job id.');
-            let res;
-            try {
-                res = await fetch('/api/ai-video-ideas/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun }),
-                    signal: startController.signal
-                });
-            } catch (startError) {
-                if (startError && startError.name === 'AbortError') {
-                    throw new Error(`Server did not acknowledge the generation job within ${Math.round(ACK_TIMEOUT_MS / 1000)}s. Treating it as failed so it cannot sit for 800s silently.`);
-                }
-                throw startError;
-            }
-            acked = true;
-            clearInterval(ackTimer);
-            clearTimeout(ackTimeout);
-            const start = await res.json().catch(() => ({}));
-            if (res.ok && Array.isArray(start.created)) {
-                const createdArr = start.created || [];
-                if (createdArr.length) {
-                    const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
-                    aiVideoIdeas = [...createdArr.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
-                    aiVideoIdeasLoaded = true;
-                }
-                aiVideoIdeasStatus = `Server returned a legacy blocking result: created ${createdArr.length}, pruned ${(start.rejected || []).length}.`;
-                prog.done(aiVideoIdeasStatus, true);
-                return;
-            }
-            if (!res.ok || !start.jobId) throw new Error(start.error || `Generate failed: ${res.status}`);
-            const jobId = start.jobId;
-            prog.step(`Server acknowledged job ${jobId.slice(0, 8)}. Polling live progress.`);
-            prog.setSnapshot({
-                phase: 'accepted',
-                updatedAgo: 0,
-                inputs: start.inputs || {},
-                outputs: {}
-            });
-            let seenEvents = 0, seenCards = 0;
-            let lastServerEventAt = Date.now();
-            let lastQuietNotice = 0;
-            let pollFailureStartedAt = 0;
-            while (true) {
-                await new Promise(r => setTimeout(r, 400));
-                let pr;
+            const count = Math.max(1, aiVideoIdeasRuns * aiVideoIdeasPerRun);
+
+            // 1) LOOK THROUGH Business World (like the hooks do): existing ideas,
+            //    videos & AI ideas — so Kimi doesn't repeat anything.
+            stepMsg('Reading Business World — your ideas, videos & existing AI ideas (so nothing repeats)…');
+            const [ideasData, videosData] = await Promise.all([
+                fetch('/api/data/ideas').then(r => r.ok ? r.json() : []).catch(() => []),
+                fetch('/api/data/videos').then(r => r.ok ? r.json() : []).catch(() => [])
+            ]);
+            const iN = Array.isArray(ideasData) ? ideasData.length : 0;
+            const vN = Array.isArray(videosData) ? videosData.length : 0;
+            const existingTitles = [
+                ...aiVideoIdeas.map(x => x.title || x.name),
+                ...(Array.isArray(ideasData) ? ideasData : []).map(x => x.name || x.title),
+                ...(Array.isArray(videosData) ? videosData : []).map(x => x.name || x.title)
+            ].filter(Boolean);
+            stepMsg(`Context loaded: ${iN} ideas, ${vN} videos, ${aiVideoIdeas.length} AI ideas — won't repeat any of them.`);
+            prog.setSnapshot({ phase: 'context', updatedAgo: 0, inputs: { request: { runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun, requestedIdeas: count }, contextSummary: { ideas: iN, videos: vN, aiIdeas: aiVideoIdeas.length, avoidingTitles: existingTitles.length } }, outputs: {} });
+
+            // 2) ASSEMBLE the P/V/C/O/A/G prompt.
+            const messages = aiVideoIdeaMessages(count, existingTitles);
+            prog.setSnapshot({ phase: 'prompt', updatedAgo: 0, inputs: { request: { runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun, requestedIdeas: count }, prompt: { system: messages[0].content, user: messages[1].content } }, outputs: {} });
+            stepMsg(`Prompt assembled with the P/V/C/O/A/G formula. Asking Kimi K2.6 for ${count} idea${count === 1 ? '' : 's'}…`);
+
+            // 3) GENERATE — the same simple, reliable endpoint the hooks use.
+            const r = await fetch('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 8000 }) });
+            if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (${r.status})`); }
+            const data = await r.json();
+            const content = data.choices?.[0]?.message?.content || '';
+            if (content) prog.setOutput(content);
+            stepMsg('Kimi K2.6 replied — parsing ideas…');
+
+            // 4) PARSE.
+            const parsed = aiVideoExtractJson(content);
+            const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
+            if (!rawIdeas.length) throw new Error('Kimi did not return any parseable ideas — try again.');
+            const ideas = rawIdeas.slice(0, count).map(aiVideoNormalizeIdea).filter(i => i.title);
+            stepMsg(`Parsed ${ideas.length} idea${ideas.length === 1 ? '' : 's'}. Saving…`);
+
+            // 5) SAVE each (generic R2 collection — already works) + show cards live.
+            const created = [];
+            for (const idea of ideas) {
+                prog.setCards([], created.concat([idea]));
                 try {
-                    const progressRes = await fetch('/api/ai-video-ideas/progress?job=' + encodeURIComponent(jobId));
-                    // A 404 means the server no longer has this job — it almost
-                    // always restarted/crashed (often OOM) mid-generation. Fail fast
-                    // with an actionable message instead of retrying for 45s.
-                    if (progressRes.status === 404) {
-                        throw new Error(`The server lost this job (404) — it most likely RESTARTED or ran OUT OF MEMORY mid-generation. Check the Render logs: look for the last "[aivideo ${jobId.slice(0, 8)} …]" line (that's the phase it died on) or a "heap out of memory" message.`);
-                    }
-                    pr = await progressRes.json();
-                    if (!progressRes.ok) throw new Error(pr.error || `Progress failed: ${progressRes.status}`);
-                    pollFailureStartedAt = 0;
-                } catch (pollError) {
-                    if (/lost this job \(404\)/.test(pollError.message || '')) throw pollError;   // don't retry a dead job
-                    const msg = `Progress poll failed: ${pollError.message || pollError}`;
-                    aiVideoIdeasStatus = msg;
-                    prog.step(msg);
-                    if (!pollFailureStartedAt) pollFailureStartedAt = Date.now();
-                    if (Date.now() - pollFailureStartedAt > POLL_FAILURE_TIMEOUT_MS) {
-                        throw new Error(`Progress polling failed for more than ${Math.round(POLL_FAILURE_TIMEOUT_MS / 1000)}s. Marking this generation as failed.`);
-                    }
-                    continue;
-                }
-                if (!pr) continue;
-                if (pr.error) throw new Error(pr.error);
-                const serverIdleMs = Number(pr.updatedAgo || 0);
-                const totalElapsedMs = Number(pr.elapsed || 0);
-                if (serverIdleMs > SERVER_IDLE_FAIL_MS) {
-                    throw new Error(`AI video idea generation stalled: the server has not reported progress for ${Math.round(serverIdleMs / 1000)}s.`);
-                }
-                if (totalElapsedMs > CLIENT_TOTAL_FAIL_MS) {
-                    throw new Error(`AI video idea generation exceeded ${Math.round(CLIENT_TOTAL_FAIL_MS / 1000)}s. Marking it failed instead of waiting indefinitely.`);
-                }
-                const newEvents = (pr.events || []).slice(seenEvents);
-                if (newEvents.length) lastServerEventAt = Date.now();
-                newEvents.forEach(ev => {
-                    const msg = aiVideoProgressEventText(ev);
-                    if (!msg) return;
-                    aiVideoIdeasLog.push(msg);
-                    if (aiVideoIdeasLog.length > 120) aiVideoIdeasLog = aiVideoIdeasLog.slice(-120);
-                    aiVideoIdeasStatus = msg;
-                    prog.step(msg, ev);
-                });
-                seenEvents = (pr.events || []).length;
-                const quiet = Math.floor((Date.now() - lastServerEventAt) / 1000);
-                if (quiet >= 20 && quiet !== lastQuietNotice && quiet % 20 === 0) {
-                    lastQuietNotice = quiet;
-                    const msg = `No new server step for ${quiet}s. Still polling job ${jobId.slice(0, 8)}; current phase: ${pr.phase || 'unknown'}.`;
-                    aiVideoIdeasLog.push(msg);
-                    aiVideoIdeasStatus = msg;
-                    prog.step(msg);
-                }
-                prog.setSnapshot(pr);
-                prog.setOutput(pr.output);                                  // live model output
-                prog.setCards(pr.candidateCards || [], pr.cards || []);
-                seenCards = (pr.cards || []).length;
-                renderAiVideoIdeas();
-                if (pr.done) {
-                    const createdArr = Array.isArray(pr.created) ? pr.created : [];
-                    if (createdArr.length) {
-                        const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
-                        aiVideoIdeas = [...createdArr.filter(idea => !existingIds.has(idea.id)), ...aiVideoIdeas];
-                        aiVideoIdeasLoaded = true;
-                    }
-                    const created = createdArr.length;
-                    const rejected = (pr.rejected || []).length;
-                    aiVideoIdeasStatus = `Created ${created} candidate${created === 1 ? '' : 's'}; pruned ${rejected} near-duplicate${rejected === 1 ? '' : 's'}.`;
-                    prog.done(aiVideoIdeasStatus, true);
-                    break;
-                }
+                    const saved = await fetch('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }).then(res => res.ok ? res.json() : null);
+                    created.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
+                    stepMsg(`✓ ${idea.title}`);
+                } catch (e) { created.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
             }
+            const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
+            aiVideoIdeas = [...created.filter(i => !existingIds.has(i.id)), ...aiVideoIdeas];
+            aiVideoIdeasLoaded = true;
+            aiVideoIdeasStatus = `Created ${created.length} idea${created.length === 1 ? '' : 's'}.`;
+            prog.setCards([], created);
+            prog.done(aiVideoIdeasStatus, true);
+            renderAiVideoIdeas();
         } catch (e) {
             aiVideoIdeasStatus = e.message || 'Generation failed.';
             prog.done(aiVideoIdeasStatus, false);
             renderAiVideoIdeas();
         } finally {
-            if (ackTimer) clearInterval(ackTimer);
-            if (ackTimeout) clearTimeout(ackTimeout);
             aiVideoIdeasBusy = false;
             clearInterval(aiVideoIdeasTimer); aiVideoIdeasTimer = null;
             updateAiVideoIdeasGenerateButtons();
