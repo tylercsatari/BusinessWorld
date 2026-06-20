@@ -2337,15 +2337,44 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
             // consumer), NOT the server — so a pathological clip fails gracefully
             // instead of taking the whole service down. Scales to thousands of clips.
             const os = require('os');
-            const transcodeUrlToProxy = (url, outPath) => new Promise((resolve) => {
-                let ff;
-                try {
-                    ff = require('child_process').spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
-                        '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
-                        '-threads', '1', '-i', url, '-t', '1200', '-vf', 'scale=-2:360', '-r', '1.5',
+            // A long video is reduced to a ~30s proxy by sampling frames evenly
+            // across its WHOLE length and compressing them into 30s — so a 29-minute
+            // clip costs the same as a 30s one (Gemini's size/cost scales with proxy
+            // DURATION, not source length).
+            const FC_TARGET_SECONDS = 30;
+            const FC_OUTPUT_FPS = 1.5;
+            const FC_TARGET_FRAMES = Math.round(FC_TARGET_SECONDS * FC_OUTPUT_FPS);   // 45
+            const probeDuration = (url) => new Promise((resolve) => {
+                let ff, out = '';
+                try { ff = require('child_process').spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', url], { stdio: ['ignore', 'pipe', 'ignore'] }); }
+                catch (e) { resolve(0); return; }
+                ff.stdout.on('data', d => { out += d.toString(); });
+                const killer = setTimeout(() => { try { ff.kill('SIGKILL'); } catch (e) {} resolve(0); }, 60000);
+                ff.on('error', () => { clearTimeout(killer); resolve(0); });
+                ff.on('exit', () => { clearTimeout(killer); const d = parseFloat(String(out).trim()); resolve(isFinite(d) && d > 0 ? d : 0); });
+            });
+            const transcodeUrlToProxy = (url, outPath, durationSec) => new Promise((resolve) => {
+                const head = ['-y', '-hide_banner', '-loglevel', 'error',
+                    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5'];
+                let args;
+                if (durationSec > FC_TARGET_SECONDS + 2) {
+                    // Sample ~45 keyframes across the whole video (keyframe-only decode =
+                    // fast even for a 30-min clip), compressed into a ~30s silent proxy.
+                    const sampleFps = (FC_TARGET_FRAMES / durationSec).toFixed(6);
+                    args = [...head, '-skip_frame', 'nokey', '-threads', '1', '-i', url,
+                        '-vf', `fps=${sampleFps},scale=-2:360,setpts=PTS*${sampleFps}/${FC_OUTPUT_FPS}`,
+                        '-r', String(FC_OUTPUT_FPS), '-an',
+                        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '34', '-threads', '1', '-movflags', '+faststart', outPath];
+                } else {
+                    // Short clip: keep it whole (low-res, low-fps, with audio).
+                    args = [...head, '-threads', '1', '-i', url, '-t', '1200',
+                        '-vf', 'scale=-2:360', '-r', String(FC_OUTPUT_FPS),
                         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '34', '-threads', '1',
-                        '-c:a', 'aac', '-b:a', '48k', '-movflags', '+faststart', outPath], { stdio: 'ignore' });
-                } catch (e) { resolve(false); return; }
+                        '-c:a', 'aac', '-b:a', '48k', '-movflags', '+faststart', outPath];
+                }
+                let ff;
+                try { ff = require('child_process').spawn('ffmpeg', args, { stdio: 'ignore' }); }
+                catch (e) { resolve(false); return; }
                 const killer = setTimeout(() => { try { ff.kill('SIGKILL'); } catch (e) {} resolve(false); }, 300000);
                 ff.on('error', () => { clearTimeout(killer); resolve(false); });
                 ff.on('exit', (code) => { clearTimeout(killer); resolve(code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 0); });
@@ -2356,8 +2385,9 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 if (!linkData || !linkData.link) throw new Error('Dropbox did not return a temporary link');
                 const proxy = path.join(os.tmpdir(), `fc-${require('crypto').randomUUID()}.proxy.mp4`);
                 try {
-                    if (!(await transcodeUrlToProxy(linkData.link, proxy))) throw new Error('ffmpeg could not transcode this clip (unreadable, too long, or timed out)');
-                    const bytes = fs.readFileSync(proxy);   // a few MB regardless of source size
+                    const dur = await probeDuration(linkData.link);   // 0 if unknown → treated as short
+                    if (!(await transcodeUrlToProxy(linkData.link, proxy, dur))) throw new Error('ffmpeg could not transcode this clip (unreadable or timed out)');
+                    const bytes = fs.readFileSync(proxy);   // tiny — a ~30s proxy regardless of source length
                     return await geminiWatch.analyzeBytes(bytes, 'video/mp4', prompt, {
                         displayName: name, genConfig: geminiWatch.FOOTAGE_GEN_CONFIG, timeoutMs: 120000, generateTimeoutMs: 150000
                     });
