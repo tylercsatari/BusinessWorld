@@ -3805,10 +3805,11 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
     if (pathname === '/api/dropbox/session/append' && req.method === 'POST') {
         const sessionId = url.searchParams.get('session_id');
         const offset = Number(url.searchParams.get('offset'));
+        const close = url.searchParams.get('close') === '1';
         if (!sessionId || !Number.isFinite(offset)) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'missing session_id/offset' })); return; }
         try {
             const r = await dropboxContent('upload_session/append_v2',
-                { cursor: { session_id: sessionId, offset }, close: false },
+                { cursor: { session_id: sessionId, offset }, close },
                 req,
                 { duplex: true, noRetry: true, contentLength: req.headers['content-length'] });
             if (r.ok) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); return; }

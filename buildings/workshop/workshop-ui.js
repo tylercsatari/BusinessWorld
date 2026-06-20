@@ -4133,9 +4133,9 @@ const WorkshopUI = (() => {
     // covers browser→server; the server then forwards to Dropbox before
     // responding, so 100% switches to a "processing" stage until resolve.
     // ===== Dropbox upload: single-shot for small files, chunked CONCURRENT
-    // upload sessions for large ones. Chunks upload in parallel, each retries on
-    // failure, and progress is aggregated across all of them — no 150 MB cap, no
-    // whole-file server buffering, no stall at "100%". =====
+    // upload sessions for large ones. Prefix chunks upload in parallel, then the
+    // final chunk closes the session and finish commits with an empty body — this
+    // is the sequence Dropbox accepts for concurrent sessions. =====
     const DBX_CHUNK = 32 * 1024 * 1024;       // 32 MB — must be a multiple of 4 MB for concurrent sessions
     const DBX_FOURMB = 4 * 1024 * 1024;       // concurrent-session append alignment
     const DBX_SIMPLE_MAX = 64 * 1024 * 1024;  // bigger clips use parallel chunks instead of one long request
@@ -4218,11 +4218,11 @@ const WorkshopUI = (() => {
     }
 
     // POST one chunk to the append endpoint, retrying up to 3× on failure.
-    function putChunk(sessionId, offset, blob, onChunkProgress) {
+    function putChunk(sessionId, offset, blob, onChunkProgress, closeSession) {
         return new Promise((resolve, reject) => {
             const tryOnce = (n) => {
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', `/api/dropbox/session/append?session_id=${encodeURIComponent(sessionId)}&offset=${offset}`);
+                xhr.open('POST', `/api/dropbox/session/append?session_id=${encodeURIComponent(sessionId)}&offset=${offset}${closeSession ? '&close=1' : ''}`);
                 authHeader(xhr);
                 xhr.upload.onprogress = (e) => { if (e.lengthComputable && onChunkProgress) onChunkProgress(e.loaded); };
                 xhr.onload = () => {
@@ -4243,17 +4243,19 @@ const WorkshopUI = (() => {
         const sessionId = (await startRes.json()).session_id;
         if (!sessionId) throw new Error('upload session id missing');
 
-        // CONCURRENT sessions require every APPEND to be a multiple of 4 MB; the
-        // final (non-aligned) tail goes in the finish call instead. So append the
-        // largest 4 MB-aligned prefix in 16 MB chunks, and keep a (0, 4 MB] tail.
-        let appendBytes = Math.floor(file.size / DBX_FOURMB) * DBX_FOURMB;
-        if (appendBytes >= file.size) appendBytes = Math.max(0, file.size - DBX_FOURMB);  // always leave a non-empty tail
-        const tail = file.slice(appendBytes, file.size);
+        // Dropbox concurrent sessions require non-final appends to be 4 MB aligned
+        // and reject data in finish. Upload all aligned prefix bytes in parallel,
+        // append the final chunk with close=true, then finish with an empty body.
+        const remainder = file.size % DBX_FOURMB;
+        const finalChunkBytes = remainder || Math.min(DBX_CHUNK, file.size);
+        const prefixBytes = Math.max(0, file.size - finalChunkBytes);
+        const finalChunk = file.slice(prefixBytes, file.size);
 
         const chunks = [];
-        for (let off = 0; off < appendBytes; off += DBX_CHUNK) chunks.push({ offset: off, blob: file.slice(off, Math.min(off + DBX_CHUNK, appendBytes)) });
+        for (let off = 0; off < prefixBytes; off += DBX_CHUNK) chunks.push({ offset: off, blob: file.slice(off, Math.min(off + DBX_CHUNK, prefixBytes)) });
 
-        const loaded = new Array(chunks.length).fill(0);
+        const loaded = new Array(chunks.length + 1).fill(0);
+        const finalIndex = chunks.length;
         const report = () => { if (onProgress) onProgress(loaded.reduce((a, b) => a + b, 0), file.size); };
 
         // Bounded-concurrency worker pool over the (4 MB-aligned) chunk list.
@@ -4267,9 +4269,10 @@ const WorkshopUI = (() => {
         };
         if (chunks.length) await Promise.all(Array.from({ length: Math.min(DBX_CONCURRENCY, chunks.length) }, worker));
         if (failed) throw failed;
+        await putChunk(sessionId, prefixBytes, finalChunk, (n) => { loaded[finalIndex] = n; report(); }, true);
 
-        // Finish carries the tail bytes at offset = appendBytes (closes + commits).
-        const finRes = await fetch(`/api/dropbox/session/finish?session_id=${encodeURIComponent(sessionId)}&offset=${appendBytes}&path=${encodeURIComponent(destPath)}`, { method: 'POST', body: tail });
+        // Concurrent-session finish commits only; Dropbox rejects data here.
+        const finRes = await fetch(`/api/dropbox/session/finish?session_id=${encodeURIComponent(sessionId)}&offset=${file.size}&path=${encodeURIComponent(destPath)}`, { method: 'POST', body: new Blob([]) });
         let meta;
         try { meta = await finRes.json(); } catch (e) { throw new Error(`finish failed (${finRes.status})`); }
         if (!finRes.ok || !(meta.path_display || meta.path_lower)) throw new Error(meta.error_summary || meta.error || `finish failed (${finRes.status})`);
