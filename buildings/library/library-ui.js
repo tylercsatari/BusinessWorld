@@ -746,117 +746,142 @@ const LibraryUI = (() => {
         };
     }
 
+    // A clean, obvious step-list modal (inline-styled so it never depends on CSS).
+    // Each named step shows ○ pending → spinner active → ✓ done → ⚠ error, plus
+    // the idea cards as they land. Replaces the old JSON-dump panel.
+    function aiIdeaStepsModal(count) {
+        const STEPS = [
+            { id: 'context', label: 'Read your existing ideas & videos (so nothing repeats)' },
+            { id: 'kimi', label: `Ask Kimi K2.6 to generate ${count} idea${count === 1 ? '' : 's'}` },
+            { id: 'parse', label: 'Parse the ideas' },
+            { id: 'save', label: 'Save the ideas' }
+        ];
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(12,18,28,.55);display:flex;align-items:center;justify-content:center;padding:18px;';
+        overlay.innerHTML = `
+        <div style="background:#fff;border-radius:14px;max-width:540px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.32);">
+            <div style="padding:15px 20px;border-bottom:1px solid #eef1f4;display:flex;align-items:center;gap:10px;">
+                <span data-aii="spin" style="display:inline-block;width:15px;height:15px;border:2px solid #d4dde6;border-top-color:#2f80d8;border-radius:50%;animation:aiispin .7s linear infinite;flex:0 0 auto;"></span>
+                <b data-aii="head" style="font-size:15px;color:#16263a;">Generating video ideas…</b>
+                <span data-aii="elapsed" style="margin-left:auto;font-size:12px;color:#94a6b8;">0.0s</span>
+            </div>
+            <div style="padding:12px 20px 4px;">
+                ${STEPS.map(s => `<div data-aii-step="${s.id}" style="display:flex;align-items:center;gap:11px;padding:8px 0;font-size:13.5px;color:#7488a0;">
+                    <span data-aii-ic style="flex:0 0 18px;text-align:center;font-size:14px;">○</span>
+                    <span data-aii-lbl style="flex:1 1 auto;">${escHtml(s.label)}</span>
+                    <span data-aii-detail style="font-size:11.5px;color:#9fb0c2;"></span>
+                </div>`).join('')}
+            </div>
+            <div data-aii="cards" style="padding:4px 20px 8px;"></div>
+            <div style="padding:12px 20px;border-top:1px solid #eef1f4;text-align:right;">
+                <button data-aii="close" style="display:none;padding:7px 18px;border:1px solid #cdd8e3;border-radius:8px;background:#f7fafc;cursor:pointer;font-size:13px;color:#33485e;">Close</button>
+            </div>
+        </div>
+        <style>@keyframes aiispin{to{transform:rotate(360deg)}}</style>`;
+        document.body.appendChild(overlay);
+        const q = (s) => overlay.querySelector(s);
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        q('[data-aii="close"]').addEventListener('click', () => overlay.remove());
+        const t0 = Date.now();
+        const timer = setInterval(() => { const e = q('[data-aii="elapsed"]'); if (e) e.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's'; }, 200);
+        const SPIN = '<span style="display:inline-block;width:12px;height:12px;border:2px solid #d4dde6;border-top-color:#2f80d8;border-radius:50%;animation:aiispin .7s linear infinite;"></span>';
+        let activeId = null;
+        const setRow = (id, status, detail) => {
+            const row = overlay.querySelector(`[data-aii-step="${id}"]`); if (!row) return;
+            row.querySelector('[data-aii-ic]').innerHTML = status === 'active' ? SPIN : status === 'done' ? '<span style="color:#27ae60;">✓</span>' : status === 'error' ? '<span style="color:#e74c3c;">⚠</span>' : '○';
+            row.style.color = status === 'pending' ? '#7488a0' : status === 'error' ? '#e74c3c' : '#16263a';
+            row.querySelector('[data-aii-lbl]').style.fontWeight = status === 'active' ? '600' : '400';
+            if (detail != null) row.querySelector('[data-aii-detail]').textContent = detail;
+            if (status === 'active') activeId = id;
+        };
+        return {
+            step: setRow,
+            errorActive() { if (activeId) setRow(activeId, 'error'); },
+            card(idea) {
+                const c = document.createElement('div');
+                c.style.cssText = 'border:1px solid #d8efe0;background:#f4fbf7;border-radius:9px;padding:9px 11px;margin:6px 0;';
+                c.innerHTML = `<div style="font-weight:700;font-size:13px;color:#16263a;">${escHtml(idea.title || 'Idea')}</div>${idea.hook ? `<div style="font-size:12px;color:#5b748f;margin-top:3px;">${escHtml(idea.hook)}</div>` : ''}`;
+                q('[data-aii="cards"]').appendChild(c);
+            },
+            finish(ok, summary) {
+                clearInterval(timer);
+                const spin = q('[data-aii="spin"]'); if (spin) spin.style.display = 'none';
+                const head = q('[data-aii="head"]'); if (head) { head.textContent = (ok ? '✓ ' : '⚠ ') + summary; head.style.color = ok ? '#16263a' : '#e74c3c'; }
+                const btn = q('[data-aii="close"]'); if (btn) btn.style.display = '';
+            }
+        };
+    }
+
     async function generateAiVideoIdeas() {
         if (aiVideoIdeasBusy) return;
         aiVideoIdeasBusy = true;
-        // Make sure the panel area is actually visible (the header Generate button
-        // lives in the toolbar; the progress renders into the container, which must
-        // not be display:none) and loaded so render doesn't show "Loading…".
         const _cont = document.getElementById('library-aiideas-container');
         if (_cont) _cont.style.display = '';
         aiVideoIdeasLoaded = true;
-        aiVideoIdeasLog = [`Running Kimi K2.6 for ${aiVideoIdeasRuns} run${aiVideoIdeasRuns === 1 ? '' : 's'} × ${aiVideoIdeasPerRun} idea${aiVideoIdeasPerRun === 1 ? '' : 's'}…`];
-        aiVideoIdeasStatus = aiVideoIdeasLog[0];
-        aiVideoIdeasT0 = Date.now();
-        const prog = showAiIdeasProgressModal();
-        prog.step(aiVideoIdeasLog[0]);
-        prog.setSnapshot({
-            phase: 'client-start',
-            updatedAgo: 0,
-            inputs: {
-                request: {
-                    runs: aiVideoIdeasRuns,
-                    ideasPerRun: aiVideoIdeasPerRun,
-                    requestedIdeas: aiVideoIdeasRuns * aiVideoIdeasPerRun
-                },
-                pipeline: ['read Business World context', 'assemble P/V/C/O/A/G prompt', 'Kimi K2.6 via /api/kimi/chat', 'parse + save ideas']
-            },
-            outputs: {}
-        });
-        // Tick the elapsed timer independently of SSE, so it's visibly alive even
-        // during a long Kimi call (when the step message doesn't change).
-        clearInterval(aiVideoIdeasTimer);
-        aiVideoIdeasTimer = setInterval(() => {
-            const t = ((Date.now() - aiVideoIdeasT0) / 1000).toFixed(1) + 's';
-            const el = document.getElementById('library-aiideas-elapsed'); if (el) el.textContent = t;
-            prog.setElapsed(t);
-            updateAiVideoIdeasGenerateButtons();   // keep the visible button's "…Ns" ticking too
-        }, 200);
+        const count = Math.max(1, aiVideoIdeasRuns * aiVideoIdeasPerRun);
+        const ui = aiIdeaStepsModal(count);                 // clean step-list modal
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
-        // stepMsg sets the VISIBLE Phase too (via the modal's step phase), so the
-        // panel moves at every step instead of sitting on "client-start".
-        const stepMsg = (phase, m) => { aiVideoIdeasStatus = m; aiVideoIdeasLog.push(m); prog.step(m, { phase, msg: m }); renderAiVideoIdeas(); };
+        // Every network call is wrapped with a hard timeout, so the flow can NEVER
+        // hang — a stuck step fails fast and shows ⚠ on that exact step.
         const fetchT = (url, opts, ms) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { ...(opts || {}), signal: c.signal }).finally(() => clearTimeout(t)); };
         try {
-            const count = Math.max(1, aiVideoIdeasRuns * aiVideoIdeasPerRun);
-
-            // 1) CONTEXT — existing titles so Kimi doesn't repeat. The already-loaded
-            //    AI ideas always count; the ideas/videos fetch is BEST-EFFORT with a
-            //    short timeout so a slow 1.5 MB load can never stall the run.
-            stepMsg('reading context', 'Reading Business World — your ideas & videos (so nothing repeats)…');
-            let ideasData = [], videosData = [];
+            // 1) CONTEXT — best-effort, tight timeout so it can never stall.
+            ui.step('context', 'active');
+            let libTitles = [];
             try {
-                [ideasData, videosData] = await Promise.all([
-                    fetchT('/api/data/ideas', {}, 6000).then(r => r.ok ? r.json() : []).catch(() => []),
-                    fetchT('/api/data/videos', {}, 6000).then(r => r.ok ? r.json() : []).catch(() => [])
+                const [ideasData, videosData] = await Promise.all([
+                    fetchT('/api/data/ideas', {}, 5000).then(r => r.ok ? r.json() : []).catch(() => []),
+                    fetchT('/api/data/videos', {}, 5000).then(r => r.ok ? r.json() : []).catch(() => [])
                 ]);
-            } catch (_) { /* best-effort — proceed with just the loaded AI ideas */ }
-            const iN = Array.isArray(ideasData) ? ideasData.length : 0;
-            const vN = Array.isArray(videosData) ? videosData.length : 0;
-            const existingTitles = [
-                ...aiVideoIdeas.map(x => x.title || x.name),
-                ...(Array.isArray(ideasData) ? ideasData : []).map(x => x.name || x.title),
-                ...(Array.isArray(videosData) ? videosData : []).map(x => x.name || x.title)
-            ].filter(Boolean);
-            stepMsg('context ready', `Context: ${iN} ideas, ${vN} videos, ${aiVideoIdeas.length} AI ideas — avoiding ${existingTitles.length} existing titles.`);
+                libTitles = [...(Array.isArray(ideasData) ? ideasData : []), ...(Array.isArray(videosData) ? videosData : [])].map(x => x.name || x.title).filter(Boolean);
+            } catch (_) { /* proceed with just the loaded AI ideas */ }
+            const existingTitles = [...aiVideoIdeas.map(x => x.title || x.name), ...libTitles].filter(Boolean);
+            ui.step('context', 'done', `${existingTitles.length} to avoid`);
 
-            // 2) ASSEMBLE the P/V/C/O/A/G prompt.
+            // 2) ASK KIMI K2.6 — the same endpoint the hooks use. 90s cap.
+            ui.step('kimi', 'active');
             const messages = aiVideoIdeaMessages(count, existingTitles);
-            prog.setSnapshot({ phase: 'prompt', updatedAgo: 0, inputs: { request: { runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun, requestedIdeas: count }, prompt: { system: messages[0].content, user: messages[1].content } }, outputs: {} });
-            stepMsg('asking Kimi K2.6', `Prompt assembled (P/V/C/O/A/G). Asking Kimi K2.6 for ${count} idea${count === 1 ? '' : 's'}… (~5-15s)`);
-
-            // 3) GENERATE — the same simple, reliable endpoint the hooks use. 90s cap.
             let r;
             try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 8000 }) }, 90000); }
             catch (err) { throw new Error(err && err.name === 'AbortError' ? 'Kimi took longer than 90s — try again.' : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
-            if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (${r.status})`); }
+            if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
             const data = await r.json();
-            const content = data.choices?.[0]?.message?.content || '';
-            if (content) prog.setOutput(content);
-            stepMsg('parsing', 'Kimi K2.6 replied — parsing ideas…');
+            const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+            ui.step('kimi', 'done', 'replied');
 
-            // 4) PARSE.
+            // 3) PARSE.
+            ui.step('parse', 'active');
             const parsed = aiVideoExtractJson(content);
             const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
-            if (!rawIdeas.length) throw new Error('Kimi replied but no ideas parsed. Reply started: ' + (content || '(empty)').slice(0, 160));
+            if (!rawIdeas.length) throw new Error('Kimi replied but no ideas could be parsed. It said: ' + (content || '(empty)').slice(0, 160));
             const ideas = rawIdeas.slice(0, count).map(aiVideoNormalizeIdea).filter(i => i.title);
-            stepMsg('saving', `Parsed ${ideas.length} idea${ideas.length === 1 ? '' : 's'}. Saving…`);
+            ui.step('parse', 'done', `${ideas.length} idea${ideas.length === 1 ? '' : 's'}`);
 
-            // 5) SAVE each (generic R2 collection — already works) + show cards live.
+            // 4) SAVE + show each card as it lands.
+            ui.step('save', 'active');
             const created = [];
             for (const idea of ideas) {
-                prog.setCards([], created.concat([idea]));
+                ui.card(idea);
                 try {
                     const saved = await fetchT('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }, 20000).then(res => res.ok ? res.json() : null);
                     created.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
                 } catch (e) { created.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
-                stepMsg('saving', `✓ ${idea.title}`);
             }
-            const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
+            ui.step('save', 'done', `saved ${created.length}`);
+            const existingIds = new Set(aiVideoIdeas.map(i => i.id));
             aiVideoIdeas = [...created.filter(i => !existingIds.has(i.id)), ...aiVideoIdeas];
             aiVideoIdeasLoaded = true;
             aiVideoIdeasStatus = `Created ${created.length} idea${created.length === 1 ? '' : 's'}.`;
-            prog.setCards([], created);
-            prog.done(aiVideoIdeasStatus, true);
+            ui.finish(true, aiVideoIdeasStatus);
             renderAiVideoIdeas();
         } catch (e) {
             aiVideoIdeasStatus = e.message || 'Generation failed.';
-            prog.done(aiVideoIdeasStatus, false);
+            ui.errorActive();
+            ui.finish(false, aiVideoIdeasStatus);
             renderAiVideoIdeas();
         } finally {
             aiVideoIdeasBusy = false;
-            clearInterval(aiVideoIdeasTimer); aiVideoIdeasTimer = null;
             updateAiVideoIdeasGenerateButtons();
             renderAiVideoIdeas();
         }
