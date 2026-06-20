@@ -173,11 +173,15 @@ async function analyzeBytes(bytes, mimeType, prompt, opts = {}) {
   const displayName = opts.displayName || 'footage-clip';
   const uploadUrl = await startResumable(bytes.length, mimeType, displayName);
   const file = await uploadBytes(uploadUrl, bytes);
-  await waitActive(file.name, { timeoutMs: opts.timeoutMs || 300000 });
-  const result = await generate(file.uri, file.mimeType || mimeType, model, prompt);
+  await waitActive(file.name, { timeoutMs: opts.timeoutMs || 120000 });
+  const result = await generate(file.uri, file.mimeType || mimeType, model, prompt, opts.genConfig, opts.generateTimeoutMs);
   try { await fetch(authUrl(`/v1beta/${file.name}`), { method: 'DELETE' }); } catch (e) {}
   return { model, result };
 }
+
+// The cheap/fast Gemini config for footage cataloguing (vs the Video Lab's
+// thorough watch) — exported so callers don't re-declare it.
+const FOOTAGE_GEN_CONFIG = { thinkingConfig: { thinkingLevel: 'low' }, mediaResolution: 'MEDIA_RESOLUTION_LOW' };
 
 /**
  * Like analyzeBytes, but STREAMS the file into Gemini's resumable upload so the
@@ -229,4 +233,4 @@ async function analyzeStream({ readable, size, mimeType, prompt, displayName, mo
   return { model, result };
 }
 
-module.exports = { watchVideo, analyzeBytes, analyzeStream, GEMINI_MODEL, OBSERVATION_PROMPT };
+module.exports = { watchVideo, analyzeBytes, analyzeStream, FOOTAGE_GEN_CONFIG, GEMINI_MODEL, OBSERVATION_PROMPT };

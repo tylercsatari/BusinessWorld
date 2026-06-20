@@ -2318,19 +2318,57 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 while (data.has_more) { data = await dbxJson('list_folder/continue', { cursor: data.cursor }); out = out.concat(data.entries || []); }
                 return out;
             };
-            // Stream a clip straight from Dropbox into Gemini's resumable upload —
-            // never buffers the whole (potentially multi-GB) clip in memory.
-            const analyzeClip = async ({ path, name, size, mimeType, prompt }) => {
+            // Analyze a clip with HARD memory bounds: stream-download it to a temp
+            // file on disk (Node pipeline = real backpressure, never buffers the
+            // clip in RAM), then stream-upload from that file to Gemini. Decoupling
+            // the two phases avoids any chance of the Dropbox→Gemini pipe buffering
+            // a multi-GB clip in memory. The temp file is always cleaned up.
+            const { pipeline: streamPipeline } = require('stream/promises');
+            const { Readable } = require('stream');
+            const os = require('os');
+            // Transcode a clip to a small low-res proxy (360p, ~1.5fps, low bitrate,
+            // ≤20min). The upload is then a few MB regardless of the source size, so
+            // memory is hard-bounded. Resolves false if ffmpeg is missing/fails.
+            const transcodeToProxy = (srcPath, outPath) => new Promise((resolve) => {
+                let ff;
+                try {
+                    ff = require('child_process').spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
+                        '-i', srcPath, '-t', '1200', '-vf', 'scale=-2:360', '-r', '1.5',
+                        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '34',
+                        '-c:a', 'aac', '-b:a', '48k', '-movflags', '+faststart', outPath], { stdio: 'ignore' });
+                } catch (e) { resolve(false); return; }
+                const killer = setTimeout(() => { try { ff.kill('SIGKILL'); } catch (e) {} resolve(false); }, 240000);
+                ff.on('error', () => { clearTimeout(killer); resolve(false); });
+                ff.on('exit', (code) => { clearTimeout(killer); resolve(code === 0 && fs.existsSync(outPath) && fs.statSync(outPath).size > 0); });
+            });
+            const analyzeClip = async ({ path: clipPath, name, size, mimeType, prompt }) => {
                 const call = async (tok) => fetch('https://content.dropboxapi.com/2/files/download', {
-                    method: 'POST', headers: { 'Authorization': `Bearer ${tok}`, 'Dropbox-API-Arg': JSON.stringify({ path }) }
+                    method: 'POST', headers: { 'Authorization': `Bearer ${tok}`, 'Dropbox-API-Arg': JSON.stringify({ path: clipPath }) }
                 });
                 let tok = await cloud.getDropboxToken();
                 let r = await call(tok);
                 if (r.status === 401) { process.env._DROPBOX_TOKEN_EXPIRED = '1'; tok = await cloud.getDropboxToken(); r = await call(tok); }
                 if (!r.ok) { const t = await r.text(); throw new Error(`Dropbox download ${r.status}: ${t.slice(0, 200)}`); }
-                const sz = size || Number(r.headers.get('content-length')) || 0;
-                if (!sz) throw new Error('could not determine clip size');
-                return geminiWatch.analyzeStream({ readable: r.body, size: sz, mimeType, prompt, displayName: name });
+                const tmp = path.join(os.tmpdir(), `fc-${require('crypto').randomUUID()}`);
+                const proxy = tmp + '.proxy.mp4';
+                try {
+                    await streamPipeline(Readable.fromWeb(r.body), fs.createWriteStream(tmp));   // → disk, bounded memory
+                    if (!fs.statSync(tmp).size) throw new Error('downloaded clip is empty');
+                    // Preferred: tiny transcoded proxy → small in-memory upload (no OOM possible).
+                    if (await transcodeToProxy(tmp, proxy)) {
+                        const bytes = fs.readFileSync(proxy);   // small (a few MB)
+                        return await geminiWatch.analyzeBytes(bytes, 'video/mp4', prompt, {
+                            displayName: name, genConfig: geminiWatch.FOOTAGE_GEN_CONFIG, timeoutMs: 120000, generateTimeoutMs: 150000
+                        });
+                    }
+                    // Fallback (no ffmpeg): stream the original from disk.
+                    const sz = fs.statSync(tmp).size;
+                    const webStream = Readable.toWeb(fs.createReadStream(tmp));
+                    return await geminiWatch.analyzeStream({ readable: webStream, size: sz, mimeType, prompt, displayName: name });
+                } finally {
+                    fs.promises.unlink(tmp).catch(() => {});
+                    fs.promises.unlink(proxy).catch(() => {});
+                }
             };
             // Per-clip cache (by Dropbox content_hash), loaded once.
             const cacheRecords = await dataStore.getAll('footagecache').catch(() => []);
