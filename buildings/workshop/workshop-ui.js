@@ -4691,6 +4691,48 @@ const WorkshopUI = (() => {
         });
     }
 
+    function promptDropboxAuthorizationCode(authUrl, authWindow) {
+        return new Promise((resolve, reject) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'wsp-picker-overlay';
+            overlay.style.display = 'flex';
+            overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal">
+                <div class="wsp-picker-header"><span>Connect Dropbox</span><button class="wsp-picker-close" data-close>✕</button></div>
+                <div class="wsp-hint" style="margin-bottom:12px;line-height:1.5;">
+                    Approve Dropbox in the opened tab. Dropbox will show an authorization code. Paste that code here, then BusinessWorld will create the public folder link and open it.
+                </div>
+                <input id="wsp-dropbox-auth-code" class="wsp-inline-input" placeholder="Dropbox authorization code" autocomplete="off" style="width:100%;margin-bottom:12px;">
+                <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+                    <button class="wsp-mini-btn" data-open-auth>Open Dropbox auth</button>
+                    <button class="wsp-mini-btn" data-cancel>Cancel</button>
+                    <button class="wsp-mini-btn done" data-connect>Connect Dropbox</button>
+                </div>
+            </div>`;
+            const host = container.querySelector('.workshop-panel') || container || document.body;
+            host.appendChild(overlay);
+            const input = overlay.querySelector('#wsp-dropbox-auth-code');
+            const close = (err, code) => {
+                overlay.remove();
+                if (err) reject(err);
+                else resolve(code);
+            };
+            const submit = () => {
+                const code = (input.value || '').trim();
+                if (!code) { input.focus(); return; }
+                close(null, code);
+            };
+            overlay.querySelector('[data-close]').addEventListener('click', () => close(new Error('Dropbox reconnect cancelled before an authorization code was entered.')));
+            overlay.querySelector('[data-cancel]').addEventListener('click', () => close(new Error('Dropbox reconnect cancelled before an authorization code was entered.')));
+            overlay.querySelector('[data-open-auth]').addEventListener('click', () => {
+                if (authWindow && !authWindow.closed) authWindow.focus();
+                else window.open(authUrl, '_blank');
+            });
+            overlay.querySelector('[data-connect]').addEventListener('click', submit);
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+            setTimeout(() => input.focus(), 50);
+        });
+    }
+
     async function reconnectDropboxForPublicLinks(path, pendingTab) {
         const authRes = await fetch('/api/dropbox/auth-url');
         const authData = await authRes.json().catch(() => ({}));
@@ -4699,7 +4741,18 @@ const WorkshopUI = (() => {
         const authWindow = pendingTab || window.open(authData.url, '_blank');
         if (!authWindow) throw new Error('Could not open the Dropbox authorization window.');
         authWindow.location.href = authData.url;
-        await waitForDropboxOAuth(authWindow);
+        if (authData.manual) {
+            const code = await promptDropboxAuthorizationCode(authData.url, authWindow);
+            const tokenRes = await fetch('/api/dropbox/exchange-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            });
+            const tokenData = await tokenRes.json().catch(() => ({}));
+            if (!tokenRes.ok || !tokenData.ok) throw new Error(tokenData.error || `Dropbox authorization failed (${tokenRes.status})`);
+        } else {
+            await waitForDropboxOAuth(authWindow);
+        }
         return createDropboxSharedLink(path);
     }
 

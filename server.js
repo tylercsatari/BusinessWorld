@@ -116,14 +116,8 @@ async function loadStoredDropboxOAuthToken() {
     }
 }
 
-function requestOrigin(req) {
-    const host = String(req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`).split(',')[0].trim();
-    const proto = String(req.headers['x-forwarded-proto'] || (IS_RENDER ? 'https' : 'http')).split(',')[0].trim();
-    return `${proto}://${host}`;
-}
-
-function dropboxRedirectUri(req) {
-    return process.env.DROPBOX_REDIRECT_URI || `${requestOrigin(req)}/api/dropbox/callback`;
+function configuredDropboxRedirectUri() {
+    return String(process.env.DROPBOX_REDIRECT_URI || '').trim();
 }
 
 async function exchangeDropboxOAuthCode(code, redirectUri) {
@@ -3716,18 +3710,19 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             res.end(JSON.stringify({ error: 'DROPBOX_APP_KEY not configured' }));
             return;
         }
-        const redirectUri = dropboxRedirectUri(req);
+        const redirectUri = configuredDropboxRedirectUri();
         const authUrl = new URL('https://www.dropbox.com/oauth2/authorize');
         authUrl.searchParams.set('client_id', appKey);
         authUrl.searchParams.set('response_type', 'code');
         authUrl.searchParams.set('token_access_type', 'offline');
         authUrl.searchParams.set('scope', DROPBOX_PUBLIC_LINK_SCOPES);
         authUrl.searchParams.set('force_reapprove', 'true');
-        authUrl.searchParams.set('redirect_uri', redirectUri);
+        if (redirectUri) authUrl.searchParams.set('redirect_uri', redirectUri);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             url: authUrl.toString(),
-            redirect: redirectUri,
+            redirect: redirectUri || '',
+            manual: !redirectUri,
             scope: DROPBOX_PUBLIC_LINK_SCOPES,
             required_scope: 'sharing.write'
         }));
@@ -3748,7 +3743,7 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
             return;
         }
         try {
-            const tokenData = await exchangeDropboxOAuthCode(code, dropboxRedirectUri(req));
+            const tokenData = await exchangeDropboxOAuthCode(code, configuredDropboxRedirectUri());
             applyDropboxOAuthToken(tokenData, false);
             await persistDropboxOAuthToken(tokenData);
             res.writeHead(200, { 'Content-Type': 'text/html' });
