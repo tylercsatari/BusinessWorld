@@ -106,7 +106,7 @@ Be conservative: only list a gap when the script clearly calls for footage that 
  * @returns {Promise<{clipsAnalyzed:number, fromCache:number, covered:string[], gaps:object[], model:string, skipped:number}>}
  */
 async function analyzeProject({ video, projectFolder, deps }) {
-    const { listFolder, download, geminiAnalyze, kimiJson, cacheGet, cacheSet, onEvent } = deps;
+    const { listFolder, analyzeClip, kimiJson, cacheGet, cacheSet, onEvent } = deps;
     const emit = (ev) => { try { onEvent && onEvent(ev); } catch (e) {} };
 
     emit({ type: 'phase', phase: 'listing', msg: `Listing footage in ${projectFolder} …` });
@@ -130,8 +130,8 @@ async function analyzeProject({ video, projectFolder, deps }) {
         } else {
             emit({ type: 'clip', index: i, name: e.name, status: 'analyzing', msg: `(${i + 1}/${clips.length}) Downloading & watching ${e.name} …` });
             try {
-                const bytes = await download(e.path_display || e.path_lower);
-                const { result } = await geminiAnalyze(bytes, mimeOf(e.name), CLIP_PROMPT, { displayName: e.name });
+                // Streamed Dropbox → Gemini upload (bounded memory — never buffers the whole clip).
+                const { result } = await analyzeClip({ path: e.path_display || e.path_lower, name: e.name, size: e.size || 0, mimeType: mimeOf(e.name), prompt: CLIP_PROMPT });
                 analysis = (result && !result._parseError) ? result : { summary: '', shots: [], spoken: '', keywords: [], _err: result && result._parseError };
                 await cacheSet(hash, { contentHash: hash, path: e.path_display || e.path_lower, name: e.name, analysis });
                 emit({ type: 'clip', index: i, name: e.name, status: 'done', summary: analysis.summary || '', msg: `(${i + 1}/${clips.length}) ${e.name} — analyzed ✓` });

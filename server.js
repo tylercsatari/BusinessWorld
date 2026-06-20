@@ -2295,15 +2295,19 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 while (data.has_more) { data = await dbxJson('list_folder/continue', { cursor: data.cursor }); out = out.concat(data.entries || []); }
                 return out;
             };
-            const download = async (path) => {
+            // Stream a clip straight from Dropbox into Gemini's resumable upload —
+            // never buffers the whole (potentially multi-GB) clip in memory.
+            const analyzeClip = async ({ path, name, size, mimeType, prompt }) => {
                 const call = async (tok) => fetch('https://content.dropboxapi.com/2/files/download', {
                     method: 'POST', headers: { 'Authorization': `Bearer ${tok}`, 'Dropbox-API-Arg': JSON.stringify({ path }) }
                 });
                 let tok = await cloud.getDropboxToken();
                 let r = await call(tok);
                 if (r.status === 401) { process.env._DROPBOX_TOKEN_EXPIRED = '1'; tok = await cloud.getDropboxToken(); r = await call(tok); }
-                if (!r.ok) throw new Error(`Dropbox download ${r.status}: ${(await r.text()).slice(0, 200)}`);
-                return Buffer.from(await r.arrayBuffer());
+                if (!r.ok) { const t = await r.text(); throw new Error(`Dropbox download ${r.status}: ${t.slice(0, 200)}`); }
+                const sz = size || Number(r.headers.get('content-length')) || 0;
+                if (!sz) throw new Error('could not determine clip size');
+                return geminiWatch.analyzeStream({ readable: r.body, size: sz, mimeType, prompt, displayName: name });
             };
             // Per-clip cache (by Dropbox content_hash), loaded once.
             const cacheRecords = await dataStore.getAll('footagecache').catch(() => []);
@@ -2315,8 +2319,7 @@ Respond ONLY as valid JSON array: [{"idx": 1, "score": 7}, {"idx": 2, "score": 4
                 const out = await footageCoverage.analyzeProject({
                     video, projectFolder,
                     deps: {
-                        listFolder, download,
-                        geminiAnalyze: (bytes, mime, prompt, opts) => geminiWatch.analyzeBytes(bytes, mime, prompt, opts),
+                        listFolder, analyzeClip,
                         kimiJson: (messages, maxTokens) => aiKimiRaw(messages, maxTokens),
                         cacheGet, cacheSet,
                         onEvent: (ev) => {
