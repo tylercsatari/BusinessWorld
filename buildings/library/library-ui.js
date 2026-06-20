@@ -693,22 +693,43 @@ const LibraryUI = (() => {
     function aiVideoIdeaMessages(count, existingTitles) {
         const avoid = (existingTitles || []).slice(0, 120).join(' | ');
         const system = [
-            'You are Kimi K2.6 inside Business World, an elite short-form video idea generator for a maker / engineering / Da Vinci-stack YouTube creator.',
+            'You are Kimi K2.6 inside Business World, an elite short-form video idea generator for a maker / engineering / Da Vinci-stack YouTube creator (real builds: suits, machines, props, spectacle).',
             'Generate only ideas that could plausibly become 100M-view videos if executed well. Be specific and buildable, never generic.',
-            'Use the P/V/C/O/A/G viral mechanism for every idea:',
-            '  P promise — what the video promises the viewer',
-            '  V early visual — the first frame / first 3 seconds of visual evidence',
-            '  C conceptual — the concept/text implied',
-            '  O outcome — the expected gratification / payoff',
-            '  A action — the action/process done on screen',
-            '  G goal — the creator motivation that feels real',
+            '',
+            'SHARED REPRESENTATION — describe every idea as 8 latent objects:',
+            '  P promise — what the video seems to promise the viewer',
+            '  V earlyVisual — what the viewer literally sees in the first 1-3 seconds (first-frame evidence)',
+            '  C conceptual — what is conceptually said/implied (the idea in words)',
+            '  O payoff — the expected gratification / result the viewer is waiting for',
+            '  A action — the action/process actually performed on screen',
+            '  G creatorGoal — the believable reason/goal behind doing it (not "for views")',
+            '  D referenceDistribution — what other videos already exist near this idea, and how this sits vs them',
+            '  U audienceInterest — which audience segments care, and the universal reward it taps (danger, speed, beauty, money, status, transformation, destruction, fantasy)',
+            '',
+            'Then SCORE five mechanisms (each a relationship between those objects), every sub-score 1-10:',
+            '  novelty = f(P,D): global (vs all shorts), niche (vs this creator niche), recent (vs last ~90d saturation), combo (rarity of the concept combination — a familiar anchor + unusual transformation, e.g. "Vantablack CAR" beats "Vantablack"), coherence (still instantly understandable).',
+            '  credibility = f(P,V,C,O): promiseEvidenceAlignment (does the first 3s visually support the promise), predicateGrounding (object/property/action/outcome shown), proofImmediacy (how soon evidence appears), causalPlausibility (does the path to the outcome make sense). NOT truth — perceived likelihood.',
+            '  broadAppeal = f(P,O,U): recognition (instant understanding), audienceCoverage (how many segments have a hook into it), rewardUniversality (taps universal rewards).',
+            '  motivation = f(G,A,O): goalClarity, actionGoalFit, scaleRewardSlope (does bigger/harder amplify the natural reward — high for "biggest firework", low for "biggest snow globe"), payoffJustification.',
+            '  referenceToGratification = f(P,O,V,unresolvedness): payoffIdentifiability (viewer knows what reward they wait for), expectedPayoffValue, unresolvedness (it has NOT happened yet), optimalUncertainty (inverted-U: clear enough to grasp, uncertain enough to need the answer, credible enough to wait).',
+            'A "monster hook" is high on ALL five at once.',
+            '',
             'Return ONLY valid JSON — no markdown, no commentary. Exact shape:',
-            '{"ideas":[{"title":"short specific title","hook":"spoken/on-screen opening line","context":"a concrete plan for how to actually make it","promise":"P","earlyVisual":"V","conceptual":"C","payoff":"O","actionProcess":"A","creatorGoal":"G","why100m":"why it has 100M-view mechanics","differentiation":"why it is NOT the same as the existing ones"}]}'
+            '{"ideas":[{',
+            '  "title":"short specific title","hook":"spoken/on-screen opening line","context":"concrete build/shoot plan a maker can actually do",',
+            '  "objects":{"P_promise":"","V_earlyVisual":"","C_conceptual":"","O_payoff":"","A_action":"","G_creatorGoal":"","D_referenceDistribution":"","U_audienceInterest":""},',
+            '  "mechanisms":{',
+            '    "novelty":{"global":0,"niche":0,"recent":0,"combo":0,"coherence":0,"note":""},',
+            '    "credibility":{"promiseEvidenceAlignment":0,"predicateGrounding":0,"proofImmediacy":0,"causalPlausibility":0,"note":""},',
+            '    "broadAppeal":{"recognition":0,"audienceCoverage":0,"rewardUniversality":0,"note":""},',
+            '    "motivation":{"goalClarity":0,"actionGoalFit":0,"scaleRewardSlope":0,"payoffJustification":0,"note":""},',
+            '    "referenceToGratification":{"payoffIdentifiability":0,"expectedPayoffValue":0,"unresolvedness":0,"optimalUncertainty":0,"note":""}},',
+            '  "overall":0,"differentiation":"why it is NOT the same as the existing ones"}]}'
         ].join('\n');
         const user = [
-            `Generate ${count} brand-new short-form video idea${count === 1 ? '' : 's'}.`,
-            avoid ? `Do NOT repeat or lightly reskin any of these existing ideas/videos:\n${avoid}` : '',
-            'Make each idea genuinely distinct from those and from each other.'
+            `Generate ${count} brand-new short-form video idea${count === 1 ? '' : 's'}, each a "monster hook".`,
+            avoid ? `These already exist — treat them as the reference distribution D; do NOT repeat or lightly reskin them, and make each new idea sit FAR from them while staying coherent:\n${avoid}` : '',
+            'Fill every object and every mechanism sub-score honestly (don\'t inflate). overall is your 1-10 verdict.'
         ].filter(Boolean).join('\n\n');
         return [{ role: 'system', content: system }, { role: 'user', content: user }];
     }
@@ -732,19 +753,33 @@ const LibraryUI = (() => {
 
     function aiVideoNormalizeIdea(idea) {
         idea = idea || {};
-        const pick = (...keys) => { for (const k of keys) { if (idea[k]) return String(idea[k]); } return ''; };
+        const o = idea.objects || idea;        // the 8 P/V/C/O/A/G/D/U objects
+        const m = idea.mechanisms || {};        // the 5 mechanism sub-score groups
+        const str = (...vals) => { for (const v of vals) { if (v != null && v !== '') return typeof v === 'string' ? v : String(v); } return ''; };
+        const avg = (grp) => { if (!grp || typeof grp !== 'object') return 0; const ns = Object.values(grp).filter(v => typeof v === 'number' && isFinite(v)); return ns.length ? Math.round(ns.reduce((a, b) => a + b, 0) / ns.length * 10) / 10 : 0; };
+        const mech = {
+            novelty: avg(m.novelty), credibility: avg(m.credibility), broadAppeal: avg(m.broadAppeal),
+            motivation: avg(m.motivation), referenceToGratification: avg(m.referenceToGratification)
+        };
+        const overall = (typeof idea.overall === 'number' && isFinite(idea.overall)) ? idea.overall
+            : Math.round(avg(mech) * 10) / 10;
         return {
-            title: (pick('title', 'name') || 'Untitled idea').slice(0, 200),
-            hook: pick('hook', 'opening').slice(0, 600),
-            context: pick('context', 'plan').slice(0, 2000),
-            promise: pick('promise', 'P'),
-            earlyVisual: pick('earlyVisual', 'early_visual', 'V'),
-            conceptual: pick('conceptual', 'C'),
-            payoff: pick('payoff', 'O', 'outcome'),
-            actionProcess: pick('actionProcess', 'action_process', 'A'),
-            creatorGoal: pick('creatorGoal', 'creator_goal', 'G'),
-            why100m: pick('why100m', 'why_100m'),
-            differentiation: pick('differentiation')
+            title: str(idea.title, idea.name, 'Untitled idea').slice(0, 200),
+            hook: str(idea.hook, idea.opening).slice(0, 600),
+            context: str(idea.context, idea.plan).slice(0, 2000),
+            promise: str(o.P_promise, o.promise, idea.promise),
+            earlyVisual: str(o.V_earlyVisual, o.earlyVisual, idea.earlyVisual),
+            conceptual: str(o.C_conceptual, o.conceptual, idea.conceptual),
+            payoff: str(o.O_payoff, o.payoff, idea.payoff),
+            actionProcess: str(o.A_action, o.actionProcess, idea.actionProcess),
+            creatorGoal: str(o.G_creatorGoal, o.creatorGoal, idea.creatorGoal),
+            referenceDistribution: str(o.D_referenceDistribution, idea.referenceDistribution),
+            audienceInterest: str(o.U_audienceInterest, idea.audienceInterest),
+            mechanisms: m,                        // full sub-score breakdown + notes (stored)
+            scores: { ...mech, overall },         // mechanism averages + overall verdict
+            overallScore: overall,
+            differentiation: str(idea.differentiation),
+            why100m: str(idea.why100m, idea.why_100m)
         };
     }
 
@@ -802,7 +837,15 @@ const LibraryUI = (() => {
             card(idea) {
                 const c = document.createElement('div');
                 c.style.cssText = 'border:1px solid #d8efe0;background:#f4fbf7;border-radius:9px;padding:9px 11px;margin:6px 0;';
-                c.innerHTML = `<div style="font-weight:700;font-size:13px;color:#16263a;">${escHtml(idea.title || 'Idea')}</div>${idea.hook ? `<div style="font-size:12px;color:#5b748f;margin-top:3px;">${escHtml(idea.hook)}</div>` : ''}`;
+                const s = idea.scores || {};
+                const ov = idea.overallScore != null ? idea.overallScore : s.overall;
+                const chip = (lbl, v) => v == null ? '' : `<span style="display:inline-block;font-size:10.5px;color:#43607c;background:#eaf3ec;border-radius:5px;padding:1px 6px;margin:2px 4px 0 0;">${lbl} ${v}</span>`;
+                c.innerHTML = `<div style="display:flex;align-items:center;gap:8px;">
+                        <div style="font-weight:700;font-size:13px;color:#16263a;flex:1 1 auto;">${escHtml(idea.title || 'Idea')}</div>
+                        ${ov != null ? `<span style="flex:0 0 auto;font-weight:800;font-size:12px;color:#1c7a43;background:#e3f6ea;border-radius:6px;padding:2px 8px;">${ov}/10</span>` : ''}
+                    </div>
+                    ${idea.hook ? `<div style="font-size:12px;color:#5b748f;margin-top:3px;">${escHtml(idea.hook)}</div>` : ''}
+                    <div style="margin-top:5px;">${chip('Nov', s.novelty)}${chip('Cred', s.credibility)}${chip('Appeal', s.broadAppeal)}${chip('Motiv', s.motivation)}${chip('Grat', s.referenceToGratification)}</div>`;
                 q('[data-aii="cards"]').appendChild(c);
             },
             finish(ok, summary) {
