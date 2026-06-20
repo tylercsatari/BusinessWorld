@@ -25,6 +25,12 @@ try {
     if (e.code !== 'MODULE_NOT_FOUND') throw e;
     console.warn('codex-runner unavailable; in-app Codex chat will be disabled.');
 }
+// Surface background-job crashes in the logs instead of dying silently. A heap
+// OOM still terminates the process (Node prints "heap out of memory" itself), but
+// a stray throw/rejection in a setImmediate job now leaves a clear breadcrumb.
+process.on('uncaughtException', (e) => { try { console.error('[uncaughtException]', e && e.stack || e); } catch (_) {} });
+process.on('unhandledRejection', (e) => { try { console.error('[unhandledRejection]', e && e.stack || e); } catch (_) {} });
+
 const cloud = require('./cloud-storage');
 const swipeScraper = require('./swipe-scraper');
 const dataStore = require('./data-store');
@@ -546,6 +552,9 @@ function aiVideoJobEvent(job, phase, msg, detail) {
     job.updatedAt = now;
     job.events.push(event);
     if (job.events.length > 240) job.events.splice(0, job.events.length - 240);
+    // Mirror to the server log so a crash/OOM leaves a breadcrumb of the LAST
+    // phase reached (Render logs) — the in-memory job vanishes on a crash.
+    try { console.log(`[aivideo ${(job.id || '').slice(0, 8)} +${Math.round(event.elapsedMs / 1000)}s] ${event.phase}: ${event.msg}`); } catch (e) {}
 }
 
 function aiVideoJobHeartbeat(job, phase, label, extra) {
@@ -564,6 +573,7 @@ function aiVideoJobFail(job, msg, detail) {
     if (job.abortController) {
         try { job.abortController.abort(); } catch (e) {}
     }
+    try { console.error(`[aivideo ${(job.id || '').slice(0, 8)}] FAILED: ${job.error}`, detail || ''); } catch (e) {}
     aiVideoJobEvent(job, 'error', job.error, detail);
     job.phase = 'error';
     job.updatedAt = Date.now();
@@ -1037,18 +1047,19 @@ async function aiVideoFetchInternetContext() {
 }
 
 async function aiVideoBuildGenerationContext() {
-    const [ideas, videos, projects, components, orders, inventory, notes, sponsors, sponsorvideos, aiideas] = await Promise.all([
-        dataStore.getAll('ideas'),
-        dataStore.getAll('videos'),
-        dataStore.getAll('projects'),
-        dataStore.getAll('components'),
-        dataStore.getAll('orders'),
-        dataStore.getAll('inventory'),
-        dataStore.getAll('notes'),
-        dataStore.getAll('sponsors'),
-        dataStore.getAll('sponsorvideos'),
-        dataStore.getAll('aiideas')
-    ]);
+    // Load SEQUENTIALLY (not Promise.all) so we never hold ~10 freshly-parsed R2
+    // collections in memory at the same instant — that simultaneous spike was a
+    // prime OOM trigger on the 2 GB box.
+    const ideas = await dataStore.getAll('ideas');
+    const videos = await dataStore.getAll('videos');
+    const projects = await dataStore.getAll('projects');
+    const components = await dataStore.getAll('components');
+    const orders = await dataStore.getAll('orders');
+    const inventory = await dataStore.getAll('inventory');
+    const notes = await dataStore.getAll('notes');
+    const sponsors = await dataStore.getAll('sponsors');
+    const sponsorvideos = await dataStore.getAll('sponsorvideos');
+    const aiideas = await dataStore.getAll('aiideas');
     const jarvis = {
         findings_summary: aiVideoReadJarvisJson('findings-summary.json', 12000),
         retention_patterns: aiVideoReadJarvisJson('retention-patterns.json', 11000),

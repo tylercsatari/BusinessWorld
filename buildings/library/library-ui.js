@@ -687,6 +687,10 @@ const LibraryUI = (() => {
 
     async function generateAiVideoIdeas() {
         if (aiVideoIdeasBusy) return;
+        const ACK_TIMEOUT_MS = 45 * 1000;
+        const POLL_FAILURE_TIMEOUT_MS = 45 * 1000;
+        const SERVER_IDLE_FAIL_MS = 100 * 1000;
+        const CLIENT_TOTAL_FAIL_MS = 11 * 60 * 1000;
         aiVideoIdeasBusy = true;
         // Make sure the panel area is actually visible (the header Generate button
         // lives in the toolbar; the progress renders into the container, which must
@@ -724,12 +728,17 @@ const LibraryUI = (() => {
         updateAiVideoIdeasGenerateButtons();
         renderAiVideoIdeas();
         let ackTimer = null;
+        let ackTimeout = null;
         try {
             // Start a background job, then POLL its progress (Render buffers SSE,
             // so polling is what reliably shows the live flow).
             const startSentAt = Date.now();
             let acked = false;
             let lastAckNotice = 0;
+            const startController = new AbortController();
+            ackTimeout = setTimeout(() => {
+                if (!acked) startController.abort();
+            }, ACK_TIMEOUT_MS);
             ackTimer = setInterval(() => {
                 if (acked) return;
                 const waited = Math.floor((Date.now() - startSentAt) / 1000);
@@ -745,13 +754,23 @@ const LibraryUI = (() => {
                 }
             }, 1000);
             prog.step('POST /api/ai-video-ideas/generate sent. Waiting for job id.');
-            const res = await fetch('/api/ai-video-ideas/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun })
-            });
+            let res;
+            try {
+                res = await fetch('/api/ai-video-ideas/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ runs: aiVideoIdeasRuns, ideasPerRun: aiVideoIdeasPerRun }),
+                    signal: startController.signal
+                });
+            } catch (startError) {
+                if (startError && startError.name === 'AbortError') {
+                    throw new Error(`Server did not acknowledge the generation job within ${Math.round(ACK_TIMEOUT_MS / 1000)}s. Treating it as failed so it cannot sit for 800s silently.`);
+                }
+                throw startError;
+            }
             acked = true;
             clearInterval(ackTimer);
+            clearTimeout(ackTimeout);
             const start = await res.json().catch(() => ({}));
             if (res.ok && Array.isArray(start.created)) {
                 const createdArr = start.created || [];
@@ -776,20 +795,42 @@ const LibraryUI = (() => {
             let seenEvents = 0, seenCards = 0;
             let lastServerEventAt = Date.now();
             let lastQuietNotice = 0;
+            let pollFailureStartedAt = 0;
             while (true) {
                 await new Promise(r => setTimeout(r, 400));
                 let pr;
                 try {
                     const progressRes = await fetch('/api/ai-video-ideas/progress?job=' + encodeURIComponent(jobId));
+                    // A 404 means the server no longer has this job — it almost
+                    // always restarted/crashed (often OOM) mid-generation. Fail fast
+                    // with an actionable message instead of retrying for 45s.
+                    if (progressRes.status === 404) {
+                        throw new Error(`The server lost this job (404) — it most likely RESTARTED or ran OUT OF MEMORY mid-generation. Check the Render logs: look for the last "[aivideo ${jobId.slice(0, 8)} …]" line (that's the phase it died on) or a "heap out of memory" message.`);
+                    }
                     pr = await progressRes.json();
                     if (!progressRes.ok) throw new Error(pr.error || `Progress failed: ${progressRes.status}`);
+                    pollFailureStartedAt = 0;
                 } catch (pollError) {
+                    if (/lost this job \(404\)/.test(pollError.message || '')) throw pollError;   // don't retry a dead job
                     const msg = `Progress poll failed: ${pollError.message || pollError}`;
                     aiVideoIdeasStatus = msg;
                     prog.step(msg);
+                    if (!pollFailureStartedAt) pollFailureStartedAt = Date.now();
+                    if (Date.now() - pollFailureStartedAt > POLL_FAILURE_TIMEOUT_MS) {
+                        throw new Error(`Progress polling failed for more than ${Math.round(POLL_FAILURE_TIMEOUT_MS / 1000)}s. Marking this generation as failed.`);
+                    }
                     continue;
                 }
                 if (!pr) continue;
+                if (pr.error) throw new Error(pr.error);
+                const serverIdleMs = Number(pr.updatedAgo || 0);
+                const totalElapsedMs = Number(pr.elapsed || 0);
+                if (serverIdleMs > SERVER_IDLE_FAIL_MS) {
+                    throw new Error(`AI video idea generation stalled: the server has not reported progress for ${Math.round(serverIdleMs / 1000)}s.`);
+                }
+                if (totalElapsedMs > CLIENT_TOTAL_FAIL_MS) {
+                    throw new Error(`AI video idea generation exceeded ${Math.round(CLIENT_TOTAL_FAIL_MS / 1000)}s. Marking it failed instead of waiting indefinitely.`);
+                }
                 const newEvents = (pr.events || []).slice(seenEvents);
                 if (newEvents.length) lastServerEventAt = Date.now();
                 newEvents.forEach(ev => {
@@ -815,7 +856,6 @@ const LibraryUI = (() => {
                 seenCards = (pr.cards || []).length;
                 renderAiVideoIdeas();
                 if (pr.done) {
-                    if (pr.error) throw new Error(pr.error);
                     const createdArr = Array.isArray(pr.created) ? pr.created : [];
                     if (createdArr.length) {
                         const existingIds = new Set(aiVideoIdeas.map(idea => idea.id));
@@ -835,6 +875,7 @@ const LibraryUI = (() => {
             renderAiVideoIdeas();
         } finally {
             if (ackTimer) clearInterval(ackTimer);
+            if (ackTimeout) clearTimeout(ackTimeout);
             aiVideoIdeasBusy = false;
             clearInterval(aiVideoIdeasTimer); aiVideoIdeasTimer = null;
             updateAiVideoIdeasGenerateButtons();
