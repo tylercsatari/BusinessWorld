@@ -3560,6 +3560,31 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         'Content-Type': 'application/json'
     };
 
+    async function dropboxApiJson(endpoint, body) {
+        const call = async (token) => fetch(`https://api.dropboxapi.com/2/${endpoint}`, {
+            method: 'POST',
+            headers: { ...DROPBOX_HEADERS, 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(body || {})
+        });
+        let token = await cloud.getDropboxToken();
+        let response = await call(token);
+        if (response.status === 401 && process.env.DROPBOX_REFRESH_TOKEN) {
+            process.env._DROPBOX_TOKEN_EXPIRED = '1';
+            token = await cloud.getDropboxToken();
+            response = await call(token);
+        }
+        const text = await response.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { error: text }; }
+        if (!response.ok) {
+            const err = new Error(data.error_summary || data.error || `Dropbox ${endpoint} ${response.status}`);
+            err.status = response.status;
+            err.data = data;
+            throw err;
+        }
+        return data;
+    }
+
     if (pathname === '/api/dropbox/list_folder' && req.method === 'POST') {
         const body = await readBody(req);
         await dropboxFetch(res, 'https://api.dropboxapi.com/2/files/list_folder', {
@@ -3581,6 +3606,37 @@ Update the idea by calling PATCH /api/data/ideas/${idea.id} with a JSON body con
         await dropboxFetch(res, 'https://api.dropboxapi.com/2/files/get_temporary_link', {
             method: 'POST', headers: { ...DROPBOX_HEADERS }, body: JSON.stringify(body)
         });
+        return;
+    }
+
+    if (pathname === '/api/dropbox/shared_link' && req.method === 'POST') {
+        try {
+            const body = await readBody(req);
+            const folderPath = String(body.path || '').trim();
+            if (!folderPath) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Missing path' })); return; }
+
+            const created = await dropboxApiJson('sharing/create_shared_link_with_settings', {
+                path: folderPath,
+                settings: { requested_visibility: 'public' }
+            });
+            if (!created || !created.url) throw new Error('Dropbox did not return a public shared link.');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ path: folderPath, link: created.url }));
+        } catch (e) {
+            const data = e.data || {};
+            const existing =
+                data.metadata ||
+                (data.error && data.error.shared_link_already_exists && data.error.shared_link_already_exists.metadata) ||
+                (data.error && data.error.shared_link_already_exists);
+            const existingLink = existing && existing.url;
+            if (existingLink) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ link: existingLink, reused: true }));
+                return;
+            }
+            res.writeHead(e.status || 500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message, ...(data.error_summary ? { error_summary: data.error_summary } : {}) }));
+        }
         return;
     }
 

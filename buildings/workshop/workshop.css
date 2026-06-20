@@ -428,20 +428,30 @@
     animation: wsp-ready-pulse 1.9s ease-in-out infinite;
 }
 @keyframes wsp-ready-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
-/* Assignee avatars — top-CENTER of each node (everyone whose role covers it) */
-.wsp-node-assignees { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); display: flex; z-index: 3; }
+/* Assignee avatars — top-CENTER of each node (everyone whose role covers it).
+   Small: ~15px, overlapping. Hover (title) shows the name. */
+.wsp-node-assignees { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); display: flex; z-index: 3; }
 .wsp-node-avatar {
-    width: 24px; height: 24px; border-radius: 50%; display: block;
-    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); box-sizing: border-box;
-    background: #eef1f4; margin-left: -4px;
+    width: 15px; height: 15px; border-radius: 50%; display: block; object-fit: cover;
+    border: 1.5px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.28); box-sizing: border-box;
+    background: #eef1f4; margin-left: -3px; cursor: default;
 }
 .wsp-node-avatar:first-child { margin-left: 0; }
-.wsp-node-assignee {
-    width: 22px; height: 22px; border-radius: 50%; color: #fff;
-    font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center;
-    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.22); box-sizing: border-box; background: #6b675a; margin-left: -4px;
+.wsp-node-avatar.fallback {
+    color: #fff; font-size: 7px; font-weight: 800; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
 }
-.wsp-node-assignee.more { font-size: 8.5px; }
+.wsp-node-assignee {
+    width: 15px; height: 15px; border-radius: 50%; color: #fff;
+    font-size: 7px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+    border: 1.5px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.22); box-sizing: border-box; background: #6b675a; margin-left: -3px; cursor: default;
+}
+.wsp-node-assignee.more { font-size: 7px; }
+/* Per-row worker control (assign / reassign / unassign) in the stage panel */
+.wsp-worker { display: inline-flex; align-items: center; gap: 4px; }
+.wsp-worker-av { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; border: 1.5px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); box-sizing: border-box; flex: 0 0 auto; }
+.wsp-worker-av.fallback { color: #fff; font-size: 8px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.wsp-worker-pick { font-size: 11px; max-width: 120px; border: 1px solid #d8d0bf; border-radius: 6px; padding: 2px 4px; background: #fff; color: #4a4234; cursor: pointer; }
 .wsp-node-counts-corner { position: absolute; top: -9px; right: -9px; display: flex; gap: 3px; }
 .wsp-node-counts-corner .wsp-node-count { position: static; top: auto; right: auto; }
 .wsp-node-counts-corner .wsp-node-count.vid  { background: #00b894; }

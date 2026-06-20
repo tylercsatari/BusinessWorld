@@ -252,10 +252,12 @@ const WorkshopUI = (() => {
                 fetch('/api/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
             ]);
         } catch (_) { return; }
-        const profById = {}; (profiles || []).forEach(p => { if (p && p.id) profById[p.id] = p; });
+        if (!Array.isArray(accounts)) accounts = [];
+        if (!Array.isArray(profiles)) profiles = [];
+        const profById = {}; profiles.forEach(p => { if (p && p.id) profById[p.id] = p; });
         const allIds = PS().STAGES.map(s => s.id);
         const roster = {}; allIds.forEach(id => roster[id] = []);
-        (accounts || []).forEach(a => {
+        accounts.forEach(a => {
             if (!a || !a.email || a.role === 'pending' || !a.role) return;   // no role → no nodes
             const name = a.displayName || a.email;
             const color = (a.color && /^#[0-9a-fA-F]{6}$/.test(a.color)) ? a.color : (getWorkerColor(name) || '');
@@ -265,19 +267,81 @@ const WorkshopUI = (() => {
         });
         nodeRoster = roster;
         renderTab();
+        autoAssignWorkers().then(() => renderTab()).catch(() => {});   // distribute items among each node's people
     }
 
-    // A board node's assignee = their account's 3D character avatar (canvas painted
-    // post-render by EggRenderer.renderCharacterAvatar).
-    function nodeAvatarHtml(person) {
-        return `<canvas class="wsp-node-avatar" title="${escAttr(person.name)}" data-worker="${escAttr(person.name)}" data-color="${escAttr(person.color || '')}" data-size="24" width="24" height="24"></canvas>`;
+    // Render each unique person's 3D avatar ONCE to a cached PNG data-URL, then use
+    // <img> everywhere. WebGL contexts are capped per page (~16), so painting one
+    // live canvas per node-avatar made some silently fail to render — caching to an
+    // image (and freeing the GL context after each) renders every person reliably.
+    const _avatarUrlCache = {};
+    function avatarUrl(name, color) {
+        const key = (name || '') + '|' + (color || '');
+        if (_avatarUrlCache[key]) return _avatarUrlCache[key];
+        if (!window.EggRenderer || !window.THREE) return null;   // not loaded yet — retry next render (don't cache the miss)
+        try {
+            const cv = document.createElement('canvas');
+            window.EggRenderer.renderCharacterAvatar(name, cv, 30, color || null);
+            const url = cv.toDataURL('image/png');
+            const gl = cv.getContext('webgl2') || cv.getContext('webgl');
+            const ext = gl && gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext();   // free the context immediately
+            if (url && url.length > 120) { _avatarUrlCache[key] = url; return url; }
+        } catch (e) {}
+        return null;
     }
-    function paintNodeAvatars(scope) {
-        if (!window.EggRenderer || !scope) return;
-        scope.querySelectorAll('.wsp-node-avatar').forEach(c => {
-            const sz = parseInt(c.dataset.size, 10) || 24;
-            try { window.EggRenderer.renderCharacterAvatar(c.dataset.worker, c, Math.round(sz / 2), c.dataset.color || null); } catch (e) {}
+    // An avatar image (preferred) or a colored-initials fallback. Hover shows the name.
+    function personAvatarHtml(person, cls) {
+        const name = person.name || '';
+        const url = avatarUrl(name, person.color);
+        if (url) return `<img class="${cls}" src="${url}" title="${escAttr(name)}" alt="${escAttr(name)}">`;
+        const c = person.color || getWorkerColor(name) || '#7a6f58';
+        const initials = String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+        return `<span class="${cls} fallback" title="${escAttr(name)}" style="background:${escAttr(c)}">${escHtml(initials)}</span>`;
+    }
+    function nodeAvatarHtml(person) { return personAvatarHtml(person, 'wsp-node-avatar'); }
+
+    // Compact "who's doing this item" control for a stage-panel row: the assigned
+    // worker's small avatar + a picker to reassign/unassign. Candidates = the node's
+    // roster (everyone whose role covers the stage).
+    function workerControlHtml(kind, id, currentWorker, stageId) {
+        const pool = (nodeRoster[stageId] || []).map(p => p.name);
+        const names = [...new Set([...(currentWorker ? [currentWorker] : []), ...pool])];
+        const cur = nodeRoster[stageId] && nodeRoster[stageId].find(p => p.name === currentWorker);
+        const avatar = currentWorker ? personAvatarHtml(cur || { name: currentWorker }, 'wsp-worker-av') : '';
+        const picker = `<select class="wsp-worker-pick" data-worker-kind="${kind}" data-worker-id="${escAttr(id)}" title="Assign / reassign this to a person">
+            <option value="">${names.length ? '— unassigned —' : 'no one on this node'}</option>
+            ${names.map(n => `<option value="${escAttr(n)}" ${n === currentWorker ? 'selected' : ''}>${escHtml(n)}</option>`).join('')}
+        </select>`;
+        return `<span class="wsp-worker">${avatar}${picker}</span>`;
+    }
+
+    // Round-robin the items at each node among the people on that node (1 person →
+    // all to them; multiple → 1,2,1,2…). Only fills MISSING/invalid workers, so
+    // manual reassignments stick. Persists; called after the rosters load.
+    async function autoAssignWorkers() {
+        if (!Object.values(nodeRoster).some(r => r && r.length)) return;   // nothing to assign to
+        const byStage = boardEntities();
+        const vUpd = [], cUpd = [];
+        const seenV = new Set();
+        PS().STAGES.forEach(s => {
+            const e = byStage[s.id]; if (!e) return;
+            const pool = (nodeRoster[s.id] || []).map(p => p.name);
+            let i = 0;
+            const next = () => { if (!pool.length) return ''; if (pool.length === 1) return pool[0]; const w = pool[i % pool.length]; i++; return w; };
+            e.videos.forEach(v => {
+                if (seenV.has(v.id)) return; seenV.add(v.id);   // a video can sit at several stages — assign once
+                const cur = v.worker || '';
+                if (cur && pool.includes(cur)) return;
+                const w = next(); if (w !== cur) vUpd.push({ id: v.id, worker: w });
+            });
+            e.components.forEach(c => {
+                const cur = c.worker || '';
+                if (cur && pool.includes(cur)) return;
+                const w = next(); if (w !== cur) cUpd.push({ id: c.id, worker: w });
+            });
         });
+        for (const u of vUpd) { try { await VideoService.update(u.id, { worker: u.worker }); } catch (e) {} }
+        for (const u of cUpd) { try { await SVC().components.update(u.id, { worker: u.worker }); } catch (e) {} }
     }
 
     function sponsorName(id) {
@@ -673,8 +737,10 @@ const WorkshopUI = (() => {
         if (fType) list = list.filter(v => v.videoType === fType);
         if (fProject) list = list.filter(v => (v.projectIds || []).includes(fProject));
         if (fSponsor) list = list.filter(v => v.sponsorId === fSponsor);
-        if (fAssignee === 'none') list = list.filter(v => getAssignedPeople(v).length === 0);
-        else if (fAssignee) list = list.filter(v => getAssignedPeople(v).includes(fAssignee));
+        // "Show only this person's work": match the assigned worker (the single doer),
+        // falling back to the legacy assignedToList membership.
+        if (fAssignee === 'none') list = list.filter(v => !v.worker && getAssignedPeople(v).length === 0);
+        else if (fAssignee) list = list.filter(v => v.worker === fAssignee || getAssignedPeople(v).includes(fAssignee));
         if (fFlag === 'blocked') list = list.filter(v => videoBlockers(v).length > 0);
         if (fFlag === 'deadline') list = list.filter(v => { const d = deadlineInfo(v); return d && d.days <= 7; });
         // Soonest deadline first, then re-ordered so each video follows the one it's
@@ -981,8 +1047,6 @@ const WorkshopUI = (() => {
         const goInv = el.querySelector('.wsp-node[data-goto="inventory"]');
         if (goInv) goInv.addEventListener('click', () => switchTab('inventory'));
 
-        requestAnimationFrame(() => paintNodeAvatars(el));   // paint the 3D account avatars on the nodes
-
         renderStagePanel();
     }
 
@@ -1059,7 +1123,7 @@ const WorkshopUI = (() => {
                         ${sp ? `<span class="wsp-sponsor-chip">💰 ${escHtml(sp)}</span>` : ''}
                     </div>
                 </div>
-                <div class="wsp-stage-video-actions">${actions}</div>
+                <div class="wsp-stage-video-actions">${stage ? workerControlHtml('video', v.id, v.worker, stage.id) : ''}${actions}</div>
             </div>
             ${expanded ? stageVideoBodyHtml(v, stage) : ''}
         </div>`;
@@ -1214,6 +1278,16 @@ const WorkshopUI = (() => {
         // The per-node DONE button lives on every stage row (and in the expanded
         // editor) — bind them all here so a collapsed row's Done works too.
         panel.querySelectorAll('[data-node-done]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); pushNodeForward(b.dataset.nodeDone, b.dataset.nodeStage); }));
+        // Reassign / unassign the worker on a row (video or component).
+        panel.querySelectorAll('.wsp-worker-pick').forEach(sel => sel.addEventListener('change', async (ev) => {
+            ev.stopPropagation();
+            const kind = sel.dataset.workerKind, id = sel.dataset.workerId, w = sel.value;
+            try {
+                if (kind === 'video') await VideoService.update(id, { worker: w });
+                else await SVC().components.update(id, { worker: w });
+            } catch (e) {}
+            renderTab();
+        }));
         // Filming footage-coverage tool — run a scan, or delete a gap suggestion.
         panel.querySelectorAll('[data-footage-check]').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); footageCheckClick(b.dataset.footageCheck, b); }));
         panel.querySelectorAll('[data-footage-del]').forEach(b => b.addEventListener('click', async (ev) => {
@@ -2687,6 +2761,7 @@ const WorkshopUI = (() => {
                 ${linkCount ? `<span class="wsp-comp-assets">${icon('link', 'wsp-cc-ic')} ${linkCount}</span>` : ''}
                 <span class="wsp-comp-stage">${escHtml(componentStatusLabel(c))}</span>
             </div>
+            ${workerControlHtml('component', c.id, c.worker, componentStageId(c))}
             ${showDone ? `<button class="wsp-mini-btn done" data-comp-done="${c.id}" title="Done">✓ Done</button>` : ''}
             <button class="wsp-mini-btn danger" data-comp-del="${c.id}" title="Remove component">✕</button>
         </div>`;
@@ -4522,10 +4597,8 @@ const WorkshopUI = (() => {
         return dropboxJoinPath(root, v.project);
     }
 
-    function dropboxHomeUrl(path) {
-        const clean = String(path || '').trim().replace(/^\/+/, '');
-        const encoded = clean.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-        return `https://www.dropbox.com/home${encoded ? `/${encoded}` : ''}`;
+    function isDropboxSharedLink(link) {
+        return /^https?:\/\/(www\.)?dropbox\.com\//i.test(String(link || '')) && !/\/home(\/|$)/i.test(String(link || ''));
     }
 
     async function getDropboxTemporaryLink(path) {
@@ -4578,11 +4651,20 @@ const WorkshopUI = (() => {
         const pendingTab = window.open('about:blank', '_blank');
         if (pendingTab) pendingTab.opener = null;
         const oldText = btn ? btn.textContent : '';
-        if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Creating public link…'; }
         try {
             const path = await videoDropboxPath(fresh);
-            const storedLinkMatches = fresh.dropboxPath === path && /^https?:\/\//i.test(fresh.dropboxLink || '');
-            const link = storedLinkMatches ? fresh.dropboxLink : dropboxHomeUrl(path);
+            let link = fresh.dropboxPath === path && isDropboxSharedLink(fresh.dropboxLink) ? fresh.dropboxLink : '';
+            if (!link) {
+                const r = await fetch('/api/dropbox/shared_link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path })
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !isDropboxSharedLink(data.link)) throw new Error(data.error_summary || data.error || `Dropbox public link failed (${r.status})`);
+                link = data.link;
+            }
             if (pendingTab) pendingTab.location.href = link;
             else window.open(link, '_blank', 'noopener');
             if (fresh.dropboxPath !== path || fresh.dropboxLink !== link) {
