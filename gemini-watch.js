@@ -180,10 +180,11 @@ async function analyzeBytes(bytes, mimeType, prompt, opts = {}) {
 }
 
 /**
- * Like analyzeBytes, but STREAMS the file into Gemini's resumable upload in
- * bounded chunks instead of buffering the whole thing in memory. Essential for
- * large video clips (a phone .mov can be hundreds of MB / GB) — keeps RAM to one
- * ~8 MB chunk regardless of clip size.
+ * Like analyzeBytes, but STREAMS the file into Gemini's resumable upload so the
+ * whole clip is never buffered in memory (a phone .mov can be hundreds of MB / GB).
+ * Uses a SINGLE "upload, finalize" command (the variant the Files API reliably
+ * accepts) with a streaming request body — the bytes flow Dropbox→server→Gemini
+ * without ever materialising the full clip in RAM.
  * @param {object} o
  * @param {ReadableStream} o.readable   a web ReadableStream of the file bytes (e.g. fetch().body)
  * @param {number} o.size               total byte length (required by the resumable protocol)
@@ -196,56 +197,35 @@ async function analyzeStream({ readable, size, mimeType, prompt, displayName, mo
   if (!size || size < 0) throw new Error('analyzeStream needs a positive byte size');
   model = model || GEMINI_MODEL;
   const uploadUrl = await startResumable(size, mimeType, displayName || 'footage-clip');
-  const CHUNK = 8 * 1024 * 1024;   // multiple of 256 KiB, as the resumable protocol requires for non-final chunks
-  const reader = readable.getReader();
-  let buf = Buffer.alloc(0);
-  let offset = 0;
-  let fileResource = null;
-  const uploadChunk = async (bytes, finalize) => {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 120000);   // a single ~8 MB chunk should upload in seconds
-    let res;
-    try {
-      res = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Length': String(bytes.length),
-          'X-Goog-Upload-Offset': String(offset),
-          'X-Goog-Upload-Command': finalize ? 'upload, finalize' : 'upload',
-        },
-        body: bytes,
-        signal: ctrl.signal,
-      });
-    } catch (e) { throw new Error(`Gemini upload chunk ${e.name === 'AbortError' ? 'timed out' : 'failed'}: ${e.message}`); }
-    finally { clearTimeout(to); }
-    if (!res.ok) throw new Error(`Gemini upload chunk failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
-    offset += bytes.length;
-    if (finalize) { const data = await res.json().catch(() => ({})); fileResource = data.file; }
-  };
+  // One-shot finalize, but with a STREAMING body (duplex:'half' lets undici send
+  // the request body as a stream). Bounded memory; proven single-command protocol.
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeoutMs || 600000);
+  let res;
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const part = Buffer.from(value);
-      buf = buf.length ? Buffer.concat([buf, part]) : part;
-      // Strictly-greater so the remainder is always ≥1 byte → the final chunk is
-      // never empty (some APIs reject a 0-byte finalize).
-      while (buf.length > CHUNK) {
-        await uploadChunk(buf.subarray(0, CHUNK), false);
-        buf = Buffer.from(buf.subarray(CHUNK));   // copy the remainder so the consumed bytes are freed
-      }
-    }
-    await uploadChunk(buf, true);   // final chunk finalizes the upload
-  } finally {
-    try { reader.releaseLock(); } catch (e) {}
-  }
-  if (!fileResource || !fileResource.name) throw new Error('Gemini upload did not finalize');
-  await waitActive(fileResource.name, { timeoutMs: timeoutMs || 120000 });
+    res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Length': String(size),
+        'X-Goog-Upload-Offset': '0',
+        'X-Goog-Upload-Command': 'upload, finalize',
+      },
+      body: readable,
+      duplex: 'half',
+      signal: ctrl.signal,
+    });
+  } catch (e) { throw new Error(`Gemini upload ${e.name === 'AbortError' ? 'timed out' : 'failed'}: ${e.message}`); }
+  finally { clearTimeout(to); }
+  if (!res.ok) throw new Error(`Gemini upload failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json().catch(() => ({}));
+  const file = data.file;
+  if (!file || !file.name) throw new Error('Gemini upload did not finalize');
+  await waitActive(file.name, { timeoutMs: 120000 });
   // Footage cataloguing only needs "what's in this clip" — use LOW media resolution
   // and LOW thinking so each clip takes seconds, not minutes (and costs far less).
-  const result = await generate(fileResource.uri, fileResource.mimeType || mimeType, model, prompt,
+  const result = await generate(file.uri, file.mimeType || mimeType, model, prompt,
     { thinkingConfig: { thinkingLevel: 'low' }, mediaResolution: 'MEDIA_RESOLUTION_LOW' }, 150000);
-  try { await fetch(authUrl(`/v1beta/${fileResource.name}`), { method: 'DELETE' }); } catch (e) {}
+  try { await fetch(authUrl(`/v1beta/${file.name}`), { method: 'DELETE' }); } catch (e) {}
   return { model, result };
 }
 
