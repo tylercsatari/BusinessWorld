@@ -2466,7 +2466,6 @@ const WorkshopUI = (() => {
                 ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
                 ${projectGate(v, 'Select a Channel Project first — the final videos live in that project\'s Dropbox folder.')}
                 ${editingHandoffHtml(v)}
-                <div id="wsp-edit-bulk" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-full" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nosubs" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nomusic" class="wsp-edit-slot"></div>
@@ -4833,104 +4832,68 @@ const WorkshopUI = (() => {
 
     // ===== EDITING — three final-video deliverables → <project>/final videos/ =====
     const EDIT_SLOTS = [
-        { key: 'full', label: 'Full video — subtitles + graphics' },
-        { key: 'nosubs', label: 'Version without subtitles & graphics' },
+        { key: 'full', label: 'Full video' },
+        { key: 'nosubs', label: 'Version without subtitles and graphics' },
         { key: 'nomusic', label: 'Version without music' }
     ];
-    function guessEditSlotKey(file, used, finalVideos) {
-        const name = String(file && file.name || '').toLowerCase();
-        const available = (key) => !used.has(key) && !(finalVideos && finalVideos[key]);
-        if (available('nomusic') && /(no[\s_-]*music|without[\s_-]*music|musicless|silent|noaudio|no[\s_-]*audio)/i.test(name)) return 'nomusic';
-        if (available('nosubs') && /(no[\s_-]*subs?|without[\s_-]*subs?|no[\s_-]*graphics|without[\s_-]*graphics|clean)/i.test(name)) return 'nosubs';
-        if (available('full') && /(full|subtitles?|graphics?|final|main)/i.test(name)) return 'full';
-        const open = EDIT_SLOTS.find(s => available(s.key));
-        return open ? open.key : '';
+
+    function finalVideoItems(finalVideos, key) {
+        const value = finalVideos && finalVideos[key];
+        if (Array.isArray(value)) return value.filter(item => item && item.path);
+        return value && value.path ? [value] : [];
     }
+
     async function initEditSlots(v) {
         if (!document.getElementById('wsp-edit-full') || !v.project) return;
         const root = await dropboxRootPath();
         const folder = `${root}/${v.project}/final videos`;
-        const setSlot = async (key, val) => {
+        const setSlotItems = async (key, items) => {
             const fresh = VideoService.getById(v.id) || v;
             const finalVideos = { ...(fresh.finalVideos || {}) };
-            if (val) finalVideos[key] = val; else delete finalVideos[key];
+            const clean = (items || []).filter(item => item && item.path);
+            if (clean.length) finalVideos[key] = clean; else delete finalVideos[key];
             await VideoService.update(v.id, { finalVideos, status: normalizedStatus(fresh) });
         };
-        const bulkEl = document.getElementById('wsp-edit-bulk');
-        if (bulkEl && bulkEl.isConnected) {
-            const missing = EDIT_SLOTS.filter(slot => !((v.finalVideos || {})[slot.key]));
-            bulkEl.innerHTML = missing.length ? `
-                <div class="wsp-edit-slot-label">Upload final videos together</div>
-                <div class="wsp-add-row">
-                    <input type="file" id="wsp-edit-bulk-files" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
-                    <button class="wsp-mini-btn done" id="wsp-edit-bulk-up">⬆ Upload selected videos</button>
-                </div>` : '';
-            bulkEl.querySelector('#wsp-edit-bulk-up')?.addEventListener('click', async () => {
-                const input = document.getElementById('wsp-edit-bulk-files');
-                const files = input && input.files ? [...input.files] : [];
-                if (!files.length) { alert('Choose one or more final video files first.'); return; }
-                const fresh = VideoService.getById(v.id) || v;
-                const finalVideos = { ...(fresh.finalVideos || {}) };
-                const used = new Set();
-                const assignments = [];
-                for (const file of files) {
-                    const key = guessEditSlotKey(file, used, finalVideos);
-                    if (!key) continue;
-                    used.add(key);
-                    assignments.push({ key, file });
-                }
-                if (!assignments.length) { alert('All final video slots are already filled. Unlink one first if you want to replace it.'); return; }
-                const bar = uploadProgressBar(bulkEl, assignments[0].file.name);
-                try {
-                    const metas = await uploadFilesToDropbox(assignments.map(a => a.file), file => `${folder}/${file.name}`, bar, { label: 'Uploading final videos' });
-                    metas.forEach((meta, i) => {
-                        const file = assignments[i].file;
-                        finalVideos[assignments[i].key] = { path: meta.path_display || meta.path_lower, name: meta.name || file.name };
-                    });
-                    bar.stage('Linking final videos…');
-                    await VideoService.update(v.id, { finalVideos, status: normalizedStatus(fresh) });
-                    bar.stage('Done ✓');
-                    toast(`🎬 ${assignments.length} final video${assignments.length === 1 ? '' : 's'} uploaded in parallel`);
-                    rerenderEditor(v.id);
-                } catch (e) { alert('Final video upload failed: ' + e.message); rerenderEditor(v.id); }
-            });
-        }
         EDIT_SLOTS.forEach(slot => {
             const el = document.getElementById('wsp-edit-' + slot.key);
             if (!el || !el.isConnected) return;
-            const cur = (v.finalVideos || {})[slot.key];
-            if (cur && cur.path) {
-                el.innerHTML = `<div class="wsp-row" style="border-left:3px solid #27ae60">
+            const items = finalVideoItems(v.finalVideos || {}, slot.key);
+            const rows = items.map((cur, i) => `<div class="wsp-row" style="border-left:3px solid #27ae60">
                     <span class="wsp-row-name"><b>${escHtml(slot.label)}</b> · ${escHtml(cur.name || cur.path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
-                    <button class="wsp-mini-btn" data-edit-open="${slot.key}">▶ Open</button>
-                    <button class="wsp-mini-btn danger" data-edit-unlink="${slot.key}">✕</button></div>`;
-                el.querySelector('[data-edit-open]').addEventListener('click', () => openFilePreview(cur.path, cur.name || cur.path.split('/').pop()));
-                el.querySelector('[data-edit-unlink]').addEventListener('click', async () => {
-                    if (!confirm('Unlink this version? (The file stays in Dropbox.)')) return;
-                    await setSlot(slot.key, null); rerenderEditor(v.id);
-                });
-            } else {
-                el.innerHTML = `<div class="wsp-edit-slot-label">${escHtml(slot.label)}</div>
-                    <div class="wsp-add-row">
-                        <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
-                        <button class="wsp-mini-btn done" data-edit-up="${slot.key}">⬆ Upload</button></div>`;
-                el.querySelector('[data-edit-up]').addEventListener('click', async () => {
-                    const input = document.getElementById('wsp-edit-file-' + slot.key);
-                    const files = input && input.files ? [...input.files] : [];
-                    if (!files.length) { alert('Choose one or more video files first.'); return; }
-                    const bar = uploadProgressBar(el, files[0].name);
-                    try {
-                        const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading final videos' });
-                        const firstMeta = metas[0];
-                        const first = { path: firstMeta.path_display || firstMeta.path_lower, name: firstMeta.name || files[0].name };
-                        bar.stage('Linking to this video…');
-                        await setSlot(slot.key, first);
-                        bar.stage('Done ✓');
-                        toast(`🎬 ${files.length} file${files.length === 1 ? '' : 's'} → ${v.project}/final videos`);
-                        rerenderEditor(v.id);
-                    } catch (e) { alert('Upload failed: ' + e.message); rerenderEditor(v.id); }
-                });
-            }
+                    <button class="wsp-mini-btn" data-edit-open="${slot.key}" data-edit-idx="${i}">▶ Open</button>
+                    <button class="wsp-mini-btn danger" data-edit-unlink="${slot.key}" data-edit-idx="${i}">✕</button></div>`).join('');
+            el.innerHTML = `<div class="wsp-edit-slot-label">${escHtml(slot.label)}</div>
+                ${rows}
+                <div class="wsp-add-row">
+                    <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
+                    <button class="wsp-mini-btn done" data-edit-up="${slot.key}">${items.length ? '⬆ Upload more' : '⬆ Upload'}</button></div>`;
+            el.querySelectorAll('[data-edit-open]').forEach(btn => btn.addEventListener('click', () => {
+                const item = finalVideoItems((VideoService.getById(v.id) || v).finalVideos || {}, slot.key)[Number(btn.dataset.editIdx)];
+                if (item && item.path) openFilePreview(item.path, item.name || item.path.split('/').pop());
+            }));
+            el.querySelectorAll('[data-edit-unlink]').forEach(btn => btn.addEventListener('click', async () => {
+                if (!confirm('Unlink this version? (The file stays in Dropbox.)')) return;
+                const fresh = VideoService.getById(v.id) || v;
+                const next = finalVideoItems(fresh.finalVideos || {}, slot.key).filter((_, i) => i !== Number(btn.dataset.editIdx));
+                await setSlotItems(slot.key, next); rerenderEditor(v.id);
+            }));
+            el.querySelector('[data-edit-up]').addEventListener('click', async () => {
+                const input = document.getElementById('wsp-edit-file-' + slot.key);
+                const files = input && input.files ? [...input.files] : [];
+                if (!files.length) { alert('Choose one or more video files first.'); return; }
+                const bar = uploadProgressBar(el, files[0].name);
+                try {
+                    const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading final videos' });
+                    const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
+                    const fresh = VideoService.getById(v.id) || v;
+                    const existing = finalVideoItems(fresh.finalVideos || {}, slot.key);
+                    bar.stage('Linking to this slot…');
+                    await setSlotItems(slot.key, [...existing, ...added]);
+                    bar.stage('Done ✓');
+                    toast(`🎬 ${files.length} ${slot.label.toLowerCase()} file${files.length === 1 ? '' : 's'} → ${v.project}/final videos`);
+                    rerenderEditor(v.id);
+                } catch (e) { alert('Upload failed: ' + e.message); rerenderEditor(v.id); }
+            });
         });
     }
 
