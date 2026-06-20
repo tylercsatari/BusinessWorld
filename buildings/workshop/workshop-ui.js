@@ -226,6 +226,13 @@ const WorkshopUI = (() => {
         return `<span class="workshop-card-worker"${style}>${escHtml(name)}</span>`;
     }
 
+    // Small colored initials chip for a board node's assignee indicator.
+    function nodeAssigneeChip(name) {
+        const c = getWorkerColor(name) || '#7a6f58';
+        const initials = String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+        return `<span class="wsp-node-assignee" title="${escAttr(name)}" style="background:${escAttr(c)}">${escHtml(initials)}</span>`;
+    }
+
     function sponsorName(id) {
         if (!id) return '';
         const s = SVC().sponsors.getById(id);
@@ -840,6 +847,21 @@ const WorkshopUI = (() => {
             const vidN = e.videoCount || 0;
             const total = vidN + e.components.length + e.orders.length;
             const blockedHere = e.videos.filter(v => videoBlockers(v).length > 0).length;
+            // RED "ready" count (top-left): items here that have everything they need
+            // and just need Done pressed — videos whose stage deliverable is met +
+            // components whose stage deliverable is met.
+            let readyN = 0;
+            e.videos.forEach(v => { try { if (nodeDeliverableStatus(v, s.id).met) readyN++; } catch (_) {} });
+            e.components.forEach(c => { try { if (componentDeliverableStatus(c).met) readyN++; } catch (_) {} });
+            // ASSIGNEES (top-center): people assigned to the work at this node — the
+            // videos sitting here, plus the videos that own the components here.
+            const nodeVideos = new Map();
+            e.videos.forEach(v => nodeVideos.set(v.id, v));
+            e.components.forEach(c => { if (c.videoId && !nodeVideos.has(c.videoId)) { const vv = VideoService.getById(c.videoId); if (vv) nodeVideos.set(vv.id, vv); } });
+            const assignees = [...new Set([...nodeVideos.values()].flatMap(getAssignedPeople))];
+            const assigneesHtml = assignees.length
+                ? `<div class="wsp-node-assignees">${assignees.slice(0, 4).map(nodeAssigneeChip).join('')}${assignees.length > 4 ? `<span class="wsp-node-assignee more">+${assignees.length - 4}</span>` : ''}</div>`
+                : '';
             // Separate colored count per type so it's readable at a glance:
             // green = videos, blue = components, orange = tasks, gold = orders.
             const cornerCounts = [
@@ -866,6 +888,8 @@ const WorkshopUI = (() => {
                         : `<span class="wsp-node-group">${s.bottleneck ? 'bottleneck' : escHtml(s.group)}</span>`}</div>
                 </div>
                 ${total ? `<div class="wsp-node-counts-corner">${cornerCounts}</div>` : ''}
+                ${readyN ? `<div class="wsp-node-ready-corner" title="${readyN} ready to advance — has everything, just press Done">${readyN}</div>` : ''}
+                ${assigneesHtml}
                 ${blockedHere ? `<span class="wsp-node-blocked" title="${blockedHere} blocked here">🔒</span>` : ''}
             </div>`;
         }).join('');
@@ -1166,6 +1190,7 @@ const WorkshopUI = (() => {
                 bindDetailFields(ev);
                 initMediaSection(ev, 'vo');
                 initMediaSection(ev, 'music');   // optional music link/file — not tied to a stage
+                initEditingHandoff(ev);
                 initEditSlots(ev);   // Editing — three final-video upload slots (was detail-page only)
                 if (selectedStageId && PS().isResultStage(selectedStageId)) initStageResultUploader(ev, selectedStageId, panel);
                 panel.querySelectorAll('[data-inline-delete]').forEach(b => b.addEventListener('click', () => deleteVideoAction(VideoService.getById(expandedStageVideoId))));
@@ -2281,6 +2306,7 @@ const WorkshopUI = (() => {
             <div class="wsp-subsection ${sectionStatusClass(v, 'editing')}" data-vfield="editing" style="--accent:#27ae60">
                 ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
                 ${projectGate(v, 'Select a Channel Project first — the final videos live in that project\'s Dropbox folder.')}
+                ${editingHandoffHtml(v)}
                 <div id="wsp-edit-full" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nosubs" class="wsp-edit-slot"></div>
                 <div id="wsp-edit-nomusic" class="wsp-edit-slot"></div>
@@ -2461,6 +2487,7 @@ const WorkshopUI = (() => {
         // wired inside bindDetailFields)
         initMediaSection(v, 'vo');
         initMediaSection(v, 'music');   // optional music link/file — not tied to a stage
+        initEditingHandoff(v);
         initEditSlots(v);   // Editing — three final-video upload slots
 
         // 3D egg preview
@@ -4338,6 +4365,205 @@ const WorkshopUI = (() => {
         });
     }
 
+    function editingAssetName(asset) {
+        if (!asset) return 'Asset';
+        return asset.name || (asset.path || asset.url || '').split('/').pop() || 'Asset';
+    }
+
+    function editingHandoffAssets(v) {
+        const assets = [];
+        const seen = new Set();
+        const add = (asset) => {
+            const path = asset.path || asset.url || '';
+            if (!path) return;
+            const key = `${asset.kind || ''}:${path}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            assets.push(asset);
+        };
+
+        add({ kind: 'Voiceover', iconName: 'voiceover', path: v.voPath, name: v.voName, detail: 'Voiceover file' });
+        add({ kind: 'Music', iconName: 'voiceover', path: v.musicPath, name: v.musicName, detail: /^https?:\/\//i.test(v.musicPath || '') ? 'Music link' : 'Music file' });
+
+        PS().hooksOf(v).forEach((h, hi) => {
+            const typeMeta = HOOK_TYPE_META[h.type] || { label: 'Hook' };
+            const iconName = h.type === 'animation' ? 'animation' : h.type === 'practical' ? 'hookfilm' : 'hook';
+            hookVideos(h).forEach((vid, vi) => add({
+                kind: `${typeMeta.label} hook`,
+                iconName,
+                path: vid.path,
+                name: vid.name || (vid.path || '').split('/').pop(),
+                detail: `Hook ${hi + 1}${hookVideos(h).length > 1 ? `, clip ${vi + 1}` : ''}`
+            }));
+        });
+
+        (Array.isArray(v.animAssets) ? v.animAssets : []).forEach((asset, i) => add({
+            kind: 'Animation asset',
+            iconName: 'cad',
+            path: asset.path,
+            name: asset.name || (asset.path || '').split('/').pop(),
+            detail: `Animation source ${i + 1}`
+        }));
+
+        return assets;
+    }
+
+    function editingHookRowsHtml(v) {
+        const hooks = PS().hooksOf(v).filter(h => (h.text || h.label || h.visual || h.type || '').trim());
+        if (!hooks.length) return '<div class="wsp-edit-empty">No hook written yet.</div>';
+        return hooks.map((h, i) => {
+            const type = (HOOK_TYPE_META[h.type] && HOOK_TYPE_META[h.type].label) || 'Unassigned';
+            const text = (h.text || h.label || '').trim();
+            const visual = (h.visual || '').trim();
+            return `<div class="wsp-edit-hook-row">
+                <div class="wsp-edit-hook-meta">Hook ${i + 1} · ${escHtml(type)}</div>
+                ${text ? `<div class="wsp-edit-hook-text">${escHtml(text)}</div>` : '<div class="wsp-edit-empty">No hook line yet.</div>'}
+                ${visual ? `<div class="wsp-edit-hook-visual">Opening visual: ${escHtml(visual)}</div>` : ''}
+            </div>`;
+        }).join('');
+    }
+
+    function editingAssetsHtml(v) {
+        const assets = editingHandoffAssets(v);
+        if (!assets.length) return '<div class="wsp-edit-empty">No voiceover, animation, or music assets linked yet.</div>';
+        return assets.map((asset, i) => {
+            const name = editingAssetName(asset);
+            const isUrl = /^https?:\/\//i.test(asset.path || asset.url || '');
+            return `<div class="wsp-edit-asset-row">
+                <span class="wsp-row-name">${icon(asset.iconName || 'inventory', 'wsp-row-ic')} <b>${escHtml(asset.kind)}</b> · ${escHtml(name)}${asset.detail ? ` <span class="wsp-hint">${escHtml(asset.detail)}</span>` : ''}</span>
+                <button class="wsp-mini-btn" data-edit-asset-open="${i}">${isUrl ? 'Open link' : 'Open'}</button>
+                ${isUrl ? '' : `<button class="wsp-mini-btn" data-edit-asset-download="${i}">Download</button>`}
+            </div>`;
+        }).join('');
+    }
+
+    function editingHandoffHtml(v) {
+        const folderLabel = v.dropboxPath || (v.project ? `${v.project}/` : 'No Channel Project selected');
+        const hasStoredLink = !!(v.dropboxLink && (!v.dropboxPath || !v.project || v.dropboxPath.includes(`/${v.project}`)));
+        return `<div class="wsp-edit-handoff" id="wsp-edit-handoff">
+            <div class="wsp-edit-handoff-head">
+                <div>
+                    <div class="wsp-edit-handoff-title">Editor handoff</div>
+                    <div class="wsp-hint">Hook, Dropbox folder, and source assets attached to this video object.</div>
+                </div>
+                <button class="wsp-mini-btn done" id="wsp-edit-dropbox-open" ${v.project ? '' : 'disabled'}>${hasStoredLink ? 'Open Dropbox folder' : 'Create / open Dropbox link'}</button>
+            </div>
+            <div class="wsp-edit-folder-line">
+                <span class="wsp-edit-folder-label">Dropbox folder</span>
+                <span class="wsp-edit-folder-path">${escHtml(folderLabel)}</span>
+            </div>
+            <div class="wsp-edit-handoff-grid">
+                <div class="wsp-edit-handoff-panel">
+                    <div class="wsp-edit-panel-title">Hook</div>
+                    ${editingHookRowsHtml(v)}
+                </div>
+                <div class="wsp-edit-handoff-panel">
+                    <div class="wsp-edit-panel-title">Assets for editing</div>
+                    ${editingAssetsHtml(v)}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function dropboxJoinPath(root, project) {
+        const raw = `${String(root || '').replace(/\/+$/, '')}/${String(project || '').replace(/^\/+/, '')}`;
+        return raw.startsWith('/') ? raw.replace(/\/{2,}/g, '/') : `/${raw.replace(/\/{2,}/g, '/')}`;
+    }
+
+    async function videoDropboxPath(v) {
+        if (!v || !v.project) return '';
+        const root = await dropboxRootPath();
+        return dropboxJoinPath(root, v.project);
+    }
+
+    async function getDropboxTemporaryLink(path) {
+        const r = await fetch('/api/dropbox/get_temporary_link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.link) throw new Error(data.error_summary || data.error || `Dropbox link failed (${r.status})`);
+        return data.link;
+    }
+
+    function downloadFromUrl(url, name) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name || '';
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    async function openEditingAsset(asset, download) {
+        if (!asset) return;
+        const path = asset.path || asset.url || '';
+        if (!path) return;
+        const name = editingAssetName(asset);
+        if (/^https?:\/\//i.test(path)) {
+            if (download) downloadFromUrl(path, name);
+            else window.open(path, '_blank', 'noopener');
+            return;
+        }
+        if (!download) {
+            openFilePreview(path, name);
+            return;
+        }
+        try {
+            const link = await getDropboxTemporaryLink(path);
+            downloadFromUrl(link, name);
+        } catch (e) {
+            alert('Could not download this Dropbox asset: ' + e.message);
+        }
+    }
+
+    async function openVideoDropboxFolder(v, btn) {
+        const fresh = VideoService.getById(v.id) || v;
+        if (!fresh.project) { alert('Select a Channel Project first.'); return; }
+        const path = await videoDropboxPath(fresh);
+        let link = fresh.dropboxPath === path ? fresh.dropboxLink : '';
+        let pendingTab = null;
+        if (!link) {
+            pendingTab = window.open('about:blank', '_blank');
+            if (pendingTab) pendingTab.opener = null;
+        }
+        const oldText = btn ? btn.textContent : '';
+        if (btn) { btn.disabled = true; btn.textContent = link ? 'Opening…' : 'Creating Dropbox link…'; }
+        try {
+            if (!link) {
+                const r = await fetch('/api/dropbox/shared_link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path })
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.link) throw new Error(data.error_summary || data.error || `Dropbox shared link failed (${r.status})`);
+                link = data.link;
+                await VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link });
+            }
+            if (pendingTab) pendingTab.location.href = link;
+            else window.open(link, '_blank', 'noopener');
+            rerenderEditor(fresh.id);
+        } catch (e) {
+            if (pendingTab) pendingTab.close();
+            alert('Could not open the Dropbox folder: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = oldText; }
+        }
+    }
+
+    function initEditingHandoff(v) {
+        const host = document.getElementById('wsp-edit-handoff');
+        if (!host) return;
+        host.querySelector('#wsp-edit-dropbox-open')?.addEventListener('click', () => openVideoDropboxFolder(v, host.querySelector('#wsp-edit-dropbox-open')));
+        const assets = editingHandoffAssets(VideoService.getById(v.id) || v);
+        host.querySelectorAll('[data-edit-asset-open]').forEach(btn => btn.addEventListener('click', () => openEditingAsset(assets[Number(btn.dataset.editAssetOpen)], false)));
+        host.querySelectorAll('[data-edit-asset-download]').forEach(btn => btn.addEventListener('click', () => openEditingAsset(assets[Number(btn.dataset.editAssetDownload)], true)));
+    }
+
     // ===== EDITING — three final-video deliverables → <project>/final videos/ =====
     const EDIT_SLOTS = [
         { key: 'full', label: 'Full video — subtitles + graphics' },
@@ -4499,8 +4725,10 @@ const WorkshopUI = (() => {
             // (v.hooks, saved by saveHooks) — there is no #workshop-hook field, so
             // reading it would always be '' and silently wipe the hook on the video
             // AND (via saveWithIdeaSync) on the linked Library idea.
+            const projectChanged = project !== (v.project || '');
             await VideoService.saveWithIdeaSync(v.id, {
                 name, project, noProject, context, deadline, sponsorId, previousVideoId,
+                ...(projectChanged ? { dropboxPath: '', dropboxLink: '' } : {}),
                 status: normalizedStatus(v)
             });
             return true;

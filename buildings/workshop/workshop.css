@@ -418,6 +418,24 @@
 }
 .wsp-node-count.inv { background: #8e44ad; }
 /* Per-type count badges clustered in the node corner — green/blue/orange/gold */
+/* RED "ready to advance" count — top-LEFT of each node */
+.wsp-node-ready-corner {
+    position: absolute; top: -9px; left: -9px;
+    background: #e74c3c; color: #fff; font-size: 11px; font-weight: 800;
+    min-width: 22px; height: 22px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center; padding: 0 6px;
+    box-shadow: 0 2px 6px rgba(70,58,34,0.22); border: 2px solid #fff;
+    animation: wsp-ready-pulse 1.9s ease-in-out infinite;
+}
+@keyframes wsp-ready-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+/* Assignee chips — top-CENTER of each node (who's working it) */
+.wsp-node-assignees { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; z-index: 3; }
+.wsp-node-assignee {
+    width: 19px; height: 19px; border-radius: 50%; color: #fff;
+    font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.22); box-sizing: border-box; background: #7a6f58;
+}
+.wsp-node-assignee.more { background: #6b675a; font-size: 8.5px; }
 .wsp-node-counts-corner { position: absolute; top: -9px; right: -9px; display: flex; gap: 3px; }
 .wsp-node-counts-corner .wsp-node-count { position: static; top: auto; right: auto; }
 .wsp-node-counts-corner .wsp-node-count.vid  { background: #00b894; }
@@ -960,6 +978,108 @@
 .wsp-hooki-text { width: 100%; min-height: 54px; resize: vertical; border: 1px solid #e6dcc6; border-radius: 8px; padding: 7px 10px; font-family: inherit; font-size: 13px; color: #4a3a26; box-sizing: border-box; }
 .wsp-edit-slot { border: 1px solid #e9e0cf; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; background: #fffdf8; }
 .wsp-edit-slot-label { font-size: 12px; font-weight: 800; color: #4a3a26; margin-bottom: 5px; }
+.wsp-edit-handoff {
+    border: 1px solid #d9eadf;
+    border-radius: 9px;
+    padding: 10px;
+    background: #f8fffa;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.wsp-edit-handoff-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.wsp-edit-handoff-title,
+.wsp-edit-panel-title {
+    font-size: 12px;
+    font-weight: 850;
+    color: #216d3f;
+}
+.wsp-edit-folder-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #e2f1e7;
+}
+.wsp-edit-folder-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #6d8a76;
+    text-transform: uppercase;
+}
+.wsp-edit-folder-path {
+    font-size: 12px;
+    font-weight: 700;
+    color: #2d4535;
+    overflow-wrap: anywhere;
+}
+.wsp-edit-handoff-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 8px;
+}
+.wsp-edit-handoff-panel {
+    border: 1px solid #e6efe7;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+.wsp-edit-hook-row {
+    border-left: 3px solid #27ae60;
+    padding: 5px 8px;
+    border-radius: 7px;
+    background: #fbfdfb;
+}
+.wsp-edit-hook-meta {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #6d8a76;
+    text-transform: uppercase;
+}
+.wsp-edit-hook-text {
+    font-size: 13px;
+    font-weight: 700;
+    color: #263a2d;
+    line-height: 1.35;
+    white-space: pre-wrap;
+}
+.wsp-edit-hook-visual,
+.wsp-edit-empty {
+    font-size: 11.5px;
+    color: #8a8f88;
+    line-height: 1.35;
+}
+.wsp-edit-empty { font-style: italic; }
+.wsp-edit-asset-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    border: 1px solid #eef2ec;
+    border-radius: 8px;
+    background: #fffdf8;
+}
+.wsp-edit-asset-row .wsp-mini-btn { margin-left: auto; }
+.wsp-edit-asset-row .wsp-mini-btn + .wsp-mini-btn { margin-left: 0; }
+@media (max-width: 760px) {
+    .wsp-edit-handoff-grid { grid-template-columns: 1fr; }
+    .wsp-edit-asset-row .wsp-mini-btn { margin-left: 0; }
+}
 .wsp-anim-noassets { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 12px; color: #4a3a26; font-weight: 600; cursor: pointer; }
 .wsp-anim-noassets input { margin: 0; }
 
