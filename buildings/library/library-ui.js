@@ -738,8 +738,12 @@ const LibraryUI = (() => {
     function aiVideoExtractJson(text) {
         if (!text) return null;
         const cleaned = String(text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-        try { return JSON.parse(cleaned); } catch (e) {}
-        const from = cleaned.indexOf('{'); if (from < 0) return null;
+        try { const p = JSON.parse(cleaned); if (p && p.ideas) return p; } catch (e) {}
+        // Kimi K2.6 reasons BEFORE the JSON. Anchor on the "ideas" key and start at
+        // the { that encloses it, so a stray { in the reasoning preamble can't derail us.
+        const anchor = cleaned.indexOf('"ideas"');
+        const from = anchor >= 0 ? cleaned.lastIndexOf('{', anchor) : cleaned.indexOf('{');
+        if (from < 0) return null;
         let depth = 0, inStr = false, esc = false;
         for (let i = from; i < cleaned.length; i++) {
             const ch = cleaned[i];
@@ -748,6 +752,10 @@ const LibraryUI = (() => {
             else if (ch === '{') depth++;
             else if (ch === '}') { depth--; if (depth === 0) { try { return JSON.parse(cleaned.slice(from, i + 1)); } catch (e) { return null; } } }
         }
+        // Truncated mid-output (hit the token cap): salvage the complete idea objects
+        // by closing the array at the last "}" that ends a full element.
+        const cut = cleaned.lastIndexOf('}');
+        if (cut > from) { try { return JSON.parse(cleaned.slice(from, cut + 1) + ']}'); } catch (e) {} }
         return null;
     }
 
@@ -892,7 +900,7 @@ const LibraryUI = (() => {
             ui.step('kimi', 'active');
             const messages = aiVideoIdeaMessages(count, existingTitles);
             let r;
-            try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 8000 }) }, 90000); }
+            try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 24000 }) }, 120000); }
             catch (err) { throw new Error(err && err.name === 'AbortError' ? 'Kimi took longer than 90s — try again.' : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
             if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
             const data = await r.json();
