@@ -815,13 +815,17 @@ const LibraryUI = (() => {
     async function generateAiVideoIdeas() {
         if (aiVideoIdeasBusy) return;
         aiVideoIdeasBusy = true;
+        // renderAiVideoIdeas() reads these while busy — initialise them or it throws
+        // BEFORE the try block and leaves the run stuck (modal frozen on ○).
+        aiVideoIdeasLog = [];
+        aiVideoIdeasStatus = '';
+        aiVideoIdeasT0 = Date.now();
         const _cont = document.getElementById('library-aiideas-container');
         if (_cont) _cont.style.display = '';
         aiVideoIdeasLoaded = true;
         const count = Math.max(1, aiVideoIdeasRuns * aiVideoIdeasPerRun);
         const ui = aiIdeaStepsModal(count);                 // clean step-list modal
-        updateAiVideoIdeasGenerateButtons();
-        renderAiVideoIdeas();
+        try { updateAiVideoIdeasGenerateButtons(); renderAiVideoIdeas(); } catch (_) {}
         // Every network call is wrapped with a hard timeout, so the flow can NEVER
         // hang — a stuck step fails fast and shows ⚠ on that exact step.
         const fetchT = (url, opts, ms) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { ...(opts || {}), signal: c.signal }).finally(() => clearTimeout(t)); };
