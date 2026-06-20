@@ -523,7 +523,7 @@ const AI_VIDEO_IDEA_DEFAULT_BATCH = 3;
 const AI_VIDEO_IDEA_MAX_BATCH = 5;
 const AI_VIDEO_IDEA_MAX_RUNS = 20;
 const AI_VIDEO_IDEA_MAX_TOTAL = 60;
-const AI_VIDEO_IDEA_DEDUPE_LIMIT = parseInt(process.env.AI_VIDEO_IDEA_DEDUPE_LIMIT || '2500', 10);
+const AI_VIDEO_IDEA_DEDUPE_LIMIT = parseInt(process.env.AI_VIDEO_IDEA_DEDUPE_LIMIT || '1200', 10);
 const AI_VIDEO_IDEA_SIMILARITY_THRESHOLD = Number(process.env.AI_VIDEO_IDEA_SIMILARITY_THRESHOLD || 0.88);
 const AI_VIDEO_IDEA_JOB_TIMEOUT_MS = parseInt(process.env.AI_VIDEO_IDEA_JOB_TIMEOUT_MS || String(10 * 60 * 1000), 10);
 const AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS = parseInt(process.env.AI_VIDEO_IDEA_JOB_IDLE_TIMEOUT_MS || String(90 * 1000), 10);
@@ -808,23 +808,42 @@ async function aiKimiRaw(messages, maxTokens = 8000) {
 async function aiVideoEmbedTexts(texts) {
     if (!texts.length) return [];
     if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set; semantic dedupe requires embeddings');
-    const out = [];
     const batchSize = 64;
+    const batches = [];
     for (let i = 0; i < texts.length; i += batchSize) {
-        const batch = texts.slice(i, i + batchSize).map(t => t && t.trim() ? t : 'empty idea');
-        const response = await fetch('https://api.openai.com/v1/embeddings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
-            body: JSON.stringify({
-                input: batch,
-                model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
-                dimensions: parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS) || 512
-            })
-        });
-        if (!response.ok) throw new Error(`OpenAI embeddings error ${response.status}: ${await response.text()}`);
-        const data = await response.json();
-        out.push(...(data.data || []).map(d => d.embedding));
+        batches.push({ start: i, items: texts.slice(i, i + batchSize).map(t => t && t.trim() ? t : 'empty idea') });
     }
+    const out = new Array(texts.length);
+    // Run batches with bounded CONCURRENCY (was strictly sequential — a large
+    // dedupe corpus meant ~40 back-to-back round-trips, ~60s of "stuck"). Each
+    // request gets a hard timeout so one stalled call can't hang the whole job.
+    const CONCURRENCY = 6;
+    let cursor = 0;
+    const worker = async () => {
+        while (cursor < batches.length) {
+            const b = batches[cursor++];
+            const ctrl = new AbortController();
+            const to = setTimeout(() => ctrl.abort(), 30000);
+            let response;
+            try {
+                response = await fetch('https://api.openai.com/v1/embeddings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+                    body: JSON.stringify({
+                        input: b.items,
+                        model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+                        dimensions: parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS) || 512
+                    }),
+                    signal: ctrl.signal
+                });
+            } catch (e) { throw new Error(`OpenAI embeddings request failed: ${e.name === 'AbortError' ? 'timed out after 30s' : e.message}`); }
+            finally { clearTimeout(to); }
+            if (!response.ok) throw new Error(`OpenAI embeddings error ${response.status}: ${(await response.text()).slice(0, 300)}`);
+            const data = await response.json();
+            (data.data || []).forEach((d, j) => { out[b.start + j] = d.embedding; });
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker));
     return out;
 }
 
@@ -993,7 +1012,11 @@ async function aiVideoFetchInternetContext() {
             maxResults: String(parseInt(process.env.AI_VIDEO_IDEA_TREND_LIMIT || '25', 10)),
             key: process.env.YOUTUBE_API_KEY
         });
-        const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`);
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 8000);   // never let trend context hang the job
+        let response;
+        try { response = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`, { signal: ctrl.signal }); }
+        finally { clearTimeout(to); }
         if (!response.ok) {
             context.youtubeError = `YouTube API ${response.status}: ${(await response.text()).slice(0, 300)}`;
             return context;
