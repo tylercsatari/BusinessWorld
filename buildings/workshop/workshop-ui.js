@@ -38,6 +38,10 @@ const WorkshopUI = (() => {
 
     // Pipeline board filters (apply to everything: dots, counts, stage panel)
     let fSearch = '', fType = '', fProject = '', fSponsor = '', fAssignee = '', fFlag = '';
+    // Per-node roster: stageId -> [{id,name,color}] of everyone whose ROLE grants
+    // that stage (so a person's avatar appears on every node their role covers).
+    // Loaded from /api/accounts + /api/profiles (owner view).
+    let nodeRoster = {};
     // Which entity types are visible on the board (legend toggles)
     // The Workshop board tracks two entities: videos and the components they
     // spawn. Orders/Storage live in their own tabs, not on the pipeline board.
@@ -226,11 +230,54 @@ const WorkshopUI = (() => {
         return `<span class="workshop-card-worker"${style}>${escHtml(name)}</span>`;
     }
 
-    // Small colored initials chip for a board node's assignee indicator.
-    function nodeAssigneeChip(name) {
-        const c = getWorkerColor(name) || '#7a6f58';
-        const initials = String(name).trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
-        return `<span class="wsp-node-assignee" title="${escAttr(name)}" style="background:${escAttr(c)}">${escHtml(initials)}</span>`;
+    // Which pipeline stages does a profile grant? Mirrors window.stageAccess but for
+    // ANY profile (not just the current user). Workshop not granted → none; granted
+    // with no per-stage keys → the whole pipeline; else the read/write stages.
+    function profileStageIds(profile) {
+        const allIds = PS().STAGES.map(s => s.id);
+        if (!profile || !(Array.isArray(profile.buildings) && profile.buildings.includes('Workshop'))) return [];
+        const feats = profile.features || {};
+        const keys = Object.keys(feats).filter(k => k.indexOf('Workshop:stage:') === 0);
+        if (!keys.length) return allIds.slice();
+        return allIds.filter(id => { const v = feats['Workshop:stage:' + id]; return v === 'write' || v === 'read'; });
+    }
+
+    // Build nodeRoster from the real accounts + their role's stages. A person shows
+    // up on every node their role covers (owner = all nodes).
+    async function loadNodeRosters() {
+        let accounts = [], profiles = [];
+        try {
+            [accounts, profiles] = await Promise.all([
+                fetch('/api/accounts').then(r => r.ok ? r.json() : []).catch(() => []),
+                fetch('/api/profiles').then(r => r.ok ? r.json() : []).catch(() => [])
+            ]);
+        } catch (_) { return; }
+        const profById = {}; (profiles || []).forEach(p => { if (p && p.id) profById[p.id] = p; });
+        const allIds = PS().STAGES.map(s => s.id);
+        const roster = {}; allIds.forEach(id => roster[id] = []);
+        (accounts || []).forEach(a => {
+            if (!a || !a.email || a.role === 'pending' || !a.role) return;   // no role → no nodes
+            const name = a.displayName || a.email;
+            const color = (a.color && /^#[0-9a-fA-F]{6}$/.test(a.color)) ? a.color : (getWorkerColor(name) || '');
+            const stages = a.role === 'owner' ? allIds : profileStageIds(profById[a.role]);
+            const person = { id: a.id, name, color };
+            stages.forEach(sid => { if (roster[sid]) roster[sid].push(person); });
+        });
+        nodeRoster = roster;
+        renderTab();
+    }
+
+    // A board node's assignee = their account's 3D character avatar (canvas painted
+    // post-render by EggRenderer.renderCharacterAvatar).
+    function nodeAvatarHtml(person) {
+        return `<canvas class="wsp-node-avatar" title="${escAttr(person.name)}" data-worker="${escAttr(person.name)}" data-color="${escAttr(person.color || '')}" data-size="24" width="24" height="24"></canvas>`;
+    }
+    function paintNodeAvatars(scope) {
+        if (!window.EggRenderer || !scope) return;
+        scope.querySelectorAll('.wsp-node-avatar').forEach(c => {
+            const sz = parseInt(c.dataset.size, 10) || 24;
+            try { window.EggRenderer.renderCharacterAvatar(c.dataset.worker, c, Math.round(sz / 2), c.dataset.color || null); } catch (e) {}
+        });
     }
 
     function sponsorName(id) {
@@ -853,14 +900,12 @@ const WorkshopUI = (() => {
             let readyN = 0;
             e.videos.forEach(v => { try { if (nodeDeliverableStatus(v, s.id).met) readyN++; } catch (_) {} });
             e.components.forEach(c => { try { if (componentDeliverableStatus(c).met) readyN++; } catch (_) {} });
-            // ASSIGNEES (top-center): people assigned to the work at this node — the
-            // videos sitting here, plus the videos that own the components here.
-            const nodeVideos = new Map();
-            e.videos.forEach(v => nodeVideos.set(v.id, v));
-            e.components.forEach(c => { if (c.videoId && !nodeVideos.has(c.videoId)) { const vv = VideoService.getById(c.videoId); if (vv) nodeVideos.set(vv.id, vv); } });
-            const assignees = [...new Set([...nodeVideos.values()].flatMap(getAssignedPeople))];
-            const assigneesHtml = assignees.length
-                ? `<div class="wsp-node-assignees">${assignees.slice(0, 4).map(nodeAssigneeChip).join('')}${assignees.length > 4 ? `<span class="wsp-node-assignee more">+${assignees.length - 4}</span>` : ''}</div>`
+            // ASSIGNEES (top-center): everyone whose ROLE covers this node — their
+            // 3D account avatar, painted after render. A person appears on every node
+            // their role grants them.
+            const roster = nodeRoster[s.id] || [];
+            const assigneesHtml = roster.length
+                ? `<div class="wsp-node-assignees">${roster.slice(0, 5).map(nodeAvatarHtml).join('')}${roster.length > 5 ? `<span class="wsp-node-assignee more">+${roster.length - 5}</span>` : ''}</div>`
                 : '';
             // Separate colored count per type so it's readable at a glance:
             // green = videos, blue = components, orange = tasks, gold = orders.
@@ -935,6 +980,8 @@ const WorkshopUI = (() => {
         });
         const goInv = el.querySelector('.wsp-node[data-goto="inventory"]');
         if (goInv) goInv.addEventListener('click', () => switchTab('inventory'));
+
+        requestAnimationFrame(() => paintNodeAvatars(el));   // paint the 3D account avatars on the nodes
 
         renderStagePanel();
     }
@@ -4439,14 +4486,13 @@ const WorkshopUI = (() => {
 
     function editingHandoffHtml(v) {
         const folderLabel = v.dropboxPath || (v.project ? `${v.project}/` : 'No Channel Project selected');
-        const hasStoredLink = !!(v.dropboxLink && (!v.dropboxPath || !v.project || v.dropboxPath.includes(`/${v.project}`)));
         return `<div class="wsp-edit-handoff" id="wsp-edit-handoff">
             <div class="wsp-edit-handoff-head">
                 <div>
                     <div class="wsp-edit-handoff-title">Editor handoff</div>
                     <div class="wsp-hint">Hook, Dropbox folder, and source assets attached to this video object.</div>
                 </div>
-                <button class="wsp-mini-btn done" id="wsp-edit-dropbox-open" ${v.project ? '' : 'disabled'}>${hasStoredLink ? 'Open Dropbox folder' : 'Create / open Dropbox link'}</button>
+                <button class="wsp-mini-btn done" id="wsp-edit-dropbox-open" ${v.project ? '' : 'disabled'}>Open Dropbox folder</button>
             </div>
             <div class="wsp-edit-folder-line">
                 <span class="wsp-edit-folder-label">Dropbox folder</span>
@@ -4474,6 +4520,12 @@ const WorkshopUI = (() => {
         if (!v || !v.project) return '';
         const root = await dropboxRootPath();
         return dropboxJoinPath(root, v.project);
+    }
+
+    function dropboxHomeUrl(path) {
+        const clean = String(path || '').trim().replace(/^\/+/, '');
+        const encoded = clean.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+        return `https://www.dropbox.com/home${encoded ? `/${encoded}` : ''}`;
     }
 
     async function getDropboxTemporaryLink(path) {
@@ -4523,30 +4575,19 @@ const WorkshopUI = (() => {
     async function openVideoDropboxFolder(v, btn) {
         const fresh = VideoService.getById(v.id) || v;
         if (!fresh.project) { alert('Select a Channel Project first.'); return; }
-        const path = await videoDropboxPath(fresh);
-        let link = fresh.dropboxPath === path ? fresh.dropboxLink : '';
-        let pendingTab = null;
-        if (!link) {
-            pendingTab = window.open('about:blank', '_blank');
-            if (pendingTab) pendingTab.opener = null;
-        }
+        const pendingTab = window.open('about:blank', '_blank');
+        if (pendingTab) pendingTab.opener = null;
         const oldText = btn ? btn.textContent : '';
-        if (btn) { btn.disabled = true; btn.textContent = link ? 'Opening…' : 'Creating Dropbox link…'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
         try {
-            if (!link) {
-                const r = await fetch('/api/dropbox/shared_link', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path })
-                });
-                const data = await r.json().catch(() => ({}));
-                if (!r.ok || !data.link) throw new Error(data.error_summary || data.error || `Dropbox shared link failed (${r.status})`);
-                link = data.link;
-                await VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link });
-            }
+            const path = await videoDropboxPath(fresh);
+            const storedLinkMatches = fresh.dropboxPath === path && /^https?:\/\//i.test(fresh.dropboxLink || '');
+            const link = storedLinkMatches ? fresh.dropboxLink : dropboxHomeUrl(path);
             if (pendingTab) pendingTab.location.href = link;
             else window.open(link, '_blank', 'noopener');
-            rerenderEditor(fresh.id);
+            if (fresh.dropboxPath !== path || fresh.dropboxLink !== link) {
+                VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link }).then(() => rerenderEditor(fresh.id)).catch(e => console.warn('Could not save Dropbox folder link on video', e));
+            }
         } catch (e) {
             if (pendingTab) pendingTab.close();
             alert('Could not open the Dropbox folder: ' + e.message);
@@ -4834,6 +4875,7 @@ const WorkshopUI = (() => {
             VideoService.sync().then(safeRender).catch(() => {});
             NotesService.sync().then(safeRender).catch(() => {});
             SVC().syncAll().then(safeRender).catch(() => {});
+            loadNodeRosters().catch(() => {});   // who's on each node (role → stages → avatar)
             if (opts && opts.videoId) {
                 VideoService.sync().then(() => openDetail(opts.videoId)).catch(() => {});
             }

@@ -428,14 +428,20 @@
     animation: wsp-ready-pulse 1.9s ease-in-out infinite;
 }
 @keyframes wsp-ready-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
-/* Assignee chips — top-CENTER of each node (who's working it) */
-.wsp-node-assignees { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; z-index: 3; }
-.wsp-node-assignee {
-    width: 19px; height: 19px; border-radius: 50%; color: #fff;
-    font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center;
-    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.22); box-sizing: border-box; background: #7a6f58;
+/* Assignee avatars — top-CENTER of each node (everyone whose role covers it) */
+.wsp-node-assignees { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); display: flex; z-index: 3; }
+.wsp-node-avatar {
+    width: 24px; height: 24px; border-radius: 50%; display: block;
+    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); box-sizing: border-box;
+    background: #eef1f4; margin-left: -4px;
 }
-.wsp-node-assignee.more { background: #6b675a; font-size: 8.5px; }
+.wsp-node-avatar:first-child { margin-left: 0; }
+.wsp-node-assignee {
+    width: 22px; height: 22px; border-radius: 50%; color: #fff;
+    font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.22); box-sizing: border-box; background: #6b675a; margin-left: -4px;
+}
+.wsp-node-assignee.more { font-size: 8.5px; }
 .wsp-node-counts-corner { position: absolute; top: -9px; right: -9px; display: flex; gap: 3px; }
 .wsp-node-counts-corner .wsp-node-count { position: static; top: auto; right: auto; }
 .wsp-node-counts-corner .wsp-node-count.vid  { background: #00b894; }
