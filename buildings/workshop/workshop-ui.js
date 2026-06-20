@@ -4599,17 +4599,23 @@ const WorkshopUI = (() => {
 
     function editingHandoffHtml(v) {
         const folderLabel = v.dropboxPath || (v.project ? `${v.project}/` : 'No Channel Project selected');
+        const sharedLink = isDropboxSharedLink(v.dropboxLink) ? v.dropboxLink : '';
         return `<div class="wsp-edit-handoff" id="wsp-edit-handoff">
             <div class="wsp-edit-handoff-head">
                 <div>
                     <div class="wsp-edit-handoff-title">Editor handoff</div>
                     <div class="wsp-hint">Hook, Dropbox folder, and source assets attached to this video object.</div>
                 </div>
-                <button class="wsp-mini-btn done" id="wsp-edit-dropbox-open" ${v.project ? '' : 'disabled'}>Open Dropbox folder</button>
+                <button class="wsp-mini-btn done" id="wsp-edit-dropbox-open" ${(v.project || sharedLink) ? '' : 'disabled'}>Open Dropbox folder</button>
             </div>
             <div class="wsp-edit-folder-line">
                 <span class="wsp-edit-folder-label">Dropbox folder</span>
                 <span class="wsp-edit-folder-path">${escHtml(folderLabel)}</span>
+            </div>
+            <div class="wsp-edit-folder-line">
+                <span class="wsp-edit-folder-label">Shared link</span>
+                <input id="wsp-edit-dropbox-link" value="${escAttr(sharedLink)}" placeholder="Paste public Dropbox shared folder link" style="flex:1;min-width:220px;border:1px solid #ded6ca;border-radius:6px;padding:7px 9px;font:inherit;font-size:12px;">
+                <button class="wsp-mini-btn" id="wsp-edit-dropbox-save-link">Save link</button>
             </div>
             <div class="wsp-edit-handoff-grid">
                 <div class="wsp-edit-handoff-panel">
@@ -4636,12 +4642,7 @@ const WorkshopUI = (() => {
     }
 
     function isDropboxSharedLink(link) {
-        return /^https?:\/\/(www\.)?dropbox\.com\//i.test(String(link || '')) && !/\/home(\/|$)/i.test(String(link || ''));
-    }
-
-    function isDropboxSharingWriteError(err) {
-        const text = `${err && err.message || ''} ${err && err.requiredScope || ''}`;
-        return /sharing\.write|missing_scope/i.test(text);
+        return /^https?:\/\/(www\.)?dropbox\.com\/(scl\/|s\/|sh\/)/i.test(String(link || ''));
     }
 
     async function createDropboxSharedLink(path) {
@@ -4652,108 +4653,14 @@ const WorkshopUI = (() => {
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok || !isDropboxSharedLink(data.link)) {
-            const err = new Error(data.error_summary || data.error || `Dropbox public link failed (${r.status})`);
+            const missingScope = data.required_scope === 'sharing.write' || /sharing\.write|missing_scope/i.test(`${data.error_summary || ''} ${data.error || ''}`);
+            const err = new Error(missingScope
+                ? 'Dropbox cannot create the public editor link yet because the server token does not include sharing.write. Enable that scope in the Dropbox app and update the server Dropbox token once; editors will only open the saved public link.'
+                : (data.error_summary || data.error || `Dropbox public link failed (${r.status})`));
             err.requiredScope = data.required_scope || '';
             throw err;
         }
         return data.link;
-    }
-
-    function waitForDropboxOAuth(authWindow) {
-        return new Promise((resolve, reject) => {
-            let settled = false;
-            let closeTimer = null;
-            let timeout = null;
-            const cleanup = () => {
-                window.removeEventListener('message', onMessage);
-                if (closeTimer) clearInterval(closeTimer);
-                if (timeout) clearTimeout(timeout);
-            };
-            const finish = (err, payload) => {
-                if (settled) return;
-                settled = true;
-                cleanup();
-                if (err) reject(err);
-                else resolve(payload);
-            };
-            const onMessage = (event) => {
-                if (event.origin !== window.location.origin) return;
-                const payload = event.data || {};
-                if (!payload || payload.type !== 'dropbox-oauth-complete') return;
-                if (payload.ok) finish(null, payload);
-                else finish(new Error(payload.error || 'Dropbox authorization failed.'));
-            };
-            window.addEventListener('message', onMessage);
-            closeTimer = setInterval(() => {
-                if (authWindow && authWindow.closed) finish(new Error('Dropbox authorization window closed before it completed.'));
-            }, 1000);
-            timeout = setTimeout(() => finish(new Error('Dropbox authorization timed out.')), 5 * 60 * 1000);
-        });
-    }
-
-    function promptDropboxAuthorizationCode(authUrl, authWindow) {
-        return new Promise((resolve, reject) => {
-            const overlay = document.createElement('div');
-            overlay.className = 'wsp-picker-overlay';
-            overlay.style.display = 'flex';
-            overlay.innerHTML = `<div class="wsp-picker wsp-suggest-modal">
-                <div class="wsp-picker-header"><span>Connect Dropbox</span><button class="wsp-picker-close" data-close>✕</button></div>
-                <div class="wsp-hint" style="margin-bottom:12px;line-height:1.5;">
-                    Approve Dropbox in the opened tab. Dropbox will show an authorization code. Paste that code here, then BusinessWorld will create the public folder link and open it.
-                </div>
-                <input id="wsp-dropbox-auth-code" class="wsp-inline-input" placeholder="Dropbox authorization code" autocomplete="off" style="width:100%;margin-bottom:12px;">
-                <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
-                    <button class="wsp-mini-btn" data-open-auth>Open Dropbox auth</button>
-                    <button class="wsp-mini-btn" data-cancel>Cancel</button>
-                    <button class="wsp-mini-btn done" data-connect>Connect Dropbox</button>
-                </div>
-            </div>`;
-            const host = container.querySelector('.workshop-panel') || container || document.body;
-            host.appendChild(overlay);
-            const input = overlay.querySelector('#wsp-dropbox-auth-code');
-            const close = (err, code) => {
-                overlay.remove();
-                if (err) reject(err);
-                else resolve(code);
-            };
-            const submit = () => {
-                const code = (input.value || '').trim();
-                if (!code) { input.focus(); return; }
-                close(null, code);
-            };
-            overlay.querySelector('[data-close]').addEventListener('click', () => close(new Error('Dropbox reconnect cancelled before an authorization code was entered.')));
-            overlay.querySelector('[data-cancel]').addEventListener('click', () => close(new Error('Dropbox reconnect cancelled before an authorization code was entered.')));
-            overlay.querySelector('[data-open-auth]').addEventListener('click', () => {
-                if (authWindow && !authWindow.closed) authWindow.focus();
-                else window.open(authUrl, '_blank');
-            });
-            overlay.querySelector('[data-connect]').addEventListener('click', submit);
-            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-            setTimeout(() => input.focus(), 50);
-        });
-    }
-
-    async function reconnectDropboxForPublicLinks(path, pendingTab) {
-        const authRes = await fetch('/api/dropbox/auth-url');
-        const authData = await authRes.json().catch(() => ({}));
-        if (!authRes.ok || !authData.url) throw new Error(authData.error || 'Could not start Dropbox authorization.');
-
-        const authWindow = pendingTab || window.open(authData.url, '_blank');
-        if (!authWindow) throw new Error('Could not open the Dropbox authorization window.');
-        authWindow.location.href = authData.url;
-        if (authData.manual) {
-            const code = await promptDropboxAuthorizationCode(authData.url, authWindow);
-            const tokenRes = await fetch('/api/dropbox/exchange-code', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
-            });
-            const tokenData = await tokenRes.json().catch(() => ({}));
-            if (!tokenRes.ok || !tokenData.ok) throw new Error(tokenData.error || `Dropbox authorization failed (${tokenRes.status})`);
-        } else {
-            await waitForDropboxOAuth(authWindow);
-        }
-        return createDropboxSharedLink(path);
     }
 
     async function getDropboxTemporaryLink(path) {
@@ -4802,14 +4709,15 @@ const WorkshopUI = (() => {
 
     async function openVideoDropboxFolder(v, btn) {
         const fresh = VideoService.getById(v.id) || v;
-        if (!fresh.project) { alert('Select a Channel Project first.'); return; }
+        if (!fresh.project && !isDropboxSharedLink(fresh.dropboxLink)) { alert('Select a Channel Project first or paste a public Dropbox shared link.'); return; }
         const pendingTab = window.open('about:blank', '_blank');
+        if (pendingTab) pendingTab.opener = null;
         const oldText = btn ? btn.textContent : '';
         if (btn) { btn.disabled = true; btn.textContent = 'Creating public link…'; }
         let path = '';
         try {
-            path = await videoDropboxPath(fresh);
-            let link = fresh.dropboxPath === path && isDropboxSharedLink(fresh.dropboxLink) ? fresh.dropboxLink : '';
+            path = fresh.project ? await videoDropboxPath(fresh) : (fresh.dropboxPath || '');
+            let link = isDropboxSharedLink(fresh.dropboxLink) ? fresh.dropboxLink : '';
             if (!link) {
                 link = await createDropboxSharedLink(path);
             }
@@ -4819,20 +4727,6 @@ const WorkshopUI = (() => {
                 VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link }).then(() => rerenderEditor(fresh.id)).catch(e => console.warn('Could not save Dropbox folder link on video', e));
             }
         } catch (e) {
-            if (path && isDropboxSharingWriteError(e)) {
-                try {
-                    if (btn) btn.textContent = 'Reconnect Dropbox…';
-                    const link = await reconnectDropboxForPublicLinks(path, pendingTab);
-                    if (pendingTab) pendingTab.location.href = link;
-                    else window.open(link, '_blank', 'noopener');
-                    VideoService.update(fresh.id, { dropboxPath: path, dropboxLink: link }).then(() => rerenderEditor(fresh.id)).catch(err => console.warn('Could not save Dropbox folder link on video', err));
-                    return;
-                } catch (authErr) {
-                    if (pendingTab) pendingTab.close();
-                    alert('Could not open the Dropbox folder: ' + authErr.message);
-                    return;
-                }
-            }
             if (pendingTab) pendingTab.close();
             alert('Could not open the Dropbox folder: ' + e.message);
         } finally {
@@ -4844,6 +4738,20 @@ const WorkshopUI = (() => {
         const host = document.getElementById('wsp-edit-handoff');
         if (!host) return;
         host.querySelector('#wsp-edit-dropbox-open')?.addEventListener('click', () => openVideoDropboxFolder(v, host.querySelector('#wsp-edit-dropbox-open')));
+        const linkInput = host.querySelector('#wsp-edit-dropbox-link');
+        const saveLink = async () => {
+            const fresh = VideoService.getById(v.id) || v;
+            const link = (linkInput && linkInput.value || '').trim();
+            if (link && !isDropboxSharedLink(link)) {
+                alert('Paste a public Dropbox shared link, not a Dropbox /home link or OAuth/login URL.');
+                return;
+            }
+            const path = fresh.project ? await videoDropboxPath(fresh) : (fresh.dropboxPath || '');
+            await VideoService.update(fresh.id, { dropboxLink: link, ...(path ? { dropboxPath: path } : {}) });
+            rerenderEditor(fresh.id);
+        };
+        host.querySelector('#wsp-edit-dropbox-save-link')?.addEventListener('click', saveLink);
+        linkInput?.addEventListener('keydown', e => { if (e.key === 'Enter') saveLink(); });
         const assets = editingHandoffAssets(VideoService.getById(v.id) || v);
         host.querySelectorAll('[data-edit-asset-open]').forEach(btn => btn.addEventListener('click', () => openEditingAsset(assets[Number(btn.dataset.editAssetOpen)], false)));
         host.querySelectorAll('[data-edit-asset-download]').forEach(btn => btn.addEventListener('click', () => openEditingAsset(assets[Number(btn.dataset.editAssetDownload)], true)));
