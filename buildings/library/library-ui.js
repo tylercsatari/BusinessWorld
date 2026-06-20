@@ -378,8 +378,8 @@ const LibraryUI = (() => {
     }
 
     function updateAiVideoIdeasGenerateButtons() {
-        aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
-        aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
+        aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 200);
+        aiVideoIdeasPerRun = 3;
         const total = aiVideoIdeasRuns * aiVideoIdeasPerRun;
         // The header button is always visible, so when busy it shows the live
         // elapsed time — a guaranteed progress indicator even if the panel is off.
@@ -434,8 +434,8 @@ const LibraryUI = (() => {
             });
         }
 
-        aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 20);
-        aiVideoIdeasPerRun = clampAiIdeasNumber(aiVideoIdeasPerRun, 3, 1, 5);
+        aiVideoIdeasRuns = clampAiIdeasNumber(aiVideoIdeasRuns, 1, 1, 200);
+        aiVideoIdeasPerRun = 3;
         const total = aiVideoIdeasRuns * aiVideoIdeasPerRun;
         const statusHtml = aiVideoIdeasBusy
             ? `<div class="library-aiideas-progress">
@@ -499,11 +499,11 @@ const LibraryUI = (() => {
         el.innerHTML = `
             <div class="library-aiideas-controls">
                 <div class="library-aiideas-control-row">
-                    <label>Runs <input type="number" id="library-aiideas-runs" min="1" max="20" value="${escAttr(aiVideoIdeasRuns)}"></label>
-                    <label>Ideas/run <input type="number" id="library-aiideas-per-run" min="1" max="5" value="${escAttr(aiVideoIdeasPerRun)}"></label>
+                    <label>Runs <input type="number" id="library-aiideas-runs" min="1" max="200" value="${escAttr(aiVideoIdeasRuns)}"></label>
+                    <span class="library-aiideas-hint" style="margin:0;">× 3 ideas each</span>
                     <button id="library-aiideas-generate" ${aiVideoIdeasBusy ? 'disabled' : ''}>${aiVideoIdeasBusy ? 'Generating...' : `Generate ${total}`}</button>
                 </div>
-                <div class="library-aiideas-hint">Default is 3 per run. Kimi validates fewer ideas more deeply, then server-side embeddings delete near-duplicates at a high similarity threshold.</div>
+                <div class="library-aiideas-hint">Each run generates 3 ideas IN SERIES — read context → Kimi → parse → save — before the next run starts (so later runs avoid earlier ones). Raise Runs for more; they go 3 at a time.</div>
                 ${statusHtml}
             </div>
             <div class="library-aiideas-list">${cardsHtml}</div>
@@ -511,16 +511,15 @@ const LibraryUI = (() => {
         updateAiVideoIdeasGenerateButtons();
 
         const runsInput = el.querySelector('#library-aiideas-runs');
-        const perRunInput = el.querySelector('#library-aiideas-per-run');
+        const perRunInput = null;
         if (runsInput) runsInput.addEventListener('change', () => {
-            aiVideoIdeasRuns = clampAiIdeasNumber(runsInput.value, 1, 1, 20);
+            aiVideoIdeasRuns = clampAiIdeasNumber(runsInput.value, 1, 1, 200);
             localStorage.setItem('library-aiideas-runs', String(aiVideoIdeasRuns));
             renderAiVideoIdeas();
             updateAiVideoIdeasGenerateButtons();
         });
         if (perRunInput) perRunInput.addEventListener('change', () => {
-            aiVideoIdeasPerRun = clampAiIdeasNumber(perRunInput.value, 3, 1, 5);
-            localStorage.setItem('library-aiideas-per-run', String(aiVideoIdeasPerRun));
+            aiVideoIdeasPerRun = 3;
             renderAiVideoIdeas();
             updateAiVideoIdeasGenerateButtons();
         });
@@ -794,10 +793,10 @@ const LibraryUI = (() => {
     // A clean, obvious step-list modal (inline-styled so it never depends on CSS).
     // Each named step shows ○ pending → spinner active → ✓ done → ⚠ error, plus
     // the idea cards as they land. Replaces the old JSON-dump panel.
-    function aiIdeaStepsModal(count) {
+    function aiIdeaStepsModal(perRun, totalRuns) {
         const STEPS = [
             { id: 'context', label: 'Read your existing ideas & videos (so nothing repeats)' },
-            { id: 'kimi', label: `Ask Kimi K2.6 to generate ${count} idea${count === 1 ? '' : 's'}` },
+            { id: 'kimi', label: `Ask Kimi K2.6 to generate ${perRun} idea${perRun === 1 ? '' : 's'}` },
             { id: 'parse', label: 'Parse the ideas' },
             { id: 'save', label: 'Save the ideas' }
         ];
@@ -808,6 +807,7 @@ const LibraryUI = (() => {
             <div style="padding:15px 20px;border-bottom:1px solid #eef1f4;display:flex;align-items:center;gap:10px;">
                 <span data-aii="spin" style="display:inline-block;width:15px;height:15px;border:2px solid #d4dde6;border-top-color:#2f80d8;border-radius:50%;animation:aiispin .7s linear infinite;flex:0 0 auto;"></span>
                 <b data-aii="head" style="font-size:15px;color:#16263a;">Generating video ideas…</b>
+                ${totalRuns > 1 ? `<span data-aii="run" style="font-size:12px;font-weight:700;color:#2f80d8;background:#eaf2fb;border-radius:6px;padding:2px 8px;">Run 1/${totalRuns}</span>` : ''}
                 <span data-aii="elapsed" style="margin-left:auto;font-size:12px;color:#94a6b8;">0.0s</span>
             </div>
             <div style="padding:12px 20px 4px;">
@@ -841,6 +841,11 @@ const LibraryUI = (() => {
         };
         return {
             step: setRow,
+            // Start a new run (in a series): update the badge + reset the per-run steps.
+            setRun(n) {
+                const rb = q('[data-aii="run"]'); if (rb) rb.textContent = `Run ${n}/${totalRuns}`;
+                ['kimi', 'parse', 'save'].forEach(id => setRow(id, 'pending'));
+            },
             errorActive() { if (activeId) setRow(activeId, 'error'); },
             card(idea) {
                 const c = document.createElement('div');
@@ -876,14 +881,20 @@ const LibraryUI = (() => {
         const _cont = document.getElementById('library-aiideas-container');
         if (_cont) _cont.style.display = '';
         aiVideoIdeasLoaded = true;
-        const count = Math.max(1, aiVideoIdeasRuns * aiVideoIdeasPerRun);
-        const ui = aiIdeaStepsModal(count);                 // clean step-list modal
+        // Hardcoded 3 ideas PER run — small enough to always fit Kimi's output and
+        // parse cleanly. "Runs" = how many batches of 3 to do IN SERIES: each run
+        // reads context → asks Kimi → parses → saves BEFORE the next run starts, so
+        // later runs also avoid the ideas the earlier runs just created.
+        const PER_RUN = 3;
+        const runs = Math.max(1, aiVideoIdeasRuns | 0);
+        const ui = aiIdeaStepsModal(PER_RUN, runs);
         try { updateAiVideoIdeasGenerateButtons(); renderAiVideoIdeas(); } catch (_) {}
         // Every network call is wrapped with a hard timeout, so the flow can NEVER
         // hang — a stuck step fails fast and shows ⚠ on that exact step.
         const fetchT = (url, opts, ms) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { ...(opts || {}), signal: c.signal }).finally(() => clearTimeout(t)); };
+        const allCreated = [];
         try {
-            // 1) CONTEXT — best-effort, tight timeout so it can never stall.
+            // CONTEXT (once) — best-effort, tight timeout so it can never stall.
             ui.step('context', 'active');
             let libTitles = [];
             try {
@@ -893,43 +904,52 @@ const LibraryUI = (() => {
                 ]);
                 libTitles = [...(Array.isArray(ideasData) ? ideasData : []), ...(Array.isArray(videosData) ? videosData : [])].map(x => x.name || x.title).filter(Boolean);
             } catch (_) { /* proceed with just the loaded AI ideas */ }
-            const existingTitles = [...aiVideoIdeas.map(x => x.title || x.name), ...libTitles].filter(Boolean);
-            ui.step('context', 'done', `${existingTitles.length} to avoid`);
+            // This GROWS each run with the titles just created, so runs don't repeat.
+            const avoidTitles = [...aiVideoIdeas.map(x => x.title || x.name), ...libTitles].filter(Boolean);
+            ui.step('context', 'done', `${avoidTitles.length} to avoid`);
 
-            // 2) ASK KIMI K2.6 — the same endpoint the hooks use. 90s cap.
-            ui.step('kimi', 'active');
-            const messages = aiVideoIdeaMessages(count, existingTitles);
-            let r;
-            try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.5, max_tokens: 24000 }) }, 300000); }
-            catch (err) { throw new Error(err && err.name === 'AbortError' ? 'Kimi took longer than 5 minutes — try again.' : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
-            if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
-            const data = await r.json();
-            const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-            ui.step('kimi', 'done', 'replied');
+            for (let run = 1; run <= runs; run++) {
+                if (runs > 1) ui.setRun(run);
 
-            // 3) PARSE.
-            ui.step('parse', 'active');
-            const parsed = aiVideoExtractJson(content);
-            const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
-            if (!rawIdeas.length) throw new Error('Kimi replied but no ideas could be parsed. It said: ' + (content || '(empty)').slice(0, 160));
-            const ideas = rawIdeas.slice(0, count).map(aiVideoNormalizeIdea).filter(i => i.title);
-            ui.step('parse', 'done', `${ideas.length} idea${ideas.length === 1 ? '' : 's'}`);
+                // ASK KIMI K2.6 for 3 — the same endpoint the hooks use. 5-min cap.
+                ui.step('kimi', 'active');
+                const messages = aiVideoIdeaMessages(PER_RUN, avoidTitles);
+                let r;
+                try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: 0.6, max_tokens: 16000 }) }, 300000); }
+                catch (err) { throw new Error(err && err.name === 'AbortError' ? `Kimi took longer than 5 minutes on run ${run} — try again.` : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
+                if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
+                const data = await r.json();
+                const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+                ui.step('kimi', 'done', 'replied');
 
-            // 4) SAVE + show each card as it lands.
-            ui.step('save', 'active');
-            const created = [];
-            for (const idea of ideas) {
-                ui.card(idea);
-                try {
-                    const saved = await fetchT('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }, 20000).then(res => res.ok ? res.json() : null);
-                    created.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
-                } catch (e) { created.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
+                // PARSE.
+                ui.step('parse', 'active');
+                const parsed = aiVideoExtractJson(content);
+                const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
+                if (!rawIdeas.length) throw new Error(`Run ${run}: Kimi replied but no ideas could be parsed. It said: ` + (content || '(empty)').slice(0, 160));
+                const ideas = rawIdeas.slice(0, PER_RUN).map(aiVideoNormalizeIdea).filter(i => i.title);
+                ui.step('parse', 'done', `${ideas.length} idea${ideas.length === 1 ? '' : 's'}`);
+
+                // SAVE this batch BEFORE the next run — show each card as it lands.
+                ui.step('save', 'active');
+                let savedN = 0;
+                for (const idea of ideas) {
+                    ui.card(idea);
+                    try {
+                        const saved = await fetchT('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }, 20000).then(res => res.ok ? res.json() : null);
+                        allCreated.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
+                    } catch (e) { allCreated.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
+                    avoidTitles.push(idea.title);   // later runs avoid this one
+                    savedN++;
+                }
+                ui.step('save', 'done', `saved ${savedN}`);
+                // Merge into the live list as we go, so the library fills up run-by-run.
+                const existingIds = new Set(aiVideoIdeas.map(i => i.id));
+                aiVideoIdeas = [...allCreated.filter(i => !existingIds.has(i.id)), ...aiVideoIdeas.filter(i => !allCreated.some(c => c.id === i.id))];
+                renderAiVideoIdeas();
             }
-            ui.step('save', 'done', `saved ${created.length}`);
-            const existingIds = new Set(aiVideoIdeas.map(i => i.id));
-            aiVideoIdeas = [...created.filter(i => !existingIds.has(i.id)), ...aiVideoIdeas];
             aiVideoIdeasLoaded = true;
-            aiVideoIdeasStatus = `Created ${created.length} idea${created.length === 1 ? '' : 's'}.`;
+            aiVideoIdeasStatus = `Created ${allCreated.length} idea${allCreated.length === 1 ? '' : 's'}${runs > 1 ? ` across ${runs} runs` : ''}.`;
             ui.finish(true, aiVideoIdeasStatus);
             renderAiVideoIdeas();
         } catch (e) {
