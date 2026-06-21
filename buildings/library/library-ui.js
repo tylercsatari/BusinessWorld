@@ -690,7 +690,7 @@ const LibraryUI = (() => {
     // sent to /api/kimi/chat — the same simple, reliable endpoint the workshop
     // hooks use — so generation works without the flaky background-job route.
     function aiVideoIdeaMessages(count, existingTitles) {
-        const avoid = (existingTitles || []).slice(0, 120).join(' | ');
+        const avoid = (existingTitles || []).slice(0, 250).join('\n');
         const system = [
             'You are Kimi K2.6 inside Business World, an elite short-form video idea generator for a maker / engineering / Da Vinci-stack YouTube creator (real builds: suits, machines, props, spectacle).',
             'Generate only ideas that could plausibly become 100M-view videos if executed well. Be specific and buildable, never generic.',
@@ -727,10 +727,15 @@ const LibraryUI = (() => {
             '',
             'CRITICAL OUTPUT RULE: respond with ONLY the JSON object and nothing else. Do NOT think out loud, do NOT restate the task, do NOT write any text before or after the JSON. Your very first character MUST be { and your very last character MUST be }. Keep every "note" field to a short phrase so the JSON stays compact and complete.'
         ].join('\n');
+        // A palette of distinct domains — pick a fresh spread each batch so 3 ideas
+        // never cluster in the same lane (kept as a string so identical prompts
+        // don't make identical batches; the caller varies it per run).
+        const DOMAINS = ['wearable tech / exo-suit', 'giant-scale build', 'dangerous physics / extreme forces', 'optical illusion / perception trick', 'robotics / automation', 'everyday-object hack', 'survival / endurance', 'art & aesthetics / impossible material', 'speed / vehicle', 'biology / chemistry spectacle', 'sound / music machine', 'water / fluid / ice', 'fire / heat / energy', 'light / laser / projection', 'magnetism / levitation', 'food / kitchen engineering'];
         const user = [
             `Generate ${count} brand-new short-form video idea${count === 1 ? '' : 's'}, each a "monster hook".`,
-            avoid ? `These already exist — treat them as the reference distribution D; do NOT repeat or lightly reskin them, and make each new idea sit FAR from them while staying coherent:\n${avoid}` : '',
-            'Fill every object and every mechanism sub-score honestly (don\'t inflate). overall is your 1-10 verdict.',
+            avoid ? `ALREADY DONE in Business World — these concepts (title — hook) are the reference distribution D. Study them carefully. Do NOT repeat, reskin, or make anything CONCEPTUALLY similar (same object, same mechanism, same payoff). Every new idea must sit FAR from ALL of these while staying coherent:\n${avoid}` : '',
+            `DIVERSITY IS THE TOP PRIORITY. The ${count} ideas in this batch must each be in a COMPLETELY different domain, use a different core object, and a different mechanism — no two should share the same subject or trick. Deliberately spread them across very different categories such as: ${DOMAINS.join('; ')}. If an idea feels even loosely similar to one above or to each other, throw it out and pick something wildly different.`,
+            'Fill every object and every mechanism sub-score honestly (don\'t inflate). overall is your 1-10 verdict. In "differentiation", state exactly which existing concept it could be confused with and why it is NOT that.',
             'Output ONLY the JSON object — start with { immediately, no preamble.'
         ].filter(Boolean).join('\n\n');
         return [{ role: 'system', content: system }, { role: 'user', content: user }];
@@ -897,19 +902,35 @@ const LibraryUI = (() => {
         const fetchT = (url, opts, ms) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { ...(opts || {}), signal: c.signal }).finally(() => clearTimeout(t)); };
         const allCreated = [];
         try {
-            // CONTEXT (once) — best-effort, tight timeout so it can never stall.
+            // CONTEXT (once) — SEARCH through Business World: ideas, videos, AND every
+            // past AI idea. We capture the CONCEPT (title — hook), not just the title,
+            // so the model avoids similar IDEAS, not just duplicate names.
             ui.step('context', 'active');
-            let libTitles = [];
+            const conceptOf = (x) => {
+                if (!x) return '';
+                const t = (x.title || x.name || '').trim();
+                const h = (x.hook || x.promise || x.context || x.opening || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+                if (!t) return '';
+                return h ? `${t} — ${h}` : t;
+            };
+            let bwConcepts = [];
             try {
-                const [ideasData, videosData] = await Promise.all([
-                    fetchT('/api/data/ideas', {}, 5000).then(r => r.ok ? r.json() : []).catch(() => []),
-                    fetchT('/api/data/videos', {}, 5000).then(r => r.ok ? r.json() : []).catch(() => [])
+                const [ideasData, videosData, aiideasData] = await Promise.all([
+                    fetchT('/api/data/ideas', {}, 8000).then(r => r.ok ? r.json() : []).catch(() => []),
+                    fetchT('/api/data/videos', {}, 8000).then(r => r.ok ? r.json() : []).catch(() => []),
+                    fetchT('/api/data/aiideas', {}, 8000).then(r => r.ok ? r.json() : []).catch(() => [])
                 ]);
-                libTitles = [...(Array.isArray(ideasData) ? ideasData : []), ...(Array.isArray(videosData) ? videosData : [])].map(x => x.name || x.title).filter(Boolean);
+                // AI ideas first — those are what tend to repeat — then videos, then ideas.
+                bwConcepts = [
+                    ...(Array.isArray(aiideasData) ? aiideasData : []),
+                    ...(Array.isArray(videosData) ? videosData : []),
+                    ...(Array.isArray(ideasData) ? ideasData : [])
+                ].map(conceptOf).filter(Boolean);
             } catch (_) { /* proceed with just the loaded AI ideas */ }
-            // This GROWS each run with the titles just created, so runs don't repeat.
-            const avoidTitles = [...aiVideoIdeas.map(x => x.title || x.name), ...libTitles].filter(Boolean);
-            ui.step('context', 'done', `${avoidTitles.length} to avoid`);
+            // Include anything loaded in memory too, dedupe, keep it bounded.
+            const memConcepts = aiVideoIdeas.map(conceptOf).filter(Boolean);
+            const avoidTitles = [...new Set([...memConcepts, ...bwConcepts])];   // grows each run with new CONCEPTS
+            ui.step('context', 'done', `searched ${avoidTitles.length} concepts to avoid`);
 
             let failedRuns = 0;
             for (let run = 1; run <= runs; run++) {
@@ -927,7 +948,7 @@ const LibraryUI = (() => {
                         const messages = aiVideoIdeaMessages(PER_RUN, avoidTitles);
                         if (attempt > 1) messages.push({ role: 'user', content: 'Your previous reply was not valid JSON. Reply again with ONLY the JSON object {"ideas":[...]} — no thinking, no preamble, first character {. Keep notes very short.' });
                         let r;
-                        try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: attempt > 1 ? 0.3 : 0.6, max_tokens: 32000 }) }, 420000); }
+                        try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: attempt > 1 ? 0.3 : 0.85, max_tokens: 32000 }) }, 420000); }
                         catch (err) { throw new Error(err && err.name === 'AbortError' ? `Kimi took longer than 7 minutes on run ${run}.` : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
                         if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
                         const data = await r.json();
@@ -951,7 +972,7 @@ const LibraryUI = (() => {
                             const saved = await fetchT('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }, 20000).then(res => res.ok ? res.json() : null);
                             allCreated.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
                         } catch (e) { allCreated.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
-                        avoidTitles.push(idea.title);   // later runs avoid this one
+                        avoidTitles.unshift(conceptOf(idea));   // later runs avoid this CONCEPT (front = most recent)
                         savedN++;
                     }
                     ui.step('save', 'done', `saved ${savedN}`);
