@@ -160,13 +160,14 @@ const JarvisRetention = (function () {
     const fv = x => x == null ? '—' : x >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : x >= 1e3 ? (x / 1e3).toFixed(0) + 'K' : '' + Math.round(x);
 
     const COLS = [
-        { k: 'title', l: 'Video', w: '32%', align: 'left' },
-        { k: 'published', l: 'Posted', w: '11%' },
-        { k: 'keep_rate', l: 'Keep %', w: '10%' },
-        { k: 'swiped', l: 'Swiped %', w: '10%' },
-        { k: 'avg_retention', l: 'Retention %', w: '12%' },
+        { k: 'title', l: 'Video', w: '28%', align: 'left' },
+        { k: 'published', l: 'Posted', w: '10%' },
+        { k: 'keep_rate', l: 'Keep %', w: '9%' },
+        { k: 'swiped', l: 'Swiped %', w: '9%' },
+        { k: 'avg_retention', l: 'Retention %', w: '11%' },
+        { k: 'ret5', l: '5s ret %', w: '11%' },
         { k: 'views', l: 'Views', w: '12%' },
-        { k: 'duration_s', l: 'Dur s', w: '8%' },
+        { k: 'duration_s', l: 'Dur s', w: '7%' },
     ];
 
     function curveSvg(curve) {
@@ -214,17 +215,19 @@ const JarvisRetention = (function () {
                 <td style="text-align:right;padding:7px 8px;color:${C.cyan};font-size:12px;font-weight:700">${r.keep_rate == null ? '—' : fmt(r.keep_rate, 1)}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.orange};font-size:12px">${r.swiped == null ? '—' : fmt(r.swiped, 1)}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.green};font-size:12px">${fmt(r.avg_retention, 1)}</td>
+                <td style="text-align:right;padding:7px 8px;color:${C.purple};font-size:12px">${r.ret5 == null ? '—' : fmt(r.ret5, 1)}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.text};font-size:12px;font-weight:700">${fv(r.views)}</td>
                 <td style="text-align:right;padding:7px 8px;color:${C.dim};font-size:11px">${fmt(r.duration_s, 0)}</td></tr>`;
-            const exp = open ? `<tr><td colspan="7" style="padding:10px 14px;background:${C.card2}">
+            const exp = open ? `<tr><td colspan="8" style="padding:10px 14px;background:${C.card2}">
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:${C.dim}">
                     <a href="${esc(r.url)}" target="_blank" style="background:${C.accent}22;border:1px solid ${C.accent};color:${C.accent};border-radius:6px;padding:4px 10px;font-weight:700;text-decoration:none">▶ Open on YouTube ↗</a>
                     <span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px">id: ${esc(r.id)}</span>
                     <span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px;color:${C.cyan}">kept ${fmt(r.keep_rate, 1)}% · swiped ${fmt(r.swiped, 1)}%</span>
                     ${r.nonsub_keep != null ? `<span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px">non-sub keep ${fmt(r.nonsub_keep, 1)}%</span>` : ''}
+                    <span style="background:${C.card};border:1px solid ${C.purple};border-radius:6px;padding:4px 10px;color:${C.purple}">5s ret: ${r.ret5 == null ? '—' : fmt(r.ret5, 1) + '%'} absolute · ${r.ret5_surv == null ? '—' : fmt(r.ret5_surv, 1) + '%'} survival</span>
                     <span style="background:${C.card};border:1px solid ${C.border};border-radius:6px;padding:4px 10px">👍 ${fv(r.likes)} · 💬 ${fv(r.comments)} · ↗ ${fv(r.shares)}</span>
                 </div>${r.curve ? curveSvg(r.curve) : ''}
-                <div style="font-size:10px;color:${C.mute};margin-top:6px">Verify in YouTube Studio: Keep % = "Viewed" in Viewed-vs-Swiped-Away, retention = "average percentage viewed". Keep + Swiped = 100. ${r.scraped_at ? 'Scraped ' + esc((r.scraped_at || '').slice(0, 10)) : ''}</div></td></tr>` : '';
+                <div style="font-size:10px;color:${C.mute};margin-top:6px">Verify in YouTube Studio: Keep % = "Viewed" in Viewed-vs-Swiped-Away, retention = "average percentage viewed", <b style="color:${C.purple}">5s ret</b> = the audience-retention curve value at the 5-second mark (absolute can exceed 100% on loops; survival = relative to the opening). Keep + Swiped = 100. ${r.scraped_at ? 'Scraped ' + esc((r.scraped_at || '').slice(0, 10)) : ''}</div></td></tr>` : '';
             return tr + exp;
         }).join('');
         const kr = DATA.videos.map(r => r.keep_rate).filter(x => x != null).sort((a, b) => a - b);

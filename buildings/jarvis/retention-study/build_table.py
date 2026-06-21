@@ -69,6 +69,15 @@ def main():
             yr = datetime.date.fromisoformat(pub).year if pub else None
         except Exception:
             yr = None
+        # 5-second retention — two readings for verification against Studio:
+        #   ret5      = absolute audience retention at the 5s mark (the raw point on the curve)
+        #   ret5_surv = survival from the opening (5s ÷ first-3-points avg) — removes replay/loop inflation
+        ret5 = ret5_surv = None
+        if curve and dur and dur > 0:
+            at5 = float(np.interp(min(1.0, 5.0 / dur), GRID, curve))
+            base = (curve[0] + curve[1] + curve[2]) / 3.0
+            ret5 = round(at5 * 100, 1)
+            ret5_surv = round(at5 / base * 100, 1) if base else None
         rows.append({
             'id': d, 'url': a.get('url') or f'https://www.youtube.com/watch?v={d}',
             'title': meta.get('title', d),
@@ -77,6 +86,7 @@ def main():
             'swiped': round(float(swiped), 1),                    # % swiped away = 100 - keep_rate
             'sub_keep': sr.get('subscriberStayed'), 'nonsub_keep': sr.get('nonSubscriberStayed'),
             'avg_retention': round(float(avg_ret), 2) if isinstance(avg_ret, (int, float)) else None,
+            'ret5': ret5, 'ret5_surv': ret5_surv,
             'views': int(views),
             'duration_s': round(float(dur), 1) if dur else None,
             'likes': an.get('likes'), 'comments': an.get('comments'), 'shares': an.get('shares'),
