@@ -34,7 +34,7 @@ def main():
         t = tby.get(v['id'], {})
         keep.append(t.get('keep_rate')); ret.append(t.get('avg_retention'))
         cv, d = t.get('curve'), t.get('duration_s')
-        ret5.append(float(np.interp(min(1.0, 5.0 / d), grid, cv) * 100) if cv and d else None)
+        ret5.append(float(np.interp(min(1.0, 5.0 / d), grid, cv) / (sum(cv[:3]) / 3) * 100) if cv and d else None)  # 5s survival from opening
     targets = {'keep_rate': keep, 'ret_5s': ret5, 'retention': ret}
     TGT_LABEL = {'keep_rate': 'Keep rate (swipe)', 'ret_5s': '5-sec retention', 'retention': 'Avg retention'}
 

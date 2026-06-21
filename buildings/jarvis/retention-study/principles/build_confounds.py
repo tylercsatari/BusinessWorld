@@ -61,7 +61,7 @@ def main():
         t = tby.get(v['id'], {}); an = AN[i].get('analytics', {})
         keep.append(t.get('keep_rate')); ret.append(t.get('avg_retention'))
         cv, d = t.get('curve'), t.get('duration_s')
-        ret5.append(float(np.interp(min(1.0, 5.0 / d), grid, cv) * 100) if cv and d else None)
+        ret5.append(float(np.interp(min(1.0, 5.0 / d), grid, cv) / (sum(cv[:3]) / 3) * 100) if cv and d else None)  # 5s survival from opening
         nonsub.append(an.get('nonSubscriberAvgPercent'))
         dv = an.get('dailyViews') or []
         day1.append(dv[0].get('views') if dv and isinstance(dv[0], dict) else None)

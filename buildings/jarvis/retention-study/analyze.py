@@ -80,7 +80,8 @@ def main():
     rec = np.array([(TODAY - datetime.date.fromisoformat(v['published'])).days / 365.0 if v.get('published') else np.nan for v in V])
     rec[~np.isfinite(rec)] = np.nanmedian(rec[np.isfinite(rec)])
     ldur = np.log(dur)
-    ret5 = np.array([float(np.interp(min(1.0, 5.0 / dur[i]), GRID, curves[i]) * 100) for i in range(n)])  # retention at the 5s mark
+    _at5 = np.array([float(np.interp(min(1.0, 5.0 / dur[i]), GRID, curves[i])) for i in range(n)])
+    ret5 = _at5 / curves[:, :3].mean(1) * 100   # 5s SURVIVAL from the opening — removes replay/loop inflation (the raw curve starts ~160%)
 
     # ── Q1: keep + retention → views ──
     content = np.column_stack([keep, ret])
@@ -303,7 +304,7 @@ def main():
                 'lv': round(float(lv[i]), 3), 'url': V[i].get('url'),
                 'hook': round(float(hook[i]), 1), 'tail': round(float(tail[i]), 1),
                 'nonsub_keep': round(float(nonsub[i]), 1), 'pc1': round(float(pc1[i]), 3),
-                'share_rate': round(float(share_rate[i]), 2)} for i in range(n)]
+                'ret5': round(float(ret5[i]), 1), 'share_rate': round(float(share_rate[i]), 2)} for i in range(n)]
 
     out = {'meta': {'n': n, 'target': 'log10(views)', 'metric': 'keep_rate = stayedToWatch (verified accurate)',
                     'caveat': 'observational + winners-only (all 60K-285M views); associations not proven causal; account size/impressions not in data'},
