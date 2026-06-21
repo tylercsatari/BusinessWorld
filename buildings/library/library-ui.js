@@ -53,6 +53,7 @@ const LibraryUI = (() => {
     let aiVideoIdeasTimer = null;    // interval ticking the elapsed timer
     let aiVideoIdeasRuns = parseInt(localStorage.getItem('library-aiideas-runs') || '1', 10) || 1;
     let aiVideoIdeasPerRun = parseInt(localStorage.getItem('library-aiideas-per-run') || '3', 10) || 3;
+    const aiVideoIdeasExpanded = new Set();   // which idea cards are expanded (collapsed by default)
 
     let ideaEditorTab = 'overview'; // 'overview' | 'logistics'
 
@@ -457,37 +458,41 @@ const LibraryUI = (() => {
             const riskHtml = Array.isArray(idea.risks) && idea.risks.length
                 ? `<div class="library-aiidea-risk">${idea.risks.slice(0, 3).map(r => `<span>${escHtml(r)}</span>`).join('')}</div>`
                 : '';
+            const expanded = aiVideoIdeasExpanded.has(idea.id);
             return `
-                <div class="library-aiidea-card" data-aiidea-id="${escAttr(idea.id)}">
-                    <div class="library-aiidea-head">
+                <div class="library-aiidea-card${expanded ? ' expanded' : ''}" data-aiidea-id="${escAttr(idea.id)}">
+                    <div class="library-aiidea-head" data-aiidea-toggle="${escAttr(idea.id)}">
+                        <span class="library-aiidea-caret">${expanded ? '▾' : '▸'}</span>
                         <div class="library-aiidea-title-wrap">
                             <h3>${escHtml(idea.title || idea.name || 'AI video idea')}</h3>
                             <p>${escHtml(idea.hook || idea.promise || '')}</p>
                         </div>
                         <div class="library-aiidea-overall">${Number.isFinite(overall) ? overall.toFixed(1) : '-'}<span>/10</span></div>
                     </div>
-                    <div class="library-aiidea-scores">
-                        ${aiIdeaScoreHtml('Novelty', scores.novelty)}
-                        ${aiIdeaScoreHtml('Cred', scores.credibility)}
-                        ${aiIdeaScoreHtml('Appeal', scores.broadAppeal ?? scores.broad_appeal)}
-                        ${aiIdeaScoreHtml('Motive', scores.motivation)}
-                        ${aiIdeaScoreHtml('RTG', scores.referenceToGratification ?? scores.reference_to_gratification)}
-                    </div>
-                    <div class="library-aiidea-grid">
-                        ${aiIdeaFieldHtml('P', idea.promise)}
-                        ${aiIdeaFieldHtml('V', idea.earlyVisual)}
-                        ${aiIdeaFieldHtml('O', idea.payoff)}
-                        ${aiIdeaFieldHtml('A', idea.actionProcess)}
-                        ${aiIdeaFieldHtml('G', idea.creatorGoal)}
-                    </div>
-                    ${idea.why100m ? `<div class="library-aiidea-why">${escHtml(idea.why100m)}</div>` : ''}
-                    ${idea.context ? `<div class="library-aiidea-context">${escHtml(idea.context)}</div>` : ''}
-                    ${aiIdeaMechanismNotesHtml(idea.mechanismNotes)}
-                    ${riskHtml}
-                    <div class="library-aiidea-meta">${escHtml(simText)}</div>
-                    <div class="library-aiidea-actions">
-                        <button class="library-aiidea-promote" data-aiidea-promote="${escAttr(idea.id)}">Move to Ideas</button>
-                        <button class="library-aiidea-delete" data-aiidea-delete="${escAttr(idea.id)}" title="Delete">&times;</button>
+                    <div class="library-aiidea-body">
+                        <div class="library-aiidea-scores">
+                            ${aiIdeaScoreHtml('Novelty', scores.novelty)}
+                            ${aiIdeaScoreHtml('Cred', scores.credibility)}
+                            ${aiIdeaScoreHtml('Appeal', scores.broadAppeal ?? scores.broad_appeal)}
+                            ${aiIdeaScoreHtml('Motive', scores.motivation)}
+                            ${aiIdeaScoreHtml('RTG', scores.referenceToGratification ?? scores.reference_to_gratification)}
+                        </div>
+                        <div class="library-aiidea-grid">
+                            ${aiIdeaFieldHtml('P', idea.promise)}
+                            ${aiIdeaFieldHtml('V', idea.earlyVisual)}
+                            ${aiIdeaFieldHtml('O', idea.payoff)}
+                            ${aiIdeaFieldHtml('A', idea.actionProcess)}
+                            ${aiIdeaFieldHtml('G', idea.creatorGoal)}
+                        </div>
+                        ${idea.why100m ? `<div class="library-aiidea-why">${escHtml(idea.why100m)}</div>` : ''}
+                        ${idea.context ? `<div class="library-aiidea-context">${escHtml(idea.context)}</div>` : ''}
+                        ${aiIdeaMechanismNotesHtml(idea.mechanismNotes)}
+                        ${riskHtml}
+                        <div class="library-aiidea-meta">${escHtml(simText)}</div>
+                        <div class="library-aiidea-actions">
+                            <button class="library-aiidea-promote" data-aiidea-promote="${escAttr(idea.id)}">Move to Ideas</button>
+                            <button class="library-aiidea-delete" data-aiidea-delete="${escAttr(idea.id)}" title="Delete">&times;</button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -506,6 +511,10 @@ const LibraryUI = (() => {
                 <div class="library-aiideas-hint">Each run generates 3 ideas IN SERIES — read context → Kimi → parse → save — before the next run starts (so later runs avoid earlier ones). Raise Runs for more; they go 3 at a time.</div>
                 ${statusHtml}
             </div>
+            ${aiVideoIdeasLoaded && aiVideoIdeas.length ? `<div class="library-aiideas-listhead">
+                <span class="library-aiideas-count">${aiVideoIdeas.length} idea${aiVideoIdeas.length === 1 ? '' : 's'}</span>
+                <button class="library-aiideas-expandall" id="library-aiideas-expandall">${aiVideoIdeas.every(i => aiVideoIdeasExpanded.has(i.id)) ? 'Collapse all' : 'Expand all'}</button>
+            </div>` : ''}
             <div class="library-aiideas-list">${cardsHtml}</div>
         `;
         updateAiVideoIdeasGenerateButtons();
@@ -530,6 +539,23 @@ const LibraryUI = (() => {
         });
         el.querySelectorAll('[data-aiidea-delete]').forEach(btn => {
             btn.addEventListener('click', () => deleteAiVideoIdea(btn.dataset.aiideaDelete));
+        });
+        // Collapse/expand a card — toggle the DOM directly (no re-render), persisting
+        // the open set so it survives later re-renders.
+        el.querySelectorAll('[data-aiidea-toggle]').forEach(head => head.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            const id = head.dataset.aiideaToggle;
+            const card = head.closest('.library-aiidea-card');
+            const caret = head.querySelector('.library-aiidea-caret');
+            if (aiVideoIdeasExpanded.has(id)) { aiVideoIdeasExpanded.delete(id); card.classList.remove('expanded'); if (caret) caret.textContent = '▸'; }
+            else { aiVideoIdeasExpanded.add(id); card.classList.add('expanded'); if (caret) caret.textContent = '▾'; }
+        }));
+        const expandAllBtn = el.querySelector('#library-aiideas-expandall');
+        if (expandAllBtn) expandAllBtn.addEventListener('click', () => {
+            const allOpen = aiVideoIdeas.every(i => aiVideoIdeasExpanded.has(i.id));
+            if (allOpen) aiVideoIdeasExpanded.clear();
+            else aiVideoIdeas.forEach(i => aiVideoIdeasExpanded.add(i.id));
+            renderAiVideoIdeas();
         });
     }
 
