@@ -309,10 +309,20 @@ const JarvisRetention = (function () {
 
     // Multi-indicator predictor (the best interpretable model from the ③ Drivers search):
     // expected views WITH a range — it can't be deterministic; the model sees only ~1/3 of what drives views.
-    const SLCOL = { keep: C.cyan, retention: C.green, log_dur: C.yellow, hook: C.accent, tail: C.purple, nonsub_keep: C.cyan };
-    function pval(key) { st.pvals = st.pvals || {}; const sl = S.predictor.v_best.sliders.find(s => s.key === key); return st.pvals[key] != null ? st.pvals[key] : (sl ? sl.default : 0); }
+    const SLCOL = { keep: C.cyan, retention: C.green, ret5: C.purple, log_dur: C.yellow, hook: C.accent, tail: C.purple, nonsub_keep: C.cyan };
+    // the active model = whichever inputs are checked (st.predFeats), pulled from the precomputed subsets
+    function curKey() { const order = (S.predictor.order || ['keep', 'retention', 'ret5', 'log_dur']); return order.filter(f => (st.predFeats || ['keep', 'retention', 'log_dur']).includes(f)).join('+'); }
+    function curModel() {
+        const P = S.predictor; if (!P.subsets) return P.v_best;          // fallback for older data
+        const k = curKey(), m = k ? P.subsets[k] : null; if (!m) return null;
+        const sel = m.features, sliders = sel.map(f => Object.assign({ key: f }, P.feat_meta[f])), feat_median = {};
+        sel.forEach(f => feat_median[f] = P.feat_meta[f].default);
+        return { features: sel, coef: m.coef, intercept: m.intercept, resid_sd_log10: m.resid_sd_log10, cv_r2: m.cv_r2, sliders, feat_median, labels: sel.map(f => P.feat_meta[f].label) };
+    }
+    function pval(key) { st.pvals = st.pvals || {}; const m = curModel(), sl = m && m.sliders.find(s => s.key === key); return st.pvals[key] != null ? st.pvals[key] : (sl ? sl.default : 0); }
     function predictBest(overrides) {
-        const vb = S.predictor.v_best, P10 = e => Math.pow(10, e); let plog = vb.intercept;
+        const vb = curModel(), P10 = e => Math.pow(10, e); if (!vb) return { log: 0, mid: 0, lo50: 0, hi50: 0, lo80: 0, hi80: 0 };
+        let plog = vb.intercept;
         vb.features.forEach((f, i) => { const sl = vb.sliders.find(s => s.key === f);
             let x = overrides && overrides[f] != null ? overrides[f] : (sl ? pval(f) : vb.feat_median[f]); if (sl && sl.transform === 'ln') x = Math.log(Math.max(x, 1));
             plog += vb.coef[i] * x; });
@@ -320,7 +330,7 @@ const JarvisRetention = (function () {
         return { log: plog, mid: P10(plog), lo50: P10(plog - 0.6745 * sd), hi50: P10(plog + 0.6745 * sd), lo80: P10(plog - 1.2816 * sd), hi80: P10(plog + 1.2816 * sd) };
     }
     function predictOut() {
-        const r = predictBest(), vb = S.predictor.v_best;
+        const vb = curModel(); if (!vb) return ''; const r = predictBest();
         const inputs = vb.sliders.map(s => `<b style="color:${SLCOL[s.key] || C.cyan}">${pval(s.key)}${s.unit}</b> ${esc(s.label.toLowerCase())}`).join(' · ');
         const bar = `<div style="position:relative;height:54px;margin:6px 0 2px">
             <div style="position:absolute;top:22px;left:0;right:0;height:10px;background:${C.card};border-radius:5px;border:1px solid ${C.border}"></div>
@@ -339,7 +349,7 @@ const JarvisRetention = (function () {
     function updatePredict() { const o = root.querySelector('#predict-out'); if (o) o.innerHTML = predictOut();
         const g = root.querySelector('#predict-graph'); if (g) g.innerHTML = leverGraph();
         const pg = root.querySelector('#predict-pairs'); if (pg) pg.innerHTML = pairSurfaces();
-        S.predictor.v_best.sliders.forEach(s => { const el = root.querySelector('#pf-' + s.key + '-val'); if (el) el.textContent = pval(s.key) + s.unit; }); }
+        (curModel() || { sliders: [] }).sliders.forEach(s => { const el = root.querySelector('#pf-' + s.key + '-val'); if (el) el.textContent = pval(s.key) + s.unit; }); }
     const metricVal = r => (st.predScale === 'log' ? r.log : r.mid);
     const metricLabel = v => (st.predScale === 'log' ? fmtv(v, 2) : fv(v));
     const valsFor = (sl, n) => Array.from({ length: n }, (_, i) => sl.min + (sl.max - sl.min) * i / (n - 1 || 1));
@@ -354,7 +364,7 @@ const JarvisRetention = (function () {
         return den ? num / den : null;
     }
     function leverGraph() {
-        const vb = S.predictor.v_best, scale = st.predScale || 'actual', w = 520, h = 230, pl = 46, pr = 16, pt = 14, pb = 34;
+        const vb = curModel(); if (!vb) return ''; const scale = st.predScale || 'actual', w = 520, h = 230, pl = 46, pr = 16, pt = 14, pb = 34;
         const series = vb.sliders.map(sl => {
             const vals = valsFor(sl, 25);
             return { sl, pts: vals.map(v => ({ x: v, r: predictBest({ [sl.key]: v }) })) };
@@ -397,29 +407,50 @@ const JarvisRetention = (function () {
             <div style="font-size:9px;color:${C.mute};margin-top:5px">${esc(a.label)} ↑ · ${esc(b.label)} → · third lever held at current slider</div></div>`;
     }
     function pairSurfaces() {
-        const sl = S.predictor.v_best.sliders, pairs = [];
+        const m = curModel(); if (!m || m.sliders.length < 2) return `<div style="font-size:11px;color:${C.mute}">Check at least two inputs to see combined surfaces.</div>`;
+        const sl = m.sliders, pairs = [];
         for (let i = 0; i < sl.length; i++) for (let j = i + 1; j < sl.length; j++) pairs.push(pairSurface(sl[i], sl[j]));
         return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px">${pairs.join('')}</div>`;
     }
+    function predComparison() {
+        const P = S.predictor; if (!P.subsets) return '';
+        const P10 = e => Math.pow(10, e), ck = curKey();
+        const rows = Object.entries(P.subsets).map(([k, m]) => ({ k, m, rng: P10(1.2816 * m.resid_sd_log10) })).sort((a, b) => b.m.cv_r2 - a.m.cv_r2);
+        const lab = f => P.feat_meta[f].label;
+        return cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">Every model compared — accuracy vs range</div>
+            <div style="font-size:11px;color:${C.mute};margin-bottom:8px">CV R² = out-of-sample accuracy (higher = better). Range = ×/÷ band on the prediction (lower = tighter). Click a row to load that model.</div>
+            <div style="display:flex;gap:8px;font-size:9px;color:${C.mute};text-transform:uppercase;padding:0 6px 3px"><span style="flex:1">inputs → log views</span><span style="width:80px;text-align:right">CV R²</span><span style="width:80px;text-align:right">range</span></div>
+            ${rows.map(({ k, m, rng }) => { const on = k === ck; return `<div data-predset="${k}" style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;border-radius:5px;background:${on ? C.card2 : 'transparent'};border:1px solid ${on ? C.accent : 'transparent'}">
+                <span style="flex:1;font-size:11px;color:${on ? C.text : C.dim}">${m.features.map(lab).join(' + ')}</span>
+                <span style="width:80px;text-align:right;font-size:11px;color:${C.accent};font-weight:700">${fmtv(m.cv_r2, 2)}</span>
+                <span style="width:80px;text-align:right;font-size:11px;color:${C.orange}">×/÷ ${fmtv(rng, 1)}</span></div>`; }).join('')}`);
+    }
     function renderPredict() {
-        const P = S.predictor, vb = P.v_best, sel = S.selection;
-        const base = P.v2_keep_ret, P10 = e => Math.pow(10, e), baseMult = P10(1.2816 * base.resid_sd_log10), bestMult = P10(1.2816 * vb.resid_sd_log10);
+        const P = S.predictor, P10 = e => Math.pow(10, e), order = P.order || ['keep', 'retention', 'ret5', 'log_dur'];
+        st.predFeats = st.predFeats || ['keep', 'retention', 'log_dur'];
+        const vb = curModel();
+        const chk = order.map(f => { const on = st.predFeats.includes(f), c = SLCOL[f] || C.cyan, fm = P.feat_meta[f];
+            return `<button data-predfeat="${f}" style="background:${on ? c + '22' : 'transparent'};border:1px solid ${on ? c : C.border};color:${on ? c : C.dim};border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">${on ? '☑' : '☐'} ${esc(fm.label)}</button>`; }).join('');
+        let h = h2c('⑤ Predict — expected views, your choice of levers', `Check the inputs to model log-views from; the fit, accuracy and range update live. ${S.meta.n} videos.`);
+        h += cardc(`<div style="font-size:11px;color:${C.mute};margin-bottom:6px">Model views from:</div><div style="display:flex;gap:6px;flex-wrap:wrap">${chk}</div>`);
+        if (!vb) { h += note('Select at least one input above.', C.orange); return h; }
+        const rngMult = P10(1.2816 * vb.resid_sd_log10);
         const sld = s => { const c = SLCOL[s.key] || C.cyan, val = pval(s.key); return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:${c};font-weight:700">${esc(s.label)}</span><span id="pf-${s.key}-val" style="color:${C.text};font-weight:800">${val}${s.unit}</span></div>
             <input type="range" data-pf="${s.key}" min="${Math.floor(s.min)}" max="${Math.ceil(s.max)}" value="${val}" step="1" style="width:100%;accent-color:${c}"/></div>`; };
-        let h = h2c('⑤ Predict — expected views from your indicators', `Slide the levers the ③ Drivers search found worth keeping (${vb.labels.join(' + ').toLowerCase()}). Cross-validated R² ${fmtv(vb.cv_r2, 2)} on your ${S.meta.n} videos.`);
-        h += cardc(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${statc('model R²', fmtv(vb.cv_r2, 2), C.accent)}${statc('range now', '×/÷ ' + fmtv(bestMult, 1), C.green)}${statc('vs keep+ret only', '×/÷ ' + fmtv(baseMult, 1), C.mute)}</div>
+        h += cardc(`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${statc('inputs', vb.labels.join(' + '), C.accent)}${statc('model R² (CV)', fmtv(vb.cv_r2, 2), vb.cv_r2 > 0.25 ? C.green : C.cyan)}${statc('view range', '×/÷ ' + fmtv(rngMult, 1), C.orange)}</div>
             ${vb.sliders.map(sld).join('')}
             <div id="predict-out" style="margin-top:6px;padding-top:12px;border-top:1px solid ${C.border}">${predictOut()}</div>`);
+        h += predComparison();
         h += cardc(`<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                <div><div style="font-weight:700;color:${C.text}">Independent lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Each line sweeps one predictor while the others stay fixed. Actual views uses a true linear y-axis; log10 compresses the same model so the lower range is readable.</div></div>
+                <div><div style="font-weight:700;color:${C.text}">Independent lever response curves</div><div style="font-size:11px;color:${C.mute};margin-top:2px">Each line sweeps one input while the others stay fixed. Actual views uses a true linear y-axis; log10 compresses the same model so the lower range is readable.</div></div>
                 <div style="display:flex;gap:6px">
                     <button data-pred-scale="actual" style="background:${st.predScale === 'actual' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'actual' ? C.accent : C.border};color:${st.predScale === 'actual' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">actual views</button>
                     <button data-pred-scale="log" style="background:${st.predScale === 'log' ? C.accent + '22' : 'transparent'};border:1px solid ${st.predScale === 'log' ? C.accent : C.border};color:${st.predScale === 'log' ? C.accent : C.dim};border-radius:7px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">log10</button>
                 </div></div><div id="predict-graph">${leverGraph()}</div>`);
         h += cardc(`<div style="font-weight:700;color:${C.text};margin-bottom:4px">Combined lever surfaces</div>
-            <div style="font-size:11px;color:${C.mute};margin-bottom:9px">Every cell is a model instance: two levers swept together while the third stays at your current slider value. This is where the compounding becomes obvious on actual-view scale.</div>
+            <div style="font-size:11px;color:${C.mute};margin-bottom:9px">Every cell is a model instance: two inputs swept together while the others stay at your current slider value.</div>
             <div id="predict-pairs">${pairSurfaces()}</div>`);
-        h += note(`Adding <b>duration</b> tightened the band from ×/÷ ${fmtv(baseMult, 1)} (keep+retention only) to <b>×/÷ ${fmtv(bestMult, 1)}</b>. It's still a <b>range, not a number</b>: these levers pin down ~${Math.round(vb.cv_r2 * 100)}% of views — the other ~${Math.round((1 - vb.cv_r2) * 100)}% is the algorithm's impression push, topic, and timing, which no on-video metric can see. Center bar = best single guess; the 80% band = where it would realistically land.`, C.accent);
+        h += note(`<b>${esc(vb.labels.join(' + '))}</b> pins down ~${Math.round(vb.cv_r2 * 100)}% of views (CV R² ${fmtv(vb.cv_r2, 2)}), leaving a ×/÷ ${fmtv(rngMult, 1)} band — the rest is the algorithm's push, topic and timing, which no on-video metric sees. Try swapping <b>Retention %</b> for <b>5-sec retention</b> in the checkboxes and watch R² and the range change in the table above (5-sec retention is easier to influence but explains views less well). Center bar = best guess; 80% band = realistic landing.`, C.accent);
         return h;
     }
 
@@ -770,6 +801,8 @@ const JarvisRetention = (function () {
 
     function onClick(e) {
         const ps = e.target.closest('[data-pred-scale]'); if (ps) { st.predScale = ps.getAttribute('data-pred-scale'); render(); return; }
+        const pfeat = e.target.closest('[data-predfeat]'); if (pfeat) { const f = pfeat.getAttribute('data-predfeat'); st.predFeats = (st.predFeats || ['keep', 'retention', 'log_dur']); st.predFeats = st.predFeats.includes(f) ? st.predFeats.filter(x => x !== f) : st.predFeats.concat([f]); render(); return; }
+        const pset = e.target.closest('[data-predset]'); if (pset) { st.predFeats = pset.getAttribute('data-predset').split('+'); render(); return; }
         const ns = e.target.closest('[data-rs]'); if (ns) { st.sec = ns.getAttribute('data-rs'); render(); return; }
         const nr = e.target.closest('[data-novres]'); if (nr) { st.novRes = nr.getAttribute('data-novres'); render(); return; }
         const ct = e.target.closest('[data-cortgt]'); if (ct) { st.corTarget = ct.getAttribute('data-cortgt'); render(); return; }

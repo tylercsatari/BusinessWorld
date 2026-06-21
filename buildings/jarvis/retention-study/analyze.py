@@ -80,6 +80,7 @@ def main():
     rec = np.array([(TODAY - datetime.date.fromisoformat(v['published'])).days / 365.0 if v.get('published') else np.nan for v in V])
     rec[~np.isfinite(rec)] = np.nanmedian(rec[np.isfinite(rec)])
     ldur = np.log(dur)
+    ret5 = np.array([float(np.interp(min(1.0, 5.0 / dur[i]), GRID, curves[i]) * 100) for i in range(n)])  # retention at the 5s mark
 
     # ── Q1: keep + retention → views ──
     content = np.column_stack([keep, ret])
@@ -274,7 +275,25 @@ def main():
               'coef': [round(float(c), 6) for c in mb.coef_], 'intercept': round(float(mb.intercept_), 4),
               'resid_sd_log10': round(float(rb.std()), 4), 'cv_r2': round(cvr(Xb, lv), 3),
               'feat_median': {s: round(float(np.median(feats[s])), 4) for s in selected}, 'sliders': sliders}
+    # ── toggleable subset models: every combination of keep / retention / 5-sec retention / duration ──
+    from itertools import combinations
+    FEATS4 = {'keep': keep, 'retention': ret, 'ret5': ret5, 'log_dur': ldur}
+    ORDER = ['keep', 'retention', 'ret5', 'log_dur']
+
+    def subset_model(names):
+        cols = np.column_stack([FEATS4[f] for f in names]); m = LinearRegression().fit(cols, lv); resid_ = lv - m.predict(cols)
+        return {'features': list(names), 'coef': [round(float(c), 6) for c in m.coef_], 'intercept': round(float(m.intercept_), 4),
+                'resid_sd_log10': round(float(resid_.std()), 4), 'cv_r2': round(cvr(cols, lv), 3)}
+    subsets = {'+'.join(c): subset_model(c) for r in range(1, 5) for c in combinations(ORDER, r)}
+    NAT = {'keep': keep, 'retention': ret, 'ret5': ret5, 'log_dur': dur}   # duration slider in seconds (feature = ln s)
+    FLAB = {'keep': 'Keep rate', 'retention': 'Retention %', 'ret5': '5-sec retention', 'log_dur': 'Duration'}
+    FUNIT = {'keep': '%', 'retention': '%', 'ret5': '%', 'log_dur': 's'}
+    feat_meta = {f: {'label': FLAB[f], 'unit': FUNIT[f], 'transform': 'ln' if f == 'log_dur' else 'none',
+                     'min': round(float(np.percentile(NAT[f], 2)), 1), 'max': round(float(np.percentile(NAT[f], 98)), 1),
+                     'default': round(float(np.median(NAT[f])), 1)} for f in ORDER}
+
     predictor = {'v2_keep_ret': p2, 'v3_with_duration': p3, 'v_best': v_best,
+                 'subsets': subsets, 'feat_meta': feat_meta, 'order': ORDER,
                  'ranges': {'keep': [float(keep.min()), float(keep.max())], 'retention': [float(ret.min()), float(ret.max())], 'duration': [float(dur.min()), float(dur.max())]},
                  'medians': {'keep': float(np.median(keep)), 'retention': float(np.median(ret)), 'duration': float(np.median(dur))}}
 
