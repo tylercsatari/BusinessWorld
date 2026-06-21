@@ -911,55 +911,65 @@ const LibraryUI = (() => {
             const avoidTitles = [...aiVideoIdeas.map(x => x.title || x.name), ...libTitles].filter(Boolean);
             ui.step('context', 'done', `${avoidTitles.length} to avoid`);
 
+            let failedRuns = 0;
             for (let run = 1; run <= runs; run++) {
                 if (runs > 1) ui.setRun(run);
+                // Each run is INDEPENDENT: a timeout or bad reply on one run is
+                // skipped, and the series keeps going — one slow run never kills the
+                // whole batch.
+                try {
+                    // ASK KIMI for 3, then PARSE — up to 2 attempts, because a
+                    // reasoning model occasionally writes a long preamble and runs out
+                    // of room before the JSON completes; a retry recovers it.
+                    let ideas = null, lastSaid = '';
+                    for (let attempt = 1; attempt <= 2 && !ideas; attempt++) {
+                        ui.step('kimi', 'active', attempt > 1 ? 'retrying…' : '');
+                        const messages = aiVideoIdeaMessages(PER_RUN, avoidTitles);
+                        if (attempt > 1) messages.push({ role: 'user', content: 'Your previous reply was not valid JSON. Reply again with ONLY the JSON object {"ideas":[...]} — no thinking, no preamble, first character {. Keep notes very short.' });
+                        let r;
+                        try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: attempt > 1 ? 0.3 : 0.6, max_tokens: 32000 }) }, 420000); }
+                        catch (err) { throw new Error(err && err.name === 'AbortError' ? `Kimi took longer than 7 minutes on run ${run}.` : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
+                        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
+                        const data = await r.json();
+                        const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+                        lastSaid = content;
+                        ui.step('kimi', 'done', 'replied');
+                        ui.step('parse', 'active');
+                        const parsed = aiVideoExtractJson(content);
+                        const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
+                        if (rawIdeas.length) ideas = rawIdeas.slice(0, PER_RUN).map(aiVideoNormalizeIdea).filter(i => i.title);
+                    }
+                    if (!ideas || !ideas.length) throw new Error(`Run ${run}: no ideas could be parsed (after a retry). It said: ` + (lastSaid || '(empty)').slice(0, 120));
+                    ui.step('parse', 'done', `${ideas.length} idea${ideas.length === 1 ? '' : 's'}`);
 
-                // ASK KIMI for 3, then PARSE — with up to 2 attempts, because a
-                // reasoning model occasionally writes a long preamble and runs out
-                // of room before the JSON completes. A retry (lower temperature,
-                // JSON-only) reliably recovers it.
-                let ideas = null, lastSaid = '';
-                for (let attempt = 1; attempt <= 2 && !ideas; attempt++) {
-                    ui.step('kimi', 'active', attempt > 1 ? 'retrying…' : '');
-                    const messages = aiVideoIdeaMessages(PER_RUN, avoidTitles);
-                    if (attempt > 1) messages.push({ role: 'user', content: 'Your previous reply was not valid JSON. Reply again with ONLY the JSON object {"ideas":[...]} — no thinking, no preamble, first character {. Keep notes very short.' });
-                    let r;
-                    try { r = await fetchT('/api/kimi/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, temperature: attempt > 1 ? 0.3 : 0.6, max_tokens: 32000 }) }, 300000); }
-                    catch (err) { throw new Error(err && err.name === 'AbortError' ? `Kimi took longer than 5 minutes on run ${run} — try again.` : ('Could not reach Kimi K2.6: ' + (err && err.message || err))); }
-                    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `Kimi request failed (HTTP ${r.status})`); }
-                    const data = await r.json();
-                    const content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-                    lastSaid = content;
-                    ui.step('kimi', 'done', 'replied');
-                    ui.step('parse', 'active');
-                    const parsed = aiVideoExtractJson(content);
-                    const rawIdeas = parsed && Array.isArray(parsed.ideas) ? parsed.ideas : [];
-                    if (rawIdeas.length) ideas = rawIdeas.slice(0, PER_RUN).map(aiVideoNormalizeIdea).filter(i => i.title);
+                    // SAVE this batch BEFORE the next run — show each card as it lands.
+                    ui.step('save', 'active');
+                    let savedN = 0;
+                    for (const idea of ideas) {
+                        ui.card(idea);
+                        try {
+                            const saved = await fetchT('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }, 20000).then(res => res.ok ? res.json() : null);
+                            allCreated.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
+                        } catch (e) { allCreated.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
+                        avoidTitles.push(idea.title);   // later runs avoid this one
+                        savedN++;
+                    }
+                    ui.step('save', 'done', `saved ${savedN}`);
+                    // Merge into the live list as we go, so the library fills up run-by-run.
+                    const existingIds = new Set(aiVideoIdeas.map(i => i.id));
+                    aiVideoIdeas = [...allCreated.filter(i => !existingIds.has(i.id)), ...aiVideoIdeas.filter(i => !allCreated.some(c => c.id === i.id))];
+                    renderAiVideoIdeas();
+                } catch (runErr) {
+                    // Skip this run, keep going. The failed step shows ⚠ briefly.
+                    failedRuns++;
+                    ui.errorActive();
+                    console.warn('AI ideas: run', run, 'failed —', runErr && runErr.message);
                 }
-                if (!ideas || !ideas.length) throw new Error(`Run ${run}: Kimi replied but no ideas could be parsed (after a retry). It said: ` + (lastSaid || '(empty)').slice(0, 160));
-                ui.step('parse', 'done', `${ideas.length} idea${ideas.length === 1 ? '' : 's'}`);
-
-                // SAVE this batch BEFORE the next run — show each card as it lands.
-                ui.step('save', 'active');
-                let savedN = 0;
-                for (const idea of ideas) {
-                    ui.card(idea);
-                    try {
-                        const saved = await fetchT('/api/data/aiideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...idea, status: 'candidate', source: 'ai-video-ideas', generatorVersion: 'client-kimi-2026-06', lastEdited: new Date().toISOString() }) }, 20000).then(res => res.ok ? res.json() : null);
-                        allCreated.push(saved || { id: 'tmp-' + Math.random().toString(36).slice(2), ...idea });
-                    } catch (e) { allCreated.push({ id: 'tmp-' + Math.random().toString(36).slice(2), ...idea }); }
-                    avoidTitles.push(idea.title);   // later runs avoid this one
-                    savedN++;
-                }
-                ui.step('save', 'done', `saved ${savedN}`);
-                // Merge into the live list as we go, so the library fills up run-by-run.
-                const existingIds = new Set(aiVideoIdeas.map(i => i.id));
-                aiVideoIdeas = [...allCreated.filter(i => !existingIds.has(i.id)), ...aiVideoIdeas.filter(i => !allCreated.some(c => c.id === i.id))];
-                renderAiVideoIdeas();
             }
             aiVideoIdeasLoaded = true;
-            aiVideoIdeasStatus = `Created ${allCreated.length} idea${allCreated.length === 1 ? '' : 's'}${runs > 1 ? ` across ${runs} runs` : ''}.`;
-            ui.finish(true, aiVideoIdeasStatus);
+            const okRuns = runs - failedRuns;
+            aiVideoIdeasStatus = `Created ${allCreated.length} idea${allCreated.length === 1 ? '' : 's'}${runs > 1 ? ` across ${okRuns}/${runs} runs${failedRuns ? ` (${failedRuns} skipped)` : ''}` : ''}.`;
+            ui.finish(allCreated.length > 0, aiVideoIdeasStatus);
             renderAiVideoIdeas();
         } catch (e) {
             aiVideoIdeasStatus = e.message || 'Generation failed.';
