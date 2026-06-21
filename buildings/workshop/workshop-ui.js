@@ -361,14 +361,12 @@ const WorkshopUI = (() => {
             const next = () => { if (!pool.length) return ''; if (pool.length === 1) return pool[0]; const w = pool[i % pool.length]; i++; return w; };
             e.videos.forEach(v => {
                 if (seenV.has(v.id)) return; seenV.add(v.id);   // a video can sit at several stages — assign once
-                const cur = v.worker || '';
-                if (cur && pool.includes(cur)) return;
-                const w = next(); if (w !== cur) vUpd.push({ id: v.id, worker: w });
+                if (v.worker) return;                            // ALREADY assigned (manual or prior) — never overwrite
+                const w = next(); if (w) vUpd.push({ id: v.id, worker: w });
             });
             e.components.forEach(c => {
-                const cur = c.worker || '';
-                if (cur && pool.includes(cur)) return;
-                const w = next(); if (w !== cur) cUpd.push({ id: c.id, worker: w });
+                if (c.worker) return;                            // ALREADY assigned — never overwrite
+                const w = next(); if (w) cUpd.push({ id: c.id, worker: w });
             });
         });
         for (const u of vUpd) { try { await VideoService.update(u.id, { worker: u.worker }); } catch (e) {} }
@@ -1320,10 +1318,15 @@ const WorkshopUI = (() => {
         panel.querySelectorAll('.wsp-worker-pick').forEach(sel => sel.addEventListener('change', async (ev) => {
             ev.stopPropagation();
             const kind = sel.dataset.workerKind, id = sel.dataset.workerId, w = sel.value;
+            sel.disabled = true;
             try {
                 if (kind === 'video') await VideoService.update(id, { worker: w });
                 else await SVC().components.update(id, { worker: w });
-            } catch (e) {}
+                toast(w ? `Assigned to ${w}` : 'Unassigned');
+            } catch (e) {
+                console.warn('worker reassign failed', e);
+                alert('Could not save the assignment: ' + (e && e.message || e));
+            } finally { sel.disabled = false; }
             renderTab();
         }));
         // Filming footage-coverage tool — run a scan, or delete a gap suggestion.
