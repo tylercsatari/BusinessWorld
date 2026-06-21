@@ -269,7 +269,7 @@ def main():
     for s in selected:
         nat = natural.get(s, feats[s])
         sliders.append({'key': s, 'label': LAB[s], 'unit': UNIT[s], 'transform': 'ln' if s == 'log_dur' else 'none',
-                        'min': round(float(np.percentile(nat, 2)), 1), 'max': round(float(np.percentile(nat, 98)), 1),
+                        'min': round(float(np.min(nat)), 1), 'max': round(float(np.max(nat)), 1),
                         'default': round(float(np.median(nat)), 1)})
     v_best = {'features': selected, 'labels': [LAB[s] for s in selected],
               'coef': [round(float(c), 6) for c in mb.coef_], 'intercept': round(float(mb.intercept_), 4),
@@ -289,7 +289,7 @@ def main():
     FLAB = {'keep': 'Keep rate', 'retention': 'Retention %', 'ret5': '5-sec retention', 'log_dur': 'Duration'}
     FUNIT = {'keep': '%', 'retention': '%', 'ret5': '%', 'log_dur': 's'}
     feat_meta = {f: {'label': FLAB[f], 'unit': FUNIT[f], 'transform': 'ln' if f == 'log_dur' else 'none',
-                     'min': round(float(np.percentile(NAT[f], 2)), 1), 'max': round(float(np.percentile(NAT[f], 98)), 1),
+                     'min': round(float(np.min(NAT[f])), 1), 'max': round(float(np.max(NAT[f])), 1),   # full data-sheet range (single source of truth)
                      'default': round(float(np.median(NAT[f])), 1)} for f in ORDER}
 
     predictor = {'v2_keep_ret': p2, 'v3_with_duration': p3, 'v_best': v_best,
