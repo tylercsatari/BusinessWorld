@@ -8013,6 +8013,17 @@ Respond ONLY as valid JSON (no markdown):
         const headers = { 'Content-Type': contentType };
         if (ext === '.html' || ext === '.js' || ext === '.css') {
             headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        } else if (ext === '.json') {
+            // Data files are the single source of truth — must never serve stale. Revalidate every time;
+            // allow a 304 (via Last-Modified) so large unchanged JSON isn't re-downloaded needlessly.
+            headers['Cache-Control'] = 'no-cache, must-revalidate';
+            try {
+                const mt = fs.statSync(filePath).mtime; headers['Last-Modified'] = mt.toUTCString();
+                const ims = req.headers['if-modified-since'];
+                if (ims && new Date(ims).getTime() >= Math.floor(mt.getTime() / 1000) * 1000) {
+                    res.writeHead(304, headers); res.end(); return;
+                }
+            } catch (e) { /* fall through to full send */ }
         }
         // Inject cache-busting version stamps into HTML files
         if (ext === '.html') {
