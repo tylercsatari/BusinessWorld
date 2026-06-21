@@ -80,8 +80,7 @@ def main():
     rec = np.array([(TODAY - datetime.date.fromisoformat(v['published'])).days / 365.0 if v.get('published') else np.nan for v in V])
     rec[~np.isfinite(rec)] = np.nanmedian(rec[np.isfinite(rec)])
     ldur = np.log(dur)
-    _at5 = np.array([float(np.interp(min(1.0, 5.0 / dur[i]), GRID, curves[i])) for i in range(n)])
-    ret5 = _at5 / curves[:, :3].mean(1) * 100   # 5s SURVIVAL from the opening — removes replay/loop inflation (the raw curve starts ~160%)
+    ret5 = np.array([float(v['ret5']) if v.get('ret5') is not None else np.nan for v in V])   # 5s retention — read from the data sheet (single source of truth: build_table.py)
 
     # ── Q1: keep + retention → views ──
     content = np.column_stack([keep, ret])
