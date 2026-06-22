@@ -2824,20 +2824,20 @@ const WorkshopUI = (() => {
     // is NOT editable here — a component flows on its own and is only advanced by
     // the worker who owns its CURRENT stage (via their Done button).
     function componentStageGraphic(c) {
-        // An order has no sub-states — it's just an order until it's marked done.
-        if (c && c.source === 'order') {
-            const done = c.status === 'done';
-            return `<div class="wsp-stage-track" title="An order — press Done once it's been placed.">` +
-                `<span class="wsp-stage-step ${done ? 'done' : 'current'}">${done ? 'ordered ✓' : 'order'}</span></div>`;
-        }
+        // The owner can CLICK any stage to move the component there (forward or
+        // back), bypassing the deliverable gate. Everyone else sees it read-only.
+        const owner = isOwnerUser();
         const track = componentTrack(c);
         const curIdx = track.indexOf(c.status);
-        return `<div class="wsp-stage-track" title="Where this component is right now (read-only) — it advances when the worker at its current stage marks it done">` +
+        const title = owner
+            ? 'Click any stage to move this component there (owner — moves it back or forward, no gate)'
+            : 'Where this component is right now (read-only) — it advances when the worker at its stage presses Done';
+        return `<div class="wsp-stage-track${owner ? ' editable' : ''}" title="${escAttr(title)}">` +
             track.map((s, i) => {
                 const state = (s === 'done')
                     ? (c.status === 'done' ? 'done' : 'future')
                     : (i < curIdx ? 'past' : i === curIdx ? 'current' : 'future');
-                return `<span class="wsp-stage-step ${state}">${escHtml(s)}</span>`;
+                return `<span class="wsp-stage-step ${state}${owner ? ' clickable' : ''}"${owner ? ` data-cd-jump="${escAttr(s)}"` : ''}>${escHtml(s)}</span>`;
             }).join('<span class="wsp-stage-sep">›</span>') +
         `</div>`;
     }
@@ -3193,13 +3193,23 @@ const WorkshopUI = (() => {
         // Open the linked video
         const fv = q('[data-open-video]');
         if (fv) fv.addEventListener('click', () => { close(); openDetail(fv.dataset.openVideo); });
-        // Stage — READ-ONLY graphic. The component advances on its own (the worker
-        // at its current stage presses Done); you can't jump it around from here.
-        // Re-renders when the type/needs change (the track can change shape).
+        // Stage graphic. For the OWNER it's clickable — jump the component to any
+        // stage (back or forward), no deliverable gate. For everyone else it's
+        // read-only (the worker advances it by pressing Done).
         const renderStatusCycle = () => {
             const cyc = q('#cd-status-cycle');
             if (!cyc) return;
             cyc.innerHTML = componentStageGraphic(cur());
+            if (isOwnerUser()) cyc.querySelectorAll('[data-cd-jump]').forEach(step => step.addEventListener('click', async () => {
+                const to = step.dataset.cdJump;
+                const c2 = cur();
+                if (!c2 || c2.status === to) return;
+                dirty = true;
+                await saveComp({ status: to });
+                renderStatusCycle();
+                renderTab();   // reflect the move on the board behind the modal
+                toast(to === 'done' ? '✓ Component marked done' : `Moved component to “${to}”`);
+            }));
         };
         renderStatusCycle();
         // Needs (multi-select) — toggle the local set synchronously; debounce
