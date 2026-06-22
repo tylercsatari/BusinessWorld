@@ -78,7 +78,9 @@ const WorkshopUI = (() => {
     //           sits at Props / Set Design until handled.
     // Each source has its own status track; 'done' (always last) drops it off the board.
     const COMPONENT_SOURCE_STATUSES = {
-        build: ['design', 'cad', 'software', 'manufacturing', 'assembly', 'done'],
+        // 'order' sits after design/CAD (you design it, then order the parts it needs)
+        // and before the build stages — mirrors the pipeline's Ordering bottleneck.
+        build: ['design', 'cad', 'order', 'software', 'manufacturing', 'assembly', 'done'],
         order: ['ordered', 'done'],   // single step: it's an order → press Done once placed
         task:  ['todo', 'doing', 'done']
     };
@@ -100,6 +102,7 @@ const WorkshopUI = (() => {
     const BUILD_STAGE_CHAIN = [
         { status: 'design',        needs: ['design'] },
         { status: 'cad',           needs: ['cad', 'pcb'] },
+        { status: 'order',         needs: ['order'] },
         { status: 'software',      needs: ['software'] },
         { status: 'manufacturing', needs: ['precision'] },
         { status: 'assembly',      needs: ['assembly'] }
@@ -688,7 +691,7 @@ const WorkshopUI = (() => {
     });
     const GROUP_COLORS = { Concept: '#4a9eff', Planning: '#e8a020', Procurement: '#e67e22', Build: '#14b8a6', Production: '#e74c3c', Post: '#27ae60' };
     // Where a component's build status lives on the video pipeline
-    const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', software: 'software', manufacturing: 'precision', assembly: 'assembly' };
+    const COMPONENT_STAGE_MAP = { design: 'design', cad: 'cad', order: 'order', software: 'software', manufacturing: 'precision', assembly: 'assembly' };
 
     function boardPositions() {
         // Column = topological layer, row = index within layer (centered vertically).
@@ -2677,6 +2680,7 @@ const WorkshopUI = (() => {
         { flag: 'propdesign', label: 'Props',         icon: 'propdesign' },
         { flag: 'cad',        label: 'CAD',           icon: 'cad' },
         { flag: 'pcb',        label: 'PCB',           icon: 'pcb' },
+        { flag: 'order',      label: 'Order parts',   icon: 'order' },
         { flag: 'precision',  label: 'Precision Mfg', icon: 'precision' },
         { flag: 'software',   label: 'Software',      icon: 'software' },
         { flag: 'assembly',   label: 'Assembly',      icon: 'assembly' },
