@@ -300,6 +300,13 @@ const WorkshopUI = (() => {
         } catch (e) {}
         return null;
     }
+    // Every unique person across all node rosters (for the owner's "by account" filter).
+    function allRosterPeople() {
+        const byName = new Map();
+        Object.values(nodeRoster).forEach(list => (list || []).forEach(p => { if (p && p.name && !byName.has(p.name)) byName.set(p.name, p); }));
+        return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     // An avatar image (preferred) or a colored-initials fallback. On nodes we use a
     // custom instant tooltip (data-name) instead of the native title.
     function personAvatarHtml(person, cls, useDataName) {
@@ -795,6 +802,9 @@ const WorkshopUI = (() => {
         catch (e) { console.warn('Workshop: component scoping skipped', e); }
         if (fProject) list = list.filter(c => c.projectId === fProject);
         if (fSearch) { const q = fSearch.toLowerCase(); list = list.filter(c => (c.name || '').toLowerCase().includes(q)); }
+        // "By account" filter — show only this person's components/tasks (or unassigned).
+        if (fAssignee === 'none') list = list.filter(c => !c.worker);
+        else if (fAssignee) list = list.filter(c => c.worker === fAssignee);
         return list;
     }
 
@@ -916,6 +926,7 @@ const WorkshopUI = (() => {
             <input type="text" class="wsp-search" id="wsp-f-search" placeholder="Search everything…" value="${escAttr(fSearch)}">
             ${projects.length ? `<select id="wsp-f-project"><option value="">All projects</option>${projects.map(p => `<option value="${p.id}" ${fProject === p.id ? 'selected' : ''}>🛠️ ${escHtml(p.name)}</option>`).join('')}</select>` : ''}
             ${sponsors.length ? `<select id="wsp-f-sponsor"><option value="">All sponsors</option>${sponsors.map(s => `<option value="${s.id}" ${fSponsor === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}</select>` : ''}
+            ${isOwnerUser() && allRosterPeople().length ? `<select id="wsp-f-assignee" title="Show everything assigned to one person across all nodes"><option value="">👥 All people</option>${allRosterPeople().map(p => `<option value="${escAttr(p.name)}" ${fAssignee === p.name ? 'selected' : ''}>${escHtml(p.name)}</option>`).join('')}<option value="none" ${fAssignee === 'none' ? 'selected' : ''}>— Unassigned —</option></select>` : ''}
             <div class="wsp-flag-btns">
                 <button class="workshop-filter-btn ${fFlag === 'blocked' ? 'active' : ''}" data-flag="blocked">🔒 Blocked</button>
                 <button class="workshop-filter-btn ${fFlag === 'deadline' ? 'active' : ''}" data-flag="deadline">⏰ Due soon</button>
@@ -944,6 +955,7 @@ const WorkshopUI = (() => {
         const bind = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { fn(e.value); renderTab(); }); };
         bind('wsp-f-project', v => fProject = v);
         bind('wsp-f-sponsor', v => fSponsor = v);
+        bind('wsp-f-assignee', v => fAssignee = v);
         el.querySelectorAll('[data-flag]').forEach(b => b.addEventListener('click', () => {
             fFlag = fFlag === b.dataset.flag ? '' : b.dataset.flag;
             renderTab();
