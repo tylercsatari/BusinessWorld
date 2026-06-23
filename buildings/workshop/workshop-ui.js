@@ -1406,10 +1406,8 @@ const WorkshopUI = (() => {
             if (r && r.path) openFilePreview(r.path, r.name);
         }));
         banner.querySelectorAll('[data-deliv-del]').forEach(b => b.addEventListener('click', async () => {
-            const fresh = VideoService.getById(v.id) || v;
-            const arr = stageResultsFor(fresh, stageId).filter((_, i) => i !== Number(b.dataset.delivDel));
-            const sr = { ...(fresh.stageResults || {}), [stageId]: arr };
-            await VideoService.update(v.id, { stageResults: sr, status: normalizedStatus(fresh) });
+            const idx = Number(b.dataset.delivDel);
+            await atomicVideoUpdate(v.id, (fresh) => ({ stageResults: { ...(fresh.stageResults || {}), [stageId]: stageResultsFor(fresh, stageId).filter((_, i) => i !== idx) }, status: normalizedStatus(fresh) }));
             renderTab();
         }));
         if (!upBtn || !fileInput) return;
@@ -1425,9 +1423,7 @@ const WorkshopUI = (() => {
             try {
                 const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading' });
                 const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
-                const cur = stageResultsFor(VideoService.getById(v.id) || fresh, stageId);
-                const sr = { ...((VideoService.getById(v.id) || fresh).stageResults || {}), [stageId]: [...cur, ...added] };
-                await VideoService.update(v.id, { stageResults: sr, status: normalizedStatus(fresh) });
+                await atomicVideoUpdate(v.id, (f) => ({ stageResults: { ...(f.stageResults || {}), [stageId]: [...stageResultsFor(f, stageId), ...added] }, status: normalizedStatus(f) }));
                 bar.stage(`Added ${added.length} file${added.length === 1 ? '' : 's'} ✓`);
                 toast(`Uploaded ${added.length} file${added.length === 1 ? '' : 's'} — add more or press Done`);
                 renderTab();   // stays on the node; the worker presses Done to move on
@@ -3304,8 +3300,9 @@ const WorkshopUI = (() => {
             }));
             q('#cd-media').querySelectorAll('[data-media-del]').forEach(b => b.addEventListener('click', async () => {
                 dirty = true;
-                const media2 = (cur().media || []).filter((_, i) => i !== Number(b.dataset.mediaDel));
-                await saveComp({ media: media2 }); renderMedia();
+                const idx = Number(b.dataset.mediaDel);
+                await atomicComponentUpdate(componentId, (fresh) => ({ media: (fresh.media || []).filter((_, i) => i !== idx) }));
+                renderMedia();
             }));
         };
         bindMedia();
@@ -3325,7 +3322,8 @@ const WorkshopUI = (() => {
             try {
                 const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading' });
                 dirty = true;
-                await saveComp({ media: [...(cur().media || []), ...metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }))] });
+                const addedMedia = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
+                await atomicComponentUpdate(componentId, (fresh) => ({ media: [...(fresh.media || []), ...addedMedia] }));
                 bar.stage(`Done ✓ — ${files.length} file${files.length === 1 ? '' : 's'}`);
                 setTimeout(() => progHost.remove(), 1200);
             } catch (e) { console.warn('media upload failed', e); bar.stage('Upload failed: ' + e.message); }
@@ -3968,6 +3966,26 @@ const WorkshopUI = (() => {
     // Writing the instances also derives the branches deterministically:
     // any animation instance → Animation stage on; any practical → Practical
     // Hook Filming on. Legacy single-hook fields are retired on first write.
+    // Atomically change ONE hook's footage list (append/remove), re-reading the
+    // FRESH hooks inside the serialized write so footage uploads to different hook
+    // instances can never clobber each other's links — same guarantee as the
+    // editing slots. transform(currentVideosList) returns the new list.
+    function atomicHookVideos(videoId, hid, transform) {
+        return atomicVideoUpdate(videoId, (fresh) => {
+            const hooks = PS().hooksOf(fresh).map(h => ({ ...h }));
+            const h = hooks.find(x => x.id === hid);
+            if (!h) return null;
+            const list = transform(hookVideos(h).slice());
+            h.videos = list;
+            h.videoPath = list[0] ? list[0].path : '';   // keep legacy primary in sync
+            h.videoName = list[0] ? list[0].name : '';
+            const branches = { ...(fresh.branches || {}) };
+            branches.animation = hooks.some(x => x.type === 'animation');
+            branches.hookfilm = hooks.some(x => x.type === 'practical');
+            return { hooks, branches, hook: (hooks.find(x => (x.text || '').trim()) || {}).text || '', hookType: '', hookVideoPath: '', hookVideoName: '', status: normalizedStatus(fresh) };
+        });
+    }
+
     async function saveHooks(videoId, hooks) {
         const fresh = VideoService.getById(videoId);
         const branches = { ...((fresh && fresh.branches) || {}) };
@@ -4004,8 +4022,8 @@ const WorkshopUI = (() => {
                 if (a && a.path) openFilePreview(a.path, a.name);
             }));
             list && list.querySelectorAll('[data-anim-asset-del]').forEach(b => b.addEventListener('click', async () => {
-                const next = animAssets().filter((_, i) => i !== Number(b.dataset.animAssetDel));
-                await VideoService.update(v.id, { animAssets: next }).catch(() => {});
+                const idx = Number(b.dataset.animAssetDel);
+                await atomicVideoUpdate(v.id, (fresh) => ({ animAssets: (fresh.animAssets || []).filter((_, i) => i !== idx) })).catch(() => {});
                 rerenderList();
             }));
         };
@@ -4023,7 +4041,7 @@ const WorkshopUI = (() => {
             try {
                 const metas = await uploadFilesToDropbox(files, file => `${folder}/${file.name}`, bar, { label: 'Uploading assets' });
                 const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
-                await VideoService.update(v.id, { animAssets: [...animAssets(), ...added] }).catch(() => {});
+                await atomicVideoUpdate(v.id, (fresh) => ({ animAssets: [...(fresh.animAssets || []), ...added] })).catch(() => {});
                 bar.stage('Done ✓'); toast(`🎞️ ${added.length} asset${added.length === 1 ? '' : 's'} → animation/assets`);
                 rerenderList();
             } catch (e) { alert('Upload failed: ' + e.message); }
@@ -4082,15 +4100,8 @@ const WorkshopUI = (() => {
         }));
         root.querySelectorAll('[data-hooki-unlink]').forEach(b => b.addEventListener('click', async () => {
             if (!confirm('Unlink this hook video? (The file stays in Dropbox.)')) return;
-            const hooks = hooksWithEdits(v.id);
-            const h = hooks.find(x => x.id === b.dataset.hookiUnlink);
-            if (!h) return;
-            const list = hookVideos(h).slice();
-            list.splice(+b.dataset.vi || 0, 1);
-            h.videos = list;
-            h.videoPath = list[0] ? list[0].path : '';   // keep legacy primary in sync
-            h.videoName = list[0] ? list[0].name : '';
-            await saveHooks(v.id, hooks);
+            const vi = +b.dataset.vi || 0;
+            await atomicHookVideos(v.id, b.dataset.hookiUnlink, (list) => { list.splice(vi, 1); return list; });
             rerender();
         }));
         initHookInstanceMedia(v, root, rerender);
@@ -4128,15 +4139,7 @@ const WorkshopUI = (() => {
         });
 
         const setFootage = async (hid, path, name) => {
-            const hooks = hooksWithEdits(v.id);
-            const h = hooks.find(x => x.id === hid);
-            if (!h) return;
-            const list = hookVideos(h).slice();
-            if (!list.some(x => x.path === path)) list.push({ path, name });   // append, allow many
-            h.videos = list;
-            h.videoPath = list[0] ? list[0].path : '';   // keep legacy primary in sync
-            h.videoName = list[0] ? list[0].name : '';
-            await saveHooks(v.id, hooks);
+            await atomicHookVideos(v.id, hid, (list) => { if (!list.some(x => x.path === path)) list.push({ path, name }); return list; });
             rerender();
         };
         root.querySelectorAll('[data-hooki-pick]').forEach(sel => sel.addEventListener('change', () => {
@@ -4156,16 +4159,7 @@ const WorkshopUI = (() => {
                 const metas = await uploadFilesToDropbox(files, file => `${rootPath}/${v.project}/${sub}/${file.name}`, bar, { label: 'Uploading footage' });
                 const added = metas.map((meta, i) => ({ path: meta.path_display || meta.path_lower, name: meta.name || files[i].name }));
                 bar.stage('Linking to this hook…');
-                const hooks = hooksWithEdits(v.id);
-                const h2 = hooks.find(x => x.id === hid);
-                if (h2) {
-                    const list = hookVideos(h2).slice();
-                    for (const it of added) if (!list.some(x => x.path === it.path)) list.push(it);   // append all
-                    h2.videos = list;
-                    h2.videoPath = list[0] ? list[0].path : '';   // keep legacy primary in sync
-                    h2.videoName = list[0] ? list[0].name : '';
-                    await saveHooks(v.id, hooks);
-                }
+                await atomicHookVideos(v.id, hid, (list) => { for (const it of added) if (!list.some(x => x.path === it.path)) list.push(it); return list; });
                 toast(`${sub === 'animation' ? '🎞️ animation' : '🪝 hook'} ${added.length} file${added.length === 1 ? '' : 's'} → ${v.project}/${sub}`);
                 rerender();
             } catch (e) {
@@ -5141,32 +5135,45 @@ const WorkshopUI = (() => {
         return value && value.path ? [value] : [];
     }
 
-    // SERIALIZED, ATOMIC finalVideos writes — per video. The three editing slots
-    // share one finalVideos object; saving two slots at once used to read-modify-
-    // write the same base and clobber each other (all files reached Dropbox but a
-    // slot's LINK was lost, blocking the move forward). This queue makes each save
-    // wait for the previous one and re-read the FRESHEST record inside the critical
-    // section, so a key is never dropped no matter how the uploads overlap. A small
-    // verify-and-retry guards against a transient write failure.
-    const _finalVideosChain = {};
-    function saveFinalVideoSlot(videoId, key, items) {
-        const prev = _finalVideosChain[videoId] || Promise.resolve();
+    // ===== SERIALIZED, ATOMIC media-link writes =====
+    // Every media upload links a file (or appends to an array/object) on the video
+    // or component record. When two uploads to the same record overlap — e.g. the
+    // three editing slots, or several hook instances each uploading footage — a
+    // naive read-modify-write reads the same base and the later write clobbers an
+    // earlier one (the file reaches Dropbox but its LINK is lost). These queues
+    // serialize ALL writes per record and re-read the FRESHEST data inside the
+    // critical section, so a link can never be dropped no matter how uploads
+    // overlap. mutate(fresh) returns the changes object, computed from fresh.
+    const _videoWriteChain = {};
+    function atomicVideoUpdate(videoId, mutate) {
+        const prev = _videoWriteChain[videoId] || Promise.resolve();
         const next = prev.catch(() => {}).then(async () => {
-            const clean = (items || []).filter(it => it && it.path);
-            for (let attempt = 1; attempt <= 2; attempt++) {
-                const fresh = VideoService.getById(videoId);
-                if (!fresh) return;
-                const finalVideos = { ...(fresh.finalVideos || {}) };
-                if (clean.length) finalVideos[key] = clean; else delete finalVideos[key];
-                await VideoService.update(videoId, { finalVideos, status: normalizedStatus(fresh) });
-                // Verify the write actually landed for THIS key (self-heal a transient drop).
-                const after = VideoService.getById(videoId);
-                const got = finalVideoItems((after && after.finalVideos) || {}, key);
-                if (got.length === clean.length || !clean.length) return;
-            }
+            const fresh = VideoService.getById(videoId); if (!fresh) return;
+            const changes = mutate(fresh); if (!changes) return;
+            await VideoService.update(videoId, changes);
         });
-        _finalVideosChain[videoId] = next;
+        _videoWriteChain[videoId] = next;
         return next;
+    }
+    const _compWriteChain = {};
+    function atomicComponentUpdate(componentId, mutate) {
+        const prev = _compWriteChain[componentId] || Promise.resolve();
+        const next = prev.catch(() => {}).then(async () => {
+            const fresh = SVC().components.getById(componentId); if (!fresh) return;
+            const changes = mutate(fresh); if (!changes) return;
+            await SVC().components.update(componentId, changes);
+        });
+        _compWriteChain[componentId] = next;
+        return next;
+    }
+    // Editing slots: set one of the three final-video slots (re-reads fresh + verify).
+    function saveFinalVideoSlot(videoId, key, items) {
+        const clean = (items || []).filter(it => it && it.path);
+        return atomicVideoUpdate(videoId, (fresh) => {
+            const finalVideos = { ...(fresh.finalVideos || {}) };
+            if (clean.length) finalVideos[key] = clean; else delete finalVideos[key];
+            return { finalVideos, status: normalizedStatus(fresh) };
+        });
     }
 
     async function initEditSlots(v) {
@@ -5195,12 +5202,24 @@ const WorkshopUI = (() => {
                     <span class="wsp-row-name"><b>${escHtml(slot.label)}</b> · ${escHtml(it.name || it.path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
                     <button class="wsp-mini-btn" data-edit-open="${slot.key}" data-edit-idx="${i}">▶ Open</button>
                     <button class="wsp-mini-btn danger" data-edit-unlink="${slot.key}" data-edit-idx="${i}">✕</button></div>`).join('');
+            // Recovery picker — ALWAYS available: select any video file already in
+            // the project's "final videos/" folder and link it to this slot. Lists
+            // all video files (so you can re-link even if a save was lost / went to
+            // the wrong slot). Refreshes the folder listing on demand.
+            const VIDEO_EXT = /\.(mp4|mov|m4v|webm|avi|mkv|mts|m2ts|mpg|mpeg|wmv|flv)$/i;
+            const folderVideos = folderFiles.filter(f => VIDEO_EXT.test(f.name || ''));
             el.innerHTML = `<div class="wsp-edit-slot-label">${escHtml(slot.label)}</div>
                 ${rows}
                 <div class="wsp-add-row">
                     <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
                     <button class="wsp-mini-btn done" data-edit-up="${slot.key}">${items.length ? '⬆ Upload more' : '⬆ Upload'}</button></div>
-                ${linkable.length ? `<div class="wsp-add-row"><select data-edit-pick="${slot.key}" class="wsp-inline-select" style="flex:1 1 200px;font-size:11.5px;"><option value="">🔗 Link an existing file already in Dropbox…</option>${linkable.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}</select></div>` : ''}
+                <div class="wsp-add-row" style="align-items:center">
+                    <select data-edit-pick="${slot.key}" class="wsp-inline-select" style="flex:1 1 200px;font-size:11.5px;">
+                        <option value="">📁 Select a video from Dropbox to link…${folderVideos.length ? '' : ' (none found yet)'}</option>
+                        ${folderVideos.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}"${linkedPaths.has((f.path_display || f.path_lower || '').toLowerCase()) ? ' disabled' : ''}>${escHtml(f.name)}${linkedPaths.has((f.path_display || f.path_lower || '').toLowerCase()) ? ' (already linked)' : ''}</option>`).join('')}
+                    </select>
+                    <button class="wsp-mini-btn" data-edit-refresh="${slot.key}" title="Re-check the Dropbox folder">↻</button>
+                </div>
                 <div class="wsp-upload-jobs" data-edit-upload-jobs="${slot.key}"></div>`;
             el.querySelectorAll('[data-edit-open]').forEach(btn => btn.addEventListener('click', () => {
                 const item = finalVideoItems((VideoService.getById(v.id) || v).finalVideos || {}, slot.key)[Number(btn.dataset.editIdx)];
@@ -5216,13 +5235,15 @@ const WorkshopUI = (() => {
             const pick = el.querySelector(`[data-edit-pick="${slot.key}"]`);
             if (pick) pick.addEventListener('change', async () => {
                 if (!pick.value) return;
-                const name = pick.options[pick.selectedIndex].textContent;
+                const name = (pick.options[pick.selectedIndex].textContent || '').replace(/ \(already linked\)$/, '');
                 const fresh = VideoService.getById(v.id) || v;
                 const existing = finalVideoItems(fresh.finalVideos || {}, slot.key);
                 await setSlotItems(slot.key, [...existing, { path: pick.value, name }]);
                 toast(`🔗 ${slot.label} linked from Dropbox`);
                 rerenderEditor(v.id);
             });
+            const refreshBtn = el.querySelector(`[data-edit-refresh="${slot.key}"]`);
+            if (refreshBtn) refreshBtn.addEventListener('click', () => { rerenderEditor(v.id); });   // re-lists the folder
             el.querySelector('[data-edit-up]').addEventListener('click', async () => {
                 const input = document.getElementById('wsp-edit-file-' + slot.key);
                 const files = input && input.files ? [...input.files] : [];
