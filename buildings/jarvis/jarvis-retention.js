@@ -924,7 +924,7 @@ const JarvisRetention = (function () {
             const cur = window.document.getElementById('rtg-cursec'); if (cur) cur.innerHTML = rtgSecInfo(Math.round(t));
         } catch (e) { }
     }
-    function rtgSeek(t) { try { if (rtgPlayer && rtgPlayer.seekTo) rtgPlayer.seekTo(t, true); if (rtgPlayer && rtgPlayer.playVideo) rtgPlayer.playVideo(); } catch (e) { } rtgSetPlayhead(t); }
+    function rtgSeek(t, play) { try { if (rtgPlayer && rtgPlayer.seekTo) rtgPlayer.seekTo(t, true); if (rtgPlayer) { if (play && rtgPlayer.playVideo) rtgPlayer.playVideo(); else if (rtgPlayer.pauseVideo) rtgPlayer.pauseVideo(); } } catch (e) { } rtgSetPlayhead(t); }
     function rtgTick() {
         if (typeof requestAnimationFrame === 'undefined') return;
         rtgRAF = requestAnimationFrame(rtgTick);
@@ -1126,7 +1126,7 @@ const JarvisRetention = (function () {
                     <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
                       <input id="rtg-seek" type="range" min="0" max="${v.n_sec - 1}" step="0.1" value="0" style="flex:1;accent-color:${C.purple};cursor:pointer">
                       <span style="font-size:10px;color:${C.dim};font-weight:700;white-space:nowrap">t=<span id="rtg-curt">0.0s</span></span></div>
-                    <div style="font-size:10px;color:${C.mute};margin-top:4px;line-height:1.4">Play or drag — the white playhead crosses every channel below. Click any ▲ / ○ to jump here & inspect.</div>
+                    <div style="font-size:10px;color:${C.mute};margin-top:4px;line-height:1.4">Click any ▲ / ○ (or drag) to <b>freeze</b> on that moment & inspect — the white playhead crosses every channel below. Press ▶ on the video to play.</div>
                   </div>
                   <div style="flex:1;min-width:240px"><div style="font-size:10px;color:${C.mute};text-transform:uppercase;margin-bottom:5px">Moment inspector — everything encoded at the playhead</div>
                     <div id="rtg-cursec" style="background:${C.card2};border-radius:8px;padding:11px 13px;min-height:120px">${rtgSecInfo(0)}</div></div>
