@@ -128,8 +128,8 @@ def main():
     ages = np.array([m['age_days'] if m['age_days'] is not None else np.nan for m in meta], float)
 
     out = {'meta': {'n': n, 'hook_seconds': M['hook_seconds'],
-                    'models': {'visual': 'facebook/dinov2-small', 'whole': 'openai/clip-vit-base-patch16',
-                               'concept': 'all-MiniLM-L6-v2', 'detector': 'IDEA-Research/grounding-dino-tiny', 'ocr': 'tesseract-5'},
+                    'models': {'visual': 'facebook/dinov2-large', 'whole': 'openai/clip-vit-base-patch16',
+                               'concept': 'all-MiniLM-L6-v2', 'detector': 'IDEA-Research/grounding-dino-base', 'ocr': 'tesseract-5'},
                     'resolutions': ['hook', 'second']},
            'ledger': LEDGER, 'videos': []}
 

@@ -1068,7 +1068,7 @@ const JarvisRetention = (function () {
               <b style="color:${C.text}">⇒ optimum</b>   f* = log p(z<sub>j</sub>|c<sub>i</sub>) / p(z<sub>j</sub>) = directed <b>PMI</b>   (the heatmap value)<br>
               <b style="color:${C.text}">surprise</b>   S(j) = −PMI(z<sub>j</sub> | c<sub>j−1</sub>, lag 1)   ·   tension(t) = Σ open-loop PMI<br>
               <b style="color:${C.text}">existence</b>   held-out top-1 retrieval of the true future vs shuffled-context / similarity / chance<br>
-              <b style="color:${C.text}">data</b>   tokens = PCA-${M.pca_d} of CLIP V/C · ${M.n_train} train / ${M.n_heldout} held-out · ${M.epochs} epochs · max lag ${M.max_lag}s
+              <b style="color:${C.text}">data</b>   visual = ${esc(M.visual_encoder || 'clip-vit-base-patch16')} · concept = CLIP-text · PCA-${M.pca_d} · ${M.n_train} train / ${M.n_heldout} held-out · ${M.epochs} epochs · lag ≤${M.max_lag}s
             </div>
             <div style="font-size:10px;color:${C.mute};margin-top:6px">v1 = correct model, small data (${RTGP.meta.n} videos, 1fps). v2 = scrape 10⁴–10⁶ Shorts + V-JEPA/CLAP encoders + finer resolution + fine-tuned trunk.</div>`);
     }

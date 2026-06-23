@@ -46,7 +46,7 @@ def main():
     M = json.load(open(os.path.join(HERE, 'hooks_meta.json')))['meta']
     from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
     print(f"loading Grounding DINO · device {DEV}", flush=True)
-    mid = 'IDEA-Research/grounding-dino-tiny'
+    mid = 'IDEA-Research/grounding-dino-base'
     proc = AutoProcessor.from_pretrained(mid)
     model = AutoModelForZeroShotObjectDetection.from_pretrained(mid).to(DEV).eval()
     MEAN = np.array([0.485, 0.456, 0.406], np.float32); STD = np.array([0.229, 0.224, 0.225], np.float32)
@@ -95,8 +95,12 @@ def main():
                 o = model(pixel_values=px, input_ids=tin.input_ids, attention_mask=tin.attention_mask, token_type_ids=tin.get('token_type_ids'))
             res = proc.post_process_grounded_object_detection(o, tin.input_ids, threshold=TAU, text_threshold=0.22, target_sizes=[(SZ, SZ)])[0]
             best = {}
+            labs = res.get('text_labels', res.get('labels'))   # v5.9: text_labels=strings, labels=int ids
             for bi in range(len(res['scores'])):
-                sc = float(res['scores'][bi]); lab = clean(res['labels'][bi], cset)
+                raw = labs[bi]
+                if not isinstance(raw, str):
+                    continue
+                sc = float(res['scores'][bi]); lab = clean(raw, cset)
                 if not lab or sc <= TAU or sc <= best.get(lab, (0,))[0]:
                     continue
                 x1, y1, x2, y2 = [float(v) for v in res['boxes'][bi]]

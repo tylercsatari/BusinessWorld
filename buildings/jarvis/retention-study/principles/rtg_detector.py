@@ -61,8 +61,21 @@ class Critic(nn.Module):
 def main():
     z = np.load(os.path.join(HERE, 'rtg_tokens.npz'))
     owner, sec = z['owner'], z['sec']
-    Vraw = z['clip_img'].astype(np.float32); Craw = z['clip_txt'].astype(np.float32)
+    Craw = z['clip_txt'].astype(np.float32)
     hasc = z['has_c'].astype(bool)
+    # visual channel: prefer V-JEPA2 (temporal) tokens if present, else CLIP-image
+    vj = os.path.join(HERE, 'rtg_tokens_vjepa.npz')
+    if os.path.exists(vj):
+        zj = np.load(vj)
+        if len(zj['owner']) == len(owner) and (zj['owner'] == owner).all() and (zj['sec'] == sec).all():
+            Vraw = zj['vjepa'].astype(np.float32)
+        else:
+            idx = {(int(o), int(s)): i for i, (o, s) in enumerate(zip(zj['owner'], zj['sec']))}
+            Vraw = np.stack([zj['vjepa'][idx[(int(o), int(s))]] for o, s in zip(owner, sec)]).astype(np.float32)
+        VENC = 'vjepa2-vitg-fpc64-256'
+    else:
+        Vraw = z['clip_img'].astype(np.float32); VENC = 'clip-vit-base-patch16'
+    print('visual encoder:', VENC, flush=True)
 
     def pca(X):
         mu = X.mean(0); Xc = X - mu
@@ -298,6 +311,7 @@ def main():
                      'is the bottleneck. v2 = scrape 10^4-10^6 Shorts + finer resolution + V-JEPA/CLAP encoders.')
 
     json.dump({'meta': {'n': len(out_vids), 'min_gap': MIN_GAP, 'pca_d': PCA_D, 'hidden': H, 'max_lag': K,
+                        'visual_encoder': VENC,
                         'epochs': EPOCHS, 'neg': NEG, 'temp': TEMP, 'ds_grid': DS_GRID, 'mat_scale': MAT_SCALE,
                         'surprise_k': SURPRISE_K, 'n_train': len(train_idx), 'n_heldout': len(held_idx)},
                'existence_pred': existence, 'verdict': verdict, 'exists': bool(exists), 'diagnosis': diagnosis,

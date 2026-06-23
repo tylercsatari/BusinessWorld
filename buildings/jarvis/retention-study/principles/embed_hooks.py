@@ -62,7 +62,7 @@ def main():
     from transformers import AutoModel, CLIPModel, AutoTokenizer
     from sentence_transformers import SentenceTransformer
     print("loading models…", flush=True)
-    dino = AutoModel.from_pretrained('facebook/dinov2-small').to(DEV).eval()
+    dino = AutoModel.from_pretrained('facebook/dinov2-large').to(DEV).eval()
     clip = CLIPModel.from_pretrained('openai/clip-vit-base-patch16').to(DEV).eval()
     ctok = AutoTokenizer.from_pretrained('openai/clip-vit-base-patch16')
     st = SentenceTransformer('all-MiniLM-L6-v2', device=DEV)
@@ -133,7 +133,7 @@ def main():
                         scene_owner=np.array(scene_owner, np.int32), scene_frame=np.array(scene_frame, np.int32),
                         scene=np.array(scene_vecs, np.float32))
     json.dump({'meta': meta, 'n': len(meta), 'hook_seconds': 5,
-               'models': {'visual': 'facebook/dinov2-small', 'whole': 'openai/clip-vit-base-patch16',
+               'models': {'visual': 'facebook/dinov2-large', 'whole': 'openai/clip-vit-base-patch16',
                           'concept': 'all-MiniLM-L6-v2'}},
               open(os.path.join(HERE, 'hooks_meta.json'), 'w'))
     print(f"saved {len(meta)} hooks → hooks_emb.npz + hooks_meta.json ({len(scene_vecs)} scene frames)", flush=True)
