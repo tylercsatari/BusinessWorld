@@ -2346,9 +2346,13 @@ const WorkshopUI = (() => {
         const myComps = componentsForVideo(v.id);
         // Blocker rows still show which kind is holding the video up
         const DEP_ICON_NAME = { video: 'video', component: 'component', order: 'order' };
-        // Clean section header: line-icon + title + optional muted hint
+        // Clean section header: just line-icon + title + status badge. The hint
+        // (description) moves OUT of the header into a body line, so the collapsed
+        // list is a tidy column of section names; the description appears only when
+        // you expand the section.
         const subTitle = (iconName, title, hint) =>
-            `<div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span>${hint ? ` <span class="wsp-hint">${hint}</span>` : ''}<span class="wsp-sec-state"></span></div>`;
+            `<div class="wsp-subsection-title">${icon(iconName, 'wsp-sub-ic')} <span class="wsp-sub-name">${title}</span><span class="wsp-sec-state"></span></div>` +
+            (hint ? `<div class="wsp-sec-hint wsp-hint">${hint.replace(/^—\s*/, '')}</div>` : '');
 
         return `
             <div class="workshop-detail-summary" data-vfield="sourceidea">${sourceIdeaHtml}</div>
@@ -2358,44 +2362,47 @@ const WorkshopUI = (() => {
                 ${blockers.map(b => `<div class="wsp-blocker-line">${icon(DEP_ICON_NAME[b.kind] || 'inventory', 'wsp-row-ic')} ${escHtml(b.label)} <span class="wsp-hint">${escHtml(b.detail)}</span></div>`).join('')}
             </div>` : ''}
 
-            <div data-vfield="name">
-                <label>Video Name <span class="wsp-save-status saved" id="wsp-save-status">Saved</span></label>
-                <input type="text" id="workshop-name" value="${escAttr(v.name)}">
-            </div>
+            <div class="wsp-subsection" data-section="metadata" style="--accent:#7a6f58">
+                ${subTitle('video', 'Metadata')}
+                <div data-vfield="name">
+                    <label>Video Name <span class="wsp-save-status saved" id="wsp-save-status">Saved</span></label>
+                    <input type="text" id="workshop-name" value="${escAttr(v.name)}">
+                </div>
 
-            <div class="wsp-field-grid">
-                <div data-vfield="deadline">
-                    <label>Deadline <span class="wsp-hint">(optional)</span></label>
-                    <input type="date" id="workshop-deadline" value="${escAttr(v.deadline || '')}">
+                <div class="wsp-field-grid">
+                    <div data-vfield="deadline">
+                        <label>Deadline <span class="wsp-hint">(optional)</span></label>
+                        <input type="date" id="workshop-deadline" value="${escAttr(v.deadline || '')}">
+                    </div>
+                    <div data-vfield="sponsor">
+                        <label>Sponsor</label>
+                        <select id="workshop-sponsor">
+                            <option value="">No sponsor</option>
+                            ${sponsors.map(s => `<option value="${s.id}" ${v.sponsorId === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div data-vfield="project">
+                        <label>Channel Project (egg)</label>
+                        <select id="workshop-project">
+                            <option value="" disabled ${!v.project && !v.noProject ? 'selected' : ''}>— Pick a project —</option>
+                            <option value="__none__" ${v.noProject ? 'selected' : ''}>🚫 No project (deliberate)</option>
+                            ${dropboxProjects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
-                <div data-vfield="sponsor">
-                    <label>Sponsor</label>
-                    <select id="workshop-sponsor">
-                        <option value="">No sponsor</option>
-                        ${sponsors.map(s => `<option value="${s.id}" ${v.sponsorId === s.id ? 'selected' : ''}>${escHtml(s.name)}</option>`).join('')}
-                    </select>
-                </div>
-                <div data-vfield="project">
-                    <label>Channel Project (egg)</label>
-                    <select id="workshop-project">
-                        <option value="" disabled ${!v.project && !v.noProject ? 'selected' : ''}>— Pick a project —</option>
-                        <option value="__none__" ${v.noProject ? 'selected' : ''}>🚫 No project (deliberate)</option>
-                        ${dropboxProjects.map(p => `<option value="${escAttr(p)}" ${p === v.project ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
-                    </select>
-                </div>
-            </div>
 
-            <div data-vfield="progress">
-            <div class="wsp-progress-head">
-                <label>Pipeline Progress</label>
-                <div class="wsp-progress-head-actions">
-                    ${isOwnerUser() ? `<select id="wsp-move-stage" class="wsp-inline-select" title="Owner only: move this video to any stage — everything before it is marked done, that stage and after reset to pending. Forces the move regardless of deliverables.">
-                        <option value="">⇄ Move to stage…</option>
-                        ${PS().STAGES.map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`).join('')}
-                    </select>` : ''}
+                <div data-vfield="progress">
+                <div class="wsp-progress-head">
+                    <label>Pipeline Progress</label>
+                    <div class="wsp-progress-head-actions">
+                        ${isOwnerUser() ? `<select id="wsp-move-stage" class="wsp-inline-select" title="Owner only: move this video to any stage — everything before it is marked done, that stage and after reset to pending. Forces the move regardless of deliverables.">
+                            <option value="">⇄ Move to stage…</option>
+                            ${PS().STAGES.map(s => `<option value="${s.id}">${escHtml(s.label)}</option>`).join('')}
+                        </select>` : ''}
+                    </div>
                 </div>
-            </div>
-            ${stageChecklistHtml(v)}
+                ${stageChecklistHtml(v)}
+                </div>
             </div>
 
             <div class="wsp-subsection ${sectionStatusClass(v, 'context')}" data-vfield="context" style="--accent:#a87d3c">
@@ -2508,7 +2515,7 @@ const WorkshopUI = (() => {
             const titleEl = sec.querySelector(':scope > .wsp-subsection-title');
             if (!titleEl) return;
             sec.classList.add('collapsible');
-            const key = sec.getAttribute('data-vfield') || (titleEl.querySelector('.wsp-sub-name') || titleEl).textContent.trim().slice(0, 24);
+            const key = sec.getAttribute('data-vfield') || sec.getAttribute('data-section') || (titleEl.querySelector('.wsp-sub-name') || titleEl).textContent.trim().slice(0, 24);
             if (expandedSections.has(key)) sec.classList.add('expanded');
             titleEl.addEventListener('click', (ev) => {
                 if (ev.target.closest('button, input, select, textarea, a')) return;   // controls in the header act, don't toggle
