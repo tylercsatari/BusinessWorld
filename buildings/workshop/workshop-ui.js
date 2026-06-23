@@ -5120,23 +5120,58 @@ const WorkshopUI = (() => {
         return value && value.path ? [value] : [];
     }
 
+    // SERIALIZED, ATOMIC finalVideos writes — per video. The three editing slots
+    // share one finalVideos object; saving two slots at once used to read-modify-
+    // write the same base and clobber each other (all files reached Dropbox but a
+    // slot's LINK was lost, blocking the move forward). This queue makes each save
+    // wait for the previous one and re-read the FRESHEST record inside the critical
+    // section, so a key is never dropped no matter how the uploads overlap. A small
+    // verify-and-retry guards against a transient write failure.
+    const _finalVideosChain = {};
+    function saveFinalVideoSlot(videoId, key, items) {
+        const prev = _finalVideosChain[videoId] || Promise.resolve();
+        const next = prev.catch(() => {}).then(async () => {
+            const clean = (items || []).filter(it => it && it.path);
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                const fresh = VideoService.getById(videoId);
+                if (!fresh) return;
+                const finalVideos = { ...(fresh.finalVideos || {}) };
+                if (clean.length) finalVideos[key] = clean; else delete finalVideos[key];
+                await VideoService.update(videoId, { finalVideos, status: normalizedStatus(fresh) });
+                // Verify the write actually landed for THIS key (self-heal a transient drop).
+                const after = VideoService.getById(videoId);
+                const got = finalVideoItems((after && after.finalVideos) || {}, key);
+                if (got.length === clean.length || !clean.length) return;
+            }
+        });
+        _finalVideosChain[videoId] = next;
+        return next;
+    }
+
     async function initEditSlots(v) {
         if (!document.getElementById('wsp-edit-full') || !v.project) return;
         const root = await dropboxRootPath();
         const folder = `${root}/${v.project}/final videos`;
-        const setSlotItems = async (key, items) => {
-            const fresh = VideoService.getById(v.id) || v;
-            const finalVideos = { ...(fresh.finalVideos || {}) };
-            const clean = (items || []).filter(item => item && item.path);
-            if (clean.length) finalVideos[key] = clean; else delete finalVideos[key];
-            await VideoService.update(v.id, { finalVideos, status: normalizedStatus(fresh) });
-        };
+        const setSlotItems = (key, items) => saveFinalVideoSlot(v.id, key, items);
+        // List what's actually in the final videos/ folder — so a lost link can be
+        // re-linked straight from Dropbox (recovery if a save ever fails / a window
+        // restarts mid-flow). Best-effort; the slots still work without it.
+        let folderFiles = [];
+        try {
+            const r = await fetch('/api/dropbox/list_folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: folder }) });
+            const data = await r.json();
+            if (Array.isArray(data.entries)) folderFiles = data.entries.filter(e => e['.tag'] === 'file');
+        } catch (e) { /* folder may not exist yet */ }
         EDIT_SLOTS.forEach(slot => {
             const el = document.getElementById('wsp-edit-' + slot.key);
             if (!el || !el.isConnected) return;
-            const items = finalVideoItems(v.finalVideos || {}, slot.key);
-            const rows = items.map((cur, i) => `<div class="wsp-row" style="border-left:3px solid #27ae60">
-                    <span class="wsp-row-name"><b>${escHtml(slot.label)}</b> · ${escHtml(cur.name || cur.path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
+            const cur = VideoService.getById(v.id) || v;
+            const items = finalVideoItems(cur.finalVideos || {}, slot.key);
+            // Files in the folder NOT already linked to this slot — offer them for recovery.
+            const linkedPaths = new Set(items.map(it => (it.path || '').toLowerCase()));
+            const linkable = folderFiles.filter(f => !linkedPaths.has((f.path_display || f.path_lower || '').toLowerCase()));
+            const rows = items.map((it, i) => `<div class="wsp-row" style="border-left:3px solid #27ae60">
+                    <span class="wsp-row-name"><b>${escHtml(slot.label)}</b> · ${escHtml(it.name || it.path.split('/').pop())} <span class="wsp-hint">linked ✓</span></span>
                     <button class="wsp-mini-btn" data-edit-open="${slot.key}" data-edit-idx="${i}">▶ Open</button>
                     <button class="wsp-mini-btn danger" data-edit-unlink="${slot.key}" data-edit-idx="${i}">✕</button></div>`).join('');
             el.innerHTML = `<div class="wsp-edit-slot-label">${escHtml(slot.label)}</div>
@@ -5144,6 +5179,7 @@ const WorkshopUI = (() => {
                 <div class="wsp-add-row">
                     <input type="file" id="wsp-edit-file-${slot.key}" accept="video/*" multiple style="font-size:11.5px;flex:1 1 160px;">
                     <button class="wsp-mini-btn done" data-edit-up="${slot.key}">${items.length ? '⬆ Upload more' : '⬆ Upload'}</button></div>
+                ${linkable.length ? `<div class="wsp-add-row"><select data-edit-pick="${slot.key}" class="wsp-inline-select" style="flex:1 1 200px;font-size:11.5px;"><option value="">🔗 Link an existing file already in Dropbox…</option>${linkable.map(f => `<option value="${escAttr(f.path_display || f.path_lower)}">${escHtml(f.name)}</option>`).join('')}</select></div>` : ''}
                 <div class="wsp-upload-jobs" data-edit-upload-jobs="${slot.key}"></div>`;
             el.querySelectorAll('[data-edit-open]').forEach(btn => btn.addEventListener('click', () => {
                 const item = finalVideoItems((VideoService.getById(v.id) || v).finalVideos || {}, slot.key)[Number(btn.dataset.editIdx)];
@@ -5155,6 +5191,17 @@ const WorkshopUI = (() => {
                 const next = finalVideoItems(fresh.finalVideos || {}, slot.key).filter((_, i) => i !== Number(btn.dataset.editIdx));
                 await setSlotItems(slot.key, next); rerenderEditor(v.id);
             }));
+            // Recovery: link a file that's already in Dropbox to this slot.
+            const pick = el.querySelector(`[data-edit-pick="${slot.key}"]`);
+            if (pick) pick.addEventListener('change', async () => {
+                if (!pick.value) return;
+                const name = pick.options[pick.selectedIndex].textContent;
+                const fresh = VideoService.getById(v.id) || v;
+                const existing = finalVideoItems(fresh.finalVideos || {}, slot.key);
+                await setSlotItems(slot.key, [...existing, { path: pick.value, name }]);
+                toast(`🔗 ${slot.label} linked from Dropbox`);
+                rerenderEditor(v.id);
+            });
             el.querySelector('[data-edit-up]').addEventListener('click', async () => {
                 const input = document.getElementById('wsp-edit-file-' + slot.key);
                 const files = input && input.files ? [...input.files] : [];
@@ -5180,6 +5227,7 @@ const WorkshopUI = (() => {
                     if (failed.length) {
                         alert(`${failed.length} upload${failed.length === 1 ? '' : 's'} failed. Successful files were kept. Failed files:\n\n${failed.map(r => '• ' + r.file.name + ': ' + r.error.message).join('\n')}`);
                     }
+                    rerenderEditor(v.id);   // refresh slots + the move-forward gate from the freshest record
                 } catch (e) {
                     alert('Upload failed: ' + e.message);
                 } finally {
