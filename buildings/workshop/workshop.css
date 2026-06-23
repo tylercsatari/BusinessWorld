@@ -684,6 +684,21 @@
     border-radius: 9px;
     background: linear-gradient(95deg, color-mix(in srgb, var(--accent, #999) 8%, transparent), transparent 55%);
 }
+/* Collapsible editor sections — collapsed by default, click the header to expand.
+   When collapsed, everything except the header is hidden (a clean, scannable list
+   of section headers). A caret shows the state. */
+.wsp-subsection.collapsible > .wsp-subsection-title { cursor: pointer; user-select: none; }
+.wsp-subsection.collapsible > .wsp-subsection-title::before {
+    content: '\25B8'; flex: 0 0 auto; color: #b3a98f; font-size: 10px; margin-right: 1px;
+}
+.wsp-subsection.collapsible.expanded > .wsp-subsection-title::before { content: '\25BE'; }
+.wsp-subsection.collapsible:not(.expanded) > :not(.wsp-subsection-title) { display: none !important; }
+.wsp-subsection.collapsible:not(.expanded) { padding-top: 9px; padding-bottom: 9px; }
+.wsp-subsection.collapsible > .wsp-subsection-title:hover { filter: brightness(0.9); }
+/* Optional editing-context notes */
+.wsp-editcontext { width: 100%; min-height: 60px; resize: vertical; box-sizing: border-box; font-size: 12.5px;
+    padding: 7px 9px; border: 1px solid #ddd6c6; border-radius: 7px; background: #fff; color: #3a3328; }
+
 .wsp-subsection-title {
     display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     font-size: 13px; font-weight: 800; color: #5a4a32;

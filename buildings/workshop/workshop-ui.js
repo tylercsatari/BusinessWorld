@@ -31,6 +31,9 @@ const WorkshopUI = (() => {
     let selectedStageId = null;
     let _scopedStagePicked = false;  // one-time auto-focus for single-node workers
     let expandedStageVideoId = null;
+    // Which editor sections are expanded (collapsed by default so a video is easy
+    // to scan). Keyed by section (data-vfield); persists across re-renders.
+    const expandedSections = new Set();
     let selectedProjectId = null;
     let _pipelineIndexed = false;   // lazy semantic-search index (per session)
     let searchType = 'all';
@@ -2473,7 +2476,7 @@ const WorkshopUI = (() => {
                 </div>
             </div>
 
-            <div class="wsp-subsection" style="--accent:#16a085">
+            <div class="wsp-subsection" data-vfield="music" style="--accent:#16a085">
                 ${subTitle('voiceover', 'Music', '— optional. Paste a song link, or upload an audio/video file (stored in the project\'s music/ folder). Not tied to any stage or task.')}
                 <div id="wsp-music-section">
                     ${v.musicPath ? '' /* filled by initMediaSection */ : '<div class="wsp-hint">Loading…</div>'}
@@ -2482,6 +2485,8 @@ const WorkshopUI = (() => {
 
             <div class="wsp-subsection ${sectionStatusClass(v, 'editing')}" data-vfield="editing" style="--accent:#27ae60">
                 ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
+                <label class="wsp-field-label" style="margin-top:2px">Editing context <span class="wsp-hint">— optional notes for the editor (style, pacing, what to cut, music vibe, on-screen text…). Visible to anyone who can see this section.</span></label>
+                <textarea id="workshop-editcontext" class="wsp-editcontext" placeholder="Optional — anything the editor should know before cutting this…">${escHtml(v.editContext || '')}</textarea>
                 ${projectGate(v, 'Select a Channel Project first — the final videos live in that project\'s Dropbox folder.')}
                 ${editingHandoffHtml(v)}
                 <div id="wsp-edit-full" class="wsp-edit-slot"></div>
@@ -2499,6 +2504,22 @@ const WorkshopUI = (() => {
         const root = nameEl.closest('.workshop-detail-fields');
         if (window.applyVideoFieldGating) window.applyVideoFieldGating(root);  // hide sections this profile can't see
         const rerender = () => rerenderEditor(v.id);
+
+        // COLLAPSIBLE SECTIONS — collapse every editor section by default so a video
+        // is easy to scan; click a section header to expand it. Open state persists
+        // (expandedSections), so a section you opened stays open across re-renders.
+        if (root) root.querySelectorAll('.wsp-subsection').forEach(sec => {
+            const titleEl = sec.querySelector(':scope > .wsp-subsection-title');
+            if (!titleEl) return;
+            sec.classList.add('collapsible');
+            const key = sec.getAttribute('data-vfield') || (titleEl.querySelector('.wsp-sub-name') || titleEl).textContent.trim().slice(0, 24);
+            if (expandedSections.has(key)) sec.classList.add('expanded');
+            titleEl.addEventListener('click', (ev) => {
+                if (ev.target.closest('button, input, select, textarea, a')) return;   // controls in the header act, don't toggle
+                const open = sec.classList.toggle('expanded');
+                if (open) expandedSections.add(key); else expandedSections.delete(key);
+            });
+        });
 
         // Autosave with a visible status (Editing… → Saving… → Saved ✓),
         // same pattern as the inline script editor. Typed fields debounce
@@ -2524,7 +2545,7 @@ const WorkshopUI = (() => {
             clearTimeout(saveTimer);
             saveTimer = setTimeout(() => doSave(false), 600);
         };
-        ['workshop-name', 'workshop-context'].forEach(id => {   // hook is its own instances now, not a field here
+        ['workshop-name', 'workshop-context', 'workshop-editcontext'].forEach(id => {   // hook is its own instances now, not a field here
             const el = get(id);
             if (!el) return;
             el.addEventListener('input', scheduleSave);
@@ -5326,6 +5347,7 @@ const WorkshopUI = (() => {
         const noProject = rawProject === '__none__';
         const project = noProject ? '' : rawProject;
         const context = get('workshop-context')?.value || '';
+        const editContext = get('workshop-editcontext')?.value || '';
         const deadline = get('workshop-deadline')?.value || '';
         const sponsorId = get('workshop-sponsor')?.value || '';
         // Previous-video link (priority sequence). Guard against loops.
@@ -5341,7 +5363,7 @@ const WorkshopUI = (() => {
             // AND (via saveWithIdeaSync) on the linked Library idea.
             const projectChanged = project !== (v.project || '');
             await VideoService.saveWithIdeaSync(v.id, {
-                name, project, noProject, context, deadline, sponsorId, previousVideoId,
+                name, project, noProject, context, editContext, deadline, sponsorId, previousVideoId,
                 ...(projectChanged ? { dropboxPath: '', dropboxLink: '' } : {}),
                 status: normalizedStatus(v)
             });
