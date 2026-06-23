@@ -2480,7 +2480,7 @@ const WorkshopUI = (() => {
             </div>
 
             <div class="wsp-subsection ${sectionStatusClass(v, 'editing')}" data-vfield="editing" style="--accent:#27ae60">
-                ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to the project\'s "final videos/" folder in Dropbox and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
+                ${subTitle('edit', 'Editing — final videos', '— upload all THREE versions. They go to this video\'s OWN subfolder in Dropbox: <project>/final videos/<this video\'s name>/ and link back here. Once all three are in, Editing finishes and the video moves to Split Test.')}
                 <label class="wsp-field-label" style="margin-top:2px">Editing context <span class="wsp-hint">— optional notes for the editor (style, pacing, what to cut, music vibe, on-screen text…). Visible to anyone who can see this section.</span></label>
                 <textarea id="workshop-editcontext" class="wsp-editcontext" placeholder="Optional — anything the editor should know before cutting this…">${escHtml(v.editContext || '')}</textarea>
                 ${projectGate(v, 'Select a Channel Project first — the final videos live in that project\'s Dropbox folder.')}
@@ -5122,7 +5122,18 @@ const WorkshopUI = (() => {
         host.querySelectorAll('[data-edit-asset-download]').forEach(btn => btn.addEventListener('click', () => openEditingAsset(assets[Number(btn.dataset.editAssetDownload)], true)));
     }
 
-    // ===== EDITING — three final-video deliverables → <project>/final videos/ =====
+    // ===== EDITING — three final-video deliverables → <project>/final videos/<video name>/ =====
+    // A Dropbox-safe folder name from a Business World label (keeps it readable and
+    // matching, just strips the few characters Dropbox disallows in a path segment).
+    function safeFolderSegment(name, fallback) {
+        let s = String(name || '').trim()
+            .replace(/[\/\\:?*"<>|]/g, '-')     // disallowed path chars
+            .replace(/[\x00-\x1f]/g, '')        // control chars
+            .replace(/\s+/g, ' ')               // collapse whitespace
+            .replace(/[.\s]+$/g, '')            // no trailing dots/spaces (Dropbox/Win)
+            .slice(0, 120).trim();
+        return s || (fallback || 'video');
+    }
     const EDIT_SLOTS = [
         { key: 'full', label: 'Full video' },
         { key: 'nosubs', label: 'Version without subtitles and graphics' },
@@ -5179,17 +5190,31 @@ const WorkshopUI = (() => {
     async function initEditSlots(v) {
         if (!document.getElementById('wsp-edit-full') || !v.project) return;
         const root = await dropboxRootPath();
-        const folder = `${root}/${v.project}/final videos`;
+        // Each video gets its OWN subfolder inside "final videos/", named to match
+        // its Business World label — so a project with 10 or 100 videos stays
+        // organized (one folder per video) instead of one big pile of files.
+        const videoFolder = safeFolderSegment(v.name, v.id);
+        const folder = `${root}/${v.project}/final videos/${videoFolder}`;
         const setSlotItems = (key, items) => saveFinalVideoSlot(v.id, key, items);
         // List what's actually in the final videos/ folder — so a lost link can be
         // re-linked straight from Dropbox (recovery if a save ever fails / a window
         // restarts mid-flow). Best-effort; the slots still work without it.
-        let folderFiles = [];
-        try {
-            const r = await fetch('/api/dropbox/list_folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: folder }) });
-            const data = await r.json();
-            if (Array.isArray(data.entries)) folderFiles = data.entries.filter(e => e['.tag'] === 'file');
-        } catch (e) { /* folder may not exist yet */ }
+        const listDbxFiles = async (path) => {
+            try {
+                const r = await fetch('/api/dropbox/list_folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+                const data = await r.json();
+                return Array.isArray(data.entries) ? data.entries.filter(e => e['.tag'] === 'file') : [];
+            } catch (e) { return []; }
+        };
+        // List this video's subfolder, AND the parent "final videos/" root (legacy
+        // videos uploaded files there before per-video subfolders) — so recovery
+        // finds files either way. Dedupe by path.
+        const [subFiles, rootFiles] = await Promise.all([
+            listDbxFiles(folder),
+            listDbxFiles(`${root}/${v.project}/final videos`)
+        ]);
+        const seenPaths = new Set();
+        const folderFiles = [...subFiles, ...rootFiles].filter(f => { const p = (f.path_display || f.path_lower || '').toLowerCase(); if (seenPaths.has(p)) return false; seenPaths.add(p); return true; });
         EDIT_SLOTS.forEach(slot => {
             const el = document.getElementById('wsp-edit-' + slot.key);
             if (!el || !el.isConnected) return;
